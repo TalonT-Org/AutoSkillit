@@ -1033,6 +1033,7 @@ class TestSkillResult:
             "retry_reason",
             "stderr",
             "token_usage",
+            "write_path_warnings",
         }
         assert set(parsed.keys()) == expected
 

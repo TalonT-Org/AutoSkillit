@@ -672,6 +672,7 @@ class TestBuildSkillResultCrossValidation:
         "retry_reason",
         "stderr",
         "token_usage",
+        "write_path_warnings",
     }
 
     def test_empty_stdout_exit_zero_is_failure(self):
@@ -2433,10 +2434,23 @@ class TestBuildSkillResultWritePathWarnings:
 
     def test_write_path_warnings_independent_of_output_token_contamination(self):
         """Warnings are populated even when _validate_output_paths also fires."""
+        # plan_path token must appear in an assistant text message for
+        # _validate_output_paths to detect it (it scans assistant_messages,
+        # not the final result record).
+        path_token_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "plan_path = /source/repo/temp/plan.md"}]
+                },
+            }
+        )
         stdout = (
             self._tool_use_ndjson("Write", {"file_path": "/source/repo/bad.md", "content": "x"})
             + "\n"
-            + _success_session_json("plan_path = /source/repo/temp/plan.md")
+            + path_token_line
+            + "\n"
+            + _success_session_json("Done %%DONE%%")
         )
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         sr = _build_skill_result(result, cwd="/clone/worktree")

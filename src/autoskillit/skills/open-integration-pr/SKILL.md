@@ -19,13 +19,14 @@ PR, and output `pr_url=<url>`.
 ## Arguments
 
 ```
-/autoskillit:open-integration-pr {integration_branch} {base_branch} {pr_order_file} [audit_verdict]
+/autoskillit:open-integration-pr {integration_branch} {base_branch} {pr_order_file} [audit_verdict] [conflict_report_paths]
 ```
 
 - `integration_branch` — integration branch name (e.g. `pr-batch/pr-merge-20250228-143052`)
 - `base_branch` — PR target branch (e.g. `main`)
 - `pr_order_file` — absolute path to JSON produced by `analyze-prs`
 - `audit_verdict` (optional) — `GO`, `NO GO`, or empty string when audit was skipped
+- `conflict_report_paths` (optional) — comma-separated list of absolute paths to conflict resolution report files, produced by `resolve-merge-conflicts`. When provided and non-empty, embed a "Conflict Resolution Decisions" section in the PR body.
 
 ## When to Use
 
@@ -51,7 +52,9 @@ PR, and output `pr_url=<url>`.
 ### Step 1: Parse Arguments
 
 Parse four positional args: `integration_branch`, `base_branch`, `pr_order_file`,
-`audit_verdict` (last one may be absent or empty string).
+`audit_verdict` (last one may be absent or empty string). Parse the optional fifth
+positional argument `conflict_report_paths` (may be absent or empty string). Split on `,`
+to get a list of paths; filter out any empty strings. Store as `conflict_report_path_list`.
 
 ### Step 2: Read pr_order_file
 
@@ -80,6 +83,18 @@ git diff --diff-filter=M --name-only {base_branch}..{integration_branch}
 ```
 
 Store as `changed_files`, `new_files`, `modified_files`.
+
+### Step 4b: Load Conflict Resolution Reports
+
+- If `conflict_report_path_list` is empty: skip — set `conflict_resolution_table = ""`.
+- For each path in `conflict_report_path_list`:
+  - Read the file.
+  - Extract the `## Per-File Resolution Decisions` table (all lines from the `| File |` header
+    through the last table row).
+- Concatenate all extracted tables (one per report, separated by a blank line if multiple).
+- Store as `conflict_resolution_table`.
+
+This step is skipped gracefully if any path is missing — log a warning and exclude that file.
 
 ### Step 5: Select Arch-Lens Lenses
 
@@ -153,6 +168,13 @@ Collapsed {N} PRs into `{integration_branch}` targeting `{base_branch}`.
 ## Audit
 
 **Verdict:** {audit_verdict}
+
+{If conflict_resolution_table is non-empty:}
+## Conflict Resolution Decisions
+
+The following files had merge conflicts that were automatically resolved during pipeline integration.
+
+{conflict_resolution_table}
 
 {If validated_diagrams non-empty:}
 ## Architecture Impact

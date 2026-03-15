@@ -29,6 +29,7 @@ description: >
 - Emit `worktree_path=` and `branch_name=` on successful resolution
 - Run `pre-commit run --all-files` after a successful rebase before emitting output tokens
 - Validate all three positional arguments before touching git state
+- Write `conflict_resolution_report_*.md` to `temp/resolve-merge-conflicts/` and emit `conflict_report_path=` after successful conflict resolution
 
 ## When to Use
 
@@ -89,7 +90,7 @@ git -C {worktree_path} rebase origin/{base_branch}
 ```
 
 **On success (clean rebase):** The integration branch advanced in a non-conflicting way
-since the last attempt. Proceed directly to Step 6 — emit output tokens and exit.
+since the last attempt. Proceed directly to Step 7 — emit output tokens and exit.
 
 **On conflict:** Proceed to Step 3.
 
@@ -145,6 +146,11 @@ Assign one of three conflict categories:
 | **LOW** | Category 3 conflict; or any conflict where intent cannot be determined from available context; or the conflicting file is outside the scope recorded in the plan's PR Changes Inventory |
 
 ### Step 4 — Confidence gate
+
+**Maintain a `resolution_log`:** As you resolve each file, record a log entry with:
+`file` (path), `category` (1/2/3), `confidence` (HIGH/MEDIUM), `strategy` (ours/theirs/combined),
+and `justification` (one sentence). Accumulate all entries across all rebase continuation rounds.
+This list is consumed in Step 6 to write the decision report.
 
 **If any conflict file is rated LOW:**
 
@@ -232,11 +238,52 @@ re-run `pre-commit run --all-files` to confirm clean.
 which already ran and passed before `merge_to_integration` was first attempted. Running
 tests here would be redundant and is explicitly prohibited.
 
-### Step 6 — Emit output tokens
+### Step 6 — Write Conflict Resolution Report
+
+Create the directory and write the conflict resolution report:
+
+```bash
+mkdir -p {worktree_path}/temp/resolve-merge-conflicts
+```
+
+Write the report to:
+```
+{worktree_path}/temp/resolve-merge-conflicts/conflict_resolution_report_{YYYY-MM-DD_HHMMSS}.md
+```
+
+Report format:
+
+```markdown
+# Merge Conflict Resolution Report
+
+**Worktree:** {worktree_path}
+**Base Branch:** {base_branch}
+**Timestamp:** {ISO-8601 timestamp, e.g. 2026-03-14T21:09:00Z}
+**Files Conflicting:** {total number of files that had conflicts across all rebase rounds}
+**Files Resolved:** {number of files successfully resolved}
+
+## Per-File Resolution Decisions
+
+| File | Category | Confidence | Strategy | Justification |
+|------|----------|------------|----------|---------------|
+| {file_path} | {1/2/3} | {HIGH/MEDIUM} | {ours/theirs/combined} | {one-sentence justification} |
+```
+
+One row per file from `resolution_log`. The table MUST be a standard GFM pipe table so downstream
+tools can extract rows programmatically by splitting on `|`.
+
+After writing, capture the absolute path to this file as `conflict_report_file_path` for use in
+Step 7.
+
+**If no conflicts were encountered** (clean rebase in Step 2, or Step 2 succeeded immediately):
+Skip this step — emit `worktree_path=` and `branch_name=` only (no `conflict_report_path`).
+
+### Step 7 — Emit output tokens
 
 ```
 worktree_path = {worktree_path}
 branch_name = {current_branch}
+conflict_report_path = {conflict_report_file_path}
 ```
 
 Where `{current_branch}` is the output of:
@@ -244,12 +291,15 @@ Where `{current_branch}` is the output of:
 git -C {worktree_path} branch --show-current
 ```
 
+Omit `conflict_report_path=` line entirely when the rebase was clean (no conflicts occurred — `resolution_log` is empty).
+
 ## Output contract
 
 | Token | Type | When emitted |
 |---|---|---|
 | `worktree_path=` | directory_path | On successful resolution (confidence gate passed) |
 | `branch_name=` | string | On successful resolution |
+| `conflict_report_path=` | file_path | On successful resolution when at least one conflict was resolved |
 | `escalation_required=true` | string literal `'true'` (lowercase) | When confidence is LOW or rebase rounds exceed 3 |
 | `escalation_reason=` | string | When confidence is LOW — explains which file and why |
 

@@ -33,7 +33,7 @@ jobs:
           set -euo pipefail
           CURRENT=$(python3 -c "
           import tomllib, pathlib
-          print(tomllib.loads(pathlib.Path('pyproject.toml').read_bytes())['project']['version'])
+          print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])
           ")
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           NEW="$MAJOR.$MINOR.$((PATCH + 1))"
@@ -155,7 +155,7 @@ jobs:
           set -euo pipefail
           CURRENT=$(python3 -c "
           import tomllib, pathlib
-          print(tomllib.loads(pathlib.Path('pyproject.toml').read_bytes())['project']['version'])
+          print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])
           ")
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           NEW="$MAJOR.$MINOR.$((PATCH + 1))"

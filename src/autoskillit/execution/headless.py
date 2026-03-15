@@ -174,7 +174,10 @@ def _recover_block_from_assistant_messages(
         "channel_b_pattern_recovered_from_assistant_messages",
         patterns=list(expected_output_patterns),
     )
-    return dataclasses.replace(session, result=combined)
+    # Preserve any content already drained into session.result before appending
+    # the recovered assistant_messages block.
+    recovered = (session.result + "\n\n" + combined) if session.result else combined
+    return dataclasses.replace(session, result=recovered)
 
 
 def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:

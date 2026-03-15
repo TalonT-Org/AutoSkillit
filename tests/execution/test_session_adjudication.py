@@ -12,6 +12,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.session import (
     ClaudeSessionResult,
+    _check_expected_patterns,
     _check_session_content,
     _compute_outcome,
     _compute_retry,
@@ -1160,3 +1161,57 @@ class TestToolUseParsing:
         assert len(session.tool_uses) == 2
         assert session.tool_uses[0]["name"] == "Write"
         assert session.tool_uses[1]["name"] == "Skill"
+
+
+class TestCheckExpectedPatterns:
+    """Unit tests for the standalone _check_expected_patterns function."""
+
+    def test_check_expected_patterns_present(self) -> None:
+        assert (
+            _check_expected_patterns(
+                result="some text ---my-block--- more text",
+                patterns=["---my-block---"],
+            )
+            is True
+        )
+
+    def test_check_expected_patterns_absent(self) -> None:
+        assert (
+            _check_expected_patterns(
+                result="some text without the block",
+                patterns=["---my-block---"],
+            )
+            is False
+        )
+
+    def test_check_expected_patterns_empty_patterns_always_true(self) -> None:
+        assert _check_expected_patterns(result="anything", patterns=[]) is True
+
+
+class TestComputeSuccessChannelBPatterns:
+    """Channel B bypass must not skip expected_output_patterns validation."""
+
+    def test_compute_success_channel_b_bypass_with_missing_patterns_returns_false(
+        self,
+    ) -> None:
+        """Channel B bypass must not skip expected_output_patterns validation.
+
+        When patterns are configured and absent from session.result, success must
+        be False (not True) even when channel_confirmation is CHANNEL_B.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="Final message without the block.",  # pattern absent
+            is_error=False,
+            session_id="s1",
+            assistant_messages=["Final message without the block."],
+        )
+        success = _compute_success(
+            session=session,
+            returncode=0,
+            termination=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["---prepare-issue-result---"],
+        )
+        assert success is False, "Channel B bypass must not skip expected_output_patterns check"

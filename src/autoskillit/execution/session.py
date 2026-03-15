@@ -294,6 +294,28 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
     )
 
 
+def _check_expected_patterns(result: str, patterns: Sequence[str]) -> bool:
+    """Return True if ALL expected_output_patterns are found in result, or if
+    no patterns are configured. This check MUST run on all session outcome paths,
+    including the Channel B bypass path.
+
+    AND semantics are intentional: patterns represent content contracts (e.g.,
+    block start/end delimiters) that must all be present simultaneously.
+
+    If any pattern is an invalid regex, returns False rather than raising.
+    """
+    if not patterns:
+        return True
+    for p in patterns:
+        try:
+            if not re.search(p, result):
+                return False
+        except re.error:
+            logger.warning("invalid_expected_output_pattern", pattern=p)
+            return False
+    return True
+
+
 def _check_session_content(
     session: ClaudeSessionResult,
     completion_marker: str,
@@ -322,16 +344,13 @@ def _check_session_content(
                 result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
             )
             return False
-    if expected_output_patterns:
-        result_text = session.result.strip()
-        matched = any(re.search(p, result_text) for p in expected_output_patterns)
-        if not matched:
-            logger.warning(
-                "content_check_failed",
-                reason="expected_artifact_absent",
-                patterns=list(expected_output_patterns),
-            )
-            return False
+    if not _check_expected_patterns(session.result.strip(), expected_output_patterns):
+        logger.warning(
+            "content_check_failed",
+            reason="expected_artifact_absent",
+            patterns=list(expected_output_patterns),
+        )
+        return False
     logger.debug("content_check_passed")
     return True
 
@@ -356,8 +375,28 @@ def _compute_success(
     # Gate 0.5: Channel B provenance bypass — session JSONL is authoritative.
     match channel_confirmation:
         case ChannelConfirmation.CHANNEL_B:
-            logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
-            return True
+            # Channel B confirmed the completion marker — skip the marker check.
+            # But expected_output_patterns must still be validated: the block
+            # delimiter is a content contract, not a completion signal.
+            if _check_expected_patterns(session.result, expected_output_patterns):
+                logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
+                return True
+            # Patterns absent in session.result. Recovery was attempted in
+            # _build_skill_result before this call (via
+            # _recover_block_from_assistant_messages). If we are here, recovery
+            # did not find the block — treat as retriable via the dead-end guard.
+            #
+            # PRECONDITION: _recover_block_from_assistant_messages MUST be called
+            # (and its recovered session substituted) before this function when
+            # channel_confirmation=CHANNEL_B and expected_output_patterns is set.
+            # Callers that bypass _build_skill_result must honour this contract.
+            logger.warning(
+                "channel_b_pattern_check_failed",
+                patterns=list(expected_output_patterns),
+                result_length=len(session.result),
+                assistant_message_count=len(session.assistant_messages),
+            )
+            return False
         case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
             pass  # fall through to termination dispatch
         case _ as _unreachable_cc:

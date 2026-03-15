@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from autoskillit.core import (
+    ChannelConfirmation,
     ClaudeFlags,
     FailureRecord,
     RetryReason,
@@ -36,6 +37,7 @@ from autoskillit.execution.commands import build_headless_cmd
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
+    _check_expected_patterns,
     _compute_outcome,
     _compute_success,
     _normalize_subtype,
@@ -152,6 +154,30 @@ def _recover_from_separate_marker(
         recovery="rebuilding result from assistant_messages",
     )
     return dataclasses.replace(session, result=combined)
+
+
+def _recover_block_from_assistant_messages(
+    session: ClaudeSessionResult,
+    expected_output_patterns: Sequence[str],
+) -> ClaudeSessionResult | None:
+    """When session.result lacks expected_output_patterns (Channel B win before
+    stdout drain), attempt to find the patterns in session.assistant_messages.
+    If found, return a new ClaudeSessionResult with result reconstructed from
+    assistant_messages. Return None if patterns cannot be found there either.
+    """
+    if not session.assistant_messages or not expected_output_patterns:
+        return None
+    combined = "\n\n".join(session.assistant_messages)
+    if not _check_expected_patterns(combined, expected_output_patterns):
+        return None
+    logger.warning(
+        "channel_b_pattern_recovered_from_assistant_messages",
+        patterns=list(expected_output_patterns),
+    )
+    # Preserve any content already drained into session.result before appending
+    # the recovered assistant_messages block.
+    recovered = (session.result + "\n\n" + combined) if session.result else combined
+    return dataclasses.replace(session, result=recovered)
 
 
 def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
@@ -452,6 +478,20 @@ def _build_skill_result(
         recovered = _recover_from_separate_marker(session, completion_marker)
         if recovered is not None:
             session = recovered
+
+    # Channel B pattern recovery: when Channel B wins before stdout is drained,
+    # expected_output_patterns content may only exist in assistant_messages.
+    # Attempt recovery so that _compute_success sees the block in session.result.
+    if (
+        result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        and expected_output_patterns
+        and not _check_expected_patterns(session.result, expected_output_patterns)
+    ):
+        pattern_recovered = _recover_block_from_assistant_messages(
+            session, expected_output_patterns
+        )
+        if pattern_recovered is not None:
+            session = pattern_recovered
 
     outcome, retry_reason = _compute_outcome(
         session,

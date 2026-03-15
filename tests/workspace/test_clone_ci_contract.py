@@ -18,7 +18,6 @@ from autoskillit.execution import resolve_remote_repo
 from autoskillit.execution.ci import _parse_repo_from_remote
 from autoskillit.workspace import clone_repo
 
-
 # ---------------------------------------------------------------------------
 # Explicit contract documentation
 # ---------------------------------------------------------------------------

@@ -475,7 +475,7 @@ def _find_recipe(name: str, cwd: Path) -> Any:
 
 async def infer_repo_from_remote(cwd: str) -> str:
     """Return 'owner/repo' from git remote URL, or '' on failure."""
-    from autoskillit.execution.remote_resolver import resolve_remote_repo
+    from autoskillit.execution import resolve_remote_repo
 
     return await resolve_remote_repo(cwd) or ""
 

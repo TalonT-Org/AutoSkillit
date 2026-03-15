@@ -103,7 +103,8 @@ src/autoskillit/
 │   ├── logging.py           #   get_logger, configure_logging, PACKAGE_LOGGER_NAME
 │   ├── paths.py             #   pkg_root(), is_git_worktree() — canonical package root resolver
 │   ├── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
-│   └── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
+│   ├── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
+│   └── github_url.py        #   parse_github_repo — canonical GitHub URL parser (str → owner/repo | None)
 ├── config/                  # L1 configuration sub-package
 │   ├── __init__.py          #   Re-exports AutomationConfig + GitHubConfig
 │   ├── defaults.yaml        #   Bundled package defaults (always loaded as first layer)
@@ -140,6 +141,7 @@ src/autoskillit/
 │   ├── merge_queue.py       #   GitHub merge queue watcher service (L1, httpx-based, never raises)
 │   ├── github.py            #   GitHub issue fetcher (L1, httpx-based, never raises)
 │   ├── session.py           #   ClaudeSessionResult, SkillResult, extract_token_usage
+│   ├── remote_resolver.py   #   resolve_remote_repo — canonical async resolver (upstream > origin, clone-aware)
 │   └── testing.py           #   Pytest output parsing and pass/fail adjudication
 ├── workspace/               # L1 workspace sub-package
 │   ├── __init__.py          #   Re-exports CleanupResult, SkillResolver, SessionSkillManager, clone_repo, remove_clone, push_to_remote

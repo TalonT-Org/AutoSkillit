@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import re
 
-from autoskillit.core import parse_github_repo
+from autoskillit.core import get_logger, parse_github_repo
+
+_log = get_logger(__name__)
 
 _OWNER_REPO_RE = re.compile(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
 
@@ -53,6 +55,6 @@ async def resolve_remote_repo(
                 if parsed:
                     return parsed
         except Exception:
-            pass
+            _log.warning("Failed to get URL for remote %r in %r", remote, cwd, exc_info=True)
 
     return None

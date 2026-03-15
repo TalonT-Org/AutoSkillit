@@ -9,7 +9,6 @@ import pytest
 
 from autoskillit.execution import resolve_remote_repo
 
-
 # ---------------------------------------------------------------------------
 # Hint-path tests (no subprocess calls)
 # ---------------------------------------------------------------------------
@@ -41,9 +40,7 @@ async def test_resolve_with_file_url_hint_falls_through_to_remotes(tmp_path: Pat
     """file:// hint is not a valid GitHub URL — resolver falls through to subprocess."""
     bare = tmp_path / "bare.git"
     bare.mkdir()
-    subprocess.run(
-        ["git", "init", "--bare", "--initial-branch=main", str(bare)], check=True
-    )
+    subprocess.run(["git", "init", "--bare", "--initial-branch=main", str(bare)], check=True)
     repo = tmp_path / "repo"
     subprocess.run(["git", "clone", str(bare), str(repo)], check=True)
     subprocess.run(["git", "-C", str(repo), "remote", "set-url", "origin", str(bare)], check=True)
@@ -70,13 +67,9 @@ def _make_repo_with_remotes(
     subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t.com"], check=True)
     subprocess.run(["git", "-C", str(repo), "config", "user.name", "T"], check=True)
     if origin:
-        subprocess.run(
-            ["git", "-C", str(repo), "remote", "add", "origin", origin], check=True
-        )
+        subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", origin], check=True)
     if upstream:
-        subprocess.run(
-            ["git", "-C", str(repo), "remote", "add", "upstream", upstream], check=True
-        )
+        subprocess.run(["git", "-C", str(repo), "remote", "add", "upstream", upstream], check=True)
     return repo
 
 

@@ -57,7 +57,7 @@ async def list_recipes() -> str:
 
 @mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("load_recipe")
-async def load_recipe(name: str) -> str:
+async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str:
     """Load a recipe by name and return its raw YAML content.
 
     The YAML follows the recipe schema (ingredients, steps with tool/action,
@@ -179,7 +179,11 @@ async def load_recipe(name: str) -> str:
     suppressed = tool_ctx.config.migration.suppressed
     _defaults = resolve_ingredient_defaults(Path.cwd())
     result = tool_ctx.recipes.load_and_validate(
-        name, Path.cwd(), suppressed=suppressed, resolved_defaults=_defaults
+        name,
+        Path.cwd(),
+        suppressed=suppressed,
+        resolved_defaults=_defaults,
+        ingredient_overrides=overrides,
     )
     recipe_info = tool_ctx.recipes.find(name, Path.cwd())
     return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))

@@ -212,6 +212,7 @@ class ValidationContext:
     dataflow: DataFlowReport
     available_recipes: frozenset[str] = field(default_factory=frozenset)
     available_skills: frozenset[str] = field(default_factory=frozenset)
+    available_sub_recipes: frozenset[str] = field(default_factory=frozenset)
 
 
 # ---------------------------------------------------------------------------
@@ -557,6 +558,7 @@ def make_validation_context(
     *,
     available_recipes: frozenset[str] = frozenset(),
     available_skills: frozenset[str] = frozenset(),
+    available_sub_recipes: frozenset[str] = frozenset(),
 ) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
 
@@ -571,4 +573,5 @@ def make_validation_context(
         dataflow=dataflow,
         available_recipes=available_recipes,
         available_skills=available_skills,
+        available_sub_recipes=available_sub_recipes,
     )

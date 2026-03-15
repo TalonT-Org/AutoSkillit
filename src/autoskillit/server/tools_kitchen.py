@@ -89,11 +89,20 @@ def _build_tool_category_listing() -> str:
 
 @mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("open_kitchen")
-async def open_kitchen(name: str | None = None, ctx: Context = CurrentContext()) -> str:
+async def open_kitchen(
+    name: str | None = None,
+    overrides: dict[str, str] | None = None,
+    ctx: Context = CurrentContext(),
+) -> str:
     """Open the AutoSkillit kitchen for service.
 
     When ``name`` is provided, the kitchen is opened AND the named recipe is
     loaded in a single call, reducing terminal noise from two tool calls to one.
+
+    Args:
+        name: Optional recipe name to load immediately after opening.
+        overrides: Optional dict of ingredient name → value to override recipe defaults.
+            Use to activate hidden features (e.g., ``{"sprint_mode": "true"}``).
     """
     if (h := _require_not_headless("open_kitchen")) is not None:
         return h
@@ -114,7 +123,11 @@ async def open_kitchen(name: str | None = None, ctx: Context = CurrentContext())
         suppressed = tool_ctx.config.migration.suppressed
         _defaults = resolve_ingredient_defaults(Path.cwd())
         result = tool_ctx.recipes.load_and_validate(
-            name, Path.cwd(), suppressed=suppressed, resolved_defaults=_defaults
+            name,
+            Path.cwd(),
+            suppressed=suppressed,
+            resolved_defaults=_defaults,
+            ingredient_overrides=overrides,
         )
         recipe_info = tool_ctx.recipes.find(name, Path.cwd())
         result = await _apply_triage_gate(result, name, recipe_info=recipe_info)

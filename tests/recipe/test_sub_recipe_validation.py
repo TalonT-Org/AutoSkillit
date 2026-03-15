@@ -190,7 +190,8 @@ def test_dual_validation_runs_standalone_and_combined(tmp_path: Path) -> None:
         ingredient_overrides={"sprint_mode": "true"},
     )
     assert "error" not in result
-    assert result.get("valid") is not None
+    assert result.get("valid") is True
+    assert isinstance(result.get("errors"), list)
 
 
 def test_dual_validation_standalone_errors_surfaced(tmp_path: Path) -> None:

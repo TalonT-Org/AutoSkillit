@@ -87,26 +87,39 @@ def test_unknown_sub_recipe_rule_fails_open_when_registry_empty() -> None:
 
 def test_circular_sub_recipe_rule_fires(tmp_path: Path) -> None:
     """circular-sub-recipe finding when sub_recipe chain forms a cycle."""
-    # Write a self-referencing sub-recipe to builtin location (patch via tmp_path)
-    # We'll test by checking the rule runs on a recipe that has a sub_recipe
-    # pointing to a file that itself has a sub_recipe back to parent
-    # For simplicity, test the rule is registered and runs without crashing
-    recipe = _make_recipe_with_sub_recipe("sprint-prefix")
-    ctx = make_validation_context(recipe)
-    findings = run_semantic_rules(ctx)
-    # Rule should have run (no crash) even if no cycle found (sprint-prefix doesn't exist)
-    # circular-sub-recipe only fires if a cycle is detected; no crash is the key assertion
-    assert isinstance(findings, list)  # reached here without exception
+    import textwrap
 
+    # Write a self-referencing sub-recipe to the project sub-recipes directory
+    sub_dir = tmp_path / ".autoskillit" / "recipes" / "sub-recipes"
+    sub_dir.mkdir(parents=True)
+    (sub_dir / "loop.yaml").write_text(
+        textwrap.dedent("""
+            name: loop
+            description: Self-referencing sub-recipe
+            ingredients:
+              gate:
+                description: Gate
+                default: "true"
+            kitchen_rules: []
+            steps:
+              cycle_step:
+                sub_recipe: loop
+                gate: gate
+                on_success: done
+                on_failure: escalate
+        """)
+    )
 
-def test_circular_sub_recipe_rule_passes_for_acyclic() -> None:
-    """No finding for acyclic sub_recipe references."""
-    # Recipe with a sub_recipe that doesn't exist yet — no cycle possible
-    recipe = _make_recipe_with_sub_recipe("sprint-prefix")
-    ctx = make_validation_context(recipe)
+    recipe = _make_recipe_with_sub_recipe("loop")
+    ctx = make_validation_context(
+        recipe,
+        available_sub_recipes=frozenset({"loop"}),
+        project_dir=tmp_path,
+    )
     findings = run_semantic_rules(ctx)
     circular = [f for f in findings if f.rule == "circular-sub-recipe"]
-    assert not circular
+    assert circular, "Expected a circular-sub-recipe finding for self-referencing sub-recipe"
+    assert "loop" in circular[0].message
 
 
 def test_rules_recipe_registered() -> None:

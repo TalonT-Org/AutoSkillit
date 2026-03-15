@@ -41,12 +41,9 @@ def test_implementation_sprint_entry_gates_on_sprint_mode(impl_recipe) -> None:
     assert step.gate == "sprint_mode"
 
 
-def test_implementation_sprint_entry_on_success_is_clone(impl_recipe) -> None:
-    """implementation.yaml sprint_entry.on_success == 'clone'."""
-    # on_success for sprint_entry is 'done' (sprint handles the full workflow)
-    # but the placeholder routes to 'done' after sub-recipe completes
+def test_implementation_sprint_entry_on_success_is_done(impl_recipe) -> None:
+    """implementation.yaml sprint_entry.on_success == 'done'."""
     step = impl_recipe.steps["sprint_entry"]
-    # The sprint_entry step on_success is 'done' (sprint workflow terminates parent)
     assert step.on_success == "done"
 
 
@@ -131,6 +128,6 @@ def test_implementation_no_semantic_errors(impl_recipe) -> None:
     from autoskillit.core.types import Severity
 
     active, _ = _build_active_recipe(impl_recipe, None, pkg_root().parent)
-    ctx = make_validation_context(active)
+    ctx = make_validation_context(active, available_sub_recipes=frozenset({"sprint-prefix"}))
     errors = [f for f in run_semantic_rules(ctx) if f.severity == Severity.ERROR]
     assert not errors, f"Semantic errors: {errors}"

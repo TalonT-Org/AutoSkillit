@@ -57,6 +57,6 @@ def test_remediation_no_semantic_errors(rem_recipe) -> None:
     from autoskillit.core.types import Severity
 
     active, _ = _build_active_recipe(rem_recipe, None, pkg_root().parent)
-    ctx = make_validation_context(active)
+    ctx = make_validation_context(active, available_sub_recipes=frozenset({"sprint-prefix"}))
     errors = [f for f in run_semantic_rules(ctx) if f.severity == Severity.ERROR]
     assert not errors, f"Semantic errors: {errors}"

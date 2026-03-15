@@ -71,18 +71,18 @@ def _make_sub_recipe() -> Recipe:
     )
 
 
-def test_load_with_gate_false_drops_sub_recipe_step() -> None:
+def test_load_with_gate_false_drops_sub_recipe_step(tmp_path: Path) -> None:
     """When gate ingredient is false, sub_recipe step is absent from served Recipe."""
     parent = _make_parent_recipe(gate_default="false")
-    active, combined = _build_active_recipe(parent, None, Path("/tmp"))
+    active, combined = _build_active_recipe(parent, None, tmp_path)
     assert "sprint_entry" not in active.steps
     assert combined is None
 
 
-def test_load_with_gate_false_is_identical_to_standalone() -> None:
+def test_load_with_gate_false_is_identical_to_standalone(tmp_path: Path) -> None:
     """Served recipe with gate=false is content-identical to a recipe without sub_recipe step."""
     parent = _make_parent_recipe(gate_default="false")
-    active, _ = _build_active_recipe(parent, None, Path("/tmp"))
+    active, _ = _build_active_recipe(parent, None, tmp_path)
     # Steps should be identical to parent minus the placeholder
     assert set(active.steps.keys()) == {"clone"}
     assert active.ingredients == parent.ingredients
@@ -139,7 +139,7 @@ def test_merged_steps_have_prefixed_names(tmp_path: Path) -> None:
     active, _ = _build_active_recipe(parent, {"sprint_mode": "true"}, tmp_path)
     # All merged step names should have the sub-recipe prefix
     sub_step_names = [n for n in active.steps if n != "clone"]
-    assert all("sprint_prefix_" in name or "sprint" in name for name in sub_step_names)
+    assert all(name.startswith("sprint_prefix_") for name in sub_step_names)
 
 
 def test_merged_step_done_routes_to_on_success(tmp_path: Path) -> None:

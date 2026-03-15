@@ -475,11 +475,15 @@ def _find_recipe(name: str, cwd: Path) -> Any:
     return find_recipe_by_name(name, cwd)
 
 
-async def infer_repo_from_remote(cwd: str) -> str:
-    """Return 'owner/repo' from git remote URL, or '' on failure."""
+async def infer_repo_from_remote(cwd: str, hint: str | None = None) -> str:
+    """Return 'owner/repo' from git remote URL, or '' on failure.
+
+    hint: optional owner/repo string or full GitHub URL; parsed before
+          git remote inference. Passes through to resolve_remote_repo.
+    """
     from autoskillit.execution import resolve_remote_repo
 
-    return await resolve_remote_repo(cwd) or ""
+    return await resolve_remote_repo(cwd, hint=hint) or ""
 
 
 async def _prime_quota_cache() -> None:

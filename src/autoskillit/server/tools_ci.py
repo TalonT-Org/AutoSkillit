@@ -13,12 +13,12 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import CIRunScope, get_logger
-from autoskillit.execution.remote_resolver import resolve_remote_repo
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
     _require_enabled,
     _run_subprocess,
+    infer_repo_from_remote,
     track_response_size,
 )
 
@@ -103,10 +103,7 @@ async def wait_for_ci(
         head_sha=head_sha,
     )
 
-    resolved_repo = await resolve_remote_repo(
-        cwd=cwd,
-        hint=remote_url or repo or None,
-    )
+    resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
 
     await _notify(
         ctx,
@@ -323,10 +320,7 @@ async def wait_for_merge_queue(
             }
         )
 
-    resolved_repo = await resolve_remote_repo(
-        cwd=cwd,
-        hint=remote_url or repo or None,
-    )
+    resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
 
     result = await tool_ctx.merge_queue_watcher.wait(
         pr_number=pr_number,

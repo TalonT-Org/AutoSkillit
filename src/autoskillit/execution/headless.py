@@ -77,6 +77,20 @@ def _inject_completion_directive(skill_command: str, marker: str) -> str:
     return skill_command + directive
 
 
+def _inject_cwd_anchor(skill_command: str, cwd: str) -> str:
+    """Append a working directory anchor directive to prevent path contamination."""
+    if not cwd or not os.path.isabs(cwd):
+        return skill_command
+    directive = (
+        f"\n\nWORKING DIRECTORY ANCHOR: Your working directory is {cwd}. "
+        f"All relative paths (temp/, .autoskillit/, etc.) MUST resolve against {cwd}. "
+        f"Do NOT use any other directory as a base for relative paths, regardless of "
+        f"what paths appear in code-index tool responses or set_project_path results. "
+        f"The code-index project path is for READ-ONLY exploration only."
+    )
+    return skill_command + directive
+
+
 def _session_log_dir(cwd: str) -> Path:
     """Derive Claude Code session log directory from project cwd."""
     log_dir = claude_code_project_dir(cwd)
@@ -169,6 +183,62 @@ def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
     return last
 
 
+_OUTPUT_PATH_TOKENS: frozenset[str] = frozenset(
+    {
+        "plan_path",
+        "plan_parts",
+        "investigation_path",
+        "diagnosis_path",
+        "report_path",
+        "review_path",
+        "groups_path",
+        "manifest_path",
+        "summary_path",
+        "analysis_path",
+        "remediation_path",
+        "diagram_path",
+        "triage_report",
+        "triage_manifest",
+        "pr_order_file",
+        "analysis_file",
+        "conflict_report_path",
+        "config_path",
+        "recipe_path",
+    }
+)
+
+_OUTPUT_PATH_PATTERN: re.Pattern[str] = re.compile(
+    r"^(" + "|".join(re.escape(t) for t in sorted(_OUTPUT_PATH_TOKENS)) + r")\s*=\s*(.+)$",
+    re.MULTILINE,
+)
+
+
+def _extract_output_paths(assistant_messages: list[str]) -> dict[str, str]:
+    """Extract structured output path tokens from session output."""
+    paths: dict[str, str] = {}
+    for msg in assistant_messages:
+        for m in _OUTPUT_PATH_PATTERN.finditer(msg):
+            token, value = m.group(1), m.group(2).strip()
+            if os.path.isabs(value):
+                paths[token] = value
+    return paths
+
+
+def _validate_output_paths(
+    extracted_paths: dict[str, str],
+    cwd: str,
+) -> str | None:
+    """Return a diagnostic string if any path is outside cwd, else None."""
+    if not os.path.isabs(cwd) or cwd == "/":
+        return None
+    cwd_prefix = cwd.rstrip("/") + "/"
+    violations = []
+    for token, path in extracted_paths.items():
+        if not path.startswith(cwd_prefix) and path != cwd.rstrip("/"):
+            violations.append(f"{token} '{path}' is outside session cwd '{cwd}'")
+    return "; ".join(violations) if violations else None
+
+
 def _apply_budget_guard(
     sr: SkillResult,
     skill_command: str,
@@ -206,6 +276,7 @@ def _build_skill_result(
     audit: AuditStore | None = None,
     max_consecutive_retries: int = 3,
     expected_output_patterns: Sequence[str] = (),
+    cwd: str = "",
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
@@ -337,20 +408,46 @@ def _build_skill_result(
     if needs_retry:
         extracted_worktree_path = _extract_worktree_path(session.assistant_messages)
 
-    sr = SkillResult(
-        success=success,
-        result=result_text,
-        session_id=session.session_id,
-        subtype=normalized_subtype,
-        is_error=session.is_error,
-        exit_code=returncode,
-        needs_retry=needs_retry,
-        retry_reason=retry_reason,
-        stderr=_truncate(result.stderr),
-        token_usage=session.token_usage,
-        worktree_path=extracted_worktree_path,
-        cli_subtype=session.subtype,
-    )
+    # Path contamination detection
+    path_contamination: str | None = None
+    if not cwd:
+        logger.debug("path_contamination_check_skipped", reason="cwd not provided")
+    elif cwd:
+        extracted_paths = _extract_output_paths(session.assistant_messages)
+        path_contamination = _validate_output_paths(extracted_paths, cwd)
+        if path_contamination:
+            logger.warning("path_contamination_detected", detail=path_contamination, cwd=cwd)
+
+    if path_contamination:
+        sr = SkillResult(
+            success=False,
+            result=result_text,
+            session_id=session.session_id,
+            subtype="path_contamination",
+            is_error=session.is_error,
+            exit_code=returncode,
+            needs_retry=True,
+            retry_reason=RetryReason.RESUME,
+            stderr=_truncate(result.stderr),
+            token_usage=session.token_usage,
+            worktree_path=extracted_worktree_path,
+            cli_subtype=session.subtype,
+        )
+    else:
+        sr = SkillResult(
+            success=success,
+            result=result_text,
+            session_id=session.session_id,
+            subtype=normalized_subtype,
+            is_error=session.is_error,
+            exit_code=returncode,
+            needs_retry=needs_retry,
+            retry_reason=retry_reason,
+            stderr=_truncate(result.stderr),
+            token_usage=session.token_usage,
+            worktree_path=extracted_worktree_path,
+            cli_subtype=session.subtype,
+        )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
     logger.debug(
         "build_skill_result_exit",
@@ -388,8 +485,11 @@ async def run_headless_core(
         skill_command=original_skill_command[:100],
         step_name=step_name or None,
     ):
-        skill_command = _inject_completion_directive(
-            _ensure_skill_prefix(skill_command), cfg.completion_marker
+        skill_command = _inject_cwd_anchor(
+            _inject_completion_directive(
+                _ensure_skill_prefix(skill_command), cfg.completion_marker
+            ),
+            cwd,
         )
         effective_plugin_dir = ctx.plugin_dir
         resolved_model = _resolve_model(model, ctx.config)
@@ -483,6 +583,7 @@ async def run_headless_core(
             skill_command=original_skill_command,
             audit=ctx.audit,
             expected_output_patterns=expected_output_patterns,
+            cwd=cwd,
         )
 
         # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()

@@ -64,7 +64,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Include every requirement from the source document in exactly one group
 - Assign each group a sequential suffix: groupA, groupB, ... groupZ
 - State dependencies between groups explicitly
-- Write to `temp/make-groups/` directory
+- Write to `temp/make-groups/` directory (relative to the current working directory)
 
 ## Workflow
 

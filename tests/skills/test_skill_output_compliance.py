@@ -158,3 +158,55 @@ def test_no_shared_scratch_files(skill_name: str) -> None:
             f"Skill '{skill_name}' writes to shared scratch file '{scratch_file}'.\n"
             f"Use skill-scoped path: temp/{skill_name}/... with timestamp instead."
         )
+
+
+@pytest.mark.parametrize("skill_name", _get_file_producing_skills())
+def test_file_producing_skills_have_cwd_anchor(skill_name: str) -> None:
+    """Every file-producing skill must anchor temp/ writes to the current working directory."""
+    resolver = SkillResolver()
+    info = resolver.resolve(skill_name)
+    assert info is not None
+    content = info.path.read_text()
+
+    assert re.search(r"current working directory", content, re.IGNORECASE), (
+        f"Skill '{skill_name}' writes to temp/ but does not anchor paths to the "
+        f"current working directory. Add '(relative to the current working directory)' "
+        f"after the output path instruction."
+    )
+
+
+def test_output_path_tokens_synchronized() -> None:
+    """_OUTPUT_PATH_TOKENS must match the expected path-bearing token set exactly."""
+    from autoskillit.execution.headless import _OUTPUT_PATH_TOKENS
+
+    # Static known-set of tokens whose values are filesystem paths.
+    # Update this set when adding new path-bearing structured output tokens.
+    expected_path_tokens = frozenset(
+        {
+            "plan_path",
+            "plan_parts",
+            "investigation_path",
+            "diagnosis_path",
+            "report_path",
+            "review_path",
+            "groups_path",
+            "manifest_path",
+            "summary_path",
+            "analysis_path",
+            "remediation_path",
+            "diagram_path",
+            "triage_report",
+            "triage_manifest",
+            "pr_order_file",
+            "analysis_file",
+            "conflict_report_path",
+            "config_path",
+            "recipe_path",
+        }
+    )
+
+    assert _OUTPUT_PATH_TOKENS == expected_path_tokens, (
+        f"_OUTPUT_PATH_TOKENS mismatch.\n"
+        f"Missing: {expected_path_tokens - _OUTPUT_PATH_TOKENS}\n"
+        f"Extra: {_OUTPUT_PATH_TOKENS - expected_path_tokens}"
+    )

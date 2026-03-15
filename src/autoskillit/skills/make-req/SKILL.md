@@ -41,7 +41,7 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 - Group requirements by what would be implemented together
 - Provide background and context for each group
 - State requirements as verifiable conditions
-- Write to `temp/make-req/` directory
+- Write to `temp/make-req/` directory (relative to the current working directory)
 
 ## Workflow
 
@@ -90,7 +90,7 @@ Keep context factual. Do not suggest solutions.
 
 ### Step 5: Write the Requirements Document
 
-Save to: `temp/make-req/requirements_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+Save to: `temp/make-req/requirements_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ```markdown
 # Requirements: {Topic}

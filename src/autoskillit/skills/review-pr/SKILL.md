@@ -95,7 +95,7 @@ gh pr diff {pr_number}
 gh repo view --json nameWithOwner -q .nameWithOwner
 ```
 
-Save the diff to `temp/review-pr/diff_{pr_number}.txt`.
+Save the diff to `temp/review-pr/diff_{pr_number}.txt`. (relative to the current working directory)
 
 ### Step 2.7: Deterministic Diff Annotation
 
@@ -447,7 +447,7 @@ gh pr review {pr_number} --comment --body "AutoSkillit review: uncertain trade-o
 
 ### Step 8: Write Summary and Emit Verdict
 
-Save findings summary to `temp/review-pr/summary_{pr_number}_{timestamp}.md`.
+Save findings summary to `temp/review-pr/summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
 
 Output the verdict as the final line:
 

@@ -38,7 +38,7 @@ execute session, collect result, report.
 - Process batches in ascending order: batch 1 before batch 2 before batch 3
 - Use `load_recipe` to execute the recipe for each issue
 - Emit `---process-issues-result---` result block on completion (success or failure)
-- Write the summary report to `temp/process-issues/`
+- Write the summary report to `temp/process-issues/` (relative to the current working directory)
 - Use `model: "sonnet"` when spawning subagents via the Task tool
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include `--force` in all `gh label create` calls

@@ -56,7 +56,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 **ALWAYS:**
 - Use subagents for parallel exploration
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
-- Write findings as a markdown report with unique name to `temp/investigate/` directory
+- Write findings as a markdown report with unique name to `temp/investigate/` directory (relative to the current working directory)
 - Identify how tests missed the issue (if applicable)
 - Check for similar existing patterns in codebase
 - Ensure approaches, solutions, and fixes are the appropriate long-term solutions with proper architecture
@@ -155,7 +155,7 @@ After subagents complete, consolidate into structured findings:
 
 ### Step 4: Write Report
 
-Write findings to: `temp/investigate/investigation_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+Write findings to: `temp/investigate/investigation_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 Report structure:
 ```markdown
@@ -213,4 +213,3 @@ Focus on:
 This is a research task - DO NOT modify any code.
 Report your findings in a structured format.
 ```
-

@@ -107,7 +107,7 @@ Create directory `temp/diagnose-ci/` if it doesn't exist. Write the diagnosis fi
 {1-3 sentences describing how resolve-failures should approach this}
 ```
 
-Save to `temp/diagnose-ci/diagnosis_{timestamp}.md`.
+Save to `temp/diagnose-ci/diagnosis_{timestamp}.md`. (relative to the current working directory)
 
 ### Step 7: Emit Output Tokens
 

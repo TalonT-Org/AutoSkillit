@@ -203,7 +203,7 @@ The loaded skill will read the PR context file written in step 1 above.
 
 **3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
 
-The arch-lens skills write their output to `temp/arch-lens-{lens-name}/`. After each skill
+The arch-lens skills write their output to `temp/arch-lens-{lens-name}/` (relative to the current working directory). After each skill
 runs, read the generated markdown file and extract the mermaid code block(s).
 
 After extracting the mermaid block, inspect its content for `★` or `●` characters:
@@ -221,7 +221,7 @@ After generating all diagrams, check `validated_diagrams`:
 - If `validated_diagrams` is empty → omit the `## Architecture Impact` section entirely.
   Do not include a placeholder or note in the PR body.
 
-Write the PR body to `temp/open-pr/pr_body_{timestamp}.md`.
+Write the PR body to `temp/open-pr/pr_body_{timestamp}.md`. (relative to the current working directory)
 
 Read `## Summary` from each plan file.
 

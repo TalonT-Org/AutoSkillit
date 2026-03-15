@@ -121,7 +121,7 @@ Defense standards come from the `/autoskillit:design-guards` pipeline:
 2. **Each subagent:** runs the audit strategy, reports violations with file paths and line numbers
 3. **Consolidate findings** by standard and severity
 4. Ensure `temp/audit-defense-standards/` exists (`mkdir -p`)
-5. **Write report** to `temp/audit-defense-standards/defense_audit_{YYYY-MM-DD_HHMMSS}.md`
+5. **Write report** to `temp/audit-defense-standards/defense_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 6. **Output summary** to terminal: violation count per standard, total by severity
 
 ## Report Structure

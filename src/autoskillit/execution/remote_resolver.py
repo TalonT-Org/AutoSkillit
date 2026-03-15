@@ -7,13 +7,10 @@ encoding the clone isolation contract (upstream > origin priority).
 from __future__ import annotations
 
 import asyncio
-import re
 
-from autoskillit.core import get_logger, parse_github_repo
+from autoskillit.core import get_logger, normalize_owner_repo, parse_github_repo
 
 _log = get_logger(__name__)
-
-_OWNER_REPO_RE = re.compile(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
 
 
 async def resolve_remote_repo(
@@ -24,7 +21,7 @@ async def resolve_remote_repo(
     """Resolve GitHub 'owner/repo' from a git working directory.
 
     Priority:
-      1. hint — if already owner/repo format, return as-is; if a full URL, parse it.
+      1. hint — if already owner/repo format, return as-is (strips .git); if a full URL, parse it.
       2. Each remote in `remotes` (default: upstream first, then origin).
          The default order encodes the clone isolation contract: upstream holds
          the real GitHub URL; origin may be a file:// isolation URL.
@@ -32,8 +29,9 @@ async def resolve_remote_repo(
     Returns owner/repo string or None if no GitHub remote is found.
     """
     if hint:
-        if _OWNER_REPO_RE.match(hint):
-            return hint
+        normalized = normalize_owner_repo(hint)
+        if normalized:
+            return normalized
         parsed = parse_github_repo(hint)
         if parsed:
             return parsed
@@ -54,7 +52,7 @@ async def resolve_remote_repo(
                 parsed = parse_github_repo(stdout.decode().strip())
                 if parsed:
                     return parsed
-        except Exception:
+        except OSError:
             _log.warning("Failed to get URL for remote %r in %r", remote, cwd, exc_info=True)
 
     return None

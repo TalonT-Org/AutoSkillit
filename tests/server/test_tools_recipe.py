@@ -751,15 +751,20 @@ class TestDocstringSemantics:
 class TestLoadSkillScriptFailurePredicates:
     """The load_recipe tool description documents failure predicates."""
 
-    @pytest.mark.anyio
-    async def test_description_documents_run_skill_failure(self):
-        """The routing rules must define failure for run_skill, not just test_check."""
+    async def _get_tools(self) -> dict:
+        """Return dict of tool_name -> tool for all visible tools via public Client API."""
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
 
         async with Client(mcp) as client:
-            tools = {t.name: t for t in await client.list_tools()}
+            tools = await client.list_tools()
+        return {t.name: t for t in tools}
+
+    @pytest.mark.anyio
+    async def test_description_documents_run_skill_failure(self):
+        """The routing rules must define failure for run_skill, not just test_check."""
+        tools = await self._get_tools()
         desc = tools["load_recipe"].description or ""
         assert "run_skill" in desc
         assert "success" in desc.lower()

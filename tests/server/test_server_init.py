@@ -141,8 +141,8 @@ class TestToolRegistration:
 
         from autoskillit.server import mcp
 
-        mcp.enable(tags={"kitchen"})
         try:
+            mcp.enable(tags={"kitchen"})
             async with Client(mcp) as client:
                 all_tools = await client.list_tools()
         finally:
@@ -194,7 +194,7 @@ class TestToolRegistration:
 
     @pytest.mark.anyio
     async def test_ungated_tools_lack_kitchen_tag(self):
-        """Ungated tools (including open_kitchen, close_kitchen) are visible without kitchen."""
+        """Ungated tools are visible without kitchen and carry no 'kitchen' tag."""
         from fastmcp.client import Client
 
         from autoskillit.pipeline.gate import UNGATED_TOOLS
@@ -204,6 +204,37 @@ class TestToolRegistration:
             visible_names = {t.name for t in await client.list_tools()}
         for name in UNGATED_TOOLS:
             assert name in visible_names, f"{name} should be visible without kitchen"
+
+        # Verify no ungated tool carries the kitchen tag (internal registry check)
+        all_tools = {t.name: t for t in await mcp.list_tools()}
+        for name in UNGATED_TOOLS:
+            tool = all_tools.get(name)
+            if tool is not None:
+                assert "kitchen" not in tool.tags, (
+                    f"Ungated tool '{name}' must not carry the 'kitchen' tag"
+                )
+
+    @pytest.mark.anyio
+    async def test_kitchen_tools_have_both_tags(self):
+        """Every tool in GATED_TOOLS carries both 'automation' and 'kitchen' tags."""
+        from autoskillit.pipeline.gate import GATED_TOOLS
+        from autoskillit.server import mcp
+
+        all_tools = {t.name: t for t in await mcp.list_tools()}
+        for name in GATED_TOOLS:
+            tool = all_tools.get(name)
+            assert tool is not None, f"Gated tool '{name}' not registered on server"
+            assert "automation" in tool.tags, f"Gated tool '{name}' missing 'automation' tag"
+            assert "kitchen" in tool.tags, f"Gated tool '{name}' missing 'kitchen' tag"
+
+    @pytest.mark.anyio
+    async def test_all_tools_tagged_automation(self):
+        """Every registered tool carries the 'automation' tag."""
+        from autoskillit.server import mcp
+
+        all_tools = await mcp.list_tools()
+        for tool in all_tools:
+            assert "automation" in tool.tags, f"Tool '{tool.name}' is missing the 'automation' tag"
 
     def test_ungated_tools_docstrings_state_notification_free(self):
         """P5-1: Each ungated tool docstring states it sends no MCP notifications."""
@@ -1102,19 +1133,25 @@ class TestToolSchemas:
         "run_skill": ["MCP tool", "delegate"],
     }
 
-    @pytest.mark.anyio
-    async def test_tool_descriptions_contain_no_legacy_terms(self):
-        """No registered tool should reference old package terminology."""
+    async def _get_all_tools(self) -> dict:
+        """Return dict of tool_name -> tool for all tools, including kitchen-gated ones."""
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
 
-        mcp.enable(tags={"kitchen"})
         try:
+            mcp.enable(tags={"kitchen"})
             async with Client(mcp) as client:
-                all_tools = await client.list_tools()
+                tools = await client.list_tools()
         finally:
             mcp.disable(tags={"kitchen"})
+        return {t.name: t for t in tools}
+
+    @pytest.mark.anyio
+    async def test_tool_descriptions_contain_no_legacy_terms(self):
+        """No registered tool should reference old package terminology."""
+        all_tools_dict = await self._get_all_tools()
+        all_tools = list(all_tools_dict.values())
         for tool in all_tools:
             desc = (tool.description or "").lower()
             for term in self.FORBIDDEN_TERMS:
@@ -1141,16 +1178,8 @@ class TestToolSchemas:
     @pytest.mark.anyio
     async def test_classify_fix_docstring_has_routing_guidance(self):
         """classify_fix must explain what to do with each return value."""
-        from fastmcp.client import Client
-
-        from autoskillit.server import mcp
-
-        mcp.enable(tags={"kitchen"})
-        try:
-            async with Client(mcp) as client:
-                tools = {t.name: t for t in await client.list_tools()}
-        finally:
-            mcp.disable(tags={"kitchen"})
+        tools = await self._get_all_tools()
+        assert "classify_fix" in tools, "Tool 'classify_fix' not found in server"
         desc = tools["classify_fix"].description or ""
         # Must mention both routing outcomes
         assert "full_restart" in desc
@@ -1195,16 +1224,7 @@ class TestToolSchemas:
     @pytest.mark.anyio
     async def test_pipeline_tools_have_orchestrator_guidance(self):
         """run_skill must reinforce MCP-only delegation."""
-        from fastmcp.client import Client
-
-        from autoskillit.server import mcp
-
-        mcp.enable(tags={"kitchen"})
-        try:
-            async with Client(mcp) as client:
-                tools = {t.name: t for t in await client.list_tools()}
-        finally:
-            mcp.disable(tags={"kitchen"})
+        tools = await self._get_all_tools()
         failures = []
         for tool_name, required_terms in self.PIPELINE_TOOLS_WITH_GUIDANCE.items():
             desc = tools[tool_name].description or ""
@@ -1241,16 +1261,9 @@ class TestToolSchemas:
     @pytest.mark.anyio
     async def test_run_skill_names_all_forbidden_tools(self):
         """run_skill docstring must name all forbidden tools."""
-        from fastmcp.client import Client
+        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
 
-        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS, mcp
-
-        mcp.enable(tags={"kitchen"})
-        try:
-            async with Client(mcp) as client:
-                tools = {t.name: t for t in await client.list_tools()}
-        finally:
-            mcp.disable(tags={"kitchen"})
+        tools = await self._get_all_tools()
         for tool_name in ("run_skill",):
             desc = tools[tool_name].description or ""
             missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in desc]

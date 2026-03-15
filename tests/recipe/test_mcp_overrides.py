@@ -99,7 +99,7 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
             overrides={"sprint_mode": "true"},
             ctx=mock_mcp_ctx,
         )
-        result = json.loads(result_str)
+        json.loads(result_str)  # verify valid JSON
 
         # Verify overrides were passed through to load_and_validate
         mock_recipes.load_and_validate.assert_called_once()

@@ -373,7 +373,9 @@ async def test_wait_for_merge_queue_parses_remote_url_to_resolve_repo(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inference(tool_ctx):
+async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inference(
+    tool_ctx, tmp_path
+):
     """
     remote_url that parses to None (e.g. file://) does NOT short-circuit;
     inference continues via resolve_remote_repo(cwd).
@@ -392,7 +394,9 @@ async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inferenc
             pr_number=1,
             target_branch="main",
             remote_url="file:///tmp/clone",
-            cwd="/tmp/clone",  # no upstream/origin with GitHub URL
+            cwd=str(tmp_path),  # real dir, no GitHub remotes
         )
     )
     assert result["pr_state"] == "error"
+    # The file:// URL must not resolve to a GitHub repo, so watcher receives repo=None
+    assert mock_watcher.wait.call_args.kwargs.get("repo") is None

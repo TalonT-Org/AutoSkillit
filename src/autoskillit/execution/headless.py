@@ -242,7 +242,9 @@ def _validate_output_paths(
 
 _WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})
 _BASH_TOOL_NAME: str = "Bash"
-_ABS_PATH_PATTERN: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/-]+))')
+_ABS_PATH_PATTERN: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+:-]+))')
+# Exclude paths of 4 chars or fewer (/tmp, /etc, /bin, /var) as low-signal noise.
+_MIN_BASH_PATH_LEN: int = 5
 
 
 def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
@@ -261,8 +263,8 @@ def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
     cwd_prefix = cwd.rstrip("/") + "/"
     warnings: list[str] = []
 
-    for line in stdout.strip().splitlines():
-        line = line.strip()
+    for raw_line in stdout.strip().splitlines():
+        line = raw_line.strip()
         if not line:
             continue
         try:
@@ -303,7 +305,7 @@ def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
                     for match in _ABS_PATH_PATTERN.finditer(command):
                         path = match.group(1)
                         if (
-                            len(path) > 4
+                            len(path) >= _MIN_BASH_PATH_LEN
                             and not path.startswith(cwd_prefix)
                             and path != cwd.rstrip("/")
                         ):

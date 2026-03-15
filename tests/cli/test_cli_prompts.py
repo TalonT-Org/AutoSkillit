@@ -225,6 +225,6 @@ def test_orchestrator_prompt_multi_issue_ask_only_two_options():
 
     prompt = _build_orchestrator_prompt("implementation")
     # Must tell the orchestrator to ask the user — no other alternatives offered
-    assert "sequential or parallel" in prompt.lower(), (
+    assert "sequentially (one at a time) or in parallel" in prompt.lower(), (
         "Prompt must instruct orchestrator to ask 'sequential or parallel?'"
     )

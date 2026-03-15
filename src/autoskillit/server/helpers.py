@@ -441,7 +441,7 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     resolved: dict[str, str] = {}
 
     try:
-        from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE
+        from autoskillit.execution import REMOTE_PRECEDENCE
 
         for remote in REMOTE_PRECEDENCE:
             proc = subprocess.run(

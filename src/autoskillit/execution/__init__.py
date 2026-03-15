@@ -50,7 +50,7 @@ from autoskillit.execution.process import (
     run_managed_sync,
 )
 from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
-from autoskillit.execution.remote_resolver import resolve_remote_repo
+from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE, resolve_remote_repo
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     extract_token_usage,
@@ -99,6 +99,7 @@ __all__ = [
     # merge_queue
     "DefaultMergeQueueWatcher",
     # remote_resolver
+    "REMOTE_PRECEDENCE",
     "resolve_remote_repo",
     # diff_annotator
     "FilterResult",

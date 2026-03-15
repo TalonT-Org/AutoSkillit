@@ -69,7 +69,7 @@ class DefaultCIWatcher:
 
     async def _resolve_repo(self, repo: str | None, cwd: str) -> str | None:
         """Resolve owner/repo from argument or git remote."""
-        if not cwd:
+        if not cwd and not repo:
             return None
         from autoskillit.execution.remote_resolver import resolve_remote_repo
 

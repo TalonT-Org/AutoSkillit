@@ -641,7 +641,7 @@ def test_doctor_detects_plugin_registration(monkeypatch: pytest.MonkeyPatch) -> 
     fake_claude_json_content = _json.dumps({"mcpServers": {}})  # No mcpServers entry
 
     class FakeResult:
-        stdout = "autoskillit  0.3.1  active\n"
+        stdout = "autoskillit  0.4.0  active\n"
         returncode = 0
 
     def fake_plugin_list(*args: object, **kwargs: object) -> FakeResult:

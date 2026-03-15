@@ -787,8 +787,8 @@ def test_wrapped_run_skill_success(tmp_path):
 def test_wrapped_kitchen_status(tmp_path):
     """Wrapped kitchen_status must unwrap and show status fields."""
     payload = {
-        "package_version": "0.3.1",
-        "plugin_json_version": "0.3.1",
+        "package_version": "0.4.0",
+        "plugin_json_version": "0.4.0",
         "versions_match": True,
         "tools_enabled": True,
         "token_usage_verbosity": "summary",

@@ -882,18 +882,25 @@ async def claim_issue(
 async def release_issue(
     issue_url: str,
     label: str | None = None,
+    target_branch: str | None = None,
+    staged_label: str | None = None,
 ) -> str:
     """Remove the in-progress label from a GitHub issue to release it.
 
     Call this in cleanup paths (both success and failure) to allow the issue
     to be picked up by future pipeline runs.
 
-    Returns JSON with: success, issue_number, label.
+    When target_branch is provided and differs from the configured default base branch,
+    also applies a 'staged' label to indicate the work is merged and awaiting promotion.
+
+    Returns JSON with: success, issue_number, label, staged, staged_label.
     On gate closed or no token: {success: false, error: "..."}.
 
     Args:
         issue_url: Full GitHub issue URL or shorthand (owner/repo#42).
         label: Label name to remove. Defaults to github.in_progress_label from config.
+        target_branch: Branch the PR was merged into. When non-default, applies staged label.
+        staged_label: Label name for staged state. Defaults to github.staged_label from config.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -919,11 +926,57 @@ async def release_issue(
         result = await tool_ctx.github_client.remove_label(
             owner, repo, issue_number, effective_label
         )
+        if not result.get("success", False):
+            return json.dumps(
+                {
+                    "success": False,
+                    "issue_number": issue_number,
+                    "label": effective_label,
+                }
+            )
+
+        # Determine if staging is needed
+        default_branch = tool_ctx.config.branching.default_base_branch
+        should_stage = target_branch is not None and target_branch != default_branch
+
+        staged = False
+        effective_staged_label = staged_label or tool_ctx.config.github.staged_label
+
+        if should_stage:
+            ensure_result = await tool_ctx.github_client.ensure_label(
+                owner,
+                repo,
+                effective_staged_label,
+                color="0075ca",
+                description="Implementation staged and waiting for promotion to main",
+            )
+            if not ensure_result.get("success"):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": f"Failed to ensure staged label: {ensure_result.get('error', '?')}",
+                    }
+                )
+
+            apply_result = await tool_ctx.github_client.add_labels(
+                owner, repo, issue_number, [effective_staged_label]
+            )
+            if not apply_result.get("success"):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": f"Failed to apply staged label: {apply_result.get('error', '?')}",
+                    }
+                )
+            staged = True
+
         return json.dumps(
             {
-                "success": result.get("success", False),
+                "success": True,
                 "issue_number": issue_number,
                 "label": effective_label,
+                "staged": staged,
+                "staged_label": effective_staged_label if staged else None,
             }
         )
 

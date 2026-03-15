@@ -41,7 +41,6 @@ __all__ = [
     # Public utilities consumed by CLI and tests
     "version_info",
     "make_context",
-    "resolve_ingredient_defaults",
 ]
 
 # Import all tool sub-modules to trigger @mcp.tool() registration.
@@ -49,7 +48,6 @@ __all__ = [
 # because tool modules import `mcp` from this package at import time.
 import os  # noqa: E402
 
-from autoskillit.config import resolve_ingredient_defaults  # noqa: E402, F401
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
 from autoskillit.server import (  # noqa: E402, F401
     helpers,

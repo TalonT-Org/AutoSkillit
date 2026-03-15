@@ -52,6 +52,7 @@ def _check_mcp_server_registered(claude_json_path: Path | None = None) -> Doctor
             )
 
     # Check 2: plugin-based registration (install-based)
+    _plugin_check_detail = ""
     try:
         result = subprocess.run(
             ["claude", "plugin", "list"],

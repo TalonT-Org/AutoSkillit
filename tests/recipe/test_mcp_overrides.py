@@ -39,7 +39,7 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
         patch("autoskillit.server.tools_recipe._require_not_headless", return_value=None),
         patch("autoskillit.server.tools_recipe._get_ctx_or_none", return_value=mock_tool_ctx),
         patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            "autoskillit.config.resolve_ingredient_defaults",
             return_value={},
         ),
         patch(
@@ -82,7 +82,7 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
         ),
         patch("autoskillit.server._get_ctx", return_value=mock_tool_ctx),
         patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            "autoskillit.config.resolve_ingredient_defaults",
             return_value={},
         ),
         patch(

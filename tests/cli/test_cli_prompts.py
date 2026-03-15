@@ -147,7 +147,7 @@ def test_show_cook_preview_prints_table(monkeypatch, tmp_path, capsys):
     from autoskillit.recipe.io import _parse_recipe
 
     monkeypatch.setattr(
-        "autoskillit.server.resolve_ingredient_defaults",
+        "autoskillit.config.resolve_ingredient_defaults",
         lambda _: {"source_dir": "https://github.com/test/repo", "base_branch": "main"},
     )
     recipe = _parse_recipe(
@@ -177,7 +177,7 @@ def test_show_cook_preview_no_diagram(monkeypatch, tmp_path, capsys):
     from autoskillit.recipe.io import _parse_recipe
 
     monkeypatch.setattr(
-        "autoskillit.server.resolve_ingredient_defaults",
+        "autoskillit.config.resolve_ingredient_defaults",
         lambda _: {},
     )
     recipe = _parse_recipe(

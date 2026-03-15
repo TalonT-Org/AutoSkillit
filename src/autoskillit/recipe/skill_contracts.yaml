@@ -48,6 +48,8 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
+    - name: conflict_report_path
+      type: file_path
     - name: escalation_required
       type: string
     - name: escalation_reason

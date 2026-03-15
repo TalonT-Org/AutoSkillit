@@ -220,7 +220,11 @@ class TestToolRegistration:
         from autoskillit.pipeline.gate import GATED_TOOLS
         from autoskillit.server import mcp
 
-        all_tools = {t.name: t for t in await mcp.list_tools()}
+        try:
+            mcp.enable(tags={"kitchen"})
+            all_tools = {t.name: t for t in await mcp.list_tools()}
+        finally:
+            mcp.disable(tags={"kitchen"})
         for name in GATED_TOOLS:
             tool = all_tools.get(name)
             assert tool is not None, f"Gated tool '{name}' not registered on server"
@@ -232,7 +236,11 @@ class TestToolRegistration:
         """Every registered tool carries the 'automation' tag."""
         from autoskillit.server import mcp
 
-        all_tools = await mcp.list_tools()
+        try:
+            mcp.enable(tags={"kitchen"})
+            all_tools = await mcp.list_tools()
+        finally:
+            mcp.disable(tags={"kitchen"})
         for tool in all_tools:
             assert "automation" in tool.tags, f"Tool '{tool.name}' is missing the 'automation' tag"
 

@@ -833,7 +833,7 @@ class TestPrepareIssueTool:
         assert result["success"] is False
         assert result["session_id"] == "sid123"
         assert result["subtype"] == "success"
-        assert "no result block" in result["error"].lower() or "empty" in result["error"].lower()
+        assert result["error"] == "session completed but output was empty (drain race)"
         assert result["status"] != "complete"  # contradiction must be impossible
 
     @pytest.mark.anyio
@@ -911,6 +911,7 @@ class TestPrepareIssueTool:
         result = json.loads(await prepare_issue("Title", "Body"))
 
         assert result["success"] is True
+        assert result["status"] == "complete"
 
     @pytest.mark.anyio
     @pytest.mark.parametrize(
@@ -940,10 +941,8 @@ class TestPrepareIssueTool:
 
         result = json.loads(await prepare_issue("Title", "Body"))
 
-        if result["status"] == "complete":
-            assert result["success"] is True, "status=complete implies success=True"
-        if result["success"] is False:
-            assert result["status"] != "complete", "success=False implies status!=complete"
+        assert result["success"] is False
+        assert result["status"] == "failed"
 
 
 class TestEnrichIssuesTool:
@@ -963,7 +962,7 @@ class TestEnrichIssuesTool:
 
     @pytest.mark.anyio
     async def test_enrich_issues_success_empty_result_includes_diagnostics(self, tool_ctx):
-        """Channel B drain race for enrich_issues: success=True with empty result → failure response."""
+        """Drain race for enrich_issues: success=True with empty result must yield failure."""
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
             success=True,

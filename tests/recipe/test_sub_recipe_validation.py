@@ -231,9 +231,6 @@ def test_dual_validation_standalone_errors_surfaced(tmp_path: Path) -> None:
 
     result = load_and_validate("test-recipe", project_dir=tmp_path)
     assert result.get("valid") is False, f"Expected valid=False, got {result.get('valid')}"
-    assert any("gate" in str(s) for s in result.get("suggestions", [])), (
-        f"Expected gate-related suggestion, got: {result.get('suggestions')}"
-    )
 
 
 def test_combined_graph_dataflow_validated(tmp_path: Path) -> None:

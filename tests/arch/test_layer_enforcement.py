@@ -563,9 +563,10 @@ def test_no_cross_package_submodule_imports() -> None:
 
 def test_server_tools_import_only_allowed_packages() -> None:
     """REQ-ARCH-003: server/tools_*.py may only import from autoskillit.core,
-    autoskillit.pipeline, and intra-package autoskillit.server.*. TYPE_CHECKING exempt.
+    autoskillit.pipeline, autoskillit.config, and intra-package autoskillit.server.*.
+    TYPE_CHECKING exempt.
     """
-    ALLOWED = {"core", "pipeline", "server"}
+    ALLOWED = {"core", "pipeline", "server", "config"}
     tools_files = [
         p for p in _SOURCE_FILES if p.parent.name == "server" and p.stem.startswith("tools_")
     ]

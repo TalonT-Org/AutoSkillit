@@ -7,7 +7,7 @@ import subprocess
 
 def test_resolve_ingredient_defaults_uses_upstream_when_origin_is_file_url(tmp_path):
     """resolve_ingredient_defaults must return the upstream URL when origin is file://."""
-    from autoskillit.server.helpers import resolve_ingredient_defaults
+    from autoskillit.config import resolve_ingredient_defaults
 
     # Create repo with file:// origin and real URL upstream
     repo = tmp_path / "repo"
@@ -27,7 +27,7 @@ def test_resolve_ingredient_defaults_uses_upstream_when_origin_is_file_url(tmp_p
 
 def test_resolve_ingredient_defaults_still_works_with_github_origin(tmp_path):
     """Non-clone context: origin has real GitHub URL — must continue to work."""
-    from autoskillit.server.helpers import resolve_ingredient_defaults
+    from autoskillit.config import resolve_ingredient_defaults
 
     repo = tmp_path / "repo"
     subprocess.run(["git", "init", str(repo)], check=True)

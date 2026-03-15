@@ -89,7 +89,8 @@ class TestVersionBumpWorkflow:
 
     def test_contents_write_permission(self):
         wf = _load(VERSION_BUMP_WORKFLOW)
-        perms = wf.get("permissions", {})
+        job = next(iter(wf.get("jobs", {}).values()))
+        perms = job.get("permissions", {})
         assert perms.get("contents") == "write", (
             "version-bump.yml needs contents: write to push commits"
         )
@@ -97,7 +98,8 @@ class TestVersionBumpWorkflow:
     def test_no_pull_requests_write_permission(self):
         """version-bump.yml no longer opens PRs — pull-requests: write must not be present."""
         wf = _load(VERSION_BUMP_WORKFLOW)
-        perms = wf.get("permissions", {})
+        job = next(iter(wf.get("jobs", {}).values()))
+        perms = job.get("permissions", {})
         assert "pull-requests" not in perms, (
             "version-bump.yml must not declare pull-requests: write — "
             "sync is now a force-push, not a PR"
@@ -258,7 +260,8 @@ class TestReleaseWorkflow:
 
     def test_contents_write_permission(self):
         wf = _load(RELEASE_WORKFLOW)
-        perms = wf.get("permissions", {})
+        job = next(iter(wf.get("jobs", {}).values()))
+        perms = job.get("permissions", {})
         assert perms.get("contents") == "write"
 
     def test_setup_uv_has_version_pin(self):

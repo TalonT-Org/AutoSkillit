@@ -41,16 +41,6 @@ FAILED_CONCLUSIONS: frozenset[str] = frozenset(
 )
 
 
-def _parse_repo_from_remote(remote_url: str) -> str | None:
-    """Extract owner/repo from a git remote URL.
-
-    Thin shim delegating to the canonical parse_github_repo parser.
-    """
-    from autoskillit.core import parse_github_repo
-
-    return parse_github_repo(remote_url)
-
-
 def _jittered_sleep(attempt: int) -> float:
     """Compute full-jitter exponential backoff: random(0, min(cap, base * 2^attempt))."""
     ceiling = min(_BACKOFF_CAP, _BACKOFF_BASE * (2**attempt))
@@ -79,6 +69,8 @@ class DefaultCIWatcher:
 
     async def _resolve_repo(self, repo: str | None, cwd: str) -> str | None:
         """Resolve owner/repo from argument or git remote."""
+        if not cwd:
+            return None
         from autoskillit.execution.remote_resolver import resolve_remote_repo
 
         return await resolve_remote_repo(cwd, hint=repo)

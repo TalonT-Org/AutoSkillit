@@ -52,7 +52,7 @@ PR, and output `pr_url=<url>`.
 ### Step 1: Parse Arguments
 
 Parse four positional args: `integration_branch`, `base_branch`, `pr_order_file`,
-`audit_verdict` (last one may be absent or empty string). Parse the optional sixth
+`audit_verdict` (last one may be absent or empty string). Parse the optional fifth
 positional argument `conflict_report_paths` (may be absent or empty string). Split on `,`
 to get a list of paths; filter out any empty strings. Store as `conflict_report_path_list`.
 

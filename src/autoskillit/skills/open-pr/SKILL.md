@@ -55,7 +55,7 @@ relevant arch-lens lenses, and open a GitHub Pull Request.
 Parse three positional arguments: `plan_paths`, `feature_branch`, `base_branch`.
 Parse the optional fourth positional argument `token_summary_path` (may be absent).
 Parse the optional fifth positional argument `closing_issue` (may be absent or empty string).
-Parse the optional seventh positional argument `conflict_report_path` (may be absent or empty string).
+Parse the optional sixth positional argument `conflict_report_path` (may be absent or empty string).
 Split `plan_paths` by comma to get a list of plan file paths.
 
 ### Step 1b: Fetch Requirements from Closing Issue

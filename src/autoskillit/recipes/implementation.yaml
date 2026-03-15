@@ -1,6 +1,6 @@
 name: implementation
 description: Plan, verify, implement, test, and merge a task end-to-end. Use when user says "run pipeline", "implement task", or "auto implement".
-summary: clone > capture_base_sha > set_merge_target > (create_branch?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup
+summary: "[sprint: triage > plan > confirm > dispatch > report] | clone > capture_base_sha > set_merge_target > (create_branch?) > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup"
 autoskillit_version: "0.3.0"
 
 ingredients:
@@ -29,6 +29,10 @@ ingredients:
   issue_url:
     description: GitHub issue to close on merge
     required: false
+  sprint_mode:
+    description: Enable sprint sub-recipe prefix (triage → sprint selection → per-issue dispatch)
+    default: "false"
+    hidden: true
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -51,6 +55,18 @@ kitchen_rules:
     the remote URL inside push_to_remote."
 
 steps:
+  sprint_entry:
+    sub_recipe: sprint-prefix
+    gate: sprint_mode
+    on_success: done
+    on_failure: escalate_stop
+    note: >
+      Sprint sub-recipe entry point. When sprint_mode=true, the sprint-prefix
+      sub-recipe steps are merged here and handle the full multi-issue workflow
+      (triage → planning → user approval → per-issue dispatch → report).
+      When sprint_mode=false (default), this step is dropped at load time and
+      the recipe starts at 'clone' as usual.
+
   clone:
     tool: clone_repo
     with:

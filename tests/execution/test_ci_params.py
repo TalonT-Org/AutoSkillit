@@ -43,7 +43,7 @@ async def test_completed_runs_includes_workflow_id(httpx_mock):
             lookback_seconds=300,
         )
     req = httpx_mock.get_requests()[0]
-    assert "workflow_id=tests.yml" in str(req.url)
+    assert httpx.URL(str(req.url)).params["workflow_id"] == "tests.yml"
 
 
 @pytest.mark.anyio
@@ -83,7 +83,7 @@ async def test_completed_runs_always_sends_branch(httpx_mock):
             lookback_seconds=300,
         )
     req = httpx_mock.get_requests()[0]
-    assert "branch=main" in str(req.url)
+    assert httpx.URL(str(req.url)).params["branch"] == "main"
 
 
 @pytest.mark.anyio
@@ -103,7 +103,7 @@ async def test_completed_runs_sends_head_sha(httpx_mock):
             lookback_seconds=300,
         )
     req = httpx_mock.get_requests()[0]
-    assert "head_sha=abc123" in str(req.url)
+    assert httpx.URL(str(req.url)).params["head_sha"] == "abc123"
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +127,7 @@ async def test_active_runs_includes_workflow_id(httpx_mock):
             scope=CIRunScope(workflow="tests.yml"),
         )
     req = httpx_mock.get_requests()[0]
-    assert "workflow_id=tests.yml" in str(req.url)
+    assert httpx.URL(str(req.url)).params["workflow_id"] == "tests.yml"
 
 
 # ---------------------------------------------------------------------------
@@ -138,11 +138,13 @@ async def test_active_runs_includes_workflow_id(httpx_mock):
 @pytest.mark.anyio
 async def test_status_list_path_includes_workflow_id(httpx_mock):
     """status() branch-list path must send workflow_id when scope carries a workflow."""
+    import httpx
+
     httpx_mock.add_response(json={"workflow_runs": []})
     watcher = DefaultCIWatcher(token="tok")
     await watcher.status("main", repo="owner/repo", scope=CIRunScope(workflow="tests.yml"))
     req = httpx_mock.get_requests()[0]
-    assert "workflow_id=tests.yml" in str(req.url)
+    assert httpx.URL(str(req.url)).params["workflow_id"] == "tests.yml"
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +210,10 @@ async def test_failed_jobs_includes_timed_out(httpx_mock):
 @pytest.mark.anyio
 async def test_wait_calls_fetch_jobs_for_timed_out_run(httpx_mock):
     """A GitHub-level timed_out run conclusion must still populate failed_jobs."""
+    import re
+
     httpx_mock.add_response(
+        url=re.compile(r"actions/runs\?"),
         json={
             "workflow_runs": [
                 {
@@ -218,9 +223,12 @@ async def test_wait_calls_fetch_jobs_for_timed_out_run(httpx_mock):
                     "updated_at": _now(),
                 }
             ]
-        }
+        },
     )
-    httpx_mock.add_response(json={"jobs": [{"name": "unit", "conclusion": "timed_out"}]})
+    httpx_mock.add_response(
+        url=re.compile(r"actions/runs/5/jobs"),
+        json={"jobs": [{"name": "unit", "conclusion": "timed_out"}]},
+    )
     watcher = DefaultCIWatcher(token="tok")
     result = await watcher.wait("main", repo="owner/repo", timeout_seconds=60)
     assert result["conclusion"] == "timed_out"
@@ -246,6 +254,7 @@ async def test_wait_for_ci_handler_passes_workflow(tool_ctx):
     # cwd="" → head_sha inference skipped (empty string is falsy)
     json.loads(await wait_for_ci(branch="main", workflow="tests.yml", cwd=""))
 
+    mock_watcher.wait.assert_called_once()
     call_kwargs = mock_watcher.wait.call_args
     assert call_kwargs.kwargs["scope"].workflow == "tests.yml"
 

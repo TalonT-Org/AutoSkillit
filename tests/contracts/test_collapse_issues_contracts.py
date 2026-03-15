@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from autoskillit.workspace.skills import bundled_skills_dir
 
 skills_dir = bundled_skills_dir()
@@ -32,8 +34,6 @@ def test_result_block_close_delimiter():
 def test_gh_label_create_uses_force():
     text = skill_text()
     # Every `gh label create` call must include --force
-    import re
-
     calls = re.findall(r"gh label create[^\n]*", text)
     assert calls, "Must document at least one gh label create call"
     for call in calls:
@@ -42,8 +42,6 @@ def test_gh_label_create_uses_force():
 
 def test_no_batch_labels_on_combined_issues():
     text = skill_text()
-    import re
-
     # batch:N labels must not appear in label creation or issue create commands
     label_lines = re.findall(r"(gh issue create[^\n]*|gh label create[^\n]*|--label[^\n]*)", text)
     for line in label_lines:
@@ -52,8 +50,6 @@ def test_no_batch_labels_on_combined_issues():
 
 def test_only_known_recipe_routes():
     text = skill_text()
-    import re
-
     recipe_labels = re.findall(r"recipe:(\w[\w-]*)", text)
     known = {"implementation", "remediation"}
     unknown = set(recipe_labels) - known
@@ -114,3 +110,48 @@ def test_from_section_in_combined_body():
 def test_triage_issues_references_collapse_issues():
     text = triage_text()
     assert "collapse-issues" in text, "triage-issues must document optional --collapse integration"
+
+
+def test_collapse_issues_uses_per_issue_fetch():
+    """collapse-issues must call fetch_github_issue per-issue before body assembly.
+
+    The bulk gh issue list endpoint truncates bodies. Per-issue fetch via the
+    MCP tool hits the REST single-issue endpoint which always returns the full body.
+    """
+    assert "fetch_github_issue" in skill_text(), (
+        "collapse-issues must call fetch_github_issue per-issue before assembling "
+        "the combined body — gh issue list truncates bodies"
+    )
+
+
+def test_collapse_issues_never_summarize():
+    """collapse-issues NEVER block must explicitly forbid summarizing source bodies.
+
+    Without an explicit NEVER constraint, the LLM defaults to concise output
+    when filling in body sections, producing summaries or hyperlinks instead
+    of verbatim content.
+    """
+    text = skill_text()
+    lower = text.lower()
+    assert "summarize" in lower or "paraphrase" in lower or "abbreviate" in lower, (
+        "collapse-issues NEVER block must forbid summarizing, paraphrasing, or "
+        "abbreviating source issue body content"
+    )
+
+
+def test_collapse_issues_no_angle_bracket_body_placeholder():
+    """collapse-issues must not use angle-bracket syntax for body-copy instructions.
+
+    <full body of issue N, verbatim> is parsed as a fill-in-the-blank template
+    by the LLM — the word 'verbatim' inside the angle brackets blends into the
+    placeholder label and is not treated as a separate constraint. Explicit
+    imperative prose must be used instead.
+    """
+    text = skill_text()
+    # Detect any angle-bracket token that references body content of issues
+    pattern = re.compile(r"<[^>]*(body|content)\s+of\s+(issue|#)", re.IGNORECASE)
+    matches = pattern.findall(text)
+    assert not matches, (
+        "collapse-issues must not use angle-bracket placeholder syntax for "
+        "body-copy instructions — use explicit imperative language instead"
+    )

@@ -43,6 +43,13 @@ _PREPARE_RESULT_END = "---/prepare-issue-result---"
 _ENRICH_RESULT_START = "---enrich-issues-result---"
 _ENRICH_RESULT_END = "---/enrich-issues-result---"
 
+# Sentinel error strings returned by _parse_*_result when block extraction fails.
+# Shared by prepare_issue and enrich_issues to distinguish parse failures from
+# skill-internal errors embedded in a valid block.
+_BLOCK_PARSE_ERRORS: frozenset[str] = frozenset(
+    {"no result block found", "result block contained invalid JSON"}
+)
+
 # Strong references to in-flight non-blocking report tasks (prevents GC).
 _pending_report_tasks: set[asyncio.Task[Any]] = set()
 
@@ -761,7 +768,7 @@ async def prepare_issue(
             }
         )
 
-    if not result.result.strip():
+    if result.result is None or not result.result.strip():
         return json.dumps(
             {
                 "success": False,
@@ -777,7 +784,6 @@ async def prepare_issue(
     # Distinguish block-parse failures (block absent or malformed JSON) from skill-level data.
     # The sentinel errors from _parse_prepare_result signal a block-extraction failure —
     # these are not the same as skill-internal errors embedded in a valid block.
-    _BLOCK_PARSE_ERRORS = {"no result block found", "result block contained invalid JSON"}
     if parsed.get("error") in _BLOCK_PARSE_ERRORS:
         return json.dumps(
             {
@@ -878,7 +884,7 @@ async def enrich_issues(
             }
         )
 
-    if not result.result.strip():
+    if result.result is None or not result.result.strip():
         return json.dumps(
             {
                 "success": False,
@@ -890,7 +896,25 @@ async def enrich_issues(
         )
 
     parsed = _parse_enrich_result(result.result)
-    return json.dumps(parsed)
+    if parsed.get("error") in _BLOCK_PARSE_ERRORS:
+        return json.dumps(
+            {
+                "success": False,
+                "status": "failed",
+                "error": parsed["error"],
+                "session_id": result.session_id,
+                "subtype": result.subtype,
+                "exit_code": result.exit_code,
+            }
+        )
+
+    return json.dumps(
+        {
+            "success": True,
+            "status": "complete",
+            **_without_success_key(parsed),
+        }
+    )
 
 
 @mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})

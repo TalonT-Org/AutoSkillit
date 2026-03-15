@@ -95,3 +95,6 @@ mcp_response:
 
 branching:
   default_base_branch: main
+
+ci:
+  workflow: null  # Workflow filename to filter CI runs, e.g. "tests.yml"

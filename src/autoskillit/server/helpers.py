@@ -441,7 +441,9 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     resolved: dict[str, str] = {}
 
     try:
-        for remote in ("upstream", "origin"):
+        from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE
+
+        for remote in REMOTE_PRECEDENCE:
             proc = subprocess.run(
                 ["git", "remote", "get-url", remote],
                 cwd=str(project_dir),

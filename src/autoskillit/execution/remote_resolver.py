@@ -12,11 +12,15 @@ from autoskillit.core import get_logger, normalize_owner_repo, parse_github_repo
 
 _log = get_logger(__name__)
 
+# Canonical remote precedence order: upstream before origin encodes the clone
+# isolation contract (upstream = real GitHub URL; origin = file:// local path).
+REMOTE_PRECEDENCE: tuple[str, ...] = ("upstream", "origin")
+
 
 async def resolve_remote_repo(
     cwd: str,
     hint: str | None = None,
-    remotes: tuple[str, ...] = ("upstream", "origin"),
+    remotes: tuple[str, ...] = REMOTE_PRECEDENCE,
 ) -> str | None:
     """Resolve GitHub 'owner/repo' from a git working directory.
 

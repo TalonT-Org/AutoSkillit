@@ -944,6 +944,77 @@ class TestPrepareIssueTool:
         assert result["success"] is False
         assert result["status"] == "failed"
 
+    @pytest.mark.anyio
+    async def test_prepare_issue_no_result_block_includes_stderr(self, tool_ctx):
+        """success=True + non-empty result + no delimiters → stderr surfaced."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="I created the issue. All steps complete.",
+            session_id="abc-123",
+            stderr="ImportError: cannot import x from autoskillit",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+        )
+        tool_ctx.executor = mock_executor
+        response = json.loads(await prepare_issue("Test Issue", ""))
+        assert response["success"] is False
+        assert response["error"] == "no result block found"
+        assert "stderr" in response, "stderr must be in block-parse-failure response"
+        assert response["stderr"] == "ImportError: cannot import x from autoskillit"
+        assert response["session_id"] == "abc-123"
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_empty_output_includes_stderr(self, tool_ctx):
+        """success=True + empty result (drain race) → stderr surfaced."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="",
+            session_id="abc-456",
+            stderr="Connection reset by peer",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+        )
+        tool_ctx.executor = mock_executor
+        response = json.loads(await prepare_issue("Test Issue", ""))
+        assert response["success"] is False
+        assert "drain race" in response["error"]
+        assert "stderr" in response, "stderr must be in drain-race failure response"
+        assert response["stderr"] == "Connection reset by peer"
+        assert response["session_id"] == "abc-456"
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_session_failure_uses_subtype_not_block_sentinel(self, tool_ctx):
+        """success=False must NOT call _parse_prepare_result.
+        The error must reflect actual failure reason, not 'no result block found'.
+        """
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="Session context exhausted. Cannot continue.",
+            session_id="abc-789",
+            stderr="",
+            subtype="stale",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=True,
+            retry_reason=RetryReason.RESUME,
+        )
+        tool_ctx.executor = mock_executor
+        response = json.loads(await prepare_issue("Test Issue", ""))
+        assert response["success"] is False
+        assert response["error"] != "no result block found", (
+            "Wrong-branch masking: failure path must not call _parse_prepare_result"
+        )
+        assert response["subtype"] == "stale"
+
 
 class TestEnrichIssuesTool:
     def test_enrich_issues_is_gated(self):
@@ -1027,6 +1098,153 @@ class TestEnrichIssuesTool:
 
         call_kwargs = mock_executor.run.call_args.kwargs
         assert call_kwargs.get("expected_output_patterns") == ["---enrich-issues-result---"]
+
+    @pytest.mark.anyio
+    async def test_enrich_issues_no_result_block_includes_stderr(self, tool_ctx):
+        """success=True + non-empty result + no delimiters → stderr surfaced."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="All issues enriched. Workflow complete.",
+            session_id="enrich-123",
+            stderr="Warning: contract stale",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+        )
+        tool_ctx.executor = mock_executor
+        response = json.loads(await enrich_issues())
+        assert response["success"] is False
+        assert response["error"] == "no result block found"
+        assert "stderr" in response, "stderr must be in block-parse-failure response"
+        assert response["stderr"] == "Warning: contract stale"
+        assert response["session_id"] == "enrich-123"
+
+
+_REQUIRED_FAILURE_KEYS = frozenset(
+    {"success", "error", "session_id", "stderr", "subtype", "exit_code"}
+)
+
+_HEADLESS_FAILURE_SCENARIOS = [
+    pytest.param(
+        "prepare_issue",
+        dict(
+            success=False,
+            result="",
+            session_id="s1",
+            stderr="e1",
+            subtype="stale",
+            exit_code=-1,
+            needs_retry=True,
+            is_error=True,
+            retry_reason=RetryReason.RESUME,
+        ),
+        id="prepare_issue-session_failed",
+    ),
+    pytest.param(
+        "prepare_issue",
+        dict(
+            success=True,
+            result="",
+            session_id="s2",
+            stderr="e2",
+            subtype="success",
+            exit_code=0,
+            needs_retry=False,
+            is_error=False,
+            retry_reason=RetryReason.NONE,
+        ),
+        id="prepare_issue-drain_race",
+    ),
+    pytest.param(
+        "prepare_issue",
+        dict(
+            success=True,
+            result="prose without delimiters",
+            session_id="s3",
+            stderr="e3",
+            subtype="success",
+            exit_code=0,
+            needs_retry=False,
+            is_error=False,
+            retry_reason=RetryReason.NONE,
+        ),
+        id="prepare_issue-block_parse_error",
+    ),
+    pytest.param(
+        "enrich_issues",
+        dict(
+            success=False,
+            result="",
+            session_id="s4",
+            stderr="e4",
+            subtype="stale",
+            exit_code=-1,
+            needs_retry=True,
+            is_error=True,
+            retry_reason=RetryReason.RESUME,
+        ),
+        id="enrich_issues-session_failed",
+    ),
+    pytest.param(
+        "enrich_issues",
+        dict(
+            success=True,
+            result="",
+            session_id="s5",
+            stderr="e5",
+            subtype="success",
+            exit_code=0,
+            needs_retry=False,
+            is_error=False,
+            retry_reason=RetryReason.NONE,
+        ),
+        id="enrich_issues-drain_race",
+    ),
+    pytest.param(
+        "enrich_issues",
+        dict(
+            success=True,
+            result="prose without delimiters",
+            session_id="s6",
+            stderr="e6",
+            subtype="success",
+            exit_code=0,
+            needs_retry=False,
+            is_error=False,
+            retry_reason=RetryReason.NONE,
+        ),
+        id="enrich_issues-block_parse_error",
+    ),
+]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("tool_name,skill_result_kwargs", _HEADLESS_FAILURE_SCENARIOS)
+async def test_headless_tool_failure_paths_include_all_diagnostic_fields(
+    tool_name, skill_result_kwargs, tool_ctx
+):
+    """Contract test: every failure path of every headless session tool
+    must surface the full diagnostic set: success, error, session_id,
+    stderr, subtype, exit_code.
+    """
+    tool_fn = {"prepare_issue": prepare_issue, "enrich_issues": enrich_issues}[tool_name]
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = SkillResult(**skill_result_kwargs)
+    tool_ctx.executor = mock_executor
+
+    kwargs: dict = {}
+    if tool_name == "prepare_issue":
+        kwargs = {"title": "Test Issue", "body": ""}
+
+    response = json.loads(await tool_fn(**kwargs))
+    missing = _REQUIRED_FAILURE_KEYS - set(response.keys())
+    assert not missing, f"{tool_name} failure scenario '{tool_name}' missing keys: {missing}"
+    assert response["success"] is False
+    assert response["stderr"] == skill_result_kwargs["stderr"]
+    assert response["session_id"] == skill_result_kwargs["session_id"]
 
 
 class TestReportBugTool:

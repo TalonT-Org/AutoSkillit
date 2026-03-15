@@ -249,6 +249,25 @@ class TestCIWorkflow:
         )
 
 
+class TestRecipeWorkflowField:
+    def test_ci_watch_steps_carry_workflow_field(self):
+        """All wait_for_ci steps in bundled top-level recipes must specify a workflow.
+
+        Without a workflow field, wait_for_ci queries all workflows on the branch,
+        causing false failures when unrelated workflows (version bumps, labelers)
+        complete with failure before the test workflow runs.
+        """
+        recipes_dir = REPO_ROOT / "src" / "autoskillit" / "recipes"
+        for recipe_path in recipes_dir.glob("*.yaml"):
+            recipe = yaml.safe_load(recipe_path.read_text())
+            for step_name, step in recipe.get("steps", {}).items():
+                if step.get("tool") == "wait_for_ci":
+                    assert "workflow" in step.get("with", {}), (
+                        f"{recipe_path.name}:{step_name} missing workflow in with: — "
+                        f"add 'workflow: \"tests.yml\"' to scope CI polling to the correct workflow"
+                    )
+
+
 class TestPtyTestGuard:
     def test_pty_wrapper_test_has_script_guard(self):
         """test_pty_wrapper_provides_tty must have a skipif guard for missing 'script' binary.

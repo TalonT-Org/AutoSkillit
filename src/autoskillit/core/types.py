@@ -857,6 +857,19 @@ class GitHubFetcher(Protocol):
     ) -> dict[str, Any]: ...
 
 
+@dataclass(frozen=True)
+class CIRunScope:
+    """Immutable scope parameters that uniquely identify which CI workflow runs are relevant.
+
+    Passed as a single argument through the CIWatcher protocol so that adding a new
+    scope axis (e.g. event: str | None) requires changing only this dataclass and the
+    API params builder — not every method signature in the call chain.
+    """
+
+    workflow: str | None = None  # workflow filename, e.g. "tests.yml"
+    head_sha: str | None = None  # commit SHA to pin results to
+
+
 @runtime_checkable
 class CIWatcher(Protocol):
     """Protocol for watching GitHub Actions CI runs.
@@ -870,7 +883,7 @@ class CIWatcher(Protocol):
         branch: str,
         *,
         repo: str | None = None,
-        head_sha: str | None = None,
+        scope: CIRunScope = CIRunScope(),
         timeout_seconds: int = 300,
         lookback_seconds: int = 120,
         cwd: str = "",
@@ -882,6 +895,7 @@ class CIWatcher(Protocol):
         *,
         repo: str | None = None,
         run_id: int | None = None,
+        scope: CIRunScope = CIRunScope(),
         cwd: str = "",
     ) -> dict[str, Any]: ...
 

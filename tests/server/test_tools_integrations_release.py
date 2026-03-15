@@ -13,7 +13,7 @@ from autoskillit.server.tools_integrations import release_issue
 class TestReleaseIssueStagedLifecycle:
     @pytest.mark.anyio
     async def test_release_issue_non_default_branch_applies_staged(self, tool_ctx):
-        """release_issue with target_branch='integration' removes in-progress and applies staged."""
+        """Non-default target_branch removes in-progress and applies staged label."""
         mock_client = AsyncMock()
         mock_client.remove_label.return_value = {"success": True}
         mock_client.ensure_label.return_value = {"success": True, "created": True}

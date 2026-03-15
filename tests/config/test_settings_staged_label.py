@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from autoskillit.config import AutomationConfig
 from autoskillit.config.settings import GitHubConfig
 

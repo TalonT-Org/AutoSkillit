@@ -954,7 +954,9 @@ async def release_issue(
                 return json.dumps(
                     {
                         "success": False,
-                        "error": f"Failed to ensure staged label: {ensure_result.get('error', '?')}",
+                        "error": (
+                            f"Failed to ensure staged label: {ensure_result.get('error', '?')}"
+                        ),
                     }
                 )
 

@@ -32,12 +32,14 @@ _BACKOFF_CAP = 30  # seconds
 # GitHub run-level conclusions that indicate a job-level failure worth inspecting.
 # "action_required" is intentionally excluded — it signals a billing/permissions
 # gate, not a job execution failure, so failed_jobs is always [] for it.
-FAILED_CONCLUSIONS: frozenset[str] = frozenset({
-    "failure",
-    "timed_out",
-    "startup_failure",
-    "cancelled",
-})
+FAILED_CONCLUSIONS: frozenset[str] = frozenset(
+    {
+        "failure",
+        "timed_out",
+        "startup_failure",
+        "cancelled",
+    }
+)
 
 
 def _parse_repo_from_remote(remote_url: str) -> str | None:
@@ -193,9 +195,7 @@ class DefaultCIWatcher:
         resp.raise_for_status()
         data = resp.json()
         return [
-            j["name"]
-            for j in data.get("jobs", [])
-            if j.get("conclusion") in FAILED_CONCLUSIONS
+            j["name"] for j in data.get("jobs", []) if j.get("conclusion") in FAILED_CONCLUSIONS
         ]
 
     async def wait(

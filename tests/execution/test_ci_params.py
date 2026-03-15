@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -199,9 +199,7 @@ async def test_failed_jobs_includes_timed_out(httpx_mock):
     httpx_mock.add_response(json={"jobs": jobs})
     watcher = DefaultCIWatcher(token="tok")
     async with httpx.AsyncClient() as client:
-        result = await watcher._fetch_failed_jobs(
-            client, watcher._headers(), "owner/repo", 1
-        )
+        result = await watcher._fetch_failed_jobs(client, watcher._headers(), "owner/repo", 1)
     assert "build" in result  # timed_out must appear
     assert "lint" in result
     assert "ok" not in result

@@ -264,7 +264,8 @@ class TestRecipeWorkflowField:
                 if step.get("tool") == "wait_for_ci":
                     assert "workflow" in step.get("with", {}), (
                         f"{recipe_path.name}:{step_name} missing workflow in with: — "
-                        f"add 'workflow: \"tests.yml\"' to scope CI polling to the correct workflow"
+                        "add 'workflow: \"tests.yml\"' to scope CI polling to the correct"
+                        " workflow"
                     )
 
 

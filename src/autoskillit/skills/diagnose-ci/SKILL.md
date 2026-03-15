@@ -11,13 +11,14 @@ before routing to `resolve-failures`.
 ## Invocation
 
 ```
-/autoskillit:diagnose-ci {branch} [run_id] [ci_failed_jobs]
+/autoskillit:diagnose-ci {branch} [run_id] [ci_failed_jobs] [workflow]
 ```
 
 **Positional args:**
 - `branch` — the git branch whose CI run to investigate
 - `run_id` (optional) — specific workflow run ID; if absent, discover from `gh run list`
 - `ci_failed_jobs` (optional) — JSON array of failed job names from `wait_for_ci`, used to scope log fetching
+- `workflow` (optional) — workflow filename (e.g. `tests.yml`); if provided, scopes `gh run list` to that workflow only; use `-` to skip
 
 ## Critical Constraints
 
@@ -42,9 +43,13 @@ mcp__code-index__set_project_path(path=<cwd>)
 
 ### Step 2: Discover Run ID (if not provided)
 
-If `run_id` is not provided as an argument:
+If `run_id` is not provided as an argument (or is `-`):
 ```bash
 gh run list --branch {branch} --limit 1 --json databaseId,status,conclusion
+```
+If `workflow` is provided and is not `-`:
+```bash
+gh run list --branch {branch} --workflow {workflow} --limit 1 --json databaseId,status,conclusion
 ```
 Parse the JSON to extract `databaseId` as `run_id`.
 
@@ -107,16 +112,16 @@ Create directory `temp/diagnose-ci/` if it doesn't exist. Write the diagnosis fi
 {1-3 sentences describing how resolve-failures should approach this}
 ```
 
-Save to `temp/diagnose-ci/diagnosis_{timestamp}.md`.
+Save to `temp/diagnose-ci/diagnosis_{timestamp}.md`. (relative to the current working directory)
 
 ### Step 7: Emit Output Tokens
 
 Emit these tokens on their own lines at the end of your response:
 
 ```
-diagnosis_path=/absolute/path/to/temp/diagnose-ci/diagnosis_{timestamp}.md
-failure_type=test|lint|build|type_check|env|unknown
-is_fixable=true|false
+diagnosis_path = /absolute/path/to/temp/diagnose-ci/diagnosis_{timestamp}.md
+failure_type = test|lint|build|type_check|env|unknown
+is_fixable = true|false
 ```
 
 ## gh Unavailable Fallback

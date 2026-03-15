@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import json
+import os
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
-from autoskillit.execution import resolve_log_dir  # noqa: F401 — used by tools_integrations.py
+from autoskillit.execution import (
+    resolve_log_dir,  # noqa: F401 — used by tools_integrations.py, tools_status.py
+    write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
+)
 from autoskillit.pipeline import gate_error_result
 from autoskillit.recipe import (
     StaleItem,
@@ -110,7 +115,18 @@ def track_response_size(
     def decorator(fn: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
         @functools.wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            result = await fn(*args, **kwargs)
+            try:
+                result = await fn(*args, **kwargs)
+            except Exception as exc:
+                result = json.dumps(
+                    {
+                        "success": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "exit_code": -1,
+                        "subtype": "tool_exception",
+                    }
+                )
+                logger.exception("Unhandled exception in tool %s", tool_name)
             try:
                 ctx = _get_ctx_or_none()
                 if ctx is not None:
@@ -148,6 +164,21 @@ def track_response_size(
         return wrapper
 
     return decorator
+
+
+def _require_not_headless(tool_name: str = "") -> str | None:
+    """Return headless_error JSON if called from a headless session; None if safe."""
+    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
+        from autoskillit.pipeline import headless_error_result
+
+        msg = (
+            f"{tool_name} cannot be called from headless sessions. "
+            "Only the Tier 1 orchestrator may call this tool."
+            if tool_name
+            else None
+        )
+        return headless_error_result(msg)
+    return None
 
 
 def _require_enabled() -> str | None:
@@ -345,7 +376,6 @@ async def _import_and_call(
     Returns dict with 'success', 'result' (or 'error').
     Handles sync and async callables, with timeout protection.
     """
-    import asyncio
     import importlib
     import inspect
 
@@ -410,6 +440,17 @@ def _find_recipe(name: str, cwd: Path) -> Any:
     This function provides the architecture-compliant bridge to autoskillit.recipe.
     """
     return find_recipe_by_name(name, cwd)
+
+
+async def infer_repo_from_remote(cwd: str, hint: str | None = None) -> str:
+    """Return 'owner/repo' from git remote URL, or '' on failure.
+
+    hint: optional owner/repo string or full GitHub URL; parsed before
+          git remote inference. Passes through to resolve_remote_repo.
+    """
+    from autoskillit.execution import resolve_remote_repo
+
+    return await resolve_remote_repo(cwd, hint=hint) or ""
 
 
 async def _prime_quota_cache() -> None:

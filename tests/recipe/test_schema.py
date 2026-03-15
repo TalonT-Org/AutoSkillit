@@ -261,21 +261,6 @@ def test_recipe_ingredient_default_strips_for_comparison() -> None:
     assert ing_none.default is None  # None sentinel preserved
 
 
-def test_format_ingredient_default_folded_scalar_bool() -> None:
-    """_format_ingredient_default must return 'off'/'on'/'auto-detect' for folded defaults."""
-    from autoskillit.recipe.diagrams import _format_ingredient_default
-    from autoskillit.recipe.schema import RecipeIngredient
-
-    assert (
-        _format_ingredient_default(RecipeIngredient(description="d", default="false\n")) == "off"
-    )
-    assert _format_ingredient_default(RecipeIngredient(description="d", default="true\n")) == "on"
-    assert (
-        _format_ingredient_default(RecipeIngredient(description="d", default="\n"))
-        == "auto-detect"
-    )
-
-
 # ---------------------------------------------------------------------------
 # P9-F1: RecipeStep.description field
 # ---------------------------------------------------------------------------
@@ -295,3 +280,11 @@ def test_recipe_step_description_stores_value() -> None:
 
     step = RecipeStep(tool="run_cmd", description="Build the project")
     assert step.description == "Build the project"
+
+
+def test_terminal_targets_defined_in_schema():
+    """Schema is the authoritative home for routing sentinel constants."""
+    from autoskillit.recipe.schema import _TERMINAL_TARGETS
+
+    assert "escalate" in _TERMINAL_TARGETS
+    assert "done" in _TERMINAL_TARGETS

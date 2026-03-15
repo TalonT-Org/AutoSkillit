@@ -10,14 +10,21 @@ Neither contracts.py nor io.py imports _analysis.py, so no cycle exists.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import igraph
 
 from autoskillit.core import SKILL_TOOLS, get_logger
 from autoskillit.recipe.contracts import _CONTEXT_REF_RE, _RESULT_CAPTURE_RE
 from autoskillit.recipe.io import iter_steps_with_context  # noqa: F401 — re-exported for rules
-from autoskillit.recipe.schema import DataFlowReport, DataFlowWarning, Recipe, RecipeStep
+from autoskillit.recipe.schema import (
+    _TERMINAL_TARGETS,
+    DataFlowReport,
+    DataFlowWarning,
+    Recipe,
+    RecipeStep,
+)
 
 logger = get_logger(__name__)
 
@@ -103,10 +110,17 @@ def build_recipe_graph(recipe: Recipe) -> igraph.Graph:
     for name, step in recipe.steps.items():
         src = name_to_id[name]
         for edge in _extract_routing_edges(step):
+            # Mirror _build_step_graph: skip on_exhausted edges for action steps
+            # (stop/confirm/route steps have no retry semantics).
+            if edge.edge_type == "exhausted" and step.action is not None:
+                continue
             if edge.target in name_to_id:
                 edges.append((src, name_to_id[edge.target]))
                 edge_types.append(edge.edge_type)
                 edge_conditions.append(edge.condition or "")
+            elif edge.target in _TERMINAL_TARGETS:
+                # Known sentinel — valid target, no graph edge needed.
+                pass
             else:
                 logger.warning(
                     "build_recipe_graph: step %r references unknown target %r — edge skipped",
@@ -197,6 +211,10 @@ class ValidationContext:
     recipe: Recipe
     step_graph: dict[str, set[str]]
     dataflow: DataFlowReport
+    available_recipes: frozenset[str] = field(default_factory=frozenset)
+    available_skills: frozenset[str] = field(default_factory=frozenset)
+    available_sub_recipes: frozenset[str] = field(default_factory=frozenset)
+    project_dir: Path | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +267,19 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
                 if condition.route in step_names:
                     for pred in predecessors[name]:
                         graph[pred].add(condition.route)
+
+    # For each sub_recipe placeholder step (gate-controlled), add a bypass edge
+    # to the next step in YAML order. When the gate is false the step is dropped
+    # at load time; without this edge the next step becomes unreachable in the
+    # raw recipe graph, breaking reachability-based semantic rules.
+    step_names_list = list(recipe.steps.keys())
+    for i, (name, step) in enumerate(recipe.steps.items()):
+        if step.sub_recipe is None or i + 1 >= len(step_names_list):
+            continue
+        next_step = step_names_list[i + 1]
+        graph[name].add(next_step)
+        for pred in predecessors[name]:
+            graph[pred].add(next_step)
 
     return graph
 
@@ -421,7 +452,8 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         # BFS: collect all steps reachable from this step
         reachable = _bfs_reachable(graph, step_name)
 
-        # Collect all context.X references in reachable steps' with_args
+        # Collect all context.X references in reachable steps' with_args and
+        # on_result condition when-expressions (route actions gate on context vars).
         consumed: set[str] = set()
         for reachable_name in reachable:
             reachable_step = recipe.steps[reachable_name]
@@ -429,6 +461,10 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                 if not isinstance(arg_val, str):
                     continue
                 consumed.update(_CONTEXT_REF_RE.findall(arg_val))
+            if reachable_step.on_result and reachable_step.on_result.conditions:
+                for cond in reachable_step.on_result.conditions:
+                    if cond.when and isinstance(cond.when, str):
+                        consumed.update(_CONTEXT_REF_RE.findall(cond.when))
 
         # on_result routing — both legacy field and predicate conditions count
         # as structural consumption of captured variables.
@@ -452,7 +488,7 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                 if step.tool == "merge_worktree" and "result.cleanup_succeeded" in str(cap_val):
                     continue
                 # Exempt diagnose-ci diagnosis_path captures: in recipes without a resolve_ci
-                # step (e.g. pr-merge-pipeline), diagnosis_path is captured for observability
+                # step (e.g. merge-prs), diagnosis_path is captured for observability
                 # only — no downstream automated remediation consumes it.
                 if cap_key == "diagnosis_path" and "diagnose-ci" in step.with_args.get(
                     "skill_command", ""
@@ -532,7 +568,14 @@ def analyze_dataflow(
     return DataFlowReport(warnings=warnings, summary=summary)
 
 
-def make_validation_context(recipe: Recipe) -> ValidationContext:
+def make_validation_context(
+    recipe: Recipe,
+    *,
+    available_recipes: frozenset[str] = frozenset(),
+    available_skills: frozenset[str] = frozenset(),
+    available_sub_recipes: frozenset[str] = frozenset(),
+    project_dir: Path | None = None,
+) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
 
     Constructs the step graph and data-flow report once so that semantic
@@ -540,4 +583,12 @@ def make_validation_context(recipe: Recipe) -> ValidationContext:
     """
     step_graph = _build_step_graph(recipe)
     dataflow = analyze_dataflow(recipe, step_graph=step_graph)
-    return ValidationContext(recipe=recipe, step_graph=step_graph, dataflow=dataflow)
+    return ValidationContext(
+        recipe=recipe,
+        step_graph=step_graph,
+        dataflow=dataflow,
+        available_recipes=available_recipes,
+        available_skills=available_skills,
+        available_sub_recipes=available_sub_recipes,
+        project_dir=project_dir,
+    )

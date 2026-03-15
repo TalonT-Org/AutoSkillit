@@ -7,17 +7,30 @@ _logging.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import get_logger
+from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, get_logger
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
     from autoskillit.core import SubprocessRunner
 
 logger = get_logger(__name__)
+
+
+def build_sanitized_env() -> dict[str, str]:
+    """Return a copy of os.environ with server-private env vars removed.
+
+    Server-private vars (AUTOSKILLIT_PRIVATE_ENV_VARS) control MCP server
+    behavior and must not be inherited by user-code subprocesses (e.g., pytest
+    runs launched by test_check). Callers passing this dict as env= to a
+    subprocess runner get full env inheritance minus the internal vars.
+    """
+    return {k: v for k, v in os.environ.items() if k not in AUTOSKILLIT_PRIVATE_ENV_VARS}
+
 
 _OUTCOME_PATTERN = re.compile(
     r"(\d+)\s+(passed|failed|errors?|xfailed|xpassed|skipped|warnings?|deselected)"
@@ -95,6 +108,7 @@ class DefaultTestRunner:
     async def run(self, cwd: Path) -> tuple[bool, str]:
         command = self._config.test_check.command
         timeout = float(self._config.test_check.timeout)
-        result = await self._runner(command, cwd=cwd, timeout=timeout)
+        env = build_sanitized_env()
+        result = await self._runner(command, cwd=cwd, timeout=timeout, env=env)
         passed = check_test_passed(result.returncode, result.stdout)
         return passed, result.stdout

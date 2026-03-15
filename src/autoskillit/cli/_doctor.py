@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
@@ -15,55 +14,70 @@ from autoskillit.hook_registry import HOOK_REGISTRY
 
 @dataclass
 class DoctorResult:
-    """Outcome of a single doctor check.
-
-    The ``fix`` field is for **external programmatic callers** that want to
-    inspect results and apply remediation themselves.  ``run_doctor`` does not
-    dispatch ``fix`` — it passes ``fix=True`` directly into each check function,
-    which applies the fix inline and returns an ``OK`` result immediately.
-    External callers (e.g. tests or integrations) may call ``result.fix()``
-    after receiving an ``ERROR`` result from a check function invoked with
-    ``fix=False``.
-    """
+    """Outcome of a single doctor check."""
 
     severity: Severity
     check: str
     message: str
-    fix: Callable[[], None] | None = field(default=None, repr=False)
 
 
-def _check_mcp_server_registered() -> DoctorResult:
-    claude_json = Path.home() / ".claude.json"
-    if not claude_json.exists():
-        return DoctorResult(
-            severity=Severity.WARNING,
-            check="mcp_server_registered",
-            message="~/.claude.json not found. Run 'autoskillit init' to register.",
-        )
+def _check_mcp_server_registered(claude_json_path: Path | None = None) -> DoctorResult:
+    """Check that autoskillit MCP server is registered (via mcpServers or plugin)."""
+    import subprocess
+
+    if claude_json_path is None:
+        claude_json_path = Path.home() / ".claude.json"
+
+    # Check 1: direct mcpServers entry (legacy / init-based registration)
+    if claude_json_path.exists():
+        try:
+            data = json.loads(claude_json_path.read_text())
+            if "autoskillit" in data.get("mcpServers", {}):
+                return DoctorResult(
+                    severity=Severity.OK,
+                    check="mcp_server_registered",
+                    message="autoskillit registered in mcpServers",
+                )
+        except OSError as exc:
+            return DoctorResult(
+                severity=Severity.ERROR,
+                check="mcp_server_registered",
+                message=f"~/.claude.json could not be read: {exc}",
+            )
+        except json.JSONDecodeError as exc:
+            return DoctorResult(
+                severity=Severity.ERROR,
+                check="mcp_server_registered",
+                message=f"~/.claude.json is not valid JSON: {exc}",
+            )
+
+    # Check 2: plugin-based registration (install-based)
+    _plugin_check_detail = ""
     try:
-        data = json.loads(claude_json.read_text())
-    except OSError as exc:
-        return DoctorResult(
-            severity=Severity.ERROR,
-            check="mcp_server_registered",
-            message=f"~/.claude.json could not be read: {exc}",
+        result = subprocess.run(
+            ["claude", "plugin", "list"],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
-    except json.JSONDecodeError as exc:
-        return DoctorResult(
-            severity=Severity.ERROR,
-            check="mcp_server_registered",
-            message=f"~/.claude.json is not valid JSON: {exc}",
-        )
-    if "autoskillit" not in data.get("mcpServers", {}):
-        return DoctorResult(
-            severity=Severity.WARNING,
-            check="mcp_server_registered",
-            message="autoskillit not in ~/.claude.json mcpServers. Run 'autoskillit init'.",
-        )
+        if result.returncode == 0 and "autoskillit" in result.stdout:
+            return DoctorResult(
+                severity=Severity.OK,
+                check="mcp_server_registered",
+                message="autoskillit registered as Claude plugin",
+            )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        _plugin_check_detail = f" (claude plugin list unavailable: {type(exc).__name__})"
+    else:
+        _plugin_check_detail = ""
+
     return DoctorResult(
-        severity=Severity.OK,
+        severity=Severity.WARNING,
         check="mcp_server_registered",
-        message="autoskillit registered in ~/.claude.json mcpServers.",
+        message=(
+            "autoskillit not registered. Run 'autoskillit install' to install as a plugin, "
+            "or 'autoskillit init' to register in mcpServers." + _plugin_check_detail
+        ),
     )
 
 
@@ -92,8 +106,12 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     )
 
 
-def run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
+def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
+    from autoskillit.cli._marketplace import _clear_plugin_cache
+
+    _clear_plugin_cache()
+
     results: list[DoctorResult] = []
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
@@ -138,8 +156,8 @@ def run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
                 DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")
             )
 
-    # Check 2: MCP server registered in ~/.claude.json
-    results.append(_check_mcp_server_registered())
+    # Check 2: MCP server registered in ~/.claude.json or via plugin
+    results.append(_check_mcp_server_registered(claude_json_path=Path.home() / ".claude.json"))
 
     # Check 3: autoskillit command on PATH
     if shutil.which("autoskillit") is None:

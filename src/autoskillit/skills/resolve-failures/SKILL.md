@@ -34,6 +34,8 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 
 ## Workflow
 
+Read the configured test command from `.autoskillit/config.yaml` (key: `test_check.command`). Use this command wherever `{test_command}` appears in these instructions. If no config exists, use the `test_check` MCP tool (which resolves the command from the project's config automatically).
+
 ### Step 0: Validate Arguments
 1. Parse three positional args using **path detection**: scan all tokens after
    the skill name for those starting with `/`, `./`, or `.autoskillit/`. The
@@ -61,11 +63,16 @@ mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
 
 Code-index tools require **project-relative paths**. Always use paths like:
 
-    src/autoskillit/execution/headless.py
+    src/<your_package>/some_module.py
 
 NOT absolute paths like:
 
-    /path/to/project/src/autoskillit/execution/headless.py
+    /absolute/path/to/src/<your_package>/some_module.py
+
+> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
+> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
+> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
+> for the same searches — they provide equivalent results without the code-index server.
 
 Agents launched via `run_skill` inherit no code-index state from the parent session — this
 call is mandatory at the start of every headless session that uses code-index tools.
@@ -78,13 +85,27 @@ call is mandatory at the start of every headless session that uses code-index to
    - Log: "Committed {N} uncommitted file(s) before test run"
 3. If output is empty: continue (worktree is clean)
 
+### Step 0.7: Switch Code-Index to Worktree
+
+Call `set_project_path` with the worktree path so all subsequent code-index
+queries (`find_files`, `search_code_advanced`, `get_file_summary`, `get_symbol_body`)
+return worktree-relative paths instead of source-repo paths:
+
+```
+mcp__code-index__set_project_path(path="{worktree_path}")
+```
+
+This prevents the model from being exposed to source-repo absolute paths during
+investigation and fixing. Note: code-index tools are read-only; this switch does not
+affect git operations, which always use `git -C {worktree_path}` explicitly.
+
 ### Step 1: Understand Context
 1. Read the plan file to understand what was implemented and why
 2. Run `git log --oneline $(git merge-base HEAD origin/{base_branch})..HEAD`
 3. Run `git diff --stat $(git merge-base HEAD origin/{base_branch})..HEAD`
 
 ### Step 2: Run Tests
-1. Run `cd {worktree_path} && task test-all`
+1. Run `cd {worktree_path} && {test_command}`
 2. If tests pass: go to Step 4 (Report Success)
 3. If tests fail: go to Step 3 (Fix Loop)
 
@@ -93,7 +114,7 @@ call is mandatory at the start of every headless session that uses code-index to
 2. Apply targeted fixes
 3. If the project has pre-commit hooks, run `pre-commit run --all-files` and
    stage any auto-fixed files before committing. Commit each fix: `fix: {what was wrong and why}`
-4. Re-run: `cd {worktree_path} && task test-all`
+4. Re-run: `cd {worktree_path} && {test_command}`
 5. Green → Step 4; Red and < 3 iterations → repeat; Red and >= 3 → Step 5
 
 ### Step 4: Report Success

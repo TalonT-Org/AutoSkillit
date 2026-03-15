@@ -137,7 +137,7 @@ Consolidate subagent findings into a structured profile:
 - Current git branch (for `base_branch` default)
 - Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate recipe drafts
 
-### Step 3: Write Analysis to temp/
+### Step 3: Write Analysis to temp/ (relative to the current working directory)
 
 Before presenting anything interactively, write the full analysis (project profile, workflow patterns, candidate workflows, shell command patterns) to:
 
@@ -151,13 +151,19 @@ Tell the user: "Full analysis saved to {path} for your review."
 
 Interactive flow. For each candidate workflow discovered:
 
+**CRITICAL:** Do NOT output any prose status text between workflow iterations.
+After completing one workflow's presentation and user response, immediately
+begin presenting the next workflow.
+
 1. **Always offer the standard implementation pipeline first** (plan → dry-walkthrough → implement → test → merge), even if not discovered in history. This is the core AutoSkillit workflow.
 
 2. For each candidate workflow (including the standard one):
+   Do NOT output any prose status text between workflows — immediately begin the
+   next workflow's presentation after the user responds.
    - Present the workflow chain and explain what it automates
    - Ask the user: "Would you like me to generate a recipe for this workflow?"
    - Before generating, resolve skill references in the workflow:
-     - For each skill in the detected chain, check if it exists both locally
+     - For each skill in the detected chain (no prose between skills), check if it exists both locally
        (`.claude/skills/<name>/SKILL.md`) and as a bundled autoskillit skill
      - If any skill exists in both, present the conflicts to the user as a batch:
        > "These skills exist in both your project and AutoSkillit's bundled set:
@@ -249,8 +255,8 @@ After the summary confirmation gate completes (Step 7), emit the following struc
 output tokens as the very last lines of your text output:
 
 ```
-analysis_path={absolute_path_to_analysis_file}
-config_path={absolute_path_to_config_file}
+analysis_path = {absolute_path_to_analysis_file}
+config_path = {absolute_path_to_config_file}
 ```
 
 Emit `config_path` only if `.autoskillit/config.yaml` was written in this session.

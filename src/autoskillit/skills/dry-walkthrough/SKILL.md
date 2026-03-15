@@ -112,13 +112,76 @@ PROJECT RULES CHECKLIST:
 [ ] No PR breakdown sections
 [ ] Follows existing architectural patterns
 [ ] Uses existing utilities (not reinventing) unless refactoring is part of plan or provides major improvement
-[ ] Test command is `task test-all` — no other test commands (pytest, python -m pytest, etc.) appear in the plan
+[ ] Test command uses the project's configured `test_check.command` (from `.autoskillit/config.yaml`, default: `task test-check`) — no unconfigured direct test runner invocations (pytest, python -m pytest, etc.)
 [ ] Worktree setup uses `worktree_setup.command` or `task install-worktree` — no hardcoded `uv venv`, `pip install`, or direct package manager invocations
 ```
 
-**Test command enforcement:** Scan the entire plan for any test invocation. The only acceptable test command is `task test-all`. If the plan contains `pytest`, `python -m pytest`, `make test`, or any other direct test runner, replace it with `task test-all`. This project uses a Taskfile and all testing must go through it.
+**Test command enforcement:** Scan the entire plan for any test invocation. Read the project's configured test command from `test_check.command` in `.autoskillit/config.yaml` (default: `task test-check` if absent or unconfigured). If the plan contains `pytest`, `python -m pytest`, `make test`, or any other unconfigured test runner invocation, replace it with the config-driven command.
 
 **Worktree setup enforcement:** Scan the plan for any worktree environment setup. The plan should reference the project's configured `worktree_setup.command` or `task install-worktree`. If the plan contains hardcoded `uv venv`, `uv pip install`, `pip install -e`, `npm install` (as worktree setup, not as a configured command), flag it and replace with the config-driven approach.
+
+### Step 4.5: Historical Regression Check
+
+Run a lightweight two-part scan to detect whether the plan risks reintroducing
+patterns that were previously fixed or conflicts with tracked GitHub issues.
+This is a quick cross-reference sanity check — not a deep audit.
+
+**Defaults:** Last 100 recent commits · Issues closed in last 30 days
+
+**A. Git History Scan**
+
+1. Extract the set of source files the plan proposes to touch by grepping the plan
+   text for paths matching `src/**/*.py` and `tests/**/*.py`. Store as `PLAN_FILES`.
+
+2. Scan recent commit messages on those files for fix/revert/remove/replace keywords:
+   ```bash
+   git log --oneline -100 --format="%H %s" --grep="fix\|revert\|remove\|replace\|delete" -- {PLAN_FILES}
+   ```
+
+3. For each matching commit, determine signal strength:
+   - **Strong signal:** The plan proposes to add a function or class name that appears
+     in the commit's diff as a deletion — check with:
+     `git show {hash} | grep "^-def \|^-class \|^-async def "` and compare against
+     function/class names the plan introduces.
+   - **Weak signal:** Same file touched + fix/revert keyword in message, but no
+     symbol-level match.
+
+4. Classify:
+   - **Strong signal → Actionable:** Insert a warning note into the affected plan step:
+     `> ⚠️ Historical note: {symbol} was removed in {hash} ("{commit_message}") — verify this addition is intentional and does not reintroduce a known bug.`
+   - **Weak signal → Informational:** Record for terminal output (collected in Part C).
+
+**B. GitHub Issues Cross-Reference**
+
+1. Check `gh` authentication:
+   ```bash
+   gh auth status 2>/dev/null
+   ```
+   If this fails, skip Part B and record an informational note:
+   "GitHub issues scan skipped — gh not authenticated."
+
+2. Fetch open and recently closed issues:
+   ```bash
+   gh issue list --state open --json number,title,body --limit 100
+   gh issue list --state closed --json number,title,body,closedAt --limit 100
+   ```
+   Filter closed issues to those `closedAt` within the last 30 days.
+
+3. Build a keyword set from the plan: target file basenames (without `.py`), function
+   names mentioned in the plan, and key terms from described changes.
+
+4. Cross-reference each issue's title and body against the keyword set:
+   - **Closed issue match → Actionable:** The issue specifically fixed a pattern the
+     plan proposes to introduce. Insert a warning note into the affected plan step:
+     `> ⚠️ Historical note: Issue #{N} ("{title}") addressed this area — ensure the plan does not reintroduce the fixed pattern.`
+   - **Open issue match → Informational:** Record for terminal output:
+     "Issue #{N}: {title} — addresses the same area. Verify alignment before implementing."
+
+**C. Collect informational findings**
+
+Gather all weak-signal git findings and open-issue area overlaps into a list.
+These are forwarded to Step 7 for inclusion in the `### Historical Context` terminal section.
+If Part A and Part B produce no findings, record: "No historical regressions or issue overlaps detected."
 
 ### Step 5: Fix the Plan
 
@@ -154,6 +217,10 @@ After updating the plan, output a summary to the terminal (your response text):
 ### Verified
 - {Key assumption that was confirmed}
 - {Key assumption that was confirmed}
+
+### Historical Context
+- {finding}: {description}
+  (or: No historical regressions or issue overlaps detected.)
 
 ### Recommendation
 {Implement as-is / Review changes before implementing}
@@ -194,6 +261,9 @@ After updating the plan, output a summary to the terminal (your response text):
 - `src/api/client.py` exists with expected `__init__` signature
 - No circular dependency risk identified
 - Test commands are correct
+
+### Historical Context
+- Issue #302: "consolidate retry logic" — addresses the same area. Verify alignment before implementing.
 
 ### Recommendation
 Ready to implement. Review the updated Phase 2 to see the pattern reference.

@@ -184,8 +184,8 @@ Do not merge until user confirms first!
 Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
 
 ```
-worktree_path=${WORKTREE_PATH}
-branch_name=${CURRENT_BRANCH}
+worktree_path = ${WORKTREE_PATH}
+branch_name = ${CURRENT_BRANCH}
 ```
 
 ### Step 6.5: Reset Code Index to Original Project (REQUIRED)

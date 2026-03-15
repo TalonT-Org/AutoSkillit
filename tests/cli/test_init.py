@@ -176,12 +176,13 @@ class TestCLIInit:
         """init --scope user writes mcpServers.autoskillit to ~/.claude.json."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
         cli.init(scope="user", test_command="task test-all")
         claude_json = tmp_path / ".claude.json"
         data = json.loads(claude_json.read_text())
         assert "autoskillit" in data["mcpServers"]
         assert data["mcpServers"]["autoskillit"]["command"] == "autoskillit"
-        assert data["mcpServers"]["autoskillit"]["args"] == ["serve"]
+        assert data["mcpServers"]["autoskillit"]["args"] == []
 
     # CI-SCOPE-2
     def test_init_registers_hooks_in_settings_json(
@@ -213,6 +214,7 @@ class TestCLIInit:
         """Running init twice does not duplicate mcpServers.autoskillit or hook entries."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
         cli.init(scope="user", test_command="task test-all")
         cli.init(scope="user", test_command="task test-all")
         claude_json = tmp_path / ".claude.json"
@@ -222,9 +224,10 @@ class TestCLIInit:
         settings = json.loads(settings_path.read_text())
         pretooluse = settings.get("hooks", {}).get("PreToolUse", [])
         matchers = [e.get("matcher", "") for e in pretooluse]
-        # No duplicate matchers (run_skill appears exactly once)
-        run_skill_count = sum(1 for m in matchers if "run_skill" in m)
-        assert run_skill_count == 1
+        # No duplicate matchers — each matcher string appears exactly once
+        assert len(matchers) == len(set(matchers)), (
+            f"Duplicate PreToolUse matchers after double init: {matchers}"
+        )
 
     # CI-SCOPE-4
     def test_init_default_scope_is_user(
@@ -235,6 +238,7 @@ class TestCLIInit:
         project_dir.mkdir()
         monkeypatch.chdir(project_dir)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
         cli.init(test_command="task test-all")
         # MCP server should be registered to user home, not project dir
         assert (tmp_path / ".claude.json").exists()
@@ -318,3 +322,28 @@ class TestServeStartupLog:
         startup = next((entry for entry in logs if entry.get("event") == "serve_startup"), None)
         assert startup is not None
         assert startup["config_path"] is None
+
+
+def test_init_prompts_for_github_default_repo() -> None:
+    """autoskillit init must prompt the user for github.default_repo."""
+    import inspect
+
+    from autoskillit.cli._init_helpers import _register_all
+
+    source = inspect.getsource(_register_all)
+    assert "github" in source.lower() and (
+        "default_repo" in source or "_prompt_github_repo" in source
+    ), "init flow must prompt for github.default_repo (REQ-CFG-002)"
+
+
+def test_init_creates_secrets_template(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """autoskillit init must create .secrets.yaml with a token placeholder."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".autoskillit").mkdir()
+    from autoskillit.cli._init_helpers import _create_secrets_template
+
+    _create_secrets_template(tmp_path)
+    secrets_path = tmp_path / ".autoskillit" / ".secrets.yaml"
+    assert secrets_path.exists(), ".secrets.yaml template not created"
+    content = secrets_path.read_text()
+    assert "github" in content.lower() and "token" in content.lower()

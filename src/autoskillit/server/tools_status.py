@@ -12,13 +12,28 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import _atomic_write, get_logger
+from autoskillit.pipeline import TelemetryFormatter
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, track_response_size
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    _require_not_headless,
+    resolve_log_dir,
+    track_response_size,
+    write_telemetry_clear_marker,
+)
 
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation"})
+def _get_log_root() -> Path:
+    """Return the resolved log root directory for the current context."""
+    from autoskillit.server import _get_ctx
+
+    return resolve_log_dir(_get_ctx().config.linux_tracing.log_dir)
+
+
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("kitchen_status")
 async def kitchen_status() -> str:
     """Return version health and configuration status for the running server.
@@ -31,6 +46,8 @@ async def kitchen_status() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (h := _require_not_headless("kitchen_status")) is not None:
+        return h
     from autoskillit.server import _get_config, _get_ctx, version_info
 
     info = version_info()
@@ -57,7 +74,7 @@ async def kitchen_status() -> str:
     return json.dumps(status)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("get_pipeline_report")
 async def get_pipeline_report(clear: bool = False) -> str:
     """Return accumulated run_skill failures since last clear.
@@ -75,11 +92,17 @@ async def get_pipeline_report(clear: bool = False) -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (h := _require_not_headless("get_pipeline_report")) is not None:
+        return h
     from autoskillit.server import _get_ctx
 
     failures = _get_ctx().audit.get_report_as_dicts()
     if clear:
         _get_ctx().audit.clear()
+        try:
+            write_telemetry_clear_marker(_get_log_root())
+        except Exception:
+            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
     return json.dumps(
         {
             "total_failures": len(failures),
@@ -88,9 +111,18 @@ async def get_pipeline_report(clear: bool = False) -> str:
     )
 
 
-@mcp.tool(tags={"automation"})
+def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> list[dict]:
+    """Add wall_clock_seconds to each token step from timing log; fall back to elapsed_seconds."""
+    timing_by_step = {e["step_name"]: e["total_seconds"] for e in timing_report}
+    for step in steps:
+        sn = step.get("step_name", "")
+        step["wall_clock_seconds"] = timing_by_step.get(sn, step.get("elapsed_seconds", 0.0))
+    return steps
+
+
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("get_token_summary")
-async def get_token_summary(clear: bool = False) -> str:
+async def get_token_summary(clear: bool = False, format: str = "json") -> str:
     """Return accumulated run_skill token usage grouped by step name.
 
     This tool is always available (not gated by open_kitchen).
@@ -100,23 +132,31 @@ async def get_token_summary(clear: bool = False) -> str:
     Returns JSON with:
     - steps: list of {step_name, input_tokens, output_tokens,
                        cache_creation_input_tokens, cache_read_input_tokens,
-                       invocation_count}
+                       invocation_count, wall_clock_seconds}
     - total: {input_tokens, output_tokens, cache_creation_input_tokens,
                cache_read_input_tokens}
 
     Args:
         clear: If True, reset the token log after returning current data.
+        format: Output format — "json" (default) returns structured JSON,
+                "table" returns a pre-formatted markdown table string.
     """
     from autoskillit.server import _get_ctx
 
     ctx = _get_ctx()
-    steps = ctx.token_log.get_report()
+    steps = _merge_wall_clock_seconds(ctx.token_log.get_report(), ctx.timing_log.get_report())
     total = ctx.token_log.compute_total()
     mcp_report = ctx.response_log.get_report()
     mcp_total = ctx.response_log.compute_total()
     if clear:
         ctx.token_log.clear()
         ctx.response_log.clear()
+        try:
+            write_telemetry_clear_marker(_get_log_root())
+        except Exception:
+            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
+    if format == "table":
+        return TelemetryFormatter.format_token_table(steps, total)
     return json.dumps(
         {
             "steps": steps,
@@ -129,9 +169,9 @@ async def get_token_summary(clear: bool = False) -> str:
     )
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("get_timing_summary")
-async def get_timing_summary(clear: bool = False) -> str:
+async def get_timing_summary(clear: bool = False, format: str = "json") -> str:
     """Return accumulated wall-clock timing grouped by step name.
 
     This tool is always available (not gated by open_kitchen).
@@ -144,6 +184,8 @@ async def get_timing_summary(clear: bool = False) -> str:
 
     Args:
         clear: If True, reset the timing log after returning current data.
+        format: Output format — "json" (default) returns structured JSON,
+                "table" returns a pre-formatted markdown table string.
     """
     from autoskillit.server import _get_ctx
 
@@ -151,33 +193,69 @@ async def get_timing_summary(clear: bool = False) -> str:
     total = _get_ctx().timing_log.compute_total()
     if clear:
         _get_ctx().timing_log.clear()
+        try:
+            write_telemetry_clear_marker(_get_log_root())
+        except Exception:
+            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
+    if format == "table":
+        return TelemetryFormatter.format_timing_table(steps, total)
     return json.dumps({"steps": steps, "total": total})
 
 
-def _format_token_summary(steps: list) -> str:
-    """Render token log entries as a markdown string."""
-    lines = ["# Token Summary\n\n"]
-    for step in steps:
-        lines.append(f"## {step['step_name']}\n\n")
-        lines.append(f"- input_tokens: {step['input_tokens']}\n")
-        lines.append(f"- output_tokens: {step['output_tokens']}\n")
-        lines.append(f"- cache_creation_input_tokens: {step['cache_creation_input_tokens']}\n")
-        lines.append(f"- cache_read_input_tokens: {step['cache_read_input_tokens']}\n")
-        lines.append(f"- invocation_count: {step['invocation_count']}\n\n")
-    return "".join(lines)
+def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
+    """Read the last n events from quota_events.jsonl (most recent first).
+
+    Returns (events_slice, total_count). Silently tolerates missing or corrupt lines.
+    """
+    qe_path = Path(log_root) / "quota_events.jsonl"
+    if not qe_path.exists():
+        return [], 0
+    events: list[dict] = []
+    try:
+        for line in qe_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    except OSError:
+        return [], 0
+    total = len(events)
+    return list(reversed(events))[:n], total  # most recent first
 
 
-def _format_timing_summary(steps: list) -> str:
-    """Render timing log entries as a markdown string."""
-    lines = ["# Timing Summary\n\n"]
-    for step in steps:
-        lines.append(f"## {step['step_name']}\n\n")
-        lines.append(f"- total_seconds: {step['total_seconds']}\n")
-        lines.append(f"- invocation_count: {step['invocation_count']}\n\n")
-    return "".join(lines)
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@track_response_size("get_quota_events")
+async def get_quota_events(n: int = 50) -> str:
+    """Return the most recent quota guard events from the diagnostic log.
+
+    Events are written by the quota_check.py PreToolUse hook each time it
+    approves or blocks a run_skill call. Use this to diagnose quota throttling
+    during long pipeline runs.
+
+    Returns JSON with:
+      - events: list of {ts, event, threshold, utilization?, sleep_seconds?,
+                         resets_at?, cache_path?}  (most recent first)
+      - total_count: int  (total events in the log, before limiting to n)
+
+    Args:
+        n: Maximum number of events to return (default 50).
+
+    This tool is always available (not gated by open_kitchen).
+    This tool sends no MCP progress notifications by design (ungated tools are
+    notification-free — see CLAUDE.md).
+    """
+    from autoskillit.server import _get_ctx
+
+    ctx = _get_ctx()
+    log_root = resolve_log_dir(ctx.config.linux_tracing.log_dir)
+    events, total = _read_quota_events(log_root, n)
+    return json.dumps({"events": events, "total_count": total})
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("write_telemetry_files")
 async def write_telemetry_files(
     output_dir: str,
@@ -187,6 +265,7 @@ async def write_telemetry_files(
 
     Reads the current session's token log and timing log and writes two
     markdown files to output_dir, creating the directory if needed.
+    Files contain PR-ready markdown tables via TelemetryFormatter.
 
     Returns JSON with:
       - token_summary_path: absolute path to the written token_summary.md
@@ -216,11 +295,21 @@ async def write_telemetry_files(
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
+    token_steps = _merge_wall_clock_seconds(
+        tool_ctx.token_log.get_report(), tool_ctx.timing_log.get_report()
+    )
+    token_total = tool_ctx.token_log.compute_total()
+
     token_path = out / "token_summary.md"
-    _atomic_write(token_path, _format_token_summary(tool_ctx.token_log.get_report()))
+    _atomic_write(token_path, TelemetryFormatter.format_token_table(token_steps, token_total))
 
     timing_path = out / "timing_summary.md"
-    _atomic_write(timing_path, _format_timing_summary(tool_ctx.timing_log.get_report()))
+    _atomic_write(
+        timing_path,
+        TelemetryFormatter.format_timing_table(
+            tool_ctx.timing_log.get_report(), tool_ctx.timing_log.compute_total()
+        ),
+    )
 
     mcp_path = out / "mcp_response_metrics.json"
     mcp_data = {
@@ -238,7 +327,7 @@ async def write_telemetry_files(
     )
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("read_db")
 async def read_db(
     db_path: str,

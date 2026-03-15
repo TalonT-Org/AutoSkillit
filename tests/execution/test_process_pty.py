@@ -276,7 +276,8 @@ class TestSTOPDelayPipelineAdjudication:
         assert skill_result.success is False
         assert skill_result.needs_retry is True
         assert skill_result.retry_reason == RetryReason.RESUME
-        assert skill_result.subtype == "success"
+        assert skill_result.subtype == "empty_result"
+        assert skill_result.cli_subtype == "success"
 
     @pytest.mark.anyio
     async def test_natural_exit_empty_stdout_produces_retriable_skill_result(self, tmp_path):

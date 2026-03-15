@@ -13,7 +13,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import _atomic_write, _parse_issue_ref, get_logger
+from autoskillit.core import RetryReason, _atomic_write, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
@@ -24,7 +24,7 @@ from autoskillit.server.helpers import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import GitHubFetcher, HeadlessExecutor
+    from autoskillit.core import GitHubFetcher, HeadlessExecutor, SkillResult
 
 logger = get_logger(__name__)
 
@@ -43,11 +43,57 @@ _PREPARE_RESULT_END = "---/prepare-issue-result---"
 _ENRICH_RESULT_START = "---enrich-issues-result---"
 _ENRICH_RESULT_END = "---/enrich-issues-result---"
 
+# Sentinel error strings returned by _parse_*_result when block extraction fails.
+# Shared by prepare_issue and enrich_issues to distinguish parse failures from
+# skill-internal errors embedded in a valid block.
+_BLOCK_PARSE_ERRORS: frozenset[str] = frozenset(
+    {"no result block found", "result block contained invalid JSON"}
+)
+
+
+def _build_headless_error_response(
+    result: SkillResult,
+    *,
+    error: str,
+    status: str = "failed",
+) -> dict[str, Any]:
+    """Canonical error response for tools that invoke headless sessions.
+
+    Every failure path that derives a response from a SkillResult MUST use this
+    builder. Do not hand-roll error dicts — that pattern caused silent omission of
+    diagnostic fields (issue #384). Adding a field here propagates to all paths
+    automatically.
+    """
+    return {
+        "success": False,
+        "status": status,
+        "error": error,
+        "session_id": result.session_id,
+        "stderr": result.stderr or "",
+        "subtype": result.subtype or "",
+        "exit_code": result.exit_code if result.exit_code is not None else -1,
+    }
+
+
+def _retry_reason_to_error(result: SkillResult) -> str:
+    """Extract a human-readable error string from a failed SkillResult.
+
+    Uses result.retry_reason.value when retry_reason is a RetryReason enum member
+    and not NONE; otherwise falls back to result.subtype or a generic message.
+    """
+    if isinstance(result.retry_reason, RetryReason) and result.retry_reason not in (
+        RetryReason.NONE,
+        None,
+    ):
+        return result.retry_reason.value
+    return result.subtype or "skill session failed"
+
+
 # Strong references to in-flight non-blocking report tasks (prevents GC).
 _pending_report_tasks: set[asyncio.Task[Any]] = set()
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("fetch_github_issue")
 async def fetch_github_issue(
     issue_url: str,
@@ -111,7 +157,7 @@ async def fetch_github_issue(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("get_issue_title")
 async def get_issue_title(issue_url: str) -> str:
     """Fetch only the title and slug for a GitHub issue — no body, no comments.
@@ -153,7 +199,7 @@ async def get_issue_title(issue_url: str) -> str:
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("report_bug")
 async def report_bug(
     error_context: str,
@@ -229,6 +275,10 @@ async def report_bug(
 
         log_dir = config.linux_tracing.log_dir if config.linux_tracing is not None else ""
 
+        expected_output_patterns: list[str] = []
+        if tool_ctx.output_pattern_resolver:
+            expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
         if severity == "blocking":
             result = await _run_report_session(
                 skill_command,
@@ -241,6 +291,7 @@ async def report_bug(
                 effective_model,
                 step_name,
                 log_dir=log_dir,
+                expected_output_patterns=expected_output_patterns,
             )
             if not result["success"]:
                 await _notify(
@@ -265,6 +316,7 @@ async def report_bug(
                 effective_model,
                 step_name,
                 log_dir=log_dir,
+                expected_output_patterns=expected_output_patterns,
             )
         )
         _pending_report_tasks.add(task)
@@ -537,6 +589,7 @@ async def _run_report_session(
     model: str,
     step_name: str,
     log_dir: str,
+    expected_output_patterns: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run the headless session, write the report, and handle GitHub filing.
 
@@ -544,7 +597,12 @@ async def _run_report_session(
     """
     cfg = config.report_bug
     skill_result = await executor.run(
-        skill_command, cwd, model=model, step_name=step_name, timeout=float(cfg.timeout)
+        skill_command,
+        cwd,
+        model=model,
+        step_name=step_name,
+        timeout=float(cfg.timeout),
+        expected_output_patterns=expected_output_patterns or [],
     )
 
     report_text = skill_result.result or skill_result.stderr or "No report generated."
@@ -559,6 +617,10 @@ async def _run_report_session(
             "status": "failed",
             "report": report_text,
             "report_path": str(report_path),
+            "session_id": skill_result.session_id,
+            "stderr": skill_result.stderr,
+            "subtype": skill_result.subtype,
+            "exit_code": skill_result.exit_code,
         }
 
     diag = _read_session_diagnostics(skill_result.session_id, log_dir)
@@ -589,6 +651,16 @@ async def _run_report_session(
 def _extract_label_names(raw_labels: list[Any]) -> list[str]:
     """Extract label name strings from a mixed list of dicts or strings."""
     return [lbl["name"] if isinstance(lbl, dict) else str(lbl) for lbl in raw_labels]
+
+
+def _without_success_key(d: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of d with the 'success' key removed.
+
+    Used when merging parsed skill block data into a response dict where
+    result.success is the authoritative success signal — preventing the block's
+    own 'success' field from silently overwriting the outer key.
+    """
+    return {k: v for k, v in d.items() if k != "success"}
 
 
 def _build_prepare_skill_command(
@@ -659,7 +731,7 @@ def _parse_enrich_result(response_text: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("prepare_issue")
 async def prepare_issue(
     title: str,
@@ -711,22 +783,48 @@ async def prepare_issue(
 
     skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
 
+    expected_output_patterns: list[str] = []
+    if tool_ctx.output_pattern_resolver:
+        expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
     result = await tool_ctx.executor.run(
         skill_command,
         str(Path.cwd()),
+        expected_output_patterns=expected_output_patterns,
     )
 
-    parsed = _parse_prepare_result(result.result or "")
+    if not result.success:
+        return json.dumps(
+            _build_headless_error_response(result, error=_retry_reason_to_error(result))
+        )
+
+    if result.result is None or not result.result.strip():
+        return json.dumps(
+            _build_headless_error_response(
+                result,
+                error="session completed but output was empty (drain race)",
+            )
+        )
+
+    parsed = _parse_prepare_result(result.result)
+    # Distinguish block-parse failures (block absent or malformed JSON) from skill-level data.
+    # The sentinel errors from _parse_prepare_result signal a block-extraction failure —
+    # these are not the same as skill-internal errors embedded in a valid block.
+    if parsed.get("error") in _BLOCK_PARSE_ERRORS:
+        return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
+
+    # Block parsed successfully. result.success=True is the authoritative signal —
+    # the parsed block's "success" field (if any) must not overwrite it.
     return json.dumps(
         {
-            "success": result.success,
-            "status": "complete" if result.success else "failed",
-            **parsed,
+            "success": True,
+            "status": "complete",
+            **_without_success_key(parsed),
         }
     )
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("enrich_issues")
 async def enrich_issues(
     issue_number: int | None = None,
@@ -746,7 +844,8 @@ async def enrich_issues(
 
     Returns JSON with: enriched[], skipped_already_enriched[], skipped_too_vague[],
     skipped_mixed_concerns[], dry_run.
-    On gate closed or skill failure: {success: false, error: "..."}
+    On gate closed or skill failure: {success: false, status: "failed", error: "...",
+    session_id, stderr, subtype, exit_code} (unified contract via _build_headless_error_response).
 
     Args:
         issue_number: Enrich a single issue by number (optional).
@@ -781,19 +880,43 @@ async def enrich_issues(
 
     skill_command = _build_enrich_skill_command(issue_number, batch, dry_run, repo)
 
+    expected_output_patterns: list[str] = []
+    if tool_ctx.output_pattern_resolver:
+        expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
     result = await tool_ctx.executor.run(
         skill_command,
         str(Path.cwd()),
+        expected_output_patterns=expected_output_patterns,
     )
 
     if not result.success:
-        return json.dumps({"success": False, "error": result.stderr or "skill session failed"})
+        return json.dumps(
+            _build_headless_error_response(result, error=_retry_reason_to_error(result))
+        )
 
-    parsed = _parse_enrich_result(result.result or "")
-    return json.dumps(parsed)
+    if result.result is None or not result.result.strip():
+        return json.dumps(
+            _build_headless_error_response(
+                result,
+                error="session completed but output was empty (drain race)",
+            )
+        )
+
+    parsed = _parse_enrich_result(result.result)
+    if parsed.get("error") in _BLOCK_PARSE_ERRORS:
+        return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
+
+    return json.dumps(
+        {
+            "success": True,
+            "status": "complete",
+            **_without_success_key(parsed),
+        }
+    )
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("claim_issue")
 async def claim_issue(
     issue_url: str,
@@ -877,23 +1000,30 @@ async def claim_issue(
         )
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("release_issue")
 async def release_issue(
     issue_url: str,
     label: str | None = None,
+    target_branch: str | None = None,
+    staged_label: str | None = None,
 ) -> str:
     """Remove the in-progress label from a GitHub issue to release it.
 
     Call this in cleanup paths (both success and failure) to allow the issue
     to be picked up by future pipeline runs.
 
-    Returns JSON with: success, issue_number, label.
+    When target_branch is provided and differs from the configured default base branch,
+    also applies a 'staged' label to indicate the work is merged and awaiting promotion.
+
+    Returns JSON with: success, issue_number, label, staged, staged_label.
     On gate closed or no token: {success: false, error: "..."}.
 
     Args:
         issue_url: Full GitHub issue URL or shorthand (owner/repo#42).
         label: Label name to remove. Defaults to github.in_progress_label from config.
+        target_branch: Branch the PR was merged into. When non-default, applies staged label.
+        staged_label: Label name for staged state. Defaults to github.staged_label from config.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -919,11 +1049,65 @@ async def release_issue(
         result = await tool_ctx.github_client.remove_label(
             owner, repo, issue_number, effective_label
         )
+        if not result.get("success", False):
+            return json.dumps(
+                {
+                    "success": False,
+                    "issue_number": issue_number,
+                    "label": effective_label,
+                    "staged": False,
+                    "staged_label": None,
+                }
+            )
+
+        # Determine if staging is needed
+        default_branch = tool_ctx.config.branching.default_base_branch
+        should_stage = target_branch is not None and target_branch != default_branch
+
+        staged = False
+        effective_staged_label = staged_label or tool_ctx.config.github.staged_label
+
+        if should_stage:
+            ensure_result = await tool_ctx.github_client.ensure_label(
+                owner,
+                repo,
+                effective_staged_label,
+                color="0075ca",
+                description="Implementation staged and waiting for promotion to main",
+            )
+            if not ensure_result.get("success"):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "issue_number": issue_number,
+                        "label": effective_label,
+                        "error": (
+                            f"Failed to ensure staged label: {ensure_result.get('error', '?')}"
+                        ),
+                    }
+                )
+
+            apply_result = await tool_ctx.github_client.add_labels(
+                owner, repo, issue_number, [effective_staged_label]
+            )
+            if not apply_result.get("success"):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "issue_number": issue_number,
+                        "label": effective_label,
+                        "error": f"Failed to apply staged label: {apply_result.get('error', '?')}",
+                    }
+                )
+            staged = True
+
         return json.dumps(
             {
-                "success": result.get("success", False),
+                "success": True,
                 "issue_number": issue_number,
                 "label": effective_label,
+                "staged": staged,
+                "staged_label": effective_staged_label if staged else None,
             }
         )
 
@@ -972,7 +1156,7 @@ async def _close_issues_sequentially(
     return closed, failed
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("get_pr_reviews")
 async def get_pr_reviews(
     pr_number: int,
@@ -1037,7 +1221,7 @@ async def get_pr_reviews(
         return json.dumps({"reviews": reviews})
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("bulk_close_issues")
 async def bulk_close_issues(
     issue_numbers: list[int],

@@ -38,7 +38,7 @@ execute session, collect result, report.
 - Process batches in ascending order: batch 1 before batch 2 before batch 3
 - Use `load_recipe` to execute the recipe for each issue
 - Emit `---process-issues-result---` result block on completion (success or failure)
-- Write the summary report to `temp/process-issues/`
+- Write the summary report to `temp/process-issues/` (relative to the current working directory)
 - Use `model: "sonnet"` when spawning subagents via the Task tool
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include `--force` in all `gh label create` calls
@@ -84,7 +84,7 @@ Parse arguments:
 1. Read `github.default_repo` from `.autoskillit/config.yaml` if present.
 2. Infer from git remote:
    ```bash
-   git remote get-url origin | sed 's|.*github.com[:/]||; s|\.git$||'
+   { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github.com[:/]||; s|\.git$||'
    ```
    This yields `owner/repo`.
 
@@ -139,6 +139,10 @@ Skip this step when `--dry-run` is active (Step 2 already prints the plan and ex
 
 For each batch in **ascending order** (batch 1, then batch 2, etc.):
 
+**CRITICAL:** Do NOT output any prose status text between batches. After
+completing one batch (all issues processed, optional merge cycle done),
+immediately begin the batch header (3a) for the next batch.
+
 - If `--batch N` was given, skip all batches with a different number.
 
 **3a. Log batch header:**
@@ -150,6 +154,11 @@ Processing X issues:
 ```
 
 **3b. For each issue in the batch (process sequentially):**
+
+**CRITICAL:** Do NOT output any prose status text between issues. After
+completing one issue's processing (step 9), immediately begin step 1
+(Construct the issue URL) for the next issue. Inter-issue announcements
+create end_turn windows that cause stochastic session termination.
 
 1. **Construct the issue URL** (from Step 1 derivation).
 
@@ -229,6 +238,9 @@ run_skill("/autoskillit:analyze-prs {base_branch}")
 
 Parse the `pr_order_file` from the skill output. For each PR in the recommended
 merge order:
+
+**CRITICAL:** Do NOT output any prose status text between PRs. After one
+merge-pr completes, immediately call run_skill for the next PR.
 
 ```
 run_skill("/autoskillit:merge-pr {pr_number} {complexity}")

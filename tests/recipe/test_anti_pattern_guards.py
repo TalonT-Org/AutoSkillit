@@ -65,21 +65,26 @@ def test_implementation_create_branch_uses_create_unique_branch_tool():
     )
 
 
-def test_pr_merge_pipeline_no_run_cmd_push():
-    """AP2: pr-merge-pipeline.yaml push_integration_branch must use push_to_remote, not run_cmd."""
-    recipe = load_recipe(builtin_recipes_dir() / "pr-merge-pipeline.yaml")
+def test_merge_prs_no_run_cmd_push():
+    """AP2: merge-prs.yaml push_integration_branch must use push_to_remote, not run_cmd."""
+    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
     step = recipe.steps["push_integration_branch"]
     assert step.tool == "push_to_remote", (
         "push_integration_branch must use push_to_remote MCP tool, not run_cmd"
     )
 
 
-def test_pr_merge_pipeline_has_no_loop_push_kitchen_rule():
-    """AP2: pr-merge-pipeline.yaml push_to_remote must only appear in the designated push steps."""
-    raw = yaml.safe_load((builtin_recipes_dir() / "pr-merge-pipeline.yaml").read_text())
+def test_merge_prs_has_no_loop_push_kitchen_rule():
+    """AP2: merge-prs.yaml push_to_remote must only appear in the designated push steps."""
+    raw = yaml.safe_load((builtin_recipes_dir() / "merge-prs.yaml").read_text())
     steps = raw.get("steps", {})
     push_steps = {name for name, step in steps.items() if step.get("tool") == "push_to_remote"}
-    unexpected = push_steps - {"publish_integration_branch", "push_integration_branch"}
+    unexpected = push_steps - {
+        "publish_integration_branch",
+        "push_integration_branch",
+        "re_push_review_integration",  # authorized: re-pushes after review fixes
+        "push_ejected_fix",  # authorized: pushes conflict-resolved ejected PR branch back
+    }
     assert not unexpected, (
         f"push_to_remote found in unexpected steps (loop pushes are prohibited): {unexpected}"
     )

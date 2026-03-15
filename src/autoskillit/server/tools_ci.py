@@ -1,27 +1,38 @@
-"""MCP tool handlers: wait_for_ci (gated), get_ci_status (ungated)."""
+"""MCP tool handlers: wait_for_ci (gated), get_ci_status (ungated), set_commit_status (gated),
+wait_for_merge_queue (gated).
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
+from typing import Literal
 
 import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import get_logger
+from autoskillit.core import CIRunScope, get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, track_response_size
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    _run_subprocess,
+    infer_repo_from_remote,
+    track_response_size,
+)
 
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("wait_for_ci")
 async def wait_for_ci(
     branch: str,
     repo: str | None = None,
+    remote_url: str = "",
     head_sha: str | None = None,
+    workflow: str | None = None,
     timeout_seconds: int = 300,
     cwd: str = ".",
     ctx: Context = CurrentContext(),
@@ -35,8 +46,13 @@ async def wait_for_ci(
         branch: Git branch name to watch CI for.
         repo: GitHub owner/repo (e.g. "owner/repo"). If omitted, inferred
               from git remote in cwd.
+        remote_url: Full GitHub remote URL (e.g. "https://github.com/owner/repo.git").
+                    Parsed to owner/repo before inference. Takes priority over repo
+                    when both are provided.
         head_sha: Specific commit SHA to match. If omitted, inferred from
                   HEAD in cwd.
+        workflow: Workflow filename to filter runs (e.g. "tests.yml"). If
+                  omitted, falls back to the project-level ci.workflow config.
         timeout_seconds: Maximum time to wait (default 300s).
         cwd: Working directory for git operations.
 
@@ -82,18 +98,29 @@ async def wait_for_ci(
         except OSError:
             pass
 
+    scope = CIRunScope(
+        workflow=workflow or tool_ctx.default_ci_scope.workflow,
+        head_sha=head_sha,
+    )
+
+    resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
+
     await _notify(
         ctx,
         "info",
         f"Watching CI for branch {branch}",
         "autoskillit.wait_for_ci",
-        extra={"repo": repo or "(infer)", "head_sha": head_sha or "(any)"},
+        extra={
+            "repo": resolved_repo or "(infer)",
+            "head_sha": scope.head_sha or "(any)",
+            "workflow": scope.workflow or "(any)",
+        },
     )
 
     result = await tool_ctx.ci_watcher.wait(
         branch,
-        repo=repo,
-        head_sha=head_sha,
+        repo=resolved_repo or None,
+        scope=scope,
         timeout_seconds=timeout_seconds,
         cwd=cwd,
     )
@@ -111,12 +138,92 @@ async def wait_for_ci(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation"})
+@mcp.tool(tags={"kitchen", "automation"}, annotations={"readOnlyHint": True})
+@track_response_size("set_commit_status")
+async def set_commit_status(
+    sha: str,
+    state: Literal["pending", "success", "failure", "error"],
+    context: str,
+    description: str = "",
+    target_url: str = "",
+    repo: str = "",
+    cwd: str = "",
+) -> dict[str, object]:
+    """Post a GitHub Commit Status to a commit SHA.
+
+    Use to implement review-first gating: post `pending` when review starts,
+    then `success` or `failure` when it completes. Combine with a required
+    status check in branch protection to block merge until the review resolves.
+
+    Args:
+        sha: Full commit SHA to attach the status to.
+        state: One of: pending, success, failure, error.
+        context: Status context label (e.g. "autoskillit/ai-review").
+        description: Short human-readable status description (max 140 chars).
+        target_url: Optional URL linking to review details.
+        repo: owner/repo format. Inferred from `cwd` git remote if absent.
+        cwd: Working directory for repo inference. Defaults to plugin_dir.
+    """
+    if (gate := _require_enabled()) is not None:
+        return json.loads(gate)  # type: ignore[return-value]
+
+    if not sha:
+        return {"success": False, "error": "sha must not be empty"}
+    if not context:
+        return {"success": False, "error": "context must not be empty"}
+    if len(description) > 140:
+        return {
+            "success": False,
+            "error": f"description exceeds 140 chars ({len(description)} chars)",
+        }
+
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    effective_cwd = cwd or tool_ctx.plugin_dir or "."
+
+    # Resolve owner/repo if not provided
+    owner_repo = repo
+    if not owner_repo:
+        rc, stdout, stderr = await _run_subprocess(
+            ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+            cwd=effective_cwd,
+            timeout=30.0,
+        )
+        if rc != 0:
+            return {"success": False, "error": f"Could not infer owner/repo: {stderr}"}
+        owner_repo = stdout.strip()
+
+    cmd = [
+        "gh",
+        "api",
+        "--method",
+        "POST",
+        f"/repos/{owner_repo}/statuses/{sha}",
+        "-f",
+        f"state={state}",
+        "-f",
+        f"context={context}",
+        "-f",
+        f"description={description}",
+    ]
+    if target_url:
+        cmd += ["-f", f"target_url={target_url}"]
+
+    rc, _stdout, stderr = await _run_subprocess(cmd, cwd=effective_cwd, timeout=30.0)
+    if rc != 0:
+        return {"success": False, "error": stderr}
+
+    return {"success": True, "sha": sha, "state": state, "context": context}
+
+
+@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("get_ci_status")
 async def get_ci_status(
     branch: str | None = None,
     run_id: int | None = None,
     repo: str | None = None,
+    workflow: str | None = None,
     cwd: str = ".",
 ) -> str:
     """Return current CI status for a branch or specific run without waiting.
@@ -129,6 +236,8 @@ async def get_ci_status(
         branch: Git branch name. Required if run_id is not provided.
         run_id: Specific run ID to check. If provided, branch is ignored.
         repo: GitHub owner/repo. If omitted, inferred from git remote in cwd.
+        workflow: Workflow filename to filter runs (e.g. "tests.yml"). If
+                  omitted, falls back to the project-level ci.workflow config.
         cwd: Working directory for git operations.
 
     Returns:
@@ -143,10 +252,82 @@ async def get_ci_status(
     if branch is None and run_id is None:
         return json.dumps({"runs": [], "error": "Provide branch or run_id"})
 
+    scope = CIRunScope(workflow=workflow or tool_ctx.default_ci_scope.workflow)
+
     result = await tool_ctx.ci_watcher.status(
         branch or "",
         repo=repo,
         run_id=run_id,
+        scope=scope,
         cwd=cwd,
+    )
+    return json.dumps(result)
+
+
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": False})
+@track_response_size("wait_for_merge_queue")
+async def wait_for_merge_queue(
+    pr_number: int,
+    target_branch: str,
+    cwd: str,
+    repo: str = "",
+    remote_url: str = "",
+    timeout_seconds: int = 600,
+    poll_interval: int = 15,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Poll a PR's progress through GitHub's merge queue until merged, ejected, or timed out.
+
+    Args:
+        pr_number: PR number to monitor.
+        target_branch: Branch the merge queue targets (e.g. "integration").
+        cwd: Working directory for git remote resolution when repo is not provided.
+        repo: Optional "owner/name" string. Inferred from git remote if empty.
+        remote_url: Full GitHub remote URL (e.g. "https://github.com/owner/repo.git").
+                    Parsed to owner/repo before inference. Takes priority over repo
+                    when both are provided.
+        timeout_seconds: Total polling budget (default 600s).
+        poll_interval: Seconds between polls (default 15s).
+
+    Returns:
+        JSON: {"success": bool, "pr_state": "merged"|"ejected"|"timeout"|"error", "reason": str}
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(
+        tool="wait_for_merge_queue", pr_number=pr_number, target_branch=target_branch
+    )
+    await _notify(
+        ctx,
+        "info",
+        f"Waiting for PR #{pr_number} in merge queue on {target_branch!r}",
+        "autoskillit.wait_for_merge_queue",
+        extra={"pr_number": pr_number, "target_branch": target_branch},
+    )
+
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+
+    if tool_ctx.merge_queue_watcher is None:
+        return json.dumps(
+            {
+                "success": False,
+                "pr_state": "error",
+                "reason": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
+            }
+        )
+
+    resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
+
+    result = await tool_ctx.merge_queue_watcher.wait(
+        pr_number=pr_number,
+        target_branch=target_branch,
+        repo=resolved_repo or None,
+        cwd=cwd,
+        timeout_seconds=timeout_seconds,
+        poll_interval=poll_interval,
     )
     return json.dumps(result)

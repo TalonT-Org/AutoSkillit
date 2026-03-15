@@ -11,24 +11,45 @@ from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
 
 BUNDLED_SKILLS = [
     "analyze-prs",
+    "arch-lens-c4-container",
+    "arch-lens-concurrency",
+    "arch-lens-data-lineage",
+    "arch-lens-deployment",
+    "arch-lens-development",
+    "arch-lens-error-resilience",
+    "arch-lens-module-dependency",
+    "arch-lens-operational",
+    "arch-lens-process-flow",
+    "arch-lens-repository-access",
+    "arch-lens-scenarios",
+    "arch-lens-security",
+    "arch-lens-state-lifecycle",
+    "audit-arch",
+    "audit-bugs",
+    "audit-cohesion",
+    "audit-defense-standards",
     "audit-friction",
     "audit-impl",
+    "audit-tests",
     "close-kitchen",
     "collapse-issues",
-    "create-review-pr",
+    "design-guards",
     "diagnose-ci",
     "dry-walkthrough",
+    "elaborate-phase",
     "enrich-issues",
     "implement-worktree",
     "implement-worktree-no-merge",
     "investigate",
     "issue-splitter",
+    "make-arch-diag",
     "make-groups",
     "make-plan",
+    "make-req",
     "merge-pr",
-    "write-recipe",
     "mermaid",
     "migrate-recipes",
+    "open-integration-pr",
     "open-kitchen",
     "open-pr",
     "pipeline-summary",
@@ -40,17 +61,43 @@ BUNDLED_SKILLS = [
     "resolve-merge-conflicts",
     "resolve-review",
     "retry-worktree",
-    "review-approach",
     "review-pr",
+    "review-approach",
     "setup-project",
     "smoke-task",
     "sous-chef",
+    "sprint-planner",
     "triage-issues",
+    "verify-diag",
+    "write-recipe",
 ]
 
 # Internal-only skill documents: injected programmatically, never invocable as slash commands.
 # They have no YAML frontmatter and do not follow the user-facing SKILL.md structural contract.
 INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
+
+ARCH_LENS_NAMES = [
+    "arch-lens-c4-container",
+    "arch-lens-process-flow",
+    "arch-lens-data-lineage",
+    "arch-lens-module-dependency",
+    "arch-lens-concurrency",
+    "arch-lens-error-resilience",
+    "arch-lens-repository-access",
+    "arch-lens-operational",
+    "arch-lens-security",
+    "arch-lens-development",
+    "arch-lens-scenarios",
+    "arch-lens-state-lifecycle",
+    "arch-lens-deployment",
+]
+
+AUDIT_SKILL_NAMES = [
+    "audit-arch",
+    "audit-tests",
+    "audit-cohesion",
+    "audit-defense-standards",
+]
 
 BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)
 
@@ -129,7 +176,7 @@ class TestSkillResolver:
                 name = match.group(1)
                 if name.startswith("autoskillit:") or name.startswith("mcp__"):
                     continue
-                # Skip URI paths like workflow://bugfix-loop — not skill invocations
+                # Skip URI paths like workflow://some-recipe — not skill invocations
                 start = match.start()
                 if start >= 1 and content[start - 1] == "/":
                     continue
@@ -317,3 +364,23 @@ class TestSkillResolver:
         info = resolver.resolve("diagnose-ci")
         assert info is not None
         assert info.path.exists()
+
+    def test_all_arch_lens_skills_bundled(self) -> None:
+        """All 13 arch-lens skill variants must be resolvable via SkillResolver."""
+        resolver = SkillResolver()
+        for name in ARCH_LENS_NAMES:
+            info = resolver.resolve(name)
+            assert info is not None, f"arch-lens skill '{name}' not found in bundled skills"
+            assert info.path.exists(), f"SKILL.md missing for '{name}' at {info.path}"
+
+    def test_all_audit_skills_bundled(self) -> None:
+        """Audit skills must be bundled and available for use in recipes."""
+        resolver = SkillResolver()
+        for name in AUDIT_SKILL_NAMES:
+            info = resolver.resolve(name)
+            assert info is not None, f"audit skill '{name}' not found in bundled skills"
+
+    def test_review_pr_is_bundled(self) -> None:
+        """review-pr must be in bundled skills."""
+        resolver = SkillResolver()
+        assert resolver.resolve("review-pr") is not None, "review-pr must be a bundled skill"

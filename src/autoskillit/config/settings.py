@@ -55,6 +55,9 @@ class SafetyConfig:
     reset_guard_marker: str = ".autoskillit-workspace"
     require_dry_walkthrough: bool = True
     test_gate_on_merge: bool = True
+    protected_branches: list[str] = field(
+        default_factory=lambda: ["main", "integration", "stable"]
+    )
 
 
 @dataclass
@@ -79,7 +82,7 @@ class RunSkillConfig:
 
 @dataclass
 class ModelConfig:
-    default: str | None = None
+    default: str = "sonnet"
     override: str | None = None
 
 
@@ -113,6 +116,7 @@ class GitHubConfig:
     token: str | None = None
     default_repo: str | None = None
     in_progress_label: str = "in-progress"
+    staged_label: str = "staged"
 
 
 @dataclass
@@ -145,7 +149,12 @@ class McpResponseConfig:
 
 @dataclass
 class BranchingConfig:
-    default_base_branch: str = "integration"
+    default_base_branch: str = "main"
+
+
+@dataclass
+class CIConfig:
+    workflow: str | None = None
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:
@@ -179,6 +188,7 @@ class AutomationConfig:
     linux_tracing: LinuxTracingConfig = field(default_factory=LinuxTracingConfig)
     mcp_response: McpResponseConfig = field(default_factory=McpResponseConfig)
     branching: BranchingConfig = field(default_factory=BranchingConfig)
+    ci: CIConfig = field(default_factory=CIConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -213,6 +223,7 @@ class AutomationConfig:
         lt = sec("linux_tracing")
         mr = sec("mcp_response")
         br = sec("branching")
+        ci = sec("ci")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -232,6 +243,7 @@ class AutomationConfig:
         _lt = _field_defaults(LinuxTracingConfig)
         _mr = _field_defaults(McpResponseConfig)
         _br = _field_defaults(BranchingConfig)
+        _ci = _field_defaults(CIConfig)
 
         return cls(
             test_check=TestCheckConfig(
@@ -255,6 +267,7 @@ class AutomationConfig:
                     val(sf, "require_dry_walkthrough", _sf["require_dry_walkthrough"])
                 ),
                 test_gate_on_merge=bool(val(sf, "test_gate_on_merge", _sf["test_gate_on_merge"])),
+                protected_branches=list(val(sf, "protected_branches", _sf["protected_branches"])),
             ),
             read_db=ReadDbConfig(
                 timeout=int(val(rd, "timeout", _rd["timeout"])),
@@ -272,7 +285,7 @@ class AutomationConfig:
                 ),
             ),
             model=ModelConfig(
-                default=val(mc, "default", _mc["default"]) or None,
+                default=_d if (_d := val(mc, "default", None)) is not None else _mc["default"],
                 override=val(mc, "override", _mc["override"]) or None,
             ),
             worktree_setup=WorktreeSetupConfig(
@@ -296,6 +309,7 @@ class AutomationConfig:
                 token=val(gh, "token", _gh["token"]) or None,
                 default_repo=val(gh, "default_repo", _gh["default_repo"]) or None,
                 in_progress_label=str(val(gh, "in_progress_label", _gh["in_progress_label"])),
+                staged_label=str(val(gh, "staged_label", _gh["staged_label"])),
             ),
             report_bug=ReportBugConfig(
                 timeout=int(val(rb, "timeout", _rb["timeout"])),
@@ -327,6 +341,9 @@ class AutomationConfig:
                 default_base_branch=str(
                     val(br, "default_base_branch", _br["default_base_branch"])
                 ),
+            ),
+            ci=CIConfig(
+                workflow=val(ci, "workflow", _ci["workflow"]) or None,
             ),
         )
 

@@ -17,6 +17,15 @@ T = TypeVar("T")
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
 
+# Env vars that control MCP server-level behavior and must not leak into
+# user-code subprocesses (pytest runs, shell commands, etc.).
+# Add new internal vars here as they are introduced.
+AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
+    {
+        "AUTOSKILLIT_HEADLESS",
+    }
+)
+
 
 class RetryReason(StrEnum):
     RESUME = "resume"
@@ -27,6 +36,7 @@ class RetryReason(StrEnum):
 
 class MergeFailedStep(StrEnum):
     PATH_VALIDATION = "path_validation"
+    PROTECTED_BRANCH = "protected_branch"
     BRANCH_DETECTION = "branch_detection"
     DIRTY_TREE = "dirty_tree"
     TEST_GATE = "test_gate"
@@ -279,6 +289,7 @@ class SubprocessRunner(Protocol):
         *,
         cwd: Path,
         timeout: float,
+        env: dict[str, str] | None = None,
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,
@@ -392,24 +403,78 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "get_pr_reviews",
         "bulk_close_issues",
         "check_pr_mergeable",
+        "set_commit_status",
+        "wait_for_merge_queue",
     }
 )
 
-UNGATED_TOOLS: frozenset[str] = frozenset(
+WORKER_TOOLS: frozenset[str] = frozenset(
     {
-        "kitchen_status",
-        "get_pipeline_report",
-        "get_token_summary",
-        "get_timing_summary",
-        "list_recipes",
-        "load_recipe",
-        "validate_recipe",
         "fetch_github_issue",
         "get_issue_title",
         "get_ci_status",
-        "open_kitchen",  # was prompt, now ungated tool
-        "close_kitchen",  # was prompt, now ungated tool
+        "get_token_summary",
+        "get_timing_summary",
+        "get_quota_events",
     }
+)
+
+HEADLESS_BLOCKED_UNGATED_TOOLS: frozenset[str] = frozenset(
+    {
+        "kitchen_status",
+        "get_pipeline_report",
+        "list_recipes",
+        "load_recipe",
+        "validate_recipe",
+        "open_kitchen",
+        "close_kitchen",
+    }
+)
+
+UNGATED_TOOLS: frozenset[str] = WORKER_TOOLS | HEADLESS_BLOCKED_UNGATED_TOOLS
+
+# Categorized tool listing for the open_kitchen response.
+# Each entry is (category_name, tuple_of_tool_names). Tool names must match the
+# registered MCP tool names exactly.
+TOOL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Execution", ("run_cmd", "run_python", "run_skill")),
+    ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
+    (
+        "Git Operations",
+        ("merge_worktree", "create_unique_branch", "check_pr_mergeable", "set_commit_status"),
+    ),
+    ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
+    ("Clone & Remote", ("clone_repo", "remove_clone", "push_to_remote")),
+    (
+        "GitHub",
+        (
+            "fetch_github_issue",
+            "get_issue_title",
+            "get_ci_status",
+            "report_bug",
+            "prepare_issue",
+            "enrich_issues",
+            "claim_issue",
+            "release_issue",
+            "wait_for_ci",
+            "wait_for_merge_queue",
+            "get_pr_reviews",
+            "bulk_close_issues",
+        ),
+    ),
+    (
+        "Telemetry & Diagnostics",
+        (
+            "read_db",
+            "write_telemetry_files",
+            "kitchen_status",
+            "get_pipeline_report",
+            "get_token_summary",
+            "get_timing_summary",
+            "get_quota_events",
+        ),
+    ),
+    ("Kitchen", ("open_kitchen", "close_kitchen")),
 )
 
 # Canonical prefix required for all skill_command values passed to run_skill.
@@ -463,6 +528,8 @@ class SkillResult:
     stderr: str
     token_usage: dict[str, Any] | None = None
     worktree_path: str | None = None
+    cli_subtype: str = field(default="")
+    write_path_warnings: list[str] = field(default_factory=list)
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -470,12 +537,14 @@ class SkillResult:
             "result": self.result,
             "session_id": self.session_id,
             "subtype": self.subtype,
+            "cli_subtype": self.cli_subtype,
             "is_error": self.is_error,
             "exit_code": self.exit_code,
             "needs_retry": self.needs_retry,
             "retry_reason": self.retry_reason,
             "stderr": self.stderr,
             "token_usage": self.token_usage,
+            "write_path_warnings": self.write_path_warnings,
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path
@@ -636,7 +705,13 @@ class RecipeRepository(Protocol):
     def list(self, project_dir: Path) -> Any: ...
 
     def load_and_validate(
-        self, name: str, project_dir: Any, *, suppressed: Sequence[str] | None = None
+        self,
+        name: str,
+        project_dir: Any,
+        *,
+        suppressed: Sequence[str] | None = None,
+        resolved_defaults: dict[str, str] | None = None,
+        ingredient_overrides: dict[str, str] | None = None,
     ) -> dict[str, Any]: ...
 
     def validate_from_path(self, script_path: Any) -> dict[str, Any]: ...
@@ -699,7 +774,13 @@ class CloneManager(Protocol):
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]: ...
 
     def push_to_remote(
-        self, clone_path: str, source_dir: str = "", branch: str = "", *, remote_url: str = ""
+        self,
+        clone_path: str,
+        source_dir: str = "",
+        branch: str = "",
+        *,
+        remote_url: str = "",
+        protected_branches: list[str] | None = None,
     ) -> dict[str, str | bool]: ...
 
 
@@ -778,6 +859,19 @@ class GitHubFetcher(Protocol):
     ) -> dict[str, Any]: ...
 
 
+@dataclass(frozen=True)
+class CIRunScope:
+    """Immutable scope parameters that uniquely identify which CI workflow runs are relevant.
+
+    Passed as a single argument through the CIWatcher protocol so that adding a new
+    scope axis (e.g. event: str | None) requires changing only this dataclass and the
+    API params builder — not every method signature in the call chain.
+    """
+
+    workflow: str | None = None  # workflow filename, e.g. "tests.yml"
+    head_sha: str | None = None  # commit SHA to pin results to
+
+
 @runtime_checkable
 class CIWatcher(Protocol):
     """Protocol for watching GitHub Actions CI runs.
@@ -791,7 +885,7 @@ class CIWatcher(Protocol):
         branch: str,
         *,
         repo: str | None = None,
-        head_sha: str | None = None,
+        scope: CIRunScope = CIRunScope(),
         timeout_seconds: int = 300,
         lookback_seconds: int = 120,
         cwd: str = "",
@@ -803,7 +897,27 @@ class CIWatcher(Protocol):
         *,
         repo: str | None = None,
         run_id: int | None = None,
+        scope: CIRunScope = CIRunScope(),
         cwd: str = "",
+    ) -> dict[str, Any]: ...
+
+
+@runtime_checkable
+class MergeQueueWatcher(Protocol):
+    """Protocol for watching a PR's progress through GitHub's merge queue.
+
+    Implementations must never raise — all errors must be captured and
+    returned in the result dict with appropriate pr_state values.
+    """
+
+    async def wait(
+        self,
+        pr_number: int,
+        target_branch: str,
+        repo: str | None = None,
+        cwd: str = ".",
+        timeout_seconds: int = 600,
+        poll_interval: int = 15,
     ) -> dict[str, Any]: ...
 
 

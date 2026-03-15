@@ -63,6 +63,7 @@ _PRINT_EXEMPT = frozenset(
         "_marketplace.py",
         "_prompts.py",
         "_workspace.py",
+        "branch_protection_guard.py",
         "pretty_output.py",
         "quota_check.py",
         "remove_clone_guard.py",

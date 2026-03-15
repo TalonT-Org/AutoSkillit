@@ -16,6 +16,7 @@ from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools_execution import run_skill
 from autoskillit.server.tools_status import (
     get_pipeline_report,
+    get_quota_events,
     get_timing_summary,
     get_token_summary,
     kitchen_status,
@@ -533,6 +534,61 @@ class TestTelemetryRecoveryData:
         assert result["failures"][0]["skill_command"] == "/autoskillit:implement-worktree"
 
 
+class TestGetQuotaEvents:
+    @pytest.mark.anyio
+    async def test_returns_events_from_jsonl(self, tool_ctx, tmp_path, monkeypatch):
+        events = [
+            {
+                "ts": "2026-03-10T10:00:00+00:00",
+                "event": "approved",
+                "threshold": 90.0,
+                "utilization": 50.0,
+            },
+            {
+                "ts": "2026-03-10T11:00:00+00:00",
+                "event": "blocked",
+                "threshold": 90.0,
+                "utilization": 92.5,
+            },
+        ]
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        (log_dir / "quota_events.jsonl").write_text(
+            "\n".join(json.dumps(e) for e in events) + "\n"
+        )
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        result = json.loads(await get_quota_events())
+        assert result["total_count"] == 2
+        assert result["events"][0]["event"] == "blocked"  # most recent first
+
+    @pytest.mark.anyio
+    async def test_limits_to_n_events(self, tool_ctx, tmp_path, monkeypatch):
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        lines = [
+            json.dumps({"ts": f"2026-03-10T{h:02d}:00:00+00:00", "event": "approved"})
+            for h in range(10)
+        ]
+        (log_dir / "quota_events.jsonl").write_text("\n".join(lines) + "\n")
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        result = json.loads(await get_quota_events(n=3))
+        assert len(result["events"]) == 3
+        assert result["total_count"] == 10
+        # most-recent-first: hours 09, 08, 07
+        assert result["events"][0]["ts"] == "2026-03-10T09:00:00+00:00"
+        assert result["events"][1]["ts"] == "2026-03-10T08:00:00+00:00"
+        assert result["events"][2]["ts"] == "2026-03-10T07:00:00+00:00"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_when_file_missing(self, tool_ctx, tmp_path, monkeypatch):
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        result = json.loads(await get_quota_events())
+        assert result["events"] == []
+        assert result["total_count"] == 0
+
+
 class TestWriteTelemetryFiles:
     @pytest.mark.anyio
     async def test_writes_token_summary_markdown(self, tool_ctx, tmp_path):
@@ -548,8 +604,13 @@ class TestWriteTelemetryFiles:
         result = json.loads(await write_telemetry_files(str(tmp_path)))
         path = Path(result["token_summary_path"])
         assert path.exists()
-        assert "step1" in path.read_text()
-        assert "100" in path.read_text()
+        content = path.read_text()
+        assert "step1" in content
+        # Format-structural assertions (table, not bullet list)
+        assert "| Step |" in content
+        assert "|---" in content
+        assert "- input_tokens:" not in content
+        assert "# Token Summary" not in content
 
     @pytest.mark.anyio
     async def test_writes_timing_summary_markdown(self, tool_ctx, tmp_path):
@@ -557,7 +618,32 @@ class TestWriteTelemetryFiles:
         result = json.loads(await write_telemetry_files(str(tmp_path)))
         path = Path(result["timing_summary_path"])
         assert path.exists()
-        assert "step1" in path.read_text()
+        content = path.read_text()
+        assert "step1" in content
+        # Format-structural assertions (table, not bullet list)
+        assert "| Step |" in content
+        assert "|---" in content
+        assert "- total_seconds:" not in content
+        assert "# Timing Summary" not in content
+
+    @pytest.mark.anyio
+    async def test_token_file_uses_wall_clock_seconds(self, tool_ctx, tmp_path):
+        """write_telemetry_files merges wall_clock_seconds from timing log."""
+        tool_ctx.token_log.record(
+            "deploy",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            elapsed_seconds=5.0,
+        )
+        tool_ctx.timing_log.record("deploy", 120.0)
+        result = json.loads(await write_telemetry_files(str(tmp_path)))
+        content = Path(result["token_summary_path"]).read_text()
+        # Should show 2m 0s (wall_clock=120), not 5s (elapsed)
+        assert "2m 0s" in content
 
     @pytest.mark.anyio
     async def test_creates_output_dir_if_missing(self, tool_ctx, tmp_path):
@@ -572,3 +658,202 @@ class TestWriteTelemetryFiles:
         result = json.loads(await write_telemetry_files("/tmp"))
         assert result["success"] is False
         assert result["subtype"] == "gate_error"
+
+
+class TestGetTokenSummaryFormat:
+    """Tests for get_token_summary format parameter."""
+
+    @pytest.fixture(autouse=True)
+    def _close_kitchen(self, tool_ctx):
+        tool_ctx.gate = DefaultGateState(enabled=False)
+
+    @pytest.mark.anyio
+    async def test_format_json_default(self, tool_ctx):
+        """format='json' (default) returns JSON dict."""
+        tool_ctx.token_log.record(
+            "plan",
+            {"input_tokens": 100, "output_tokens": 50},
+        )
+        result = json.loads(await get_token_summary())
+        assert "steps" in result
+        assert "total" in result
+
+    @pytest.mark.anyio
+    async def test_format_table_returns_markdown(self, tool_ctx):
+        """format='table' returns a markdown table string."""
+        tool_ctx.token_log.record(
+            "plan",
+            {"input_tokens": 100, "output_tokens": 50},
+        )
+        result = await get_token_summary(format="table")
+        assert "| Step |" in result
+        assert "|---" in result
+        assert "plan" in result
+        assert "**Total**" in result
+        # Not JSON
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(result)
+
+    @pytest.mark.anyio
+    async def test_format_table_with_clear(self, tool_ctx):
+        """format='table' + clear=True clears the log after returning."""
+        tool_ctx.token_log.record(
+            "plan",
+            {"input_tokens": 100, "output_tokens": 50},
+        )
+        result = await get_token_summary(clear=True, format="table")
+        assert "plan" in result
+        result2 = json.loads(await get_token_summary())
+        assert result2["steps"] == []
+
+
+class TestGetTimingSummaryFormat:
+    """Tests for get_timing_summary format parameter."""
+
+    @pytest.fixture(autouse=True)
+    def _close_kitchen(self, tool_ctx):
+        tool_ctx.gate = DefaultGateState(enabled=False)
+
+    @pytest.mark.anyio
+    async def test_format_json_default(self, tool_ctx):
+        """format='json' (default) returns JSON dict."""
+        tool_ctx.timing_log.record("plan", 3.0)
+        result = json.loads(await get_timing_summary())
+        assert "steps" in result
+        assert "total" in result
+
+    @pytest.mark.anyio
+    async def test_format_table_returns_markdown(self, tool_ctx):
+        """format='table' returns a markdown table string."""
+        tool_ctx.timing_log.record("plan", 3.0)
+        result = await get_timing_summary(format="table")
+        assert "| Step |" in result
+        assert "|---" in result
+        assert "plan" in result
+        assert "**Total**" in result
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(result)
+
+
+class TestTokenSummaryWallClock:
+    @pytest.mark.anyio
+    async def test_wall_clock_seconds_merged_from_timing_log(self, tool_ctx):
+        from autoskillit.pipeline.timings import DefaultTimingLog
+        from autoskillit.pipeline.tokens import DefaultTokenLog
+
+        tool_ctx.token_log = DefaultTokenLog()
+        tool_ctx.timing_log = DefaultTimingLog()
+        tool_ctx.token_log.record(
+            "step-a",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            elapsed_seconds=8.0,
+        )
+        tool_ctx.timing_log.record("step-a", 12.5)
+
+        result = json.loads(await get_token_summary())
+        step = next(s for s in result["steps"] if s["step_name"] == "step-a")
+        assert step["wall_clock_seconds"] == pytest.approx(12.5)
+        assert step["elapsed_seconds"] == pytest.approx(8.0)
+
+    @pytest.mark.anyio
+    async def test_wall_clock_falls_back_to_elapsed_when_no_timing(self, tool_ctx):
+        from autoskillit.pipeline.timings import DefaultTimingLog
+        from autoskillit.pipeline.tokens import DefaultTokenLog
+
+        tool_ctx.token_log = DefaultTokenLog()
+        tool_ctx.timing_log = DefaultTimingLog()
+        tool_ctx.token_log.record(
+            "step-b",
+            {
+                "input_tokens": 200,
+                "output_tokens": 100,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            elapsed_seconds=5.0,
+        )
+
+        # Verify no step-b entry was injected into timing_log (guards against parallel pollution)
+        assert not any(e["step_name"] == "step-b" for e in tool_ctx.timing_log.get_report())
+        result = json.loads(await get_token_summary())
+        step = next(s for s in result["steps"] if s["step_name"] == "step-b")
+        # No timing_log entry → falls back to elapsed_seconds
+        assert step["wall_clock_seconds"] == pytest.approx(5.0)
+
+
+class TestClearMarkerWritten:
+    @pytest.mark.anyio
+    async def test_token_summary_clear_writes_marker(self, tool_ctx, tmp_path, monkeypatch):
+        from autoskillit.execution.session_log import read_telemetry_clear_marker
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        await get_token_summary(clear=True)
+        marker = read_telemetry_clear_marker(log_dir)
+        assert marker is not None
+
+    @pytest.mark.anyio
+    async def test_timing_summary_clear_writes_marker(self, tool_ctx, tmp_path, monkeypatch):
+        from autoskillit.execution.session_log import read_telemetry_clear_marker
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        await get_timing_summary(clear=True)
+        assert read_telemetry_clear_marker(log_dir) is not None
+
+    @pytest.mark.anyio
+    async def test_pipeline_report_clear_writes_marker(self, tool_ctx, tmp_path, monkeypatch):
+        from autoskillit.execution.session_log import read_telemetry_clear_marker
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        await get_pipeline_report(clear=True)
+        assert read_telemetry_clear_marker(log_dir) is not None
+
+
+class TestGetLogRoot:
+    def test_returns_resolved_log_dir(self, tool_ctx, tmp_path, monkeypatch):
+        """_get_log_root() returns the resolved path for the configured log_dir."""
+        from autoskillit.server.helpers import resolve_log_dir
+        from autoskillit.server.tools_status import _get_log_root
+
+        log_dir = tmp_path / "custom_logs"
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(log_dir))
+        result = _get_log_root()
+        assert result == resolve_log_dir(str(log_dir))
+
+    def test_returns_path_type(self, tool_ctx, tmp_path, monkeypatch):
+        """_get_log_root() returns a Path, not a string."""
+        from autoskillit.server.tools_status import _get_log_root
+
+        monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(tmp_path))
+        assert isinstance(_get_log_root(), Path)
+
+
+# ---------------------------------------------------------------------------
+# Headless gate enforcement for status tools
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_kitchen_status_denied_when_headless(tool_ctx, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    result = json.loads(await kitchen_status())
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"
+
+
+@pytest.mark.anyio
+async def test_get_pipeline_report_denied_when_headless(tool_ctx, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    result = json.loads(await get_pipeline_report())
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"

@@ -1,6 +1,6 @@
 ---
 name: merge-pr
-description: Merge a single PR into the integration branch. For simple PRs, uses gh pr merge --squash --auto to enforce GitHub's required status checks. For needs_check PRs, re-assesses complexity and returns needs_plan=true with a conflict report when conflicts are detected. Use inside the pr-merge-pipeline loop.
+description: Merge a single PR into the integration branch. For simple PRs, uses gh pr merge --squash --auto to enforce GitHub's required status checks. For needs_check PRs, re-assesses complexity and returns needs_plan=true with a conflict report when conflicts are detected. Use inside the merge-prs loop.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -18,7 +18,7 @@ conflicts from earlier merges in the queue.
 
 ## When to Use
 
-- Inside the `pr-merge-pipeline` loop, once per PR
+- Inside the `merge-prs` loop, once per PR
 - Called with the PR number and its complexity tag from `analyze-prs` output
 
 ## Arguments
@@ -37,11 +37,11 @@ conflicts from earlier merges in the queue.
 - Use `git merge` to merge the PR into the integration branch — always use `gh pr merge --squash --auto`
 - Close or comment on the PR
 - Leave the git working tree in a dirty state
-- Create files outside `temp/pr-merge-pipeline/` directory
+- Create files outside `temp/merge-prs/` directory
 
 **ALWAYS:**
 - Run `git status` before any operation to verify clean state
-- Use `gh pr merge {pr_number} --squash --auto` for the simple path — this enforces GitHub's required status checks (Preflight + Ubuntu) before the merge executes
+- Use `gh pr merge {pr_number} --squash --auto` for the simple path — this enforces the repository's required status checks before the merge executes
 - Poll `gh pr view {pr_number} --json state,mergedAt` to confirm the merge completed
 - Fetch the PR branch from remote before the deletion regression scan and conflict analysis
 
@@ -159,7 +159,7 @@ code** from the PR's changes, not to restore it. The base branch's deletion is a
 ### Step 2: Simple Path — gh pr merge
 
 Queue the merge on GitHub using auto-merge so that the integration branch ruleset
-(Preflight + Ubuntu required status checks) is enforced before GitHub executes the merge:
+(required status checks) is enforced before GitHub executes the merge:
 
 ```bash
 gh pr merge {pr_number} --squash --auto
@@ -251,7 +251,7 @@ Extract the `## Requirements` section if present — set `requirements_section =
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.
 
-Write `temp/pr-merge-pipeline/conflict_pr{pr_number}_plan_{ts}.md`:
+Write `temp/merge-prs/conflict_pr{pr_number}_plan_{ts}.md`:
 
 ```markdown
 # Conflict Resolution Plan: PR #{pr_number} — "{pr_title}"
@@ -373,7 +373,7 @@ Print a JSON result block to stdout for recipe capture:
     "pr_number": 47,
     "pr_branch": "feature/db-refactor",
     "pr_title": "Refactor database layer",
-    "conflict_report_path": "temp/pr-merge-pipeline/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": "temp/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
 
@@ -392,7 +392,7 @@ with `conflict_report_path` set. The pipeline then routes to make-plan → imple
     "pr_number": 47,
     "pr_branch": "feature/stale-branch",
     "pr_title": "Feature from stale branch",
-    "conflict_report_path": "temp/pr-merge-pipeline/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": "temp/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
 
@@ -418,48 +418,48 @@ very last lines of your text output:
 
 **On successful GitHub auto-merge:**
 ```
-merged=true
-needs_plan=false
-deletion_regression=false
-pr_number={pr_number}
-pr_branch={pr_branch_name}
-pr_title={pr_title}
+merged = true
+needs_plan = false
+deletion_regression = false
+pr_number = {pr_number}
+pr_branch = {pr_branch_name}
+pr_title = {pr_title}
 ```
 
 **On complex / conflict detected:**
 ```
-merged=false
-needs_plan=true
-deletion_regression=false
-escalation_required=false
-pr_number={pr_number}
-pr_branch={pr_branch_name}
-pr_title={pr_title}
-conflict_report_path={absolute_path_to_conflict_plan_file}
+merged = false
+needs_plan = true
+deletion_regression = false
+escalation_required = false
+pr_number = {pr_number}
+pr_branch = {pr_branch_name}
+pr_title = {pr_title}
+conflict_report_path = {absolute_path_to_conflict_plan_file}
 ```
 
 **On deletion regression detected:**
 ```
-merged=false
-needs_plan=true
-deletion_regression=true
-escalation_required=false
-pr_number={pr_number}
-pr_branch={pr_branch_name}
-pr_title={pr_title}
-conflict_report_path={absolute_path_to_conflict_plan_file}
+merged = false
+needs_plan = true
+deletion_regression = true
+escalation_required = false
+pr_number = {pr_number}
+pr_branch = {pr_branch_name}
+pr_title = {pr_title}
+conflict_report_path = {absolute_path_to_conflict_plan_file}
 ```
 
 **On escalation required:**
 ```
-merged=false
-needs_plan=false
-deletion_regression=false
-escalation_required=true
-escalation_reason={human-readable description of why the conflict cannot be resolved automatically}
-pr_number={pr_number}
-pr_branch={pr_branch_name}
-pr_title={pr_title}
+merged = false
+needs_plan = false
+deletion_regression = false
+escalation_required = true
+escalation_reason = {human-readable description of why the conflict cannot be resolved automatically}
+pr_number = {pr_number}
+pr_branch = {pr_branch_name}
+pr_title = {pr_title}
 ```
 
 Emit `conflict_report_path=` only when `needs_plan=true` and a conflict plan file was
@@ -468,7 +468,7 @@ written. Omit the line entirely on a successful direct merge or when `escalation
 ## Output Location
 
 ```
-temp/pr-merge-pipeline/
+temp/merge-prs/
 └── conflict_pr{N}_plan_{ts}.md    (written only when needs_plan=true)
 ```
 

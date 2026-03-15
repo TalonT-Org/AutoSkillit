@@ -131,8 +131,10 @@ TOOLS_FILES = list((SRC / "server").glob("tools_*.py"))
 
 @pytest.mark.parametrize("path", TOOLS_FILES, ids=lambda p: p.name)
 def test_req_imp_003_tools_import_namespace(path: Path) -> None:
-    """tools_*.py may only import from autoskillit.core and autoskillit.pipeline."""
-    allowed = frozenset({"autoskillit.core", "autoskillit.pipeline", "autoskillit.server"})
+    """tools_*.py may import from core, pipeline, config, and server."""
+    allowed = frozenset(
+        {"autoskillit.core", "autoskillit.pipeline", "autoskillit.server", "autoskillit.config"}
+    )
     violations: list[str] = []
     for mod, _in_tc in _parse_imports(path):
         top2 = ".".join(mod.split(".")[:2])

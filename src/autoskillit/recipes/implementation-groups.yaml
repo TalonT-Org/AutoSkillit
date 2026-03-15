@@ -5,31 +5,30 @@ autoskillit_version: "0.3.0"
 
 ingredients:
   source_doc:
-    description: Path to source document for group decomposition
+    description: Source document for group decomposition
     required: true
   source_dir:
-    description: Path to the source repository (auto-detected if empty)
+    description: Source repository
     required: false
     default: ""
   run_name:
-    description: Pipeline run name prefix (used in branch and clone naming)
+    description: Run name prefix
     default: "impl"
   base_branch:
-    description: Branch to merge into (defaults to current branch)
-    default: integration
+    description: Merge target
+    default: ""
   review_approach:
-    description: Run /review-approach before implementation? (true/false)
+    description: Research approaches first
     default: "false"
   audit:
-    description: Gate merge on audit-impl quality check (true/false)
+    description: Post-merge quality gate
     default: "true"
   open_pr:
-    description: Open a PR to base_branch instead of merging directly (true/false)
+    description: PR instead of direct merge
     default: "true"
   issue_url:
-    description: GitHub issue URL to close on merge (optional)
+    description: GitHub issue to close on merge
     required: false
-    default: ""
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -428,11 +427,10 @@ steps:
       accumulated across group iterations. The open-pr skill splits and synthesizes
       PR content from all plans.
       TOKEN SUMMARY: Before invoking this step, the orchestrator MUST:
-      1. Call get_token_summary(clear=false) to retrieve accumulated token usage.
-      2. The get_token_summary result is already formatted as Markdown-KV. Parse the compact lines (e.g. "investigate x1 [in:45.2k out:12.8k cached:1.2M]") into a markdown table with columns: Step, input, output, cached, count. Include a bold Total row from the total_in/total_out/total_cached lines.
-      3. Write the formatted table to temp/open-pr/token_summary.md via run_cmd.
-      4. Append the file path as a 4th positional argument to the skill_command.
-      5. If context.issue_number is a non-empty string (set by fetch_issue), append it
+      1. Call get_token_summary(clear=false, format=table) — returns a pre-formatted markdown table.
+      2. Write the result to temp/open-pr/token_summary.md via run_cmd.
+      3. Append the file path as a 4th positional argument to the skill_command.
+      4. If context.issue_number is a non-empty string (set by fetch_issue), append it
          as a 5th positional argument to the skill_command. The open-pr skill will insert
          "Closes #{issue_number}" into the PR body to auto-close the issue on merge.
 
@@ -497,8 +495,10 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.merge_target }}"
+      workflow: "tests.yml"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
@@ -517,7 +517,7 @@ steps:
   diagnose_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }}"
+      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - tests.yml"
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
       ci_failed_jobs: "${{ context.ci_failed_jobs }}"

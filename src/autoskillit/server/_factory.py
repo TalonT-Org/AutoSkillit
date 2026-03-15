@@ -19,6 +19,7 @@ from autoskillit.execution import (
     DefaultDatabaseReader,
     DefaultGitHubFetcher,
     DefaultHeadlessExecutor,
+    DefaultMergeQueueWatcher,
     DefaultTestRunner,
 )
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
@@ -91,7 +92,7 @@ def make_context(
 
     resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
     gate = DefaultGateState(enabled=False)
-    if os.environ.get("AUTOSKILLIT_KITCHEN_OPEN") == "1":
+    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
         gate.enable()
 
     provider = SkillsDirectoryProvider()
@@ -113,6 +114,7 @@ def make_context(
         clone_mgr=DefaultCloneManager(),
         github_client=DefaultGitHubFetcher(token=github_token),
         ci_watcher=DefaultCIWatcher(token=github_token),
+        merge_queue_watcher=DefaultMergeQueueWatcher(token=github_token),
         session_skill_manager=session_mgr,
     )
 

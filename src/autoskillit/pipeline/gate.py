@@ -53,11 +53,45 @@ def gate_error_result(message: str | None = None) -> str:
             "result": message if message is not None else _DEFAULT_GATE_MESSAGE,
             "session_id": "",
             "subtype": "gate_error",
+            "cli_subtype": "",
             "is_error": True,
             "exit_code": -1,
             "needs_retry": False,
             "retry_reason": "none",
             "stderr": "",
             "token_usage": None,
+            "write_path_warnings": [],
+        }
+    )
+
+
+_DEFAULT_HEADLESS_MESSAGE = (
+    "This tool cannot be called from headless sessions. "
+    "Headless workers (Tier 2) may only use native Claude Code tools and "
+    "WORKER_TOOLS. Orchestration tools are reserved for Tier 1 sessions."
+)
+
+
+def headless_error_result(message: str | None = None) -> str:
+    """Return a canonical JSON error for tools blocked in headless sessions.
+
+    Uses subtype='headless_error' to distinguish from gate_error
+    (kitchen closed). All other fields match the standard 9-field response
+    envelope so orchestrators can route failures without schema inspection.
+    """
+    return json.dumps(
+        {
+            "success": False,
+            "result": message if message is not None else _DEFAULT_HEADLESS_MESSAGE,
+            "session_id": "",
+            "subtype": "headless_error",
+            "cli_subtype": "",
+            "is_error": True,
+            "exit_code": -1,
+            "needs_retry": False,
+            "retry_reason": "none",
+            "stderr": "",
+            "token_usage": None,
+            "write_path_warnings": [],
         }
     )

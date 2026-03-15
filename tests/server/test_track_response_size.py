@@ -75,13 +75,20 @@ class TestTrackResponseSize:
         assert result == "response"  # no error raised
 
     @pytest.mark.anyio
-    async def test_decorator_does_not_suppress_handler_exception(self):
-        """If the wrapped handler raises, the exception propagates normally."""
+    async def test_decorator_catches_handler_exception_as_structured_json(self):
+        """If the wrapped handler raises, the exception is caught and converted."""
+        import json
+
         from autoskillit.server.helpers import track_response_size
 
         @track_response_size("run_skill")
         async def bad_handler():
             raise ValueError("something went wrong")
 
-        with pytest.raises(ValueError, match="something went wrong"):
-            await bad_handler()
+        with patch("autoskillit.server.helpers._get_ctx_or_none", return_value=None):
+            result = await bad_handler()
+
+        data = json.loads(result)
+        assert data["success"] is False
+        assert "ValueError: something went wrong" in data["error"]
+        assert data["subtype"] == "tool_exception"

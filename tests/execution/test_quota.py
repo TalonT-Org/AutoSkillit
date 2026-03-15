@@ -430,15 +430,11 @@ class TestIntegration:
         stdin_text = json.dumps({"tool_name": "run_skill"})
         buf = io.StringIO()
         with patch("sys.stdin", io.StringIO(stdin_text)):
-            with patch(
-                "autoskillit.hooks.quota_check._DEFAULT_CACHE_PATH",
-                str(cache_path),
-            ):
-                with redirect_stdout(buf):
-                    try:
-                        main()
-                    except SystemExit:
-                        pass
+            with redirect_stdout(buf):
+                try:
+                    main(cache_path_override=str(cache_path))
+                except SystemExit:
+                    pass
 
         out = buf.getvalue()
         data = json.loads(out)

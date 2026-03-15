@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import re
+import types
 from pathlib import Path
 
 import pytest
@@ -195,7 +196,7 @@ class TestRunPythonCallableContract:
             except ImportError:
                 continue
             attr = getattr(module, attr_name, None)
-            if attr is not None and not callable(attr):
+            if attr is not None and not callable(attr) and not isinstance(attr, types.ModuleType):
                 failures.append(f"{source}: {dotted!r} — attribute exists but is not callable")
         assert not failures, "Non-callable references in SKILL.md files:\n" + "\n".join(failures)
 
@@ -254,6 +255,26 @@ class TestMultiPartScopeContract:
         assert "SCOPE FENCE" in text or "scope fence" in text.lower(), (
             "implement-worktree-no-merge SKILL.md must contain a SCOPE FENCE instruction"
         )
+
+
+class TestOrchestratorPromptDelegation:
+    """Orchestrator prompt must delegate recipe display to load_recipe."""
+
+    def test_orchestrator_prompt_does_not_embed_recipe_data(self):
+        """The orchestrator prompt must delegate recipe loading to open_kitchen(name).
+
+        This is an architectural invariant: the CLI-to-session bridge injects
+        behavioral instructions only. Recipe content is discovered by the
+        session via MCP tools.
+        """
+        from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+        prompt = _build_orchestrator_prompt("implementation")
+        # Must NOT contain recipe YAML markers
+        assert "--- RECIPE ---" not in prompt
+        assert "--- END RECIPE ---" not in prompt
+        # Must instruct open_kitchen call with recipe name
+        assert "open_kitchen" in prompt
 
 
 class TestQuotaGuardStructuralEnforcement:

@@ -20,6 +20,11 @@ def merge_pr_text():
 
 @pytest.fixture(scope="module")
 def review_pr_text():
+    if not REVIEW_PR_SKILL.exists():
+        pytest.fail(
+            f"Bundled skill review-pr is missing at {REVIEW_PR_SKILL}. "
+            "Bundled skills must not be deleted without removing all recipe references."
+        )
     return REVIEW_PR_SKILL.read_text()
 
 

@@ -213,11 +213,15 @@ Available tools for use in `tool:` fields:
 
 These skills ship with the autoskillit plugin and are invoked as `/autoskillit:<name>`:
 
-analyze-prs, audit-friction, audit-impl, close-kitchen, collapse-issues, create-review-pr, diagnose-ci, dry-walkthrough, enrich-issues,
-implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-groups, make-plan,
-merge-pr, write-recipe, mermaid, migrate-recipes, open-kitchen, open-pr, pipeline-summary, prepare-issue, process-issues,
-rectify, report-bug, resolve-failures, resolve-merge-conflicts, resolve-review, retry-worktree, review-approach, review-pr,
-setup-project, smoke-task, sous-chef, triage-issues
+analyze-prs, arch-lens-c4-container, arch-lens-concurrency, arch-lens-data-lineage, arch-lens-deployment,
+arch-lens-development, arch-lens-error-resilience, arch-lens-module-dependency, arch-lens-operational,
+arch-lens-process-flow, arch-lens-repository-access, arch-lens-scenarios, arch-lens-security, arch-lens-state-lifecycle,
+audit-arch, audit-bugs, audit-cohesion, audit-defense-standards, audit-friction, audit-impl, audit-tests,
+close-kitchen, collapse-issues, design-guards, diagnose-ci, dry-walkthrough, elaborate-phase,
+enrich-issues, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
+make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr, open-kitchen, open-pr, pipeline-summary,
+prepare-issue, process-issues, rectify, report-bug, resolve-failures, resolve-merge-conflicts, resolve-review,
+retry-worktree, review-approach, review-pr, setup-project, smoke-task, sous-chef, sprint-planner, triage-issues, verify-diag, write-recipe
 
 ## Skill Reference Disambiguation
 
@@ -344,7 +348,7 @@ steps:
 A condensed bugfix loop showing retry, classify, and routing patterns:
 
 ```yaml
-name: bugfix-loop
+name: example-loop
 description: Test, fix, and merge with automatic retry.
 summary: test > investigate > plan > implement > verify > merge
 
@@ -500,7 +504,7 @@ After telling the user, emit the structured output token as the very last line o
 text output:
 
 ```
-recipe_path={absolute_path_to_saved_recipe_file}
+recipe_path = {absolute_path_to_saved_recipe_file}
 ```
 
 ## CRITICAL: Scripts Are NOT Skills

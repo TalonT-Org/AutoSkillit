@@ -18,7 +18,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 ## Arguments
 
 ```
-{plans_input} {branch_name} {base_branch}
+{plans_input} {branch_name} {base_branch} [conflict_report_paths]
 ```
 
 - `plans_input` — one of:
@@ -31,6 +31,9 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
   standalone invocations. A live worktree path is accepted for legacy use (Step 0 extracts
   the branch name automatically).
 - `base_branch` — branch to diff against (default: `integration`)
+- `conflict_report_paths` (optional) — comma-separated list of absolute paths to conflict
+  resolution reports produced by `resolve-merge-conflicts`. When provided and non-empty,
+  cross-reference resolution decisions against plan intent in Step 2.5.
 
 ## Critical Constraints
 
@@ -86,6 +89,11 @@ Determine the diff source from `implementation_ref`:
 The old silent fallthrough (non-existent path treated as branch name without error)
 is removed. A clear error is emitted instead.
 
+Parse the optional fourth positional argument `conflict_report_paths` (may be absent or empty
+string). Split on `,`, trim each entry, and filter out any empty strings after splitting;
+store as `conflict_report_path_list`. Proceed even if empty — the cross-reference check in
+Step 2.5 is skipped when the list is empty.
+
 **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
 exist (e.g., plan file arguments, `temp/investigate/` reports, external file references), use
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
@@ -101,11 +109,16 @@ mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
 
 Code-index tools require **project-relative paths**. Always use paths like:
 
-    src/autoskillit/execution/headless.py
+    src/<your_package>/some_module.py
 
 NOT absolute paths like:
 
-    /path/to/project/src/autoskillit/execution/headless.py
+    /absolute/path/to/src/<your_package>/some_module.py
+
+> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
+> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
+> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
+> for the same searches — they provide equivalent results without the code-index server.
 
 Agents launched via `run_skill` inherit no code-index state from the parent session — this
 call is mandatory at the start of every headless session that uses code-index tools.
@@ -170,6 +183,31 @@ If a `PR Changes Inventory` is found:
 
 Record all Category C `MISSING` findings alongside the standard audit findings in Step 3.
 
+**Conflict Resolution Report Cross-Reference (when `conflict_report_path_list` is non-empty):**
+
+For each path in `conflict_report_path_list`:
+1. Check whether the file exists before reading. If the path does not exist, log a warning
+   `"Warning: conflict report not found at {path} — skipping"` and continue to the next path.
+2. Read the conflict resolution report.
+3. Parse the `## Per-File Resolution Decisions` table — extract all rows as
+   `(file, category, confidence, strategy, justification)` tuples.
+4. For each resolved file, check against the plan:
+   - **Category 3 resolution flagged**: Any row with `Category = 3` indicates a Category 3
+     (architectural tension) conflict was resolved rather than escalated. This ALWAYS forces a
+     `CONFLICT` finding — Category 3 conflicts must never be automatically resolved per the
+     `resolve-merge-conflicts` escalation contract.
+   - **Strategy contradicts plan intent**: If the plan's `## Resolver Contract` or
+     `## Implementation Steps` sections prescribe a specific outcome for the file that
+     contradicts the recorded strategy (e.g., plan says "preserve the new API signature"
+     but strategy is "ours" which kept the old signature), record a `CONFLICT` finding.
+   - **Resolved file absent from diff**: If a file listed in the report's table is absent
+     from the implementation diff entirely, record a `MISSING` finding — the resolved
+     content was not carried into the integration branch.
+
+Record all findings from this cross-reference alongside the standard Step 3 audit findings.
+Each `CONFLICT` or `MISSING` finding here forces a `NO GO` verdict per the existing verdict
+logic (Step 4).
+
 ### Step 3 — Audit via Parallel Subagents
 
 Divide the requirements inventory into up to 3 slices. Launch parallel Explore subagents,
@@ -228,7 +266,7 @@ After printing the GO result, emit the following structured output token as the 
 last line of your text output:
 
 ```
-verdict=GO
+verdict = GO
 ```
 
 ---
@@ -298,8 +336,8 @@ After printing the NO GO result, emit the following structured output tokens as 
 last lines of your text output:
 
 ```
-verdict=NO GO
-remediation_path={absolute_path_to_remediation_file}
+verdict = NO GO
+remediation_path = {absolute_path_to_remediation_file}
 ```
 
 The `verdict` token must be exactly `GO` or `NO GO` — this is the value the recipe's

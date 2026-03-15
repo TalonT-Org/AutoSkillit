@@ -244,8 +244,6 @@ class TestRecipeTools:
         result = json.loads(await list_recipes())
         names = {r["name"] for r in result["recipes"]}
         assert "implementation" in names
-        assert "bugfix-loop" in names
-        assert "audit-and-fix" in names
         assert "remediation" in names
         assert "smoke-test" in names
 
@@ -418,10 +416,10 @@ class TestLoadRecipeExceptionHandling:
         )
 
     @pytest.mark.anyio
-    async def test_unexpected_exception_propagates(
+    async def test_unexpected_exception_returns_structured_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Unexpected exceptions (not in specific catches) must propagate, not be swallowed."""
+        """Unexpected exceptions are caught by the exception boundary."""
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
@@ -432,8 +430,10 @@ class TestLoadRecipeExceptionHandling:
             "autoskillit.recipe._api.run_semantic_rules",
             side_effect=AttributeError("programming error"),
         ):
-            with pytest.raises(AttributeError, match="programming error"):
-                await load_recipe(name="test")
+            result = json.loads(await load_recipe(name="test"))
+        assert result["success"] is False
+        assert result["subtype"] == "tool_exception"
+        assert "programming error" in result["error"]
 
 
 class TestValidateRecipeTool:
@@ -598,15 +598,20 @@ class TestDocstringSemantics:
     routing, and cross-section consistency.
     """
 
-    def test_load_recipe_action_protocol_routes_through_skill(self):
+    async def _get_tools(self) -> dict:
+        """Return a dict of tool_name -> tool for all visible tools via public Client API."""
+        from fastmcp.client import Client
+
+        from autoskillit.server import mcp
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        return {t.name: t for t in tools}
+
+    @pytest.mark.anyio
+    async def test_load_recipe_action_protocol_routes_through_skill(self):
         """After loading section must route modifications through write-recipe."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp as server
-
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        tools = await self._get_tools()
         desc = tools["load_recipe"].description or ""
         sections = _extract_docstring_sections(desc)
 
@@ -618,15 +623,10 @@ class TestDocstringSemantics:
             "After loading section must route recipe modifications through write-recipe"
         )
 
-    def test_load_recipe_after_loading_does_not_instruct_direct_modification(self):
+    @pytest.mark.anyio
+    async def test_load_recipe_after_loading_does_not_instruct_direct_modification(self):
         """After loading section must not instruct direct file modification."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp as server
-
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        tools = await self._get_tools()
         desc = tools["load_recipe"].description or ""
         sections = _extract_docstring_sections(desc)
 
@@ -641,15 +641,10 @@ class TestDocstringSemantics:
         found = [p for p in direct_edit_phrases if p.lower() in after_loading.lower()]
         assert not found, f"After loading section instructs direct modification: {found}"
 
-    def test_validate_recipe_has_failure_routing(self):
+    @pytest.mark.anyio
+    async def test_validate_recipe_has_failure_routing(self):
         """validate_recipe must route validation failures to write-recipe."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp as server
-
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        tools = await self._get_tools()
         desc = tools["validate_recipe"].description or ""
 
         # Must reference the failure return case
@@ -666,15 +661,10 @@ class TestDocstringSemantics:
             "validate_recipe must route failures to write-recipe for remediation"
         )
 
-    def test_validate_recipe_does_not_endorse_direct_editing(self):
+    @pytest.mark.anyio
+    async def test_validate_recipe_does_not_endorse_direct_editing(self):
         """validate_recipe must not normalize direct recipe editing."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp as server
-
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        tools = await self._get_tools()
         desc = tools["validate_recipe"].description or ""
 
         # "or editing a recipe" without qualifying through write-recipe
@@ -684,15 +674,10 @@ class TestDocstringSemantics:
             "should qualify as going through write-recipe"
         )
 
-    def test_tool_description_sections_are_not_contradictory(self):
+    @pytest.mark.anyio
+    async def test_tool_description_sections_are_not_contradictory(self):
         """After loading must not instruct what the prohibition section prohibits."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp as server
-
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        tools = await self._get_tools()
         desc = tools["load_recipe"].description or ""
         sections = _extract_docstring_sections(desc)
 
@@ -716,15 +701,10 @@ class TestDocstringSemantics:
                 f"but 'After loading' instructs: {found}"
             )
 
-    def test_load_recipe_has_preview_format_spec(self):
+    @pytest.mark.anyio
+    async def test_load_recipe_has_preview_format_spec(self):
         """load_recipe must specify presentation format for loaded recipes."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp as server
-
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        tools = await self._get_tools()
         desc = tools["load_recipe"].description or ""
 
         required_fields = ["kitchen_rules", "note", "retry", "capture"]
@@ -734,15 +714,10 @@ class TestDocstringSemantics:
             f"fields. Found only: {found}"
         )
 
-    def test_recipe_tool_descriptions_are_coherent(self):
+    @pytest.mark.anyio
+    async def test_recipe_tool_descriptions_are_coherent(self):
         """Recipe tools must form a coherent policy about recipe modification."""
-        from fastmcp.tools import Tool
-
-        from autoskillit.server import mcp as server
-
-        tools = {
-            c.name: c for c in server._local_provider._components.values() if isinstance(c, Tool)
-        }
+        tools = await self._get_tools()
 
         failures = []
 
@@ -776,15 +751,20 @@ class TestDocstringSemantics:
 class TestLoadSkillScriptFailurePredicates:
     """The load_recipe tool description documents failure predicates."""
 
-    def test_description_documents_run_skill_failure(self):
-        """The routing rules must define failure for run_skill, not just test_check."""
-        from fastmcp.tools import Tool
+    async def _get_tools(self) -> dict:
+        """Return dict of tool_name -> tool for all visible tools via public Client API."""
+        from fastmcp.client import Client
 
         from autoskillit.server import mcp
 
-        tools = {
-            c.name: c for c in mcp._local_provider._components.values() if isinstance(c, Tool)
-        }
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        return {t.name: t for t in tools}
+
+    @pytest.mark.anyio
+    async def test_description_documents_run_skill_failure(self):
+        """The routing rules must define failure for run_skill, not just test_check."""
+        tools = await self._get_tools()
         desc = tools["load_recipe"].description or ""
         assert "run_skill" in desc
         assert "success" in desc.lower()
@@ -1346,36 +1326,6 @@ class TestLoadRecipeDiagram:
         result = json.loads(await load_recipe(name="my-recipe"))
         assert result["diagram"] is None
 
-    # DG-14
-    @pytest.mark.anyio
-    async def test_load_recipe_diagram_content_when_exists(self, tmp_path, monkeypatch):
-        """DG-14: diagram is non-None string when diagram file exists."""
-        from autoskillit.recipe.diagrams import generate_recipe_diagram
-
-        recipes_dir = self._setup_project_recipe(tmp_path, monkeypatch)
-        recipe_path = recipes_dir / "my-recipe.yaml"
-        generate_recipe_diagram(recipe_path, recipes_dir)
-
-        result = json.loads(await load_recipe(name="my-recipe"))
-        assert isinstance(result["diagram"], str)
-        assert "<!-- autoskillit-recipe-hash:" in result["diagram"]
-
-    # DG-15
-    @pytest.mark.anyio
-    async def test_load_recipe_stale_diagram_in_suggestions(self, tmp_path, monkeypatch):
-        """DG-15: stale diagram appears in suggestions."""
-        from autoskillit.recipe.diagrams import generate_recipe_diagram
-
-        recipes_dir = self._setup_project_recipe(tmp_path, monkeypatch)
-        recipe_path = recipes_dir / "my-recipe.yaml"
-        # Generate diagram first, then mutate recipe to make it stale
-        generate_recipe_diagram(recipe_path, recipes_dir)
-        recipe_path.write_text(recipe_path.read_text() + "\n# modified\n")
-
-        result = json.loads(await load_recipe(name="my-recipe"))
-        rules = [s["rule"] for s in result["suggestions"]]
-        assert "stale-diagram" in rules
-
 
 # ---------------------------------------------------------------------------
 # P5F2: Accessor pattern tests (ungated tools must use _get_ctx_or_none)
@@ -1432,3 +1382,32 @@ def test_tools_recipe_does_not_import_raw_ctx():
                 assert "_ctx" not in names, (
                     "tools_recipe.py must not import raw _ctx — use _get_ctx_or_none()"
                 )
+
+
+# ---------------------------------------------------------------------------
+# Headless gate enforcement for recipe tools
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_load_recipe_denied_when_headless(tool_ctx, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    result = json.loads(await load_recipe(name="implementation"))
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"
+
+
+@pytest.mark.anyio
+async def test_list_recipes_denied_when_headless(tool_ctx, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    result = json.loads(await list_recipes())
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"
+
+
+@pytest.mark.anyio
+async def test_validate_recipe_denied_when_headless(tool_ctx, monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    result = json.loads(await validate_recipe(script_path="/tmp/test.yaml"))
+    assert result["success"] is False
+    assert result["subtype"] == "headless_error"

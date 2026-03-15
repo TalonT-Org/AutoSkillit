@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 36 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 24 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 24 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 39 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, wait_for_merge_queue, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 26 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 59 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -102,10 +102,13 @@ src/autoskillit/
 │   ├── io.py                #   _atomic_write, ensure_project_temp, load_yaml, dump_yaml, YAMLError
 │   ├── logging.py           #   get_logger, configure_logging, PACKAGE_LOGGER_NAME
 │   ├── paths.py             #   pkg_root(), is_git_worktree() — canonical package root resolver
-│   └── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
+│   ├── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
+│   ├── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
+│   └── github_url.py        #   parse_github_repo — canonical GitHub URL parser (str → owner/repo | None)
 ├── config/                  # L1 configuration sub-package
-│   ├── __init__.py          #   Re-exports AutomationConfig + GitHubConfig
+│   ├── __init__.py          #   Re-exports AutomationConfig + GitHubConfig + resolve_ingredient_defaults
 │   ├── defaults.yaml        #   Bundled package defaults (always loaded as first layer)
+│   ├── ingredient_defaults.py #  resolve_ingredient_defaults — auto-detect source_dir + base_branch
 │   └── settings.py          #   Dataclass config + dynaconf-backed layered resolution
 ├── pipeline/                # L1 pipeline state sub-package
 │   ├── __init__.py          #   Re-exports ToolContext, DefaultGateState, AuditLog, TokenLog
@@ -113,12 +116,16 @@ src/autoskillit/
 │   ├── context.py           #   ToolContext DI container (config, audit, token_log, gate, plugin_dir, runner)
 │   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
 │   ├── mcp_response.py      #   McpResponseEntry, DefaultMcpResponseLog — per-tool response size tracking
+│   ├── telemetry_fmt.py     #   TelemetryFormatter — canonical token/timing display (single source of truth)
 │   ├── timings.py           #   TimingEntry, DefaultTimingLog — per-step wall-clock accumulation
-│   └── tokens.py            #   TokenEntry, TokenLog, _token_log singleton
+│   ├── tokens.py            #   TokenEntry, TokenLog, _token_log singleton
+│   ├── pr_gates.py          #   PR eligibility gates: is_ci_passing, is_review_passing, partition_prs
+│   └── fidelity.py          #   Fidelity helpers: extract_linked_issues, is_valid_fidelity_finding
 ├── execution/               # L1 execution sub-package
 │   ├── __init__.py          #   Re-exports public surface
 │   ├── commands.py          #   ClaudeInteractiveCmd/ClaudeHeadlessCmd builders
 │   ├── db.py                #   Read-only SQLite execution with defence-in-depth
+│   ├── diff_annotator.py    #   Deterministic diff annotation and findings filter for review-pr
 │   ├── headless.py          #   Headless Claude session orchestration (L1 service)
 │   ├── linux_tracing.py     #   Linux-only /proc + psutil process tracing (accumulate snapshots)
 │   ├── anomaly_detection.py #   Post-hoc anomaly detection over ProcSnapshot series
@@ -132,8 +139,10 @@ src/autoskillit/
 │   ├── _process_race.py     #   RaceAccumulator, RaceSignals, resolve_termination, _watch_*
 │   ├── quota.py             #   Quota-aware check: QuotaStatus, cache, fetch, check_and_sleep_if_needed
 │   ├── ci.py                #   GitHub Actions CI watcher service (L1, httpx-based, never raises)
+│   ├── merge_queue.py       #   GitHub merge queue watcher service (L1, httpx-based, never raises)
 │   ├── github.py            #   GitHub issue fetcher (L1, httpx-based, never raises)
 │   ├── session.py           #   ClaudeSessionResult, SkillResult, extract_token_usage
+│   ├── remote_resolver.py   #   resolve_remote_repo — canonical async resolver (upstream > origin, clone-aware)
 │   └── testing.py           #   Pytest output parsing and pass/fail adjudication
 ├── workspace/               # L1 workspace sub-package
 │   ├── __init__.py          #   Re-exports CleanupResult, SkillResolver, SessionSkillManager, clone_repo, remove_clone, push_to_remote
@@ -154,10 +163,13 @@ src/autoskillit/
 │   ├── rules_bypass.py      #   Semantic rules for skip_when_false bypass routing contracts
 │   ├── rules_ci.py          #   Semantic rules for CI polling patterns (ci-polling-inline-shell)
 │   ├── rules_clone.py       #   Semantic rules for clone/push workflow validation
+│   ├── rules_contracts.py   #   Semantic rules for skill contract completeness (missing-output-patterns)
 │   ├── rules_dataflow.py    #   Semantic rules for capture/output dataflow analysis
 │   ├── rules_graph.py       #   Semantic rules for step graph reachability and cycles
 │   ├── rules_inputs.py      #   Semantic rules for ingredient/version validation
 │   ├── rules_merge.py       #   Semantic rules for merge_worktree routing completeness
+│   ├── rules_recipe.py      #   Semantic rules for unknown sub-recipe references (unknown-sub-recipe rule)
+│   ├── rules_skills.py      #   Semantic rules for skill_command resolvability (unknown-skill-command)
 │   ├── rules_tools.py       #   Semantic rules for MCP tool name validity (unknown-tool rule)
 │   ├── rules_verdict.py     #   Semantic rules for skill verdict routing completeness (unrouted-verdict-value)
 │   ├── rules_worktree.py    #   Semantic rules for worktree retry lifecycle
@@ -175,18 +187,19 @@ src/autoskillit/
 │   ├── git.py               #   Git merge workflow for merge_worktree (perform_merge)
 │   ├── helpers.py           #   Shared server-layer helpers (worktree setup, path utilities)
 │   ├── tools_kitchen.py     #   open_kitchen, close_kitchen tool handlers + recipe:// resource
-│   ├── tools_ci.py          #   wait_for_ci, get_ci_status tool handlers
+│   ├── tools_ci.py          #   wait_for_ci, get_ci_status, wait_for_merge_queue tool handlers
 │   ├── tools_clone.py       #   clone_repo, remove_clone, push_to_remote tool handlers
 │   ├── tools_execution.py   #   run_cmd, run_python, run_skill tool handlers
 │   ├── tools_git.py         #   merge_worktree, classify_fix, create_unique_branch, check_pr_mergeable tool handlers
 │   ├── tools_recipe.py      #   migrate_recipe, load_recipe, list_recipes, validate_recipe tool handlers
-│   ├── tools_status.py      #   kitchen_status, get_pipeline_report, get_token_summary, write_telemetry_files tool handlers
-│   ├── tools_integrations.py #  fetch_github_issue, report_bug, get_pr_reviews, bulk_close_issues tool handlers
-│   ├── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace, read_db tool handlers
+│   ├── tools_status.py      #   kitchen_status, get_pipeline_report, get_token_summary, write_telemetry_files, read_db tool handlers
+│   ├── tools_integrations.py #  fetch_github_issue, get_issue_title, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, get_pr_reviews, bulk_close_issues tool handlers
+│   ├── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace tool handlers
 │   ├── _factory.py          #   Composition Root: make_context() wires ToolContext
 │   └── _state.py            #   Server state extraction (lazy init, plugin dir resolution)
 ├── cli/                     # L3 CLI sub-package
 │   ├── __init__.py          #   Re-exports main entry point
+│   ├── _ansi.py             #   Terminal color utilities (supports_color, NO_COLOR/TERM=dumb)
 │   ├── _chefs_hat.py        #   chefs-hat command: ephemeral skill session launcher (claude --add-dir)
 │   ├── _doctor.py           #   Doctor command -- 7 project setup checks
 │   ├── _hooks.py            #   Unified PreToolUse hook registration helpers
@@ -197,31 +210,44 @@ src/autoskillit/
 ├── hooks/                   # Claude Code PreToolUse and PostToolUse hook scripts
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration (auto-discovered by Claude Code)
+│   ├── branch_protection_guard.py #  PreToolUse hook — denies merge_worktree/push_to_remote targeting protected branches
 │   ├── quota_check.py       #   Quota guard hook — blocks run_skill when threshold exceeded
 │   ├── remove_clone_guard.py #  Remove-clone guard — denies remove_clone calls with keep != "true"
 │   ├── skill_cmd_check.py   #   PreToolUse hook — validates skill_command path argument format
 │   ├── skill_command_guard.py #  PreToolUse hook — blocks run_skill with non-slash skill_command
 │   ├── open_kitchen_guard.py #  PreToolUse hook — blocks open_kitchen from headless sessions
+│   ├── headless_orchestration_guard.py #  PreToolUse hook — blocks run_skill/run_cmd/run_python from headless sessions
 │   └── pretty_output.py     #   PostToolUse hook — reformats MCP JSON responses as Markdown-KV
 ├── migrations/              # Data: versioned migration YAML notes
 │   └── __init__.py
 ├── recipes/                 # Bundled recipe YAML definitions
 │   ├── audit-and-fix.yaml
-│   ├── bugfix-loop.yaml
 │   ├── implementation-groups.yaml
 │   ├── implementation.yaml
 │   ├── remediation.yaml
 │   └── smoke-test.yaml
-└── skills/                  # 33 bundled skills (SKILL.md per skill)
-    ├── analyze-prs/              ├── audit-friction/
-    ├── audit-impl/               ├── collapse-issues/
-    ├── create-review-pr/         ├── diagnose-ci/
-    ├── dry-walkthrough/          ├── enrich-issues/
+└── skills/                  # 59 bundled skills (SKILL.md per skill)
+    ├── analyze-prs/              ├── arch-lens-c4-container/
+    ├── arch-lens-concurrency/    ├── arch-lens-data-lineage/
+    ├── arch-lens-deployment/     ├── arch-lens-development/
+    ├── arch-lens-error-resilience/ ├── arch-lens-module-dependency/
+    ├── arch-lens-operational/    ├── arch-lens-process-flow/
+    ├── arch-lens-repository-access/ ├── arch-lens-scenarios/
+    ├── arch-lens-security/       ├── arch-lens-state-lifecycle/
+    ├── audit-arch/               ├── audit-bugs/
+    ├── audit-cohesion/           ├── audit-defense-standards/
+    ├── audit-friction/           ├── audit-impl/
+    ├── audit-tests/              ├── close-kitchen/
+    ├── collapse-issues/          ├── design-guards/
+    ├── diagnose-ci/              ├── dry-walkthrough/
+    ├── elaborate-phase/          ├── enrich-issues/
     ├── implement-worktree/       ├── implement-worktree-no-merge/
     ├── investigate/              ├── issue-splitter/
-    ├── make-groups/              ├── make-plan/
+    ├── make-arch-diag/           ├── make-groups/
+    ├── make-plan/                ├── make-req/
     ├── merge-pr/                 ├── mermaid/
-    ├── migrate-recipes/          ├── open-pr/
+    ├── migrate-recipes/          ├── open-integration-pr/
+    ├── open-kitchen/             ├── open-pr/
     ├── pipeline-summary/         ├── prepare-issue/
     ├── process-issues/           ├── rectify/
     ├── report-bug/               ├── resolve-failures/
@@ -229,7 +255,8 @@ src/autoskillit/
     ├── retry-worktree/           ├── review-approach/
     ├── review-pr/                ├── setup-project/
     ├── smoke-task/               ├── sous-chef/
-    ├── triage-issues/            └── write-recipe/
+    ├── triage-issues/            ├── verify-diag/
+    └── write-recipe/
 ```
 
 **Session diagnostics logs** are stored globally at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir` in config. Session directories are named by Claude Code session UUID when available (preferred: parsed from stdout, fallback: discovered from JSONL filename via Channel B). When no session ID is available from either source, directories use `no_session_{timestamp}` naming. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.

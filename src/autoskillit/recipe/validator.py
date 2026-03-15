@@ -32,7 +32,7 @@ from autoskillit.recipe.registry import (
     run_semantic_rules,
     semantic_rule,
 )
-from autoskillit.recipe.schema import Recipe
+from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe
 
 logger = get_logger(__name__)
 
@@ -54,10 +54,6 @@ __all__ = [
     "semantic_rule",
 ]
 
-# Reserved terminal target names accepted by on_success/on_failure/on_context_limit/on_exhausted.
-_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
-
-
 # ---------------------------------------------------------------------------
 # Structural validation
 # ---------------------------------------------------------------------------
@@ -74,7 +70,34 @@ def validate_recipe(recipe: Recipe) -> list[str]:
 
     step_names = set(recipe.steps.keys())
 
+    ingredient_names = set(recipe.ingredients.keys())
+
     for step_name, step in recipe.steps.items():
+        if step.sub_recipe is not None:
+            other_discriminators = [
+                d for d in ("tool", "action", "python", "constant") if getattr(step, d) is not None
+            ]
+            if other_discriminators:
+                errors.append(
+                    f"Step '{step_name}' has both 'sub_recipe' and "
+                    f"({', '.join(other_discriminators)}); sub_recipe is mutually exclusive."
+                )
+            if not step.gate:
+                errors.append(
+                    f"Step '{step_name}' (sub_recipe: '{step.sub_recipe}')"
+                    " must have a 'gate' field."
+                )
+            elif step.gate not in ingredient_names:
+                errors.append(
+                    f"Step '{step_name}'.gate references undeclared ingredient '{step.gate}'."
+                )
+            if not step.on_success:
+                errors.append(
+                    f"Step '{step_name}' (sub_recipe: '{step.sub_recipe}') must have 'on_success'."
+                )
+            # sub_recipe steps skip discriminator/with_args/capture/on_result validation below
+            continue
+
         discriminators = [
             d for d in ("tool", "action", "python", "constant") if getattr(step, d) is not None
         ]
@@ -161,7 +184,10 @@ def validate_recipe(recipe: Recipe) -> list[str]:
 
     # Validate capture values: must contain ${{ result.* }} expressions
     # (constant steps use literal capture values — no template expression needed)
+    # sub_recipe steps are placeholders — skip capture validation for them.
     for step_name, step in recipe.steps.items():
+        if step.sub_recipe is not None:
+            continue
         for cap_key, cap_val in step.capture.items():
             if step.constant is not None:
                 continue
@@ -180,9 +206,10 @@ def validate_recipe(recipe: Recipe) -> list[str]:
                     )
 
     # Validate input and context references in with_args using iter_steps_with_context
-    ingredient_names = set(recipe.ingredients.keys())
-
+    # sub_recipe steps have no with_args to validate — skip them.
     for step_name, step, available_context in iter_steps_with_context(recipe):
+        if step.sub_recipe is not None:
+            continue
         for arg_key, arg_val in step.with_args.items():
             if not isinstance(arg_val, str):
                 continue

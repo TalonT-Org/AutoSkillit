@@ -56,7 +56,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 **ALWAYS:**
 - Use subagents for parallel exploration
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
-- Write findings as a markdown report with unique name to `temp/investigate/` directory
+- Write findings as a markdown report with unique name to `temp/investigate/` directory (relative to the current working directory)
 - Identify how tests missed the issue (if applicable)
 - Check for similar existing patterns in codebase
 - Ensure approaches, solutions, and fixes are the appropriate long-term solutions with proper architecture
@@ -78,11 +78,16 @@ mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
 
 Code-index tools require **project-relative paths**. Always use paths like:
 
-    src/autoskillit/execution/headless.py
+    src/<your_package>/some_module.py
 
 NOT absolute paths like:
 
-    /path/to/project/src/autoskillit/execution/headless.py
+    /absolute/path/to/src/<your_package>/some_module.py
+
+> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
+> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
+> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
+> for the same searches — they provide equivalent results without the code-index server.
 
 Agents launched via `run_skill` inherit no code-index state from the parent session — this
 call is mandatory at the start of every headless session that uses code-index tools.
@@ -150,7 +155,7 @@ After subagents complete, consolidate into structured findings:
 
 ### Step 4: Write Report
 
-Write findings to: `temp/investigate/investigation_{topic}_{date}.md`
+Write findings to: `temp/investigate/investigation_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 Report structure:
 ```markdown
@@ -190,7 +195,7 @@ After writing the report file, emit the structured output token as the very last
 of your text output:
 
 ```
-investigation_path={absolute_path_to_investigation_report_file}
+investigation_path = {absolute_path_to_investigation_report_file}
 ```
 
 ## Subagent Prompt Template
@@ -208,4 +213,3 @@ Focus on:
 This is a research task - DO NOT modify any code.
 Report your findings in a structured format.
 ```
-

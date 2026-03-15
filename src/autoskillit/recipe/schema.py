@@ -17,6 +17,7 @@ class RecipeIngredient:
     description: str
     required: bool = False
     default: str | None = None
+    hidden: bool = False  # When True, excluded from ingredients table shown to agent
 
     def __post_init__(self) -> None:
         self.description = self.description.strip().replace("\n", " ")
@@ -55,6 +56,12 @@ class StepResultRoute:
     conditions: list[StepResultCondition] = dataclasses.field(default_factory=list)
 
 
+# Terminal routing sentinels: valid on_exhausted targets that are not step names.
+# "escalate": triggers orchestrator-level escalation (stop-with-escalation).
+# "done": terminates the recipe cleanly without escalation.
+_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
+
+
 @dataclass
 class RecipeStep:
     tool: str | None = None
@@ -76,6 +83,8 @@ class RecipeStep:
     skip_when_false: str | None = None
     model: str | None = None
     description: str = ""
+    sub_recipe: str | None = None  # Name of sub-recipe file (no extension)
+    gate: str | None = None  # Ingredient name whose value controls lazy loading
 
 
 @dataclass
@@ -87,6 +96,7 @@ class Recipe:
     steps: dict[str, RecipeStep] = field(default_factory=dict)
     kitchen_rules: list[str] = field(default_factory=list)
     version: str | None = None
+    experimental: bool = False
 
     def __post_init__(self) -> None:
         self.name = self.name.strip()

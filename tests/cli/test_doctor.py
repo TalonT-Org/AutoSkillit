@@ -40,7 +40,7 @@ class TestCLIDoctor:
             json.dumps(
                 {
                     "mcpServers": {
-                        "bugfix-loop": {
+                        "old-server": {
                             "type": "stdio",
                             "command": "/nonexistent/path/to/old-server",
                         },
@@ -53,7 +53,7 @@ class TestCLIDoctor:
         monkeypatch.chdir(tmp_path)
         cli.doctor()
         captured = capsys.readouterr()
-        assert "bugfix-loop" in captured.out
+        assert "old-server" in captured.out
         assert "ERROR" in captured.out
 
     def test_doctor_ignores_healthy_coregistered_servers(
@@ -284,9 +284,18 @@ class TestCLIDoctor:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """mcp_server_registered returns warning when autoskillit absent from ~/.claude.json."""
+        import subprocess
+
         # ~/.claude.json does not exist in tmp_path (no file created)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
+
+        # Simulate `claude plugin list` returning non-zero so check falls through to WARNING
+        class _NoPlugin:
+            returncode = 1
+            stdout = ""
+
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _NoPlugin())
         cli.doctor(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
@@ -569,13 +578,12 @@ class TestGroupFDoctor:
 
         called_with: dict = {}
 
-        def mock_run_doctor(*, output_json: bool = False, fix: bool = False) -> None:
+        def mock_run_doctor(*, output_json: bool = False) -> None:
             called_with["output_json"] = output_json
-            called_with["fix"] = fix
 
         monkeypatch.setattr(_doctor, "run_doctor", mock_run_doctor)
         cli.doctor(output_json=True)
-        assert called_with == {"output_json": True, "fix": False}
+        assert called_with == {"output_json": True}
 
     def test_severity_and_doctorresult_in_doctor_module(self):
         """Severity and DoctorResult must be importable from autoskillit.cli._doctor."""
@@ -586,50 +594,26 @@ class TestGroupFDoctor:
         assert r.check == "test"
 
 
-class TestDoctorResultFixField:
-    """T1: DoctorResult has an optional fix callable field."""
+def test_doctor_fix_parameter_does_not_exist():
+    """The doctor --fix no-op flag must be removed from the CLI."""
+    import inspect
 
-    def test_doctor_result_has_fix_field(self):
-        """DoctorResult must have an optional fix callable field."""
-        from autoskillit.cli._doctor import DoctorResult
-        from autoskillit.core import Severity
+    from autoskillit import cli
 
-        # Can be constructed without fix
-        r = DoctorResult(severity=Severity.OK, check="x", message="y")
-        assert r.fix is None
-
-        # Can be constructed with fix and it is callable
-        called = []
-        r_with_fix = DoctorResult(
-            severity=Severity.ERROR,
-            check="x",
-            message="y",
-            fix=lambda: called.append(1),
-        )
-        assert callable(r_with_fix.fix)
-        r_with_fix.fix()
-        assert called == [1]
-
-    def test_doctor_result_fix_not_in_json_output(self, tmp_path, monkeypatch, capsys):
-        """fix callable must not appear in --output-json serialization."""
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        cli.doctor(output_json=True)
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        for entry in data["results"]:
-            assert "fix" not in entry
+    sig = inspect.signature(cli.doctor)
+    assert "fix" not in sig.parameters, "doctor --fix is a silent no-op and must be removed"
 
 
-class TestDoctorFixFlag:
-    """T3: doctor CLI accepts fix parameter (infrastructure for future checks)."""
-
-    def test_doctor_command_accepts_fix_parameter(self):
-        """doctor CLI command must expose a fix parameter."""
-        import inspect
-
-        sig = inspect.signature(cli.doctor)
-        assert "fix" in sig.parameters
+def test_doctor_clears_plugin_cache(tmp_path, monkeypatch, capsys):
+    """Doctor must clear the plugin cache on every run."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "0.3.0" / "hooks").mkdir(parents=True)
+    (cache_dir / "0.3.0" / "hooks" / "pretty_output.py").write_text("# stale")
+    cli.doctor()
+    assert not cache_dir.exists()
 
 
 def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsys):
@@ -643,3 +627,37 @@ def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsy
     data = json.loads(captured.out)
     check_names = {r["check"] for r in data["results"]}
     assert "stale_gate_file" not in check_names
+
+
+def test_doctor_detects_plugin_registration(monkeypatch: pytest.MonkeyPatch) -> None:
+    """doctor must not report MCP unregistered when autoskillit is installed as a plugin."""
+    import json as _json
+    import subprocess
+    import tempfile
+
+    from autoskillit.cli._doctor import _check_mcp_server_registered
+    from autoskillit.core import Severity
+
+    fake_claude_json_content = _json.dumps({"mcpServers": {}})  # No mcpServers entry
+
+    class FakeResult:
+        stdout = "autoskillit  0.4.0  active\n"
+        returncode = 0
+
+    def fake_plugin_list(*args: object, **kwargs: object) -> FakeResult:
+        return FakeResult()
+
+    monkeypatch.setattr(subprocess, "run", fake_plugin_list)
+
+    with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+        f.write(fake_claude_json_content)
+        tmpf = Path(f.name)
+
+    try:
+        result = _check_mcp_server_registered(claude_json_path=tmpf)
+        assert result.severity == Severity.OK, (
+            "doctor must recognize plugin-based registration; "
+            "not just mcpServers presence (REQ-ONB-002)"
+        )
+    finally:
+        tmpf.unlink(missing_ok=True)

@@ -64,7 +64,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Include every requirement from the source document in exactly one group
 - Assign each group a sequential suffix: groupA, groupB, ... groupZ
 - State dependencies between groups explicitly
-- Write to `temp/make-groups/` directory
+- Write to `temp/make-groups/` directory (relative to the current working directory)
 
 ## Workflow
 
@@ -82,11 +82,16 @@ mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
 
 Code-index tools require **project-relative paths**. Always use paths like:
 
-    src/autoskillit/execution/headless.py
+    src/<your_package>/some_module.py
 
 NOT absolute paths like:
 
-    /path/to/project/src/autoskillit/execution/headless.py
+    /absolute/path/to/src/<your_package>/some_module.py
+
+> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
+> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
+> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
+> for the same searches — they provide equivalent results without the code-index server.
 
 Agents launched via `run_skill` inherit no code-index state from the parent session — this
 call is mandatory at the start of every headless session that uses code-index tools.
@@ -240,9 +245,9 @@ After all group files are written and the prose report is printed, emit the foll
 structured output tokens as the very last lines of your text output:
 
 ```
-groups_path={absolute_path_to_index_file}
-manifest_path={absolute_path_to_manifest_file}
-group_files={absolute_path_to_group_1_file}
+groups_path = {absolute_path_to_index_file}
+manifest_path = {absolute_path_to_manifest_file}
+group_files = {absolute_path_to_group_1_file}
 {absolute_path_to_group_2_file}
 {absolute_path_to_group_3_file}
 ```
@@ -283,8 +288,8 @@ branch, runs the group loop, and gates on audit before signalling merge-ready.
 
 ## Related Skills
 
-- **`/make-req`** — Produces requirements from raw input (this skill groups existing requirements)
+- **`/autoskillit:make-req`** — Produces requirements from raw input (this skill groups existing requirements)
 - **`/autoskillit:make-plan`** — Consumes individual groups as planning input
-- **`/elaborate-phase`** — Elaborates phases within a plan (this skill creates the groups that become plans)
+- **`/autoskillit:elaborate-phase`** — Elaborates phases within a plan (this skill creates the groups that become plans)
 - **`/autoskillit:dry-walkthrough`** — Validates plans produced from groups
 - **`/autoskillit:audit-impl`** — Audits the full implementation against all group plans

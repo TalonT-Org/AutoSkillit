@@ -34,7 +34,7 @@ _SUCCESS_JSON = (
 
 
 class TestRunSkillPluginDir:
-    """T2: run_skill and run_skill_retry pass --plugin-dir to the claude command."""
+    """T2: run_skill passes --plugin-dir to the claude command."""
 
     @pytest.mark.anyio
     async def test_run_skill_passes_plugin_dir(self, tool_ctx):
@@ -56,6 +56,11 @@ class TestRunSkillPluginDir:
         # --output-format and stream-json must be present
         assert "--output-format" in cmd
         assert cmd[cmd.index("--output-format") + 1] == "stream-json"
+        # cwd must propagate to the subprocess runner
+        from pathlib import Path
+
+        actual_cwd = tool_ctx.runner.call_args_list[0][1]
+        assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 
     @pytest.mark.anyio
     async def test_run_skill_uses_two_hour_timeout(self, tool_ctx):
@@ -160,6 +165,11 @@ class TestRunSkillPrefix:
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
         assert cmd[5].startswith("Use /investigate error")
+        # cwd must propagate to the subprocess runner
+        from pathlib import Path
+
+        actual_cwd = tool_ctx.runner.call_args_list[0][1]
+        assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 
     @pytest.mark.anyio
     async def test_run_skill_rejects_prose_without_slash(self, tool_ctx):
@@ -210,6 +220,11 @@ class TestRunSkillPrefix:
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
         assert "%%ORDER_UP%%" in cmd[5]
+        # cwd must propagate to the subprocess runner
+        from pathlib import Path
+
+        actual_cwd = tool_ctx.runner.call_args_list[0][1]
+        assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 
 
 class TestValidateSkillCommand:
@@ -266,7 +281,7 @@ class TestDryWalkthroughGateWithPrefix:
 
 
 class TestRunSkillTimeoutFromConfig:
-    """run_skill and run_skill_retry use configurable timeouts."""
+    """run_skill uses configurable timeouts."""
 
     @pytest.mark.anyio
     async def test_run_skill_timeout_from_config(self, tool_ctx):
@@ -471,7 +486,8 @@ class TestRunSkillFailurePaths:
         tool_ctx.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/investigate error", "/tmp"))
         assert result["is_error"] is True
-        assert result["subtype"] == "success"
+        assert result["subtype"] == "missing_completion_marker"
+        assert result["cli_subtype"] == "success"
 
     @pytest.mark.anyio
     async def test_handles_empty_stdout(self, tool_ctx):
@@ -502,7 +518,7 @@ class TestRunSkillFailurePaths:
 
 
 class TestRunSkillModel:
-    """Tests for model parameter in run_skill and run_skill_retry."""
+    """Tests for model parameter in run_skill."""
 
     _MOCK_STDOUT = (
         '{"type": "result", "subtype": "success", "is_error": false, '
@@ -521,6 +537,7 @@ class TestRunSkillModel:
     # MOD_S3
     @pytest.mark.anyio
     async def test_run_skill_no_model_flag_when_empty(self, tool_ctx):
+        tool_ctx.config.model.default = ""  # ← add this line
         tool_ctx.runner.push(_make_result(0, self._MOCK_STDOUT, ""))
         await run_skill("/investigate error", "/tmp", model="")
         cmd = tool_ctx.runner.call_args_list[0][0]
@@ -841,6 +858,37 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
 
     await run_skill("/test skill", "/tmp")
     assert calls == [("/test skill", "/tmp")]
+
+
+class TestHeadlessGateEnforcement:
+    """T_HGE: run_skill, run_cmd, run_python each return headless_error
+    when the session is running with AUTOSKILLIT_HEADLESS=1.
+
+    The gate is open (tool_ctx default), so _require_enabled() passes.
+    _require_not_headless() fires first and returns subtype='headless_error'.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _set_headless_env(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+
+    @pytest.mark.anyio
+    async def test_run_skill_blocked_in_headless_session(self, tool_ctx):
+        """run_skill returns headless_error when AUTOSKILLIT_HEADLESS=1."""
+        result = json.loads(await run_skill("/autoskillit:investigate some-error", "/tmp"))
+        assert result["subtype"] == "headless_error"
+
+    @pytest.mark.anyio
+    async def test_run_cmd_blocked_in_headless_session(self, tool_ctx):
+        """run_cmd returns headless_error when AUTOSKILLIT_HEADLESS=1."""
+        result = json.loads(await run_cmd("echo hello", "/tmp"))
+        assert result["subtype"] == "headless_error"
+
+    @pytest.mark.anyio
+    async def test_run_python_blocked_in_headless_session(self, tool_ctx):
+        """run_python returns headless_error when AUTOSKILLIT_HEADLESS=1."""
+        result = json.loads(await run_python("os.getcwd"))
+        assert result["subtype"] == "headless_error"
 
 
 class TestResponseFieldsAreTypeSafe:

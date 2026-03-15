@@ -5,7 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, pkg_root
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, pkg_root
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from autoskillit.recipe.loader import RecipeInfo
@@ -35,8 +37,30 @@ def _resolve_recipe_input(raw: str, available: list[RecipeInfo]) -> RecipeInfo |
     return next((r for r in available if r.name == raw), None)
 
 
-def _build_orchestrator_prompt(script_yaml: str) -> str:
-    """Build the --append-system-prompt content for a cook session."""
+_COOK_GREETINGS: list[str] = [
+    (
+        "Welcome to Good Burger, home of the Good Burger, "
+        "can I take your order? Today's special: {recipe_name}."
+    ),
+    "Order up! Today's special: {recipe_name}. What ingredients are we working with?",
+    "Table for one! Today's special: {recipe_name}. Ready when you are.",
+    "Fresh off the menu — today's special: {recipe_name}. What can I get started for you?",
+]
+
+_OPEN_KITCHEN_GREETINGS: list[str] = [
+    "Welcome to Good Burger, home of the Good Burger, can I take your order?",
+    "Kitchen's open! What are we cooking today?",
+    "Order up! The kitchen is ready. What can I get you?",
+]
+
+
+def _build_orchestrator_prompt(recipe_name: str) -> str:
+    """Build the --append-system-prompt content for a cook session.
+
+    The prompt contains behavioral instructions (routing rules, failure
+    predicates, orchestrator discipline) and a greeting pool. Recipe content
+    is discovered by the session via ``load_recipe``.
+    """
     # Inject sous-chef global orchestration rules (graceful degradation if absent)
     sous_chef_content = ""
     _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
@@ -44,39 +68,18 @@ def _build_orchestrator_prompt(script_yaml: str) -> str:
         sous_chef_content = "\n\n" + _sous_chef_path.read_text()
 
     return f"""\
-You are a pipeline orchestrator. Execute the recipe below step-by-step.
+You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
-1. Present the recipe to the user using the preview format below
-2. Prompt for input values using AskUserQuestion
-3. Execute the pipeline steps by calling MCP tools directly
-
-Preview format:
-
-    ## {{name}}
-    {{description}}
-
-    **Flow:** {{summary}}
-
-    ### Ingredients
-    For each ingredient show: name, description, required/optional, default value.
-    Distinguish user-supplied ingredients (required=true or meaningful defaults)
-    from agent-managed state (default="" or default=null with description
-    indicating it is set by a prior step or the agent).
-
-    ### Steps
-    For each step show:
-    - Step name and tool/action/python discriminator
-    - Routing: on_success → X, on_failure → Y
-    - If on_result: show field name and each route
-    - If optional: true, mark as "[Optional]" and show the note explaining
-      the skip condition
-    - If retry block exists: retries Nx on {{condition}}, then → {{on_exhausted}}
-    - If note exists, show it (notes contain critical agent instructions)
-    - If capture exists, show what values are extracted
-
-    ### Kitchen Rules
-    If present, list all kitchen_rules strings.
-    If absent, note: "No kitchen rules defined"
+FIRST ACTION — before prompting for any inputs:
+0. Call open_kitchen('{recipe_name}') to open the kitchen and load the recipe.
+1. The response contains a pre-formatted ingredients table
+   between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
+   Display it verbatim in your response — do not reformat or re-render it.
+   Then ask for the required fields (marked with *). If the recipe has both
+   a task and an issue_url ingredient, mention that a GitHub issue URL can
+   be provided as the task. Keep it to one or two short sentences.
+2. Collect ingredient values conversationally from the user's response.
+3. Execute the pipeline steps.
 
 During pipeline execution, only use AutoSkillit MCP tools:
 - Read, Grep, Glob (code investigation) — not used here because investigation
@@ -133,9 +136,6 @@ ACTION: CONFIRM STEP SEMANTICS:
 - If the user declines (answers no, skip, keep, cancel, or similar negative),
   route to the step's on_failure target.
 {sous_chef_content}
---- RECIPE ---
-{script_yaml}
---- END RECIPE ---
 """
 
 
@@ -148,9 +148,8 @@ def _build_open_kitchen_prompt() -> str:
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
-        "Call the open_kitchen tool now to open the AutoSkillit kitchen and gain access to "
-        "all automation tools. Then call the kitchen_status tool to display version "
-        "and health information to the user.\n\n"
+        "Call the open_kitchen tool to open the AutoSkillit kitchen and gain access to "
+        "all automation tools.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "
@@ -170,3 +169,26 @@ def _build_open_kitchen_prompt() -> str:
         )
 
     return text
+
+
+def show_cook_preview(
+    recipe_name: str, parsed_recipe: object, recipes_dir: Path, project_dir: Path
+) -> None:
+    """Display the terminal preview: flow diagram + ingredients table.
+
+    Owns the entire pre-launch display so ``cook()`` makes one call.
+    Gateway imports only (no cross-package submodule imports).
+    """
+    from autoskillit.cli._ansi import diagram_to_terminal, ingredients_to_terminal
+    from autoskillit.config import resolve_ingredient_defaults
+    from autoskillit.recipe import format_ingredients_table, load_recipe_diagram
+
+    diagram = load_recipe_diagram(recipe_name, recipes_dir)
+    if diagram:
+        print(diagram_to_terminal(diagram))
+        print()  # blank line between diagram and table
+
+    resolved = resolve_ingredient_defaults(project_dir)
+    table = format_ingredients_table(parsed_recipe, resolved_defaults=resolved)
+    if table:
+        print(ingredients_to_terminal(table))

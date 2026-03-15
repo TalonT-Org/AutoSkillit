@@ -1,5 +1,6 @@
 """Shared test fixtures for autoskillit."""
 
+import subprocess
 import sys
 from pathlib import Path as _Path
 
@@ -42,6 +43,9 @@ class MockSubprocessRunner(SubprocessRunner):
 
     Inherits from SubprocessRunner (Protocol) so mypy verifies the __call__
     signature matches the protocol at class definition, not just at call sites.
+
+    call_args_list stores (cmd, cwd, timeout, kwargs) tuples.
+    IMPORTANT: Assert [N][1] (cwd) when testing cwd propagation.
     """
 
     def __init__(self) -> None:
@@ -205,20 +209,51 @@ def parse_stdout_json(capsys):
 
 
 @pytest.fixture(autouse=True)
-def _clear_kitchen_open_env(monkeypatch):
-    """Ensure AUTOSKILLIT_KITCHEN_OPEN is unset at the start of every test.
+def _clear_headless_env(monkeypatch):
+    """Ensure AUTOSKILLIT_HEADLESS is unset at the start of every test.
 
-    make_context() reads this env var to decide whether to start with the gate
-    open. Any residual value from the shell environment would silently break
-    tests that assert the gate starts closed.
+    Tools check this env var to block calls from headless sessions.
+    Also resets mcp kitchen visibility transforms when the server module is
+    already imported.
     """
-    monkeypatch.delenv("AUTOSKILLIT_KITCHEN_OPEN", raising=False)
+    import sys
+
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    if "autoskillit.server" in sys.modules:
+        from autoskillit.server import mcp
+
+        mcp.disable(tags={"kitchen"})
 
 
 @pytest.fixture(scope="function")
 def anyio_backend():
     """Lock all @pytest.mark.anyio tests to the asyncio backend."""
     return "asyncio"
+
+
+@pytest.fixture(scope="session")
+def clone_isolation_repo(tmp_path_factory):
+    """
+    Creates a clone-isolated git repo mirroring what clone_repo produces:
+    - origin → file://{clone_path}  (isolation)
+    - upstream → https://github.com/testowner/testrepo.git  (real remote)
+
+    Session-scoped to avoid repeated git subprocess calls per test.
+    Use shutil.copytree in tests that mutate remotes.
+    """
+    base = tmp_path_factory.mktemp("clone_isolation")
+    repo = base / "clone"
+    repo.mkdir()
+    subprocess.run(["git", "init", str(repo)], check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", f"file://{base}/other"], cwd=str(repo), check=True
+    )
+    subprocess.run(
+        ["git", "remote", "add", "upstream", "https://github.com/testowner/testrepo.git"],
+        cwd=str(repo),
+        check=True,
+    )
+    return repo
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""Tests for the wait_for_ci and get_ci_status MCP tool handlers."""
+"""Tests for the wait_for_ci, get_ci_status, and wait_for_merge_queue MCP tool handlers."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
-from autoskillit.server.tools_ci import get_ci_status, wait_for_ci
+from autoskillit.server.tools_ci import get_ci_status, wait_for_ci, wait_for_merge_queue
 
 # ---------------------------------------------------------------------------
 # Gate membership
@@ -52,7 +52,7 @@ async def test_wait_for_ci_success_response(tool_ctx):
     tool_ctx.ci_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -80,7 +80,7 @@ async def test_wait_for_ci_failure_response(tool_ctx):
     tool_ctx.ci_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -109,7 +109,7 @@ async def test_wait_for_ci_infers_head_sha(tool_ctx):
     tool_ctx.ci_watcher = mock_watcher
 
     with patch(
-        "autoskillit.server.tools_ci.asyncio.create_subprocess_exec",
+        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -119,9 +119,9 @@ async def test_wait_for_ci_infers_head_sha(tool_ctx):
 
         await wait_for_ci("main", cwd="/some/repo")
 
-    # Verify that wait was called with the inferred head_sha
+    # Verify that wait was called with the inferred head_sha inside scope
     call_kwargs = mock_watcher.wait.call_args
-    assert call_kwargs.kwargs.get("head_sha") == "abc123"
+    assert call_kwargs.kwargs["scope"].head_sha == "abc123"
 
 
 # ---------------------------------------------------------------------------
@@ -182,3 +182,215 @@ async def test_get_ci_status_no_watcher(tool_ctx):
     result = json.loads(await get_ci_status(branch="main"))
     assert result["runs"] == []
     assert "not configured" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# wait_for_merge_queue
+# ---------------------------------------------------------------------------
+
+
+def test_wait_for_merge_queue_is_gated():
+    assert "wait_for_merge_queue" in GATED_TOOLS
+
+
+@pytest.mark.anyio
+async def test_gate_closed_returns_gate_error(tool_ctx):
+    """Gate-closed returns gate_error response (watcher not called)."""
+    tool_ctx.gate = DefaultGateState(enabled=False)
+    result = json.loads(await wait_for_merge_queue(pr_number=1, target_branch="main", cwd="."))
+    assert result["success"] is False
+    assert result["subtype"] == "gate_error"
+
+
+@pytest.mark.anyio
+async def test_delegates_to_merge_queue_watcher(tool_ctx):
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"success": True, "pr_state": "merged", "reason": "PR merged"}
+    )
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    with patch(
+        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_proc:
+        proc_inst = AsyncMock()
+        proc_inst.communicate = AsyncMock(
+            return_value=(b"https://github.com/owner/repo.git\n", b"")
+        )
+        proc_inst.returncode = 0
+        mock_proc.return_value = proc_inst
+
+        result = json.loads(
+            await wait_for_merge_queue(pr_number=42, target_branch="integration", cwd=".")
+        )
+
+    assert result["pr_state"] == "merged"
+    mock_watcher.wait.assert_called_once()
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs["pr_number"] == 42
+    assert call_kwargs.kwargs["target_branch"] == "integration"
+
+
+@pytest.mark.anyio
+async def test_infers_repo_from_git_remote_when_repo_empty(tool_ctx):
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"success": True, "pr_state": "merged", "reason": "PR merged"}
+    )
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    with patch(
+        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_proc:
+        proc_inst = AsyncMock()
+        proc_inst.communicate = AsyncMock(
+            return_value=(b"https://github.com/owner/repo.git\n", b"")
+        )
+        proc_inst.returncode = 0
+        mock_proc.return_value = proc_inst
+
+        await wait_for_merge_queue(pr_number=42, target_branch="main", cwd=".", repo="")
+
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs["repo"] == "owner/repo"
+
+
+@pytest.mark.anyio
+async def test_explicit_repo_skips_subprocess(tool_ctx):
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"success": True, "pr_state": "merged", "reason": "PR merged"}
+    )
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    with patch(
+        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_proc:
+        await wait_for_merge_queue(
+            pr_number=42,
+            target_branch="main",
+            cwd=".",
+            repo="owner/explicit-repo",
+        )
+
+    mock_proc.assert_not_called()
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs["repo"] == "owner/explicit-repo"
+
+
+@pytest.mark.anyio
+async def test_watcher_none_returns_error(tool_ctx):
+    tool_ctx.merge_queue_watcher = None
+    result = json.loads(await wait_for_merge_queue(pr_number=42, target_branch="main", cwd="."))
+    assert result["success"] is False
+    assert "pr_state" in result
+    assert result["pr_state"] == "error"
+
+
+# ---------------------------------------------------------------------------
+# wait_for_ci: remote_url parameter
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_parses_remote_url_to_resolve_repo(tool_ctx):
+    """When remote_url is provided, wait_for_ci must parse it to owner/repo
+    and pass that to the watcher without calling any subprocess."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait.return_value = {
+        "conclusion": "success",
+        "run_id": 1,
+        "failed_jobs": [],
+        "head_sha": "abc123",
+    }
+    tool_ctx.ci_watcher = mock_watcher
+
+    result = json.loads(
+        await wait_for_ci(
+            branch="main",
+            remote_url="https://github.com/owner/repo.git",
+            cwd="/any/cwd",
+        )
+    )
+    assert result["conclusion"] == "success"
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs.get("repo") == "owner/repo"
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_remote_url_wins_over_empty_repo(tool_ctx):
+    """remote_url= supersedes repo='' — hint priority in resolve_remote_repo."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait.return_value = {
+        "conclusion": "success",
+        "run_id": 1,
+        "failed_jobs": [],
+        "head_sha": "abc",
+    }
+    tool_ctx.ci_watcher = mock_watcher
+    await wait_for_ci(
+        branch="main",
+        remote_url="https://github.com/owner/repo.git",
+        repo="",  # empty — remote_url must win
+        cwd="/any/cwd",
+    )
+    assert mock_watcher.wait.call_args.kwargs.get("repo") == "owner/repo"
+
+
+# ---------------------------------------------------------------------------
+# wait_for_merge_queue: remote_url parameter
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_merge_queue_parses_remote_url_to_resolve_repo(tool_ctx):
+    """When remote_url is provided, wait_for_merge_queue parses it to owner/repo
+    without calling any subprocess."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait.return_value = {"success": True, "pr_state": "merged", "pr_number": 42}
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    result = json.loads(
+        await wait_for_merge_queue(
+            pr_number=42,
+            target_branch="main",
+            remote_url="https://github.com/owner/repo.git",
+            cwd="/any/cwd",
+        )
+    )
+    assert result["pr_state"] == "merged"
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs.get("repo") == "owner/repo"
+
+
+@pytest.mark.anyio
+async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inference(
+    tool_ctx, tmp_path
+):
+    """
+    remote_url that parses to None (e.g. file://) does NOT short-circuit;
+    inference continues via resolve_remote_repo(cwd).
+    """
+    mock_watcher = AsyncMock()
+    mock_watcher.wait.return_value = {
+        "success": False,
+        "pr_state": "error",
+        "reason": "Invalid repo format: None",
+    }
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    # provide a file:// remote_url — should fall through, eventually fail gracefully
+    result = json.loads(
+        await wait_for_merge_queue(
+            pr_number=1,
+            target_branch="main",
+            remote_url="file:///tmp/clone",
+            cwd=str(tmp_path),  # real dir, no GitHub remotes
+        )
+    )
+    assert result["pr_state"] == "error"
+    # The file:// URL must not resolve to a GitHub repo, so watcher receives repo=None
+    assert mock_watcher.wait.call_args.kwargs.get("repo") is None

@@ -10,14 +10,21 @@ _logger = get_logger(__name__)
 from autoskillit.recipe import rules_bypass as _rules_bypass  # noqa: E402 F401
 from autoskillit.recipe import rules_ci as _rules_ci  # noqa: E402 F401
 from autoskillit.recipe import rules_clone as _rules_clone  # noqa: E402 F401
+from autoskillit.recipe import rules_contracts as _rules_contracts  # noqa: E402 F401
 from autoskillit.recipe import rules_dataflow as _rules_dataflow  # noqa: E402 F401
 from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401
 from autoskillit.recipe import rules_inputs as _rules_inputs  # noqa: E402 F401
 from autoskillit.recipe import rules_merge as _rules_merge  # noqa: E402 F401
+from autoskillit.recipe import rules_recipe as _rules_recipe  # noqa: E402 F401
+from autoskillit.recipe import rules_skills as _rules_skills  # noqa: E402 F401
 from autoskillit.recipe import rules_tools as _rules_tools  # noqa: E402 F401
 from autoskillit.recipe import rules_verdict as _rules_verdict  # noqa: E402 F401
 from autoskillit.recipe import rules_worktree as _rules_worktree  # noqa: E402 F401
 from autoskillit.recipe._api import (  # noqa: E402
+    ListRecipesResult,
+    LoadRecipeResult,
+    RecipeListItem,
+    format_ingredients_table,
     format_recipe_list_response,
     list_all,
     load_and_validate,
@@ -36,18 +43,19 @@ from autoskillit.recipe.contracts import (  # noqa: E402
 from autoskillit.recipe.diagrams import (  # noqa: E402
     check_diagram_staleness,
     diagram_stale_to_suggestions,
-    generate_recipe_diagram,
     load_recipe_diagram,
 )
 from autoskillit.recipe.io import (  # noqa: E402
+    builtin_sub_recipes_dir,
     find_recipe_by_name,
+    find_sub_recipe_by_name,
     iter_steps_with_context,
     list_recipes,
     load_recipe,
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
-from autoskillit.recipe.schema import Recipe, RecipeStep  # noqa: E402
+from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeStep  # noqa: E402
 from autoskillit.recipe.staleness_cache import (  # noqa: E402
     StalenessEntry,
     compute_recipe_hash,
@@ -62,7 +70,11 @@ from autoskillit.recipe.validator import (  # noqa: E402
 )
 
 __all__ = [
+    "ListRecipesResult",
+    "LoadRecipeResult",
+    "RecipeListItem",
     "Recipe",
+    "RecipeInfo",
     "RecipeStep",
     "StaleItem",
     "StalenessEntry",
@@ -89,9 +101,11 @@ __all__ = [
     "load_and_validate",
     "validate_from_path",
     "list_all",
+    "format_ingredients_table",
     "format_recipe_list_response",
-    "generate_recipe_diagram",
     "load_recipe_diagram",
     "check_diagram_staleness",
     "diagram_stale_to_suggestions",
+    "builtin_sub_recipes_dir",
+    "find_sub_recipe_by_name",
 ]

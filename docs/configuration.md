@@ -1,5 +1,18 @@
 # Configuration Reference
 
+## Quick Start
+
+Most projects only need one setting — the test command:
+
+    cd your-project
+    autoskillit init
+
+This creates `.autoskillit/config.yaml` with the test command you provide.
+Everything else has sensible defaults. See [Getting Started](getting-started.md)
+for a full tutorial.
+
+## Layered Resolution
+
 AutoSkillit uses layered YAML configuration. Resolution order (last wins):
 
 1. Package defaults (`autoskillit/config/defaults.yaml`)
@@ -18,7 +31,7 @@ AUTOSKILLIT_QUOTA_GUARD__ENABLED=false        # disables quota guard
 
 This is useful for CI pipelines or per-session overrides without touching config files.
 
-Partial configs are fine. Unset fields keep their defaults. View the resolved config with `autoskillit config show`.
+Partial configs are fine. Unset fields keep their defaults. View the resolved config with [`autoskillit config show`](cli-reference.md#autoskillit-config-show).
 
 ## Test Command
 
@@ -38,7 +51,7 @@ Control which model `run_skill` uses for headless sessions.
 
 ```yaml
 model:
-  default: null      # default model when step has no model field (null = CLI default)
+  default: sonnet    # default model when step has no model field
   override: null     # force all sessions to use this model (overrides step YAML)
 ```
 
@@ -97,6 +110,47 @@ github:
 
 Token goes in `.autoskillit/.secrets.yaml` (never commit).
 
+## Branching
+
+```yaml
+branching:
+  default_base_branch: main   # default base branch for recipes
+```
+
+Default: `main`. Override if your project uses a different integration branch (e.g. `integration` or `develop`):
+
+```yaml
+branching:
+  default_base_branch: integration
+```
+
+## Session Diagnostics (Linux)
+
+```yaml
+linux_tracing:
+  enabled: true           # default: true
+  proc_interval: 5.0      # seconds between snapshots
+  log_dir: ""             # empty = platform default
+  tmpfs_path: "/dev/shm"  # RAM-backed path for crash resilience
+```
+
+See [Session Diagnostics](developer.md#session-diagnostics-logging) for details on log output.
+
+## Headless Sessions
+
+```yaml
+run_skill:
+  timeout: 7200            # 2-hour session timeout (seconds)
+  stale_threshold: 1200    # 20 minutes of no output before declaring stale
+```
+
+## MCP Response Tracking
+
+```yaml
+mcp_response:
+  alert_threshold_tokens: 2000   # warn when tool responses exceed this token estimate
+```
+
 ## Safety and Gates
 
 ```yaml
@@ -111,6 +165,74 @@ safety:
 ```
 
 These defaults are usually fine. Override per-project if needed.
+
+## Token Usage
+
+Controls how token consumption is reported per pipeline step.
+
+```yaml
+token_usage:
+  verbosity: "summary"   # "summary" | "full" | "none"
+```
+
+- `"summary"` — report total tokens per step (default)
+- `"full"` — report input and output tokens separately per step
+- `"none"` — disable token reporting
+
+## Migration
+
+```yaml
+migration:
+  suppressed:
+    - "some-migration-id"
+```
+
+`suppressed` is a list of migration IDs to skip. Useful when a migration is not applicable to a specific project (e.g. you never used the feature the migration addresses). Migration IDs appear in warning output from `autoskillit migrate`.
+
+## Logging
+
+```yaml
+logging:
+  level: "INFO"         # "DEBUG" | "INFO" | "WARNING" | "ERROR"
+  json_output: null     # true = JSON lines, false = human-readable, null = auto (stderr tty detection)
+```
+
+Controls the autoskillit server logger. Useful for debugging:
+
+```bash
+AUTOSKILLIT_LOGGING__LEVEL=DEBUG autoskillit serve
+```
+
+## Read DB
+
+```yaml
+read_db:
+  timeout: 30       # SQLite connection timeout in seconds
+  max_rows: 10000   # maximum rows returned per query
+```
+
+## Report Bug
+
+```yaml
+report_bug:
+  output_dir: null  # null = {cwd}/.autoskillit/temp/bug-reports/
+  timeout: 600
+  github_filing: true
+  github_labels: ["autoreported", "bug"]
+```
+
+## Environment Variables
+
+### `AUTOSKILLIT_HEADLESS`
+
+When set to `"1"`, marks the MCP server instance as a headless session. This activates several session-scoped behaviors:
+
+- **Kitchen pre-opened**: all kitchen-tagged pipeline tools are revealed at startup and the gate is pre-enabled — no `open_kitchen` call required
+- **Orchestration blocked**: `run_skill`, `run_cmd`, and `run_python` are denied (headless sessions execute tasks, they do not orchestrate sub-sessions)
+- **`open_kitchen` blocked**: cannot be triggered from within a headless session
+- **Env isolation**: server-private env vars are stripped from any subprocess env passed to test runners, preventing leakage into user code
+
+This is automatically set by `autoskillit cook`, `chefs-hat`, and when launching sub-recipe headless sessions. Do **not** set this manually in user-facing orchestration sessions — it disables the protection that prevents the orchestrator from accidentally calling gated pipeline tools outside of a pipeline context.
 
 ## Full Example
 
@@ -136,3 +258,22 @@ reset_workspace:
 github:
   default_repo: "my-org/my-repo"
 ```
+
+## Merge Queue Configuration
+
+AutoSkillit's `wait_for_merge_queue` tool and the queue mode in `merge-prs` work
+with GitHub's merge queue feature. For best results with automation use cases:
+
+### `min_entries_to_merge_wait_minutes` = 0
+
+GitHub branch rulesets expose a `min_entries_to_merge_wait_minutes` setting that adds
+latency before a queued PR is eligible to merge. For the `integration` branch (or any
+branch where AutoSkillit manages the PR queue), set this to `0`.
+
+**Why:** AutoSkillit enters PRs one at a time or in small batches. A non-zero wait
+multiplier adds unnecessary latency per PR. Setting it to `0` lets PRs merge as soon
+as their CI passes.
+
+**Location:** GitHub → Repository Settings → Branches → Branch protection rules →
+select the integration ruleset → Merge queue → "Minimum entries to merge — wait X minutes".
+Set to `0`.

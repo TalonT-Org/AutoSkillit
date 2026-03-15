@@ -1612,35 +1612,3 @@ class TestRecipeIntegrationPredicateRouting:
             assert errors == [], f"{name} has ERROR-severity semantic findings: " + str(
                 [(f.rule, f.step_name, f.message) for f in errors]
             )
-
-    def test_bugfix_loop_merge_step_has_complete_predicate_routing(self) -> None:
-        """The merge step in bugfix-loop.yaml has complete predicate on_result routing."""
-        bf_recipe = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
-        step = bf_recipe.steps["merge"]
-        assert step.on_result is not None
-        assert step.on_result.conditions, "merge step must have predicate conditions"
-        assert len(step.on_result.conditions) == 6
-
-        cond0 = step.on_result.conditions[0]
-        assert cond0.when == "result.failed_step == 'dirty_tree'"
-        assert cond0.route == "assess"
-
-        cond1 = step.on_result.conditions[1]
-        assert cond1.when == "result.failed_step == 'test_gate'"
-        assert cond1.route == "assess"
-
-        cond2 = step.on_result.conditions[2]
-        assert cond2.when == "result.failed_step == 'post_rebase_test_gate'"
-        assert cond2.route == "assess"
-
-        cond3 = step.on_result.conditions[3]
-        assert cond3.when == "result.failed_step == 'rebase'"
-        assert cond3.route == "assess"
-
-        cond4 = step.on_result.conditions[4]
-        assert cond4.when == "result.error"
-        assert cond4.route == "escalate"
-
-        cond5 = step.on_result.conditions[5]
-        assert cond5.when is None
-        assert cond5.route == "done"

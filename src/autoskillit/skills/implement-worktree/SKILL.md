@@ -147,23 +147,28 @@ Before running the test suite, confirm the following to prevent avoidable test-f
   the `## Architecture` section in CLAUDE.md reflects them
 - [ ] **Recipe diagrams** — if any recipe YAML file was added or modified, either regenerate
   diagrams (`task diagrams`) or confirm new diagram files are listed in `.gitignore`
-- [ ] **Tool registrations** — if new MCP tools were added, they appear in `GATED_TOOLS` or
-  `UNGATED_TOOLS` in `src/autoskillit/pipeline/gate.py`
-- [ ] **Skill registrations** — if new skills were added, they are discoverable by
-  `SkillResolver` (present in `src/autoskillit/skills/`) and listed in CLAUDE.md's skills section
+- [ ] **Project-specific registration checks** — if the project maintains a registry of
+  components (e.g., a tool registry, a plugin manifest, a module index), verify any
+  newly added components are registered. This prevents cascading test failures caused
+  by missing registrations rather than implementation bugs.
+- [ ] **Documentation consistency** — if the project maintains architecture documentation
+  or a component count (e.g., in CLAUDE.md, README, or API docs), update it to reflect
+  new components added during this implementation.
 - [ ] **Count-based test assertions** — if tool, skill, or rule counts have changed, update any
-  `assert len(...) ==` assertions in the test suite before running `task test-all`
+  `assert len(...) ==` assertions in the test suite before running `{test_command}`
 
 This checklist exists because these categories produce avoidable test-fix cycles: a single
 missed registration generates 5–30 cascading test failures that require a second commit to fix.
 
 ### Step 5: Final Verification
 
+Read the configured test command from `.autoskillit/config.yaml` (key: `test_check.command`). Use this command wherever `{test_command}` appears below. If no config exists, use `task test-check` as the default.
+
 Run the project's code quality checks and test suite from the worktree.
 
 ```bash
 cd "${WORKTREE_PATH}" && pre-commit run --all-files
-cd "${WORKTREE_PATH}" && task test-all
+cd "${WORKTREE_PATH}" && {test_command}
 ```
 
 If tests fail, fix the issue and re-run.
@@ -187,8 +192,8 @@ Do not merge until user confirms first!
 Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
 
 ```
-worktree_path=${WORKTREE_PATH}
-branch_name=${WORKTREE_NAME}
+worktree_path = ${WORKTREE_PATH}
+branch_name = ${WORKTREE_NAME}
 ```
 
 ### Step 7.5: Reset Code Index to Original Project (REQUIRED)

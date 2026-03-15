@@ -5,6 +5,9 @@ so callers can do either `from autoskillit.core import get_logger` or the
 explicit `from autoskillit.core.logging import get_logger`.
 """
 
+from .branch_guard import is_protected_branch
+from .github_url import normalize_owner_repo as normalize_owner_repo
+from .github_url import parse_github_repo as parse_github_repo
 from .io import (
     YAMLError,
     _atomic_write,
@@ -27,16 +30,21 @@ from .paths import (
 )
 from .types import (
     AUTOSKILLIT_INSTALLED_VERSION,
+    AUTOSKILLIT_PRIVATE_ENV_VARS,
     AUTOSKILLIT_SKILL_PREFIX,
     CONTEXT_EXHAUSTION_MARKER,
     GATED_TOOLS,
+    HEADLESS_BLOCKED_UNGATED_TOOLS,
     PIPELINE_FORBIDDEN_TOOLS,
     RESERVED_LOG_RECORD_KEYS,
     SKILL_COMMAND_PREFIX,
     SKILL_TOOLS,
+    TOOL_CATEGORIES,
     UNGATED_TOOLS,
+    WORKER_TOOLS,
     AuditStore,
     ChannelConfirmation,
+    CIRunScope,
     CIWatcher,
     ClaudeFlags,
     CleanupResult,
@@ -50,6 +58,7 @@ from .types import (
     LoadResult,
     McpResponseStore,
     MergeFailedStep,
+    MergeQueueWatcher,
     MergeState,
     MigrationService,
     OutputFormat,
@@ -74,6 +83,11 @@ from .types import (
 )
 
 __all__ = [
+    # branch_guard
+    "is_protected_branch",
+    # github_url
+    "normalize_owner_repo",
+    "parse_github_repo",
     # io
     "YAMLError",
     "atomic_write",
@@ -94,16 +108,22 @@ __all__ = [
     # types
     "ClaudeFlags",
     "AUTOSKILLIT_INSTALLED_VERSION",
+    "AUTOSKILLIT_PRIVATE_ENV_VARS",
     "AUTOSKILLIT_SKILL_PREFIX",
     "CONTEXT_EXHAUSTION_MARKER",
     "GATED_TOOLS",
+    "HEADLESS_BLOCKED_UNGATED_TOOLS",
     "PIPELINE_FORBIDDEN_TOOLS",
     "RESERVED_LOG_RECORD_KEYS",
     "SKILL_COMMAND_PREFIX",
     "SKILL_TOOLS",
+    "TOOL_CATEGORIES",
     "UNGATED_TOOLS",
+    "WORKER_TOOLS",
     "AuditStore",
+    "CIRunScope",
     "CIWatcher",
+    "MergeQueueWatcher",
     "ChannelConfirmation",
     "CleanupResult",
     "CloneManager",

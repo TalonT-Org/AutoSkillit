@@ -39,11 +39,14 @@ branch already checked out.
 - Fetch both inline comments (`pulls/{number}/comments`) and top-level review
   bodies (`pulls/{number}/reviews`) via the GitHub API
 - Commit each distinct fix separately with a message describing what was addressed
-- Run `task test-check` after applying all fixes to catch regressions
+- Run `{test_command}` (from config, default: `task test-check`) after applying all fixes to catch regressions
 - Gracefully degrade (exit 0, report skip) if `gh` is unavailable or no PR is found
 - Report a structured summary: findings fetched, fixes applied, fixes skipped (with reasons)
 
 ## Workflow
+
+Read `test_check.command` from `.autoskillit/config.yaml` (default: `task test-check`).
+Store the resolved command as `{test_command}` for use in all test-running steps.
 
 ### Step 0: Validate Arguments
 
@@ -80,9 +83,33 @@ Fetch top-level review bodies (summary reviews):
 gh api repos/{owner}/{repo}/pulls/{number}/reviews --paginate
 ```
 
+Fetch review thread node IDs (needed for thread resolution in Step 6) using
+cursor-based pagination to handle PRs with more than 100 threads:
+
+```bash
+# Fetch all pages; repeat with after=$endCursor while hasNextPage is true
+gh api graphql \
+  -f query='query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}nodes{id isResolved comments(first:1){nodes{databaseId}}}}}}}' \
+  -F owner="$owner" \
+  -F repo="$repo" \
+  -F number=$number \
+  -F after=""
+```
+
+Collect all `nodes` across pages into a single list. Continue fetching while
+`pageInfo.hasNextPage` is `true`, passing `pageInfo.endCursor` as `$after`.
+
 Save raw responses to:
 - `temp/resolve-review/inline_comments_{pr_number}.json`
 - `temp/resolve-review/reviews_{pr_number}.json`
+- `temp/resolve-review/threads_{pr_number}.json` (first page; subsequent pages merged in memory)
+
+Build a lookup map from the threads response:
+- `comment_id_to_thread_id: dict[int, str]` — key: comment `databaseId` (integer), value: thread GraphQL `id` (string node ID)
+- Skip threads where `isResolved` is already `true` (no need to resolve again)
+
+If the GraphQL call fails (e.g., token lacks `read:discussion` scope), log a warning and
+set `comment_id_to_thread_id = {}`. Thread resolution will be silently skipped in Step 6.
 
 ### Step 3: Parse and Classify Findings
 
@@ -91,6 +118,9 @@ From **inline comments**, extract per comment:
 - `line` — the line being commented on
 - `body` — the reviewer's message
 - `diff_hunk` — surrounding context
+- `id` — the comment's REST database ID (integer `id` field in the JSON)
+- `thread_node_id` — look up `comment_id_to_thread_id.get(id)` (may be `None` if lookup
+  failed or thread was already resolved)
 
 From **top-level reviews**, extract:
 - `state` — APPROVED, CHANGES_REQUESTED, COMMENTED
@@ -109,6 +139,8 @@ When a finding matches multiple tiers, use the highest severity.
 
 ### Step 4: Apply Fixes (max 3 iterations)
 
+Initialize `addressed_thread_ids: list[str] = []` before processing findings.
+
 For each actionable finding (process critical findings first, then warnings):
 
 1. Read the referenced file and ±20 lines of context around the comment line
@@ -122,6 +154,9 @@ For each actionable finding (process critical findings first, then warnings):
    git commit -m "fix(review): {brief description of reviewer's request}"
    ```
 
+**Apply the fix flow:** After committing the fix:
+- Append the finding's `thread_node_id` to `addressed_thread_ids` (if not `None`).
+
 **Skip a finding if:**
 - The referenced file does not exist in the current branch
 - The finding references a line number that no longer exists (stale comment)
@@ -130,18 +165,45 @@ For each actionable finding (process critical findings first, then warnings):
 
 Record each skip with: `(file, line, reason)`.
 
+**Skip a finding flow:** When skipping a finding (stale comment, missing file, unclear guidance, contradiction):
+- Record `(file, line, reason)` as before.
+- Do NOT add the finding's `thread_node_id` to `addressed_thread_ids`.
+
 ### Step 5: Run Tests
 
 ```bash
-task test-check
+{test_command}
 ```
 
-- Pass → proceed to Step 6
+- Pass → proceed to Step 6 (Resolve Addressed Review Threads)
 - Fail (iteration < 3): analyze failures against the fixes applied, revert/adjust the
   problematic commit, re-commit and retry (increment iteration counter)
 - Fail (iteration >= 3): report failure, leave working directory intact, exit non-zero
 
-### Step 6: Report
+### Step 6: Resolve Addressed Review Threads
+
+For each `thread_id` in `addressed_thread_ids`:
+
+```bash
+gh api graphql \
+  -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' \
+  -f threadId="$thread_id"
+```
+
+- **Success** (`isResolved: true` in response): increment `resolved_count`.
+- **Failure** (non-zero exit code, parse error, or `isResolved: false`): log a warning
+  `"Warning: could not resolve thread {thread_id}: {error}"`. Continue to the next thread.
+  Do not modify exit code.
+
+Track:
+- `resolved_count: int` — successfully resolved threads
+- `resolve_failed_count: int` — threads that could not be resolved (permissions, network)
+
+This step is a best-effort operation. Failure to resolve any thread must never cause the
+overall skill to exit non-zero. Thread resolution failure does not affect the exit code of
+the overall skill.
+
+### Step 7: Report
 
 Print a structured summary to terminal:
 
@@ -155,11 +217,13 @@ Findings fetched: {total}
 Fixes applied: {n}
 Fixes skipped: {n}
   - {file}:{line} — {reason}
+Threads resolved: {resolved_count}/{len(addressed_thread_ids)}
+  - {resolve_failed_count} failed (warnings logged above)
 Test iterations: {n}
 Status: PASS
 ```
 
-Save full report to `temp/resolve-review/report_{pr_number}_{timestamp}.md`.
+Save full report to `temp/resolve-review/report_{pr_number}_{timestamp}.md`. (relative to the current working directory)
 
 Exit 0.
 

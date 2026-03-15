@@ -35,7 +35,7 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Pause for human input on ambiguous classifications
-- Write the triage report and manifest to `temp/triage-issues/`
+- Write the triage report and manifest to `temp/triage-issues/` (relative to the current working directory)
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include rationale for every recipe classification
 - Record human decisions in the final report
@@ -65,11 +65,16 @@ mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
 
 Code-index tools require **project-relative paths**. Always use paths like:
 
-    src/autoskillit/execution/headless.py
+    src/<your_package>/some_module.py
 
 NOT absolute paths like:
 
-    /path/to/project/src/autoskillit/execution/headless.py
+    /absolute/path/to/src/<your_package>/some_module.py
+
+> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
+> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
+> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
+> for the same searches — they provide equivalent results without the code-index server.
 
 Agents launched via `run_skill` inherit no code-index state from the parent session — this
 call is mandatory at the start of every headless session that uses code-index tools.
@@ -335,16 +340,28 @@ temp/triage-issues/
 
 ## Output Fields (for recipe capture)
 
-The skill prints a final JSON result block for recipe capture:
+After the triage report and manifest are written, emit the following structured output
+tokens as the very last lines of your text output:
 
-```json
-{
-    "triage_report": "temp/triage-issues/triage_report_{ts}.md",
-    "triage_manifest": "temp/triage-issues/triage_manifest_{ts}.json",
-    "total_issues": 12,
-    "batch_count": 3,
-    "recipe_distribution": {"implementation": 8, "remediation": 4}
-}
+```
+triage_report = {absolute_path_to_report_file}
+triage_manifest = {absolute_path_to_manifest_file}
+total_issues = {integer_count}
+batch_count = {integer_count}
+recipe_distribution = {json_distribution_dict}
+```
+
+These emit lines are consumed by `capture:` in orchestrating recipes. The
+`triage_manifest` path is the primary output used by downstream recipe steps.
+
+Example emit block:
+
+```
+triage_report = temp/triage-issues/triage_report_20260310_120000.md
+triage_manifest = temp/triage-issues/triage_manifest_20260310_120000.json
+total_issues = 12
+batch_count = 3
+recipe_distribution = {"implementation": 8, "remediation": 4}
 ```
 
 ## Related Skills

@@ -29,6 +29,10 @@ safety:
   reset_guard_marker: ".autoskillit-workspace"
   require_dry_walkthrough: true
   test_gate_on_merge: true
+  protected_branches:
+    - main
+    - integration
+    - stable
 
 read_db:
   timeout: 30
@@ -66,6 +70,7 @@ github:
   token: null
   default_repo: null
   in_progress_label: "in-progress"
+  staged_label: "staged"
 
 report_bug:
   timeout: 600
@@ -90,4 +95,7 @@ mcp_response:
   alert_threshold_tokens: 2000
 
 branching:
-  default_base_branch: integration
+  default_base_branch: main
+
+ci:
+  workflow: null  # Workflow filename to filter CI runs, e.g. "tests.yml"

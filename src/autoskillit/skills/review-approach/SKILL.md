@@ -65,7 +65,7 @@ Drop anything that doesn't meaningfully inform the decision.
 
 ### Step 4: Write Review
 
-Save to: `temp/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+Save to: `temp/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ```markdown
 # Approach Review: {Topic}
@@ -98,5 +98,5 @@ After saving the review file, emit the structured output token as the very last 
 of your text output:
 
 ```
-review_path={absolute_path_to_review_file}
+review_path = {absolute_path_to_review_file}
 ```

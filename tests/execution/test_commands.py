@@ -32,9 +32,9 @@ class TestBuildInteractiveCmd:
         result = build_interactive_cmd()
         assert result.cmd[0] == "claude"
 
-    def test_env_has_kitchen_open(self) -> None:
+    def test_env_is_empty(self) -> None:
         result = build_interactive_cmd()
-        assert result.env.get("AUTOSKILLIT_KITCHEN_OPEN") == "1"
+        assert result.env == {}
 
     def test_accepts_model(self) -> None:
         result = build_interactive_cmd(model="claude-opus-4-6")
@@ -45,6 +45,16 @@ class TestBuildInteractiveCmd:
     def test_no_model_flag_when_model_is_none(self) -> None:
         result = build_interactive_cmd(model=None)
         assert ClaudeFlags.MODEL not in result.cmd
+
+    def test_includes_initial_prompt_as_positional_arg(self) -> None:
+        result = build_interactive_cmd(initial_prompt="Hello chef")
+        assert "Hello chef" in result.cmd
+        assert ClaudeFlags.PRINT not in result.cmd  # still interactive, not headless
+
+    def test_omits_prompt_when_initial_prompt_is_none(self) -> None:
+        result = build_interactive_cmd()
+        # cmd is just ["claude", "--dangerously-skip-permissions"]
+        assert len(result.cmd) == 2
 
 
 class TestBuildHeadlessCmd:

@@ -44,7 +44,7 @@ Do not change any code.
 - Focus on architectural immunity over direct fixes
 - Identify how tests missed the issue and similar/related bugs
 - Map the components and their connections thoroughly
-- Write the plan as markdown to `temp/rectify/` directory
+- Write the plan as markdown to `temp/rectify/` directory (relative to the current working directory)
 - The solution must solve more than just the immediate issue
 
 ## Rectify Workflow
@@ -72,11 +72,16 @@ mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
 
 Code-index tools require **project-relative paths**. Always use paths like:
 
-    src/autoskillit/execution/headless.py
+    src/<your_package>/some_module.py
 
 NOT absolute paths like:
 
-    /path/to/project/src/autoskillit/execution/headless.py
+    /absolute/path/to/src/<your_package>/some_module.py
+
+> **Note:** Code-index tools (`find_files`, `search_code_advanced`, `get_file_summary`,
+> `get_symbol_body`) are only available when the `code-index` MCP server is configured.
+> If `set_project_path` returns an error, fall back to native `Glob` and `Grep` tools
+> for the same searches — they provide equivalent results without the code-index server.
 
 Agents launched via `run_skill` inherit no code-index state from the parent session — this
 call is mandatory at the start of every headless session that uses code-index tools.
@@ -138,26 +143,26 @@ After finalizing the plan, determine which architecture lens best illustrates th
 
 **4b. Write your lens selection rationale to a file using the Write tool:**
 
-- **Path:** `temp/arch-lens-selection.md`
+- **Path:** `temp/rectify/arch_lens_selection_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:** Which lens was selected and why (1-2 sentences of rationale).
 
 **4c. MANDATORY: LOAD the appropriate arch-lens skill using the Skill tool:**
 
 | Lens | Skill to LOAD |
 |------|---------------|
-| C4 Container | `/arch-lens-c4-container` |
-| Process Flow | `/arch-lens-process-flow` |
-| Data Lineage | `/arch-lens-data-lineage` |
-| Module Dependency | `/arch-lens-module-dependency` |
-| Concurrency | `/arch-lens-concurrency` |
-| Error/Resilience | `/arch-lens-error-resilience` |
-| Repository Access | `/arch-lens-repository-access` |
-| Operational | `/arch-lens-operational` |
-| Security | `/arch-lens-security` |
-| Development | `/arch-lens-development` |
-| Scenarios | `/arch-lens-scenarios` |
-| State Lifecycle | `/arch-lens-state-lifecycle` |
-| Deployment | `/arch-lens-deployment` |
+| C4 Container | `/autoskillit:arch-lens-c4-container` |
+| Process Flow | `/autoskillit:arch-lens-process-flow` |
+| Data Lineage | `/autoskillit:arch-lens-data-lineage` |
+| Module Dependency | `/autoskillit:arch-lens-module-dependency` |
+| Concurrency | `/autoskillit:arch-lens-concurrency` |
+| Error/Resilience | `/autoskillit:arch-lens-error-resilience` |
+| Repository Access | `/autoskillit:arch-lens-repository-access` |
+| Operational | `/autoskillit:arch-lens-operational` |
+| Security | `/autoskillit:arch-lens-security` |
+| Development | `/autoskillit:arch-lens-development` |
+| Scenarios | `/autoskillit:arch-lens-scenarios` |
+| State Lifecycle | `/autoskillit:arch-lens-state-lifecycle` |
+| Deployment | `/autoskillit:arch-lens-deployment` |
 
 **4d. Create the diagram following the loaded skill's instructions:**
 - Focus on the PROPOSED changes (use `newComponent` class for new elements)
@@ -174,7 +179,7 @@ Include the diagram in the plan document under a "## Proposed Architecture" sect
 Before writing the final plan, verify:
 
 - [ ] Determined which architecture lens best fits the proposed changes
-- [ ] LOADED the corresponding `/arch-lens-*` skill using the Skill tool
+- [ ] LOADED the corresponding `/autoskillit:arch-lens-*` skill using the Skill tool
 - [ ] The arch-lens skill LOADED the `/autoskillit:mermaid` skill for styling
 - [ ] Diagram uses ONLY the classDef styles from the mermaid skill (no invented colors)
 - [ ] Diagram includes a color legend table
@@ -190,20 +195,20 @@ If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b
 - The title of each part file MUST include `— PART A ONLY` (or B, C, etc.).
 - Each part file MUST open with: `> **PART {X} ONLY. Do not implement any other part. Other parts are separate tasks requiring explicit authorization.**`
 
-Save the plan to: `temp/rectify/rectify_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+Save the plan to: `temp/rectify/rectify_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 **Structured output:** After saving the file(s), emit the following lines so pipeline orchestrators can capture both fields:
 
 For a single-part plan:
 ```
-plan_path={absolute_path}
-plan_parts={absolute_path}
+plan_path = {absolute_path}
+plan_parts = {absolute_path}
 ```
 
 For a multi-part plan (list all part paths in alphabetical order):
 ```
-plan_path={path_to_part_a}
-plan_parts={path_to_part_a}
+plan_path = {path_to_part_a}
+plan_parts = {path_to_part_a}
 {path_to_part_b}
 {path_to_part_c}
 ```

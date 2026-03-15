@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 
 import structlog
@@ -21,7 +22,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("merge_worktree")
 async def merge_worktree(
     worktree_path: str,
@@ -85,7 +86,7 @@ async def merge_worktree(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("classify_fix")
 async def classify_fix(
     worktree_path: str,
@@ -124,12 +125,41 @@ async def classify_fix(
         extra={"worktree": worktree_path, "base": base_branch},
     )
 
+    if not os.path.isdir(worktree_path):
+        return json.dumps(
+            {
+                "restart_scope": RestartScope.FULL_RESTART,
+                "reason": f"worktree_path does not exist or is not a directory: {worktree_path}",
+                "critical_files": [],
+                "all_changed_files": [],
+            }
+        )
+
     from autoskillit.server import _get_config, _get_ctx
     from autoskillit.server.git import _filter_changed_files
 
     tool_ctx = _get_ctx()
     _start = time.monotonic()
     try:
+        fetch_rc, _, fetch_stderr = await _run_subprocess(
+            ["git", "fetch", "origin", base_branch],
+            cwd=worktree_path,
+            timeout=30,
+        )
+        if fetch_rc != 0:
+            return json.dumps(
+                {
+                    "restart_scope": RestartScope.FULL_RESTART,
+                    "reason": (
+                        f"git fetch origin {base_branch} failed — "
+                        "remote-tracking ref may be stale. "
+                        f"git error: {(fetch_stderr or '').strip()[:200]}"
+                    ),
+                    "critical_files": [],
+                    "all_changed_files": [],
+                }
+            )
+
         returncode, stdout, stderr = await _run_subprocess(
             ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
             cwd=worktree_path,
@@ -186,7 +216,7 @@ async def classify_fix(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("create_unique_branch")
 async def create_unique_branch(
     slug: str = "",
@@ -312,7 +342,7 @@ async def create_unique_branch(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("check_pr_mergeable")
 async def check_pr_mergeable(
     pr_number: int,
@@ -328,6 +358,7 @@ async def check_pr_mergeable(
     Returns JSON with:
       - mergeable: True when gh reports "MERGEABLE", False otherwise
       - merge_state_status: raw mergeStateStatus string (e.g. "CLEAN", "DIRTY")
+      - mergeable_status: raw GitHub mergeable string ("MERGEABLE" | "CONFLICTING" | "UNKNOWN")
     On gh failure: {"success": false, "error": "..."}
 
     Args:
@@ -365,5 +396,6 @@ async def check_pr_mergeable(
         {
             "mergeable": data.get("mergeable") == "MERGEABLE",
             "merge_state_status": data.get("mergeStateStatus", ""),
+            "mergeable_status": data.get("mergeable", ""),
         }
     )

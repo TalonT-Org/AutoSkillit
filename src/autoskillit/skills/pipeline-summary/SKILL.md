@@ -175,7 +175,7 @@ Output: `pr_url={url}`
 For recipe authors who want to include token/timing data in the PR body:
 
 1. Call the `get_token_summary` MCP tool to retrieve current pipeline token data.
-2. Write the JSON result to `temp/token_summary_{timestamp}.json` using a `run_python` step.
+2. Write the JSON result to `temp/token_summary_{timestamp}.json` using a `run_python` step. (relative to the current working directory)
    The `run_python` step executes in the MCP server process and has access to the live
    `ToolContext` via the server context; call `ctx.token_log.get_report()` and
    `ctx.token_log.compute_total()`, then write `{"steps": ..., "total": ...}` as JSON.

@@ -23,6 +23,7 @@ from autoskillit.execution.anomaly_detection import detect_anomalies
 logger = get_logger(__name__)
 
 _MAX_SESSIONS = 500
+_CLEAR_MARKER_FILENAME = ".telemetry_cleared_at"
 
 
 def resolve_log_dir(log_dir: str) -> Path:
@@ -34,6 +35,32 @@ def resolve_log_dir(log_dir: str) -> Path:
     xdg = os.environ.get("XDG_DATA_HOME")
     base = Path(xdg) if xdg else Path.home() / ".local" / "share"
     return base / "autoskillit" / "logs"
+
+
+def write_telemetry_clear_marker(log_root: Path) -> None:
+    """Write the current UTC timestamp as a telemetry-clear fence.
+
+    Called when any pipeline log is cleared via clear=True. On the next server
+    startup, _state._initialize reads this marker and excludes sessions that
+    predate it from load_from_log_dir replay, preventing double-counting.
+
+    Silently no-ops on any error — never raises.
+    """
+    try:
+        log_root = Path(log_root)
+        log_root.mkdir(parents=True, exist_ok=True)
+        _atomic_write(log_root / _CLEAR_MARKER_FILENAME, datetime.now(UTC).isoformat())
+    except Exception:
+        logger.debug("write_telemetry_clear_marker failed", exc_info=True)
+
+
+def read_telemetry_clear_marker(log_root: Path) -> datetime | None:
+    """Read the persisted telemetry-clear timestamp, or None if absent/corrupt."""
+    try:
+        text = (Path(log_root) / _CLEAR_MARKER_FILENAME).read_text(encoding="utf-8").strip()
+        return datetime.fromisoformat(text)
+    except (OSError, ValueError):
+        return None
 
 
 def flush_session_log(
@@ -56,6 +83,8 @@ def flush_session_log(
     token_usage: dict[str, Any] | None = None,
     timing_seconds: float | None = None,
     audit_record: dict[str, Any] | None = None,
+    cli_subtype: str = "",
+    write_path_warnings: list[str] | None = None,
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -67,6 +96,9 @@ def flush_session_log(
     token_usage.json, step_timing.json, and (if audit_record) audit_log.json
     to the session directory for recovery at next server startup.
     """
+    effective_write_path_warnings: list[str] = (
+        write_path_warnings if write_path_warnings is not None else []
+    )
     log_root = resolve_log_dir(log_dir)
     dir_name = session_id if session_id else f"no_session_{start_ts.replace(':', '-')}"
 
@@ -150,6 +182,7 @@ def flush_session_log(
         "skill_command": skill_command,
         "success": success,
         "subtype": subtype,
+        "cli_subtype": cli_subtype,
         "exit_code": exit_code,
         "start_ts": start_ts,
         "end_ts": end_ts,
@@ -161,6 +194,7 @@ def flush_session_log(
         "peak_oom_score": peak_oom_score,
         "peak_fd_ratio": round(peak_fd_ratio, 3),
         "termination_reason": termination_reason,
+        "write_path_warnings": effective_write_path_warnings,
     }
     summary_path = session_dir / "summary.json"
     _atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
@@ -196,6 +230,7 @@ def flush_session_log(
         "skill_command": skill_command[:100],
         "success": success,
         "subtype": subtype,
+        "cli_subtype": cli_subtype,
         "exit_code": exit_code,
         "snapshot_count": snapshot_count,
         "anomaly_count": anomaly_count,

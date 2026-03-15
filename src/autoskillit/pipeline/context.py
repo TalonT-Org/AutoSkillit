@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     AuditStore,
+    CIRunScope,
     CIWatcher,
     CloneManager,
     DatabaseReader,
@@ -19,6 +20,7 @@ from autoskillit.core import (
     GitHubFetcher,
     HeadlessExecutor,
     McpResponseStore,
+    MergeQueueWatcher,
     MigrationService,
     OutputPatternResolver,
     RecipeRepository,
@@ -60,6 +62,7 @@ class ToolContext:
     clone_mgr:            CloneManager — clone-based pipeline run isolation
     github_client:        GitHubFetcher — fetches GitHub issue content
     ci_watcher:           CIWatcher — watches GitHub Actions CI runs
+    merge_queue_watcher:  MergeQueueWatcher — polls GitHub merge queue for a PR
     session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
     """
 
@@ -80,5 +83,12 @@ class ToolContext:
     clone_mgr: CloneManager | None = field(default=None)
     github_client: GitHubFetcher | None = field(default=None)
     ci_watcher: CIWatcher | None = field(default=None)
+    merge_queue_watcher: MergeQueueWatcher | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
+
+    @property
+    def default_ci_scope(self) -> CIRunScope:
+        """Build the default CI scope from config. Used by handlers as fallback when
+        the caller does not supply a workflow argument."""
+        return CIRunScope(workflow=self.config.ci.workflow)

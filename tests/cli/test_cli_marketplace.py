@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
-import pytest
-
 
 # MK1
 def test_marketplace_module_exists():
@@ -33,41 +29,33 @@ def test_clear_plugin_cache_importable_from_marketplace():
 
 
 # MK6
-def test_install_not_defined_in_app_module():
-    """install must have moved -- not defined in cli/app.py."""
+def test_install_defined_in_app_module():
+    """install command is registered in cli/app.py as a thin @app.command wrapper."""
     import importlib
     import inspect
 
     app_mod = importlib.import_module("autoskillit.cli.app")
-
     src = inspect.getsource(app_mod)
-    # The @app.command install definition should NOT be in app.py
-    # (only a forwarding import or nothing)
-    assert "def install(" not in src, (
-        "install() should be defined in cli/_marketplace.py, not cli/app.py"
-    )
+    assert "def install(" in src
 
 
 # MK-DEP-1
-def test_install_not_registered_as_cli_command():
-    """autoskillit install is not a registered CLI command."""
+def test_install_registered_as_cli_command():
+    """autoskillit install is a registered CLI command (delegates to _marketplace)."""
     from autoskillit import cli
 
-    with pytest.raises(SystemExit) as exc_info:
-        with patch("sys.argv", ["autoskillit", "install"]):
-            cli.main()
-    assert exc_info.value.code != 0
+    assert hasattr(cli, "install")
 
 
 # MK-DEP-2
-def test_upgrade_not_registered_as_cli_command():
-    """autoskillit upgrade is not a registered CLI command."""
-    from autoskillit import cli
+def test_upgrade_is_registered_as_cli_command():
+    """autoskillit upgrade must be a registered CLI command (defined in cli/app.py)."""
+    import importlib
+    import inspect
 
-    with pytest.raises(SystemExit) as exc_info:
-        with patch("sys.argv", ["autoskillit", "upgrade"]):
-            cli.main()
-    assert exc_info.value.code != 0
+    app_mod = importlib.import_module("autoskillit.cli.app")
+    src = inspect.getsource(app_mod)
+    assert "def upgrade(" in src
 
 
 # MK-DEP-3

@@ -4,13 +4,29 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autoskillit"
-version = "0.3.0"
+version = "0.4.0"
 description = "MCP server for orchestrating automated skill-driven workflows with Claude Code"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Talon Trecek", email = "talontrecek@gmail.com"},
+]
+keywords = ["claude", "claude-code", "automation", "ai", "mcp", "plugin"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 requires-python = ">=3.11"
 dependencies = [
     "anyio>=4.6.0",
     "dynaconf>=3.2.12,<4.0",
-    "fastmcp>=3.0.2",
+    "fastmcp>=3.1.1,<4.0",
     "httpx>=0.28,<0.29",
     "igraph>=1.0",
     "packaging>=23.0",
@@ -32,6 +48,12 @@ dev = [
     "packaging>=25.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/TalonT-Org/AutoSkillit"
+Repository = "https://github.com/TalonT-Org/AutoSkillit"
+Documentation = "https://github.com/TalonT-Org/AutoSkillit/tree/stable/docs"
+"Bug Tracker" = "https://github.com/TalonT-Org/AutoSkillit/issues"
+
 [project.scripts]
 autoskillit = "autoskillit.cli:main"
 
@@ -43,6 +65,14 @@ artifacts = [
     "src/autoskillit/migrations/**",
     "src/autoskillit/hooks/**",
     "src/autoskillit/config/defaults.yaml",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/autoskillit/**",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
 ]
 
 [tool.pytest.ini_options]

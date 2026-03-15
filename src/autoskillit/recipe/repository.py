@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import autoskillit.recipe._api as _api
 from autoskillit.recipe.io import builtin_recipes_dir, list_recipes
@@ -52,11 +52,25 @@ class DefaultRecipeRepository:
         return self._get_list(project_dir)
 
     def load_and_validate(
-        self, name: str, project_dir: Any, *, suppressed: Sequence[str] | None = None
+        self,
+        name: str,
+        project_dir: Any,
+        *,
+        suppressed: Sequence[str] | None = None,
+        resolved_defaults: dict[str, str] | None = None,
+        ingredient_overrides: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         recipe_info = self.find(name, project_dir)
-        return _api.load_and_validate(
-            name, project_dir=project_dir, suppressed=suppressed, recipe_info=recipe_info
+        return cast(
+            dict[str, Any],
+            _api.load_and_validate(
+                name,
+                project_dir=project_dir,
+                suppressed=suppressed,
+                recipe_info=recipe_info,
+                resolved_defaults=resolved_defaults,
+                ingredient_overrides=ingredient_overrides,
+            ),
         )
 
     def validate_from_path(self, script_path: Any) -> dict[str, Any]:

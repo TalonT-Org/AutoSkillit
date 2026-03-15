@@ -173,6 +173,21 @@ def test_merge_prs_routes_escalation_to_stop(recipe):
     assert "escalate_stop" in recipe["steps"], "escalate_stop must be a defined step in the recipe"
 
 
+@pytest.fixture(scope="module")
+def skill_contracts_yaml():
+    from autoskillit.core.io import load_yaml
+
+    contracts_path = pkg_root() / "recipe" / "skill_contracts.yaml"
+    return load_yaml(contracts_path)
+
+
+@pytest.fixture(scope="module")
+def merge_prs_recipe():
+    from autoskillit.core.io import load_yaml
+
+    return load_yaml(RECIPE_PATH)
+
+
 def _skill_text(skill_name: str) -> str:
     return (SKILLS_ROOT / skill_name / "SKILL.md").read_text()
 
@@ -228,4 +243,101 @@ def test_resolve_merge_conflicts_in_skill_contracts():
     contracts = yaml.safe_load(contracts_path.read_text())
     assert "resolve-merge-conflicts" in contracts.get("skills", {}), (
         "skill_contracts.yaml must declare resolve-merge-conflicts as a key under 'skills'"
+    )
+
+
+# ── New: conflict decision report guards ────────────────────────────────────
+
+
+def test_resolve_merge_conflicts_emits_conflict_report_path():
+    """resolve-merge-conflicts SKILL.md must declare conflict_report_path= emit."""
+    skill_md_path = SKILLS_ROOT / "resolve-merge-conflicts" / "SKILL.md"
+    text = skill_md_path.read_text()
+    assert "conflict_report_path" in text, (
+        "resolve-merge-conflicts/SKILL.md must emit conflict_report_path= "
+        "as an output token after successful resolution"
+    )
+
+
+def test_resolve_merge_conflicts_writes_decision_report():
+    """resolve-merge-conflicts SKILL.md must describe writing a report file."""
+    skill_md_path = SKILLS_ROOT / "resolve-merge-conflicts" / "SKILL.md"
+    text = skill_md_path.read_text()
+    assert "conflict_resolution_report_" in text, (
+        "resolve-merge-conflicts/SKILL.md must document writing "
+        "conflict_resolution_report_*.md to temp/"
+    )
+
+
+def test_resolve_merge_conflicts_report_has_required_columns():
+    """Report table must include all five required columns per REQ-RPT-001."""
+    skill_md_path = SKILLS_ROOT / "resolve-merge-conflicts" / "SKILL.md"
+    text = skill_md_path.read_text()
+    for column in ("Category", "Confidence", "Strategy", "Justification"):
+        assert column in text, (
+            f"resolve-merge-conflicts/SKILL.md report format must include "
+            f"'{column}' column per REQ-RPT-001"
+        )
+
+
+def test_resolve_merge_conflicts_report_has_summary_header():
+    """Report must document a summary header with worktree path and counts per REQ-RPT-002."""
+    skill_md_path = SKILLS_ROOT / "resolve-merge-conflicts" / "SKILL.md"
+    text = skill_md_path.read_text()
+    assert "Files Conflicting" in text or "Files Resolved" in text, (
+        "resolve-merge-conflicts/SKILL.md must document a summary header "
+        "with conflict/resolved file counts per REQ-RPT-002"
+    )
+
+
+def test_resolve_merge_conflicts_contract_has_conflict_report_path(skill_contracts_yaml):
+    """skill_contracts.yaml must include conflict_report_path in resolve-merge-conflicts outputs."""
+    outputs = skill_contracts_yaml["skills"]["resolve-merge-conflicts"]["outputs"]
+    output_names = [o["name"] for o in outputs]
+    assert "conflict_report_path" in output_names, (
+        "skill_contracts.yaml must declare conflict_report_path as an output "
+        "of resolve-merge-conflicts per REQ-CTR-001"
+    )
+
+
+def test_merge_prs_captures_conflict_report_from_resolve_integration(merge_prs_recipe):
+    """resolve_integration_conflicts step must capture conflict_report_path per REQ-PIP-001."""
+    step = merge_prs_recipe["steps"]["resolve_integration_conflicts"]
+    capture_block = {**(step.get("capture") or {}), **(step.get("capture_list") or {})}
+    assert any(
+        "conflict_report_path" in v
+        for v in capture_block.values()
+    ), (
+        "merge-prs.yaml resolve_integration_conflicts step must capture "
+        "conflict_report_path per REQ-PIP-001"
+    )
+
+
+def test_open_integration_pr_embeds_conflict_resolution_decisions():
+    """open-integration-pr SKILL.md must embed Conflict Resolution Decisions section."""
+    skill_md_path = SKILLS_ROOT / "open-integration-pr" / "SKILL.md"
+    text = skill_md_path.read_text()
+    assert "Conflict Resolution Decisions" in text, (
+        "open-integration-pr/SKILL.md must describe embedding a "
+        "'Conflict Resolution Decisions' section per REQ-PIP-002"
+    )
+
+
+def test_open_pr_embeds_conflict_resolution_decisions():
+    """open-pr SKILL.md must embed Conflict Resolution Decisions section."""
+    skill_md_path = SKILLS_ROOT / "open-pr" / "SKILL.md"
+    text = skill_md_path.read_text()
+    assert "Conflict Resolution Decisions" in text, (
+        "open-pr/SKILL.md must describe embedding a "
+        "'Conflict Resolution Decisions' section per REQ-PIP-003"
+    )
+
+
+def test_audit_impl_cross_references_conflict_report():
+    """audit-impl SKILL.md must describe cross-referencing the conflict resolution report."""
+    skill_md_path = SKILLS_ROOT / "audit-impl" / "SKILL.md"
+    text = skill_md_path.read_text()
+    assert "conflict_report_path" in text or "conflict resolution report" in text.lower(), (
+        "audit-impl/SKILL.md must describe cross-referencing conflict_report_paths "
+        "against the original plan per REQ-AUD-001"
     )

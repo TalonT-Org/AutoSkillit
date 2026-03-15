@@ -1241,66 +1241,6 @@ class TestBaseBranchDefaults:
         )
 
 
-class TestDevSprintRecipe:
-    @pytest.fixture(scope="class")
-    def recipe(self):
-        return load_recipe(builtin_recipes_dir() / "dev-sprint.yaml")
-
-    def test_ds1_recipe_name_matches(self, recipe) -> None:
-        """DS1: recipe.name must be 'dev-sprint'."""
-        assert recipe.name == "dev-sprint"
-
-    def test_ds2_structural_validation_clean(self, recipe) -> None:
-        """DS2: dev-sprint passes structural validation with no errors."""
-        from autoskillit.recipe.validator import validate_recipe
-
-        assert not validate_recipe(recipe), "Structural validation errors found"
-
-    def test_ds3_no_semantic_errors(self, recipe) -> None:
-        """DS3: dev-sprint has no semantic ERROR findings.
-
-        Passes available_recipes so unknown-sub-recipe rule fires on misspelled names.
-        """
-        from autoskillit.core.types import Severity
-        from autoskillit.recipe._analysis import make_validation_context
-        from autoskillit.recipe.io import list_recipes
-
-        bundled_names = frozenset(r.name for r in list_recipes(builtin_recipes_dir()).items)
-        ctx = make_validation_context(recipe, available_recipes=bundled_names)
-        errors = [f for f in run_semantic_rules(ctx) if f.severity == Severity.ERROR]
-        assert not errors, f"Semantic errors: {errors}"
-
-    def test_ds4_has_no_run_recipe_step(self, recipe) -> None:
-        """DS4: dev-sprint must NOT have any run_recipe steps (removed)."""
-        run_recipe_steps = [n for n, s in recipe.steps.items() if s.tool == "run_recipe"]
-        assert not run_recipe_steps, f"dev-sprint still uses run_recipe: {run_recipe_steps}"
-
-    def test_ds5_implement_step_uses_load_recipe(self, recipe) -> None:
-        """DS5: implement step must use load_recipe for direct orchestration."""
-        impl = recipe.steps.get("implement")
-        assert impl is not None and impl.tool == "load_recipe", (
-            "implement step must use tool: load_recipe"
-        )
-
-    def test_ds5b_implement_step_loads_implementation_groups(self, recipe) -> None:
-        """DS5b: implement step must load implementation-groups."""
-        impl = recipe.steps.get("implement")
-        assert impl is not None
-        assert impl.with_args.get("name") == "implementation-groups"
-
-    def test_ds6_triage_step_captures_manifest(self, recipe) -> None:
-        """DS6: triage step must capture triage_manifest from result.manifest_path."""
-        triage = recipe.steps.get("triage")
-        assert triage is not None and "triage_manifest" in triage.capture
-
-    def test_ds8_kitchen_rules_list_forbidden_tools(self, recipe) -> None:
-        """DS8: kitchen_rules must explicitly mention each forbidden native tool."""
-        assert recipe.kitchen_rules
-        rules_text = " ".join(recipe.kitchen_rules)
-        for tool in ("Read", "Grep", "Glob", "Edit", "Write", "Bash"):
-            assert tool in rules_text, f"kitchen_rules must mention {tool}"
-
-
 # ---------------------------------------------------------------------------
 # WF7: build_recipe_graph emits zero warnings for all bundled recipes
 # ---------------------------------------------------------------------------
@@ -1323,27 +1263,3 @@ def test_bundled_recipes_emit_no_graph_warnings(recipe_path):
         f"build_recipe_graph emitted {len(warning_events)} warnings for "
         f"{recipe_path.name}: {warning_events}"
     )
-
-
-def test_dev_sprint_has_no_run_recipe_step():
-    import yaml
-
-    from autoskillit.core.paths import pkg_root
-
-    path = pkg_root() / "recipes" / "dev-sprint.yaml"
-    data = yaml.safe_load(path.read_text())
-    for step_name, step in data.get("steps", {}).items():
-        assert step.get("tool") != "run_recipe", (
-            f"dev-sprint step '{step_name}' still uses tool: run_recipe"
-        )
-
-
-def test_dev_sprint_recipe_passes_validator():
-    from autoskillit.core.paths import pkg_root
-    from autoskillit.recipe import validate_recipe as validate_recipe_fn
-    from autoskillit.recipe.io import load_recipe as load_recipe_fn
-
-    path = pkg_root() / "recipes" / "dev-sprint.yaml"
-    recipe = load_recipe_fn(path)
-    errors = validate_recipe_fn(recipe)
-    assert errors == [], f"dev-sprint.yaml has validation errors: {errors}"

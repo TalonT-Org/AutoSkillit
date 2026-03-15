@@ -11,6 +11,7 @@ Neither contracts.py nor io.py imports _analysis.py, so no cycle exists.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import igraph
 
@@ -212,6 +213,8 @@ class ValidationContext:
     dataflow: DataFlowReport
     available_recipes: frozenset[str] = field(default_factory=frozenset)
     available_skills: frozenset[str] = field(default_factory=frozenset)
+    available_sub_recipes: frozenset[str] = field(default_factory=frozenset)
+    project_dir: Path | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +267,19 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
                 if condition.route in step_names:
                     for pred in predecessors[name]:
                         graph[pred].add(condition.route)
+
+    # For each sub_recipe placeholder step (gate-controlled), add a bypass edge
+    # to the next step in YAML order. When the gate is false the step is dropped
+    # at load time; without this edge the next step becomes unreachable in the
+    # raw recipe graph, breaking reachability-based semantic rules.
+    step_names_list = list(recipe.steps.keys())
+    for i, (name, step) in enumerate(recipe.steps.items()):
+        if step.sub_recipe is None or i + 1 >= len(step_names_list):
+            continue
+        next_step = step_names_list[i + 1]
+        graph[name].add(next_step)
+        for pred in predecessors[name]:
+            graph[pred].add(next_step)
 
     return graph
 
@@ -557,6 +573,8 @@ def make_validation_context(
     *,
     available_recipes: frozenset[str] = frozenset(),
     available_skills: frozenset[str] = frozenset(),
+    available_sub_recipes: frozenset[str] = frozenset(),
+    project_dir: Path | None = None,
 ) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
 
@@ -571,4 +589,6 @@ def make_validation_context(
         dataflow=dataflow,
         available_recipes=available_recipes,
         available_skills=available_skills,
+        available_sub_recipes=available_sub_recipes,
+        project_dir=project_dir,
     )

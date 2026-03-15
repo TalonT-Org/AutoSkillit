@@ -12,6 +12,7 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import get_logger
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
+from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.helpers import (
     _apply_triage_gate,
     _notify,
@@ -46,8 +47,6 @@ async def list_recipes() -> str:
     """
     if (h := _require_not_headless("list_recipes")) is not None:
         return h
-    from autoskillit.server._state import _get_ctx_or_none
-
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps([])
@@ -57,7 +56,7 @@ async def list_recipes() -> str:
 
 @mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
 @track_response_size("load_recipe")
-async def load_recipe(name: str) -> str:
+async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str:
     """Load a recipe by name and return its raw YAML content.
 
     The YAML follows the recipe schema (ingredients, steps with tool/action,
@@ -171,15 +170,17 @@ async def load_recipe(name: str) -> str:
     """
     if (h := _require_not_headless("load_recipe")) is not None:
         return h
-    from autoskillit.server._state import _get_ctx_or_none
-
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"error": "Server not initialized"})
     suppressed = tool_ctx.config.migration.suppressed
     _defaults = resolve_ingredient_defaults(Path.cwd())
     result = tool_ctx.recipes.load_and_validate(
-        name, Path.cwd(), suppressed=suppressed, resolved_defaults=_defaults
+        name,
+        Path.cwd(),
+        suppressed=suppressed,
+        resolved_defaults=_defaults,
+        ingredient_overrides=overrides,
     )
     recipe_info = tool_ctx.recipes.find(name, Path.cwd())
     return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))
@@ -215,8 +216,6 @@ async def validate_recipe(script_path: str) -> str:
     """
     if (h := _require_not_headless("validate_recipe")) is not None:
         return h
-    from autoskillit.server._state import _get_ctx_or_none
-
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"valid": False, "errors": ["Server not initialized"]})

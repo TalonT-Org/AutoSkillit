@@ -1,5 +1,6 @@
 name: remediation
 description: Investigate deeply, plan architectural fix, implement and open a PR.
+summary: "[sprint: triage > plan > confirm > dispatch > report] | clone > investigate > rectify > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup"
 autoskillit_version: "0.3.0"
 
 kitchen_rules:
@@ -53,8 +54,24 @@ ingredients:
   issue_url:
     description: GitHub issue to close on merge
     required: false
+  sprint_mode:
+    description: Enable sprint sub-recipe prefix (triage → sprint selection → per-issue dispatch)
+    default: "false"
+    hidden: true
 
 steps:
+  sprint_entry:
+    sub_recipe: sprint-prefix
+    gate: sprint_mode
+    on_success: done
+    on_failure: escalate_stop
+    note: >
+      Sprint sub-recipe entry point. When sprint_mode=true, the sprint-prefix
+      sub-recipe steps are merged here and handle the full multi-issue workflow
+      (triage → planning → user approval → per-issue dispatch → report).
+      When sprint_mode=false (default), this step is dropped at load time and
+      the recipe starts at 'clone' as usual.
+
   clone:
     tool: clone_repo
     with:

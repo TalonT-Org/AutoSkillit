@@ -709,6 +709,7 @@ class RecipeRepository(Protocol):
         *,
         suppressed: Sequence[str] | None = None,
         resolved_defaults: dict[str, str] | None = None,
+        ingredient_overrides: dict[str, str] | None = None,
     ) -> dict[str, Any]: ...
 
     def validate_from_path(self, script_path: Any) -> dict[str, Any]: ...

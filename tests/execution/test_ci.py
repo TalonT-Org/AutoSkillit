@@ -11,7 +11,6 @@ from autoskillit.core import CIRunScope, CIWatcher
 from autoskillit.execution.ci import (
     DefaultCIWatcher,
     _jittered_sleep,
-    _parse_repo_from_remote,
 )
 
 # ---------------------------------------------------------------------------
@@ -45,27 +44,6 @@ def _runs_response(*runs: dict) -> dict:
 def _jobs_response(*jobs: tuple[str, str]) -> dict:
     """jobs: (name, conclusion) tuples."""
     return {"jobs": [{"name": n, "conclusion": c} for n, c in jobs]}
-
-
-# ---------------------------------------------------------------------------
-# _parse_repo_from_remote
-# ---------------------------------------------------------------------------
-
-
-def test_parse_https_url():
-    assert _parse_repo_from_remote("https://github.com/owner/repo.git") == "owner/repo"
-
-
-def test_parse_ssh_url():
-    assert _parse_repo_from_remote("git@github.com:owner/repo.git") == "owner/repo"
-
-
-def test_parse_https_without_dot_git():
-    assert _parse_repo_from_remote("https://github.com/owner/repo") == "owner/repo"
-
-
-def test_parse_invalid_returns_none():
-    assert _parse_repo_from_remote("not-a-github-url") is None
 
 
 # ---------------------------------------------------------------------------

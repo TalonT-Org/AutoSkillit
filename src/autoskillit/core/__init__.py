@@ -6,6 +6,7 @@ explicit `from autoskillit.core.logging import get_logger`.
 """
 
 from .branch_guard import is_protected_branch
+from .github_url import parse_github_repo as parse_github_repo
 from .io import (
     YAMLError,
     _atomic_write,
@@ -83,6 +84,8 @@ from .types import (
 __all__ = [
     # branch_guard
     "is_protected_branch",
+    # github_url
+    "parse_github_repo",
     # io
     "YAMLError",
     "atomic_write",

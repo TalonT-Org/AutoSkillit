@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import random
-import re
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -45,12 +44,11 @@ FAILED_CONCLUSIONS: frozenset[str] = frozenset(
 def _parse_repo_from_remote(remote_url: str) -> str | None:
     """Extract owner/repo from a git remote URL.
 
-    Supports both HTTPS and SSH formats:
-      https://github.com/owner/repo.git  →  owner/repo
-      git@github.com:owner/repo.git      →  owner/repo
+    Thin shim delegating to the canonical parse_github_repo parser.
     """
-    m = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$", remote_url)
-    return m.group(1) if m else None
+    from autoskillit.core import parse_github_repo
+
+    return parse_github_repo(remote_url)
 
 
 def _jittered_sleep(attempt: int) -> float:
@@ -81,26 +79,9 @@ class DefaultCIWatcher:
 
     async def _resolve_repo(self, repo: str | None, cwd: str) -> str | None:
         """Resolve owner/repo from argument or git remote."""
-        if repo:
-            return repo
-        if not cwd:
-            return None
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "git",
-                "remote",
-                "get-url",
-                "origin",
-                cwd=cwd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await proc.communicate()
-            if proc.returncode == 0:
-                return _parse_repo_from_remote(stdout.decode().strip())
-        except OSError:
-            pass
-        return None
+        from autoskillit.execution.remote_resolver import resolve_remote_repo
+
+        return await resolve_remote_repo(cwd, hint=repo)
 
     async def _fetch_completed_runs(
         self,

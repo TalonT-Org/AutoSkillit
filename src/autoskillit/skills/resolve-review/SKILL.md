@@ -80,26 +80,33 @@ Fetch top-level review bodies (summary reviews):
 gh api repos/{owner}/{repo}/pulls/{number}/reviews --paginate
 ```
 
-Fetch review thread node IDs (needed for thread resolution in Step 6.5):
+Fetch review thread node IDs (needed for thread resolution in Step 6) using
+cursor-based pagination to handle PRs with more than 100 threads:
+
 ```bash
+# Fetch all pages; repeat with after=$endCursor while hasNextPage is true
 gh api graphql \
-  -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:1){nodes{databaseId}}}}}}}' \
+  -f query='query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}nodes{id isResolved comments(first:1){nodes{databaseId}}}}}}}' \
   -F owner="$owner" \
   -F repo="$repo" \
-  -F number=$number
+  -F number=$number \
+  -F after=""
 ```
+
+Collect all `nodes` across pages into a single list. Continue fetching while
+`pageInfo.hasNextPage` is `true`, passing `pageInfo.endCursor` as `$after`.
 
 Save raw responses to:
 - `temp/resolve-review/inline_comments_{pr_number}.json`
 - `temp/resolve-review/reviews_{pr_number}.json`
-- `temp/resolve-review/threads_{pr_number}.json`
+- `temp/resolve-review/threads_{pr_number}.json` (first page; subsequent pages merged in memory)
 
 Build a lookup map from the threads response:
 - `comment_id_to_thread_id: dict[int, str]` — key: comment `databaseId` (integer), value: thread GraphQL `id` (string node ID)
 - Skip threads where `isResolved` is already `true` (no need to resolve again)
 
 If the GraphQL call fails (e.g., token lacks `read:discussion` scope), log a warning and
-set `comment_id_to_thread_id = {}`. Thread resolution will be silently skipped in Step 6.5.
+set `comment_id_to_thread_id = {}`. Thread resolution will be silently skipped in Step 6.
 
 ### Step 3: Parse and Classify Findings
 
@@ -165,12 +172,12 @@ Record each skip with: `(file, line, reason)`.
 task test-check
 ```
 
-- Pass → proceed to Step 6
+- Pass → proceed to Step 6 (Resolve Addressed Review Threads)
 - Fail (iteration < 3): analyze failures against the fixes applied, revert/adjust the
   problematic commit, re-commit and retry (increment iteration counter)
 - Fail (iteration >= 3): report failure, leave working directory intact, exit non-zero
 
-### Step 6.5: Resolve Addressed Review Threads
+### Step 6: Resolve Addressed Review Threads
 
 For each `thread_id` in `addressed_thread_ids`:
 
@@ -193,7 +200,7 @@ This step is a best-effort operation. Failure to resolve any thread must never c
 overall skill to exit non-zero. Thread resolution failure does not affect the exit code of
 the overall skill.
 
-### Step 6: Report
+### Step 7: Report
 
 Print a structured summary to terminal:
 

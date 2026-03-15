@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from autoskillit.core import CIWatcher
+from autoskillit.core import CIRunScope, CIWatcher
 from autoskillit.execution.ci import (
     DefaultCIWatcher,
     _jittered_sleep,
@@ -138,7 +138,7 @@ async def test_lookback_finds_completed_failed_run():
 
 @pytest.mark.anyio
 async def test_lookback_filters_by_head_sha():
-    """When head_sha is provided, the API filters server-side."""
+    """When scope.head_sha is provided, the API filters server-side."""
     watcher = DefaultCIWatcher(token="tok")
     matching_run = _run(run_id=222, head_sha="abc123")
     watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
@@ -149,13 +149,13 @@ async def test_lookback_filters_by_head_sha():
     result = await watcher.wait(
         "feature-x",
         repo="owner/repo",
-        head_sha="abc123",
+        scope=CIRunScope(head_sha="abc123"),
         timeout_seconds=60,
     )
     assert result["run_id"] == 222
-    # Verify head_sha was passed to the API call
+    # Verify scope.head_sha was passed to the API call
     call_kwargs = watcher._fetch_completed_runs.call_args
-    assert call_kwargs[0][4] == "abc123"  # positional arg: head_sha
+    assert call_kwargs[0][4].head_sha == "abc123"  # positional arg: scope
 
 
 @pytest.mark.anyio

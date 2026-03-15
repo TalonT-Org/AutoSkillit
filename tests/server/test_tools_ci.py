@@ -119,9 +119,9 @@ async def test_wait_for_ci_infers_head_sha(tool_ctx):
 
         await wait_for_ci("main", cwd="/some/repo")
 
-    # Verify that wait was called with the inferred head_sha
+    # Verify that wait was called with the inferred head_sha inside scope
     call_kwargs = mock_watcher.wait.call_args
-    assert call_kwargs.kwargs.get("head_sha") == "abc123"
+    assert call_kwargs.kwargs["scope"].head_sha == "abc123"
 
 
 # ---------------------------------------------------------------------------

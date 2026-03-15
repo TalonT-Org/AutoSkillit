@@ -493,7 +493,6 @@ def _build_skill_result(
         if path_contamination:
             logger.warning("path_contamination_detected", detail=path_contamination, cwd=cwd)
 
-    # JSONL write-path scan: non-blocking diagnostic layer
     write_path_warnings: list[str] = []
     if cwd:
         write_path_warnings = _scan_jsonl_write_paths(result.stdout, cwd)

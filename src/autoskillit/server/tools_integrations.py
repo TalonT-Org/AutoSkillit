@@ -14,6 +14,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import _atomic_write, _parse_issue_ref, get_logger
+from autoskillit.core.types import RetryReason
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
@@ -25,6 +26,7 @@ from autoskillit.server.helpers import (
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, HeadlessExecutor
+    from autoskillit.execution.session import SkillResult
 
 logger = get_logger(__name__)
 
@@ -49,6 +51,31 @@ _ENRICH_RESULT_END = "---/enrich-issues-result---"
 _BLOCK_PARSE_ERRORS: frozenset[str] = frozenset(
     {"no result block found", "result block contained invalid JSON"}
 )
+
+
+def _build_headless_error_response(
+    result: SkillResult,
+    *,
+    error: str,
+    status: str = "failed",
+) -> dict:
+    """Canonical error response for tools that invoke headless sessions.
+
+    Every failure path that derives a response from a SkillResult MUST use this
+    builder. Do not hand-roll error dicts — that pattern caused silent omission of
+    diagnostic fields (issue #384). Adding a field here propagates to all paths
+    automatically.
+    """
+    return {
+        "success": False,
+        "status": status,
+        "error": error,
+        "session_id": result.session_id,
+        "stderr": result.stderr,
+        "subtype": result.subtype,
+        "exit_code": result.exit_code,
+    }
+
 
 # Strong references to in-flight non-blocking report tasks (prevents GC).
 _pending_report_tasks: set[asyncio.Task[Any]] = set()
@@ -755,29 +782,19 @@ async def prepare_issue(
     )
 
     if not result.success:
-        parsed = _parse_prepare_result(result.result or "")
-        return json.dumps(
-            {
-                "success": False,
-                "status": "failed",
-                "error": parsed.get("error", "skill session failed"),
-                "session_id": result.session_id,
-                "stderr": result.stderr,
-                "subtype": result.subtype,
-                "exit_code": result.exit_code,
-            }
+        error = (
+            result.retry_reason.value
+            if result.retry_reason and result.retry_reason != RetryReason.NONE
+            else result.subtype or "skill session failed"
         )
+        return json.dumps(_build_headless_error_response(result, error=error))
 
     if result.result is None or not result.result.strip():
         return json.dumps(
-            {
-                "success": False,
-                "status": "failed",
-                "error": "session completed but output was empty (drain race)",
-                "session_id": result.session_id,
-                "subtype": result.subtype,
-                "exit_code": result.exit_code,
-            }
+            _build_headless_error_response(
+                result,
+                error="session completed but output was empty (drain race)",
+            )
         )
 
     parsed = _parse_prepare_result(result.result)
@@ -785,16 +802,7 @@ async def prepare_issue(
     # The sentinel errors from _parse_prepare_result signal a block-extraction failure —
     # these are not the same as skill-internal errors embedded in a valid block.
     if parsed.get("error") in _BLOCK_PARSE_ERRORS:
-        return json.dumps(
-            {
-                "success": False,
-                "status": "failed",
-                "error": parsed["error"],
-                "session_id": result.session_id,
-                "subtype": result.subtype,
-                "exit_code": result.exit_code,
-            }
-        )
+        return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
 
     # Block parsed successfully. result.success=True is the authoritative signal —
     # the parsed block's "success" field (if any) must not overwrite it.
@@ -873,40 +881,24 @@ async def enrich_issues(
     )
 
     if not result.success:
-        return json.dumps(
-            {
-                "success": False,
-                "error": result.stderr or "skill session failed",
-                "session_id": result.session_id,
-                "stderr": result.stderr,
-                "subtype": result.subtype,
-                "exit_code": result.exit_code,
-            }
+        error = (
+            result.retry_reason.value
+            if result.retry_reason and result.retry_reason != RetryReason.NONE
+            else result.subtype or "skill session failed"
         )
+        return json.dumps(_build_headless_error_response(result, error=error))
 
     if result.result is None or not result.result.strip():
         return json.dumps(
-            {
-                "success": False,
-                "error": "session completed but output was empty (drain race)",
-                "session_id": result.session_id,
-                "subtype": result.subtype,
-                "exit_code": result.exit_code,
-            }
+            _build_headless_error_response(
+                result,
+                error="session completed but output was empty (drain race)",
+            )
         )
 
     parsed = _parse_enrich_result(result.result)
     if parsed.get("error") in _BLOCK_PARSE_ERRORS:
-        return json.dumps(
-            {
-                "success": False,
-                "status": "failed",
-                "error": parsed["error"],
-                "session_id": result.session_id,
-                "subtype": result.subtype,
-                "exit_code": result.exit_code,
-            }
-        )
+        return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
 
     return json.dumps(
         {

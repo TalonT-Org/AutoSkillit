@@ -1334,6 +1334,16 @@ async def test_list_recipes_no_recipes_returns_empty(tool_ctx):
     assert result == []
 
 
+# P5F2-T1b
+@pytest.mark.anyio
+async def test_list_recipes_gate_closed_returns_gate_error(tool_ctx):
+    """list_recipes returns gate_error JSON when kitchen gate is closed."""
+    tool_ctx.gate = DefaultGateState(enabled=False)
+    result = json.loads(await list_recipes())
+    assert result.get("success") is False
+    assert result.get("subtype") == "gate_error"
+
+
 # P5F2-T2
 @pytest.mark.anyio
 async def test_load_recipe_no_ctx_returns_error(monkeypatch):

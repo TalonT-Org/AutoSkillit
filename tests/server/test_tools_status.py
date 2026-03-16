@@ -154,6 +154,14 @@ class TestGetPipelineReport:
     """get_pipeline_report is a gated tool that returns accumulated failures."""
 
     @pytest.mark.anyio
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        """get_pipeline_report returns gate_error when kitchen gate is closed."""
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        result = json.loads(await get_pipeline_report())
+        assert result.get("success") is False
+        assert result.get("subtype") == "gate_error"
+
+    @pytest.mark.anyio
     async def test_returns_empty_initially(self, tool_ctx):
         result = json.loads(await get_pipeline_report())
         assert result["total_failures"] == 0
@@ -186,6 +194,14 @@ class TestGetPipelineReport:
 
 class TestGetTokenSummary:
     """get_token_summary is a gated tool that returns accumulated token usage."""
+
+    @pytest.mark.anyio
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        """get_token_summary returns gate_error when kitchen gate is closed."""
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        result = json.loads(await get_token_summary())
+        assert result.get("success") is False
+        assert result.get("subtype") == "gate_error"
 
     @pytest.mark.anyio
     async def test_returns_empty_steps_initially(self, tool_ctx):
@@ -333,6 +349,14 @@ class TestGetTokenSummary:
 
 class TestGetTimingSummary:
     """get_timing_summary is a gated tool that returns accumulated wall-clock timing."""
+
+    @pytest.mark.anyio
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        """get_timing_summary returns gate_error when kitchen gate is closed."""
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        result = json.loads(await get_timing_summary())
+        assert result.get("success") is False
+        assert result.get("subtype") == "gate_error"
 
     @pytest.mark.anyio
     async def test_returns_empty_steps_initially(self, tool_ctx):

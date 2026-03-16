@@ -243,6 +243,7 @@ async def get_quota_events(n: int = 50) -> str:
         n: Maximum number of events to return (default 50).
 
     This tool requires the kitchen to be open (gated by open_kitchen).
+    This tool sends no MCP progress notifications.
     """
     if (gate := _require_enabled()) is not None:
         return gate

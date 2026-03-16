@@ -424,3 +424,94 @@ class TestSkillResolver:
     def test_skill_source_bundled_extended_exists(self) -> None:
         """SkillSource.BUNDLED_EXTENDED enum member exists."""
         assert SkillSource.BUNDLED_EXTENDED == "bundled_extended"
+
+
+class TestSkillCategories:
+    # T6 — read_skill_categories() and SkillInfo.categories
+
+    def test_read_skill_categories_returns_frozenset_for_github_skill(self, tmp_path) -> None:
+        from autoskillit.workspace.skills import read_skill_categories
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("---\nname: open-pr\ncategories: [github]\n---\n# content")
+        result = read_skill_categories(skill_md)
+        assert result == frozenset({"github"})
+
+    def test_read_skill_categories_returns_empty_when_no_categories_key(self, tmp_path) -> None:
+        from autoskillit.workspace.skills import read_skill_categories
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("---\nname: investigate\ndescription: foo\n---\n# content")
+        result = read_skill_categories(skill_md)
+        assert result == frozenset()
+
+    def test_read_skill_categories_returns_empty_when_no_frontmatter(self, tmp_path) -> None:
+        from autoskillit.workspace.skills import read_skill_categories
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("# No frontmatter here")
+        result = read_skill_categories(skill_md)
+        assert result == frozenset()
+
+    def test_read_skill_categories_multiple_categories(self, tmp_path) -> None:
+        from autoskillit.workspace.skills import read_skill_categories
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("---\nname: foo\ncategories: [github, audit]\n---\n# body")
+        result = read_skill_categories(skill_md)
+        assert result == frozenset({"github", "audit"})
+
+    def test_skill_info_has_categories_field(self) -> None:
+        from pathlib import Path
+
+        from autoskillit.workspace.skills import SkillInfo
+
+        info = SkillInfo(name="test", source=SkillSource.BUNDLED, path=Path("/fake/SKILL.md"))
+        assert info.categories == frozenset()
+
+    def test_open_pr_skill_has_github_category(self) -> None:
+        info = SkillResolver().resolve("open-pr")
+        assert info is not None
+        assert "github" in info.categories
+
+    def test_diagnose_ci_skill_has_ci_category(self) -> None:
+        info = SkillResolver().resolve("diagnose-ci")
+        assert info is not None
+        assert "ci" in info.categories
+
+    def test_all_arch_lens_skills_have_arch_lens_category(self) -> None:
+        resolver = SkillResolver()
+        for name in ARCH_LENS_NAMES:
+            info = resolver.resolve(name)
+            assert info is not None
+            assert "arch-lens" in info.categories, f"{name} missing 'arch-lens' category"
+
+    def test_make_arch_diag_has_arch_lens_category(self) -> None:
+        info = SkillResolver().resolve("make-arch-diag")
+        assert info is not None
+        assert "arch-lens" in info.categories
+
+    def test_verify_diag_has_arch_lens_category(self) -> None:
+        info = SkillResolver().resolve("verify-diag")
+        assert info is not None
+        assert "arch-lens" in info.categories
+
+    def test_all_audit_skills_have_audit_category(self) -> None:
+        resolver = SkillResolver()
+        for name in [
+            "audit-arch",
+            "audit-cohesion",
+            "audit-tests",
+            "audit-defense-standards",
+            "audit-bugs",
+            "audit-friction",
+            "audit-impl",
+        ]:
+            info = resolver.resolve(name)
+            assert info is not None
+            assert "audit" in info.categories, f"{name} missing 'audit' category"
+
+    def test_uncategorized_skills_have_empty_categories(self) -> None:
+        info = SkillResolver().resolve("investigate")
+        assert info is not None
+        assert info.categories == frozenset()

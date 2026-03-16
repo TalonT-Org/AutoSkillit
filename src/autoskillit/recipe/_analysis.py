@@ -215,6 +215,7 @@ class ValidationContext:
     available_skills: frozenset[str] = field(default_factory=frozenset)
     available_sub_recipes: frozenset[str] = field(default_factory=frozenset)
     project_dir: Path | None = None
+    disabled_subsets: frozenset[str] = field(default_factory=frozenset)
 
 
 # ---------------------------------------------------------------------------
@@ -575,6 +576,7 @@ def make_validation_context(
     available_skills: frozenset[str] = frozenset(),
     available_sub_recipes: frozenset[str] = frozenset(),
     project_dir: Path | None = None,
+    disabled_subsets: frozenset[str] = frozenset(),
 ) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
 
@@ -591,4 +593,5 @@ def make_validation_context(
         available_skills=available_skills,
         available_sub_recipes=available_sub_recipes,
         project_dir=project_dir,
+        disabled_subsets=disabled_subsets,
     )

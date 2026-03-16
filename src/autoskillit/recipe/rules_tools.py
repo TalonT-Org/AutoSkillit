@@ -8,6 +8,47 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _ALL_TOOLS: frozenset[str] = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
 
+# Known parameter signatures for MCP tools that accept `with:` args in recipes.
+# Intentionally hardcoded — recipe validation runs without a live MCP server.
+_TOOL_PARAMS: dict[str, frozenset[str]] = {
+    "run_skill": frozenset({"skill_command", "cwd", "model", "step_name"}),
+    "run_cmd": frozenset({"command", "cwd", "timeout", "step_name"}),
+    "run_python": frozenset({"callable_path", "kwargs", "step_name"}),
+    "test_check": frozenset({"worktree_path"}),
+    "merge_worktree": frozenset({"worktree_path", "base_branch"}),
+    "reset_test_dir": frozenset({"test_dir", "force"}),
+    "classify_fix": frozenset({"worktree_path", "base_branch"}),
+    "reset_workspace": frozenset({"test_dir"}),
+    "validate_recipe": frozenset({"script_path"}),
+    "clone_repo": frozenset({"repo", "branch", "target_dir"}),
+    "remove_clone": frozenset({"clone_dir", "keep"}),
+    "push_to_remote": frozenset({"clone_dir", "branch"}),
+    "report_bug": frozenset({"error_context", "report_path", "cwd"}),
+    "prepare_issue": frozenset({"title", "body", "labels", "cwd"}),
+    "enrich_issues": frozenset({"cwd"}),
+    "claim_issue": frozenset({"issue_number", "cwd"}),
+    "release_issue": frozenset({"issue_number", "cwd"}),
+    "wait_for_ci": frozenset({"branch", "repo", "cwd", "timeout_seconds", "poll_interval"}),
+    "wait_for_merge_queue": frozenset(
+        {"pr_number", "target_branch", "repo", "cwd", "timeout_seconds", "poll_interval"}
+    ),
+    "create_unique_branch": frozenset({"base_name", "cwd"}),
+    "check_pr_mergeable": frozenset({"pr_number", "cwd"}),
+    "write_telemetry_files": frozenset({"output_dir"}),
+    "get_pr_reviews": frozenset({"pr_number", "cwd"}),
+    "bulk_close_issues": frozenset({"issue_numbers", "comment", "cwd"}),
+    "set_commit_status": frozenset(
+        {"sha", "state", "context", "description", "target_url", "cwd"}
+    ),
+    "get_quota_events": frozenset({"minutes"}),
+    "migrate_recipe": frozenset({"recipe_path"}),
+    "load_recipe": frozenset({"recipe_name", "ingredients", "cwd"}),
+    "list_recipes": frozenset({"cwd"}),
+    "fetch_github_issue": frozenset({"issue_number", "repo", "cwd"}),
+    "get_issue_title": frozenset({"issue_number", "repo", "cwd"}),
+    "get_ci_status": frozenset({"branch", "repo", "cwd"}),
+}
+
 
 @semantic_rule(
     name="constant-step-with-args",
@@ -89,4 +130,32 @@ def _check_subset_disabled_tool(ctx: ValidationContext) -> list[RuleFinding]:
                     ),
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name="dead-with-param",
+    description="with: key does not match any known parameter of the step's tool",
+    severity=Severity.WARNING,
+)
+def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool is None or step.tool not in _TOOL_PARAMS:
+            continue
+        known_params = _TOOL_PARAMS[step.tool]
+        for key in step.with_args:
+            if key not in known_params:
+                findings.append(
+                    RuleFinding(
+                        rule="dead-with-param",
+                        severity=Severity.WARNING,
+                        step_name=step_name,
+                        message=(
+                            f"step '{step_name}': with key '{key}' is not a known "
+                            f"parameter of tool '{step.tool}'. "
+                            f"Known parameters: {sorted(known_params)}"
+                        ),
+                    )
+                )
     return findings

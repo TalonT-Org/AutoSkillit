@@ -30,6 +30,7 @@ from autoskillit.core import (
     SessionOutcome,
     SkillResult,
     TerminationReason,
+    ValidatedAddDir,
     claude_code_project_dir,
     get_logger,
 )
@@ -598,7 +599,7 @@ async def run_headless_core(
     *,
     model: str = "",
     step_name: str = "",
-    add_dirs: Sequence[str] = (),
+    add_dirs: Sequence[ValidatedAddDir] = (),
     timeout: float | None = None,
     stale_threshold: float | None = None,
     expected_output_patterns: Sequence[str] = (),
@@ -634,9 +635,8 @@ async def run_headless_core(
         for flag in cfg.output_format.required_cli_flags:
             if flag not in cmd:
                 cmd.append(flag)
-        for _dir in add_dirs:
-            if _dir:
-                cmd.extend([ClaudeFlags.ADD_DIR, _dir])
+        for validated_dir in add_dirs:
+            cmd.extend([ClaudeFlags.ADD_DIR, validated_dir.path])
 
         env_vars = ["AUTOSKILLIT_HEADLESS=1"]
         delay_ms = cfg.exit_after_stop_delay_ms
@@ -792,7 +792,7 @@ class DefaultHeadlessExecutor:
         *,
         model: str = "",
         step_name: str = "",
-        add_dirs: Sequence[str] = (),
+        add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),

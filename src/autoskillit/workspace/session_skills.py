@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import ClaudeDirectoryConventions, _atomic_write, get_logger
+from autoskillit.core import ClaudeDirectoryConventions, ValidatedAddDir, _atomic_write, get_logger
 from autoskillit.workspace.skills import SkillInfo, SkillResolver, detect_project_local_overrides
 
 if TYPE_CHECKING:
@@ -176,7 +176,7 @@ class DefaultSessionSkillManager:
         cook_session: bool = False,
         config: AutomationConfig | None = None,
         project_dir: Path | None = None,
-    ) -> Path:
+    ) -> ValidatedAddDir:
         """Create ephemeral skill dir for session_id.
 
         Returns path to the created skills directory.
@@ -242,7 +242,7 @@ class DefaultSessionSkillManager:
             gated = (not cook_session) and (skill_info.name in tier2_skills)
             content = self._provider.get_skill_content(skill_info.name, gated=gated)
             _atomic_write(skill_dir / "SKILL.md", content)
-        return session_skills_dir
+        return ValidatedAddDir(path=str(session_skills_dir))
 
     def activate_tier2(self, session_id: str, skill_name: str) -> bool:
         """Remove disable-model-invocation from the ephemeral copy of skill_name.

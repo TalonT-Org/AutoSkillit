@@ -6,7 +6,7 @@ explicit `from autoskillit.core.logging import get_logger`.
 """
 
 from .branch_guard import is_protected_branch
-from .claude_conventions import ClaudeDirectoryConventions
+from .claude_conventions import ClaudeDirectoryConventions, LayoutError, validate_add_dir
 from .github_url import normalize_owner_repo as normalize_owner_repo
 from .github_url import parse_github_repo as parse_github_repo
 from .io import (
@@ -81,6 +81,7 @@ from .types import (
     TestRunner,
     TimingStore,
     TokenStore,
+    ValidatedAddDir,
     WorkspaceManager,
     truncate_text,
 )
@@ -90,6 +91,8 @@ __all__ = [
     "is_protected_branch",
     # claude_conventions
     "ClaudeDirectoryConventions",
+    "LayoutError",
+    "validate_add_dir",
     # github_url
     "normalize_owner_repo",
     "parse_github_repo",
@@ -112,6 +115,7 @@ __all__ = [
     "pkg_root",
     # types
     "ClaudeFlags",
+    "ValidatedAddDir",
     "AUTOSKILLIT_INSTALLED_VERSION",
     "AUTOSKILLIT_PRIVATE_ENV_VARS",
     "AUTOSKILLIT_SKILL_PREFIX",

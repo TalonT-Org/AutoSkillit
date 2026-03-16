@@ -15,6 +15,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from autoskillit.core.types import ValidatedAddDir
+
+
+class LayoutError(ValueError):
+    """Raised when a directory does not satisfy Claude Code --add-dir layout conventions."""
+
 
 class ClaudeDirectoryConventions:
     """Claude Code skill discovery directory layout conventions.
@@ -39,3 +45,18 @@ class ClaudeDirectoryConventions:
 
     #: Filename expected inside each ``<name>/`` directory.
     SKILL_FILENAME: str = "SKILL.md"
+
+
+def validate_add_dir(path: Path) -> ValidatedAddDir:
+    """Validate that a directory satisfies the --add-dir convention.
+
+    Raises LayoutError if ``path/.claude/skills/`` does not exist or
+    contains no ``SKILL.md`` files.
+    """
+    skills_subdir = path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+    if not skills_subdir.is_dir():
+        raise LayoutError(f"{path} does not contain .claude/skills/ subdirectory")
+    skill_files = list(skills_subdir.glob("*/SKILL.md"))
+    if not skill_files:
+        raise LayoutError(f"{path}/.claude/skills/ contains no SKILL.md files")
+    return ValidatedAddDir(path=str(path))

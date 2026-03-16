@@ -250,7 +250,6 @@ steps:
     with:
       skill_command: "/autoskillit:dry-walkthrough ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
-      add_dir: "${{ context.review_path }}"
       step_name: "dry_walkthrough"
     on_success: implement
     on_failure: release_issue_failure

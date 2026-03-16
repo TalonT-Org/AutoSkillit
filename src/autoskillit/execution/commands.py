@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from autoskillit.core import ClaudeFlags
+from autoskillit.core import ClaudeFlags, ValidatedAddDir
 
 
 @dataclass(frozen=True)
@@ -26,7 +26,7 @@ def build_interactive_cmd(
     initial_prompt: str | None = None,
     model: str | None = None,
     plugin_dir: Path | None = None,
-    add_dirs: Sequence[Path | str] = (),
+    add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
 ) -> ClaudeInteractiveCmd:
     """Build a Claude interactive session command.
 

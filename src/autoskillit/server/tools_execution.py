@@ -9,7 +9,14 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, pkg_root, truncate_text
+from autoskillit.core import (
+    PIPELINE_FORBIDDEN_TOOLS,
+    LayoutError,
+    ValidatedAddDir,
+    get_logger,
+    truncate_text,
+    validate_add_dir,
+)
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
@@ -195,13 +202,31 @@ async def run_skill(
     if tool_ctx.output_pattern_resolver:
         expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
 
+    # Build validated add_dirs via DefaultSessionSkillManager
+    from pathlib import Path
+    from uuid import uuid4
+
+    skill_add_dirs: list[ValidatedAddDir] = []
+    if tool_ctx.session_skill_manager is not None:
+        session_root = tool_ctx.session_skill_manager.init_session(
+            f"headless-{uuid4().hex[:12]}",
+            cook_session=False,
+            config=tool_ctx.config,
+            project_dir=Path(cwd),
+        )
+        skill_add_dirs.append(session_root)
+    try:
+        skill_add_dirs.append(validate_add_dir(Path(cwd)))
+    except LayoutError:
+        pass  # cwd has no project-local skills — already accessible as working dir
+
     _start = time.monotonic()
     try:
         skill_result = await tool_ctx.executor.run(
             skill_command,
             cwd,
             model=model,
-            add_dirs=[str(pkg_root() / "skills_extended"), cwd],
+            add_dirs=skill_add_dirs,
             step_name=step_name,
             expected_output_patterns=expected_output_patterns,
         )

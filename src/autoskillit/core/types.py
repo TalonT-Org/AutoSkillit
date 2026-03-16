@@ -422,6 +422,28 @@ GATED_TOOLS: frozenset[str] = frozenset(
 
 HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check"})
 
+
+@dataclass(frozen=True)
+class ValidatedAddDir:
+    """An --add-dir path validated for Claude Code convention compliance.
+
+    Cannot be constructed directly — use ``validate_add_dir()`` or obtain from
+    ``DefaultSessionSkillManager.init_session()``.
+
+    Implements ``__str__`` and ``__fspath__`` so it works transparently with
+    ``str(d)`` (used by ``build_interactive_cmd``) and ``shutil.rmtree``
+    (used by chefs-hat).
+    """
+
+    path: str
+
+    def __str__(self) -> str:
+        return self.path
+
+    def __fspath__(self) -> str:
+        return self.path
+
+
 FREE_RANGE_TOOLS: frozenset[str] = frozenset({"open_kitchen", "close_kitchen"})
 
 UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS
@@ -718,7 +740,7 @@ class HeadlessExecutor(Protocol):
         *,
         model: str = "",
         step_name: str = "",
-        add_dirs: Sequence[str] = (),
+        add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),
@@ -961,7 +983,7 @@ class SessionSkillManager(Protocol):
         cook_session: bool = False,
         config: Any | None = None,
         project_dir: Path | None = None,
-    ) -> Path: ...
+    ) -> ValidatedAddDir: ...
 
     def activate_tier2(self, session_id: str, skill_name: str) -> bool: ...
 

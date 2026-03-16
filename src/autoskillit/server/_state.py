@@ -42,7 +42,8 @@ def _initialize(ctx: ToolContext) -> None:
                 mcp.disable(tags={subset})
         except ImportError:
             logger.error(
-                "Could not import mcp for subset disable at startup — subset-disabled tools may be unexpectedly visible",
+                "Could not import mcp for subset disable at startup"
+                " — subset-disabled tools may be unexpectedly visible",
                 exc_info=True,
             )
 

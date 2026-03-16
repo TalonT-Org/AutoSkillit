@@ -109,6 +109,28 @@ def _is_skill_disabled(
     return False
 
 
+def _should_inject_skill(
+    skill_info: SkillInfo,
+    *,
+    cook_session: bool,
+    overrides: frozenset[str],
+    disabled_subsets: list[str],
+    custom_tags: dict[str, list[str]],
+) -> bool:
+    """Return True if this skill should be written to the ephemeral session dir.
+
+    cook_session=True bypasses all restrictions: the human cook always sees the
+    full bundled menu regardless of project-local overrides or disabled subsets.
+    """
+    if cook_session:
+        return True
+    if _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
+        return False
+    if skill_info.name in overrides:
+        return False
+    return True
+
+
 class SkillsDirectoryProvider:
     """Provides bundled skill content with tier-aware frontmatter injection."""
 
@@ -200,12 +222,15 @@ class DefaultSessionSkillManager:
         session_skills_dir = self._root / session_id
         session_skills_dir.mkdir(parents=True, exist_ok=True)
         for skill_info in self._provider.list_skills():
-            # Skip skills in disabled subsets (REQ-VIS-002)
-            if _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
-                continue
-            # Skip bundled skill when a project-local override exists (REQ-OVR-003)
-            if skill_info.name in overrides:
-                _log.debug("init_session_override_skip", skill=skill_info.name)
+            if not _should_inject_skill(
+                skill_info,
+                cook_session=cook_session,
+                overrides=overrides,
+                disabled_subsets=disabled_subsets,
+                custom_tags=custom_tags,
+            ):
+                if skill_info.name in overrides:
+                    _log.debug("init_session_override_skip", skill=skill_info.name)
                 continue
             skill_dir = session_skills_dir / skill_info.name
             skill_dir.mkdir(exist_ok=True)

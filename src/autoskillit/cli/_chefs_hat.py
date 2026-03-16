@@ -51,6 +51,7 @@ def chefs_hat() -> None:
 
     from autoskillit.config import load_config
     from autoskillit.core import pkg_root
+    from autoskillit.execution.commands import build_interactive_cmd
 
     session_id = uuid.uuid4().hex[:16]
     ephemeral_root = resolve_ephemeral_root()
@@ -60,11 +61,10 @@ def chefs_hat() -> None:
         session_id, cook_session=True, config=config, project_dir=Path.cwd()
     )
 
+    cmd = build_interactive_cmd(plugin_dir=pkg_root(), add_dirs=[skills_dir]).cmd
     env = {**os.environ}
     try:
-        result = subprocess.run(
-            ["claude", "--plugin-dir", str(pkg_root()), "--add-dir", str(skills_dir)], env=env
-        )
+        result = subprocess.run(cmd, env=env)
         if result.returncode != 0:
             raise SystemExit(result.returncode)
     finally:

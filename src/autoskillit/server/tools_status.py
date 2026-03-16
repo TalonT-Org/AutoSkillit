@@ -17,7 +17,6 @@ from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
     _require_enabled,
-    _require_not_headless,
     resolve_log_dir,
     track_response_size,
     write_telemetry_clear_marker,
@@ -33,7 +32,7 @@ def _get_log_root() -> Path:
     return resolve_log_dir(_get_ctx().config.linux_tracing.log_dir)
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("kitchen_status")
 async def kitchen_status() -> str:
     """Return version health and configuration status for the running server.
@@ -46,8 +45,6 @@ async def kitchen_status() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
-    if (h := _require_not_headless("kitchen_status")) is not None:
-        return h
     from autoskillit.server import _get_config, _get_ctx, version_info
 
     info = version_info()
@@ -74,7 +71,7 @@ async def kitchen_status() -> str:
     return json.dumps(status)
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("get_pipeline_report")
 async def get_pipeline_report(clear: bool = False) -> str:
     """Return accumulated run_skill failures since last clear.
@@ -92,8 +89,6 @@ async def get_pipeline_report(clear: bool = False) -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
-    if (h := _require_not_headless("get_pipeline_report")) is not None:
-        return h
     from autoskillit.server import _get_ctx
 
     failures = _get_ctx().audit.get_report_as_dicts()
@@ -120,7 +115,7 @@ def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> l
     return steps
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
 @track_response_size("get_token_summary")
 async def get_token_summary(clear: bool = False, format: str = "json") -> str:
     """Return accumulated run_skill token usage grouped by step name.
@@ -169,7 +164,7 @@ async def get_token_summary(clear: bool = False, format: str = "json") -> str:
     )
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
 @track_response_size("get_timing_summary")
 async def get_timing_summary(clear: bool = False, format: str = "json") -> str:
     """Return accumulated wall-clock timing grouped by step name.
@@ -226,7 +221,7 @@ def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
     return list(reversed(events))[:n], total  # most recent first
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
 @track_response_size("get_quota_events")
 async def get_quota_events(n: int = 50) -> str:
     """Return the most recent quota guard events from the diagnostic log.
@@ -255,7 +250,7 @@ async def get_quota_events(n: int = 50) -> str:
     return json.dumps({"events": events, "total_count": total})
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
 @track_response_size("write_telemetry_files")
 async def write_telemetry_files(
     output_dir: str,
@@ -327,7 +322,7 @@ async def write_telemetry_files(
     )
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("read_db")
 async def read_db(
     db_path: str,

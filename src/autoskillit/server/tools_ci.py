@@ -25,7 +25,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
 @track_response_size("wait_for_ci")
 async def wait_for_ci(
     branch: str,
@@ -138,7 +138,7 @@ async def wait_for_ci(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"kitchen", "automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("set_commit_status")
 async def set_commit_status(
     sha: str,
@@ -217,7 +217,7 @@ async def set_commit_status(
     return {"success": True, "sha": sha, "state": state, "context": context}
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
 @track_response_size("get_ci_status")
 async def get_ci_status(
     branch: str | None = None,
@@ -264,7 +264,7 @@ async def get_ci_status(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": False})
+@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": False})
 @track_response_size("wait_for_merge_queue")
 async def wait_for_merge_queue(
     pr_number: int,

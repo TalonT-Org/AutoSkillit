@@ -46,11 +46,12 @@ def test_make_context_gate_starts_closed(monkeypatch):
     assert ctx.gate.enabled is False
 
 
-def test_make_context_gate_pre_enabled_in_headless_session(monkeypatch):
-    """Gate starts enabled when AUTOSKILLIT_HEADLESS=1 (headless worker)."""
+def test_make_context_gate_stays_closed_in_headless_session(monkeypatch):
+    """Gate is NOT pre-enabled when AUTOSKILLIT_HEADLESS=1.
+    Tag-based visibility (mcp.enable({'headless'})) handles tool reveal."""
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.gate.enabled is True
+    assert ctx.gate.enabled is False
 
 
 def test_make_context_executor_is_default_headless():

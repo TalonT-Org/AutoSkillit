@@ -383,7 +383,6 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "run_python",
         "read_db",
         "run_skill",
-        "test_check",
         "merge_worktree",
         "reset_test_dir",
         "classify_fix",
@@ -405,33 +404,30 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "check_pr_mergeable",
         "set_commit_status",
         "wait_for_merge_queue",
-    }
-)
-
-WORKER_TOOLS: frozenset[str] = frozenset(
-    {
+        # Formerly ungated — now kitchen-gated:
         "fetch_github_issue",
         "get_issue_title",
         "get_ci_status",
-        "get_token_summary",
-        "get_timing_summary",
-        "get_quota_events",
-    }
-)
-
-HEADLESS_BLOCKED_UNGATED_TOOLS: frozenset[str] = frozenset(
-    {
-        "kitchen_status",
         "get_pipeline_report",
+        "get_quota_events",
+        "get_timing_summary",
+        "get_token_summary",
+        "kitchen_status",
         "list_recipes",
         "load_recipe",
         "validate_recipe",
-        "open_kitchen",
-        "close_kitchen",
     }
 )
 
-UNGATED_TOOLS: frozenset[str] = WORKER_TOOLS | HEADLESS_BLOCKED_UNGATED_TOOLS
+HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check"})
+
+FREE_RANGE_TOOLS: frozenset[str] = frozenset({"open_kitchen", "close_kitchen"})
+
+UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS
+
+CATEGORY_TAGS: frozenset[str] = frozenset(
+    {"github", "ci", "clone", "telemetry", "arch-lens", "audit"}
+)
 
 # Categorized tool listing for the open_kitchen response.
 # Each entry is (category_name, tuple_of_tool_names). Tool names must match the

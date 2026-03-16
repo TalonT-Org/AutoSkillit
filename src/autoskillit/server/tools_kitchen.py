@@ -88,7 +88,7 @@ def _build_tool_category_listing() -> str:
     return "\n".join(lines)
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": True})
 @track_response_size("open_kitchen")
 async def open_kitchen(
     name: str | None = None,
@@ -163,7 +163,7 @@ async def open_kitchen(
     return text
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": True})
 @track_response_size("close_kitchen")
 async def close_kitchen(ctx: Context = CurrentContext()) -> str:
     """Close the AutoSkillit kitchen."""

@@ -23,7 +23,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "headless"}, annotations={"readOnlyHint": True})
 @track_response_size("test_check")
 async def test_check(
     worktree_path: str,
@@ -44,8 +44,6 @@ async def test_check(
         worktree_path: Path to the git worktree to run tests in.
         step_name: Optional YAML step key for wall-clock timing accumulation.
     """
-    if (gate := _require_enabled()) is not None:
-        return gate
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="test_check", cwd=worktree_path)
     logger.info("test_check", worktree=worktree_path)
@@ -83,7 +81,7 @@ async def test_check(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("reset_test_dir")
 async def reset_test_dir(
     test_dir: str,
@@ -159,7 +157,7 @@ async def reset_test_dir(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("reset_workspace")
 async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str:
     """Runs a configured reset command then deletes directory contents,

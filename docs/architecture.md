@@ -19,12 +19,13 @@ When you run `autoskillit cook`, Claude Code acts as a pipeline orchestrator. It
 
 ## Tool Visibility (Kitchen Gating)
 
-AutoSkillit uses a two-tier tool visibility model:
+AutoSkillit uses a three-tier tool visibility model:
 
-- **Always visible (13 tools)**: Lightweight query tools — `kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`, `get_pipeline_report`, `get_token_summary`, `get_timing_summary`, `fetch_github_issue`, `get_issue_title`, `get_ci_status`, `get_quota_events`, `open_kitchen`, `close_kitchen`
-- **Kitchen tools (26 tools)**: Gated behind `open_kitchen` — `run_skill`, `run_cmd`, `run_python`, `test_check`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 19 more
+- **Free-range (2 tools)**: Always visible — `open_kitchen`, `close_kitchen`
+- **Headless tools (1 tool)**: Revealed in headless sessions via `mcp.enable({'headless'})` — `test_check`
+- **Kitchen tools (36 tools)**: Gated behind `open_kitchen` — `run_skill`, `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 30 more
 
-When you call `open_kitchen` (automatically done by `cook`), all 26 kitchen tools become available for that session. This keeps normal Claude Code sessions clean — no pipeline tools cluttering the tool list.
+When you call `open_kitchen` (automatically done by `cook`), all 37 kitchen-tagged tools become available for that session. This keeps normal Claude Code sessions clean — no pipeline tools cluttering the tool list.
 
 ## Clone Isolation
 

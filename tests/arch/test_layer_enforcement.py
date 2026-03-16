@@ -878,30 +878,21 @@ def test_tool_subset_tags_match_decorators() -> None:
 
 def test_server_docstring_counts_accurate() -> None:
     """server/__init__.py docstring numeric claims match actual frozenset sizes."""
-    import re
-
     from autoskillit.core.types import FREE_RANGE_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
 
     docstring = (SRC_ROOT / "server" / "__init__.py").read_text()
-    claims: dict[str, tuple[re.Match[str] | None, int]] = {
-        "gated": (re.search(r"(\d+)\s+gated", docstring), len(GATED_TOOLS)),
-        "headless-tagged": (
-            re.search(r"(\d+)\s+headless-tagged", docstring),
-            len(HEADLESS_TOOLS),
-        ),
-        "free-range": (re.search(r"(\d+)\s+free-range", docstring), len(FREE_RANGE_TOOLS)),
-        "kitchen-tagged": (
-            re.search(r"(\d+)\s+kitchen-tagged", docstring),
-            len(GATED_TOOLS) + len(HEADLESS_TOOLS),
-        ),
+    expected_substrings: dict[str, str] = {
+        "gated": f"{len(GATED_TOOLS)} gated",
+        "headless-tagged": f"{len(HEADLESS_TOOLS)} headless-tagged",
+        "free-range": f"{len(FREE_RANGE_TOOLS)} free-range",
+        "kitchen-tagged": f"{len(GATED_TOOLS) + len(HEADLESS_TOOLS)} kitchen-tagged",
     }
 
-    mismatches: list[str] = []
-    for label, (match, actual) in claims.items():
-        assert match, f"server/__init__.py docstring has no '{label}' count claim"
-        claimed = int(match.group(1))
-        if claimed != actual:
-            mismatches.append(f"'{label}': claims {claimed}, actual {actual}")
+    mismatches = [
+        f"'{label}': expected '{claim}' in docstring"
+        for label, claim in expected_substrings.items()
+        if claim not in docstring
+    ]
 
     assert not mismatches, (
         "server/__init__.py docstring count claims do not match frozenset sizes:\n"

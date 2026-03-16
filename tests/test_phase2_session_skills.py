@@ -201,7 +201,7 @@ def test_init_session_unknown_skill_logs_warning() -> None:
     root = resolve_ephemeral_root()
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), root)
     with structlog.testing.capture_logs() as cap_logs:
-        skills_dir = mgr.init_session("test_unknown_warn", cook_session=True, config=config)
+        skills_dir = mgr.init_session("test_unknown_warn", cook_session=False, config=config)
     shutil.rmtree(skills_dir, ignore_errors=True)
     assert any(
         "this-skill-does-not-exist-anywhere" in str(entry.get("event", ""))

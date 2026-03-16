@@ -394,17 +394,21 @@ def _evaluate_content_state(
     if session.is_error:
         return ContentState.SESSION_ERROR
 
-    # No content requirements configured: CHANNEL_B confirmation alone is sufficient.
-    # Returning COMPLETE here preserves the existing behaviour for skills that produce
-    # no stdout but complete correctly (e.g. fire-and-forget commands).
-    if not completion_marker and not expected_output_patterns:
-        return ContentState.COMPLETE
-
     result = session.result.strip()
 
-    # Empty result — drain-race candidate
+    # Empty result — drain-race candidate regardless of content requirements.
+    # This must come before the "no requirements" shortcut so that CHANNEL_A
+    # dead-end guard can detect drain-race artifacts even when no marker or
+    # patterns are configured.
     if not result:
         return ContentState.ABSENT
+
+    # No content requirements configured and result is non-empty: CHANNEL_B
+    # confirmation alone is sufficient. Returning COMPLETE here preserves the
+    # existing behaviour for skills that produce non-empty output without a
+    # marker (e.g. fire-and-forget commands with plain text output).
+    if not completion_marker and not expected_output_patterns:
+        return ContentState.COMPLETE
 
     # Marker absent — partial drain candidate
     if completion_marker and completion_marker not in session.result:
@@ -437,25 +441,24 @@ def _compute_success(
     # Gate 0.5: Channel B provenance bypass — session JSONL is authoritative.
     match channel_confirmation:
         case ChannelConfirmation.CHANNEL_B:
-            # Channel B confirmed the completion marker — skip the marker check.
-            # Delegate to _evaluate_content_state for a typed result so that
-            # _compute_outcome can use the same evaluation to decide whether the
-            # dead-end guard should promote to RETRIABLE.
+            # Channel B confirmed the session completed via the JSONL marker stream.
+            # Skip is_error, empty result, and completion_marker checks — all are
+            # overridden by channel confirmation. Only expected_output_patterns can
+            # prevent success (pattern contracts must still be met).
             #
             # PRECONDITION: _recover_block_from_assistant_messages MUST be called
             # (and its recovered session substituted) before this function when
             # channel_confirmation=CHANNEL_B and expected_output_patterns is set.
             # Callers that bypass _build_skill_result must honour this contract.
-            state = _evaluate_content_state(session, completion_marker, expected_output_patterns)
-            if state == ContentState.COMPLETE:
-                logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
-                return True
-            logger.debug(
-                "channel_b_content_check_failed",
-                content_state=state.value,
-                result_len=len(session.result),
-            )
-            return False
+            if not _check_expected_patterns(session.result.strip(), expected_output_patterns):
+                logger.debug(
+                    "channel_b_content_check_failed",
+                    result_len=len(session.result),
+                    pattern_count=len(expected_output_patterns),
+                )
+                return False
+            logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
+            return True
         case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
             pass  # fall through to termination dispatch
         case _ as _unreachable_cc:

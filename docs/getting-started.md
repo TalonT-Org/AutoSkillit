@@ -1,173 +1,145 @@
 # Getting Started
 
-This tutorial walks through running the `implementation` recipe — AutoSkillit's
-flagship pipeline that takes a task description and produces a tested, reviewed PR.
+Walk through the implementation workflow end-to-end. You'll give AutoSkillit a GitHub issue, and it will plan, implement, test, and open a PR — all automatically.
 
-## Before You Start
+## Prerequisites
 
-1. AutoSkillit is installed (`autoskillit doctor` passes)
-2. You're in a git repository with a test command configured
-3. Your project has `.autoskillit/config.yaml` (from `autoskillit init`)
+- AutoSkillit installed (`autoskillit doctor` should pass)
+- A GitHub repository with an open issue to implement
+- `gh auth login` completed
 
-## Starting the Pipeline
+## Start the Recipe
 
-    autoskillit cook implementation
+```bash
+cd your-project
+autoskillit cook implementation
+```
 
-This launches an interactive Claude Code session with the recipe loaded. The
-orchestrator will ask you for the required inputs.
+Select `implementation` from the menu, then confirm the launch.
 
-## Ingredients (Inputs)
+## Provide the Ingredients
 
-The orchestrator prompts you for these before starting:
+AutoSkillit asks for the task details. You can:
 
-| Ingredient | Required | Default | What it does |
-|------------|----------|---------|-------------|
-| `task` | Yes | — | What to implement. Can be a description or a GitHub issue URL |
-| `source_dir` | No | (auto-detected) | Path to your repo. Usually auto-detected |
-| `base_branch` | No | `integration` | Branch to merge into (change to `main` if needed) |
-| `review_approach` | No | `false` | Research modern solutions before implementing |
-| `audit` | No | `true` | Run a quality audit before merging |
-| `open_pr` | No | `true` | Open a GitHub PR (vs. direct merge) |
-| `issue_url` | No | — | GitHub issue URL to close when done |
+- **Paste a GitHub issue URL** — AutoSkillit fetches the title, body, and comments
+- **Describe the task** in plain text
+- **Both** — paste the URL and add extra context
 
-### Example inputs
+Example:
+```
+Task: https://github.com/your-org/your-repo/issues/42
+```
 
-**Simple task:**
-> task: "Add a --verbose flag to the export command that prints each file as it's processed"
-
-**GitHub issue:**
-> task: "https://github.com/myorg/myproject/issues/42"
+AutoSkillit fills in the rest automatically: it detects your repository, base branch, and creates a feature branch named from the issue (e.g., `fix-auth-regression/42`).
 
 ## What Happens Next
 
-### 1. Clone
+The pipeline runs through these stages without intervention:
 
-AutoSkillit clones your repository into `../autoskillit-runs/impl-{timestamp}/`.
-Your working directory is never modified. All pipeline work happens in the clone.
+### 1. Clone and Setup (~1 min)
+Your repo is cloned into an isolated directory. Your working tree is never touched. A feature branch is created and published.
 
-### 2. Plan
+### 2. Planning (~5-7 min)
+A headless Claude session analyzes your codebase with parallel subagents, designs the best technical approach, and writes a detailed implementation plan. If the plan is large, it's split into sequential parts.
 
-The `make-plan` skill analyzes your codebase deeply:
-- Launches parallel subagents to study affected systems
-- Researches approaches via web search
-- Designs tests first (tests that should fail now, pass after implementation)
-- Evaluates approaches on technical merit only
-- Generates architecture diagrams using the appropriate lens
-- Writes a structured plan to `temp/make-plan/`
+### 3. Dry Walkthrough (~4-5 min)
+The plan is validated against the actual codebase. Missing files, wrong function signatures, and broken assumptions are caught and fixed in the plan before any code is written.
 
-If the plan is large (>500 lines), it's automatically split into parts that are
-implemented sequentially.
+### 4. Implementation (~6-10 min)
+Code changes are made in an isolated git worktree, committed phase by phase. If the session runs out of context, it automatically resumes where it left off.
 
-### 3. Verify (Dry Walkthrough)
+### 5. Testing (~1 min)
+Your project's test suite runs. If tests fail, a fix skill automatically diagnoses and resolves the failures (up to 3 attempts).
 
-Before any code is written, the `dry-walkthrough` skill validates the plan:
-- Checks that referenced files and functions actually exist
-- Validates assumptions about current code state
-- Catches circular dependencies and hidden dependencies
-- Fixes issues directly in the plan file
-- Stamps the plan with `Dry-walkthrough verified = TRUE`
+### 6. Quality Audit (~2-5 min)
+The full implementation is diffed against the plan and audited for correctness, scope, and test coverage. If the audit fails, the pipeline re-plans and re-implements the gaps.
 
-Implementation cannot proceed without this stamp.
+### 7. PR Creation (~7-8 min)
+A PR is opened with architecture diagrams, a structured summary, and `Closes #42`. Token usage is included in the PR body.
 
-### 4. Implement
+### 8. Automated Review (~6-10 min)
+Parallel audit subagents review the PR across multiple dimensions (architecture, tests, bugs, cohesion, and more). Inline comments are posted to the PR. If changes are requested, they're applied automatically.
 
-The `implement-worktree` skill creates a git worktree and implements the plan:
-- Creates a new branch in an isolated worktree
-- Implements changes phase by phase with commits per phase
-- Runs `pre-commit` hooks and the full test suite
-- If tests fail, automatically routes to a fix skill
+### 9. CI and Merge Queue (~5-15 min)
+CI is monitored. If it fails, the pipeline diagnoses and fixes the failure. Once CI passes, the PR is enrolled in the merge queue (if enabled).
 
-### 5. Test & Fix Loop
+## When You're Done
 
-If tests fail after implementation:
-- The `resolve-failures` skill diagnoses the failures
-- It applies fixes and re-runs tests
-- This loops until tests pass or the retry budget is exhausted
-- If path-prefix-sensitive files are changed, the pipeline may restart from investigation
+After the pipeline completes, you're asked whether to delete the clone directory. Keep it if you want to inspect the work; delete it to clean up.
 
-### 6. Merge
+The PR is open and ready for human review or automatic merge.
 
-Once tests pass, `merge_worktree` rebases the worktree branch onto the base branch
-and fast-forward merges. Tests must pass again after the rebase (test gate).
+## Monitoring Progress
 
-### 7. Push & PR
+During the run, you can see each step executing in your terminal. The orchestrator shows tool calls and their results as they complete.
 
-The merged changes are pushed to the remote, and a PR is opened. The PR body includes:
-- A summary of all plan files used
-- Token usage statistics from the pipeline
+## Common Variations
 
-### 8. Automated Code Review
-
-The `review-pr` skill reviews the PR with 7 parallel audit subagents:
-
-| Audit | What it checks |
-|-------|---------------|
-| Architecture | Import layering and architectural rule violations |
-| Tests | Over-mocking, weak assertions, xdist safety |
-| Defense | Typed boundaries, error context, late validation |
-| Bugs | Off-by-one errors, missing await, unhandled None |
-| Cohesion | Naming consistency, feature locality |
-| Slop | Dead code, useless comments, AI backward-compat hacks |
-| Deletion regression | Code reintroduced after deliberate deletion |
-
-Each finding is posted as an inline comment on the PR. If changes are requested,
-the `resolve-review` skill applies fixes and pushes.
-
-### 9. CI Watch
-
-If CI is configured, AutoSkillit monitors the CI run. If it fails:
-- `diagnose-ci` analyzes the failure
-- `resolve-failures` applies fixes
-- Changes are re-pushed and CI is re-watched
-
-## After the Pipeline
-
-When the pipeline completes, you'll be asked to confirm cleanup. The clone directory
-is preserved until you approve deletion.
-
-**If something goes wrong:** Clones are always preserved on failure (`keep: "true"`).
-You can inspect the clone, the worktree, and all artifacts in `temp/`.
-
-## Configuration Tips
-
-### Changing the base branch
-
-Most projects use `main` instead of `integration`:
-
-```yaml
-# .autoskillit/config.yaml
-branching:
-  default_base_branch: main
+### No GitHub issue — just a description
+Skip the issue URL and describe the task directly:
+```
+Task: Add rate limiting to the /api/search endpoint with a 100 req/min limit per API key
 ```
 
-Or pass it as an ingredient: `base_branch: main`
+### Skip the PR
+Set `open_pr` to `false` when asked for ingredients. Changes merge directly to your base branch.
 
-### Setting up worktree dependencies
+### Skip the audit
+Set `audit` to `false` for faster runs when you trust the implementation.
 
-If your project needs setup after creating a worktree (e.g., installing dependencies):
+## Typical Timing
 
-```yaml
-worktree_setup:
-  command: ["npm", "install"]
+Based on real pipeline runs:
+
+| Stage | Typical Duration |
+|-------|-----------------|
+| Clone + setup | ~1 min |
+| Planning | 5-7 min |
+| Dry walkthrough | 4-5 min |
+| Implementation | 6-10 min |
+| Testing | 1-2 min |
+| Quality audit | 2-5 min |
+| PR + review | 13-18 min |
+| CI + merge queue | 5-15 min |
+| **Total** | **~45-60 min** |
+
+## Other Recipes
+
+### Fixing bugs: `remediation`
+When you have a bug or regression, use the remediation recipe instead. It starts with deep investigation and root-cause analysis before planning:
+
+```bash
+autoskillit cook remediation
 ```
 
-### Choosing the model
+See **[Recipes](recipes.md)** for details.
 
-By default, headless sessions use Sonnet. To use a different model:
+### Large documents: `implementation-groups`
+For architecture proposals, migration plans, or large feature specs, use `implementation-groups`. It decomposes the document into ordered groups and implements each one:
 
-```yaml
-model:
-  default: "claude-sonnet-4-6"
+```bash
+autoskillit cook implementation-groups
 ```
 
-See [Configuration Reference](configuration.md) for all options.
+### Consolidating PRs: `merge-prs`
+When you have multiple open PRs to merge together:
 
-## Alternative: Chefs-Hat Mode
+```bash
+autoskillit cook merge-prs
+```
 
-If you want to use individual skills interactively (without a recipe):
+## Interactive Skills: Chefs Hat
 
-    autoskillit chefs-hat
+For one-off tasks without a full pipeline, launch an interactive session with all skills available:
 
-This launches Claude Code with all 36 bundled skills available as slash commands.
-Type `/autoskillit:make-plan` to create a plan, `/autoskillit:investigate` to
-debug an issue, etc.
+```bash
+autoskillit chefs-hat
+```
+
+Then use any skill as a slash command: `/autoskillit:investigate`, `/autoskillit:review-pr`, `/autoskillit:audit-arch`, etc.
+
+## Next Steps
+
+- **[Recipes](recipes.md)** — All recipes with ingredients and flow diagrams
+- **[CLI Reference](cli-reference.md)** — All commands and options
+- **[Configuration](configuration.md)** — Customize test commands, safety settings, and more

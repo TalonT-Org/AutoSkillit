@@ -8,6 +8,7 @@
 
 ### Recommended
 - **uv** — Fast Python package manager ([install](https://docs.astral.sh/uv/getting-started/installation/))
+- **[gh CLI](https://cli.github.com/)** — Required for GitHub features (PR creation, issue management, CI status). Install: `brew install gh` or see [gh docs](https://cli.github.com/). Authenticate: `gh auth login`
 - **Task** (go-task) — If your project uses Taskfile.yml for test commands
 
 ## Quick Install

@@ -35,10 +35,12 @@ autoskillit cook implementation
 After installation, run the setup wizard to configure AutoSkillit for your project:
 
 ```bash
-autoskillit cook setup-project
+autoskillit chefs-hat
+# Then in the Claude session:
+/autoskillit:setup-project
 ```
 
-This generates project-tailored recipes and config by exploring your codebase.
+This explores your codebase and generates project-tailored recipes and config.
 
 That's it. Describe what you want to build, and AutoSkillit handles the rest:
 
@@ -72,12 +74,13 @@ See the [CLI Reference](docs/cli-reference.md) for all commands.
 
 ## Documentation
 
-- **[Installation](docs/installation.md)** — Prerequisites, manual install, troubleshooting
-- **[Getting Started](docs/getting-started.md)** — Full tutorial with the implementation recipe
+- **[Getting Started](docs/getting-started.md)** — Walk through the implementation workflow step by step
+- **[Installation](docs/installation.md)** — Prerequisites, install, troubleshooting
 - **[Recipes](docs/recipes.md)** — All recipes with flow diagrams and input reference
-- **[Architecture](docs/architecture.md)** — Gating, clone isolation, headless sessions, hooks
 - **[CLI Reference](docs/cli-reference.md)** — All commands and options
 - **[Configuration](docs/configuration.md)** — Layered config, all settings, examples
+- **[Architecture](docs/architecture.md)** — Gating, clone isolation, headless sessions, hooks
+- **[Contributing](docs/developer/contributing.md)** — Development setup, testing, architecture layers
 
 ## License
 

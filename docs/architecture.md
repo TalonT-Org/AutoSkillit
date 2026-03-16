@@ -13,7 +13,7 @@ headless Claude Code session with full tool access. Examples: `make-plan` (creat
 an implementation plan), `implement-worktree` (implement code in a worktree),
 `review-pr` (review a PR with parallel audit subagents).
 
-AutoSkillit bundles 36 skills. Use `autoskillit skills list` to see them all.
+AutoSkillit bundles 60 skills. Use `autoskillit skills list` to see them all.
 
 ### Recipes
 
@@ -35,10 +35,10 @@ issues.
 
 ## Three-Tier Visibility System
 
-AutoSkillit uses a three-tier visibility model so that its 36 MCP tools and 36
+AutoSkillit uses a three-tier visibility model so that its 39 MCP tools and 60
 skills never pollute your context window when you don't need them.
 
-### Tier 0: Always Visible (12 tools)
+### Tier 0: Always Visible (13 tools)
 
 These lightweight tools are visible in every Claude Code session immediately.
 They let you inspect recipes, check status, and fetch issues without opening
@@ -47,12 +47,12 @@ the kitchen:
 `kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`,
 `get_pipeline_report`, `get_token_summary`, `get_timing_summary`,
 `fetch_github_issue`, `get_issue_title`, `get_ci_status`,
-`open_kitchen`, `close_kitchen`
+`get_quota_events`, `open_kitchen`, `close_kitchen`
 
-### Tier 1: Kitchen-Gated (24 tools)
+### Tier 1: Kitchen-Gated (26 tools)
 
 The pipeline tools — `run_skill`, `run_cmd`, `test_check`, `merge_worktree`,
-`clone_repo`, and 19 others — are hidden at startup via FastMCP's tag-based
+`clone_repo`, and 21 others — are hidden at startup via FastMCP's tag-based
 visibility system. They don't appear in `tools/list`, so Claude never sees
 their descriptions and never wastes tokens on them.
 
@@ -60,7 +60,7 @@ To reveal them, call `open_kitchen` (or launch via `autoskillit cook`, which
 opens the kitchen automatically). This:
 
 1. Enables the gate (`DefaultGateState.enable()`)
-2. Dynamically reveals all 24 kitchen tools to the MCP client
+2. Dynamically reveals all 26 kitchen tools to the MCP client
 3. Writes a hook config file for the quota guard
 4. Injects orchestrator discipline rules into the response
 
@@ -177,7 +177,7 @@ Two validation rules:
 
 | Feature | What it prevents |
 |---------|-----------------|
-| Three-tier visibility | 24 pipeline tools hidden by default — zero token cost in normal sessions |
+| Three-tier visibility | 26 pipeline tools hidden by default — zero token cost in normal sessions |
 | Clone isolation | Source repo never modified during pipelines |
 | Dry-walkthrough gate | Plans validated before implementation |
 | Test gate on merge | Tests must pass before merge is allowed |

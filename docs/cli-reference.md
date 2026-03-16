@@ -82,7 +82,7 @@ Launch Claude Code with all skills as slash commands.
 
 Alias: `autoskillit chef`
 
-This gives you an unrestricted Claude session with all 36 bundled skills
+This gives you an unrestricted Claude session with all bundled skills
 available as `/autoskillit:*` slash commands and the kitchen pre-opened.
 No recipe — use skills individually as needed.
 
@@ -157,7 +157,7 @@ List all bundled skills.
 
     autoskillit skills list
 
-Shows name, source, and path for each of the 36 bundled skills.
+Shows name, source, and path for all bundled skills (see `autoskillit skills list` for the full list).
 
 ---
 

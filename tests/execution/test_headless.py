@@ -2479,3 +2479,86 @@ class TestBuildSkillResultChannelBPatternRecovery:
         )
         assert sr.success is True
         assert "---prepare-issue-result---" in sr.result
+
+
+class TestBuildSkillResultChannelAPatternRecovery:
+    """_build_skill_result must extend pattern recovery to CHANNEL_A wins, not just CHANNEL_B."""
+
+    def test_build_skill_result_channel_a_recovers_from_assistant_messages(self) -> None:
+        """_build_skill_result must attempt pattern recovery for CHANNEL_A, not just CHANNEL_B."""
+        block = "verdict = GO\n%%ORDER_UP%%"
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": block}],
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done. %%ORDER_UP%%",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["verdict\\s*=\\s*(GO|NO_GO)"],
+        )
+        assert sr.success is True, (
+            "CHANNEL_A should recover patterns from assistant_messages, same as CHANNEL_B."
+        )
+
+    def test_build_skill_result_channel_a_pattern_contract_violation_is_terminal(
+        self,
+    ) -> None:
+        """After failed CHANNEL_A recovery, contract violation must be FAILED, not RETRIABLE."""
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "No verdict here. %%ORDER_UP%%"}],
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done. %%ORDER_UP%%",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["verdict\\s*=\\s*(GO|NO_GO)"],
+        )
+        assert sr.success is False
+        assert sr.needs_retry is False
+        assert sr.subtype == "adjudicated_failure"

@@ -35,9 +35,10 @@ def main() -> int:
     try:
         tmp.write_text(content, encoding="utf-8")
         tmp.replace(PLUGIN_JSON)
-    except Exception:
+    except Exception as e:
         tmp.unlink(missing_ok=True)
-        raise
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
     print(f"plugin.json updated to version {version}")
     return 0
 

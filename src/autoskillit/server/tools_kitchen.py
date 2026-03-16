@@ -110,6 +110,16 @@ async def open_kitchen(
     await _open_kitchen_handler()
     await ctx.enable_components(tags={"kitchen"})
 
+    # REQ-VIS-008: Re-disable subset-suppressed tools after enabling kitchen.
+    # FastMCP session rules override server rules; enable_components(kitchen) would
+    # otherwise reveal dual-tagged tools (e.g. kitchen+github) that are server-disabled.
+    # Later session rules win, so this disable correctly overrides the kitchen enable.
+    from autoskillit.server import _get_ctx  # noqa: PLC0415
+
+    tool_ctx = _get_ctx()
+    for subset in tool_ctx.config.subsets.disabled:
+        await ctx.disable_components(tags={subset})
+
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     _categories = _build_tool_category_listing()
 

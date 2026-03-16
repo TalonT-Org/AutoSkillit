@@ -89,6 +89,26 @@ def _remove_disable_model_invocation(content: str) -> str:
     return f"---\n{fm_text}\n---\n{body}"
 
 
+def _is_skill_disabled(
+    skill_info: SkillInfo,
+    disabled: list[str],
+    custom_tags: dict[str, list[str]],
+) -> bool:
+    """Return True if skill should be excluded due to a disabled subset.
+
+    For each tag in disabled:
+    - If the tag is a custom_tag key: check if skill.name is in custom_tags[tag]
+    - Otherwise (built-in category): check if tag is in skill_info.categories
+    """
+    for tag in disabled:
+        if tag in custom_tags:
+            if skill_info.name in custom_tags[tag]:
+                return True
+        elif tag in skill_info.categories:
+            return True
+    return False
+
+
 class SkillsDirectoryProvider:
     """Provides bundled skill content with tier-aware frontmatter injection."""
 
@@ -164,9 +184,20 @@ class DefaultSessionSkillManager:
                 )
             tier2_skills = frozenset(config.skills.tier2)
 
+        # Extract subset disable info from config (empty by default)
+        if config is None:
+            disabled_subsets: list[str] = []
+            custom_tags: dict[str, list[str]] = {}
+        else:
+            disabled_subsets = list(config.subsets.disabled)
+            custom_tags = dict(config.subsets.custom_tags)
+
         session_skills_dir = self._root / session_id
         session_skills_dir.mkdir(parents=True, exist_ok=True)
         for skill_info in self._provider.list_skills():
+            # Skip skills in disabled subsets (REQ-VIS-002)
+            if _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
+                continue
             skill_dir = session_skills_dir / skill_info.name
             skill_dir.mkdir(exist_ok=True)
             tier2_gated = (not cook_session) and (skill_info.name in tier2_skills)

@@ -31,6 +31,15 @@ def _initialize(ctx: ToolContext) -> None:
     global _ctx
     _ctx = ctx
 
+    # Apply server-level subset visibility from config.
+    # Uses a deferred local import to avoid module-level circular import
+    # (server/__init__.py imports from _state.py at module level).
+    if ctx.config.subsets.disabled:
+        from autoskillit.server import mcp  # noqa: PLC0415
+
+        for subset in ctx.config.subsets.disabled:
+            mcp.disable(tags={subset})
+
     # Recovery sweep: finalize any orphaned tmpfs trace files from crashed sessions.
     try:
         from autoskillit.execution import recover_crashed_sessions

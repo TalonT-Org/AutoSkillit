@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
+from pathlib import Path
 
 from autoskillit.core import ClaudeFlags
 from autoskillit.execution.commands import (
@@ -60,20 +60,16 @@ class TestBuildInteractiveCmd:
 
 
 class TestBuildInteractiveCmdExtended:
-    def test_accepts_plugin_dir(self, tmp_path: pytest.TempdirFactory) -> None:
+    def test_accepts_plugin_dir(self, tmp_path: Path) -> None:
         """build_interactive_cmd with plugin_dir includes --plugin-dir flag."""
-        from pathlib import Path
-
         plugin_dir = Path(tmp_path)
         result = build_interactive_cmd(plugin_dir=plugin_dir)
         assert "--plugin-dir" in result.cmd
         idx = result.cmd.index("--plugin-dir")
         assert result.cmd[idx + 1] == str(plugin_dir)
 
-    def test_accepts_add_dirs(self, tmp_path: pytest.TempdirFactory) -> None:
+    def test_accepts_add_dirs(self, tmp_path: Path) -> None:
         """build_interactive_cmd with add_dirs includes --add-dir for each entry."""
-        from pathlib import Path
-
         d1, d2 = Path(tmp_path) / "a", Path(tmp_path) / "b"
         result = build_interactive_cmd(add_dirs=[d1, d2])
         assert result.cmd.count("--add-dir") == 2
@@ -83,9 +79,8 @@ class TestBuildInteractiveCmdExtended:
         result = build_interactive_cmd()
         assert "--plugin-dir" not in result.cmd
 
-    def test_chefs_hat_uses_builder_output(self, tmp_path: pytest.TempdirFactory) -> None:
+    def test_chefs_hat_uses_builder_output(self, tmp_path: Path) -> None:
         """chefs-hat subprocess cmd is consistent with build_interactive_cmd output."""
-        from pathlib import Path
         from unittest.mock import MagicMock, patch
 
         from autoskillit.core import pkg_root

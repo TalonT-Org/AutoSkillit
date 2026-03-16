@@ -110,7 +110,11 @@ class TestAddDirLayoutContract:
 
         # Only .claude/ is allowed as a top-level child of session_dir
         flat_skills = list(session_dir.glob("*/SKILL.md"))
-        flat_non_claude = [f for f in flat_skills if f.parts[-3] != ".claude"]
+        flat_non_claude = [
+            f
+            for f in flat_skills
+            if not str(f.relative_to(session_dir)).startswith(".claude/skills/")
+        ]
         assert not flat_non_claude, (
             f"Flat layout detected: {flat_non_claude}. "
             "Skills must be nested under .claude/skills/, not at session root. "
@@ -210,13 +214,18 @@ class TestChefsHatAddDirStructure:
                     skill_files = list(add_dir.glob(".claude/skills/*/SKILL.md"))
                     if not skill_files:
                         structure_errors.append(
-                            f"--add-dir target {add_dir} has no .claude/skills/<name>/SKILL.md files. "
+                            f"--add-dir target {add_dir} has no "
+                            ".claude/skills/<name>/SKILL.md files. "
                             "Claude Code will find zero skills. "
                             "The real init_session is not writing the correct layout."
                         )
 
                     # Anti-regression: flat layout must not exist at the session root
-                    flat = [f for f in add_dir.glob("*/SKILL.md") if f.parts[-3] != ".claude"]
+                    flat = [
+                        f
+                        for f in add_dir.glob("*/SKILL.md")
+                        if not str(f.relative_to(add_dir)).startswith(".claude/skills/")
+                    ]
                     if flat:
                         structure_errors.append(
                             f"Flat layout detected in --add-dir target: {flat}. "
@@ -244,15 +253,30 @@ class TestChefsHatAddDirStructure:
         real_mgr = DefaultSessionSkillManager(
             SkillsDirectoryProvider(), ephemeral_root=ephemeral_root
         )
-        # DefaultSessionSkillManager is imported inside the chefs_hat() function body,
-        # so it must be patched via its source module (autoskillit.workspace), not via
-        # the _chefs_hat module namespace — which has no module-level binding for this name.
+        # Verified: _chefs_hat.py imports DefaultSessionSkillManager from
+        # autoskillit.workspace inside the chefs_hat() function body (lazy import),
+        # so patching autoskillit.workspace.DefaultSessionSkillManager intercepts it.
+        # The spy below confirms real_mgr.init_session is actually called.
+        init_session_calls: list[bool] = []
+        original_init_session = real_mgr.init_session
+
+        def _spy_init_session(*args: object, **kwargs: object) -> object:
+            init_session_calls.append(True)
+            return original_init_session(*args, **kwargs)
+
+        monkeypatch.setattr(real_mgr, "init_session", _spy_init_session)
         monkeypatch.setattr(
             "autoskillit.workspace.DefaultSessionSkillManager",
             lambda *a, **kw: real_mgr,
         )
 
         chefs_hat()
+
+        assert init_session_calls, (
+            "real_mgr.init_session was never called — "
+            "patch target 'autoskillit.workspace.DefaultSessionSkillManager' "
+            "did not intercept chefs_hat()'s constructor call."
+        )
 
         assert add_dir_seen, "Expected at least one --add-dir in command"
         assert not structure_errors, "\n".join(structure_errors)

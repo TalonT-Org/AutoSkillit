@@ -41,7 +41,10 @@ def _initialize(ctx: ToolContext) -> None:
             for subset in ctx.config.subsets.disabled:
                 mcp.disable(tags={subset})
         except ImportError:
-            logger.warning("Could not import mcp for subset disable at startup", exc_info=True)
+            logger.error(
+                "Could not import mcp for subset disable at startup — subset-disabled tools may be unexpectedly visible",
+                exc_info=True,
+            )
 
     # Recovery sweep: finalize any orphaned tmpfs trace files from crashed sessions.
     try:

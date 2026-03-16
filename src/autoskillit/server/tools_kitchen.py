@@ -118,19 +118,18 @@ async def open_kitchen(
     """
     if (h := _require_not_headless("open_kitchen")) is not None:
         return h
-    await _open_kitchen_handler()
-    await ctx.enable_components(tags={"kitchen"})
 
     from autoskillit.server import _get_ctx  # noqa: PLC0415
 
-    await _redisable_subsets(ctx, _get_ctx().config.subsets.disabled)
+    disabled_subsets = _get_ctx().config.subsets.disabled
+    await _open_kitchen_handler()
+    await ctx.enable_components(tags={"kitchen"})
+    await _redisable_subsets(ctx, disabled_subsets)
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     _categories = _build_tool_category_listing()
 
     if name is not None:
-        from autoskillit.server import _get_ctx
-
         tool_ctx = _get_ctx()
         if tool_ctx.recipes is None:
             return json.dumps({"error": "Server not initialized", "kitchen": "open"})

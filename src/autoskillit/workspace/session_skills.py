@@ -141,17 +141,17 @@ class SkillsDirectoryProvider:
         """List all public bundled skills."""
         return self._resolver.list_all()
 
-    def get_skill_content(self, name: str, *, tier2_gated: bool = True) -> str:
-        """Return SKILL.md content with tier-appropriate frontmatter.
+    def get_skill_content(self, name: str, *, gated: bool = True) -> str:
+        """Return SKILL.md content with gating frontmatter injected when required.
 
-        - tier2_gated=True  → ensure disable-model-invocation: true is present
-        - tier2_gated=False → return unmodified content (cook session or Tier 1)
+        - gated=True  → ensure disable-model-invocation: true is present
+        - gated=False → return unmodified content (cook session or Tier 1)
         """
         skill_info = self._resolver.resolve(name)
         if skill_info is None:
             raise FileNotFoundError(f"Skill not found: {name}")
         content = skill_info.path.read_text()
-        if tier2_gated:
+        if gated:
             content = _inject_disable_model_invocation(content)
         return content
 
@@ -231,11 +231,13 @@ class DefaultSessionSkillManager:
             ):
                 if skill_info.name in overrides:
                     _log.debug("init_session_override_skip", skill=skill_info.name)
+                elif _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
+                    _log.debug("init_session_subset_skip", skill=skill_info.name)
                 continue
             skill_dir = session_skills_dir / skill_info.name
             skill_dir.mkdir(exist_ok=True)
-            tier2_gated = (not cook_session) and (skill_info.name in tier2_skills)
-            content = self._provider.get_skill_content(skill_info.name, tier2_gated=tier2_gated)
+            gated = (not cook_session) and (skill_info.name in tier2_skills)
+            content = self._provider.get_skill_content(skill_info.name, gated=gated)
             _atomic_write(skill_dir / "SKILL.md", content)
         return session_skills_dir
 

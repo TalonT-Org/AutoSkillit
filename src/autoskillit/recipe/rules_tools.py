@@ -43,28 +43,7 @@ def _unknown_tool(ctx: ValidationContext) -> list[RuleFinding]:
     for step_name, step in ctx.recipe.steps.items():
         if step.tool is None:
             continue
-        if step.tool in _ALL_TOOLS:
-            # Known tool — check if it belongs to a disabled subset
-            if ctx.disabled_subsets:
-                tool_categories = TOOL_SUBSET_TAGS.get(step.tool, frozenset())
-                overlap = tool_categories & ctx.disabled_subsets
-                if overlap:
-                    disabled_subset = next(iter(sorted(overlap)))
-                    findings.append(
-                        RuleFinding(
-                            rule="subset-disabled-tool",
-                            severity=Severity.WARNING,
-                            step_name=step_name,
-                            message=(
-                                f"step '{step_name}': tool '{step.tool}' belongs to "
-                                f"the disabled subset '{disabled_subset}'. Enable "
-                                f"'{disabled_subset}' in .autoskillit/config.yaml "
-                                f"subsets.disabled to use this tool."
-                            ),
-                        )
-                    )
-        else:
-            # Truly unknown tool
+        if step.tool not in _ALL_TOOLS:
             findings.append(
                 RuleFinding(
                     rule="unknown-tool",
@@ -73,6 +52,40 @@ def _unknown_tool(ctx: ValidationContext) -> list[RuleFinding]:
                     message=(
                         f"step '{step_name}': tool '{step.tool}' is not a registered MCP tool. "
                         f"Known tools: {sorted(_ALL_TOOLS)}"
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="subset-disabled-tool",
+    description=(
+        "step.tool belongs to a functional category currently disabled in subsets.disabled config"
+    ),
+    severity=Severity.WARNING,
+)
+def _check_subset_disabled_tool(ctx: ValidationContext) -> list[RuleFinding]:
+    if not ctx.disabled_subsets:
+        return []
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool is None or step.tool not in _ALL_TOOLS:
+            continue
+        tool_categories = TOOL_SUBSET_TAGS.get(step.tool, frozenset())
+        overlap = tool_categories & ctx.disabled_subsets
+        if overlap:
+            disabled_subset = next(iter(sorted(overlap)))
+            findings.append(
+                RuleFinding(
+                    rule="subset-disabled-tool",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"step '{step_name}': tool '{step.tool}' belongs to "
+                        f"the disabled subset '{disabled_subset}'. Enable "
+                        f"'{disabled_subset}' in .autoskillit/config.yaml "
+                        f"subsets.disabled to use this tool."
                     ),
                 )
             )

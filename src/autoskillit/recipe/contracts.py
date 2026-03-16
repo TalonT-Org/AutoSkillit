@@ -416,7 +416,10 @@ def check_contract_staleness(
         if effective_skills_dir is not None:
             current_hash = compute_skill_hash(skill_name, skills_dir=effective_skills_dir)
         else:
-            assert _resolver is not None
+            if _resolver is None:
+                raise RuntimeError(
+                    "check_staleness called without effective_skills_dir or resolver"
+                )
             info = _resolver.resolve(skill_name)
             current_hash = (
                 compute_skill_hash(skill_name, skills_dir=info.path.parent.parent)

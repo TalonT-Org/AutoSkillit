@@ -83,11 +83,11 @@ class TestComputeOutcomeLogging:
     """Verify _compute_outcome logs guard firings."""
 
     def test_logs_dead_end_guard(self):
-        """_compute_outcome logs when dead-end guard promotes to RETRIABLE."""
+        """_compute_outcome logs when dead-end guard promotes to RETRIABLE (drain-race path)."""
         session = ClaudeSessionResult(
             subtype="success",
-            is_error=True,  # will make _compute_success return False
-            result="x",
+            is_error=False,
+            result="",  # empty result — drain-race candidate; guard must promote to RETRIABLE
             session_id="",
         )
         with structlog.testing.capture_logs() as logs:
@@ -95,12 +95,33 @@ class TestComputeOutcomeLogging:
                 session,
                 returncode=0,
                 termination=TerminationReason.NATURAL_EXIT,
-                completion_marker="",
+                completion_marker="%%ORDER_UP%%",
                 channel_confirmation=ChannelConfirmation.CHANNEL_A,
             )
         dead_end_logs = [r for r in logs if r.get("event") == "dead_end_guard"]
         assert dead_end_logs
         assert dead_end_logs[0]["action"] == "promoted_to_retriable"
+
+    def test_logs_dead_end_guard_terminal_not_promoted(self):
+        """Dead-end guard logs terminal_failure_not_promoted for CONTRACT_VIOLATION."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="Done. %%ORDER_UP%%",  # result + marker present, patterns will fail
+            session_id="",
+        )
+        with structlog.testing.capture_logs() as logs:
+            outcome, reason = _compute_outcome(
+                session,
+                returncode=0,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker="%%ORDER_UP%%",
+                channel_confirmation=ChannelConfirmation.CHANNEL_A,
+                expected_output_patterns=["verdict\\s*=\\s*(GO|NO_GO)"],
+            )
+        dead_end_logs = [r for r in logs if r.get("event") == "dead_end_guard"]
+        assert dead_end_logs
+        assert dead_end_logs[0]["action"] == "terminal_failure_not_promoted"
 
     def test_logs_contradiction_guard(self):
         """_compute_outcome logs when contradiction guard fires."""

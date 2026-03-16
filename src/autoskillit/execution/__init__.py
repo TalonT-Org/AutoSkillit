@@ -53,6 +53,7 @@ from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
 from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE, resolve_remote_repo
 from autoskillit.execution.session import (
     ClaudeSessionResult,
+    ContentState,
     extract_token_usage,
     parse_session_result,
 )
@@ -84,6 +85,7 @@ __all__ = [
     "check_and_sleep_if_needed",
     # session
     "ClaudeSessionResult",
+    "ContentState",
     "SkillResult",
     "extract_token_usage",
     "parse_session_result",

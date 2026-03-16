@@ -160,8 +160,8 @@ def _recover_block_from_assistant_messages(
     session: ClaudeSessionResult,
     expected_output_patterns: Sequence[str],
 ) -> ClaudeSessionResult | None:
-    """When session.result lacks expected_output_patterns (Channel B win before
-    stdout drain), attempt to find the patterns in session.assistant_messages.
+    """When session.result lacks expected_output_patterns (drain-race condition
+    on either channel), attempt to find the patterns in session.assistant_messages.
     If found, return a new ClaudeSessionResult with result reconstructed from
     assistant_messages. Return None if patterns cannot be found there either.
     """
@@ -171,7 +171,7 @@ def _recover_block_from_assistant_messages(
     if not _check_expected_patterns(combined, expected_output_patterns):
         return None
     logger.warning(
-        "channel_b_pattern_recovered_from_assistant_messages",
+        "pattern_recovered_from_assistant_messages",
         patterns=list(expected_output_patterns),
     )
     # Preserve any content already drained into session.result before appending
@@ -479,13 +479,13 @@ def _build_skill_result(
         if recovered is not None:
             session = recovered
 
-    # Channel B pattern recovery: when Channel B wins before stdout is drained,
-    # expected_output_patterns content may only exist in assistant_messages.
-    # Attempt recovery so that _compute_success sees the block in session.result.
+    # Pattern recovery: when a drain-race occurs on either channel, expected_output_patterns
+    # content may only exist in assistant_messages. Attempt recovery so that _compute_success
+    # sees the block in session.result.
     if (
-        result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        result.channel_confirmation != ChannelConfirmation.UNMONITORED
         and expected_output_patterns
-        and not _check_expected_patterns(session.result, expected_output_patterns)
+        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
     ):
         pattern_recovered = _recover_block_from_assistant_messages(
             session, expected_output_patterns

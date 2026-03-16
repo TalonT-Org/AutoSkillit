@@ -44,6 +44,8 @@ async def list_recipes() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps([])
@@ -165,6 +167,8 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     ``suggestions`` (list of semantic findings, possibly empty) keys.
     On error: JSON with ``error`` key.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"error": "Server not initialized"})
@@ -209,6 +213,8 @@ async def validate_recipe(script_path: str) -> str:
     Args:
         script_path: Absolute path to the .yaml recipe file to validate.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"valid": False, "errors": ["Server not initialized"]})

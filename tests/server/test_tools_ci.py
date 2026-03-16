@@ -19,9 +19,9 @@ def test_wait_for_ci_is_gated():
     assert "wait_for_ci" in GATED_TOOLS
 
 
-def test_get_ci_status_is_ungated():
-    assert "get_ci_status" in UNGATED_TOOLS
-    assert "get_ci_status" not in GATED_TOOLS
+def test_get_ci_status_is_gated():
+    assert "get_ci_status" in GATED_TOOLS
+    assert "get_ci_status" not in UNGATED_TOOLS
 
 
 # ---------------------------------------------------------------------------
@@ -143,27 +143,11 @@ async def test_wait_for_ci_no_watcher(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_get_ci_status_ungated(tool_ctx):
-    """get_ci_status works even when gate is closed."""
+async def test_get_ci_status_gate_check(tool_ctx):
+    """get_ci_status is now gated — returns gate_error when gate is closed."""
     tool_ctx.gate = DefaultGateState(enabled=False)
-    mock_watcher = AsyncMock()
-    mock_watcher.status = AsyncMock(
-        return_value={
-            "runs": [
-                {
-                    "id": 100,
-                    "status": "completed",
-                    "conclusion": "success",
-                    "failed_jobs": [],
-                }
-            ]
-        }
-    )
-    tool_ctx.ci_watcher = mock_watcher
-
     result = json.loads(await get_ci_status(branch="main", cwd="/repo"))
-    assert len(result["runs"]) == 1
-    assert result["runs"][0]["conclusion"] == "success"
+    assert result.get("subtype") == "gate_error"
 
 
 @pytest.mark.anyio

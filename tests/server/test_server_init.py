@@ -1211,12 +1211,7 @@ class TestToolSchemas:
     @pytest.mark.anyio
     async def test_tool_docstrings_contain_required_cross_refs(self):
         """Tool docstrings must contain required cross-references."""
-        from fastmcp.client import Client
-
-        from autoskillit.server import mcp
-
-        async with Client(mcp) as client:
-            tools = {t.name: t for t in await client.list_tools()}
+        tools = await self._get_all_tools()
         for tool_name, required_terms in self.REQUIRED_CROSS_REFS.items():
             tool = tools.get(tool_name)
             assert tool is not None, f"Tool '{tool_name}' not found in server"
@@ -1239,12 +1234,7 @@ class TestToolSchemas:
     @pytest.mark.anyio
     async def test_recipe_tools_have_disambiguation(self):
         """All recipe-related tools must carry the 'NOT slash commands' disclaimer."""
-        from fastmcp.client import Client
-
-        from autoskillit.server import mcp
-
-        async with Client(mcp) as client:
-            tools = {t.name: t for t in await client.list_tools()}
+        tools = await self._get_all_tools()
         recipe_tools = ["list_recipes", "load_recipe", "validate_recipe"]
         for tool_name in recipe_tools:
             tool = tools.get(tool_name)
@@ -1257,12 +1247,7 @@ class TestToolSchemas:
     @pytest.mark.anyio
     async def test_load_recipe_names_all_forbidden_tools(self):
         """load_recipe must enumerate all forbidden native tools."""
-        from fastmcp.client import Client
-
-        from autoskillit.server import mcp
-
-        async with Client(mcp) as client:
-            tools = {t.name: t for t in await client.list_tools()}
+        tools = await self._get_all_tools()
         desc = tools["load_recipe"].description or ""
 
         missing = [t for t in self.FORBIDDEN_NATIVE_TOOLS if t not in desc]

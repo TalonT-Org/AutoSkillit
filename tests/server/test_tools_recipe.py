@@ -599,13 +599,17 @@ class TestDocstringSemantics:
     """
 
     async def _get_tools(self) -> dict:
-        """Return a dict of tool_name -> tool for all visible tools via public Client API."""
+        """Return a dict of tool_name -> tool for all visible tools including kitchen-gated."""
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        try:
+            mcp.enable(tags={"kitchen"})
+            async with Client(mcp) as client:
+                tools = await client.list_tools()
+        finally:
+            mcp.disable(tags={"kitchen"})
         return {t.name: t for t in tools}
 
     @pytest.mark.anyio
@@ -752,13 +756,17 @@ class TestLoadSkillScriptFailurePredicates:
     """The load_recipe tool description documents failure predicates."""
 
     async def _get_tools(self) -> dict:
-        """Return dict of tool_name -> tool for all visible tools via public Client API."""
+        """Return dict of tool_name -> tool for all visible tools including kitchen-gated."""
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        try:
+            mcp.enable(tags={"kitchen"})
+            async with Client(mcp) as client:
+                tools = await client.list_tools()
+        finally:
+            mcp.disable(tags={"kitchen"})
         return {t.name: t for t in tools}
 
     @pytest.mark.anyio
@@ -772,13 +780,6 @@ class TestLoadSkillScriptFailurePredicates:
 
 class TestMigrationSuggestions:
     """MSUG2: validate_recipe surfaces migration warnings."""
-
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        """Verify these tools work WITHOUT tool activation."""
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
 
     # MSUG2
     @pytest.mark.anyio
@@ -795,13 +796,6 @@ class TestMigrationSuggestions:
 
 class TestMigrationSuppression:
     """SUP1, SUP4: load_recipe respects migration.suppressed config."""
-
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        """Verify these tools work WITHOUT tool activation."""
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
 
     # SUP1
     @pytest.mark.anyio
@@ -936,11 +930,6 @@ class TestApplyTriageGate:
 
 class TestLoadRecipeReadOnly:
     """P4: load_recipe is strictly read-only — no migration, no contract card generation."""
-
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        """load_recipe works WITHOUT tool activation."""
-        tool_ctx.gate = DefaultGateState(enabled=False)
 
     @pytest.mark.anyio
     async def test_load_recipe_does_not_call_migration_engine(self, tmp_path, monkeypatch):
@@ -1382,32 +1371,3 @@ def test_tools_recipe_does_not_import_raw_ctx():
                 assert "_ctx" not in names, (
                     "tools_recipe.py must not import raw _ctx — use _get_ctx_or_none()"
                 )
-
-
-# ---------------------------------------------------------------------------
-# Headless gate enforcement for recipe tools
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_load_recipe_denied_when_headless(tool_ctx, monkeypatch):
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    result = json.loads(await load_recipe(name="implementation"))
-    assert result["success"] is False
-    assert result["subtype"] == "headless_error"
-
-
-@pytest.mark.anyio
-async def test_list_recipes_denied_when_headless(tool_ctx, monkeypatch):
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    result = json.loads(await list_recipes())
-    assert result["success"] is False
-    assert result["subtype"] == "headless_error"
-
-
-@pytest.mark.anyio
-async def test_validate_recipe_denied_when_headless(tool_ctx, monkeypatch):
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    result = json.loads(await validate_recipe(script_path="/tmp/test.yaml"))
-    assert result["success"] is False
-    assert result["subtype"] == "headless_error"

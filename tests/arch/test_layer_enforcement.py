@@ -150,9 +150,10 @@ def test_all_mcp_tools_are_registered() -> None:
     """Bidirectional check: every @mcp.tool function is in the _gate registry
     and every registry entry has a corresponding @mcp.tool function in server/.
     """
+    from autoskillit.core.types import HEADLESS_TOOLS
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    expected = GATED_TOOLS | UNGATED_TOOLS
+    expected = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
     server_dir = SRC_ROOT / "server"
     decorated: set[str] = set()
     for py_file in server_dir.glob("*.py"):

@@ -123,9 +123,11 @@ async def fetch_github_issue(
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_config, _get_ctx
 
-    # Ungated read-only query: structlog context binding is intentionally omitted.
+    # Read-only query: structlog context binding is intentionally omitted.
     logger.info("fetch_github_issue", issue_url=issue_url, include_comments=include_comments)
 
     tool_ctx = _get_ctx()
@@ -177,6 +179,8 @@ async def get_issue_title(issue_url: str) -> str:
         issue_url: Full GitHub issue URL (https://github.com/owner/repo/issues/42)
                    or shorthand (owner/repo#42).
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_config, _get_ctx
 
     tool_ctx = _get_ctx()

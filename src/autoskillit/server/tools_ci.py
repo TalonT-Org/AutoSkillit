@@ -243,6 +243,8 @@ async def get_ci_status(
     Returns:
         JSON with runs list, each containing id, status, conclusion, failed_jobs.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_ctx
 
     tool_ctx = _get_ctx()

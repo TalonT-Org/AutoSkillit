@@ -45,6 +45,8 @@ async def kitchen_status() -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_config, _get_ctx, version_info
 
     info = version_info()
@@ -89,6 +91,8 @@ async def get_pipeline_report(clear: bool = False) -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_ctx
 
     failures = _get_ctx().audit.get_report_as_dicts()
@@ -136,6 +140,8 @@ async def get_token_summary(clear: bool = False, format: str = "json") -> str:
         format: Output format — "json" (default) returns structured JSON,
                 "table" returns a pre-formatted markdown table string.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_ctx
 
     ctx = _get_ctx()
@@ -182,6 +188,8 @@ async def get_timing_summary(clear: bool = False, format: str = "json") -> str:
         format: Output format — "json" (default) returns structured JSON,
                 "table" returns a pre-formatted markdown table string.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_ctx
 
     steps = _get_ctx().timing_log.get_report()
@@ -242,6 +250,8 @@ async def get_quota_events(n: int = 50) -> str:
     This tool sends no MCP progress notifications by design (ungated tools are
     notification-free — see CLAUDE.md).
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_ctx
 
     ctx = _get_ctx()

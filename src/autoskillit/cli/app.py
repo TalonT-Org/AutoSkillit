@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Annotated
 
 if TYPE_CHECKING:
     from autoskillit.recipe import RecipeInfo
+    from autoskillit.recipe.schema import Recipe
 
 from cyclopts import App, Parameter
 
@@ -392,7 +393,12 @@ def recipes_render(name: str | None = None) -> None:
     print(diagram if diagram else f"No diagram. Run /render-recipe {name}")
 
 
-def _launch_cook_session(system_prompt: str, *, initial_message: str | None = None) -> None:
+def _launch_cook_session(
+    system_prompt: str,
+    *,
+    initial_message: str | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> None:
     """Launch an interactive Claude Code cook session with the given system prompt."""
     if shutil.which("claude") is None:
         print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
@@ -406,9 +412,48 @@ def _launch_cook_session(system_prompt: str, *, initial_message: str | None = No
         ClaudeFlags.APPEND_SYSTEM_PROMPT,
         system_prompt,
     ]
-    result = subprocess.run(cmd, env={**os.environ, **spec.env})
+    env = {**os.environ, **spec.env}
+    if extra_env:
+        env.update(extra_env)
+    result = subprocess.run(cmd, env=env)
     if result.returncode != 0:
         sys.exit(result.returncode)
+
+
+def _get_subsets_needed(recipe: "Recipe", disabled_subsets: frozenset[str]) -> frozenset[str]:
+    """Return the subset names from disabled_subsets that are actually referenced in recipe."""
+    import re
+
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.registry import run_semantic_rules
+
+    ctx = make_validation_context(recipe, disabled_subsets=disabled_subsets)
+    findings = run_semantic_rules(ctx)
+    needed: set[str] = set()
+    for f in findings:
+        if f.rule not in ("subset-disabled-skill", "subset-disabled-tool"):
+            continue
+        m = re.search(r"disabled subset '([^']+)'", f.message)
+        if m:
+            needed.add(m.group(1))
+    return frozenset(needed)
+
+
+def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> None:
+    """Remove specified subsets from subsets.disabled in .autoskillit/config.yaml."""
+    from autoskillit.core import YAMLError, _atomic_write, dump_yaml_str, load_yaml
+
+    config_path = project_dir / ".autoskillit" / "config.yaml"
+    try:
+        data: dict = load_yaml(config_path) if config_path.exists() else {}
+    except YAMLError:
+        data = {}
+    subsets_section = data.setdefault("subsets", {})
+    current_disabled: list[str] = subsets_section.get("disabled", [])
+    subsets_section["disabled"] = [s for s in current_disabled if s not in subsets]
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(config_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
+    print(f"Updated {config_path}: removed {sorted(subsets)} from subsets.disabled")
 
 
 @app.command
@@ -498,6 +543,37 @@ def cook(recipe: str | None = None):
             print(f"  - {err}")
         sys.exit(1)
 
+    # Subset-disabled gate (REQ-VAL-004)
+    from autoskillit.config import load_config as _load_config
+
+    _cfg = _load_config(Path.cwd())
+    _disabled = frozenset(_cfg.subsets.disabled)
+    _extra_env: dict[str, str] = {}
+
+    if _disabled:
+        _needed = _get_subsets_needed(parsed, _disabled)
+        if _needed:
+            if not sys.stdin.isatty():
+                print(
+                    f"ERROR: Recipe '{recipe}' requires subset(s) "
+                    f"{sorted(_needed)} which are currently disabled."
+                )
+                print("Enable the subset(s) in .autoskillit/config.yaml or run interactively.")
+                sys.exit(1)
+            # Interactive prompt
+            subset_list = ", ".join(sorted(_needed))
+            print(f"\nThis recipe requires the following disabled subset(s): {subset_list}")
+            print("  1. Enable temporarily (for this run only)")
+            print("  2. Enable permanently (update .autoskillit/config.yaml)")
+            print("  3. Cancel")
+            _choice = input("Choose [1/2/3]: ").strip()
+            if _choice == "1":
+                _extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
+            elif _choice == "2":
+                _enable_subsets_permanently(Path.cwd(), _needed)
+            else:
+                return
+
     from autoskillit.cli._prompts import _COOK_GREETINGS, show_cook_preview
 
     show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
@@ -510,7 +586,11 @@ def cook(recipe: str | None = None):
         return
 
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
-    _launch_cook_session(_build_orchestrator_prompt(recipe), initial_message=greeting)
+    _launch_cook_session(
+        _build_orchestrator_prompt(recipe),
+        initial_message=greeting,
+        extra_env=_extra_env if _extra_env else None,
+    )
 
 
 @app.command(name="chefs-hat", alias="chef")

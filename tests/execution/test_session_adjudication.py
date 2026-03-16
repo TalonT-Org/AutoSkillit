@@ -1245,10 +1245,10 @@ class TestContentStateEnum:
 
     def test_content_state_enum_variants(self) -> None:
         """ContentState exposes the four expected variants."""
-        assert ContentState.COMPLETE
-        assert ContentState.ABSENT
-        assert ContentState.CONTRACT_VIOLATION
-        assert ContentState.SESSION_ERROR
+        assert ContentState.COMPLETE == "complete"
+        assert ContentState.ABSENT == "absent"
+        assert ContentState.CONTRACT_VIOLATION == "contract_violation"
+        assert ContentState.SESSION_ERROR == "session_error"
 
     @pytest.mark.parametrize(
         "result, is_error, completion_marker, patterns, expected_state",

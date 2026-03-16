@@ -275,12 +275,58 @@ report_bug:
 
 When set to `"1"`, marks the MCP server instance as a headless session. This activates several session-scoped behaviors:
 
-- **Kitchen pre-opened**: all kitchen-tagged pipeline tools are revealed at startup and the gate is pre-enabled — no `open_kitchen` call required
+- **Headless-tool reveal**: only `test_check` (headless-tagged) is revealed at startup.
+  Kitchen-only tools (`run_skill`, `run_cmd`, `run_python`, `merge_worktree`, etc.) remain
+  hidden — headless sessions do not orchestrate sub-sessions.
 - **Orchestration blocked**: `run_skill`, `run_cmd`, and `run_python` are denied (headless sessions execute tasks, they do not orchestrate sub-sessions)
 - **`open_kitchen` blocked**: cannot be triggered from within a headless session
 - **Env isolation**: server-private env vars are stripped from any subprocess env passed to test runners, preventing leakage into user code
 
 This is automatically set by `autoskillit cook`, `chefs-hat`, and when launching sub-recipe headless sessions. Do **not** set this manually in user-facing orchestration sessions — it disables the protection that prevents the orchestrator from accidentally calling gated pipeline tools outside of a pipeline context.
+
+## Skill Visibility
+
+Controls which skill tiers are visible in each session mode.
+
+```yaml
+# .autoskillit/config.yaml
+skills:
+  tier1:   # Visible in plain $ claude sessions (plugin-scanned)
+    - open-kitchen
+    - close-kitchen
+  tier2:   # Visible in chefs-hat and headless sessions (interactive)
+    - investigate
+    - make-plan
+    # ...full list from defaults.yaml...
+  tier3:   # Visible in chefs-hat and headless sessions (automation/pipeline)
+    - open-pr
+    - merge-pr
+    # ...
+```
+
+Any bundled skill can be promoted or demoted by adding it to the desired tier list. A skill
+in multiple tiers simultaneously is a validation error. See **[Skill Visibility](skill-visibility.md)**
+for the full tier breakdown, session mode table, and override rules.
+
+## Subset Categories
+
+Disables functional groups of tools and skills together.
+
+```yaml
+# .autoskillit/config.yaml
+subsets:
+  disabled:
+    - github     # hides all github-tagged tools and skills
+    - ci         # hides CI-polling tools and skills
+  custom_tags:
+    my-favorites:
+      - investigate
+      - make-plan
+```
+
+Disabling a subset hides its members from all session modes — even after `open_kitchen`.
+See **[Subset Categories](subset-categories.md)** for the complete category listing and
+FastMCP mechanics.
 
 ## Full Example
 

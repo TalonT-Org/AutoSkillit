@@ -23,9 +23,18 @@ AutoSkillit uses a three-tier tool visibility model:
 
 - **Free-range (2 tools)**: Always visible — `open_kitchen`, `close_kitchen`
 - **Headless tools (1 tool)**: Revealed in headless sessions via `mcp.enable({'headless'})` — `test_check`
-- **Kitchen tools (36 tools)**: Gated behind `open_kitchen` — `run_skill`, `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 30 more
+- **Kitchen tools (37 tools total, 36 kitchen-only)**: Gated behind `open_kitchen` — `run_skill`,
+  `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 30 more.
+  One kitchen tool (`test_check`) also carries the `headless` tag and is additionally
+  pre-enabled in headless sessions.
 
-When you call `open_kitchen` (automatically done by `cook`), all 37 kitchen-tagged tools become available for that session. This keeps normal Claude Code sessions clean — no pipeline tools cluttering the tool list.
+When you call `open_kitchen` (automatically done by `cook`), all 37 kitchen-tagged tools become
+available for that session. This keeps normal Claude Code sessions clean — no pipeline tools
+cluttering the tool list.
+
+Functional category subsets (`github`, `ci`, `clone`, `telemetry`) can be disabled in config;
+those tools remain hidden even after `open_kitchen`.
+See **[MCP Tool Access Control](mcp-tool-access.md)** for the complete tool map.
 
 ## Clone Isolation
 
@@ -45,12 +54,30 @@ Within the clone, implementation happens in git worktrees:
 3. `merge_worktree` rebases the worktree onto the target branch, runs tests, and merges
 4. The worktree is cleaned up after a successful merge
 
-## Two-Tier Session Model
+## Session Model
 
-- **Tier 1 (Orchestrator)**: The human-facing session. Has access to all tools. Calls `run_skill` to delegate work.
-- **Tier 2 (Worker)**: Headless sessions launched by `run_skill`. Has access to native Claude Code tools (Read, Write, Bash, etc.) plus a subset of ungated MCP tools. Cannot call `run_skill`, `run_cmd`, or `run_python` — enforced by hooks.
+AutoSkillit supports four session modes with different tool and skill visibility:
+
+- **`$ claude` (plugin, no kitchen)**: Regular Claude Code session with the AutoSkillit plugin
+  loaded. Sees 2 Free Range MCP tools (`open_kitchen`, `close_kitchen`) and Tier 1 skills only
+  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 37 kitchen-tagged MCP
+  tools become available.
+
+- **`$ autoskillit chefs-hat`**: Interactive development session. Sees all three skill tiers
+  (Tier 1+2+3) via an ephemeral session directory. MCP tools are initially ungated (same as
+  `$ claude`); `/open-kitchen` reveals kitchen tools.
+
+- **`$ autoskillit cook`**: Pipeline orchestrator session. Kitchen is pre-opened at startup —
+  all 39 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
+  delegates work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
+
+- **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees 2 Free Range
+  tools + `test_check` (headless-tagged). Cannot call `run_skill`, `run_cmd`, or `run_python`
+  — enforced by hooks and code guards. Has access to all native Claude Code tools (Read, Write,
+  Bash, etc.) and all skill tiers via `--add-dir skills_extended/`.
 
 This prevents recursive session nesting and keeps the orchestrator as a pure routing engine.
+See **[Skill Visibility](skill-visibility.md)** for the full tier breakdown and configuration.
 
 ## Safety
 

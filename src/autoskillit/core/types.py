@@ -430,6 +430,38 @@ CATEGORY_TAGS: frozenset[str] = frozenset(
     {"github", "ci", "clone", "telemetry", "arch-lens", "audit"}
 )
 
+# Maps each MCP tool name to its functional category subset tags.
+# Mirrors the FastMCP @mcp.tool(tags=...) category assignments in the server layer.
+# Tools with no functional category are absent from this map (empty intersection = no finding).
+TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
+    # github
+    "fetch_github_issue": frozenset({"github"}),
+    "get_issue_title": frozenset({"github"}),
+    "report_bug": frozenset({"github"}),
+    "prepare_issue": frozenset({"github"}),
+    "enrich_issues": frozenset({"github"}),
+    "claim_issue": frozenset({"github"}),
+    "release_issue": frozenset({"github"}),
+    "get_pr_reviews": frozenset({"github"}),
+    "bulk_close_issues": frozenset({"github"}),
+    "check_pr_mergeable": frozenset({"github"}),
+    "push_to_remote": frozenset({"github"}),
+    "create_unique_branch": frozenset({"github"}),
+    "set_commit_status": frozenset({"github"}),
+    # ci
+    "wait_for_ci": frozenset({"ci"}),
+    "wait_for_merge_queue": frozenset({"ci"}),
+    "get_ci_status": frozenset({"ci"}),
+    # clone
+    "clone_repo": frozenset({"clone"}),
+    "remove_clone": frozenset({"clone"}),
+    # telemetry
+    "get_token_summary": frozenset({"telemetry"}),
+    "get_timing_summary": frozenset({"telemetry"}),
+    "write_telemetry_files": frozenset({"telemetry"}),
+    "get_quota_events": frozenset({"telemetry"}),
+}
+
 # Categorized tool listing for the open_kitchen response.
 # Each entry is (category_name, tuple_of_tool_names). Tool names must match the
 # registered MCP tool names exactly.

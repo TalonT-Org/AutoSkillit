@@ -567,8 +567,11 @@ async def test_fetch_github_issue_client_error_propagated(tool_ctx):
     assert result["success"] is False
 
 
-def test_fetch_github_issue_in_ungated_tools():
-    assert "fetch_github_issue" in UNGATED_TOOLS
+def test_fetch_github_issue_in_gated_tools():
+    from autoskillit.pipeline.gate import GATED_TOOLS
+
+    assert "fetch_github_issue" in GATED_TOOLS
+    assert "fetch_github_issue" not in UNGATED_TOOLS
 
 
 def test_github_config_defaults():
@@ -620,12 +623,12 @@ class TestGetIssueTitleTool:
         result = json.loads(await get_issue_title("owner/repo#404"))
         assert result["success"] is False
 
-    def test_get_issue_title_is_ungated(self):
-        """'get_issue_title' in UNGATED_TOOLS."""
+    def test_get_issue_title_is_gated(self):
+        """'get_issue_title' in GATED_TOOLS."""
         from autoskillit.pipeline.gate import GATED_TOOLS
 
-        assert "get_issue_title" in UNGATED_TOOLS
-        assert "get_issue_title" not in GATED_TOOLS
+        assert "get_issue_title" in GATED_TOOLS
+        assert "get_issue_title" not in UNGATED_TOOLS
 
 
 # ---------------------------------------------------------------------------

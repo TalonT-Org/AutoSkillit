@@ -68,7 +68,7 @@ def gate_error_result(message: str | None = None) -> str:
 _DEFAULT_HEADLESS_MESSAGE = (
     "This tool cannot be called from headless sessions. "
     "Headless workers (Tier 2) may only use native Claude Code tools and "
-    "WORKER_TOOLS. Orchestration tools are reserved for Tier 1 sessions."
+    "HEADLESS_TOOLS. Orchestration tools are reserved for Tier 1 sessions."
 )
 
 

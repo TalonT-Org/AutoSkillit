@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core.paths import pkg_root
 
-SKILL_PATH = pkg_root() / "skills" / "merge-pr" / "SKILL.md"
+SKILL_PATH = pkg_root() / "skills_extended" / "merge-pr" / "SKILL.md"
 
 
 def test_merge_pr_skill_references_gh_pr_merge() -> None:

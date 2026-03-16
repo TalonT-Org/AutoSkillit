@@ -58,6 +58,17 @@ async def _open_kitchen_handler() -> None:
     await _prime_quota_cache()
 
 
+async def _redisable_subsets(ctx: Context, disabled: list[str]) -> None:
+    """Re-disable subset-tagged tools after enabling kitchen.
+
+    REQ-VIS-008: FastMCP session rules override server rules; enable_components(kitchen)
+    would otherwise reveal dual-tagged tools (e.g. kitchen+github) that are server-disabled.
+    Later session rules win, so these disables correctly override the kitchen enable.
+    """
+    for subset in disabled:
+        await ctx.disable_components(tags={subset})
+
+
 def _close_kitchen_handler() -> None:
     """Clear the tools-enabled flag. Extracted for testability."""
     from autoskillit.server import _get_ctx, logger
@@ -88,7 +99,7 @@ def _build_tool_category_listing() -> str:
     return "\n".join(lines)
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": True})
 @track_response_size("open_kitchen")
 async def open_kitchen(
     name: str | None = None,
@@ -107,15 +118,18 @@ async def open_kitchen(
     """
     if (h := _require_not_headless("open_kitchen")) is not None:
         return h
+
+    from autoskillit.server import _get_ctx  # noqa: PLC0415
+
+    disabled_subsets = _get_ctx().config.subsets.disabled
     await _open_kitchen_handler()
     await ctx.enable_components(tags={"kitchen"})
+    await _redisable_subsets(ctx, disabled_subsets)
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     _categories = _build_tool_category_listing()
 
     if name is not None:
-        from autoskillit.server import _get_ctx
-
         tool_ctx = _get_ctx()
         if tool_ctx.recipes is None:
             return json.dumps({"error": "Server not initialized", "kitchen": "open"})
@@ -163,7 +177,7 @@ async def open_kitchen(
     return text
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": True})
 @track_response_size("close_kitchen")
 async def close_kitchen(ctx: Context = CurrentContext()) -> str:
     """Close the AutoSkillit kitchen."""

@@ -21,12 +21,16 @@ from autoskillit.workspace.clone import (
     remove_clone,
 )
 from autoskillit.workspace.session_skills import (
-    TIER2_SKILLS,
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
 )
-from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
+from autoskillit.workspace.skills import (
+    SkillResolver,
+    bundled_skills_dir,
+    bundled_skills_extended_dir,
+    detect_project_local_overrides,
+)
 
 delete_directory_contents = _delete_directory_contents
 
@@ -39,8 +43,9 @@ __all__ = [
     "DefaultSessionSkillManager",
     "SkillResolver",
     "SkillsDirectoryProvider",
-    "TIER2_SKILLS",
     "bundled_skills_dir",
+    "bundled_skills_extended_dir",
+    "detect_project_local_overrides",
     "clone_repo",
     "detect_branch",
     "detect_source_dir",

@@ -215,7 +215,7 @@ def test_output_path_tokens_synchronized() -> None:
 
 def test_resolve_failures_skill_switches_code_index_to_worktree():
     """resolve-failures must set_project_path to worktree_path after env setup."""
-    skill_md = (pkg_root() / "skills" / "resolve-failures" / "SKILL.md").read_text()
+    skill_md = (pkg_root() / "skills_extended" / "resolve-failures" / "SKILL.md").read_text()
     # Must contain a set_project_path call with worktree_path as the path argument.
     # Use a regex so minor whitespace or quoting variations don't cause false failures.
     worktree_switch = re.search(r"set_project_path\([^)]*worktree_path[^)]*\)", skill_md)

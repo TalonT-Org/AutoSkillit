@@ -77,8 +77,9 @@ def make_context(
                     to the autoskillit package directory (parent of server/).
 
     Returns:
-        ToolContext with gate starting closed (enabled=False). Call
-        gate.enable() (via the open_kitchen prompt) to activate gated tools.
+        ToolContext with gate starting closed (enabled=False) in all contexts.
+        Tag-based visibility (mcp.enable({'headless'}) or open_kitchen) controls
+        tool reveal — the gate itself is never pre-enabled at startup.
         All service fields are populated. When runner=None is passed explicitly,
         tester is left as None.
     """
@@ -92,8 +93,6 @@ def make_context(
 
     resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
     gate = DefaultGateState(enabled=False)
-    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-        gate.enable()
 
     provider = SkillsDirectoryProvider()
     ephemeral_root = resolve_ephemeral_root()

@@ -6,9 +6,9 @@ import re
 
 import pytest
 
-from autoskillit.workspace.skills import bundled_skills_dir
+from autoskillit.workspace.skills import bundled_skills_extended_dir
 
-skills_dir = bundled_skills_dir()
+skills_dir = bundled_skills_extended_dir()
 
 
 def skill_text(name: str) -> str:

@@ -68,6 +68,7 @@ class RestartScope(StrEnum):
 
 class SkillSource(StrEnum):
     BUNDLED = "bundled"
+    BUNDLED_EXTENDED = "bundled_extended"
 
 
 class RecipeSource(StrEnum):
@@ -383,7 +384,6 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "run_python",
         "read_db",
         "run_skill",
-        "test_check",
         "merge_worktree",
         "reset_test_dir",
         "classify_fix",
@@ -405,33 +405,97 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "check_pr_mergeable",
         "set_commit_status",
         "wait_for_merge_queue",
-    }
-)
-
-WORKER_TOOLS: frozenset[str] = frozenset(
-    {
+        # Formerly ungated — now kitchen-gated:
         "fetch_github_issue",
         "get_issue_title",
         "get_ci_status",
-        "get_token_summary",
-        "get_timing_summary",
-        "get_quota_events",
-    }
-)
-
-HEADLESS_BLOCKED_UNGATED_TOOLS: frozenset[str] = frozenset(
-    {
-        "kitchen_status",
         "get_pipeline_report",
+        "get_quota_events",
+        "get_timing_summary",
+        "get_token_summary",
+        "kitchen_status",
         "list_recipes",
         "load_recipe",
         "validate_recipe",
-        "open_kitchen",
-        "close_kitchen",
     }
 )
 
-UNGATED_TOOLS: frozenset[str] = WORKER_TOOLS | HEADLESS_BLOCKED_UNGATED_TOOLS
+HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check"})
+
+
+@dataclass(frozen=True)
+class ValidatedAddDir:
+    """An --add-dir path validated for Claude Code convention compliance.
+
+    Cannot be constructed directly — use ``validate_add_dir()`` or obtain from
+    ``DefaultSessionSkillManager.init_session()``.
+
+    Implements ``__str__``, ``__fspath__``, and ``__truediv__`` so it works
+    transparently with ``str(d)`` (used by ``build_interactive_cmd``),
+    ``shutil.rmtree`` (used by chefs-hat), and ``d / "subdir"`` (path
+    composition in tests and production code).
+    """
+
+    path: str
+
+    def __str__(self) -> str:
+        return self.path
+
+    def __fspath__(self) -> str:
+        return self.path
+
+    def __truediv__(self, other: str | Path) -> Path:
+        return Path(self.path) / other
+
+    def exists(self) -> bool:
+        return Path(self.path).exists()
+
+    def is_dir(self) -> bool:
+        return Path(self.path).is_dir()
+
+    def glob(self, pattern: str) -> list[Path]:
+        return list(Path(self.path).glob(pattern))
+
+
+FREE_RANGE_TOOLS: frozenset[str] = frozenset({"open_kitchen", "close_kitchen"})
+
+UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS
+
+CATEGORY_TAGS: frozenset[str] = frozenset(
+    {"github", "ci", "clone", "telemetry", "arch-lens", "audit"}
+)
+
+# Maps each MCP tool name to its functional category subset tags.
+# Mirrors the FastMCP @mcp.tool(tags=...) category assignments in the server layer.
+# Tools with no functional category are absent from this map (empty intersection = no finding).
+TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
+    # github
+    "fetch_github_issue": frozenset({"github"}),
+    "get_issue_title": frozenset({"github"}),
+    "report_bug": frozenset({"github"}),
+    "prepare_issue": frozenset({"github"}),
+    "enrich_issues": frozenset({"github"}),
+    "claim_issue": frozenset({"github"}),
+    "release_issue": frozenset({"github"}),
+    "get_pr_reviews": frozenset({"github"}),
+    "bulk_close_issues": frozenset({"github"}),
+    "check_pr_mergeable": frozenset({"github"}),
+    "push_to_remote": frozenset({"github"}),
+    "create_unique_branch": frozenset({"github"}),
+    "set_commit_status": frozenset({"github"}),
+    # ci
+    "wait_for_ci": frozenset({"ci"}),
+    "wait_for_merge_queue": frozenset({"ci"}),
+    "get_ci_status": frozenset({"ci"}),
+    # clone
+    "clone_repo": frozenset({"clone"}),
+    "remove_clone": frozenset({"clone"}),
+    # telemetry
+    "get_token_summary": frozenset({"telemetry"}),
+    "get_timing_summary": frozenset({"telemetry"}),
+    "write_telemetry_files": frozenset({"telemetry"}),
+    "get_quota_events": frozenset({"telemetry"}),
+}
 
 # Categorized tool listing for the open_kitchen response.
 # Each entry is (category_name, tuple_of_tool_names). Tool names must match the
@@ -689,7 +753,7 @@ class HeadlessExecutor(Protocol):
         *,
         model: str = "",
         step_name: str = "",
-        add_dir: str = "",
+        add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),
@@ -925,7 +989,14 @@ class MergeQueueWatcher(Protocol):
 class SessionSkillManager(Protocol):
     """Protocol for managing per-session ephemeral skill directories."""
 
-    def init_session(self, session_id: str, *, cook_session: bool = False) -> Path: ...
+    def init_session(
+        self,
+        session_id: str,
+        *,
+        cook_session: bool = False,
+        config: Any | None = None,
+        project_dir: Path | None = None,
+    ) -> ValidatedAddDir: ...
 
     def activate_tier2(self, session_id: str, skill_name: str) -> bool: ...
 

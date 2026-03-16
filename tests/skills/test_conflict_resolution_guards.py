@@ -11,7 +11,7 @@ import yaml
 from autoskillit.core.paths import pkg_root
 
 PROJECT_ROOT = pkg_root()
-SKILLS_ROOT = pkg_root() / "skills"
+SKILLS_ROOT = pkg_root() / "skills_extended"
 RECIPE_PATH = pkg_root() / "recipes" / "merge-prs.yaml"
 
 

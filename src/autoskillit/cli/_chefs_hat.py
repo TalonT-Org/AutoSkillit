@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import uuid
+from pathlib import Path
 
 
 def chefs_hat() -> None:
@@ -48,14 +49,22 @@ def chefs_hat() -> None:
     if confirm in ("n", "no"):
         return
 
+    from autoskillit.config import load_config
+    from autoskillit.core import pkg_root
+    from autoskillit.execution import build_interactive_cmd
+
     session_id = uuid.uuid4().hex[:16]
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
-    skills_dir = session_mgr.init_session(session_id, cook_session=True)
+    config = load_config()
+    skills_dir = session_mgr.init_session(
+        session_id, cook_session=True, config=config, project_dir=Path.cwd()
+    )
 
+    cmd = build_interactive_cmd(plugin_dir=pkg_root(), add_dirs=[skills_dir]).cmd
     env = {**os.environ}
     try:
-        result = subprocess.run(["claude", "--add-dir", str(skills_dir)], env=env)
+        result = subprocess.run(cmd, env=env)
         if result.returncode != 0:
             raise SystemExit(result.returncode)
     finally:

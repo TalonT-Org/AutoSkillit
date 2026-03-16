@@ -16,13 +16,20 @@ from pathlib import Path
 # Project root = parent of scripts/
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = PROJECT_ROOT / "src" / "autoskillit" / "skills"
+SKILLS_EXTENDED_DIR = PROJECT_ROOT / "src" / "autoskillit" / "skills_extended"
 RECIPES_DIR = PROJECT_ROOT / "src" / "autoskillit" / "recipes"
 TYPES_FILE = PROJECT_ROOT / "src" / "autoskillit" / "core" / "types.py"
 
 
 def count_skills() -> int:
-    """Count directories in skills/ that contain a SKILL.md."""
-    return sum(1 for d in SKILLS_DIR.iterdir() if d.is_dir() and (d / "SKILL.md").exists())
+    """Count directories in skills/ and skills_extended/ that contain a SKILL.md."""
+    count = 0
+    for skills_dir in (SKILLS_DIR, SKILLS_EXTENDED_DIR):
+        if skills_dir.is_dir():
+            count += sum(
+                1 for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists()
+            )
+    return count
 
 
 def count_recipes() -> int:
@@ -31,37 +38,42 @@ def count_recipes() -> int:
 
 
 def count_tools() -> tuple[int, int]:
-    """Parse types.py to extract GATED_TOOLS and UNGATED_TOOLS sizes.
+    """Parse types.py to extract kitchen-tagged and free-range tool counts.
 
-    Returns (gated_count, ungated_count).
+    Returns (gated_count, ungated_count) where:
+    - gated_count = GATED_TOOLS + HEADLESS_TOOLS (all kitchen-tagged tools)
+    - ungated_count = FREE_RANGE_TOOLS (always-visible tools)
     """
     content = TYPES_FILE.read_text()
 
-    # Count quoted strings in GATED_TOOLS frozenset
+    # Count quoted strings in GATED_TOOLS frozenset (kitchen-only tools)
     gated_match = re.search(
         r"GATED_TOOLS:\s*frozenset\[str\]\s*=\s*frozenset\(\s*\{(.*?)\}\s*\)",
         content,
         re.DOTALL,
     )
-    gated = len(re.findall(r'"([^"]+)"', gated_match.group(1))) if gated_match else 0
+    gated_only = len(re.findall(r'"([^"]+)"', gated_match.group(1))) if gated_match else 0
 
-    # UNGATED_TOOLS = WORKER_TOOLS | HEADLESS_BLOCKED_UNGATED_TOOLS
-    # Count members of both frozensets
-    worker_match = re.search(
-        r"WORKER_TOOLS:\s*frozenset\[str\]\s*=\s*frozenset\(\s*\{(.*?)\}\s*\)",
+    # HEADLESS_TOOLS carries both kitchen + headless tags — counts toward kitchen total
+    headless_match = re.search(
+        r"HEADLESS_TOOLS:\s*frozenset\[str\]\s*=\s*frozenset\(\s*\{(.*?)\}\s*\)",
         content,
         re.DOTALL,
     )
-    worker = len(re.findall(r'"([^"]+)"', worker_match.group(1))) if worker_match else 0
+    headless = len(re.findall(r'"([^"]+)"', headless_match.group(1))) if headless_match else 0
 
-    blocked_match = re.search(
-        r"HEADLESS_BLOCKED_UNGATED_TOOLS:\s*frozenset\[str\]\s*=\s*frozenset\(\s*\{(.*?)\}\s*\)",
+    # FREE_RANGE_TOOLS are always visible (ungated)
+    free_range_match = re.search(
+        r"FREE_RANGE_TOOLS:\s*frozenset\[str\]\s*=\s*frozenset\(\s*\{(.*?)\}\s*\)",
         content,
         re.DOTALL,
     )
-    blocked = len(re.findall(r'"([^"]+)"', blocked_match.group(1))) if blocked_match else 0
+    free_range = (
+        len(re.findall(r'"([^"]+)"', free_range_match.group(1))) if free_range_match else 0
+    )
 
-    ungated = worker + blocked
+    gated = gated_only + headless  # all kitchen-tagged tools
+    ungated = free_range  # always-visible tools
     return gated, ungated
 
 

@@ -150,9 +150,10 @@ def test_all_mcp_tools_are_registered() -> None:
     """Bidirectional check: every @mcp.tool function is in the _gate registry
     and every registry entry has a corresponding @mcp.tool function in server/.
     """
+    from autoskillit.core.types import HEADLESS_TOOLS
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    expected = GATED_TOOLS | UNGATED_TOOLS
+    expected = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
     server_dir = SRC_ROOT / "server"
     decorated: set[str] = set()
     for py_file in server_dir.glob("*.py"):
@@ -798,4 +799,102 @@ def test_hook_config_filename_and_dir_match_quota_check():
     assert quota_mod.HOOK_DIR_COMPONENTS == _HOOK_DIR_COMPONENTS, (
         f"quota_check.HOOK_DIR_COMPONENTS={quota_mod.HOOK_DIR_COMPONENTS!r} "
         f"does not match tools_kitchen._HOOK_DIR_COMPONENTS={_HOOK_DIR_COMPONENTS!r}"
+    )
+
+
+# ── Tool metadata single source of truth ──────────────────────────────────────
+
+
+def test_tool_categories_covers_all_tools() -> None:
+    """Every tool in GATED_TOOLS | HEADLESS_TOOLS | FREE_RANGE_TOOLS appears
+    in exactly one TOOL_CATEGORIES group, and no extra names exist."""
+    from autoskillit.core import (
+        FREE_RANGE_TOOLS,
+        GATED_TOOLS,
+        HEADLESS_TOOLS,
+        TOOL_CATEGORIES,
+    )
+
+    all_registered = GATED_TOOLS | HEADLESS_TOOLS | FREE_RANGE_TOOLS
+    categorized: set[str] = set()
+    for _name, tools in TOOL_CATEGORIES:
+        for t in tools:
+            assert t not in categorized, f"Duplicate in TOOL_CATEGORIES: {t}"
+            categorized.add(t)
+    assert categorized == all_registered, (
+        f"Missing from TOOL_CATEGORIES: {all_registered - categorized}\n"
+        f"Extra in TOOL_CATEGORIES: {categorized - all_registered}"
+    )
+
+
+def test_tool_subset_tags_match_decorators() -> None:
+    """TOOL_SUBSET_TAGS matches actual @mcp.tool(tags=...) functional category tags.
+
+    Functional tags = decorator tags - {"autoskillit", "kitchen", "headless"}.
+    Tools with non-empty functional tags must be in TOOL_SUBSET_TAGS with the matching
+    frozenset. Tools NOT in TOOL_SUBSET_TAGS must have empty functional tags.
+    Every tool in TOOL_SUBSET_TAGS must have a matching @mcp.tool decorator.
+    """
+    from autoskillit.core import TOOL_SUBSET_TAGS
+
+    BASE_TAGS: frozenset[str] = frozenset({"autoskillit", "kitchen", "headless"})
+    server_dir = SRC_ROOT / "server"
+    decorator_tags: dict[str, frozenset[str]] = {}
+
+    for py_file in server_dir.glob("tools_*.py"):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for dec in node.decorator_list:
+                if not _is_mcp_tool_decorator(dec):
+                    continue
+                tags: set[str] = set()
+                if isinstance(dec, ast.Call):
+                    for kw in dec.keywords:
+                        if kw.arg == "tags" and isinstance(kw.value, ast.Set):
+                            for elt in kw.value.elts:
+                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                    tags.add(elt.value)
+                decorator_tags[node.name] = frozenset(tags - BASE_TAGS)
+
+    mismatches: list[str] = []
+    for tool_name, functional in decorator_tags.items():
+        expected = TOOL_SUBSET_TAGS.get(tool_name, frozenset())
+        if functional != expected:
+            mismatches.append(
+                f"{tool_name}: decorator functional tags={sorted(functional)}, "
+                f"TOOL_SUBSET_TAGS={sorted(expected)}"
+            )
+    for tool_name in TOOL_SUBSET_TAGS:
+        if tool_name not in decorator_tags:
+            mismatches.append(f"{tool_name}: in TOOL_SUBSET_TAGS but has no @mcp.tool decorator")
+
+    assert not mismatches, (
+        "TOOL_SUBSET_TAGS does not match decorator functional tags:\n"
+        + "\n".join(f"  {m}" for m in mismatches)
+    )
+
+
+def test_server_docstring_counts_accurate() -> None:
+    """server/__init__.py docstring numeric claims match actual frozenset sizes."""
+    from autoskillit.core.types import FREE_RANGE_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
+
+    docstring = (SRC_ROOT / "server" / "__init__.py").read_text()
+    expected_substrings: dict[str, str] = {
+        "gated": f"{len(GATED_TOOLS)} gated",
+        "headless-tagged": f"{len(HEADLESS_TOOLS)} headless-tagged",
+        "free-range": f"{len(FREE_RANGE_TOOLS)} free-range",
+        "kitchen-tagged": f"{len(GATED_TOOLS) + len(HEADLESS_TOOLS)} kitchen-tagged",
+    }
+
+    mismatches = [
+        f"'{label}': expected '{claim}' in docstring"
+        for label, claim in expected_substrings.items()
+        if claim not in docstring
+    ]
+
+    assert not mismatches, (
+        "server/__init__.py docstring count claims do not match frozenset sizes:\n"
+        + "\n".join(f"  {m}" for m in mismatches)
     )

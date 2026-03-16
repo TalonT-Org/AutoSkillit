@@ -152,12 +152,14 @@ class TestRunSkillAgentResult:
 
 
 class TestRunSkillPassesAddDir:
-    """run_skill forwards add_dir to executor."""
+    """run_skill passes ValidatedAddDir instances to executor."""
 
     @pytest.mark.anyio
-    async def test_run_skill_passes_add_dir_to_subprocess(self, tool_ctx):
-        """add_dir is forwarded to ctx.executor.run()."""
+    async def test_run_skill_passes_validated_add_dirs_to_executor(self, tool_ctx):
+        """add_dirs forwarded to ctx.executor.run() are ValidatedAddDir instances."""
         from unittest.mock import AsyncMock
+
+        from autoskillit.core import ValidatedAddDir
 
         mock_result = SkillResult(
             success=True,
@@ -172,9 +174,11 @@ class TestRunSkillPassesAddDir:
         )
         mock_run = AsyncMock(return_value=mock_result)
         tool_ctx.executor = type("MockExec", (), {"run": mock_run})()
-        await run_skill("/investigate something", "/tmp", add_dir="/extra/dir")
+        await run_skill("/investigate something", "/tmp")
 
-        assert mock_run.call_args.kwargs.get("add_dir") == "/extra/dir"
+        add_dirs = mock_run.call_args.kwargs.get("add_dirs", ())
+        assert len(add_dirs) >= 1
+        assert all(isinstance(d, ValidatedAddDir) for d in add_dirs)
 
 
 class TestRunSkillFields:

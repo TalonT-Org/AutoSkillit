@@ -13,14 +13,13 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from autoskillit.core import _atomic_write
-from autoskillit.workspace.skills import SkillInfo, SkillResolver
+from autoskillit.core import ClaudeDirectoryConventions, ValidatedAddDir, _atomic_write, get_logger
+from autoskillit.workspace.skills import SkillInfo, SkillResolver, detect_project_local_overrides
 
-# Tier 2 skills: human-only slash commands that agents must not invoke autonomously.
-# These get disable-model-invocation: true injected into their SKILL.md unless the
-# session is a cook session (see init_session cook_session parameter).
-TIER2_SKILLS: frozenset[str] = frozenset({"open-kitchen", "close-kitchen"})
+if TYPE_CHECKING:
+    from autoskillit.config.settings import AutomationConfig
 
 # Candidate ephemeral roots, tried in order.
 # resolve_ephemeral_root() appends tempfile.gettempdir() as the final fallback.
@@ -30,6 +29,8 @@ _CANDIDATE_ROOTS: list[Path] = [
 ]
 
 _FM_PATTERN = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
+
+_SKILLS_SUBDIR = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
 
 
 def resolve_ephemeral_root() -> Path:
@@ -90,6 +91,48 @@ def _remove_disable_model_invocation(content: str) -> str:
     return f"---\n{fm_text}\n---\n{body}"
 
 
+def _is_skill_disabled(
+    skill_info: SkillInfo,
+    disabled: list[str],
+    custom_tags: dict[str, list[str]],
+) -> bool:
+    """Return True if skill should be excluded due to a disabled subset.
+
+    For each tag in disabled:
+    - If the tag is a custom_tag key: check if skill.name is in custom_tags[tag]
+    - Otherwise (built-in category): check if tag is in skill_info.categories
+    """
+    for tag in disabled:
+        if tag in custom_tags:
+            if skill_info.name in custom_tags[tag]:
+                return True
+        elif tag in skill_info.categories:
+            return True
+    return False
+
+
+def _should_inject_skill(
+    skill_info: SkillInfo,
+    *,
+    cook_session: bool,
+    overrides: frozenset[str],
+    disabled_subsets: list[str],
+    custom_tags: dict[str, list[str]],
+) -> bool:
+    """Return True if this skill should be written to the ephemeral session dir.
+
+    cook_session=True bypasses all restrictions: the human cook always sees the
+    full bundled menu regardless of project-local overrides or disabled subsets.
+    """
+    if cook_session:
+        return True
+    if _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
+        return False
+    if skill_info.name in overrides:
+        return False
+    return True
+
+
 class SkillsDirectoryProvider:
     """Provides bundled skill content with tier-aware frontmatter injection."""
 
@@ -100,23 +143,18 @@ class SkillsDirectoryProvider:
         """List all public bundled skills."""
         return self._resolver.list_all()
 
-    def get_skill_content(self, name: str, *, tier2_gated: bool = True) -> str:
-        """Return SKILL.md content with tier-appropriate frontmatter.
+    def get_skill_content(self, name: str, *, gated: bool = True) -> str:
+        """Return SKILL.md content with gating frontmatter injected when required.
 
-        For Tier 2 skills:
-        - tier2_gated=True  → ensure disable-model-invocation: true is present
-        - tier2_gated=False → remove disable-model-invocation (cook session)
-        For Tier 1 skills, returns unmodified content.
+        - gated=True  → ensure disable-model-invocation: true is present
+        - gated=False → return unmodified content (cook session or Tier 1)
         """
         skill_info = self._resolver.resolve(name)
         if skill_info is None:
             raise FileNotFoundError(f"Skill not found: {name}")
         content = skill_info.path.read_text()
-        if name in TIER2_SKILLS:
-            if tier2_gated:
-                content = _inject_disable_model_invocation(content)
-            else:
-                content = _remove_disable_model_invocation(content)
+        if gated:
+            content = _inject_disable_model_invocation(content)
         return content
 
 
@@ -131,11 +169,20 @@ class DefaultSessionSkillManager:
         self._provider = provider
         self._root = ephemeral_root
 
-    def init_session(self, session_id: str, *, cook_session: bool = False) -> Path:
+    def init_session(
+        self,
+        session_id: str,
+        *,
+        cook_session: bool = False,
+        config: AutomationConfig | None = None,
+        project_dir: Path | None = None,
+    ) -> ValidatedAddDir:
         """Create ephemeral skill dir for session_id.
 
         Returns path to the created skills directory.
-        For non-cook sessions, Tier 2 skills get disable-model-invocation injected.
+        For non-cook sessions, Tier 2 skills (from config.skills.tier2) get
+        disable-model-invocation injected. Unknown skill names in config are
+        logged as warnings and ignored.
         """
         if (
             not session_id
@@ -145,15 +192,57 @@ class DefaultSessionSkillManager:
             or session_id in (".", "..")
         ):
             raise ValueError(f"Invalid session_id: {session_id!r}")
+
+        if config is None:
+            tier2_skills: frozenset[str] = frozenset()
+        else:
+            all_known = {s.name for s in self._provider.list_skills()}
+            configured = (
+                set(config.skills.tier1) | set(config.skills.tier2) | set(config.skills.tier3)
+            )
+            unknown = configured - all_known
+            if unknown:
+                get_logger(__name__).warning(
+                    "Unknown skill names in tier config (ignored): %s", sorted(unknown)
+                )
+            tier2_skills = frozenset(config.skills.tier2)
+
+        # Extract subset disable info from config (empty by default)
+        if config is None:
+            disabled_subsets: list[str] = []
+            custom_tags: dict[str, list[str]] = {}
+        else:
+            disabled_subsets = list(config.subsets.disabled)
+            custom_tags = dict(config.subsets.custom_tags)
+
+        # Compute project-local overrides (REQ-OVR-001..004)
+        overrides: frozenset[str] = (
+            detect_project_local_overrides(project_dir) if project_dir is not None else frozenset()
+        )
+        _log = get_logger(__name__)
+
         session_skills_dir = self._root / session_id
-        session_skills_dir.mkdir(parents=True, exist_ok=True)
+        skills_base = session_skills_dir / _SKILLS_SUBDIR
+        skills_base.mkdir(parents=True, exist_ok=True)
         for skill_info in self._provider.list_skills():
-            skill_dir = session_skills_dir / skill_info.name
+            if not _should_inject_skill(
+                skill_info,
+                cook_session=cook_session,
+                overrides=overrides,
+                disabled_subsets=disabled_subsets,
+                custom_tags=custom_tags,
+            ):
+                if skill_info.name in overrides:
+                    _log.debug("init_session_override_skip", skill=skill_info.name)
+                elif _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
+                    _log.debug("init_session_subset_skip", skill=skill_info.name)
+                continue
+            skill_dir = skills_base / skill_info.name
             skill_dir.mkdir(exist_ok=True)
-            tier2_gated = not cook_session
-            content = self._provider.get_skill_content(skill_info.name, tier2_gated=tier2_gated)
+            gated = (not cook_session) and (skill_info.name in tier2_skills)
+            content = self._provider.get_skill_content(skill_info.name, gated=gated)
             _atomic_write(skill_dir / "SKILL.md", content)
-        return session_skills_dir
+        return ValidatedAddDir(path=str(session_skills_dir))
 
     def activate_tier2(self, session_id: str, skill_name: str) -> bool:
         """Remove disable-model-invocation from the ephemeral copy of skill_name.
@@ -170,7 +259,7 @@ class DefaultSessionSkillManager:
             raise ValueError(f"Invalid session_id: {session_id!r}")
         if not skill_name or "/" in skill_name or "\\" in skill_name or skill_name in (".", ".."):
             raise ValueError(f"Invalid skill_name: {skill_name!r}")
-        skill_md = self._root / session_id / skill_name / "SKILL.md"
+        skill_md = self._root / session_id / _SKILLS_SUBDIR / skill_name / "SKILL.md"
         if not skill_md.exists():
             return False
         content = skill_md.read_text()

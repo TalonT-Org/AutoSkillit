@@ -601,3 +601,166 @@ def test_resolve_ingredient_defaults_in_config():
     from autoskillit.config import resolve_ingredient_defaults
 
     assert callable(resolve_ingredient_defaults)
+
+
+class TestSkillsConfig:
+    """SkillsConfig dataclass, tier duplication validation, and AutomationConfig integration."""
+
+    def test_skills_config_dataclass(self) -> None:
+        """SkillsConfig has tier1, tier2, tier3 list[str] fields."""
+        from autoskillit.config.settings import SkillsConfig
+
+        sc = SkillsConfig(tier1=["a"], tier2=["b"], tier3=["c"])
+        assert sc.tier1 == ["a"] and sc.tier2 == ["b"] and sc.tier3 == ["c"]
+
+    def test_skills_config_tier_duplication_raises(self) -> None:
+        """Skill in multiple tiers raises ValueError at construction (REQ-TIER-009)."""
+        import pytest
+
+        from autoskillit.config.settings import SkillsConfig
+
+        with pytest.raises(ValueError, match="multiple tiers"):
+            SkillsConfig(tier1=["open-kitchen"], tier2=["open-kitchen"], tier3=[])
+
+    def test_automation_config_has_skills_field(self) -> None:
+        """AutomationConfig.skills is a SkillsConfig with tier lists."""
+        from autoskillit.config.settings import AutomationConfig, SkillsConfig
+
+        cfg = AutomationConfig()
+        assert isinstance(cfg.skills, SkillsConfig)
+
+    def test_defaults_yaml_skills_section(self) -> None:
+        """defaults.yaml has non-empty skills.tier1/tier2/tier3 lists."""
+        from autoskillit.core import load_yaml, pkg_root
+
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        assert isinstance(defaults, dict)
+        skills = defaults.get("skills", {})
+        assert "open-kitchen" in skills.get("tier1", [])
+        assert len(skills.get("tier2", [])) >= 20
+        assert len(skills.get("tier3", [])) >= 10
+
+    def test_load_config_populates_skills_tiers(self) -> None:
+        """load_config() produces an AutomationConfig with tier assignments from defaults."""
+        from autoskillit.config import load_config
+
+        cfg = load_config()
+        assert "open-kitchen" in cfg.skills.tier1
+        assert "make-plan" in cfg.skills.tier2
+        assert "open-pr" in cfg.skills.tier3
+
+    def test_skills_config_exported_from_config_package(self) -> None:
+        """SkillsConfig is importable from autoskillit.config."""
+        from autoskillit.config import SkillsConfig
+
+        assert SkillsConfig is not None
+
+
+class TestSubsetsConfig:
+    # T1 — SubsetsConfig defaults
+
+    def test_subsets_config_default_disabled_is_empty_list(self) -> None:
+        from autoskillit.config import SubsetsConfig
+
+        cfg = SubsetsConfig()
+        assert cfg.disabled == []
+
+    def test_subsets_config_default_custom_tags_is_empty_dict(self) -> None:
+        from autoskillit.config import SubsetsConfig
+
+        cfg = SubsetsConfig()
+        assert cfg.custom_tags == {}
+
+    def test_automation_config_has_subsets_field(self) -> None:
+        from autoskillit.config import AutomationConfig, SubsetsConfig
+
+        cfg = AutomationConfig()
+        assert isinstance(cfg.subsets, SubsetsConfig)
+        assert cfg.subsets.disabled == []
+        assert cfg.subsets.custom_tags == {}
+
+    # T2 — load_config with subsets.disabled
+
+    def test_load_config_subsets_disabled(self, tmp_path) -> None:
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("subsets:\n  disabled:\n    - github\n    - ci\n")
+        cfg = load_config(tmp_path)
+        assert cfg.subsets.disabled == ["github", "ci"]
+
+    def test_load_config_subsets_disabled_absent_means_empty(self, tmp_path) -> None:
+        cfg = load_config(tmp_path)
+        assert cfg.subsets.disabled == []
+
+    # T3 — load_config with subsets.custom_tags
+
+    def test_load_config_subsets_custom_tags(self, tmp_path) -> None:
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        yaml_text = (
+            "subsets:\n"
+            "  custom_tags:\n"
+            "    my-team-tools:\n"
+            "      - investigate\n"
+            "      - make-plan\n"
+        )
+        (config_dir / "config.yaml").write_text(yaml_text)
+        cfg = load_config(tmp_path)
+        assert cfg.subsets.custom_tags == {"my-team-tools": ["investigate", "make-plan"]}
+
+    def test_load_config_subsets_custom_tags_absent_means_empty(self, tmp_path) -> None:
+        cfg = load_config(tmp_path)
+        assert cfg.subsets.custom_tags == {}
+
+    # T4 — Unknown category warning, no crash
+
+    def test_load_config_unknown_disabled_category_logs_warning_not_crash(
+        self, tmp_path, caplog
+    ) -> None:
+        import logging
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            "subsets:\n  disabled:\n    - totally-unknown-category\n"
+        )
+        with caplog.at_level(logging.WARNING, logger="autoskillit.config.settings"):
+            cfg = load_config(tmp_path)
+        assert cfg.subsets.disabled == ["totally-unknown-category"]  # preserved as-is
+        assert any("totally-unknown-category" in r.message for r in caplog.records)
+
+    def test_load_config_known_disabled_category_no_warning(self, tmp_path, caplog) -> None:
+        import logging
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("subsets:\n  disabled:\n    - github\n")
+        with caplog.at_level(logging.WARNING):
+            load_config(tmp_path)
+        assert not any("github" in r.message for r in caplog.records)
+
+    def test_load_config_custom_tag_in_disabled_is_valid(self, tmp_path, caplog) -> None:
+        """Custom tags defined in custom_tags can also appear in disabled."""
+        import logging
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        yaml_text = (
+            "subsets:\n"
+            "  disabled:\n"
+            "    - experimental\n"
+            "  custom_tags:\n"
+            "    experimental:\n"
+            "      - write-recipe\n"
+        )
+        (config_dir / "config.yaml").write_text(yaml_text)
+        with caplog.at_level(logging.WARNING):
+            load_config(tmp_path)
+        assert not any("experimental" in r.message for r in caplog.records)
+
+    # T5 — SubsetsConfig exported from config package
+
+    def test_subsets_config_importable_from_config_package(self) -> None:
+        from autoskillit.config import SubsetsConfig
+
+        assert SubsetsConfig is not None

@@ -99,3 +99,71 @@ branching:
 
 ci:
   workflow: null  # Workflow filename to filter CI runs, e.g. "tests.yml"
+
+subsets:
+  disabled: []
+  custom_tags: {}
+
+skills:
+  tier1:
+    - open-kitchen
+    - close-kitchen
+  tier2:
+    - investigate
+    - make-plan
+    - implement-worktree
+    - rectify
+    - dry-walkthrough
+    - make-groups
+    - review-approach
+    - mermaid
+    - make-arch-diag
+    - arch-lens-c4-container
+    - arch-lens-concurrency
+    - arch-lens-data-lineage
+    - arch-lens-deployment
+    - arch-lens-development
+    - arch-lens-error-resilience
+    - arch-lens-module-dependency
+    - arch-lens-operational
+    - arch-lens-process-flow
+    - arch-lens-repository-access
+    - arch-lens-scenarios
+    - arch-lens-security
+    - arch-lens-state-lifecycle
+    - audit-arch
+    - audit-cohesion
+    - audit-tests
+    - audit-defense-standards
+    - audit-bugs
+    - audit-friction
+    - make-req
+    - elaborate-phase
+    - write-recipe
+    - migrate-recipes
+    - setup-project
+    - sprint-planner
+    - design-guards
+    - triage-issues
+    - collapse-issues
+    - issue-splitter
+    - enrich-issues
+    - prepare-issue
+    - process-issues
+  tier3:
+    - open-pr
+    - open-integration-pr
+    - merge-pr
+    - analyze-prs
+    - review-pr
+    - resolve-review
+    - implement-worktree-no-merge
+    - resolve-failures
+    - retry-worktree
+    - resolve-merge-conflicts
+    - audit-impl
+    - smoke-task
+    - report-bug
+    - pipeline-summary
+    - diagnose-ci
+    - verify-diag

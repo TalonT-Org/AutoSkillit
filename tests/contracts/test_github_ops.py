@@ -14,17 +14,19 @@ import re
 
 import pytest
 
-from autoskillit.workspace.skills import bundled_skills_dir
+from autoskillit.workspace.skills import bundled_skills_dir, bundled_skills_extended_dir
 
 
 def _all_skill_mds() -> list[tuple[str, str]]:
-    """Returns [(skill_name, content), ...] for all SKILL.md files."""
-    bd = bundled_skills_dir()
-    return [
-        (d.name, (d / "SKILL.md").read_text())
-        for d in sorted(bd.iterdir())
-        if d.is_dir() and (d / "SKILL.md").is_file()
-    ]
+    """Returns [(skill_name, content), ...] for all SKILL.md files from both skill directories."""
+    result = []
+    for skills_dir in (bundled_skills_dir(), bundled_skills_extended_dir()):
+        result.extend(
+            (d.name, (d / "SKILL.md").read_text())
+            for d in sorted(skills_dir.iterdir())
+            if d.is_dir() and (d / "SKILL.md").is_file()
+        )
+    return result
 
 
 def test_all_gh_label_creates_include_force() -> None:
@@ -69,7 +71,7 @@ def test_triage_issues_classification_uses_behavioral_criterion() -> None:
     The key distinction is broken vs. missing: runtime errors route to remediation,
     new features and enhancements route to implementation regardless of scope or complexity.
     """
-    bd = bundled_skills_dir()
+    bd = bundled_skills_extended_dir()
     content = (bd / "triage-issues" / "SKILL.md").read_text()
     assert re.search(
         r"is existing behavior broken|does existing code produce a runtime error",
@@ -92,7 +94,7 @@ def test_triage_issues_label_flag_is_opt_out() -> None:
     Requiring --label (opt-in) silently skips labeling in all existing pipeline
     configurations, defeating the purpose of recipe routing.
     """
-    bd = bundled_skills_dir()
+    bd = bundled_skills_extended_dir()
     content = (bd / "triage-issues" / "SKILL.md").read_text()
     assert "--no-label" in content, (
         "triage-issues must define --no-label as the opt-out flag for label application"
@@ -115,7 +117,7 @@ def test_triage_issues_label_flag_is_opt_out() -> None:
 
 def test_issue_splitter_uses_split_not_batch_labels() -> None:
     """issue-splitter must use split/split-from vocabulary, not batch:N labels."""
-    bd = bundled_skills_dir()
+    bd = bundled_skills_extended_dir()
     content = (bd / "issue-splitter" / "SKILL.md").read_text()
     assert "split" in content
     assert "split-from:" in content
@@ -123,7 +125,7 @@ def test_issue_splitter_uses_split_not_batch_labels() -> None:
 
 def test_collapse_issues_gh_label_create_force() -> None:
     """All gh label create calls in collapse-issues must include --force."""
-    skill_file = bundled_skills_dir() / "collapse-issues" / "SKILL.md"
+    skill_file = bundled_skills_extended_dir() / "collapse-issues" / "SKILL.md"
     text = skill_file.read_text()
     calls = re.findall(r"gh label create[^\n]*", text)
     assert calls, "collapse-issues must document at least one gh label create call"
@@ -133,7 +135,7 @@ def test_collapse_issues_gh_label_create_force() -> None:
 
 def test_no_batch_labels_collapse_issues() -> None:
     """collapse-issues must not apply batch:N labels."""
-    skill_file = bundled_skills_dir() / "collapse-issues" / "SKILL.md"
+    skill_file = bundled_skills_extended_dir() / "collapse-issues" / "SKILL.md"
     text = skill_file.read_text()
     label_lines = re.findall(r"(gh issue create[^\n]*|gh label create[^\n]*|--label[^\n]*)", text)
     for line in label_lines:
@@ -143,7 +145,7 @@ def test_no_batch_labels_collapse_issues() -> None:
 @pytest.fixture
 def enrich_skill_text() -> str:
     """Load the enrich-issues SKILL.md text for contract assertions."""
-    skill_file = bundled_skills_dir() / "enrich-issues" / "SKILL.md"
+    skill_file = bundled_skills_extended_dir() / "enrich-issues" / "SKILL.md"
     return skill_file.read_text()
 
 

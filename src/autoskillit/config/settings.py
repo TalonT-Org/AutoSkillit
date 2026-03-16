@@ -11,15 +11,24 @@ Resolution order (low → high priority):
 from __future__ import annotations
 
 import dataclasses
+import logging
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import OutputFormat, dump_yaml_str, load_yaml, pkg_root
+from autoskillit.core import (
+    CATEGORY_TAGS,
+    OutputFormat,
+    dump_yaml_str,
+    load_yaml,
+    pkg_root,
+)
 
 if TYPE_CHECKING:
     from dynaconf import Dynaconf
+
+_logger = logging.getLogger(__name__)  # noqa: TID251
 
 
 @dataclass
@@ -157,6 +166,25 @@ class CIConfig:
     workflow: str | None = None
 
 
+@dataclass
+class SkillsConfig:
+    tier1: list[str] = field(default_factory=list)
+    tier2: list[str] = field(default_factory=list)
+    tier3: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        t1, t2, t3 = set(self.tier1), set(self.tier2), set(self.tier3)
+        dupes = (t1 & t2) | (t1 & t3) | (t2 & t3)
+        if dupes:
+            raise ValueError(f"Skills assigned to multiple tiers: {sorted(dupes)}")
+
+
+@dataclass
+class SubsetsConfig:
+    disabled: list[str] = field(default_factory=list)
+    custom_tags: dict[str, list[str]] = field(default_factory=dict)
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -189,6 +217,8 @@ class AutomationConfig:
     mcp_response: McpResponseConfig = field(default_factory=McpResponseConfig)
     branching: BranchingConfig = field(default_factory=BranchingConfig)
     ci: CIConfig = field(default_factory=CIConfig)
+    skills: SkillsConfig = field(default_factory=SkillsConfig)
+    subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -224,6 +254,8 @@ class AutomationConfig:
         mr = sec("mcp_response")
         br = sec("branching")
         ci = sec("ci")
+        sk = sec("skills")
+        _sub = sec("subsets")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -244,6 +276,7 @@ class AutomationConfig:
         _mr = _field_defaults(McpResponseConfig)
         _br = _field_defaults(BranchingConfig)
         _ci = _field_defaults(CIConfig)
+        _sk = _field_defaults(SkillsConfig)
 
         return cls(
             test_check=TestCheckConfig(
@@ -345,7 +378,40 @@ class AutomationConfig:
             ci=CIConfig(
                 workflow=val(ci, "workflow", _ci["workflow"]) or None,
             ),
+            skills=SkillsConfig(
+                tier1=list(val(sk, "tier1", _sk["tier1"])),
+                tier2=list(val(sk, "tier2", _sk["tier2"])),
+                tier3=list(val(sk, "tier3", _sk["tier3"])),
+            ),
+            subsets=_build_subsets_config(_sub),
         )
+
+
+def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
+    """Parse subsets section, emitting warnings for unknown disabled categories."""
+    disabled = list(raw.get("disabled", []))
+    custom_tags_raw = raw.get("custom_tags", {}) or {}
+    if not isinstance(custom_tags_raw, dict):
+        custom_tags_raw = {}
+    custom_tags: dict[str, list[str]] = {}
+    for k, v in custom_tags_raw.items():
+        if isinstance(v, list):
+            custom_tags[str(k)] = [str(item) for item in v]
+        else:
+            _logger.warning(
+                "Ignoring non-list value for custom_tags entry %r: %r",
+                k,
+                v,
+            )
+    known_categories = CATEGORY_TAGS | frozenset(custom_tags.keys())
+    for tag in disabled:
+        if tag not in known_categories:
+            _logger.warning(
+                "Unknown category %r in subsets.disabled"
+                " (not in CATEGORY_TAGS and not a custom_tag)",
+                tag,
+            )
+    return SubsetsConfig(disabled=disabled, custom_tags=custom_tags)
 
 
 def _to_optional_list(value: Any) -> list[str] | None:

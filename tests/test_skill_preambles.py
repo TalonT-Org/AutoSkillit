@@ -10,11 +10,13 @@ These encode behavioral contracts derived from friction analysis (issue #250):
 
 import pytest
 
-from autoskillit.core.paths import pkg_root
+from autoskillit.workspace.skills import SkillResolver
 
 
 def _skill_md(skill_name: str) -> str:
-    return (pkg_root() / "skills" / skill_name / "SKILL.md").read_text()
+    result = SkillResolver().resolve(skill_name)
+    assert result is not None, f"Skill {skill_name!r} not found in any bundled skills directory"
+    return result.path.read_text()
 
 
 CODE_INDEX_SKILLS = [

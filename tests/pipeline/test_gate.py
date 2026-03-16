@@ -22,8 +22,8 @@ def test_tool_sets_are_disjoint():
 def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert len(GATED_TOOLS) >= 25
-    assert len(UNGATED_TOOLS) >= 12
+    assert len(GATED_TOOLS) == 36
+    assert len(UNGATED_TOOLS) == 2
 
 
 def test_gated_tools_contains_expected_names():
@@ -34,7 +34,6 @@ def test_gated_tools_contains_expected_names():
         "run_python",
         "read_db",
         "run_skill",
-        "test_check",
         "merge_worktree",
         "reset_test_dir",
         "classify_fix",
@@ -56,6 +55,18 @@ def test_gated_tools_contains_expected_names():
         "check_pr_mergeable",
         "set_commit_status",
         "wait_for_merge_queue",
+        # formerly ungated — now kitchen-gated:
+        "fetch_github_issue",
+        "get_issue_title",
+        "get_ci_status",
+        "get_pipeline_report",
+        "get_quota_events",
+        "get_timing_summary",
+        "get_token_summary",
+        "kitchen_status",
+        "list_recipes",
+        "load_recipe",
+        "validate_recipe",
     }
     assert GATED_TOOLS == expected
 
@@ -72,21 +83,7 @@ def test_check_quota_not_in_ungated_tools():
 def test_ungated_tools_contains_expected_names():
     from autoskillit.pipeline.gate import UNGATED_TOOLS
 
-    expected = {
-        "kitchen_status",
-        "get_pipeline_report",
-        "get_token_summary",
-        "get_timing_summary",
-        "get_quota_events",
-        "list_recipes",
-        "load_recipe",
-        "validate_recipe",
-        "fetch_github_issue",
-        "get_issue_title",
-        "get_ci_status",
-        "open_kitchen",
-        "close_kitchen",
-    }
+    expected = {"open_kitchen", "close_kitchen"}
     assert UNGATED_TOOLS == expected
 
 
@@ -193,55 +190,53 @@ def test_gated_tools_does_not_contain_run_recipe():
     assert "run_recipe" not in GATED_TOOLS
 
 
-def test_worker_tools_is_frozenset():
-    from autoskillit.core.types import WORKER_TOOLS
+def test_headless_tools_is_frozenset():
+    from autoskillit.core.types import HEADLESS_TOOLS
 
-    assert isinstance(WORKER_TOOLS, frozenset)
-
-
-def test_worker_tools_contains_expected_names():
-    from autoskillit.core.types import WORKER_TOOLS
-
-    expected = {
-        "fetch_github_issue",
-        "get_issue_title",
-        "get_ci_status",
-        "get_token_summary",
-        "get_timing_summary",
-        "get_quota_events",
-    }
-    assert WORKER_TOOLS == expected
+    assert isinstance(HEADLESS_TOOLS, frozenset)
 
 
-def test_headless_blocked_ungated_tools_is_frozenset():
-    from autoskillit.core.types import HEADLESS_BLOCKED_UNGATED_TOOLS
+def test_headless_tools_contains_expected_names():
+    from autoskillit.core.types import HEADLESS_TOOLS
 
-    assert isinstance(HEADLESS_BLOCKED_UNGATED_TOOLS, frozenset)
-
-
-def test_headless_blocked_ungated_tools_contains_expected_names():
-    from autoskillit.core.types import HEADLESS_BLOCKED_UNGATED_TOOLS
-
-    expected = {
-        "kitchen_status",
-        "get_pipeline_report",
-        "list_recipes",
-        "load_recipe",
-        "validate_recipe",
-        "open_kitchen",
-        "close_kitchen",
-    }
-    assert HEADLESS_BLOCKED_UNGATED_TOOLS == expected
+    assert HEADLESS_TOOLS == {"test_check"}
 
 
-def test_ungated_tools_is_union_of_sub_sets():
-    from autoskillit.core.types import (
-        HEADLESS_BLOCKED_UNGATED_TOOLS,
-        UNGATED_TOOLS,
-        WORKER_TOOLS,
+def test_free_range_tools_is_frozenset():
+    from autoskillit.core.types import FREE_RANGE_TOOLS
+
+    assert isinstance(FREE_RANGE_TOOLS, frozenset)
+
+
+def test_free_range_tools_contains_expected_names():
+    from autoskillit.core.types import FREE_RANGE_TOOLS
+
+    assert FREE_RANGE_TOOLS == {"open_kitchen", "close_kitchen"}
+
+
+def test_ungated_tools_equals_free_range_tools():
+    from autoskillit.core.types import FREE_RANGE_TOOLS, UNGATED_TOOLS
+
+    assert UNGATED_TOOLS == FREE_RANGE_TOOLS
+
+
+def test_all_tool_sets_disjoint_and_complete():
+    from autoskillit.core.types import HEADLESS_TOOLS
+    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
+
+    assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
+    assert GATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
+    assert UNGATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
+    assert len(GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS) == 39
+
+
+def test_worker_tools_removed_from_core():
+    import autoskillit.core.types as t
+
+    assert not hasattr(t, "WORKER_TOOLS"), "WORKER_TOOLS must be removed"
+    assert not hasattr(t, "HEADLESS_BLOCKED_UNGATED_TOOLS"), (
+        "HEADLESS_BLOCKED_UNGATED_TOOLS must be removed"
     )
-
-    assert UNGATED_TOOLS == WORKER_TOOLS | HEADLESS_BLOCKED_UNGATED_TOOLS
 
 
 def test_headless_error_result_fields():

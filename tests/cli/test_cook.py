@@ -994,6 +994,144 @@ class TestCookDisplayOwnership:
         assert "FIRST ACTION" in system_prompt
 
 
+_GITHUB_RECIPE_YAML = """\
+name: github-recipe
+description: A recipe using github tools
+summary: Fetch an issue
+steps:
+  fetch:
+    tool: fetch_github_issue
+    with:
+      issue_url: https://github.com/example/repo/issues/1
+    on_success: done
+    on_failure: done
+  done:
+    action: stop
+    message: Done
+kitchen_rules:
+  - Only use AutoSkillit MCP tools during pipeline execution
+"""
+
+
+class TestCookSubsetGate:
+    """Tests for the cook-time subset-disabled gate (T-VAL-008..010)."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts.show_cook_preview",
+            lambda *a, **kw: None,
+        )
+
+    def _make_config_mock(self, disabled: list[str]) -> MagicMock:
+        mock_cfg = MagicMock()
+        mock_cfg.subsets.disabled = disabled
+        return mock_cfg
+
+    def test_cook_hard_error_non_interactive_on_disabled_subset(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """T-VAL-008: cook exits 1 non-interactively when recipe references a disabled subset."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "github-recipe.yaml").write_text(_GITHUB_RECIPE_YAML)
+
+        monkeypatch.setattr(
+            "autoskillit.config.load_config", lambda *a, **kw: self._make_config_mock(["github"])
+        )
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = False
+        monkeypatch.setattr("sys.stdin", mock_stdin)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.cook("github-recipe")
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "requires subset" in captured.out.lower()
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_enable_temporarily_sets_env_override(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """T-VAL-009: cook injects AUTOSKILLIT_SUBSETS__DISABLED env override for temp enable."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "github-recipe.yaml").write_text(_GITHUB_RECIPE_YAML)
+
+        monkeypatch.setattr(
+            "autoskillit.config.load_config", lambda *a, **kw: self._make_config_mock(["github"])
+        )
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = True
+        monkeypatch.setattr("sys.stdin", mock_stdin)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        # "1" = enable temporarily, "" = confirm launch
+        inputs = iter(["1", ""])
+        monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.cook("github-recipe")
+
+        mock_run.assert_called_once()
+        passed_env = mock_run.call_args.kwargs["env"]
+        assert "AUTOSKILLIT_SUBSETS__DISABLED" in passed_env
+        assert passed_env["AUTOSKILLIT_SUBSETS__DISABLED"] == "@json []"
+
+    def test_cook_enable_permanently_updates_config(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """T-VAL-010: cook calls _enable_subsets_permanently on enable-permanently choice."""
+        import importlib
+        import sys as _sys
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "github-recipe.yaml").write_text(_GITHUB_RECIPE_YAML)
+
+        monkeypatch.setattr(
+            "autoskillit.config.load_config", lambda *a, **kw: self._make_config_mock(["github"])
+        )
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = True
+        monkeypatch.setattr("sys.stdin", mock_stdin)
+
+        called_with: list = []
+
+        def _fake_enable(project_dir, subsets):
+            called_with.append((project_dir, subsets))
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_enable_subsets_permanently", _fake_enable)
+        # "2" = enable permanently, then "n" = cancel launch (to avoid needing subprocess)
+        inputs = iter(["2", "n"])
+        monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
+        monkeypatch.setattr("autoskillit.cli._ansi.permissions_warning", lambda: "")
+
+        cli.cook("github-recipe")
+
+        assert called_with, "_enable_subsets_permanently was not called"
+        _, subsets = called_with[0]
+        assert "github" in subsets
+
+
 class TestRecipesCLI:
     def test_recipes_list_outputs_names(self, capsys: pytest.CaptureFixture) -> None:
         """recipes list prints at least one recipe name to stdout."""

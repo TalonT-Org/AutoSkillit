@@ -8,7 +8,10 @@ import re
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from autoskillit.workspace import SkillResolver
 
 from autoskillit.core import (
     SKILL_TOOLS,
@@ -26,7 +29,6 @@ from autoskillit.recipe.staleness_cache import (
     read_staleness_cache,
     write_staleness_cache,
 )
-from autoskillit.workspace import bundled_skills_dir
 
 logger = get_logger(__name__)
 
@@ -359,6 +361,7 @@ def check_contract_staleness(
     recipe_path: Path | None = None,
     cache_path: Path | None = None,
     skills_dir: Path | None = None,
+    resolver: SkillResolver | None = None,
 ) -> list[StaleItem]:
     """Check a pipeline contract for staleness against the current manifest.
 
@@ -399,9 +402,30 @@ def check_contract_staleness(
             )
         )
 
-    effective_skills_dir = skills_dir if skills_dir is not None else bundled_skills_dir()
+    if skills_dir is not None:
+        _resolver = None
+        effective_skills_dir: Path | None = skills_dir
+    else:
+        if resolver is None:
+            from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+
+            resolver = SkillResolver()
+        _resolver = resolver
+        effective_skills_dir = None
     for skill_name, stored_hash in contract.get("skill_hashes", {}).items():
-        current_hash = compute_skill_hash(skill_name, skills_dir=effective_skills_dir)
+        if effective_skills_dir is not None:
+            current_hash = compute_skill_hash(skill_name, skills_dir=effective_skills_dir)
+        else:
+            if _resolver is None:
+                raise RuntimeError(
+                    "check_staleness called without effective_skills_dir or resolver"
+                )
+            info = _resolver.resolve(skill_name)
+            current_hash = (
+                compute_skill_hash(skill_name, skills_dir=info.path.parent.parent)
+                if info is not None
+                else ""
+            )
         if current_hash and stored_hash != current_hash:
             stale.append(
                 StaleItem(

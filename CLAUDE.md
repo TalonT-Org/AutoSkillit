@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 39 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, wait_for_merge_queue, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events + ungated kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 26 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, revealed per-session via `open_kitchen` tool, and 60 bundled skills registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 39 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, wait_for_merge_queue, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events, kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 37 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, 1 tool additionally tagged `headless` (test_check) and revealed in headless sessions via `mcp.enable(tags={'headless'})`, and 2 Free Range tools (open_kitchen, close_kitchen) always visible. Revealed per-session via `open_kitchen` tool, and 60 bundled skills registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -28,7 +28,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **No Backward Compatibility Hacks**: No comments about dead code. Remove dead code entirely.
   * **Avoid Redundancy**: Do not duplicate logic or utilities.
   * **Use Current Package Versions**: Web search for current stable versions when adding dependencies.
-  * **Version Bumps**: When bumping the package version, update `pyproject.toml`, `.claude-plugin/plugin.json`, and run `uv lock`; then search tests for hardcoded version strings (e.g. `AUTOSKILLIT_INSTALLED_VERSION` monkeypatches) and update them.
+  * **Version Bumps**: When bumping the package version, update `pyproject.toml` and run `task sync-plugin-version && uv lock`; then search tests for hardcoded version strings (e.g. `AUTOSKILLIT_INSTALLED_VERSION` monkeypatches) and update them.
   * **Run pre-commit before committing**: Always run `pre-commit run --all-files` before
     committing. Do not skip this step even when code appears clean — hooks auto-fix
     formatting and abort the commit, requiring re-stage and retry.
@@ -104,6 +104,7 @@ src/autoskillit/
 │   ├── paths.py             #   pkg_root(), is_git_worktree() — canonical package root resolver
 │   ├── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
 │   ├── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
+│   ├── claude_conventions.py #  ClaudeDirectoryConventions — canonical skill discovery directory layout constants; LayoutError, validate_add_dir()
 │   └── github_url.py        #   parse_github_repo — canonical GitHub URL parser (str → owner/repo | None)
 ├── config/                  # L1 configuration sub-package
 │   ├── __init__.py          #   Re-exports AutomationConfig + GitHubConfig + resolve_ingredient_defaults
@@ -115,6 +116,7 @@ src/autoskillit/
 │   ├── audit.py             #   FailureRecord, AuditLog, _audit_log singleton
 │   ├── context.py           #   ToolContext DI container (config, audit, token_log, gate, plugin_dir, runner)
 │   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
+│   │                        #   (UNGATED_TOOLS is an alias for FREE_RANGE_TOOLS in core/types.py)
 │   ├── mcp_response.py      #   McpResponseEntry, DefaultMcpResponseLog — per-tool response size tracking
 │   ├── telemetry_fmt.py     #   TelemetryFormatter — canonical token/timing display (single source of truth)
 │   ├── timings.py           #   TimingEntry, DefaultTimingLog — per-step wall-clock accumulation
@@ -148,7 +150,9 @@ src/autoskillit/
 │   ├── __init__.py          #   Re-exports CleanupResult, SkillResolver, SessionSkillManager, clone_repo, remove_clone, push_to_remote
 │   ├── cleanup.py           #   Directory teardown utilities (CleanupResult, preserve list)
 │   ├── clone.py             #   Clone-based run isolation: clone_repo, remove_clone, push_to_remote
-│   ├── session_skills.py    #   Per-session ephemeral skill dirs (SkillsDirectoryProvider, SessionSkillManager, TIER2_SKILLS, resolve_ephemeral_root)
+│   ├── session_skills.py    #   Per-session ephemeral skill dirs (SkillsDirectoryProvider,
+│   │                        #   DefaultSessionSkillManager, resolve_ephemeral_root)
+│   │                        #   Subset filtering + project-local override detection
 │   └── skills.py            #   Bundled skill listing (SkillResolver)
 ├── recipe/                  # L2 recipe sub-package
 │   ├── __init__.py          #   Re-exports Recipe, RecipeStep, validate_recipe, load_recipe, etc.
@@ -170,7 +174,7 @@ src/autoskillit/
 │   ├── rules_merge.py       #   Semantic rules for merge_worktree routing completeness
 │   ├── rules_recipe.py      #   Semantic rules for unknown sub-recipe references (unknown-sub-recipe rule)
 │   ├── rules_skills.py      #   Semantic rules for skill_command resolvability (unknown-skill-command)
-│   ├── rules_tools.py       #   Semantic rules for MCP tool name validity (unknown-tool rule)
+│   ├── rules_tools.py       #   Semantic rules for MCP tool name/param validity (unknown-tool, dead-with-param)
 │   ├── rules_verdict.py     #   Semantic rules for skill verdict routing completeness (unrouted-verdict-value)
 │   ├── rules_worktree.py    #   Semantic rules for worktree retry lifecycle
 │   ├── schema.py            #   Recipe, RecipeStep, DataFlowWarning, AUTOSKILLIT_VERSION_KEY
@@ -183,7 +187,8 @@ src/autoskillit/
 │   ├── loader.py            #   Migration note discovery and version chaining
 │   └── store.py             #   FailureStore: migration failure persistence (JSON, atomic writes)
 ├── server/                  # L3 FastMCP server sub-package
-│   ├── __init__.py          #   FastMCP app, _initialize(ctx), version_info(), recipe:// resource handler
+│   ├── __init__.py          #   FastMCP app, kitchen gating (mcp.disable tags={'kitchen'}),
+│   │                        #   headless tool reveal (AUTOSKILLIT_HEADLESS), recipe:// resource handler
 │   ├── git.py               #   Git merge workflow for merge_worktree (perform_merge)
 │   ├── helpers.py           #   Shared server-layer helpers (worktree setup, path utilities)
 │   ├── tools_kitchen.py     #   open_kitchen, close_kitchen tool handlers + recipe:// resource
@@ -226,37 +231,38 @@ src/autoskillit/
 │   ├── implementation.yaml
 │   ├── remediation.yaml
 │   └── smoke-test.yaml
-└── skills/                  # 59 bundled skills (SKILL.md per skill)
-    ├── analyze-prs/              ├── arch-lens-c4-container/
-    ├── arch-lens-concurrency/    ├── arch-lens-data-lineage/
-    ├── arch-lens-deployment/     ├── arch-lens-development/
-    ├── arch-lens-error-resilience/ ├── arch-lens-module-dependency/
-    ├── arch-lens-operational/    ├── arch-lens-process-flow/
-    ├── arch-lens-repository-access/ ├── arch-lens-scenarios/
-    ├── arch-lens-security/       ├── arch-lens-state-lifecycle/
-    ├── audit-arch/               ├── audit-bugs/
-    ├── audit-cohesion/           ├── audit-defense-standards/
-    ├── audit-friction/           ├── audit-impl/
-    ├── audit-tests/              ├── close-kitchen/
-    ├── collapse-issues/          ├── design-guards/
-    ├── diagnose-ci/              ├── dry-walkthrough/
-    ├── elaborate-phase/          ├── enrich-issues/
-    ├── implement-worktree/       ├── implement-worktree-no-merge/
-    ├── investigate/              ├── issue-splitter/
-    ├── make-arch-diag/           ├── make-groups/
-    ├── make-plan/                ├── make-req/
-    ├── merge-pr/                 ├── mermaid/
-    ├── migrate-recipes/          ├── open-integration-pr/
-    ├── open-kitchen/             ├── open-pr/
-    ├── pipeline-summary/         ├── prepare-issue/
-    ├── process-issues/           ├── rectify/
-    ├── report-bug/               ├── resolve-failures/
-    ├── resolve-merge-conflicts/  ├── resolve-review/
-    ├── retry-worktree/           ├── review-approach/
-    ├── review-pr/                ├── setup-project/
-    ├── smoke-task/               ├── sous-chef/
-    ├── sprint-planner/           ├── triage-issues/
-    ├── verify-diag/              └── write-recipe/
+├── skills/                  # Tier 1 bundled skills (plugin-scanned, entry points)
+│   ├── open-kitchen/        # /autoskillit:open-kitchen — reveals MCP tools
+│   ├── close-kitchen/       # /autoskillit:close-kitchen — hides MCP tools
+│   └── sous-chef/           # Internal: injected by open_kitchen, not a slash cmd
+└── skills_extended/         # Tier 2+3 bundled skills (NOT plugin-scanned)
+    │
+    │  ── Tier 2: Interactive skills (chefs-hat + headless) ──
+    ├── investigate/          ├── make-plan/
+    ├── implement-worktree/   ├── rectify/
+    ├── dry-walkthrough/      ├── make-groups/
+    ├── review-approach/      ├── mermaid/
+    ├── make-arch-diag/       ├── arch-lens-*/  (13 skills)
+    ├── audit-arch/           ├── audit-cohesion/
+    ├── audit-tests/          ├── audit-defense-standards/
+    ├── audit-bugs/           ├── audit-friction/
+    ├── make-req/             ├── elaborate-phase/
+    ├── write-recipe/         ├── migrate-recipes/
+    ├── setup-project/        ├── sprint-planner/
+    ├── design-guards/        ├── triage-issues/
+    ├── collapse-issues/      ├── issue-splitter/
+    ├── enrich-issues/        ├── prepare-issue/
+    └── process-issues/
+    │
+    │  ── Tier 3: Pipeline / automation skills ──
+    ├── open-pr/              ├── open-integration-pr/
+    ├── merge-pr/             ├── analyze-prs/
+    ├── review-pr/            ├── resolve-review/
+    ├── implement-worktree-no-merge/  ├── resolve-failures/
+    ├── retry-worktree/       ├── resolve-merge-conflicts/
+    ├── audit-impl/           ├── smoke-task/
+    ├── report-bug/           ├── pipeline-summary/
+    ├── diagnose-ci/          └── verify-diag/
 ```
 
 **Session diagnostics logs** are stored globally at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir` in config. Session directories are named by Claude Code session UUID when available (preferred: parsed from stdout, fallback: discovered from JSONL filename via Channel B). When no session ID is available from either source, directories use `no_session_{timestamp}` naming. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.

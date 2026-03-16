@@ -36,7 +36,7 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
     mock_tool_ctx = _make_mock_ctx(mock_recipes)
 
     with (
-        patch("autoskillit.server.tools_recipe._require_not_headless", return_value=None),
+        patch("autoskillit.server.tools_recipe._require_enabled", return_value=None),
         patch("autoskillit.server.tools_recipe._get_ctx_or_none", return_value=mock_tool_ctx),
         patch(
             "autoskillit.config.resolve_ingredient_defaults",

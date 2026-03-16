@@ -115,6 +115,21 @@ class TestTestCheck:
     """test_check returns unambiguous PASS/FAIL with cross-validation."""
 
     @pytest.mark.anyio
+    async def test_test_check_accessible_without_gate(self, tool_ctx):
+        """test_check must not be blocked by gate — _require_enabled() was removed."""
+        from autoskillit.pipeline.gate import DefaultGateState
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        # Still need runner to be set up — push a result for it
+        tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
+        result_str = await test_check(worktree_path="/tmp/wt")
+        result = json.loads(result_str)
+        assert result.get("subtype") != "gate_error", (
+            "test_check must not be gated — _require_enabled() was removed"
+        )
+        assert "passed" in result
+
+    @pytest.mark.anyio
     async def test_passes_on_clean_run(self, tool_ctx):
         """returncode=0 with passing summary -> passed=True."""
         tool_ctx.runner.push(_make_result(0, "= 100 passed =\n", ""))

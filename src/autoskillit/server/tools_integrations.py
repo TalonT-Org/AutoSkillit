@@ -93,7 +93,7 @@ def _retry_reason_to_error(result: SkillResult) -> str:
 _pending_report_tasks: set[asyncio.Task[Any]] = set()
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("fetch_github_issue")
 async def fetch_github_issue(
     issue_url: str,
@@ -119,13 +119,13 @@ async def fetch_github_issue(
                    github.default_repo is configured in .autoskillit/config.yaml.
         include_comments: Include the ## Comments section in content (default: true).
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
+    This tool requires the kitchen to be open (gated by open_kitchen).
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_config, _get_ctx
 
-    # Ungated read-only query: structlog context binding is intentionally omitted.
+    # Read-only query: structlog context binding is intentionally omitted.
     logger.info("fetch_github_issue", issue_url=issue_url, include_comments=include_comments)
 
     tool_ctx = _get_ctx()
@@ -157,7 +157,7 @@ async def fetch_github_issue(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("get_issue_title")
 async def get_issue_title(issue_url: str) -> str:
     """Fetch only the title and slug for a GitHub issue — no body, no comments.
@@ -177,6 +177,8 @@ async def get_issue_title(issue_url: str) -> str:
         issue_url: Full GitHub issue URL (https://github.com/owner/repo/issues/42)
                    or shorthand (owner/repo#42).
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_config, _get_ctx
 
     tool_ctx = _get_ctx()
@@ -199,7 +201,7 @@ async def get_issue_title(issue_url: str) -> str:
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("report_bug")
 async def report_bug(
     error_context: str,
@@ -731,7 +733,7 @@ def _parse_enrich_result(response_text: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("prepare_issue")
 async def prepare_issue(
     title: str,
@@ -824,7 +826,7 @@ async def prepare_issue(
     )
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("enrich_issues")
 async def enrich_issues(
     issue_number: int | None = None,
@@ -916,7 +918,7 @@ async def enrich_issues(
     )
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("claim_issue")
 async def claim_issue(
     issue_url: str,
@@ -1000,7 +1002,7 @@ async def claim_issue(
         )
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("release_issue")
 async def release_issue(
     issue_url: str,
@@ -1156,7 +1158,7 @@ async def _close_issues_sequentially(
     return closed, failed
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("get_pr_reviews")
 async def get_pr_reviews(
     pr_number: int,
@@ -1221,7 +1223,7 @@ async def get_pr_reviews(
         return json.dumps({"reviews": reviews})
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("bulk_close_issues")
 async def bulk_close_issues(
     issue_numbers: list[int],

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills/prepare-issue/SKILL.md"
+SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/prepare-issue/SKILL.md"
 
 
 def _lines():

@@ -30,6 +30,7 @@ from autoskillit.core import (
     SessionOutcome,
     SkillResult,
     TerminationReason,
+    ValidatedAddDir,
     claude_code_project_dir,
     get_logger,
 )
@@ -160,8 +161,8 @@ def _recover_block_from_assistant_messages(
     session: ClaudeSessionResult,
     expected_output_patterns: Sequence[str],
 ) -> ClaudeSessionResult | None:
-    """When session.result lacks expected_output_patterns (Channel B win before
-    stdout drain), attempt to find the patterns in session.assistant_messages.
+    """When session.result lacks expected_output_patterns (drain-race condition
+    on either channel), attempt to find the patterns in session.assistant_messages.
     If found, return a new ClaudeSessionResult with result reconstructed from
     assistant_messages. Return None if patterns cannot be found there either.
     """
@@ -171,7 +172,7 @@ def _recover_block_from_assistant_messages(
     if not _check_expected_patterns(combined, expected_output_patterns):
         return None
     logger.warning(
-        "channel_b_pattern_recovered_from_assistant_messages",
+        "pattern_recovered_from_assistant_messages",
         patterns=list(expected_output_patterns),
     )
     # Preserve any content already drained into session.result before appending
@@ -479,13 +480,13 @@ def _build_skill_result(
         if recovered is not None:
             session = recovered
 
-    # Channel B pattern recovery: when Channel B wins before stdout is drained,
-    # expected_output_patterns content may only exist in assistant_messages.
-    # Attempt recovery so that _compute_success sees the block in session.result.
+    # Pattern recovery: when a drain-race occurs on either channel, expected_output_patterns
+    # content may only exist in assistant_messages. Attempt recovery so that _compute_success
+    # sees the block in session.result.
     if (
-        result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        result.channel_confirmation != ChannelConfirmation.UNMONITORED
         and expected_output_patterns
-        and not _check_expected_patterns(session.result, expected_output_patterns)
+        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
     ):
         pattern_recovered = _recover_block_from_assistant_messages(
             session, expected_output_patterns
@@ -598,7 +599,7 @@ async def run_headless_core(
     *,
     model: str = "",
     step_name: str = "",
-    add_dir: str = "",
+    add_dirs: Sequence[ValidatedAddDir] = (),
     timeout: float | None = None,
     stale_threshold: float | None = None,
     expected_output_patterns: Sequence[str] = (),
@@ -634,8 +635,8 @@ async def run_headless_core(
         for flag in cfg.output_format.required_cli_flags:
             if flag not in cmd:
                 cmd.append(flag)
-        if add_dir:
-            cmd.extend([ClaudeFlags.ADD_DIR, add_dir])
+        for validated_dir in add_dirs:
+            cmd.extend([ClaudeFlags.ADD_DIR, validated_dir.path])
 
         env_vars = ["AUTOSKILLIT_HEADLESS=1"]
         delay_ms = cfg.exit_after_stop_delay_ms
@@ -653,7 +654,7 @@ async def run_headless_core(
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             plugin_dir=str(effective_plugin_dir),
-            add_dir=add_dir or None,
+            add_dirs=list(add_dirs) if add_dirs else None,
         )
 
         runner = ctx.runner
@@ -791,7 +792,7 @@ class DefaultHeadlessExecutor:
         *,
         model: str = "",
         step_name: str = "",
-        add_dir: str = "",
+        add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),
@@ -805,7 +806,7 @@ class DefaultHeadlessExecutor:
             self._ctx,
             model=model,
             step_name=step_name,
-            add_dir=add_dir,
+            add_dirs=add_dirs,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             expected_output_patterns=expected_output_patterns,

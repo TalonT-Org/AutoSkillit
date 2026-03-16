@@ -9,7 +9,7 @@ def resolve_review_skill_md() -> str:
         Path(__file__).parent.parent.parent
         / "src"
         / "autoskillit"
-        / "skills"
+        / "skills_extended"
         / "resolve-review"
         / "SKILL.md"
     )

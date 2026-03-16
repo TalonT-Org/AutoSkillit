@@ -3,7 +3,12 @@
 from pathlib import Path
 
 SKILL_PATH = (
-    Path(__file__).parent.parent.parent / "src" / "autoskillit" / "skills" / "open-pr" / "SKILL.md"
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "open-pr"
+    / "SKILL.md"
 )
 
 

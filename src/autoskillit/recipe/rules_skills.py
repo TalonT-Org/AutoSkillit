@@ -17,6 +17,12 @@ def _get_bundled_skill_names() -> frozenset[str]:
     return frozenset(s.name for s in SkillResolver().list_all())
 
 
+@functools.lru_cache(maxsize=1)
+def _get_skill_category_map() -> dict[str, frozenset[str]]:
+    """Return {skill_name: categories} for all bundled skills."""
+    return {s.name: s.categories for s in SkillResolver().list_all()}
+
+
 _SKILL_TOKEN_RE = re.compile(r"/autoskillit:(\S+)")
 
 
@@ -58,6 +64,48 @@ def _check_unknown_skill_command(ctx: ValidationContext) -> list[RuleFinding]:
                         f"step '{step_name}': skill_command '{skill_cmd}' references "
                         f"unknown skill '{skill_name}'. "
                         f"Known bundled skills: {sorted(known)}"
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="subset-disabled-skill",
+    description=(
+        "run_skill step references a bundled skill whose functional category "
+        "is currently disabled in subsets.disabled config"
+    ),
+    severity=Severity.WARNING,
+)
+def _check_subset_disabled_skill(ctx: ValidationContext) -> list[RuleFinding]:
+    if not ctx.disabled_subsets:
+        return []
+    category_map = _get_skill_category_map()
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if _has_dynamic_skill_name(skill_cmd):
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        categories = category_map.get(skill_name, frozenset())
+        overlap = categories & ctx.disabled_subsets
+        if overlap:
+            disabled_subset = next(iter(sorted(overlap)))
+            findings.append(
+                RuleFinding(
+                    rule="subset-disabled-skill",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"step '{step_name}': skill_command '{skill_cmd}' references "
+                        f"skill '{skill_name}' which belongs to the disabled subset "
+                        f"'{disabled_subset}'. Enable '{disabled_subset}' in "
+                        f".autoskillit/config.yaml subsets.disabled to use this skill."
                     ),
                 )
             )

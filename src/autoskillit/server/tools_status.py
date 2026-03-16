@@ -41,9 +41,7 @@ async def kitchen_status() -> str:
     tools enabled state, and active configuration summary. Call this after
     enabling tools or anytime you need to verify the server is healthy.
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
+    This tool requires the kitchen to be open (gated by open_kitchen).
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -87,9 +85,7 @@ async def get_pipeline_report(clear: bool = False) -> str:
       - failures: list of {timestamp, skill_command, exit_code, subtype,
                             needs_retry, retry_reason, stderr}
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
+    This tool requires the kitchen to be open (gated by open_kitchen).
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -246,9 +242,7 @@ async def get_quota_events(n: int = 50) -> str:
     Args:
         n: Maximum number of events to return (default 50).
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
+    This tool requires the kitchen to be open (gated by open_kitchen).
     """
     if (gate := _require_enabled()) is not None:
         return gate

@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import uuid
+from pathlib import Path
 
 
 def chefs_hat() -> None:
@@ -55,8 +56,6 @@ def chefs_hat() -> None:
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
     config = load_config()
-    from pathlib import Path
-
     skills_dir = session_mgr.init_session(
         session_id, cook_session=True, config=config, project_dir=Path.cwd()
     )

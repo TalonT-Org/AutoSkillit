@@ -40,9 +40,7 @@ async def list_recipes() -> str:
     step-by-step by the agent. Recipes live in .autoskillit/recipes/ (NOT in
     .autoskillit/skills/ or any other directory).
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
+    This tool requires the kitchen to be open (gated by open_kitchen).
     """
     if (gate := _require_enabled()) is not None:
         return gate

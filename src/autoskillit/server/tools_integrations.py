@@ -119,9 +119,7 @@ async def fetch_github_issue(
                    github.default_repo is configured in .autoskillit/config.yaml.
         include_comments: Include the ## Comments section in content (default: true).
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
+    This tool requires the kitchen to be open (gated by open_kitchen).
     """
     if (gate := _require_enabled()) is not None:
         return gate

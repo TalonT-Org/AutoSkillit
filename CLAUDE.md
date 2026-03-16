@@ -104,6 +104,7 @@ src/autoskillit/
 │   ├── paths.py             #   pkg_root(), is_git_worktree() — canonical package root resolver
 │   ├── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
 │   ├── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
+│   ├── claude_conventions.py #  ClaudeDirectoryConventions — canonical skill discovery directory layout constants
 │   └── github_url.py        #   parse_github_repo — canonical GitHub URL parser (str → owner/repo | None)
 ├── config/                  # L1 configuration sub-package
 │   ├── __init__.py          #   Re-exports AutomationConfig + GitHubConfig + resolve_ingredient_defaults

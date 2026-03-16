@@ -835,7 +835,7 @@ def test_tool_subset_tags_match_decorators() -> None:
     frozenset. Tools NOT in TOOL_SUBSET_TAGS must have empty functional tags.
     Every tool in TOOL_SUBSET_TAGS must have a matching @mcp.tool decorator.
     """
-    from autoskillit.core.types import TOOL_SUBSET_TAGS
+    from autoskillit.core import TOOL_SUBSET_TAGS
 
     BASE_TAGS: frozenset[str] = frozenset({"autoskillit", "kitchen", "headless"})
     server_dir = SRC_ROOT / "server"

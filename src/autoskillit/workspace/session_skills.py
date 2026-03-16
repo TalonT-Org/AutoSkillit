@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import _atomic_write, get_logger
+from autoskillit.core import ClaudeDirectoryConventions, _atomic_write, get_logger
 from autoskillit.workspace.skills import SkillInfo, SkillResolver, detect_project_local_overrides
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ _CANDIDATE_ROOTS: list[Path] = [
 _FM_PATTERN = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
 
 # Claude Code discovers skills from --add-dir directories at .claude/skills/<name>/SKILL.md.
-_SKILLS_SUBDIR = Path(".claude") / "skills"
+_SKILLS_SUBDIR = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
 
 
 def resolve_ephemeral_root() -> Path:

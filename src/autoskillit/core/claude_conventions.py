@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autoskillit.core.types import ValidatedAddDir
+from .types import ValidatedAddDir
 
 
 class LayoutError(ValueError):

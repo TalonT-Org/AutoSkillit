@@ -239,8 +239,6 @@ steps:
       skill_command: "/autoskillit:review-approach ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review"
-    capture:
-      review_path: "${{ result.review_path }}"
     on_success: dry_walkthrough
     on_failure: release_issue_failure
     note: "Only execute this step if review_approach input is 'true'. Otherwise skip directly to dry_walkthrough."

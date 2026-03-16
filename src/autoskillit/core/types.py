@@ -430,9 +430,10 @@ class ValidatedAddDir:
     Cannot be constructed directly — use ``validate_add_dir()`` or obtain from
     ``DefaultSessionSkillManager.init_session()``.
 
-    Implements ``__str__`` and ``__fspath__`` so it works transparently with
-    ``str(d)`` (used by ``build_interactive_cmd``) and ``shutil.rmtree``
-    (used by chefs-hat).
+    Implements ``__str__``, ``__fspath__``, and ``__truediv__`` so it works
+    transparently with ``str(d)`` (used by ``build_interactive_cmd``),
+    ``shutil.rmtree`` (used by chefs-hat), and ``d / "subdir"`` (path
+    composition in tests and production code).
     """
 
     path: str
@@ -442,6 +443,9 @@ class ValidatedAddDir:
 
     def __fspath__(self) -> str:
         return self.path
+
+    def __truediv__(self, other: str | Path) -> Path:
+        return Path(self.path) / other
 
 
 FREE_RANGE_TOOLS: frozenset[str] = frozenset({"open_kitchen", "close_kitchen"})

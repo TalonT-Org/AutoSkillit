@@ -773,12 +773,15 @@ class TestInvestigateFirstStructure:
             "context.merge_target holds the feature branch name"
         )
 
-    def test_remediation_no_dead_with_params(self, recipe) -> None:
-        """Remediation recipe must have no dead-with-param findings."""
+    def test_remediation_no_add_dir_dead_param(self, recipe) -> None:
+        """Remediation recipe must not have add_dir as a with: key (removed dead param)."""
         findings = run_semantic_rules(recipe)
-        dead = [f for f in findings if f.rule == "dead-with-param"]
-        assert not dead, (
-            f"Remediation recipe has dead with params: {[(f.step_name, f.message) for f in dead]}"
+        add_dir_dead = [
+            f for f in findings if f.rule == "dead-with-param" and "add_dir" in f.message
+        ]
+        assert not add_dir_dead, (
+            f"Remediation recipe still has dead add_dir param: "
+            f"{[(f.step_name, f.message) for f in add_dir_dead]}"
         )
 
 

@@ -485,7 +485,7 @@ def _build_skill_result(
     if (
         result.channel_confirmation != ChannelConfirmation.UNMONITORED
         and expected_output_patterns
-        and not _check_expected_patterns(session.result, expected_output_patterns)
+        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
     ):
         pattern_recovered = _recover_block_from_assistant_messages(
             session, expected_output_patterns

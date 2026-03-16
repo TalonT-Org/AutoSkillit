@@ -13,7 +13,7 @@ SKILL_PATH = (
     Path(__file__).parent.parent.parent
     / "src"
     / "autoskillit"
-    / "skills"
+    / "skills_extended"
     / "review-pr"
     / "SKILL.md"
 )

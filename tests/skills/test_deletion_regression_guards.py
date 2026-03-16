@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 
-SKILLS_ROOT = pkg_root() / "skills"
+SKILLS_ROOT = pkg_root() / "skills_extended"
 MERGE_PR_SKILL = SKILLS_ROOT / "merge-pr" / "SKILL.md"
 REVIEW_PR_SKILL = SKILLS_ROOT / "review-pr" / "SKILL.md"
 

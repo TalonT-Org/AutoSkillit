@@ -26,7 +26,6 @@ from autoskillit.recipe.staleness_cache import (
     read_staleness_cache,
     write_staleness_cache,
 )
-from autoskillit.workspace import bundled_skills_dir
 
 logger = get_logger(__name__)
 
@@ -399,9 +398,25 @@ def check_contract_staleness(
             )
         )
 
-    effective_skills_dir = skills_dir if skills_dir is not None else bundled_skills_dir()
+    if skills_dir is not None:
+        _resolver = None
+        effective_skills_dir: Path | None = skills_dir
+    else:
+        from autoskillit.workspace import SkillResolver
+
+        _resolver = SkillResolver()
+        effective_skills_dir = None
     for skill_name, stored_hash in contract.get("skill_hashes", {}).items():
-        current_hash = compute_skill_hash(skill_name, skills_dir=effective_skills_dir)
+        if effective_skills_dir is not None:
+            current_hash = compute_skill_hash(skill_name, skills_dir=effective_skills_dir)
+        else:
+            assert _resolver is not None
+            info = _resolver.resolve(skill_name)
+            current_hash = (
+                compute_skill_hash(skill_name, skills_dir=info.path.parent.parent)
+                if info is not None
+                else ""
+            )
         if current_hash and stored_hash != current_hash:
             stale.append(
                 StaleItem(

@@ -18,8 +18,9 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from autoskillit.workspace.skills import SkillResolver
 
-SKILLS_DIR = pkg_root() / "skills"
+_SKILLS_DIRS = [pkg_root() / "skills", pkg_root() / "skills_extended"]
 
 # Patterns that detect instructions to output/emit/print plain text
 _TEXT_OUTPUT_PATTERNS = [
@@ -66,14 +67,17 @@ _ANTI_PROSE_GUARD_PATTERNS = [
 
 
 def _all_skill_dirs() -> list[Path]:
-    """Discover all skill directories that contain a SKILL.md."""
-    return sorted(d for d in SKILLS_DIR.iterdir() if d.is_dir() and (d / "SKILL.md").exists())
+    """Discover all skill directories that contain a SKILL.md from both skill directories."""
+    dirs = []
+    for skills_dir in _SKILLS_DIRS:
+        dirs.extend(d for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists())
+    return sorted(dirs, key=lambda d: d.name)
 
 
 def _skill_text(skill_name: str) -> str:
-    path = SKILLS_DIR / skill_name / "SKILL.md"
-    assert path.exists(), f"Skill not found: {path}"
-    return path.read_text()
+    result = SkillResolver().resolve(skill_name)
+    assert result is not None, f"Skill not found: {skill_name}"
+    return result.path.read_text()
 
 
 def _has_text_output_instruction(text: str) -> bool:

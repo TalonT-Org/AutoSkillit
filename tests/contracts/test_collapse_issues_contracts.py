@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 
-from autoskillit.workspace.skills import bundled_skills_dir
+from autoskillit.workspace.skills import bundled_skills_extended_dir
 
-skills_dir = bundled_skills_dir()
+skills_dir = bundled_skills_extended_dir()
 COLLAPSE_SKILL = skills_dir / "collapse-issues" / "SKILL.md"
 TRIAGE_SKILL = skills_dir / "triage-issues" / "SKILL.md"
 

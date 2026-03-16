@@ -26,7 +26,11 @@ from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
 )
-from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
+from autoskillit.workspace.skills import (
+    SkillResolver,
+    bundled_skills_dir,
+    bundled_skills_extended_dir,
+)
 
 delete_directory_contents = _delete_directory_contents
 
@@ -41,6 +45,7 @@ __all__ = [
     "SkillsDirectoryProvider",
     "TIER2_SKILLS",
     "bundled_skills_dir",
+    "bundled_skills_extended_dir",
     "clone_repo",
     "detect_branch",
     "detect_source_dir",

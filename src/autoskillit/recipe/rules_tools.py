@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS, UNGATED_TOOLS, Severity
+from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS, TOOL_SUBSET_TAGS, UNGATED_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
@@ -41,7 +41,30 @@ def _check_constant_step_no_with_args(ctx: ValidationContext) -> list[RuleFindin
 def _unknown_tool(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
-        if step.tool is not None and step.tool not in _ALL_TOOLS:
+        if step.tool is None:
+            continue
+        if step.tool in _ALL_TOOLS:
+            # Known tool — check if it belongs to a disabled subset
+            if ctx.disabled_subsets:
+                tool_categories = TOOL_SUBSET_TAGS.get(step.tool, frozenset())
+                overlap = tool_categories & ctx.disabled_subsets
+                if overlap:
+                    disabled_subset = next(iter(sorted(overlap)))
+                    findings.append(
+                        RuleFinding(
+                            rule="subset-disabled-tool",
+                            severity=Severity.WARNING,
+                            step_name=step_name,
+                            message=(
+                                f"step '{step_name}': tool '{step.tool}' belongs to "
+                                f"the disabled subset '{disabled_subset}'. Enable "
+                                f"'{disabled_subset}' in .autoskillit/config.yaml "
+                                f"subsets.disabled to use this tool."
+                            ),
+                        )
+                    )
+        else:
+            # Truly unknown tool
             findings.append(
                 RuleFinding(
                     rule="unknown-tool",

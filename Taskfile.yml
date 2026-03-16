@@ -118,6 +118,11 @@ tasks:
         echo "Smoke test output saved to: $TEST_OUTPUT"
         exit $PYTEST_EXIT
 
+  check-docs:
+    desc: Verify documentation counts match source code
+    cmds:
+      - python scripts/check_doc_counts.py
+
   install-worktree:
     desc: Set up development environment (isolated venv in worktrees, direct install in main)
     status:

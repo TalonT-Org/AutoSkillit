@@ -216,6 +216,8 @@ class ValidationContext:
     available_sub_recipes: frozenset[str] = field(default_factory=frozenset)
     project_dir: Path | None = None
     disabled_subsets: frozenset[str] = field(default_factory=frozenset)
+    skill_category_map: dict[str, frozenset[str]] | None = None
+    overridden_skills: frozenset[str] | None = None
 
 
 # ---------------------------------------------------------------------------

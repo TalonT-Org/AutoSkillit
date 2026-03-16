@@ -9,17 +9,20 @@ from autoskillit.core import AUTOSKILLIT_SKILL_PREFIX, SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.workspace import SkillResolver, detect_project_local_overrides
 
 
 @functools.lru_cache(maxsize=1)
 def _get_bundled_skill_names() -> frozenset[str]:
+    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+
     return frozenset(s.name for s in SkillResolver().list_all())
 
 
 @functools.lru_cache(maxsize=1)
 def _get_skill_category_map() -> dict[str, frozenset[str]]:
     """Return {skill_name: categories} for all bundled skills."""
+    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+
     return {s.name: s.categories for s in SkillResolver().list_all()}
 
 
@@ -81,7 +84,9 @@ def _check_unknown_skill_command(ctx: ValidationContext) -> list[RuleFinding]:
 def _check_subset_disabled_skill(ctx: ValidationContext) -> list[RuleFinding]:
     if not ctx.disabled_subsets:
         return []
-    category_map = _get_skill_category_map()
+    category_map = (
+        ctx.skill_category_map if ctx.skill_category_map is not None else _get_skill_category_map()
+    )
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
         if step.tool not in SKILL_TOOLS:
@@ -123,7 +128,12 @@ def _check_subset_disabled_skill(ctx: ValidationContext) -> list[RuleFinding]:
 def _check_project_local_skill_override(ctx: ValidationContext) -> list[RuleFinding]:
     if ctx.project_dir is None:
         return []
-    overrides = detect_project_local_overrides(ctx.project_dir)
+    if ctx.overridden_skills is not None:
+        overrides = ctx.overridden_skills
+    else:
+        from autoskillit.workspace import detect_project_local_overrides  # noqa: PLC0415
+
+        overrides = detect_project_local_overrides(ctx.project_dir)
     if not overrides:
         return []
     findings: list[RuleFinding] = []

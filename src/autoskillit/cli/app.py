@@ -443,7 +443,7 @@ def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> N
 
     config_path = project_dir / ".autoskillit" / "config.yaml"
     try:
-        data: dict = load_yaml(config_path) if config_path.exists() else {}
+        data: dict = (load_yaml(config_path) or {}) if config_path.exists() else {}
     except YAMLError:
         data = {}
     subsets_section = data.setdefault("subsets", {})

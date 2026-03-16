@@ -391,7 +391,18 @@ def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
     """Parse subsets section, emitting warnings for unknown disabled categories."""
     disabled = list(raw.get("disabled", []))
     custom_tags_raw = raw.get("custom_tags", {}) or {}
-    custom_tags: dict[str, list[str]] = {str(k): list(v) for k, v in dict(custom_tags_raw).items()}
+    if not isinstance(custom_tags_raw, dict):
+        custom_tags_raw = {}
+    custom_tags: dict[str, list[str]] = {}
+    for k, v in custom_tags_raw.items():
+        if isinstance(v, list):
+            custom_tags[str(k)] = [str(item) for item in v]
+        else:
+            _logger.warning(
+                "Ignoring non-list value for custom_tags entry %r: %r",
+                k,
+                v,
+            )
     known_categories = CATEGORY_TAGS | frozenset(custom_tags.keys())
     for tag in disabled:
         if tag not in known_categories:

@@ -654,7 +654,7 @@ async def run_headless_core(
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             plugin_dir=str(effective_plugin_dir),
-            add_dirs=list(add_dirs) or None,
+            add_dirs=list(add_dirs) if add_dirs else None,
         )
 
         runner = ctx.runner

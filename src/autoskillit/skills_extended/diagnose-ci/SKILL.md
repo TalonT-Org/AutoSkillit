@@ -1,5 +1,6 @@
 ---
 name: diagnose-ci
+categories: [ci]
 ---
 
 # diagnose-ci Skill

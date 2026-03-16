@@ -1,5 +1,6 @@
 ---
 name: report-bug
+categories: [github]
 description: Investigate a bug from provided error context, write a structured markdown report to the given path, and output a deduplication fingerprint. Lightweight — no parallel subagents.
 hooks:
   PreToolUse:

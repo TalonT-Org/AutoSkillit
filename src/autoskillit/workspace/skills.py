@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from autoskillit.core import SkillSource, pkg_root
+from autoskillit.core import SkillSource, YAMLError, load_yaml, pkg_root
 
 
 @dataclass
@@ -13,6 +14,31 @@ class SkillInfo:
     name: str
     source: SkillSource
     path: Path
+    categories: frozenset[str] = field(default_factory=frozenset)
+
+
+def read_skill_categories(path: Path) -> frozenset[str]:
+    """Parse categories: from SKILL.md YAML frontmatter."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            content = fh.read()
+    except (OSError, UnicodeDecodeError):
+        return frozenset()
+    if not content.startswith("---"):
+        return frozenset()
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        return frozenset()
+    try:
+        data: Any = load_yaml(parts[1])
+    except YAMLError:
+        return frozenset()
+    if not isinstance(data, dict):
+        return frozenset()
+    categories = data.get("categories", [])
+    if not isinstance(categories, list):
+        return frozenset()
+    return frozenset(str(c) for c in categories)
 
 
 _INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
@@ -33,7 +59,12 @@ class SkillResolver:
         ):
             skill_path = directory / name / "SKILL.md"
             if skill_path.is_file():
-                return SkillInfo(name=name, source=source, path=skill_path)
+                return SkillInfo(
+                    name=name,
+                    source=source,
+                    path=skill_path,
+                    categories=read_skill_categories(skill_path),
+                )
         return None
 
     def list_all(self) -> list[SkillInfo]:
@@ -58,7 +89,12 @@ def _scan_directory(source: SkillSource, directory: Path) -> list[SkillInfo]:
     if not directory.is_dir():
         return []
     return [
-        SkillInfo(name=d.name, source=source, path=d / "SKILL.md")
+        SkillInfo(
+            name=d.name,
+            source=source,
+            path=d / "SKILL.md",
+            categories=read_skill_categories(d / "SKILL.md"),
+        )
         for d in sorted(directory.iterdir())
         if d.is_dir() and (d / "SKILL.md").is_file() and d.name not in _INTERNAL_SKILLS
     ]

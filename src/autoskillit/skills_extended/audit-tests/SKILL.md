@@ -1,5 +1,6 @@
 ---
 name: audit-tests
+categories: [audit]
 description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, and other test quality issues. Use when user says "audit tests", "audit test suite", "review tests", or "test quality check". Generates an improvement plan in temp/ with explanations for each proposed change.
 hooks:
   PreToolUse:

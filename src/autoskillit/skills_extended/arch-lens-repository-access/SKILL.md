@@ -1,5 +1,6 @@
 ---
 name: arch-lens-repository-access
+categories: [arch-lens]
 description: Create Repository/Data Access architecture diagram showing the repository pattern, entity relationships, and data access patterns. Data-centric lens answering "How is data accessed?"
 hooks:
   PreToolUse:

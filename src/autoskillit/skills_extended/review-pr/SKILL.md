@@ -1,5 +1,6 @@
 ---
 name: review-pr
+categories: [github]
 description: Automated diff-scoped PR code review using parallel audit subagents. Posts inline GitHub review comments and submits a summary verdict. Use after a PR is opened to gate CI on review approval.
 ---
 

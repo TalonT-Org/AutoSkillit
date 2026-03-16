@@ -11,15 +11,24 @@ Resolution order (low → high priority):
 from __future__ import annotations
 
 import dataclasses
+import logging
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import OutputFormat, dump_yaml_str, load_yaml, pkg_root
+from autoskillit.core import (
+    CATEGORY_TAGS,
+    OutputFormat,
+    dump_yaml_str,
+    load_yaml,
+    pkg_root,
+)
 
 if TYPE_CHECKING:
     from dynaconf import Dynaconf
+
+_logger = logging.getLogger(__name__)  # noqa: TID251
 
 
 @dataclass
@@ -170,6 +179,12 @@ class SkillsConfig:
             raise ValueError(f"Skills assigned to multiple tiers: {sorted(dupes)}")
 
 
+@dataclass
+class SubsetsConfig:
+    disabled: list[str] = field(default_factory=list)
+    custom_tags: dict[str, list[str]] = field(default_factory=dict)
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -203,6 +218,7 @@ class AutomationConfig:
     branching: BranchingConfig = field(default_factory=BranchingConfig)
     ci: CIConfig = field(default_factory=CIConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
+    subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -239,6 +255,7 @@ class AutomationConfig:
         br = sec("branching")
         ci = sec("ci")
         sk = sec("skills")
+        _sub = sec("subsets")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -366,7 +383,24 @@ class AutomationConfig:
                 tier2=list(val(sk, "tier2", _sk["tier2"])),
                 tier3=list(val(sk, "tier3", _sk["tier3"])),
             ),
+            subsets=_build_subsets_config(_sub),
         )
+
+
+def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
+    """Parse subsets section, emitting warnings for unknown disabled categories."""
+    disabled = list(raw.get("disabled", []))
+    custom_tags_raw = raw.get("custom_tags", {}) or {}
+    custom_tags: dict[str, list[str]] = {str(k): list(v) for k, v in dict(custom_tags_raw).items()}
+    known_categories = CATEGORY_TAGS | frozenset(custom_tags.keys())
+    for tag in disabled:
+        if tag not in known_categories:
+            _logger.warning(
+                "Unknown category %r in subsets.disabled"
+                " (not in CATEGORY_TAGS and not a custom_tag)",
+                tag,
+            )
+    return SubsetsConfig(disabled=disabled, custom_tags=custom_tags)
 
 
 def _to_optional_list(value: Any) -> list[str] | None:

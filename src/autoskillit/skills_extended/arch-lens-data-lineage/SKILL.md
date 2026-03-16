@@ -1,5 +1,6 @@
 ---
 name: arch-lens-data-lineage
+categories: [arch-lens]
 description: Create Data Lineage architecture diagram showing information flow, transformations, and storage destinations. Data-centric lens answering "Where is the data?"
 hooks:
   PreToolUse:

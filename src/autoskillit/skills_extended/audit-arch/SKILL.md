@@ -1,5 +1,6 @@
 ---
 name: audit-arch
+categories: [audit]
 description: Audit codebase for adherence to architectural standards, practices, and rules. Use when user says "audit arch", "audit architecture", "check architecture", or "architectural review". Spawns parallel subagents to examine multiple architectural aspects and generates a structured report.
 hooks:
   PreToolUse:

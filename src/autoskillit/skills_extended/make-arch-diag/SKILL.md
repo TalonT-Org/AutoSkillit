@@ -1,5 +1,6 @@
 ---
 name: make-arch-diag
+categories: [arch-lens]
 description: Generate architecture diagram for a specific component or system. Prompts user to select which area to document, then creates comprehensive mermaid diagrams.
 ---
 

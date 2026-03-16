@@ -1,5 +1,6 @@
 ---
 name: verify-diag
+categories: [arch-lens]
 description: Verify an architecture diagram against the actual codebase. Checks component existence, connection accuracy, and read/write directionality. Use when user says "verify diagram", "verify diag", "check diagram", or wants to validate diagram accuracy.
 ---
 

@@ -1,5 +1,6 @@
 ---
 name: audit-defense-standards
+categories: [audit]
 description: Audit the codebase against defense standards derived from historical bug patterns. Standards accumulate over time as new patterns are discovered via audit-bugs and design-guards. Use when user says "audit defenses", "audit defense standards", "check defenses", or "defense audit".
 hooks:
   PreToolUse:

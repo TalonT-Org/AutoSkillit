@@ -1,5 +1,6 @@
 ---
 name: collapse-issues
+categories: [github]
 description: >
   Identify clusters of related triaged GitHub issues sharing the same recipe route
   and collapse them into a single combined issue with full content from all originals.

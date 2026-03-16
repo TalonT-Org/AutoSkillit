@@ -1,5 +1,6 @@
 ---
 name: arch-lens-process-flow
+categories: [arch-lens]
 description: Create Process/Execution Flow architecture diagram showing runtime behavior, state transitions, and decision points. Physiological lens answering "How does it behave?"
 hooks:
   PreToolUse:

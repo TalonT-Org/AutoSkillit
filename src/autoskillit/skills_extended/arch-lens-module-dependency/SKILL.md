@@ -1,5 +1,6 @@
 ---
 name: arch-lens-module-dependency
+categories: [arch-lens]
 description: Create Module Dependency architecture diagram showing package coupling, layering, and fan-in/fan-out. Structural lens answering "How are modules coupled?"
 hooks:
   PreToolUse:

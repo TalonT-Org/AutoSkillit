@@ -1,5 +1,6 @@
 ---
 name: issue-splitter
+categories: [github]
 description: >
   Analyze a GitHub issue for mixed concerns and split it into focused sub-issues
   with proper cross-references. Integrates into triage-issues as a pre-classification step.

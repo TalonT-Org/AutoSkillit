@@ -1,5 +1,6 @@
 ---
 name: audit-cohesion
+categories: [audit]
 description: Audit codebase for internal cohesion - how well components fit together and maintain consistent patterns. Distinct from audit-arch (which checks rule violations); this checks integration fitness and convergence. Use when user says "audit cohesion", "check cohesion", "cohesion audit", or "alignment check".
 hooks:
   PreToolUse:

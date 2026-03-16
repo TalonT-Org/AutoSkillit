@@ -1,5 +1,6 @@
 ---
 name: resolve-review
+categories: [github]
 description: Fetch PR review comments and apply fixes for each actionable finding. MCP-only — used exclusively by recipe orchestration via run_skill after review_pr reports changes_requested or needs_human verdict.
 ---
 

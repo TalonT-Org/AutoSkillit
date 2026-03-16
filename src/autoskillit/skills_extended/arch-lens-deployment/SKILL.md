@@ -1,5 +1,6 @@
 ---
 name: arch-lens-deployment
+categories: [arch-lens]
 description: Create Deployment/Physical architecture diagram showing infrastructure topology, process boundaries, and network communication. Physical lens answering "Where does it run?"
 hooks:
   PreToolUse:

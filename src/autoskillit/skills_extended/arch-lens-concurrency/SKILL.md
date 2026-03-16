@@ -1,5 +1,6 @@
 ---
 name: arch-lens-concurrency
+categories: [arch-lens]
 description: Create Concurrency architecture diagram showing parallel execution patterns, thread pools, synchronization, and barriers. Physiological lens answering "How does parallelism work?"
 hooks:
   PreToolUse:

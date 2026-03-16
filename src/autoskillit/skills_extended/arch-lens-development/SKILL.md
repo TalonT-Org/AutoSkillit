@@ -1,5 +1,6 @@
 ---
 name: arch-lens-development
+categories: [arch-lens]
 description: Create Development architecture diagram showing project structure, build tools, and quality gates. Development lens answering "How is it built and tested?"
 hooks:
   PreToolUse:

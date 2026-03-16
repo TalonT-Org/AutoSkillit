@@ -1,5 +1,6 @@
 ---
 name: open-integration-pr
+categories: [github]
 description: >
   Create an integration PR for the merge-prs. Reads pr_order_file JSON, generates
   a rich PR body with per-PR details, arch-lens diagrams, and carried-forward Closes #N

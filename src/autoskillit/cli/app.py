@@ -14,8 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 if TYPE_CHECKING:
-    from autoskillit.recipe import RecipeInfo
-    from autoskillit.recipe.schema import Recipe
+    from autoskillit.recipe import Recipe, RecipeInfo
 
 from cyclopts import App, Parameter
 
@@ -424,8 +423,7 @@ def _get_subsets_needed(recipe: Recipe, disabled_subsets: frozenset[str]) -> fro
     """Return the subset names from disabled_subsets that are actually referenced in recipe."""
     import re
 
-    from autoskillit.recipe._analysis import make_validation_context
-    from autoskillit.recipe.registry import run_semantic_rules
+    from autoskillit.recipe import make_validation_context, run_semantic_rules
 
     ctx = make_validation_context(recipe, disabled_subsets=disabled_subsets)
     findings = run_semantic_rules(ctx)

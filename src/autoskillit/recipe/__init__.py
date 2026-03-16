@@ -65,6 +65,7 @@ from autoskillit.recipe.staleness_cache import (  # noqa: E402
 from autoskillit.recipe.validator import (  # noqa: E402
     RuleFinding,
     analyze_dataflow,
+    make_validation_context,
     run_semantic_rules,
     validate_recipe,
 )
@@ -87,6 +88,7 @@ __all__ = [
     "find_recipe_by_name",
     "iter_steps_with_context",
     "validate_recipe",
+    "make_validation_context",
     "run_semantic_rules",
     "analyze_dataflow",
     "check_contract_staleness",

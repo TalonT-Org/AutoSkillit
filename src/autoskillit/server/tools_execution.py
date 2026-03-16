@@ -9,7 +9,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, truncate_text
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, pkg_root, truncate_text
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
@@ -21,7 +21,6 @@ from autoskillit.server.helpers import (
     _validate_skill_command,
     track_response_size,
 )
-from autoskillit.workspace.skills import bundled_skills_extended_dir
 
 logger = get_logger(__name__)
 
@@ -198,7 +197,7 @@ async def run_skill(
     if tool_ctx.output_pattern_resolver:
         expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
 
-    effective_add_dir = add_dir or str(bundled_skills_extended_dir())
+    effective_add_dir = add_dir or str(pkg_root() / "skills_extended")
     _start = time.monotonic()
     try:
         skill_result = await tool_ctx.executor.run(

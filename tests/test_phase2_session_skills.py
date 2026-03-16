@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import time
@@ -57,8 +56,12 @@ def test_provider_injects_disable_model_invocation_for_tier2() -> None:
 
 
 def test_provider_does_not_inject_for_cook_session() -> None:
+    # Use mermaid (skills_extended/, no flag at rest) to verify that tier2_gated=False
+    # returns unmodified content without injecting disable-model-invocation.
+    # open-kitchen and close-kitchen carry disable-model-invocation: true in their source
+    # (human-only skills), so they cannot be used to assert "flag not present".
     provider = SkillsDirectoryProvider()
-    content = provider.get_skill_content("open-kitchen", tier2_gated=False)
+    content = provider.get_skill_content("mermaid", tier2_gated=False)
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match, "Content must have YAML frontmatter"
     fm = yaml.safe_load(fm_match.group(1))
@@ -180,9 +183,11 @@ def test_init_session_accepts_config_param() -> None:
     shutil.rmtree(skills_dir, ignore_errors=True)
 
 
-def test_init_session_unknown_skill_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+def test_init_session_unknown_skill_logs_warning() -> None:
     """Unknown skill name in config.skills.tier2 logs a warning (REQ-TIER-010)."""
     import shutil
+
+    import structlog.testing
 
     from autoskillit.config.settings import AutomationConfig, SkillsConfig
 
@@ -195,13 +200,13 @@ def test_init_session_unknown_skill_logs_warning(caplog: pytest.LogCaptureFixtur
     )
     root = resolve_ephemeral_root()
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), root)
-    with caplog.at_level(logging.WARNING):
+    with structlog.testing.capture_logs() as cap_logs:
         skills_dir = mgr.init_session("test_unknown_warn", cook_session=True, config=config)
     shutil.rmtree(skills_dir, ignore_errors=True)
     assert any(
-        "this-skill-does-not-exist-anywhere" in r.message
-        for r in caplog.records
-        if r.levelno == logging.WARNING
+        "this-skill-does-not-exist-anywhere" in str(entry.get("event", ""))
+        for entry in cap_logs
+        if entry.get("log_level") == "warning"
     )
 
 

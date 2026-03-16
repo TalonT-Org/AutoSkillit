@@ -149,20 +149,20 @@ class DefaultSessionSkillManager:
             raise ValueError(f"Invalid session_id: {session_id!r}")
 
         if config is None:
-            from autoskillit.config import load_config  # deferred to avoid circular import
-
-            config = load_config()
-
-        all_known = {s.name for s in self._provider.list_skills()}
-        configured = set(config.skills.tier1) | set(config.skills.tier2) | set(config.skills.tier3)
-        unknown = configured - all_known
-        if unknown:
-            from autoskillit.core import get_logger
-
-            get_logger(__name__).warning(
-                "Unknown skill names in tier config (ignored): %s", sorted(unknown)
+            tier2_skills: frozenset[str] = frozenset()
+        else:
+            all_known = {s.name for s in self._provider.list_skills()}
+            configured = (
+                set(config.skills.tier1) | set(config.skills.tier2) | set(config.skills.tier3)
             )
-        tier2_skills = frozenset(config.skills.tier2)
+            unknown = configured - all_known
+            if unknown:
+                from autoskillit.core import get_logger
+
+                get_logger(__name__).warning(
+                    "Unknown skill names in tier config (ignored): %s", sorted(unknown)
+                )
+            tier2_skills = frozenset(config.skills.tier2)
 
         session_skills_dir = self._root / session_id
         session_skills_dir.mkdir(parents=True, exist_ok=True)

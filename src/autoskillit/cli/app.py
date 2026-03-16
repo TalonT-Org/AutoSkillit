@@ -420,7 +420,7 @@ def _launch_cook_session(
         sys.exit(result.returncode)
 
 
-def _get_subsets_needed(recipe: "Recipe", disabled_subsets: frozenset[str]) -> frozenset[str]:
+def _get_subsets_needed(recipe: Recipe, disabled_subsets: frozenset[str]) -> frozenset[str]:
     """Return the subset names from disabled_subsets that are actually referenced in recipe."""
     import re
 

@@ -16,7 +16,7 @@ def _make_skill_recipe(skill_command: str):
 
 
 def test_subset_disabled_tool_finding() -> None:
-    """T-VAL-001: subset-disabled-tool WARNING when recipe uses github-tagged tool with github disabled."""
+    """T-VAL-001: subset-disabled-tool WARNING when github tool used with github disabled."""
     from autoskillit.core import Severity
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.registry import run_semantic_rules
@@ -38,7 +38,7 @@ def test_subset_disabled_tool_finding() -> None:
 
 
 def test_subset_disabled_skill_finding() -> None:
-    """T-VAL-002: subset-disabled-skill WARNING when recipe uses github-category skill with github disabled."""
+    """T-VAL-002: subset-disabled-skill WARNING when github skill used with github disabled."""
     from autoskillit.core import Severity
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.registry import run_semantic_rules
@@ -126,7 +126,6 @@ def test_disabled_subset_skill_vs_unknown_skill() -> None:
 
 def test_ci_subset_tool_disabled() -> None:
     """T-VAL-007: ci-subset tools produce subset-disabled-tool when ci is disabled."""
-    from autoskillit.core import Severity
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.registry import run_semantic_rules
     from autoskillit.recipe.schema import Recipe, RecipeStep

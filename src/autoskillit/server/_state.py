@@ -35,10 +35,13 @@ def _initialize(ctx: ToolContext) -> None:
     # Uses a deferred local import to avoid module-level circular import
     # (server/__init__.py imports from _state.py at module level).
     if ctx.config.subsets.disabled:
-        from autoskillit.server import mcp  # noqa: PLC0415
+        try:
+            from autoskillit.server import mcp  # noqa: PLC0415
 
-        for subset in ctx.config.subsets.disabled:
-            mcp.disable(tags={subset})
+            for subset in ctx.config.subsets.disabled:
+                mcp.disable(tags={subset})
+        except ImportError:
+            logger.warning("Could not import mcp for subset disable at startup", exc_info=True)
 
     # Recovery sweep: finalize any orphaned tmpfs trace files from crashed sessions.
     try:

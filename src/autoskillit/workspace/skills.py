@@ -58,7 +58,11 @@ def detect_project_local_overrides(project_dir: Path) -> frozenset[str]:
         search_root = project_dir / subdir
         if not search_root.is_dir():
             continue
-        for entry in search_root.iterdir():
+        try:
+            entries = list(search_root.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
             if entry.is_dir() and (entry / "SKILL.md").is_file():
                 overrides.add(entry.name)
     return frozenset(overrides)

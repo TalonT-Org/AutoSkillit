@@ -48,14 +48,20 @@ def chefs_hat() -> None:
     if confirm in ("n", "no"):
         return
 
+    from autoskillit.config import load_config
+    from autoskillit.core import pkg_root
+
     session_id = uuid.uuid4().hex[:16]
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
-    skills_dir = session_mgr.init_session(session_id, cook_session=True)
+    config = load_config()
+    skills_dir = session_mgr.init_session(session_id, cook_session=True, config=config)
 
     env = {**os.environ}
     try:
-        result = subprocess.run(["claude", "--add-dir", str(skills_dir)], env=env)
+        result = subprocess.run(
+            ["claude", "--plugin-dir", str(pkg_root()), "--add-dir", str(skills_dir)], env=env
+        )
         if result.returncode != 0:
             raise SystemExit(result.returncode)
     finally:

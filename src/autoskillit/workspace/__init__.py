@@ -21,7 +21,6 @@ from autoskillit.workspace.clone import (
     remove_clone,
 )
 from autoskillit.workspace.session_skills import (
-    TIER2_SKILLS,
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
@@ -43,7 +42,6 @@ __all__ = [
     "DefaultSessionSkillManager",
     "SkillResolver",
     "SkillsDirectoryProvider",
-    "TIER2_SKILLS",
     "bundled_skills_dir",
     "bundled_skills_extended_dir",
     "clone_repo",

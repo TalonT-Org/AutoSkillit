@@ -40,6 +40,7 @@ def test_workspace_package_exports() -> None:
         CleanupResult,
         SkillResolver,
         bundled_skills_dir,
+        bundled_skills_extended_dir,
     )
 
 

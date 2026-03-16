@@ -13,14 +13,13 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from autoskillit.core import _atomic_write
 from autoskillit.workspace.skills import SkillInfo, SkillResolver
 
-# Tier 2 skills: human-only slash commands that agents must not invoke autonomously.
-# These get disable-model-invocation: true injected into their SKILL.md unless the
-# session is a cook session (see init_session cook_session parameter).
-TIER2_SKILLS: frozenset[str] = frozenset({"open-kitchen", "close-kitchen"})
+if TYPE_CHECKING:
+    from autoskillit.config.settings import AutomationConfig
 
 # Candidate ephemeral roots, tried in order.
 # resolve_ephemeral_root() appends tempfile.gettempdir() as the final fallback.
@@ -103,20 +102,15 @@ class SkillsDirectoryProvider:
     def get_skill_content(self, name: str, *, tier2_gated: bool = True) -> str:
         """Return SKILL.md content with tier-appropriate frontmatter.
 
-        For Tier 2 skills:
         - tier2_gated=True  → ensure disable-model-invocation: true is present
-        - tier2_gated=False → remove disable-model-invocation (cook session)
-        For Tier 1 skills, returns unmodified content.
+        - tier2_gated=False → return unmodified content (cook session or Tier 1)
         """
         skill_info = self._resolver.resolve(name)
         if skill_info is None:
             raise FileNotFoundError(f"Skill not found: {name}")
         content = skill_info.path.read_text()
-        if name in TIER2_SKILLS:
-            if tier2_gated:
-                content = _inject_disable_model_invocation(content)
-            else:
-                content = _remove_disable_model_invocation(content)
+        if tier2_gated:
+            content = _inject_disable_model_invocation(content)
         return content
 
 
@@ -131,11 +125,19 @@ class DefaultSessionSkillManager:
         self._provider = provider
         self._root = ephemeral_root
 
-    def init_session(self, session_id: str, *, cook_session: bool = False) -> Path:
+    def init_session(
+        self,
+        session_id: str,
+        *,
+        cook_session: bool = False,
+        config: AutomationConfig | None = None,
+    ) -> Path:
         """Create ephemeral skill dir for session_id.
 
         Returns path to the created skills directory.
-        For non-cook sessions, Tier 2 skills get disable-model-invocation injected.
+        For non-cook sessions, Tier 2 skills (from config.skills.tier2) get
+        disable-model-invocation injected. Unknown skill names in config are
+        logged as warnings and ignored.
         """
         if (
             not session_id
@@ -145,12 +147,29 @@ class DefaultSessionSkillManager:
             or session_id in (".", "..")
         ):
             raise ValueError(f"Invalid session_id: {session_id!r}")
+
+        if config is None:
+            from autoskillit.config import load_config  # deferred to avoid circular import
+
+            config = load_config()
+
+        all_known = {s.name for s in self._provider.list_skills()}
+        configured = set(config.skills.tier1) | set(config.skills.tier2) | set(config.skills.tier3)
+        unknown = configured - all_known
+        if unknown:
+            from autoskillit.core import get_logger
+
+            get_logger(__name__).warning(
+                "Unknown skill names in tier config (ignored): %s", sorted(unknown)
+            )
+        tier2_skills = frozenset(config.skills.tier2)
+
         session_skills_dir = self._root / session_id
         session_skills_dir.mkdir(parents=True, exist_ok=True)
         for skill_info in self._provider.list_skills():
             skill_dir = session_skills_dir / skill_info.name
             skill_dir.mkdir(exist_ok=True)
-            tier2_gated = not cook_session
+            tier2_gated = (not cook_session) and (skill_info.name in tier2_skills)
             content = self._provider.get_skill_content(skill_info.name, tier2_gated=tier2_gated)
             _atomic_write(skill_dir / "SKILL.md", content)
         return session_skills_dir

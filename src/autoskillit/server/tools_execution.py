@@ -21,6 +21,7 @@ from autoskillit.server.helpers import (
     _validate_skill_command,
     track_response_size,
 )
+from autoskillit.workspace.skills import bundled_skills_extended_dir
 
 logger = get_logger(__name__)
 
@@ -197,13 +198,14 @@ async def run_skill(
     if tool_ctx.output_pattern_resolver:
         expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
 
+    effective_add_dir = add_dir or str(bundled_skills_extended_dir())
     _start = time.monotonic()
     try:
         skill_result = await tool_ctx.executor.run(
             skill_command,
             cwd,
             model=model,
-            add_dir=add_dir,
+            add_dir=effective_add_dir,
             step_name=step_name,
             expected_output_patterns=expected_output_patterns,
         )

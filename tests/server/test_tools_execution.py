@@ -860,6 +860,51 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
     assert calls == [("/test skill", "/tmp")]
 
 
+@pytest.mark.anyio
+async def test_run_skill_defaults_add_dir_to_skills_extended(tool_ctx, monkeypatch) -> None:
+    """run_skill passes add_dir=bundled_skills_extended_dir() when add_dir arg is empty."""
+    from autoskillit.core import SkillResult
+    from autoskillit.workspace.skills import bundled_skills_extended_dir
+
+    captured: dict = {}
+
+    class MockExecutor:
+        async def run(
+            self,
+            skill_command: str,
+            cwd: str,
+            *,
+            model: str = "",
+            step_name: str = "",
+            add_dir: str = "",
+            timeout: float | None = None,
+            stale_threshold: float | None = None,
+            expected_output_patterns: tuple[str, ...] | list[str] = (),
+        ) -> SkillResult:
+            captured["add_dir"] = add_dir
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/test skill", "/tmp")
+    assert captured["add_dir"] == str(bundled_skills_extended_dir())
+    assert str(bundled_skills_extended_dir()).endswith("skills_extended")
+
+
 class TestHeadlessGateEnforcement:
     """T_HGE: run_skill, run_cmd, run_python each return headless_error
     when the session is running with AUTOSKILLIT_HEADLESS=1.

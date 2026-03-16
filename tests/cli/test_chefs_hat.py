@@ -22,7 +22,9 @@ class TestChefsHat:
         fake_skills_dir = tmp_path / "fake-skills"
         fake_skills_dir.mkdir()
 
-        def fake_init_session(self, session_id: str, *, cook_session: bool = False) -> Path:
+        def fake_init_session(
+            self, session_id: str, *, cook_session: bool = False, config=None
+        ) -> Path:
             captured["cook_session"] = cook_session
             return fake_skills_dir
 
@@ -42,7 +44,9 @@ class TestChefsHat:
         fake_skills_dir = tmp_path / "fake-skills-ch2"
         fake_skills_dir.mkdir()
 
-        def fake_init_session(self, session_id: str, *, cook_session: bool = False) -> Path:
+        def fake_init_session(
+            self, session_id: str, *, cook_session: bool = False, config=None
+        ) -> Path:
             return fake_skills_dir
 
         def fake_run(cmd, **kw):
@@ -68,7 +72,9 @@ class TestChefsHat:
         fake_skills_dir = tmp_path / "fake-skills-ch3"
         fake_skills_dir.mkdir()
 
-        def fake_init_session(self, session_id: str, *, cook_session: bool = False) -> Path:
+        def fake_init_session(
+            self, session_id: str, *, cook_session: bool = False, config=None
+        ) -> Path:
             return fake_skills_dir
 
         def fake_run(cmd, **kw):
@@ -95,3 +101,35 @@ class TestChefsHat:
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "claude" in captured.out.lower() or "PATH" in captured.out
+
+    # CH-6
+    def test_chefs_hat_passes_plugin_dir(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """chefs-hat subprocess call includes --plugin-dir <pkg_root()> (REQ-TIER-011)."""
+        from unittest.mock import MagicMock, patch
+
+        from autoskillit.core import pkg_root
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+
+        # DefaultSessionSkillManager is imported inside the chefs_hat() function body,
+        # so it must be patched via its source module (autoskillit.workspace), not via
+        # the _chefs_hat module namespace.
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
+        ):
+            import autoskillit.cli._chefs_hat as module
+
+            module.chefs_hat()
+
+        args = mock_run.call_args[0][0]
+        assert "--plugin-dir" in args
+        idx = args.index("--plugin-dir")
+        assert args[idx + 1] == str(pkg_root())

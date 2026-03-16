@@ -1,5 +1,15 @@
 # CLI Reference
 
+## autoskillit serve
+
+Start the MCP server. This is the default command when no subcommand is given.
+
+    autoskillit serve
+
+You rarely need to run this manually — Claude Code starts the server automatically via the plugin registration.
+
+---
+
 ## autoskillit install
 
 Register AutoSkillit as a Claude Code plugin.
@@ -51,6 +61,8 @@ Launch an interactive pipeline session.
 - Opens a restricted Claude Code session (only `AskUserQuestion` + MCP tools)
 - Injects the recipe as the orchestrator's system prompt
 - Cannot be run from inside a Claude Code session
+
+**Note:** `cook` only accepts recipe names (e.g., `implementation`, `remediation`). Skills like `setup-project` are not recipes — use `autoskillit chefs-hat` and then `/autoskillit:setup-project` instead.
 
 **Examples:**
 

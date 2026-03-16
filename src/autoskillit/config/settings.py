@@ -157,6 +157,19 @@ class CIConfig:
     workflow: str | None = None
 
 
+@dataclass
+class SkillsConfig:
+    tier1: list[str] = field(default_factory=list)
+    tier2: list[str] = field(default_factory=list)
+    tier3: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        t1, t2, t3 = set(self.tier1), set(self.tier2), set(self.tier3)
+        dupes = (t1 & t2) | (t1 & t3) | (t2 & t3)
+        if dupes:
+            raise ValueError(f"Skills assigned to multiple tiers: {sorted(dupes)}")
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -189,6 +202,7 @@ class AutomationConfig:
     mcp_response: McpResponseConfig = field(default_factory=McpResponseConfig)
     branching: BranchingConfig = field(default_factory=BranchingConfig)
     ci: CIConfig = field(default_factory=CIConfig)
+    skills: SkillsConfig = field(default_factory=SkillsConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -224,6 +238,7 @@ class AutomationConfig:
         mr = sec("mcp_response")
         br = sec("branching")
         ci = sec("ci")
+        sk = sec("skills")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -244,6 +259,7 @@ class AutomationConfig:
         _mr = _field_defaults(McpResponseConfig)
         _br = _field_defaults(BranchingConfig)
         _ci = _field_defaults(CIConfig)
+        _sk = _field_defaults(SkillsConfig)
 
         return cls(
             test_check=TestCheckConfig(
@@ -344,6 +360,11 @@ class AutomationConfig:
             ),
             ci=CIConfig(
                 workflow=val(ci, "workflow", _ci["workflow"]) or None,
+            ),
+            skills=SkillsConfig(
+                tier1=list(val(sk, "tier1", _sk["tier1"])),
+                tier2=list(val(sk, "tier2", _sk["tier2"])),
+                tier3=list(val(sk, "tier3", _sk["tier3"])),
             ),
         )
 

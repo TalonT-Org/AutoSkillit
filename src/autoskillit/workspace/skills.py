@@ -19,26 +19,38 @@ _INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
 
 
 class SkillResolver:
-    """List bundled skills from the package directory."""
+    """List bundled skills from both the skills/ and skills_extended/ directories."""
 
     def __init__(self) -> None:
         self._dir = bundled_skills_dir()
+        self._extended_dir = bundled_skills_extended_dir()
 
     def resolve(self, name: str) -> SkillInfo | None:
-        """Resolve a skill name to its path."""
-        skill_path = self._dir / name / "SKILL.md"
-        if skill_path.is_file():
-            return SkillInfo(name=name, source=SkillSource.BUNDLED, path=skill_path)
+        """Resolve a skill name to its path. Checks skills/ before skills_extended/."""
+        for directory, source in (
+            (self._dir, SkillSource.BUNDLED),
+            (self._extended_dir, SkillSource.BUNDLED_EXTENDED),
+        ):
+            skill_path = directory / name / "SKILL.md"
+            if skill_path.is_file():
+                return SkillInfo(name=name, source=source, path=skill_path)
         return None
 
     def list_all(self) -> list[SkillInfo]:
-        """List all bundled skills."""
-        return sorted(_scan_directory(SkillSource.BUNDLED, self._dir), key=lambda s: s.name)
+        """List all public bundled skills from both directories."""
+        bundled = _scan_directory(SkillSource.BUNDLED, self._dir)
+        extended = _scan_directory(SkillSource.BUNDLED_EXTENDED, self._extended_dir)
+        return sorted(bundled + extended, key=lambda s: s.name)
 
 
 def bundled_skills_dir() -> Path:
     """Return the path to the bundled skills directory."""
     return pkg_root() / "skills"
+
+
+def bundled_skills_extended_dir() -> Path:
+    """Return the path to the extended bundled skills directory (Tier 2+3)."""
+    return pkg_root() / "skills_extended"
 
 
 def _scan_directory(source: SkillSource, directory: Path) -> list[SkillInfo]:

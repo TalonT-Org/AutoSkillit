@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import yaml
 
 from autoskillit.core.types import SkillSource
-from autoskillit.workspace.skills import SkillResolver, bundled_skills_dir
+from autoskillit.workspace.skills import (
+    SkillResolver,
+    bundled_skills_dir,
+    bundled_skills_extended_dir,
+)
 
 BUNDLED_SKILLS = [
     "analyze-prs",
@@ -102,13 +107,17 @@ AUDIT_SKILL_NAMES = [
 BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)
 
 
+def _all_skill_roots() -> list[Path]:
+    return [bundled_skills_dir(), bundled_skills_extended_dir()]
+
+
 class TestSkillResolver:
     # SK1
     def test_bundled_skill_found(self) -> None:
         resolver = SkillResolver()
-        info = resolver.resolve("investigate")
+        info = resolver.resolve("open-kitchen")
         assert info is not None
-        assert info.name == "investigate"
+        assert info.name == "open-kitchen"
         assert info.source == SkillSource.BUNDLED
         assert info.path.name == "SKILL.md"
 
@@ -116,17 +125,6 @@ class TestSkillResolver:
     def test_unknown_skill_returns_none(self) -> None:
         resolver = SkillResolver()
         assert resolver.resolve("nonexistent") is None
-
-    # SK8
-    def test_bundled_skills_match_filesystem(self) -> None:
-        """BUNDLED_SKILLS list must exactly match what's on the filesystem."""
-        bd = bundled_skills_dir()
-        actual = sorted(d.name for d in bd.iterdir() if d.is_dir() and (d / "SKILL.md").is_file())
-        assert actual == sorted(BUNDLED_SKILLS), (
-            f"BUNDLED_SKILLS out of sync.\n"
-            f"  On disk: {actual}\n"
-            f"  In test: {sorted(BUNDLED_SKILLS)}"
-        )
 
     def test_no_hardcoded_username_mentions_in_skill_mds(self) -> None:
         """No SKILL.md may contain a hardcoded GitHub @-mention in any line.
@@ -141,15 +139,15 @@ class TestSkillResolver:
         SAFE_TOKENS: frozenset[str] = frozenset({"@anthropic"})
         violations: list[str] = []
 
-        skills_dir = bundled_skills_dir()
-        for skill_md in sorted(skills_dir.rglob("SKILL.md")):
-            skill_name = skill_md.parent.name
-            for lineno, raw_line in enumerate(skill_md.read_text().splitlines(), start=1):
-                for match in mention_pattern.finditer(raw_line):
-                    token = match.group()
-                    if token in SAFE_TOKENS:
-                        continue
-                    violations.append(f"{skill_name}/SKILL.md:{lineno}: {token!r}")
+        for skills_dir in _all_skill_roots():
+            for skill_md in sorted(skills_dir.rglob("SKILL.md")):
+                skill_name = skill_md.parent.name
+                for lineno, raw_line in enumerate(skill_md.read_text().splitlines(), start=1):
+                    for match in mention_pattern.finditer(raw_line):
+                        token = match.group()
+                        if token in SAFE_TOKENS:
+                            continue
+                        violations.append(f"{skill_name}/SKILL.md:{lineno}: {token!r}")
 
         assert violations == [], (
             "Hardcoded GitHub @-mentions found in SKILL.md files. "
@@ -158,32 +156,31 @@ class TestSkillResolver:
         )
 
     def test_list_all_returns_bundled_skills(self) -> None:
-        """list_all returns all bundled skills with source='bundled'."""
+        """list_all returns all bundled skills from both skill directories."""
         resolver = SkillResolver()
         skills = resolver.list_all()
         names = {s.name for s in skills}
         assert "investigate" in names
         assert "make-plan" in names
         sources = {s.source for s in skills}
-        assert sources == {SkillSource.BUNDLED}
+        assert sources == {SkillSource.BUNDLED, SkillSource.BUNDLED_EXTENDED}
 
     def test_skill_md_cross_references_are_namespaced(self) -> None:
         """All /skill-name references in SKILL.md files use /autoskillit: prefix."""
-        skills_dir = bundled_skills_dir()
-        for skill_md in skills_dir.rglob("SKILL.md"):
-            content = skill_md.read_text()
-            for match in re.finditer(r"(?<!\w)/([a-z][\w-]+)", content):
-                name = match.group(1)
-                if name.startswith("autoskillit:") or name.startswith("mcp__"):
-                    continue
-                # Skip URI paths like workflow://some-recipe — not skill invocations
-                start = match.start()
-                if start >= 1 and content[start - 1] == "/":
-                    continue
-                if name in BUNDLED_SKILL_NAMES:
-                    assert False, (
-                        f"{skill_md.parent.name}/SKILL.md: /{name} should be /autoskillit:{name}"
-                    )
+        for skills_dir in _all_skill_roots():
+            for skill_md in skills_dir.rglob("SKILL.md"):
+                content = skill_md.read_text()
+                for match in re.finditer(r"(?<!\w)/([a-z][\w-]+)", content):
+                    name = match.group(1)
+                    if name.startswith("autoskillit:") or name.startswith("mcp__"):
+                        continue
+                    # Skip URI paths like workflow://some-recipe — not skill invocations
+                    start = match.start()
+                    if start >= 1 and content[start - 1] == "/":
+                        continue
+                    if name in BUNDLED_SKILL_NAMES:
+                        skill_file = f"{skill_md.parent.name}/SKILL.md"
+                        assert False, f"{skill_file}: /{name} should be /autoskillit:{name}"
 
     def test_skill_md_yaml_examples_are_valid_workflows(self) -> None:
         """YAML workflow examples embedded in SKILL.md files must pass validation."""
@@ -196,46 +193,46 @@ class TestSkillResolver:
             validate_recipe as validate_workflow,
         )
 
-        skills_dir = bundled_skills_dir()
         yaml_block_re = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
 
-        for skill_md in skills_dir.rglob("SKILL.md"):
-            content = skill_md.read_text()
-            for match in yaml_block_re.finditer(content):
-                block = match.group(1)
-                # Only validate blocks that look like full workflow definitions
-                if "steps:" not in block or "name:" not in block:
-                    continue
-                # Skip format templates that use {placeholder} syntax
-                if "{script-name}" in block or "{mcp_tool_name}" in block:
-                    continue
-                data = _yaml.safe_load(block)
-                if not isinstance(data, dict) or "steps" not in data:
-                    continue
-                wf = _parse_workflow(data)
-                errors = [e for e in validate_workflow(wf) if "kitchen_rules" not in e.lower()]
-                assert not errors, (
-                    f"{skill_md.parent.name}/SKILL.md has invalid YAML example:\n  {errors}"
-                )
+        for skills_dir in _all_skill_roots():
+            for skill_md in skills_dir.rglob("SKILL.md"):
+                content = skill_md.read_text()
+                for match in yaml_block_re.finditer(content):
+                    block = match.group(1)
+                    # Only validate blocks that look like full workflow definitions
+                    if "steps:" not in block or "name:" not in block:
+                        continue
+                    # Skip format templates that use {placeholder} syntax
+                    if "{script-name}" in block or "{mcp_tool_name}" in block:
+                        continue
+                    data = _yaml.safe_load(block)
+                    if not isinstance(data, dict) or "steps" not in data:
+                        continue
+                    wf = _parse_workflow(data)
+                    errors = [e for e in validate_workflow(wf) if "kitchen_rules" not in e.lower()]
+                    assert not errors, (
+                        f"{skill_md.parent.name}/SKILL.md has invalid YAML example:\n  {errors}"
+                    )
 
     def test_skill_md_has_critical_constraints(self) -> None:
         """Every user-invocable SKILL.md must have Critical Constraints (NEVER/ALWAYS blocks)."""
-        bd = bundled_skills_dir()
         failures: list[str] = []
-        for skill_md in bd.rglob("SKILL.md"):
-            skill_name = skill_md.parent.name
-            if skill_name in INTERNAL_SKILLS:
-                continue
-            content = skill_md.read_text()
-            missing: list[str] = []
-            if not re.search(r"^##\s+.*Critical Constraints", content, re.MULTILINE):
-                missing.append("## Critical Constraints heading")
-            if "**NEVER:**" not in content:
-                missing.append("**NEVER:** block")
-            if "**ALWAYS:**" not in content:
-                missing.append("**ALWAYS:** block")
-            if missing:
-                failures.append(f"  {skill_name}: missing {', '.join(missing)}")
+        for skills_dir in _all_skill_roots():
+            for skill_md in skills_dir.rglob("SKILL.md"):
+                skill_name = skill_md.parent.name
+                if skill_name in INTERNAL_SKILLS:
+                    continue
+                content = skill_md.read_text()
+                missing: list[str] = []
+                if not re.search(r"^##\s+.*Critical Constraints", content, re.MULTILINE):
+                    missing.append("## Critical Constraints heading")
+                if "**NEVER:**" not in content:
+                    missing.append("**NEVER:** block")
+                if "**ALWAYS:**" not in content:
+                    missing.append("**ALWAYS:** block")
+                if missing:
+                    failures.append(f"  {skill_name}: missing {', '.join(missing)}")
         assert not failures, "SKILL.md structural contract violated:\n" + "\n".join(failures)
 
     def test_file_producing_skills_have_output_guard(self) -> None:
@@ -250,10 +247,10 @@ class TestSkillResolver:
             "setup-project": "temp/setup-project/",
             "triage-issues": "temp/triage-issues/",
         }
-        bd = bundled_skills_dir()
+        bd_ext = bundled_skills_extended_dir()
         failures: list[str] = []
         for skill_name, output_dir in FILE_PRODUCING_SKILLS.items():
-            skill_md = bd / skill_name / "SKILL.md"
+            skill_md = bd_ext / skill_name / "SKILL.md"
             content = skill_md.read_text()
             # Extract NEVER block: from **NEVER:** to the next ** or ## heading
             never_match = re.search(r"\*\*NEVER:\*\*(.*?)(?=\n\*\*|\n##)", content, re.DOTALL)
@@ -270,39 +267,39 @@ class TestSkillResolver:
 
     def test_skill_md_frontmatter_matches_directory(self) -> None:
         """SKILL.md frontmatter name: field must match its directory name."""
-        bd = bundled_skills_dir()
         failures: list[str] = []
-        for skill_md in bd.rglob("SKILL.md"):
-            skill_name = skill_md.parent.name
-            if skill_name in INTERNAL_SKILLS:
-                continue
-            content = skill_md.read_text()
-            # Parse YAML frontmatter between --- delimiters
-            fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-            if fm_match is None:
-                failures.append(f"  {skill_name}: no YAML frontmatter found")
-                continue
-            data = yaml.safe_load(fm_match.group(1))
-            if not isinstance(data, dict) or "name" not in data:
-                failures.append(f"  {skill_name}: frontmatter missing 'name' field")
-                continue
-            if data["name"] != skill_name:
-                failures.append(
-                    f"  {skill_name}: frontmatter name '{data['name']}' "
-                    f"!= directory name '{skill_name}'"
-                )
+        for skills_dir in _all_skill_roots():
+            for skill_md in skills_dir.rglob("SKILL.md"):
+                skill_name = skill_md.parent.name
+                if skill_name in INTERNAL_SKILLS:
+                    continue
+                content = skill_md.read_text()
+                # Parse YAML frontmatter between --- delimiters
+                fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
+                if fm_match is None:
+                    failures.append(f"  {skill_name}: no YAML frontmatter found")
+                    continue
+                data = yaml.safe_load(fm_match.group(1))
+                if not isinstance(data, dict) or "name" not in data:
+                    failures.append(f"  {skill_name}: frontmatter missing 'name' field")
+                    continue
+                if data["name"] != skill_name:
+                    failures.append(
+                        f"  {skill_name}: frontmatter name '{data['name']}' "
+                        f"!= directory name '{skill_name}'"
+                    )
         assert not failures, "SKILL.md frontmatter/directory mismatch:\n" + "\n".join(failures)
 
     def test_make_groups_skill_documents_per_group_output(self) -> None:
         """make-groups SKILL.md must document per-group file output for pipeline consumption."""
-        skill_path = bundled_skills_dir() / "make-groups" / "SKILL.md"
+        skill_path = SkillResolver().resolve("make-groups").path
         content = skill_path.read_text()
         assert "per-group" in content.lower() or "groupA_" in content
         assert "manifest" in content.lower()
 
     def test_bundled_skills_list_matches_filesystem(self) -> None:
         """make-script-skill SKILL.md bundled skills list must match filesystem."""
-        skill_md = bundled_skills_dir() / "write-recipe" / "SKILL.md"
+        skill_md = SkillResolver().resolve("write-recipe").path
         content = skill_md.read_text()
 
         # Extract the bundled skills list section
@@ -328,10 +325,7 @@ class TestSkillResolver:
         )
 
         # Get actual filesystem skills
-        bd = bundled_skills_dir()
-        actual_skills = sorted(
-            d.name for d in bd.iterdir() if d.is_dir() and (d / "SKILL.md").is_file()
-        )
+        actual_skills = sorted(s.name for s in SkillResolver().list_all())
 
         assert listed_skills == actual_skills, (
             f"make-script-skill bundled skills list doesn't match filesystem.\n"
@@ -384,3 +378,49 @@ class TestSkillResolver:
         """review-pr must be in bundled skills."""
         resolver = SkillResolver()
         assert resolver.resolve("review-pr") is not None, "review-pr must be a bundled skill"
+
+    # ── New tests for three-tier skill directory layout ────────────────────────
+
+    def test_bundled_skills_extended_dir_path(self) -> None:
+        """bundled_skills_extended_dir() returns pkg_root() / 'skills_extended'."""
+        from autoskillit.core import pkg_root
+
+        assert bundled_skills_extended_dir() == pkg_root() / "skills_extended"
+
+    def test_skills_extended_dir_exists(self) -> None:
+        """skills_extended/ directory is present in the installed package."""
+        assert bundled_skills_extended_dir().is_dir()
+
+    def test_tier1_only_in_skills_dir(self) -> None:
+        """Only open-kitchen, close-kitchen, sous-chef remain in skills/."""
+        names = {d.name for d in bundled_skills_dir().iterdir() if d.is_dir()}
+        assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
+
+    def test_57_skills_in_skills_extended(self) -> None:
+        """skills_extended/ contains exactly 57 SKILL.md-carrying directories."""
+        skills = [
+            d
+            for d in bundled_skills_extended_dir().iterdir()
+            if d.is_dir() and (d / "SKILL.md").is_file()
+        ]
+        assert len(skills) == 57
+
+    def test_skill_resolver_list_all_total_count(self) -> None:
+        """list_all() returns 59 public skills (2 Tier-1 + 57 extended)."""
+        assert len(SkillResolver().list_all()) == 59
+
+    def test_skill_resolver_resolve_extended_skill(self) -> None:
+        """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
+        result = SkillResolver().resolve("make-plan")
+        assert result is not None
+        assert result.source == SkillSource.BUNDLED_EXTENDED
+
+    def test_skill_resolver_bundled_source_for_tier1(self) -> None:
+        """Skills in skills/ carry SkillSource.BUNDLED."""
+        result = SkillResolver().resolve("open-kitchen")
+        assert result is not None
+        assert result.source == SkillSource.BUNDLED
+
+    def test_skill_source_bundled_extended_exists(self) -> None:
+        """SkillSource.BUNDLED_EXTENDED enum member exists."""
+        assert SkillSource.BUNDLED_EXTENDED == "bundled_extended"

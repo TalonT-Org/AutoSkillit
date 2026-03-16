@@ -16,13 +16,20 @@ from pathlib import Path
 # Project root = parent of scripts/
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = PROJECT_ROOT / "src" / "autoskillit" / "skills"
+SKILLS_EXTENDED_DIR = PROJECT_ROOT / "src" / "autoskillit" / "skills_extended"
 RECIPES_DIR = PROJECT_ROOT / "src" / "autoskillit" / "recipes"
 TYPES_FILE = PROJECT_ROOT / "src" / "autoskillit" / "core" / "types.py"
 
 
 def count_skills() -> int:
-    """Count directories in skills/ that contain a SKILL.md."""
-    return sum(1 for d in SKILLS_DIR.iterdir() if d.is_dir() and (d / "SKILL.md").exists())
+    """Count directories in skills/ and skills_extended/ that contain a SKILL.md."""
+    count = 0
+    for skills_dir in (SKILLS_DIR, SKILLS_EXTENDED_DIR):
+        if skills_dir.is_dir():
+            count += sum(
+                1 for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists()
+            )
+    return count
 
 
 def count_recipes() -> int:

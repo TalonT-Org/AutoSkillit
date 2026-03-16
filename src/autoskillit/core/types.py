@@ -68,6 +68,7 @@ class RestartScope(StrEnum):
 
 class SkillSource(StrEnum):
     BUNDLED = "bundled"
+    BUNDLED_EXTENDED = "bundled_extended"
 
 
 class RecipeSource(StrEnum):

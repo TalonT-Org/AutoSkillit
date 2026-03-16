@@ -134,7 +134,7 @@ def test_make_context_protocol_substitution():
             *,
             model: str = "",
             step_name: str = "",
-            add_dir: str = "",
+            add_dirs=(),
         ) -> SkillResult:
             return SkillResult(
                 success=True,

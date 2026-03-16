@@ -152,12 +152,14 @@ class TestRunSkillAgentResult:
 
 
 class TestRunSkillPassesAddDir:
-    """run_skill forwards add_dir to executor."""
+    """run_skill always passes add_dirs=[skills_extended, cwd] to executor."""
 
     @pytest.mark.anyio
-    async def test_run_skill_passes_add_dir_to_subprocess(self, tool_ctx):
-        """add_dir is forwarded to ctx.executor.run()."""
+    async def test_run_skill_passes_add_dirs_to_subprocess(self, tool_ctx):
+        """add_dirs containing skills_extended and cwd is forwarded to ctx.executor.run()."""
         from unittest.mock import AsyncMock
+
+        from autoskillit.workspace.skills import bundled_skills_extended_dir
 
         mock_result = SkillResult(
             success=True,
@@ -172,9 +174,11 @@ class TestRunSkillPassesAddDir:
         )
         mock_run = AsyncMock(return_value=mock_result)
         tool_ctx.executor = type("MockExec", (), {"run": mock_run})()
-        await run_skill("/investigate something", "/tmp", add_dir="/extra/dir")
+        await run_skill("/investigate something", "/tmp")
 
-        assert mock_run.call_args.kwargs.get("add_dir") == "/extra/dir"
+        add_dirs = mock_run.call_args.kwargs.get("add_dirs", ())
+        assert str(bundled_skills_extended_dir()) in add_dirs
+        assert "/tmp" in add_dirs
 
 
 class TestRunSkillFields:

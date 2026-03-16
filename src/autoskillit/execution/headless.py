@@ -598,7 +598,7 @@ async def run_headless_core(
     *,
     model: str = "",
     step_name: str = "",
-    add_dir: str = "",
+    add_dirs: Sequence[str] = (),
     timeout: float | None = None,
     stale_threshold: float | None = None,
     expected_output_patterns: Sequence[str] = (),
@@ -634,8 +634,9 @@ async def run_headless_core(
         for flag in cfg.output_format.required_cli_flags:
             if flag not in cmd:
                 cmd.append(flag)
-        if add_dir:
-            cmd.extend([ClaudeFlags.ADD_DIR, add_dir])
+        for _dir in add_dirs:
+            if _dir:
+                cmd.extend([ClaudeFlags.ADD_DIR, _dir])
 
         env_vars = ["AUTOSKILLIT_HEADLESS=1"]
         delay_ms = cfg.exit_after_stop_delay_ms
@@ -653,7 +654,7 @@ async def run_headless_core(
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             plugin_dir=str(effective_plugin_dir),
-            add_dir=add_dir or None,
+            add_dirs=list(add_dirs) or None,
         )
 
         runner = ctx.runner
@@ -791,7 +792,7 @@ class DefaultHeadlessExecutor:
         *,
         model: str = "",
         step_name: str = "",
-        add_dir: str = "",
+        add_dirs: Sequence[str] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),
@@ -805,7 +806,7 @@ class DefaultHeadlessExecutor:
             self._ctx,
             model=model,
             step_name=step_name,
-            add_dir=add_dir,
+            add_dirs=add_dirs,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             expected_output_patterns=expected_output_patterns,

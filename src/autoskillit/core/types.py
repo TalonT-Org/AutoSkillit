@@ -686,7 +686,7 @@ class HeadlessExecutor(Protocol):
         *,
         model: str = "",
         step_name: str = "",
-        add_dir: str = "",
+        add_dirs: Sequence[str] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),
@@ -922,7 +922,14 @@ class MergeQueueWatcher(Protocol):
 class SessionSkillManager(Protocol):
     """Protocol for managing per-session ephemeral skill directories."""
 
-    def init_session(self, session_id: str, *, cook_session: bool = False) -> Path: ...
+    def init_session(
+        self,
+        session_id: str,
+        *,
+        cook_session: bool = False,
+        config: Any | None = None,
+        project_dir: Path | None = None,
+    ) -> Path: ...
 
     def activate_tier2(self, session_id: str, skill_name: str) -> bool: ...
 

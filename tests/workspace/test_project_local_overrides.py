@@ -5,9 +5,6 @@ Tests must FAIL against the current codebase and pass after Part B implementatio
 
 from __future__ import annotations
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # T-OVR-001..006: detect_project_local_overrides() — pure detection function
 # ---------------------------------------------------------------------------

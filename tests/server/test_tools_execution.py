@@ -832,7 +832,7 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
             *,
             model: str = "",
             step_name: str = "",
-            add_dir: str = "",
+            add_dirs=(),
             timeout: float | None = None,
             stale_threshold: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
@@ -861,8 +861,8 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
 
 
 @pytest.mark.anyio
-async def test_run_skill_defaults_add_dir_to_skills_extended(tool_ctx, monkeypatch) -> None:
-    """run_skill passes add_dir=bundled_skills_extended_dir() when add_dir arg is empty."""
+async def test_run_skill_passes_skills_extended_and_cwd(tool_ctx, monkeypatch) -> None:
+    """run_skill passes [bundled_skills_extended_dir(), cwd] as add_dirs."""
     from autoskillit.core import SkillResult
     from autoskillit.workspace.skills import bundled_skills_extended_dir
 
@@ -876,12 +876,13 @@ async def test_run_skill_defaults_add_dir_to_skills_extended(tool_ctx, monkeypat
             *,
             model: str = "",
             step_name: str = "",
-            add_dir: str = "",
+            add_dirs=(),
             timeout: float | None = None,
             stale_threshold: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
         ) -> SkillResult:
-            captured["add_dir"] = add_dir
+            captured["add_dirs"] = add_dirs
+            captured["cwd"] = cwd
             return SkillResult(
                 success=True,
                 result="ok",
@@ -901,8 +902,10 @@ async def test_run_skill_defaults_add_dir_to_skills_extended(tool_ctx, monkeypat
     from autoskillit.server.tools_execution import run_skill
 
     await run_skill("/test skill", "/tmp")
-    assert captured["add_dir"] == str(bundled_skills_extended_dir())
-    assert str(bundled_skills_extended_dir()).endswith("skills_extended")
+    skills_ext = str(bundled_skills_extended_dir())
+    assert skills_ext in captured["add_dirs"]
+    assert "/tmp" in captured["add_dirs"]
+    assert skills_ext.endswith("skills_extended")
 
 
 class TestHeadlessGateEnforcement:

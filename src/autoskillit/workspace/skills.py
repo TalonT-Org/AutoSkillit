@@ -43,6 +43,26 @@ def read_skill_categories(path: Path) -> frozenset[str]:
 
 _INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
 
+_OVERRIDE_SEARCH_DIRS: tuple[str, ...] = (".claude/skills", ".autoskillit/skills")
+
+
+def detect_project_local_overrides(project_dir: Path) -> frozenset[str]:
+    """Return the set of bundled skill names overridden by project-local SKILL.md files.
+
+    Scans .claude/skills/<name>/SKILL.md and .autoskillit/skills/<name>/SKILL.md
+    under project_dir. Returns a frozenset of skill names that have a project-local
+    override. Returns an empty frozenset if project_dir does not exist.
+    """
+    overrides: set[str] = set()
+    for subdir in _OVERRIDE_SEARCH_DIRS:
+        search_root = project_dir / subdir
+        if not search_root.is_dir():
+            continue
+        for entry in search_root.iterdir():
+            if entry.is_dir() and (entry / "SKILL.md").is_file():
+                overrides.add(entry.name)
+    return frozenset(overrides)
+
 
 class SkillResolver:
     """List bundled skills from both the skills/ and skills_extended/ directories."""

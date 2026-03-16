@@ -55,7 +55,11 @@ def chefs_hat() -> None:
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
     config = load_config()
-    skills_dir = session_mgr.init_session(session_id, cook_session=True, config=config)
+    from pathlib import Path
+
+    skills_dir = session_mgr.init_session(
+        session_id, cook_session=True, config=config, project_dir=Path.cwd()
+    )
 
     env = {**os.environ}
     try:

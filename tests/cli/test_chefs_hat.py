@@ -23,7 +23,7 @@ class TestChefsHat:
         fake_skills_dir.mkdir()
 
         def fake_init_session(
-            self, session_id: str, *, cook_session: bool = False, config=None
+            self, session_id: str, *, cook_session: bool = False, config=None, project_dir=None
         ) -> Path:
             captured["cook_session"] = cook_session
             return fake_skills_dir
@@ -45,7 +45,7 @@ class TestChefsHat:
         fake_skills_dir.mkdir()
 
         def fake_init_session(
-            self, session_id: str, *, cook_session: bool = False, config=None
+            self, session_id: str, *, cook_session: bool = False, config=None, project_dir=None
         ) -> Path:
             return fake_skills_dir
 
@@ -73,7 +73,7 @@ class TestChefsHat:
         fake_skills_dir.mkdir()
 
         def fake_init_session(
-            self, session_id: str, *, cook_session: bool = False, config=None
+            self, session_id: str, *, cook_session: bool = False, config=None, project_dir=None
         ) -> Path:
             return fake_skills_dir
 

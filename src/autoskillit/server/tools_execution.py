@@ -135,7 +135,6 @@ async def run_python(
 async def run_skill(
     skill_command: str,
     cwd: str,
-    add_dir: str = "",
     model: str = "",
     step_name: str = "",
     ctx: Context = CurrentContext(),
@@ -160,7 +159,6 @@ async def run_skill(
     Args:
         skill_command: The full prompt including skill invocation (e.g. "/investigate ...").
         cwd: Working directory for the claude session.
-        add_dir: Optional additional directory to add to the session context.
         model: Model to use (e.g. "sonnet", "opus"). Empty string = use config default.
         step_name: Optional YAML step key (e.g. "implement"). When set, token usage is
             accumulated in the server-side token log, grouped by this name.
@@ -197,14 +195,13 @@ async def run_skill(
     if tool_ctx.output_pattern_resolver:
         expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
 
-    effective_add_dir = add_dir or str(pkg_root() / "skills_extended")
     _start = time.monotonic()
     try:
         skill_result = await tool_ctx.executor.run(
             skill_command,
             cwd,
             model=model,
-            add_dir=effective_add_dir,
+            add_dirs=[str(pkg_root() / "skills_extended"), cwd],
             step_name=step_name,
             expected_output_patterns=expected_output_patterns,
         )

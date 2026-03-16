@@ -29,6 +29,7 @@ from autoskillit.workspace.skills import (
     SkillResolver,
     bundled_skills_dir,
     bundled_skills_extended_dir,
+    detect_project_local_overrides,
 )
 
 delete_directory_contents = _delete_directory_contents
@@ -44,6 +45,7 @@ __all__ = [
     "SkillsDirectoryProvider",
     "bundled_skills_dir",
     "bundled_skills_extended_dir",
+    "detect_project_local_overrides",
     "clone_repo",
     "detect_branch",
     "detect_source_dir",

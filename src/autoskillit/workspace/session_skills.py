@@ -15,8 +15,8 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import _atomic_write
-from autoskillit.workspace.skills import SkillInfo, SkillResolver
+from autoskillit.core import _atomic_write, get_logger
+from autoskillit.workspace.skills import SkillInfo, SkillResolver, detect_project_local_overrides
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import AutomationConfig
@@ -151,6 +151,7 @@ class DefaultSessionSkillManager:
         *,
         cook_session: bool = False,
         config: AutomationConfig | None = None,
+        project_dir: Path | None = None,
     ) -> Path:
         """Create ephemeral skill dir for session_id.
 
@@ -177,8 +178,6 @@ class DefaultSessionSkillManager:
             )
             unknown = configured - all_known
             if unknown:
-                from autoskillit.core import get_logger
-
                 get_logger(__name__).warning(
                     "Unknown skill names in tier config (ignored): %s", sorted(unknown)
                 )
@@ -192,11 +191,21 @@ class DefaultSessionSkillManager:
             disabled_subsets = list(config.subsets.disabled)
             custom_tags = dict(config.subsets.custom_tags)
 
+        # Compute project-local overrides (REQ-OVR-001..004)
+        overrides: frozenset[str] = (
+            detect_project_local_overrides(project_dir) if project_dir is not None else frozenset()
+        )
+        _log = get_logger(__name__)
+
         session_skills_dir = self._root / session_id
         session_skills_dir.mkdir(parents=True, exist_ok=True)
         for skill_info in self._provider.list_skills():
             # Skip skills in disabled subsets (REQ-VIS-002)
             if _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
+                continue
+            # Skip bundled skill when a project-local override exists (REQ-OVR-003)
+            if skill_info.name in overrides:
+                _log.debug("init_session_override_skip", skill=skill_info.name)
                 continue
             skill_dir = session_skills_dir / skill_info.name
             skill_dir.mkdir(exist_ok=True)

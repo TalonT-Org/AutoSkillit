@@ -1,7 +1,4 @@
-"""Tests for project-local skill override detection and enforcement (T-OVR-001..011).
-
-Tests must FAIL against the current codebase and pass after Part B implementation.
-"""
+"""Tests for project-local skill override detection and enforcement (T-OVR-001..011)."""
 
 from __future__ import annotations
 

@@ -1,7 +1,4 @@
-"""Tests for run_headless_core multi-path --add-dir support (T-OVR-012..014).
-
-Tests must FAIL against the current codebase and pass after Part B implementation.
-"""
+"""Tests for run_headless_core multi-path --add-dir support (T-OVR-012..014)."""
 
 from __future__ import annotations
 

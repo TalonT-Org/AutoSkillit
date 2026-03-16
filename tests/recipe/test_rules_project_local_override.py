@@ -1,7 +1,4 @@
-"""Tests for the project-local-skill-override recipe validation rule (T-OVR-015..018).
-
-Tests must FAIL against the current codebase and pass after Part B implementation.
-"""
+"""Tests for the project-local-skill-override recipe validation rule (T-OVR-015..018)."""
 
 from __future__ import annotations
 

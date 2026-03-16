@@ -1376,3 +1376,48 @@ async def test_open_kitchen_has_no_update_advisory(tool_ctx):
     assert "RECIPE UPDATE AVAILABLE" not in text
     assert "accept_recipe_update" not in text
     assert "decline_recipe_update" not in text
+
+
+# T-VIS-001
+def test_initialize_applies_subset_disables(monkeypatch):
+    """_initialize() must call mcp.disable(tags={subset}) for each disabled subset."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config.settings import AutomationConfig, SubsetsConfig
+    from autoskillit.pipeline import ToolContext
+
+    mock_mcp = MagicMock()
+    ctx = MagicMock(spec=ToolContext)
+    ctx.config = AutomationConfig(subsets=SubsetsConfig(disabled=["github", "ci"]))
+    ctx.session_skill_manager = None
+
+    with patch("autoskillit.server._ctx", None):
+        with patch("autoskillit.server.mcp", mock_mcp):
+            from autoskillit.server._state import _initialize
+
+            _initialize(ctx)
+
+    disable_calls = [str(c) for c in mock_mcp.disable.call_args_list]
+    assert any("github" in c for c in disable_calls)
+    assert any("ci" in c for c in disable_calls)
+
+
+# T-VIS-002
+def test_initialize_skips_subset_disable_when_empty(monkeypatch):
+    """_initialize() must not call mcp.disable for subsets when list is empty."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config.settings import AutomationConfig, SubsetsConfig
+    from autoskillit.pipeline import ToolContext
+
+    mock_mcp = MagicMock()
+    ctx = MagicMock(spec=ToolContext)
+    ctx.config = AutomationConfig(subsets=SubsetsConfig(disabled=[]))
+    ctx.session_skill_manager = None
+
+    with patch("autoskillit.server.mcp", mock_mcp):
+        from autoskillit.server._state import _initialize
+
+        _initialize(ctx)
+
+    mock_mcp.disable.assert_not_called()

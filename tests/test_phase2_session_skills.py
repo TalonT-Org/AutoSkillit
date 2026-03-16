@@ -228,3 +228,112 @@ def test_init_session_injects_disable_for_tier2_non_cook() -> None:
         content = skill_md.read_text()
         assert "disable-model-invocation: true" in content
     shutil.rmtree(skills_dir, ignore_errors=True)
+
+
+# T-VIS-006
+def test_init_session_skips_disabled_builtin_category(tmp_path: Path) -> None:
+    """Skills whose SKILL.md categories overlap disabled built-in tags are excluded."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config.settings import AutomationConfig, SubsetsConfig
+    from autoskillit.workspace.session_skills import DefaultSessionSkillManager
+    from autoskillit.workspace.skills import SkillInfo, SkillSource
+
+    skill_dir = tmp_path / "skills" / "fake-github-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\ncategories:\n  - github\n---\n# Fake GitHub Skill\n")
+
+    provider = MagicMock()
+    provider.list_skills.return_value = [
+        SkillInfo(
+            name="fake-github-skill",
+            source=SkillSource.BUNDLED,
+            path=skill_dir / "SKILL.md",
+            categories=frozenset({"github"}),
+        )
+    ]
+
+    config = AutomationConfig(subsets=SubsetsConfig(disabled=["github"]))
+    root = tmp_path / "sessions"
+    root.mkdir()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
+    session_path = mgr.init_session("test-subset-skip", config=config)
+
+    assert not (session_path / "fake-github-skill").exists(), (
+        "Skill with disabled category 'github' must not be copied to ephemeral dir"
+    )
+
+
+# T-VIS-007
+def test_init_session_skips_disabled_custom_tag(tmp_path: Path) -> None:
+    """Skills listed under a custom_tag that is disabled are excluded."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config.settings import AutomationConfig, SubsetsConfig
+    from autoskillit.workspace.session_skills import DefaultSessionSkillManager
+    from autoskillit.workspace.skills import SkillInfo, SkillSource
+
+    skill_dir = tmp_path / "skills" / "my-custom-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\ncategories: []\n---\n# My Custom Skill\n")
+
+    provider = MagicMock()
+    provider.list_skills.return_value = [
+        SkillInfo(
+            name="my-custom-skill",
+            source=SkillSource.BUNDLED,
+            path=skill_dir / "SKILL.md",
+            categories=frozenset(),
+        )
+    ]
+    provider.get_skill_content.return_value = "---\ncategories: []\n---\n# My Custom Skill\n"
+
+    config = AutomationConfig(
+        subsets=SubsetsConfig(
+            disabled=["data-infra"],
+            custom_tags={"data-infra": ["my-custom-skill"]},
+        )
+    )
+    root = tmp_path / "sessions"
+    root.mkdir()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
+    session_path = mgr.init_session("test-custom-skip", config=config)
+
+    assert not (session_path / "my-custom-skill").exists(), (
+        "Skill listed under disabled custom_tag must not be copied"
+    )
+
+
+# T-VIS-008
+def test_init_session_includes_non_disabled_skills(tmp_path: Path) -> None:
+    """Skills not in any disabled category are still copied to ephemeral dir."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config.settings import AutomationConfig, SubsetsConfig
+    from autoskillit.workspace.session_skills import DefaultSessionSkillManager
+    from autoskillit.workspace.skills import SkillInfo, SkillSource
+
+    skill_dir = tmp_path / "skills" / "safe-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\ncategories:\n  - audit\n---\n# Safe Skill\n")
+
+    provider = MagicMock()
+    provider.list_skills.return_value = [
+        SkillInfo(
+            name="safe-skill",
+            source=SkillSource.BUNDLED,
+            path=skill_dir / "SKILL.md",
+            categories=frozenset({"audit"}),
+        )
+    ]
+    provider.get_skill_content.return_value = "---\ncategories:\n  - audit\n---\n# Safe Skill\n"
+
+    config = AutomationConfig(subsets=SubsetsConfig(disabled=["github"]))
+    root = tmp_path / "sessions"
+    root.mkdir()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
+    session_path = mgr.init_session("test-safe-include", config=config)
+
+    assert (session_path / "safe-skill").exists(), (
+        "Skills in non-disabled categories must be included"
+    )

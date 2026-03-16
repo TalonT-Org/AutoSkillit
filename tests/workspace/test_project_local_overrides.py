@@ -168,3 +168,77 @@ def test_init_session_logs_override_skip(tmp_path):
         mgr.init_session("sess-005", project_dir=project_dir)
     skip_events = [e for e in logs if e.get("event") == "init_session_override_skip"]
     assert any(e.get("skill") == "investigate" for e in skip_events)
+
+
+def test_init_session_cook_session_ignores_project_local_overrides(tmp_path):
+    """T-OVR-012: cook_session=True retains bundled skill despite project-local override."""
+    from autoskillit.workspace.session_skills import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+    )
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    override = project_dir / ".claude" / "skills" / "investigate"
+    override.mkdir(parents=True)
+    (override / "SKILL.md").write_text("# custom investigate")
+
+    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
+    skills_dir = mgr.init_session("sess-cook", cook_session=True, project_dir=project_dir)
+    assert (skills_dir / "investigate" / "SKILL.md").exists(), (
+        "cook_session=True must include bundled 'investigate' "
+        "even when a project-local override exists"
+    )
+
+
+def test_init_session_cook_session_ignores_disabled_subsets(tmp_path):
+    """T-OVR-013: cook_session=True includes subset-disabled skills."""
+    from autoskillit.config import AutomationConfig, SubsetsConfig
+    from autoskillit.workspace.session_skills import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+    )
+
+    config = AutomationConfig(subsets=SubsetsConfig(disabled=["github"]))
+    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
+    skills_dir = mgr.init_session("sess-cook2", cook_session=True, config=config)
+    assert (skills_dir / "open-pr" / "SKILL.md").exists(), (
+        "cook_session=True must include 'open-pr' even when 'github' subset is disabled"
+    )
+
+
+def test_init_session_cook_full_skill_set_invariant(tmp_path):
+    """T-OVR-014: cook_session=True always yields the full bundled skill set
+    regardless of project_dir overrides and config.subsets.disabled."""
+    from autoskillit.config import AutomationConfig, SubsetsConfig
+    from autoskillit.workspace.session_skills import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+    )
+    from autoskillit.workspace.skills import SkillResolver
+
+    # Set up maximally hostile project_dir: override every possible skill
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    resolver = SkillResolver()
+    all_skills = resolver.list_all()
+    for skill in all_skills:
+        d = project_dir / ".claude" / "skills" / skill.name
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text("# override")
+
+    # Config disables all known categories
+    config = AutomationConfig(
+        subsets=SubsetsConfig(disabled=["github", "audit", "arch-lens", "ci"])
+    )
+    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
+    skills_dir = mgr.init_session(
+        "sess-invariant", cook_session=True, config=config, project_dir=project_dir
+    )
+
+    expected_names = {s.name for s in all_skills}
+    actual_names = {d.name for d in skills_dir.iterdir() if d.is_dir()}
+    missing = expected_names - actual_names
+    assert not missing, (
+        f"cook_session=True must include ALL bundled skills. Missing: {sorted(missing)}"
+    )

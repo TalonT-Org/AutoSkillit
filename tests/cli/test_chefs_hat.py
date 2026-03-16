@@ -134,3 +134,28 @@ class TestChefsHat:
         assert "--plugin-dir" in args
         idx = args.index("--plugin-dir")
         assert args[idx + 1] == str(pkg_root())
+
+    # CH-7
+    def test_chefs_hat_includes_dangerously_skip_permissions(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """chefs-hat subprocess cmd includes --dangerously-skip-permissions (REQ-TIER-012)."""
+        from unittest.mock import MagicMock, patch
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
+        ):
+            import autoskillit.cli._chefs_hat as module
+
+            module.chefs_hat()
+
+        args = mock_run.call_args[0][0]
+        assert "--dangerously-skip-permissions" in args

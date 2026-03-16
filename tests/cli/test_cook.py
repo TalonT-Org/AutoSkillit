@@ -1052,7 +1052,7 @@ class TestCookSubsetGate:
             cli.cook("github-recipe")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
-        assert "requires subset" in captured.out.lower() or "github" in captured.out.lower()
+        assert "requires subset" in captured.out.lower()
 
     @patch("autoskillit.cli.subprocess.run")
     def test_cook_enable_temporarily_sets_env_override(
@@ -1085,12 +1085,7 @@ class TestCookSubsetGate:
         cli.cook("github-recipe")
 
         mock_run.assert_called_once()
-        call_kwargs = mock_run.call_args
-        passed_env = (
-            call_kwargs[1].get("env") or call_kwargs[0][1]
-            if len(call_kwargs[0]) > 1
-            else call_kwargs[1]["env"]
-        )
+        passed_env = mock_run.call_args.kwargs["env"]
         assert "AUTOSKILLIT_SUBSETS__DISABLED" in passed_env
         assert passed_env["AUTOSKILLIT_SUBSETS__DISABLED"] == "@json []"
 

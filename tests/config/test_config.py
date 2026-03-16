@@ -724,7 +724,7 @@ class TestSubsetsConfig:
         (config_dir / "config.yaml").write_text(
             "subsets:\n  disabled:\n    - totally-unknown-category\n"
         )
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger="autoskillit.config.settings"):
             cfg = load_config(tmp_path)
         assert cfg.subsets.disabled == ["totally-unknown-category"]  # preserved as-is
         assert any("totally-unknown-category" in r.message for r in caplog.records)

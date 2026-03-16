@@ -129,6 +129,7 @@ class TestChefsHat:
 
             module.chefs_hat()
 
+        mock_mgr.init_session.assert_called_once()
         args = mock_run.call_args[0][0]
         assert "--plugin-dir" in args
         idx = args.index("--plugin-dir")

@@ -11,6 +11,48 @@ This creates `.autoskillit/config.yaml` with the test command you provide.
 Everything else has sensible defaults. See [Getting Started](getting-started.md)
 for a full tutorial.
 
+## Common Configurations
+
+### Minimal (just a test command)
+
+```yaml
+# .autoskillit/config.yaml
+test_check:
+  command: ["pytest", "-v", "--tb=short"]
+```
+
+### Full config with GitHub integration
+
+```yaml
+# .autoskillit/config.yaml
+test_check:
+  command: ["task", "test-check"]
+
+model:
+  default: "claude-sonnet-4-6"
+
+worktree_setup:
+  command: ["task", "install-worktree"]
+
+branching:
+  default_base_branch: main
+
+github:
+  default_repo: "my-org/my-repo"
+```
+
+### Project without `task` runner
+
+```yaml
+# .autoskillit/config.yaml
+test_check:
+  command: ["pytest", "-v", "--tb=short"]
+  timeout: 600
+
+worktree_setup:
+  command: ["pip", "install", "-e", ".[dev]"]
+```
+
 ## Layered Resolution
 
 AutoSkillit uses layered YAML configuration. Resolution order (last wins):
@@ -103,12 +145,18 @@ Check current quota: `autoskillit quota-status`.
 
 ## GitHub Integration
 
+GitHub features (PR creation, issue management, CI status) require the `gh` CLI to be installed and authenticated:
+
+    gh auth login
+
+The `github.default_repo` setting is used when a bare issue number (`#42`) is provided without a full URL:
+
 ```yaml
 github:
-  default_repo: "owner/repo"   # used when a bare issue number (#42) is provided
+  default_repo: "owner/repo"
 ```
 
-Token goes in `.autoskillit/.secrets.yaml` (never commit).
+If you need a GitHub token for the AutoSkillit API (separate from `gh` CLI auth), place it in `.autoskillit/.secrets.yaml` (never commit).
 
 ## Branching
 
@@ -134,7 +182,7 @@ linux_tracing:
   tmpfs_path: "/dev/shm"  # RAM-backed path for crash resilience
 ```
 
-See [Session Diagnostics](developer.md#session-diagnostics-logging) for details on log output.
+See [Session Diagnostics](developer/session-diagnostics.md) for details on log output.
 
 ## Headless Sessions
 

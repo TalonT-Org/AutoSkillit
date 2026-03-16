@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import ValidatedAddDir
+
 
 @pytest.fixture
 def make_ctx(tmp_path):
@@ -41,10 +43,19 @@ async def test_run_headless_core_no_add_dir_when_empty(make_ctx):
 
 
 @pytest.mark.anyio
-async def test_run_headless_core_two_add_dirs(make_ctx):
-    """T-OVR-013: run_headless_core with two paths emits two --add-dir flags."""
+async def test_run_headless_core_two_add_dirs(make_ctx, tmp_path):
+    """T-OVR-013: run_headless_core with two ValidatedAddDir paths emits two --add-dir flags."""
     from autoskillit.execution.headless import run_headless_core
     from tests.conftest import _make_result
+
+    # Create two valid add-dir layouts
+    for name in ("a", "b"):
+        skill_dir = tmp_path / name / ".claude" / "skills" / "test-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# Test")
+
+    dir_a = ValidatedAddDir(path=str(tmp_path / "a"))
+    dir_b = ValidatedAddDir(path=str(tmp_path / "b"))
 
     captured_cmd = []
 
@@ -57,21 +68,20 @@ async def test_run_headless_core_two_add_dirs(make_ctx):
         "/autoskillit:investigate foo",
         "/tmp/proj",
         ctx,
-        add_dirs=["/path/a", "/path/b"],
+        add_dirs=[dir_a, dir_b],
     )
     add_dir_positions = [i for i, x in enumerate(captured_cmd) if x == "--add-dir"]
     assert len(add_dir_positions) == 2
     dirs_passed = [captured_cmd[i + 1] for i in add_dir_positions]
-    assert "/path/a" in dirs_passed
-    assert "/path/b" in dirs_passed
+    assert str(tmp_path / "a") in dirs_passed
+    assert str(tmp_path / "b") in dirs_passed
 
 
 @pytest.mark.anyio
-async def test_run_skill_always_passes_skills_ext_and_cwd(tool_ctx, monkeypatch):
-    """T-OVR-014: run_skill always passes skills_extended/ and cwd as add_dirs."""
+async def test_run_skill_passes_ephemeral_session_dir_as_add_dir(tool_ctx, monkeypatch):
+    """T-OVR-014: run_skill passes ephemeral session dir (not raw skills_extended/) as add_dirs."""
     from autoskillit.core import SkillResult
     from autoskillit.server import _state
-    from autoskillit.workspace.skills import bundled_skills_extended_dir
 
     captured: dict = {}
 
@@ -99,6 +109,26 @@ async def test_run_skill_always_passes_skills_ext_and_cwd(tool_ctx, monkeypatch)
 
     await run_skill("/autoskillit:investigate foo", "/some/cwd")
 
+    # All add_dirs entries must be ValidatedAddDir instances
+    assert all(isinstance(d, ValidatedAddDir) for d in captured["add_dirs"])
+
+    # At least one add_dir must have .claude/skills/*/SKILL.md layout
+    from pathlib import Path
+
+    has_skills = False
+    for d in captured["add_dirs"]:
+        p = Path(d.path)
+        if list(p.glob(".claude/skills/*/SKILL.md")):
+            has_skills = True
+            break
+    assert has_skills, "run_skill must pass an --add-dir with discoverable skills"
+
+    # Must NOT include raw skills_extended/ path
+    from autoskillit.workspace.skills import bundled_skills_extended_dir
+
     skills_ext = str(bundled_skills_extended_dir())
-    assert skills_ext in captured["add_dirs"]
-    assert "/some/cwd" in captured["add_dirs"]
+    add_dir_paths = [d.path for d in captured["add_dirs"]]
+    assert skills_ext not in add_dir_paths, (
+        "run_skill must not pass skills_extended/ directly — "
+        "it should route through DefaultSessionSkillManager"
+    )

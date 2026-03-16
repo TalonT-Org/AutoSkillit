@@ -379,57 +379,53 @@ class TestPluginJsonContract:
 
 
 # ---------------------------------------------------------------------------
-# CC-SKILLS-EXT: run_skill --add-dir convention verification
+# CC-HEADLESS-001: run_skill headless path --add-dir layout guard
+# Path components are HARDCODED STRING LITERALS — do NOT replace with constants.
+# Replaces CC-SKILLS-EXT (xfail removed): run_skill now routes through
+# DefaultSessionSkillManager, so the ephemeral dir has the correct layout.
 # ---------------------------------------------------------------------------
 
 
-class TestSkillsExtendedAddDirConvention:
-    """Guard: skills_extended/ passed as --add-dir must have the correct layout.
+class TestRunSkillAddDirLayoutContract:
+    """Guard: run_skill's --add-dir paths must have .claude/skills/<name>/SKILL.md.
 
-    run_skill() passes pkg_root()/skills_extended/ as an --add-dir argument.
-    Claude Code's --add-dir convention requires <root>/.claude/skills/<name>/SKILL.md.
-    skills_extended/ uses a flat <name>/SKILL.md layout.
+    CRITICAL: Path components (".claude", "skills", "SKILL.md") are literal
+    strings here — NOT from ClaudeDirectoryConventions.
 
-    This test determines whether Claude Code actually discovers skills from
-    skills_extended/ via --add-dir:
-      - If skills_extended/ has a .claude/skills/ subdirectory → test passes (correct)
-      - If skills_extended/ only has flat <name>/SKILL.md → test fails (latent CC-001
-        equivalent on the automation pipeline path)
-
-    CURRENT STATE: skills_extended/ only has flat layout → XFAIL.
-    Fix is deferred to a separate rectify task (scope outside Part B).
-    When the fix is applied (restructure skills_extended/ or make run_skill use
-    DefaultSessionSkillManager), this xfail will become xpass.
-
-    Path components are HARDCODED STRING LITERALS throughout.
+    This is the headless-path counterpart of TestChefsHatAddDirStructure (DS-002).
     """
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "skills_extended/ only has flat <name>/SKILL.md layout, not "
-            ".claude/skills/<name>/SKILL.md. run_skill() passes this dir as "
-            "--add-dir so headless sessions cannot access Tier 2/3 skills. "
-            "Latent CC-001 equivalent on pipeline path. Fix deferred — see Part B plan."
-        ),
-    )
-    def test_skills_extended_has_claude_skills_subdir_for_add_dir_discovery(
-        self,
-    ) -> None:
+    def test_run_skill_add_dir_has_convention_layout(self, tmp_path: Path) -> None:
+        """CC-HEADLESS-001: run_skill's ephemeral --add-dir has .claude/skills/*/SKILL.md."""
+        from autoskillit.workspace.session_skills import (
+            DefaultSessionSkillManager,
+            SkillsDirectoryProvider,
+        )
+
+        provider = SkillsDirectoryProvider()
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+        session_root = mgr.init_session("cc-headless-001-test", cook_session=False)
+
+        # The returned ValidatedAddDir wraps a path; resolve to Path for globbing
+        session_dir = Path(str(session_root))
+
+        # ".claude", "skills", "SKILL.md" are literal strings — NOT from any constant.
+        discovered = list(session_dir.glob(".claude/skills/*/SKILL.md"))
+        assert len(discovered) > 0, (
+            "run_skill's ephemeral --add-dir must contain "
+            ".claude/skills/<name>/SKILL.md files. "
+            "If this fails, DefaultSessionSkillManager.init_session() layout "
+            "has regressed on the headless path."
+        )
+
+    def test_run_skill_add_dir_does_not_pass_raw_skills_extended(self, tmp_path: Path) -> None:
+        """run_skill must not pass skills_extended/ directly as --add-dir."""
         from autoskillit.core.paths import pkg_root
 
         skills_ext = pkg_root() / "skills_extended"
-        assert skills_ext.is_dir(), f"skills_extended/ not found at {skills_ext}"
-
-        # Claude Code --add-dir looks for ".claude/skills/<name>/SKILL.md"
-        # Path components are literals — not from ClaudeDirectoryConventions
+        # skills_extended/ has flat layout — NOT .claude/skills/
         skill_files = list(skills_ext.glob(".claude/skills/*/SKILL.md"))
-        assert len(skill_files) > 0, (
-            f"skills_extended/ at {skills_ext} has no .claude/skills/<name>/SKILL.md files. "
-            "run_skill() passes this directory as --add-dir, so Claude Code expects "
-            ".claude/skills/<name>/SKILL.md inside it. "
-            "If this assertion fails, headless sessions cannot access Tier 2/3 skills "
-            "as slash commands — this is the CC-001 equivalent for the pipeline path. "
-            "Either: (a) restructure skills_extended/ to use .claude/skills/ layout, or "
-            "(b) make run_skill use DefaultSessionSkillManager to create an ephemeral copy."
+        assert len(skill_files) == 0, (
+            "skills_extended/ should NOT have .claude/skills/ layout. "
+            "run_skill routes through DefaultSessionSkillManager instead."
         )

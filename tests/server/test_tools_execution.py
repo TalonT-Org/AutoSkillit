@@ -861,10 +861,9 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
 
 
 @pytest.mark.anyio
-async def test_run_skill_passes_skills_extended_and_cwd(tool_ctx, monkeypatch) -> None:
-    """run_skill passes [bundled_skills_extended_dir(), cwd] as add_dirs."""
-    from autoskillit.core import SkillResult
-    from autoskillit.workspace.skills import bundled_skills_extended_dir
+async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> None:
+    """run_skill passes ValidatedAddDir instances (not raw strings) as add_dirs."""
+    from autoskillit.core import SkillResult, ValidatedAddDir
 
     captured: dict = {}
 
@@ -902,10 +901,62 @@ async def test_run_skill_passes_skills_extended_and_cwd(tool_ctx, monkeypatch) -
     from autoskillit.server.tools_execution import run_skill
 
     await run_skill("/test skill", "/tmp")
+    # All add_dirs must be ValidatedAddDir instances
+    assert len(captured["add_dirs"]) >= 1
+    assert all(isinstance(d, ValidatedAddDir) for d in captured["add_dirs"])
+    # Must not include raw skills_extended/ path
+    from autoskillit.workspace.skills import bundled_skills_extended_dir
+
     skills_ext = str(bundled_skills_extended_dir())
-    assert skills_ext in captured["add_dirs"]
-    assert "/tmp" in captured["add_dirs"]
-    assert skills_ext.endswith("skills_extended")
+    add_dir_paths = [d.path for d in captured["add_dirs"]]
+    assert skills_ext not in add_dir_paths
+
+
+@pytest.mark.anyio
+async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monkeypatch) -> None:
+    """run_skill routes through session_skill_manager.init_session() for add_dirs."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import SkillResult, ValidatedAddDir
+
+    # Create a spy on init_session
+    fake_validated = ValidatedAddDir(path="/fake/session/dir")
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    tool_ctx.session_skill_manager = mock_ssm
+
+    captured: dict = {}
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            captured["add_dirs"] = add_dirs
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/test skill", "/tmp")
+
+    # init_session was called with cook_session=False (headless, not cook)
+    mock_ssm.init_session.assert_called_once()
+    call_kwargs = mock_ssm.init_session.call_args
+    assert call_kwargs.kwargs.get("cook_session") is False
+
+    # The returned ValidatedAddDir is in add_dirs
+    assert fake_validated in captured["add_dirs"]
 
 
 class TestHeadlessGateEnforcement:

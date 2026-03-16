@@ -773,6 +773,14 @@ class TestInvestigateFirstStructure:
             "context.merge_target holds the feature branch name"
         )
 
+    def test_remediation_no_dead_with_params(self, recipe) -> None:
+        """Remediation recipe must have no dead-with-param findings."""
+        findings = run_semantic_rules(recipe)
+        dead = [f for f in findings if f.rule == "dead-with-param"]
+        assert not dead, (
+            f"Remediation recipe has dead with params: {[(f.step_name, f.message) for f in dead]}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestSmokeTestStructure

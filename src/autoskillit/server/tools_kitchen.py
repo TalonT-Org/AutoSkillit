@@ -58,6 +58,17 @@ async def _open_kitchen_handler() -> None:
     await _prime_quota_cache()
 
 
+async def _redisable_subsets(ctx: Context, disabled: list[str]) -> None:
+    """Re-disable subset-tagged tools after enabling kitchen.
+
+    REQ-VIS-008: FastMCP session rules override server rules; enable_components(kitchen)
+    would otherwise reveal dual-tagged tools (e.g. kitchen+github) that are server-disabled.
+    Later session rules win, so these disables correctly override the kitchen enable.
+    """
+    for subset in disabled:
+        await ctx.disable_components(tags={subset})
+
+
 def _close_kitchen_handler() -> None:
     """Clear the tools-enabled flag. Extracted for testability."""
     from autoskillit.server import _get_ctx, logger
@@ -110,15 +121,9 @@ async def open_kitchen(
     await _open_kitchen_handler()
     await ctx.enable_components(tags={"kitchen"})
 
-    # REQ-VIS-008: Re-disable subset-suppressed tools after enabling kitchen.
-    # FastMCP session rules override server rules; enable_components(kitchen) would
-    # otherwise reveal dual-tagged tools (e.g. kitchen+github) that are server-disabled.
-    # Later session rules win, so this disable correctly overrides the kitchen enable.
     from autoskillit.server import _get_ctx  # noqa: PLC0415
 
-    tool_ctx = _get_ctx()
-    for subset in tool_ctx.config.subsets.disabled:
-        await ctx.disable_components(tags={subset})
+    await _redisable_subsets(ctx, _get_ctx().config.subsets.disabled)
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     _categories = _build_tool_category_listing()

@@ -10,6 +10,7 @@ so constant drift is caught rather than silently propagated.
 
 See also: core/types.py ClaudeFlags — the equivalent registry for CLI flags.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

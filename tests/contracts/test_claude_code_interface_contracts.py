@@ -7,10 +7,10 @@ the "tests mirror implementation" failure mode this module prevents.
 Reference: temp/investigation-ephemeral-skill-dir-layout-bug.md
 Governance model mirrors: tests/execution/test_flag_contracts.py
 """
+
 from __future__ import annotations
 
 from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # CC-DIR: ClaudeDirectoryConventions value pinning
@@ -77,9 +77,7 @@ class TestAddDirLayoutContract:
         <add_dir_root>/.claude/skills/<name>/SKILL.md
     """
 
-    def test_init_session_writes_skills_at_add_dir_convention_path(
-        self, tmp_path: Path
-    ) -> None:
+    def test_init_session_writes_skills_at_add_dir_convention_path(self, tmp_path: Path) -> None:
         from autoskillit.workspace.session_skills import (
             DefaultSessionSkillManager,
             SkillsDirectoryProvider,
@@ -97,9 +95,7 @@ class TestAddDirLayoutContract:
             "If this fails, session_skills._SKILLS_SUBDIR has regressed."
         )
 
-    def test_init_session_no_flat_skills_at_session_root(
-        self, tmp_path: Path
-    ) -> None:
+    def test_init_session_no_flat_skills_at_session_root(self, tmp_path: Path) -> None:
         """Anti-regression: the pre-fix flat layout must not reappear."""
         from autoskillit.workspace.session_skills import (
             DefaultSessionSkillManager,

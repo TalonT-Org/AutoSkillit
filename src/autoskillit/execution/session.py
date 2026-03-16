@@ -11,6 +11,7 @@ import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any, assert_never
 
 from autoskillit.core import (
@@ -41,6 +42,20 @@ _TOKEN_FIELDS = (
 )
 
 _FAILURE_SUBTYPES = frozenset({"unknown", "empty_output", "unparseable", "timeout"})
+
+
+class ContentState(StrEnum):
+    """Describes why a session's content evaluation succeeded or failed.
+
+    Separates three distinct failure categories so that the dead-end guard
+    can distinguish drain-race artifacts (transient, retriable) from pattern-
+    contract violations and session errors (terminal, not retriable).
+    """
+
+    COMPLETE = "complete"
+    ABSENT = "absent"  # Empty result or missing marker — drain-race candidate
+    CONTRACT_VIOLATION = "contract_violation"  # Result + marker present, but patterns fail
+    SESSION_ERROR = "session_error"  # is_error=True or process-level failure
 
 
 @dataclass
@@ -355,6 +370,53 @@ def _check_session_content(
     return True
 
 
+def _evaluate_content_state(
+    session: ClaudeSessionResult,
+    completion_marker: str,
+    expected_output_patterns: Sequence[str],
+) -> ContentState:
+    """Classify the content completeness and contract compliance of a session result.
+
+    Returns:
+        ContentState.COMPLETE: Result is non-empty, marker present (if configured),
+            and all expected_output_patterns match. Session is fully successful.
+        ContentState.ABSENT: Result is empty OR completion marker is absent from a
+            non-empty result. Indicates a drain-race artifact — the session may have
+            completed but stdout was not fully flushed. Retriable.
+        ContentState.CONTRACT_VIOLATION: Result is non-empty and contains the marker,
+            but one or more expected_output_patterns are absent. The session ran to
+            completion but the model did not produce the required output tokens.
+            Terminal — retrying will not produce different output.
+        ContentState.SESSION_ERROR: The CLI session itself reported an error
+            (is_error=True) or produced a failure subtype. Terminal.
+    """
+    # Process-level / CLI-level failure — terminal regardless of content
+    if session.is_error:
+        return ContentState.SESSION_ERROR
+
+    # No content requirements configured: CHANNEL_B confirmation alone is sufficient.
+    # Returning COMPLETE here preserves the existing behaviour for skills that produce
+    # no stdout but complete correctly (e.g. fire-and-forget commands).
+    if not completion_marker and not expected_output_patterns:
+        return ContentState.COMPLETE
+
+    result = session.result.strip()
+
+    # Empty result — drain-race candidate
+    if not result:
+        return ContentState.ABSENT
+
+    # Marker absent — partial drain candidate
+    if completion_marker and completion_marker not in session.result:
+        return ContentState.ABSENT
+
+    # Result non-empty, marker present (or not configured) — check pattern contract
+    if expected_output_patterns and not _check_expected_patterns(result, expected_output_patterns):
+        return ContentState.CONTRACT_VIOLATION
+
+    return ContentState.COMPLETE
+
+
 def _compute_success(
     session: ClaudeSessionResult,
     returncode: int,
@@ -376,25 +438,22 @@ def _compute_success(
     match channel_confirmation:
         case ChannelConfirmation.CHANNEL_B:
             # Channel B confirmed the completion marker — skip the marker check.
-            # But expected_output_patterns must still be validated: the block
-            # delimiter is a content contract, not a completion signal.
-            if _check_expected_patterns(session.result, expected_output_patterns):
-                logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
-                return True
-            # Patterns absent in session.result. Recovery was attempted in
-            # _build_skill_result before this call (via
-            # _recover_block_from_assistant_messages). If we are here, recovery
-            # did not find the block — treat as retriable via the dead-end guard.
+            # Delegate to _evaluate_content_state for a typed result so that
+            # _compute_outcome can use the same evaluation to decide whether the
+            # dead-end guard should promote to RETRIABLE.
             #
             # PRECONDITION: _recover_block_from_assistant_messages MUST be called
             # (and its recovered session substituted) before this function when
             # channel_confirmation=CHANNEL_B and expected_output_patterns is set.
             # Callers that bypass _build_skill_result must honour this contract.
-            logger.warning(
-                "channel_b_pattern_check_failed",
-                patterns=list(expected_output_patterns),
-                result_length=len(session.result),
-                assistant_message_count=len(session.assistant_messages),
+            state = _evaluate_content_state(session, completion_marker, expected_output_patterns)
+            if state == ContentState.COMPLETE:
+                logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
+                return True
+            logger.debug(
+                "channel_b_content_check_failed",
+                content_state=state.value,
+                result_len=len(session.result),
             )
             return False
         case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
@@ -692,18 +751,35 @@ def _compute_outcome(
             reason="retry_signal_authoritative",
         )
 
-    # Dead-end guard: channel confirmation means the session reached a natural end;
-    # failure to parse content is a data-availability issue, not a terminal failure.
+    # Dead-end guard: channel confirmation means the session signalled completion, but
+    # content checks failed and no retry was scheduled by _compute_retry.
+    # Only promote to RETRIABLE when the failure is a drain-race artifact (ABSENT state):
+    #   - empty result → stdout not fully flushed
+    #   - marker missing → partial flush
+    # Do NOT promote CONTRACT_VIOLATION or SESSION_ERROR — these are terminal failures
+    # that retrying will never resolve.
     if not success and not needs_retry:
         match channel_confirmation:
             case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.CHANNEL_B:
-                needs_retry = True
-                retry_reason = RetryReason.RESUME
-                logger.debug(
-                    "dead_end_guard",
-                    action="promoted_to_retriable",
-                    channel=str(channel_confirmation),
+                content_state = _evaluate_content_state(
+                    session, completion_marker, expected_output_patterns
                 )
+                if content_state == ContentState.ABSENT:
+                    needs_retry = True
+                    retry_reason = RetryReason.RESUME
+                    logger.debug(
+                        "dead_end_guard",
+                        action="promoted_to_retriable",
+                        content_state=content_state.value,
+                        channel=channel_confirmation.value,
+                    )
+                else:
+                    logger.debug(
+                        "dead_end_guard",
+                        action="terminal_failure_not_promoted",
+                        content_state=content_state.value,
+                        channel=channel_confirmation.value,
+                    )
             case ChannelConfirmation.UNMONITORED:
                 pass  # legitimate terminal failure — no channel confirmed completion
             case _ as unreachable_cc:

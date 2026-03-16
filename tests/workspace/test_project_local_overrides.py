@@ -84,7 +84,7 @@ def test_init_session_no_override_when_project_dir_none(tmp_path):
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-001", project_dir=None)
-    assert (skills_dir / "investigate" / "SKILL.md").exists()
+    assert (skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists()
 
 
 def test_init_session_excludes_overridden_skill(tmp_path):
@@ -101,7 +101,7 @@ def test_init_session_excludes_overridden_skill(tmp_path):
     (override / "SKILL.md").write_text("# custom investigate")
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-002", project_dir=project_dir)
-    assert not (skills_dir / "investigate" / "SKILL.md").exists()
+    assert not (skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists()
 
 
 def test_init_session_includes_non_overridden_skills(tmp_path):
@@ -120,7 +120,7 @@ def test_init_session_includes_non_overridden_skills(tmp_path):
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-003", project_dir=project_dir)
     # "make-plan" must still be present
-    assert (skills_dir / "make-plan" / "SKILL.md").exists()
+    assert (skills_dir / ".claude" / "skills" / "make-plan" / "SKILL.md").exists()
 
 
 def test_init_session_subset_and_override_compose(tmp_path):
@@ -142,8 +142,8 @@ def test_init_session_subset_and_override_compose(tmp_path):
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-004", config=config, project_dir=project_dir)
     # "open-pr" absent due to subset; "review-pr" absent due to override
-    assert not (skills_dir / "review-pr" / "SKILL.md").exists()
-    assert not (skills_dir / "open-pr" / "SKILL.md").exists()
+    assert not (skills_dir / ".claude" / "skills" / "review-pr" / "SKILL.md").exists()
+    assert not (skills_dir / ".claude" / "skills" / "open-pr" / "SKILL.md").exists()
 
 
 def test_init_session_logs_override_skip(tmp_path):
@@ -182,7 +182,7 @@ def test_init_session_cook_session_ignores_project_local_overrides(tmp_path):
 
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-cook", cook_session=True, project_dir=project_dir)
-    assert (skills_dir / "investigate" / "SKILL.md").exists(), (
+    assert (skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists(), (
         "cook_session=True must include bundled 'investigate' "
         "even when a project-local override exists"
     )
@@ -199,7 +199,7 @@ def test_init_session_cook_session_ignores_disabled_subsets(tmp_path):
     config = AutomationConfig(subsets=SubsetsConfig(disabled=["github"]))
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-cook2", cook_session=True, config=config)
-    assert (skills_dir / "open-pr" / "SKILL.md").exists(), (
+    assert (skills_dir / ".claude" / "skills" / "open-pr" / "SKILL.md").exists(), (
         "cook_session=True must include 'open-pr' even when 'github' subset is disabled"
     )
 
@@ -234,7 +234,8 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
     )
 
     expected_names = {s.name for s in all_skills}
-    actual_names = {d.name for d in skills_dir.iterdir() if d.is_dir()}
+    skills_base = skills_dir / ".claude" / "skills"
+    actual_names = {d.name for d in skills_base.iterdir() if d.is_dir()}
     missing = expected_names - actual_names
     assert not missing, (
         f"cook_session=True must include ALL bundled skills. Missing: {sorted(missing)}"

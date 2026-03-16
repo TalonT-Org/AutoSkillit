@@ -74,7 +74,7 @@ def test_session_skill_manager_creates_ephemeral_dir(tmp_path: Path) -> None:
     session_path = mgr.init_session("test-session-abc", cook_session=False)
     assert session_path.exists()
     assert session_path.is_dir()
-    skill_files = list(session_path.glob("*/SKILL.md"))
+    skill_files = list(session_path.glob(".claude/skills/*/SKILL.md"))
     assert len(skill_files) > 0
 
 
@@ -92,7 +92,7 @@ def test_session_manager_injects_disable_for_tier2(tmp_path: Path) -> None:
         )
     )
     session_path = mgr.init_session("test-session-xyz", cook_session=False, config=config)
-    mermaid_md = session_path / "mermaid" / "SKILL.md"
+    mermaid_md = session_path / ".claude" / "skills" / "mermaid" / "SKILL.md"
     assert mermaid_md.exists()
     content = mermaid_md.read_text()
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
@@ -115,7 +115,7 @@ def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
         )
     )
     session_path = mgr.init_session("cook-session-123", cook_session=True, config=config)
-    mermaid_md = session_path / "mermaid" / "SKILL.md"
+    mermaid_md = session_path / ".claude" / "skills" / "mermaid" / "SKILL.md"
     content = mermaid_md.read_text()
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match
@@ -138,7 +138,7 @@ def test_activate_tier2_removes_flag(tmp_path: Path) -> None:
     mgr.init_session("session-toggle", cook_session=False, config=config)
     result = mgr.activate_tier2("session-toggle", "mermaid")
     assert result is True
-    mermaid_md = tmp_path / "session-toggle" / "mermaid" / "SKILL.md"
+    mermaid_md = tmp_path / "session-toggle" / ".claude" / "skills" / "mermaid" / "SKILL.md"
     content = mermaid_md.read_text()
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match
@@ -223,7 +223,7 @@ def test_init_session_injects_disable_for_tier2_non_cook() -> None:
     root = resolve_ephemeral_root()
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), root)
     skills_dir = mgr.init_session("test_disable_injection", cook_session=False, config=config)
-    skill_md = skills_dir / "mermaid" / "SKILL.md"
+    skill_md = skills_dir / ".claude" / "skills" / "mermaid" / "SKILL.md"
     if skill_md.exists():
         content = skill_md.read_text()
         assert "disable-model-invocation: true" in content
@@ -259,7 +259,7 @@ def test_init_session_skips_disabled_builtin_category(tmp_path: Path) -> None:
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
     session_path = mgr.init_session("test-subset-skip", config=config)
 
-    assert not (session_path / "fake-github-skill").exists(), (
+    assert not (session_path / ".claude" / "skills" / "fake-github-skill").exists(), (
         "Skill with disabled category 'github' must not be copied to ephemeral dir"
     )
 
@@ -299,7 +299,7 @@ def test_init_session_skips_disabled_custom_tag(tmp_path: Path) -> None:
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
     session_path = mgr.init_session("test-custom-skip", config=config)
 
-    assert not (session_path / "my-custom-skill").exists(), (
+    assert not (session_path / ".claude" / "skills" / "my-custom-skill").exists(), (
         "Skill listed under disabled custom_tag must not be copied"
     )
 
@@ -334,6 +334,6 @@ def test_init_session_includes_non_disabled_skills(tmp_path: Path) -> None:
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
     session_path = mgr.init_session("test-safe-include", config=config)
 
-    assert (session_path / "safe-skill").exists(), (
+    assert (session_path / ".claude" / "skills" / "safe-skill").exists(), (
         "Skills in non-disabled categories must be included"
     )

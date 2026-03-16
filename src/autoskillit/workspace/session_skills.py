@@ -30,6 +30,9 @@ _CANDIDATE_ROOTS: list[Path] = [
 
 _FM_PATTERN = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
 
+# Claude Code discovers skills from --add-dir directories at .claude/skills/<name>/SKILL.md.
+_SKILLS_SUBDIR = Path(".claude") / "skills"
+
 
 def resolve_ephemeral_root() -> Path:
     """Return a writable ephemeral root directory for session skill dirs.
@@ -220,7 +223,8 @@ class DefaultSessionSkillManager:
         _log = get_logger(__name__)
 
         session_skills_dir = self._root / session_id
-        session_skills_dir.mkdir(parents=True, exist_ok=True)
+        skills_base = session_skills_dir / _SKILLS_SUBDIR
+        skills_base.mkdir(parents=True, exist_ok=True)
         for skill_info in self._provider.list_skills():
             if not _should_inject_skill(
                 skill_info,
@@ -234,7 +238,7 @@ class DefaultSessionSkillManager:
                 elif _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
                     _log.debug("init_session_subset_skip", skill=skill_info.name)
                 continue
-            skill_dir = session_skills_dir / skill_info.name
+            skill_dir = skills_base / skill_info.name
             skill_dir.mkdir(exist_ok=True)
             gated = (not cook_session) and (skill_info.name in tier2_skills)
             content = self._provider.get_skill_content(skill_info.name, gated=gated)
@@ -256,7 +260,7 @@ class DefaultSessionSkillManager:
             raise ValueError(f"Invalid session_id: {session_id!r}")
         if not skill_name or "/" in skill_name or "\\" in skill_name or skill_name in (".", ".."):
             raise ValueError(f"Invalid skill_name: {skill_name!r}")
-        skill_md = self._root / session_id / skill_name / "SKILL.md"
+        skill_md = self._root / session_id / _SKILLS_SUBDIR / skill_name / "SKILL.md"
         if not skill_md.exists():
             return False
         content = skill_md.read_text()

@@ -411,7 +411,7 @@ def _evaluate_content_state(
         return ContentState.COMPLETE
 
     # Marker absent — partial drain candidate
-    if completion_marker and completion_marker not in session.result:
+    if completion_marker and completion_marker not in result:
         return ContentState.ABSENT
 
     # Result non-empty, marker present (or not configured) — check pattern contract
@@ -441,11 +441,6 @@ def _compute_success(
     # Gate 0.5: Channel B provenance bypass — session JSONL is authoritative.
     match channel_confirmation:
         case ChannelConfirmation.CHANNEL_B:
-            # Channel B confirmed the session completed via the JSONL marker stream.
-            # Skip is_error, empty result, and completion_marker checks — all are
-            # overridden by channel confirmation. Only expected_output_patterns can
-            # prevent success (pattern contracts must still be met).
-            #
             # PRECONDITION: _recover_block_from_assistant_messages MUST be called
             # (and its recovered session substituted) before this function when
             # channel_confirmation=CHANNEL_B and expected_output_patterns is set.

@@ -13,8 +13,8 @@ for actionable findings, commit each fix, and verify tests still pass.
 
 `/autoskillit:resolve-review <feature_branch> <base_branch>`
 
-- **feature_branch** — The PR's head branch (used to find the open PR)
-- **base_branch** — The PR's base branch (e.g., "main")
+- `feature_branch` — The PR's head branch (used to find the open PR)
+- `base_branch` — The PR's base branch (e.g., "main")
 
 The `cwd` is provided by the recipe step's `cwd:` field — the clone with the feature
 branch already checked out.
@@ -59,8 +59,10 @@ If either is missing, abort with:
 ### Step 1: Find the Open PR
 
 ```bash
-gh pr list --head "$feature_branch" --base "$base_branch" \
-  --json number,url -q '.[0] | "\(.number) \(.url)"'
+PR_LIST_OUTPUT=$(gh pr list --head "$feature_branch" --base "$base_branch" \
+  --json number,url -q '.[0] | "\(.number) \(.url)"')
+PR_NUMBER=$(echo "$PR_LIST_OUTPUT" | awk '{print $1}')
+PR_URL=$(echo "$PR_LIST_OUTPUT" | awk '{print $2}')
 ```
 
 Get owner/repo:
@@ -316,6 +318,7 @@ This step is best-effort: failure to post any reply must not affect the exit cod
 After Step 6.5, save all REJECT-classified comments to a JSON file for future analysis:
 
 ```bash
+ts=$(date +%Y%m%d-%H%M%S)
 python3 -c "
 import json, pathlib
 reject_entries = [
@@ -326,13 +329,13 @@ reject_entries = [
         'body': c['body'],
         'evidence': c['evidence'],
         'category': c['category'],
-        'pr_number': {pr_number},
-        'feature_branch': '{feature_branch}',
+        'pr_number': ${PR_NUMBER},
+        'feature_branch': '${feature_branch}',
     }
     for c in classification_map.values()
     if c['verdict'] == 'REJECT'
 ]
-pathlib.Path('temp/resolve-review/reject_patterns_{pr_number}_{ts}.json').write_text(
+pathlib.Path('temp/resolve-review/reject_patterns_${PR_NUMBER}_${ts}.json').write_text(
     json.dumps(reject_entries, indent=2)
 )
 print(f'Saved {len(reject_entries)} reject patterns')

@@ -98,8 +98,7 @@ def test_only_accept_items_trigger_code_changes():
     assert (
         "only apply" in text.lower()
         or "accept items only" in text.lower()
-        or "accept" in text.lower()
-        and "only" in text.lower()
+        or ("accept" in text.lower() and "only" in text.lower())
     ), "SKILL.md must state that code changes are applied only for ACCEPT items"
     # Confirm REJECT and DISCUSS are explicitly excluded from fixes
     assert "reject" in text.lower() and (

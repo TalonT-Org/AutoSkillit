@@ -44,7 +44,6 @@ def test_analysis_phase_documented_before_fix_phase():
 def test_analysis_report_written_before_code_changes():
     """The analysis report must be generated BEFORE any code changes."""
     text = SKILL_TEXT
-    # The SKILL.md must explicitly say the analysis report is written before code changes.
     assert (
         "before any code changes" in text.lower()
         or "before applying" in text.lower()
@@ -143,7 +142,6 @@ def test_inline_reply_posted_for_every_comment():
 def test_accept_reply_references_commit_sha():
     """ACCEPT replies must reference the commit SHA of the fix."""
     text = SKILL_TEXT
-    # Find reply section and check that ACCEPT mentions sha
     assert "commit_sha" in text or "commit sha" in text.lower() or "fixed in" in text.lower(), (
         "SKILL.md must state that ACCEPT replies reference the fixing commit SHA"
     )
@@ -195,7 +193,6 @@ def test_reject_patterns_persisted_to_json():
 def test_report_includes_all_three_classification_counts():
     """The final report must show ACCEPT, REJECT, and DISCUSS statistics."""
     text = SKILL_TEXT
-    # Find the report block (Step 7)
     report_idx = text.find("### Step 7")
     assert report_idx != -1, "SKILL.md must have a Step 7 (Report)"
     report_section = text[report_idx:]

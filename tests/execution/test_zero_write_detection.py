@@ -2,14 +2,14 @@
 
 Verifies the behavioral write-count gate that detects silent degradation —
 sessions that report success but produced zero Edit/Write tool calls on a
-skill classified as write-expected.
+skill classified as write-expected via WriteBehaviorSpec.
 """
 
 from __future__ import annotations
 
 import json
 
-from autoskillit.core import RetryReason, extract_skill_name
+from autoskillit.core import RetryReason, WriteBehaviorSpec, extract_skill_name
 from autoskillit.execution.headless import _build_skill_result
 from tests.conftest import _make_result
 
@@ -40,40 +40,99 @@ def _ndjson_with_tool_uses(tool_names: list[str]) -> str:
 class TestZeroWriteDetection:
     """Zero-write gate: write-expected skills must produce writes."""
 
-    def test_zero_writes_on_write_expected_skill_fails(self) -> None:
+    def test_always_write_zero_writes_fails(self) -> None:
         stdout = _ndjson_with_tool_uses(["Read", "Grep"])  # no Edit/Write
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
-            skill_command="/dry-walkthrough temp/plan.md",
+            skill_command="/make-plan task",
+            write_behavior=WriteBehaviorSpec(mode="always"),
         )
         assert not sr.success
         assert sr.subtype == "zero_writes"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.ZERO_WRITES
 
-    def test_nonzero_writes_on_write_expected_skill_succeeds(self) -> None:
+    def test_always_write_nonzero_writes_passes(self) -> None:
         stdout = _ndjson_with_tool_uses(["Read", "Edit", "Write"])
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
-            skill_command="/dry-walkthrough temp/plan.md",
+            skill_command="/make-plan task",
+            write_behavior=WriteBehaviorSpec(mode="always"),
         )
         assert sr.success is True
         assert sr.subtype != "zero_writes"
 
-    def test_zero_writes_on_read_only_skill_succeeds(self) -> None:
+    def test_conditional_write_pattern_absent_passes(self) -> None:
+        """Conditional skill, zero writes, pattern NOT in output → writes not expected → pass."""
+        stdout = _ndjson_with_tool_uses(["Read", "Grep"])
+        # Inject output that does NOT contain conflict_report_path
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "worktree_path = /tmp/wt",
+            "session_id": "test-sess",
+        }
+        stdout = _ndjson_with_tool_uses(["Read"]).rsplit("\n", 1)[0] + "\n" + json.dumps(
+            result_record
+        )
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/resolve-merge-conflicts",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"conflict_report_path\s*=\s*/.+",),
+            ),
+        )
+        assert sr.success is True
+
+    def test_conditional_write_pattern_present_zero_writes_fails(self) -> None:
+        """Conditional skill, zero writes, pattern IN output → writes expected → fail."""
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "conflict_report_path = /tmp/wt/temp/report.md\nworktree_path = /tmp/wt",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/resolve-merge-conflicts",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"conflict_report_path\s*=\s*/.+",),
+            ),
+        )
+        assert not sr.success
+        assert sr.subtype == "zero_writes"
+
+    def test_no_write_behavior_passes(self) -> None:
+        """WriteBehaviorSpec with mode=None → gate inactive → pass."""
         stdout = _ndjson_with_tool_uses(["Read", "Grep"])
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
-            skill_command="/investigate error in module",
+            skill_command="/investigate err",
+            write_behavior=WriteBehaviorSpec(),
         )
         assert sr.success is True
-        assert sr.subtype != "zero_writes"
 
-    def test_zero_writes_with_no_tool_uses_on_write_expected_fails(self) -> None:
+    def test_none_write_behavior_param_passes(self) -> None:
+        """write_behavior=None → backward compatible, no gate → pass."""
+        stdout = _ndjson_with_tool_uses(["Read", "Grep"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/investigate err",
+            write_behavior=None,
+        )
+        assert sr.success is True
+
+    def test_zero_writes_with_no_tool_uses_on_always_write_fails(self) -> None:
         stdout = _ndjson_with_tool_uses([])  # no tool uses at all
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
             skill_command="/make-plan task description",
+            write_behavior=WriteBehaviorSpec(mode="always"),
         )
         assert not sr.success
         assert sr.subtype == "zero_writes"

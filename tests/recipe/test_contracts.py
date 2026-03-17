@@ -504,6 +504,7 @@ FILE_PRODUCING_SKILLS_WITH_CONTRACTS: list[str] = [
     "investigate",
     "make-plan",
     "rectify",
+    "design-guards",
     "diagnose-ci",
     "review-approach",
     "setup-project",
@@ -576,4 +577,63 @@ def test_generate_recipe_card_includes_output_patterns(tmp_path: Path) -> None:
     )
     assert open_pr_card["expected_output_patterns"], (
         "expected_output_patterns must be non-empty in the card"
+    )
+
+
+# ---------------------------------------------------------------------------
+# write_behavior contract tests
+# ---------------------------------------------------------------------------
+
+
+def test_write_behavior_always_loaded() -> None:
+    """make-plan contract declares write_behavior='always' with no patterns."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("make-plan", manifest)
+    assert contract is not None
+    assert contract.write_behavior == "always"
+    assert contract.write_expected_when == []
+
+
+def test_write_behavior_conditional_loaded() -> None:
+    """resolve-merge-conflicts declares conditional write_behavior with patterns."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("resolve-merge-conflicts", manifest)
+    assert contract is not None
+    assert contract.write_behavior == "conditional"
+    assert len(contract.write_expected_when) > 0
+    assert any("conflict_report_path" in p for p in contract.write_expected_when)
+
+
+def test_write_behavior_defaults_to_none() -> None:
+    """investigate has no write_behavior — defaults to None."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("investigate", manifest)
+    assert contract is not None
+    assert contract.write_behavior is None
+
+
+ALWAYS_WRITE_SKILLS = {
+    "dry-walkthrough",
+    "implement-worktree",
+    "implement-worktree-no-merge",
+    "resolve-failures",
+    "resolve-review",
+    "retry-worktree",
+    "rectify",
+    "make-plan",
+    "report-bug",
+    "design-guards",
+    "write-recipe",
+    "diagnose-ci",
+}
+
+
+@pytest.mark.parametrize("skill_name", sorted(ALWAYS_WRITE_SKILLS))
+def test_every_always_write_skill_has_contract(skill_name: str) -> None:
+    """Every skill that should always write must declare write_behavior='always'."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract(skill_name, manifest)
+    assert contract is not None, f"Skill '{skill_name}' missing from skill_contracts.yaml"
+    assert contract.write_behavior == "always", (
+        f"Skill '{skill_name}' expected write_behavior='always', got '{contract.write_behavior}'"
     )

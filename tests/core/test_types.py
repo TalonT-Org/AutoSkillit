@@ -276,3 +276,28 @@ def test_skill_result_to_json_omits_worktree_path_when_none():
     )
     data = json.loads(sr.to_json())
     assert "worktree_path" not in data
+
+
+# ---------------------------------------------------------------------------
+# WriteBehaviorSpec and WriteExpectedResolver
+# ---------------------------------------------------------------------------
+
+
+def test_write_expected_skills_frozenset_removed() -> None:
+    """WRITE_EXPECTED_SKILLS must not exist — replaced by contract-driven gate."""
+    import autoskillit.core.types as types_mod
+
+    assert not hasattr(types_mod, "WRITE_EXPECTED_SKILLS")
+
+
+def test_write_behavior_spec_dataclass() -> None:
+    """WriteBehaviorSpec must be importable with correct defaults."""
+    from autoskillit.core import WriteBehaviorSpec
+
+    default = WriteBehaviorSpec()
+    assert default.mode is None
+    assert default.expected_when == ()
+    always = WriteBehaviorSpec(mode="always")
+    assert always.mode == "always"
+    cond = WriteBehaviorSpec(mode="conditional", expected_when=("pat",))
+    assert cond.expected_when == ("pat",)

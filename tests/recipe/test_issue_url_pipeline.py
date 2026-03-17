@@ -253,6 +253,8 @@ class TestClaimReleaseGates:
         "implementation",
         "remediation",
     ]
+    # All current recipes have release_issue_success. This list exists so that
+    # test_split_lists_are_exhaustive catches any future recipe missing the step.
     RECIPES_WITHOUT_RELEASE_SUCCESS_STEP: list[str] = []
 
     def test_split_lists_are_exhaustive(self):

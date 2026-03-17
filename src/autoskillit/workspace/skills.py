@@ -95,7 +95,15 @@ class SkillResolver:
         """List all public bundled skills from both directories."""
         bundled = _scan_directory(SkillSource.BUNDLED, self._dir)
         extended = _scan_directory(SkillSource.BUNDLED_EXTENDED, self._extended_dir)
-        return sorted(bundled + extended, key=lambda s: s.name)
+        combined = sorted(bundled + extended, key=lambda s: s.name)
+        # Structural guard: no name may appear in both directories.
+        names = [s.name for s in combined]
+        dupes = {n for n in names if names.count(n) > 1}
+        if dupes:
+            raise RuntimeError(
+                f"Skill name collision across skills/ and skills_extended/: {sorted(dupes)}"
+            )
+        return combined
 
 
 def bundled_skills_dir() -> Path:

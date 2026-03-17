@@ -15,7 +15,13 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import ClaudeDirectoryConventions, ValidatedAddDir, _atomic_write, get_logger
+from autoskillit.core import (
+    ClaudeDirectoryConventions,
+    SkillSource,
+    ValidatedAddDir,
+    _atomic_write,
+    get_logger,
+)
 from autoskillit.workspace.skills import SkillInfo, SkillResolver, detect_project_local_overrides
 
 if TYPE_CHECKING:
@@ -121,14 +127,25 @@ def _should_inject_skill(
 ) -> bool:
     """Return True if this skill should be written to the ephemeral session dir.
 
-    cook_session=True bypasses all restrictions: the human cook always sees the
-    full bundled menu regardless of project-local overrides or disabled subsets.
+    Three-stage decision model:
+    1. Channel deduplication (unconditional) — BUNDLED skills are already served
+       by --plugin-dir; project-local overrides are already visible via CWD
+       auto-discovery.  These gates run regardless of session mode.
+    2. Cook bypass — cook_session=True skips subset filtering so the cook sees
+       the full extended menu.
+    3. Subset filtering — disabled categories and custom tags.
     """
+    # Channel deduplication — unconditional, regardless of session mode.
+    # BUNDLED skills are already registered via --plugin-dir (Channel 1).
+    if skill_info.source == SkillSource.BUNDLED:
+        return False
+    # Project-local overrides are already visible via CWD auto-discovery (Channel 3).
+    if skill_info.name in overrides:
+        return False
+    # Subset filtering — cook_session bypasses this (the cook sees the full menu).
     if cook_session:
         return True
     if _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
-        return False
-    if skill_info.name in overrides:
         return False
     return True
 
@@ -237,7 +254,9 @@ class DefaultSessionSkillManager:
                 disabled_subsets=disabled_subsets,
                 custom_tags=custom_tags,
             ):
-                if skill_info.name in overrides:
+                if skill_info.source == SkillSource.BUNDLED:
+                    _log.debug("init_session_plugin_dir_skip", skill=skill_info.name)
+                elif skill_info.name in overrides:
                     _log.debug("init_session_override_skip", skill=skill_info.name)
                 elif _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
                     _log.debug("init_session_subset_skip", skill=skill_info.name)

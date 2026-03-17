@@ -40,6 +40,10 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
   so is the wrong default. Up to 8 PRs should be processed in a single parallel batch;
   launch additional batches for larger sets.
 
+## Arguments
+
+`{base_branch}` — the base branch to list PRs against (e.g., `main`)
+
 ## Workflow
 
 ### Step 0: Authenticate and List PRs

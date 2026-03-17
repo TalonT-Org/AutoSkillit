@@ -138,9 +138,12 @@ If push fails (no remote, network issue), log the error and exit successfully.
 ### Step 6: Create GitHub Issue
 Write the issue body to a temp file, then:
 ```bash
+TEMP_ISSUE_BODY="temp/pipeline-summary/issue_body_$(date +%Y%m%d-%H%M%S).md"
+mkdir -p "$(dirname "${TEMP_ISSUE_BODY}")"
+# [write the issue body content to ${TEMP_ISSUE_BODY} here]
 gh issue create \
   --title "Pipeline Run Summary — {date}: {bug_count} bug(s) fixed" \
-  --body-file {temp_issue_body} \
+  --body-file "${TEMP_ISSUE_BODY}" \
   --label "pipeline-summary"
 ```
 Capture the issue URL from stdout. If the label doesn't exist, retry without `--label`.
@@ -150,9 +153,12 @@ Output: `issue_url={url}`
 ### Step 7: Create Pull Request
 Write the PR body to a temp file (reference the issue), then:
 ```bash
+TEMP_PR_BODY="temp/pipeline-summary/pr_body_$(date +%Y%m%d-%H%M%S).md"
+mkdir -p "$(dirname "${TEMP_PR_BODY}")"
+# [write the PR body content to ${TEMP_PR_BODY} here]
 gh pr create \
   --title "Pipeline fixes — {date}" \
-  --body-file {temp_pr_body} \
+  --body-file "${TEMP_PR_BODY}" \
   --base {target_branch} \
   --head {feature_branch}
 ```

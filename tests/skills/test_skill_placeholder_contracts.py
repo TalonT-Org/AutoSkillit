@@ -12,10 +12,16 @@ the value from ambient context and produce incorrect shell commands.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
+
+from autoskillit.recipe._skill_placeholder_parser import (
+    extract_bash_blocks,
+    extract_bash_placeholders,
+    extract_declared_ingredients,
+    shell_vars_assigned,
+)
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _SKILL_DIRS = [
@@ -105,15 +111,6 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("process-issues", "recipe"),  # recipe name from manifest
         ("triage-issues", "number"),  # per-issue iteration value
         ("triage-issues", "recipe"),  # recipe name from manifest
-        # ── PART B TRACKING ──────────────────────────────────────────────────────────
-        # These are genuine undefined-placeholder bugs intentionally deferred to Part B.
-        # Part B will fix: analyze-prs (add ## Arguments for base_branch),
-        # merge-pr (declare base_branch as ingredient or move Step 1.5 after value is known),
-        # pipeline-summary (add explicit temp file path capture before gh commands).
-        ("analyze-prs", "base_branch"),
-        ("merge-pr", "base_branch"),
-        ("pipeline-summary", "temp_issue_body"),
-        ("pipeline-summary", "temp_pr_body"),
     }
 )
 
@@ -131,68 +128,6 @@ def _all_skill_mds() -> list[tuple[str, Path]]:
     return result
 
 
-def _extract_bash_blocks(content: str) -> list[str]:
-    return re.findall(r"```bash\s*\n(.*?)```", content, re.DOTALL)
-
-
-def _extract_bash_placeholders(bash_blocks: list[str]) -> set[str]:
-    """
-    Find {identifier} tokens in bash blocks that are NOT shell variable references.
-
-    Shell variable references (${VAR}) are valid bash syntax and are excluded.
-    Only bare {identifier} without a leading $ are template placeholders that
-    must have a declared ingredient source.
-    """
-    placeholders: set[str] = set()
-    for block in bash_blocks:
-        for m in re.finditer(r"(?<![$@])\{([A-Za-z_][A-Za-z0-9_-]*)\}", block):
-            name = m.group(1)
-            # Exclude ALL_UPPERCASE identifiers — git @{upstream}, shell env vars
-            # written in annotation comments use uppercase by convention.
-            if not name.isupper():
-                placeholders.add(name)
-    return placeholders
-
-
-def _extract_declared_ingredients(content: str) -> set[str]:
-    """
-    Extract ingredient names from ## Arguments / ## Ingredients / ## Parameters sections
-    and YAML frontmatter.
-    """
-    declared: set[str] = set()
-    # Standard section heading variants
-    section_re = re.compile(
-        r"^##\s+(?:Arguments|Ingredients|Parameters|Invocation)[^\n]*\n(.*?)(?=^##|\Z)",
-        re.MULTILINE | re.DOTALL,
-    )
-    for sec in section_re.finditer(content):
-        body = sec.group(1)
-        for m in re.finditer(r"\{([A-Za-z_][A-Za-z0-9_-]*)\}", body):
-            declared.add(m.group(1))
-        for m in re.finditer(r"`([A-Za-z_][A-Za-z0-9_-]*)`", body):
-            declared.add(m.group(1))
-    # YAML frontmatter ingredients: key
-    fm = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-    if fm:
-        for m in re.finditer(r"^\s+([A-Za-z_][A-Za-z0-9_-]*):", fm.group(1), re.MULTILINE):
-            declared.add(m.group(1))
-    return declared
-
-
-def _shell_vars_assigned(bash_blocks: list[str]) -> set[str]:
-    """
-    Extract shell variable names assigned anywhere in the skill's bash blocks.
-    A variable assigned as VAR= or VAR=$() is a runtime-captured value — any
-    {placeholder} matching its name (case-insensitive) is implicitly defined.
-    """
-    assigned: set[str] = set()
-    for block in bash_blocks:
-        for m in re.finditer(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=", block, re.MULTILINE):
-            assigned.add(m.group(1))
-            assigned.add(m.group(1).lower())
-    return assigned
-
-
 @pytest.mark.parametrize("skill_name,skill_md", _all_skill_mds())
 def test_no_undefined_bash_placeholders(skill_name: str, skill_md: Path) -> None:
     """
@@ -203,16 +138,16 @@ def test_no_undefined_bash_placeholders(skill_name: str, skill_md: Path) -> None
     placeholder causes the model to guess the value from ambient context.
     """
     content = skill_md.read_text(encoding="utf-8")
-    bash_blocks = _extract_bash_blocks(content)
+    bash_blocks = extract_bash_blocks(content)
     if not bash_blocks:
         return
 
-    used = _extract_bash_placeholders(bash_blocks)
+    used = extract_bash_placeholders(bash_blocks)
     if not used:
         return
 
-    declared = _extract_declared_ingredients(content)
-    assigned = _shell_vars_assigned(bash_blocks)
+    declared = extract_declared_ingredients(content)
+    assigned = shell_vars_assigned(bash_blocks)
     defined = declared | assigned
 
     allowlisted = {name for (sname, name) in _PSEUDOCODE_ALLOWLIST if sname == skill_name}

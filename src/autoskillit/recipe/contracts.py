@@ -57,6 +57,8 @@ class SkillContract:
     outputs: list[SkillOutput]
     expected_output_patterns: list[str] = dataclasses.field(default_factory=list)
     pattern_examples: list[str] = dataclasses.field(default_factory=list)
+    write_behavior: str | None = None
+    write_expected_when: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -142,11 +144,15 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     ]
     patterns = skill_data.get("expected_output_patterns", [])
     examples = skill_data.get("pattern_examples", [])
+    write_behavior = skill_data.get("write_behavior")
+    write_expected_when = skill_data.get("write_expected_when", [])
     return SkillContract(
         inputs=inputs,
         outputs=outputs,
         expected_output_patterns=patterns,
         pattern_examples=examples,
+        write_behavior=write_behavior,
+        write_expected_when=write_expected_when,
     )
 
 
@@ -258,7 +264,7 @@ def generate_recipe_card(
             if skill_name:
                 contract = get_skill_contract(skill_name, manifest)
                 if contract:
-                    skills[skill_name] = {
+                    skill_entry: dict[str, Any] = {
                         "inputs": [
                             {"name": i.name, "type": i.type, "required": i.required}
                             for i in contract.inputs
@@ -267,6 +273,11 @@ def generate_recipe_card(
                         "expected_output_patterns": contract.expected_output_patterns,
                         "pattern_examples": contract.pattern_examples,
                     }
+                    if contract.write_behavior is not None:
+                        skill_entry["write_behavior"] = contract.write_behavior
+                    if contract.write_expected_when:
+                        skill_entry["write_expected_when"] = contract.write_expected_when
+                    skills[skill_name] = skill_entry
                     if count_positional_args(skill_cmd) > 0:
                         # Positional args used — can't verify named inputs by ref
                         entry["required"] = []

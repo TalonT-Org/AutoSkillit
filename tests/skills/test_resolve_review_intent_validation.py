@@ -58,7 +58,7 @@ def test_analysis_report_written_before_code_changes():
 def test_parallel_subagents_per_domain_group():
     """The skill must describe parallel sub-agents grouped by domain/file-area."""
     text = SKILL_TEXT
-    assert "domain" in text.lower() or "file-area" in text.lower() or "group" in text.lower(), (
+    assert "domain group" in text.lower() or "file-area" in text.lower(), (
         "SKILL.md must describe grouping comments by domain or file-area"
     )
     assert "parallel" in text.lower() and (

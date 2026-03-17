@@ -99,8 +99,12 @@ def test_only_accept_items_trigger_code_changes():
         or "accept items only" in text.lower()
         or ("accept" in text.lower() and "only" in text.lower())
     ), "SKILL.md must state that code changes are applied only for ACCEPT items"
-    reject_idx = text.upper().find("REJECT")
-    assert reject_idx != -1, "SKILL.md must mention REJECT classification"
+    gate_idx = text.lower().find("classification gate")
+    if gate_idx == -1:
+        gate_idx = text.lower().find("reject/discuss bypass")
+    assert gate_idx != -1, "SKILL.md must define a classification gate for REJECT/DISCUSS"
+    reject_idx = text.upper().find("REJECT", gate_idx)
+    assert reject_idx != -1, "SKILL.md must mention REJECT in the classification gate section"
     reject_context = text[reject_idx : reject_idx + 400].lower()
     assert (
         "no code" in reject_context

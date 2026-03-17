@@ -226,7 +226,7 @@ For each finding where the classification map shows `verdict = ACCEPT`
 
 **Classification gate — REJECT/DISCUSS bypass:**
 For findings where the classification map shows `verdict = REJECT` or `verdict = DISCUSS`:
-- For REJECT: record `(file, line, reason="classifier: REJECT — {evidence}")`
+- For REJECT: no code changes are applied; record `(file, line, reason="classifier: REJECT — {evidence}")`
 - For DISCUSS: record `(file, line, reason="classifier: DISCUSS — {context}")`
 - Do NOT add these findings' `thread_node_id` to `addressed_thread_ids`
 

@@ -17,28 +17,33 @@ class TestDefaultMergeQueueWatcher:
     def _make_watcher(self) -> DefaultMergeQueueWatcher:
         return DefaultMergeQueueWatcher(token=None)
 
-    def _pr_state(
+    def _queue_state(
         self,
         *,
-        state: str = "open",
         merged: bool = False,
-        auto_merge: object = None,
-        mergeable_state: str = "clean",
+        state: str = "OPEN",
+        merge_state_status: str = "CLEAN",
+        auto_merge_enabled_at: datetime | None = None,
+        pr_node_id: str = "PR_kwDO_test",
+        in_queue: bool = False,
+        queue_state: str | None = None,
     ) -> dict:
         return {
-            "state": state,
             "merged": merged,
-            "auto_merge": auto_merge,
-            "mergeable_state": mergeable_state,
+            "state": state,
+            "merge_state_status": merge_state_status,
+            "auto_merge_enabled_at": auto_merge_enabled_at,
+            "pr_node_id": pr_node_id,
+            "in_queue": in_queue,
+            "queue_state": queue_state,
         }
 
     @pytest.mark.anyio
     async def test_returns_merged_on_first_pr_state_check(self):
         watcher = self._make_watcher()
-        watcher._fetch_pr_state = AsyncMock(  # type: ignore[method-assign]
-            return_value=self._pr_state(merged=True)
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=self._queue_state(merged=True)
         )
-        watcher._fetch_queue_entries = AsyncMock(return_value=[])  # type: ignore[method-assign]
         result = await watcher.wait(
             pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
         )
@@ -47,9 +52,10 @@ class TestDefaultMergeQueueWatcher:
 
     @pytest.mark.anyio
     async def test_returns_merged_when_pr_closed_and_merged(self):
+        """merged=True takes priority over state=CLOSED."""
         watcher = self._make_watcher()
-        watcher._fetch_pr_state = AsyncMock(  # type: ignore[method-assign]
-            return_value=self._pr_state(state="closed", merged=True)
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=self._queue_state(state="CLOSED", merged=True)
         )
         result = await watcher.wait(
             pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
@@ -59,33 +65,33 @@ class TestDefaultMergeQueueWatcher:
 
     @pytest.mark.anyio
     async def test_returns_ejected_when_not_in_queue_not_stuck(self):
+        """Two consecutive 'open, not in queue, no auto_merge' cycles → ejected."""
         watcher = self._make_watcher()
-        watcher._fetch_pr_state = AsyncMock(  # type: ignore[method-assign]
-            return_value=self._pr_state(auto_merge=None)
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=self._queue_state(
+                merged=False, in_queue=False, auto_merge_enabled_at=None, merge_state_status="BLOCKED"
+            )
         )
-        watcher._fetch_queue_entries = AsyncMock(return_value=[])  # type: ignore[method-assign]
-        result = await watcher.wait(
-            pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
-        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
+            )
         assert result["success"] is False
         assert result["pr_state"] == "ejected"
 
     @pytest.mark.anyio
     async def test_keeps_polling_while_pr_in_queue(self):
         watcher = self._make_watcher()
-        pr_call_count = 0
+        call_count = 0
 
-        async def _pr_state_side(*_a: object, **_kw: object) -> dict:
-            nonlocal pr_call_count
-            pr_call_count += 1
-            if pr_call_count >= 3:
-                return self._pr_state(merged=True)
-            return self._pr_state(merged=False)
+        async def _fetch_side(*_a: object, **_kw: object) -> dict:
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 3:
+                return self._queue_state(merged=True)
+            return self._queue_state(in_queue=True, queue_state="AWAITING_CHECKS")
 
-        watcher._fetch_pr_state = _pr_state_side  # type: ignore[method-assign]
-        watcher._fetch_queue_entries = AsyncMock(  # type: ignore[method-assign]
-            return_value=[{"pr_number": 42, "state": "AWAITING_CHECKS"}]
-        )
+        watcher._fetch_pr_and_queue_state = _fetch_side  # type: ignore[method-assign]
 
         with patch(
             "autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock
@@ -100,30 +106,33 @@ class TestDefaultMergeQueueWatcher:
 
     @pytest.mark.anyio
     async def test_stuck_detection_triggers_toggle_once(self):
+        """Stalled PR (auto_merge set, grace expired) triggers toggle and then merges."""
         watcher = self._make_watcher()
         toggle_calls: list[int] = []
-        pr_call_count = 0
+        call_count = 0
+        enabled_at = datetime.now(timezone.utc) - timedelta(seconds=120)
 
-        async def _pr_state_side(*_a: object, **_kw: object) -> dict:
-            nonlocal pr_call_count
-            pr_call_count += 1
-            if pr_call_count >= 2:
-                return self._pr_state(merged=True)
-            return self._pr_state(
-                auto_merge={"method": "squash"},
-                mergeable_state="clean",
+        async def _fetch_side(*_a: object, **_kw: object) -> dict:
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 4:
+                return self._queue_state(merged=True)
+            return self._queue_state(
+                auto_merge_enabled_at=enabled_at,
+                merge_state_status="CLEAN",
+                in_queue=False,
             )
 
         async def _toggle_side(*_a: object, **_kw: object) -> None:
             toggle_calls.append(1)
 
-        watcher._fetch_pr_state = _pr_state_side  # type: ignore[method-assign]
-        watcher._fetch_queue_entries = AsyncMock(return_value=[])  # type: ignore[method-assign]
+        watcher._fetch_pr_and_queue_state = _fetch_side  # type: ignore[method-assign]
         watcher._toggle_auto_merge = _toggle_side  # type: ignore[method-assign]
 
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             result = await watcher.wait(
-                pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
+                pr_number=42, target_branch="main", repo="owner/repo",
+                poll_interval=1, stall_grace_period=60,
             )
 
         assert result["success"] is True
@@ -133,11 +142,8 @@ class TestDefaultMergeQueueWatcher:
     @pytest.mark.anyio
     async def test_returns_timeout_when_deadline_exceeded(self):
         watcher = self._make_watcher()
-        watcher._fetch_pr_state = AsyncMock(  # type: ignore[method-assign]
-            return_value=self._pr_state(merged=False)
-        )
-        watcher._fetch_queue_entries = AsyncMock(  # type: ignore[method-assign]
-            return_value=[{"pr_number": 42, "state": "AWAITING_CHECKS"}]
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=self._queue_state(in_queue=True, queue_state="AWAITING_CHECKS")
         )
 
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
@@ -159,8 +165,8 @@ class TestDefaultMergeQueueWatcher:
     @pytest.mark.anyio
     async def test_returns_ejected_when_pr_closed_not_merged(self):
         watcher = self._make_watcher()
-        watcher._fetch_pr_state = AsyncMock(  # type: ignore[method-assign]
-            return_value=self._pr_state(state="closed", merged=False)
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=self._queue_state(state="CLOSED", merged=False)
         )
         result = await watcher.wait(
             pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
@@ -170,10 +176,11 @@ class TestDefaultMergeQueueWatcher:
 
     @pytest.mark.anyio
     async def test_http_error_in_pr_state_logs_and_retries(self):
+        """Fetch error is caught and retried; subsequent success returns merged."""
         watcher = self._make_watcher()
         call_count = 0
 
-        async def _pr_state_side(*_a: object, **_kw: object) -> dict:
+        async def _fetch_side(*_a: object, **_kw: object) -> dict:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -182,9 +189,9 @@ class TestDefaultMergeQueueWatcher:
                     request=httpx.Request("GET", "http://x"),
                     response=httpx.Response(500),
                 )
-            return self._pr_state(merged=True)
+            return self._queue_state(merged=True)
 
-        watcher._fetch_pr_state = _pr_state_side  # type: ignore[method-assign]
+        watcher._fetch_pr_and_queue_state = _fetch_side  # type: ignore[method-assign]
 
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             result = await watcher.wait(
@@ -195,27 +202,19 @@ class TestDefaultMergeQueueWatcher:
         assert result["pr_state"] == "merged"
 
     @pytest.mark.anyio
-    async def test_graphql_error_falls_through_as_empty_queue(self):
-        """GraphQL error is caught; stuck PR continues via toggle path (not direct ejection)."""
+    async def test_graphql_error_falls_through_as_retry(self):
+        """GraphQL fetch error is caught and retried; subsequent success returns merged."""
         watcher = self._make_watcher()
-        pr_call_count = 0
-        toggle_calls: list[int] = []
+        call_count = 0
 
-        async def _pr_state_side(*_a: object, **_kw: object) -> dict:
-            nonlocal pr_call_count
-            pr_call_count += 1
-            if pr_call_count >= 2:
-                return self._pr_state(merged=True)
-            return self._pr_state(auto_merge={"method": "squash"}, mergeable_state="clean")
+        async def _fetch_side(*_a: object, **_kw: object) -> dict:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise RuntimeError("GraphQL error: connection error")
+            return self._queue_state(merged=True)
 
-        async def _toggle_side(*_a: object, **_kw: object) -> None:
-            toggle_calls.append(1)
-
-        watcher._fetch_pr_state = _pr_state_side  # type: ignore[method-assign]
-        watcher._fetch_queue_entries = AsyncMock(  # type: ignore[method-assign]
-            side_effect=httpx.RequestError("connection error")
-        )
-        watcher._toggle_auto_merge = _toggle_side  # type: ignore[method-assign]
+        watcher._fetch_pr_and_queue_state = _fetch_side  # type: ignore[method-assign]
 
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             result = await watcher.wait(
@@ -224,11 +223,10 @@ class TestDefaultMergeQueueWatcher:
 
         assert result["success"] is True
         assert result["pr_state"] == "merged"
-        assert len(toggle_calls) == 1, "graphql error caught; stuck-path toggle must fire"
 
     @pytest.mark.anyio
     async def test_graphql_errors_raise(self):
-        """GraphQL error responses should raise, not silently return []."""
+        """GraphQL error responses from _fetch_pr_and_queue_state should raise."""
         watcher = self._make_watcher()
 
         async def _mock_post(*args, **kwargs):
@@ -241,7 +239,7 @@ class TestDefaultMergeQueueWatcher:
 
         watcher._client.post = _mock_post  # type: ignore[method-assign]
         with pytest.raises(RuntimeError, match="GraphQL error"):
-            await watcher._fetch_queue_entries("owner", "repo", "main")
+            await watcher._fetch_pr_and_queue_state(42, "owner", "repo", "main")
 
 
 class TestMergeQueueReliability:

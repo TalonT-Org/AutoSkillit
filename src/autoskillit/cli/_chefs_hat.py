@@ -51,7 +51,10 @@ def chefs_hat() -> None:
 
     from autoskillit.config import load_config
     from autoskillit.core import pkg_root
+    from autoskillit.core.logging import configure_logging
     from autoskillit.execution import build_interactive_cmd
+
+    configure_logging()
 
     session_id = uuid.uuid4().hex[:16]
     ephemeral_root = resolve_ephemeral_root()

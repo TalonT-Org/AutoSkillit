@@ -70,6 +70,7 @@ class ClaudeSessionResult:
     token_usage: dict[str, Any] | None = None
     assistant_messages: list[str] = field(default_factory=list)
     tool_uses: list[dict[str, Any]] = field(default_factory=list)
+    jsonl_context_exhausted: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
@@ -85,24 +86,34 @@ class ClaudeSessionResult:
             self.subtype = "unknown" if self.subtype is None else str(self.subtype)
         if not isinstance(self.session_id, str):
             self.session_id = "" if self.session_id is None else str(self.session_id)
+        if not isinstance(self.jsonl_context_exhausted, bool):
+            self.jsonl_context_exhausted = bool(self.jsonl_context_exhausted)
 
     def _is_context_exhausted(self) -> bool:
         """Detect context window exhaustion from Claude's error output.
 
-        Requires both ``is_error=True`` AND the marker to appear in the
-        ``errors`` list (structured CLI signal).  Falls back to checking
-        ``result`` only when the subtype is a known error subtype, to
-        narrow false-positives from model prose that happens to contain
-        the marker phrase.
+        Three detection paths (evaluated in priority order):
+
+        1. JSONL flat-record fallback (Channel B): when parse_session_result detected
+           a flat assistant record with zero output tokens and the marker text. This
+           path fires regardless of is_error — it is race-resilient because it reads
+           the raw NDJSON stream rather than the drained result field.
+
+        2. Primary: is_error=True AND marker in the structured errors list.
+
+        3. Fallback: is_error=True AND marker in session.result, restricted to known
+           error subtypes to avoid false positives from model prose.
         """
+        # Path 1: JSONL flat-record detection — bypasses is_error guard
+        if self.jsonl_context_exhausted:
+            return True
         if not self.is_error:
             return False
-        # Primary: check the structured errors list from Claude CLI
+        # Path 2: structured errors list from Claude CLI
         marker = CONTEXT_EXHAUSTION_MARKER
         if any(marker in e.lower() for e in self.errors):
             return True
-        # Fallback: only trust result text for error subtypes, not execution errors
-        # where the model's own output could contain the marker phrase
+        # Path 3: result text — restricted to error subtypes
         if self.subtype in ("success", "error_max_turns") and marker in self.result.lower():
             return True
         return False
@@ -218,6 +229,56 @@ _KNOWN_RESULT_KEYS: frozenset[str] = frozenset(
 )
 
 
+def _detect_flat_context_exhaustion(stdout: str) -> bool:
+    """Detect context exhaustion from a flat assistant JSONL record.
+
+    Claude Code CLI emits a flat (no 'message' wrapper) assistant record when
+    the context window is exhausted with is_error=False:
+
+        {"type": "assistant",
+         "content": [{"type": "text", "text": "Prompt is too long"}],
+         "output_tokens": 0, "input_tokens": 0, ...}
+
+    This record does NOT appear in session.result (stdout drain race) and is
+    NOT captured by the existing is_error-gated detection paths. Scanning the
+    raw NDJSON stream for this pattern makes detection race-resilient.
+
+    Returns True only when:
+    - record type is "assistant"
+    - record has no "message" key (flat structure)
+    - "output_tokens" at top level is 0
+    - at least one content text block contains CONTEXT_EXHAUSTION_MARKER
+    """
+    marker = CONTEXT_EXHAUSTION_MARKER
+    for line in stdout.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        if obj.get("type") != "assistant":
+            continue
+        if "message" in obj:
+            continue  # standard wrapped record — not the flat context-exhaustion format
+        if obj.get("output_tokens", -1) != 0:
+            continue
+        content = obj.get("content", [])
+        if not isinstance(content, list):
+            continue
+        if any(
+            isinstance(block, dict)
+            and block.get("type") == "text"
+            and marker in block.get("text", "").lower()
+            for block in content
+        ):
+            return True
+    return False
+
+
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
     """Parse Claude Code's --output-format json stdout into a typed result.
 
@@ -306,6 +367,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         token_usage=token_usage,
         assistant_messages=assistant_messages,
         tool_uses=tool_uses,
+        jsonl_context_exhausted=_detect_flat_context_exhaustion(stdout),
     )
 
 
@@ -689,6 +751,10 @@ def _normalize_subtype(
     # raw_subtype == "success" but outcome is FAILED or RETRIABLE — synthesize.
     if not session.result.strip():
         return "empty_result"
+    # JSONL context exhaustion: report accurate subtype instead of masking as
+    # missing_completion_marker (REQ-CED-002).
+    if session.jsonl_context_exhausted:
+        return "context_exhausted"
     if completion_marker and completion_marker not in session.result:
         return "missing_completion_marker"
     return "adjudicated_failure"

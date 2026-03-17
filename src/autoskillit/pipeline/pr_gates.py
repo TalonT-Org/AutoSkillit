@@ -113,7 +113,7 @@ def partition_files_by_domain(
     file_paths: list[str],
     domain_paths: dict[str, list[str]] | None = None,
 ) -> dict[str, list[str]]:
-    """Bucket each file path into the first matching domain prefix; unmatched paths go to "Other"."""
+    """Bucket each file path into the first matching domain prefix; unmatched go to 'Other'."""
     mapping = domain_paths if domain_paths is not None else DOMAIN_PATHS
     buckets: dict[str, list[str]] = {}
 

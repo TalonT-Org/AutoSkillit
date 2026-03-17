@@ -60,12 +60,14 @@ conflicts from earlier merges in the queue.
 ```bash
 gh pr view {pr_number} --json number,title,headRefName,baseRefName,body,additions,deletions,files
 gh pr diff {pr_number}
+BASE_BRANCH=$(gh pr view {pr_number} --json baseRefName --jq '.baseRefName')
 ```
 
 Extract:
 - `pr_branch`: the headRefName
 - `pr_title`: the title
 - `pr_files`: list of changed file paths
+- `BASE_BRANCH`: the baseRefName (target branch of the PR, e.g. `main`)
 
 Fetch the PR branch locally:
 ```bash
@@ -80,11 +82,12 @@ deliberately deleted from the base branch after the PR's branch point.
 **This step runs for ALL PRs regardless of complexity tag.**
 
 ```bash
+BASE_BRANCH=$(gh pr view {pr_number} --json baseRefName --jq '.baseRefName')
 # 1. Find the divergence point between this PR and the base branch
-MERGE_BASE=$(git merge-base origin/{base_branch} origin/{pr_branch})
+MERGE_BASE=$(git merge-base origin/${BASE_BRANCH} origin/{pr_branch})
 
 # 2. Files deleted from base since the branch point
-DELETED_FILES=$(git diff --name-only --diff-filter=D ${MERGE_BASE} origin/{base_branch})
+DELETED_FILES=$(git diff --name-only --diff-filter=D ${MERGE_BASE} origin/${BASE_BRANCH})
 
 # 3. Symbols (functions/classes) removed from files this PR modifies,
 #    relative to base (catches deletions in files that still exist)
@@ -92,7 +95,7 @@ PR_FILES=$(git diff --name-only ${MERGE_BASE}...origin/{pr_branch})
 if [ -n "$PR_FILES" ]; then
   DELETED_SYMBOLS=$(
     echo "$PR_FILES" | \
-    git diff --diff-filter=M ${MERGE_BASE} origin/{base_branch} --pathspecs-from-file=- \
+    git diff --diff-filter=M ${MERGE_BASE} origin/${BASE_BRANCH} --pathspecs-from-file=- \
       | grep '^-' \
       | grep -E '^-(def |class |async def )' \
       | sed 's/^-//' \
@@ -130,10 +133,10 @@ items must NOT be reintroduced in the implementation.
 
 ```bash
 # For each regressed file: find the commit that deleted it on base
-git log --diff-filter=D --oneline --follow -- {file_path} origin/{base_branch} | head -1
+git log --diff-filter=D --oneline --follow -- {file_path} origin/${BASE_BRANCH} | head -1
 
 # For each regressed symbol: find the commit that removed it
-git log --diff-filter=M --oneline -p -- {file_path} origin/{base_branch} \
+git log --diff-filter=M --oneline -p -- {file_path} origin/${BASE_BRANCH} \
   | grep -B20 "^-def {symbol_name}\|^-class {symbol_name}" \
   | grep "^[0-9a-f]\{7,\}" \
   | head -1
@@ -192,8 +195,8 @@ Launch an Explore subagent to:
 
 2. Get the current integration branch's changes since base_branch:
    ```bash
-   git log {base_branch}..HEAD --oneline
-   git diff {base_branch}...HEAD --stat
+   git log ${BASE_BRANCH}..HEAD --oneline
+   git diff ${BASE_BRANCH}...HEAD --stat
    ```
 2. Get this PR's full diff: the diff fetched in Step 1
 3. Identify file-level overlap: files in the PR diff that also appear in the integration branch diff
@@ -225,7 +228,7 @@ Before writing the conflict report, fetch the complete set of files changed on t
 
 ```bash
 # All files changed on the PR branch relative to the base
-git diff {base_branch}...origin/{pr_branch} --name-only
+git diff ${BASE_BRANCH}...origin/{pr_branch} --name-only
 ```
 
 Classify each file into one of three categories:

@@ -81,10 +81,13 @@ Correct orchestration on `needs_retry=true`:
 ### Step 1: Create Git Worktree
 
 ```bash
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 WORKTREE_NAME="impl-{plan_name}-$(date +%Y%m%d-%H%M%S)"
 WORKTREE_PATH="../worktrees/${WORKTREE_NAME}"
 git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
 WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
+mkdir -p ".autoskillit/temp/worktrees/${WORKTREE_NAME}"
+echo "${CURRENT_BRANCH}" > ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch"
 ```
 
 ### Step 1.5: Initialize Code Index for Original Project
@@ -177,8 +180,9 @@ If tests fail, fix the issue and re-run.
 ### Step 6: Rebase for Squash-and-Merge
 
 ```bash
+CURRENT_BRANCH=$(cat ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch")
 git fetch origin
-git rebase origin/{base_branch}
+git rebase origin/${CURRENT_BRANCH}
 ```
 
 If conflicts occur, resolve them, `git rebase --continue`, then re-run tests. Report rebase status.
@@ -192,9 +196,14 @@ Do not merge until user confirms first!
 
 Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
 
+```bash
+CURRENT_BRANCH=$(cat ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch")
+```
+
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${WORKTREE_NAME}
+base_branch = ${CURRENT_BRANCH}
 ```
 
 ### Step 7.5: Reset Code Index to Original Project (REQUIRED)

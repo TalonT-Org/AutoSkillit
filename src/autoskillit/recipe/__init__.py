@@ -16,6 +16,7 @@ from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401
 from autoskillit.recipe import rules_inputs as _rules_inputs  # noqa: E402 F401
 from autoskillit.recipe import rules_merge as _rules_merge  # noqa: E402 F401
 from autoskillit.recipe import rules_recipe as _rules_recipe  # noqa: E402 F401
+from autoskillit.recipe import rules_skill_content as _rules_skill_content  # noqa: E402 F401
 from autoskillit.recipe import rules_skills as _rules_skills  # noqa: E402 F401
 from autoskillit.recipe import rules_tools as _rules_tools  # noqa: E402 F401
 from autoskillit.recipe import rules_verdict as _rules_verdict  # noqa: E402 F401

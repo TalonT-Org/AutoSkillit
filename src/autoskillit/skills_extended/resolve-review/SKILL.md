@@ -367,7 +367,7 @@ Status: PASS
 
 Save full report to:
 - Analysis report: `temp/resolve-review/analysis_{pr_number}_{ts}.md` (written before code changes)
-- Final report: `temp/resolve-review/report_{pr_number}_{timestamp}.md`
+- Final report: `temp/resolve-review/report_{pr_number}_{ts}.md`
 
 Exit 0.
 
@@ -376,4 +376,4 @@ Exit 0.
 No structured output tokens are emitted. The recipe's `resolve_review` step has no
 `capture:` block — success/failure drives routing, not captured values.
 
-Summary written to: `temp/resolve-review/report_{pr_number}_{timestamp}.md` (relative to the current working directory)
+Summary written to: `temp/resolve-review/report_{pr_number}_{ts}.md` (relative to the current working directory)

@@ -74,3 +74,45 @@ def test_audit_impl_no_go_pattern_matches_literal_output(skills):
             f"Pattern {pattern!r} does not match 'verdict = NO GO' — "
             f"SKILL.md line 340 mandates space-separated format."
         )
+
+
+def test_every_pattern_example_matches_its_patterns(skills):
+    """For every skill with expected_output_patterns and pattern_examples,
+    every pattern must re.search-match at least one example.
+
+    Permanent architectural guard: pattern/SKILL.md divergence fails CI before production.
+    """
+    import re
+
+    failures = []
+    for skill_name, contract in skills.items():
+        patterns = contract.get("expected_output_patterns", [])
+        examples = contract.get("pattern_examples", [])
+        if not patterns or not examples:
+            continue
+        for pattern in patterns:
+            if not any(re.search(pattern, ex) for ex in examples):
+                failures.append(
+                    f"Skill '{skill_name}': pattern {pattern!r} "
+                    f"matches none of the examples {examples!r}"
+                )
+    assert not failures, (
+        "Contract patterns do not match their declared examples:\n" + "\n".join(failures)
+    )
+
+
+def test_every_skill_with_patterns_has_examples(skills):
+    """Every skill with expected_output_patterns must also declare pattern_examples.
+
+    Prevents adding patterns without verifiable examples.
+    """
+    missing = [
+        skill_name
+        for skill_name, contract in skills.items()
+        if contract.get("expected_output_patterns") and not contract.get("pattern_examples")
+    ]
+    assert not missing, (
+        "These skills have expected_output_patterns but no pattern_examples:\n"
+        + "\n".join(f"  - {s}" for s in sorted(missing))
+        + "\nAdd pattern_examples to skill_contracts.yaml."
+    )

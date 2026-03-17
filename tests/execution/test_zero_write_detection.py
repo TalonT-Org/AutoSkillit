@@ -73,8 +73,8 @@ class TestZeroWriteDetection:
             "result": "worktree_path = /tmp/wt",
             "session_id": "test-sess",
         }
-        stdout = _ndjson_with_tool_uses(["Read"]).rsplit("\n", 1)[0] + "\n" + json.dumps(
-            result_record
+        stdout = (
+            _ndjson_with_tool_uses(["Read"]).rsplit("\n", 1)[0] + "\n" + json.dumps(result_record)
         )
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),

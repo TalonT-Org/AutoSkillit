@@ -836,6 +836,7 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
             timeout: float | None = None,
             stale_threshold: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
+            write_behavior=None,
         ) -> SkillResult:
             calls.append((skill_command, cwd))
             return SkillResult(
@@ -879,6 +880,7 @@ async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> Non
             timeout: float | None = None,
             stale_threshold: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
+            write_behavior=None,
         ) -> SkillResult:
             captured["add_dirs"] = add_dirs
             captured["cwd"] = cwd

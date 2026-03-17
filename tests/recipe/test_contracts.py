@@ -504,7 +504,6 @@ FILE_PRODUCING_SKILLS_WITH_CONTRACTS: list[str] = [
     "investigate",
     "make-plan",
     "rectify",
-    "design-guards",
     "diagnose-ci",
     "review-approach",
     "setup-project",

@@ -33,7 +33,6 @@ from autoskillit.core import (
     ValidatedAddDir,
     WriteBehaviorSpec,
     claude_code_project_dir,
-    extract_skill_name,
     get_logger,
 )
 from autoskillit.execution.commands import build_headless_cmd

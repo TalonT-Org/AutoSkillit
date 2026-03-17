@@ -1043,6 +1043,26 @@ class TestExtractWorktreePath:
             result = _extract_worktree_path([msg])
             assert result == "/path/to/wt"
 
+    def test_relative_path_with_dotdot_is_discarded(self) -> None:
+        """Relative worktree_path tokens (../...) are silently discarded; returns None."""
+        result = _extract_worktree_path(["worktree_path = ../worktrees/impl-fix-20260307"])
+        assert result is None
+
+    def test_relative_path_without_slash_prefix_is_discarded(self) -> None:
+        """Any non-absolute form is silently discarded."""
+        result = _extract_worktree_path(["worktree_path = worktrees/impl-fix-20260307"])
+        assert result is None
+
+    def test_absolute_wins_over_subsequent_relative(self) -> None:
+        """If an absolute token appears before a relative one, the absolute path is returned."""
+        result = _extract_worktree_path(
+            [
+                "worktree_path = /abs/worktrees/impl-first",
+                "worktree_path = ../worktrees/impl-second",
+            ]
+        )
+        assert result == "/abs/worktrees/impl-first"
+
 
 class TestBuildSkillResultWorktreePath:
     """_build_skill_result extracts worktree_path on context exhaustion."""
@@ -1171,6 +1191,38 @@ class TestWorktreePathOnContextExhaustion:
         assert sr.success is False
         assert data["needs_retry"] is True
         assert data["worktree_path"] == path
+
+
+def test_relative_worktree_path_causes_adjudicated_failure() -> None:
+    """Regression guard for issue #412.
+
+    implement-worktree-no-merge emitting worktree_path = ../worktrees/...
+    must classify as adjudicated_failure, not success.
+    Uses the real contract pattern from skill_contracts.yaml.
+    """
+    ndjson = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": (
+                "worktree_path = ../worktrees/impl-fix-20260316\n"
+                "branch_name = impl-fix-20260316\n"
+                "%%ORDER_UP%%"
+            ),
+            "session_id": "test-412",
+        }
+    )
+    skill_result = _build_skill_result(
+        _sr(stdout=ndjson),
+        completion_marker="%%ORDER_UP%%",
+        expected_output_patterns=["worktree_path\\s*=\\s*/.+"],
+        cwd="/some/project",
+        skill_command="implement-worktree-no-merge",
+    )
+    assert skill_result.subtype == "adjudicated_failure"
+    assert skill_result.success is False
+    assert skill_result.needs_retry is False
 
 
 class TestBuildSkillResultCompleted:

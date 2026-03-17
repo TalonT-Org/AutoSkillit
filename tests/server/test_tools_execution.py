@@ -1140,3 +1140,34 @@ class TestRunHeadlessCoreFlushTelemetry:
         assert len(report) == 1
         assert report[0]["step_name"] == "plan"
         assert report[0]["total_seconds"] >= 0.0
+
+
+class TestRunSkillCwdValidation:
+    """run_skill rejects non-empty relative cwd at the boundary."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_rejects_relative_cwd(self, tool_ctx):
+        """Non-empty relative cwd is rejected immediately with a clear diagnostic."""
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:retry-worktree plan.md ../worktrees/impl-fix",
+                cwd="../worktrees/impl-fix-20260316",
+            )
+        )
+        assert result["success"] is False
+        assert "cwd must be an absolute path" in result["error"]
+        assert "../worktrees/impl-fix-20260316" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_run_skill_accepts_empty_cwd(self, tool_ctx):
+        """Empty cwd is accepted (some skills have no specific cwd requirement)."""
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
+        result = json.loads(await run_skill("/investigate foo", cwd=""))
+        assert result["success"] is True
+
+    @pytest.mark.anyio
+    async def test_run_skill_accepts_absolute_cwd(self, tool_ctx):
+        """Absolute cwd passes the boundary check and proceeds normally."""
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
+        result = json.loads(await run_skill("/investigate foo", cwd="/tmp"))
+        assert result["success"] is True

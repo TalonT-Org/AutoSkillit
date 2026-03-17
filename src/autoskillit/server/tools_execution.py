@@ -32,6 +32,13 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
+def _is_absolute_path(path: str) -> bool:
+    """Return True if path is an absolute filesystem path."""
+    from pathlib import Path
+
+    return Path(path).is_absolute()
+
+
 @mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("run_cmd")
 async def run_cmd(
@@ -176,6 +183,17 @@ async def run_skill(
         return gate
     if (cmd_error := _validate_skill_command(skill_command)) is not None:
         return cmd_error
+    if cwd and not _is_absolute_path(cwd):
+        return json.dumps(
+            {
+                "success": False,
+                "error": (
+                    f"run_skill: cwd must be an absolute path, got: {cwd!r}. "
+                    "Check that the skill resolved the worktree_path to absolute "
+                    '(e.g. WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)").'
+                ),
+            }
+        )
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="run_skill", cwd=cwd)
     logger.info("run_skill", command=skill_command[:80], cwd=cwd)

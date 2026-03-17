@@ -84,6 +84,7 @@ Correct orchestration on `needs_retry=true`:
 WORKTREE_NAME="impl-{plan_name}-$(date +%Y%m%d-%H%M%S)"
 WORKTREE_PATH="../worktrees/${WORKTREE_NAME}"
 git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
+WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
 ```
 
 ### Step 1.5: Initialize Code Index for Original Project

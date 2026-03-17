@@ -151,3 +151,81 @@ def _check_missing_pattern_examples(ctx: ValidationContext) -> list[RuleFinding]
                 )
             )
     return findings
+
+
+_VALID_WRITE_BEHAVIORS = {"always", "conditional"}
+
+
+@semantic_rule(
+    name="write-behavior-consistency",
+    description="Validates write_behavior declarations in skill contracts",
+    severity=Severity.ERROR,
+)
+def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFinding]:
+    """Validate write_behavior and write_expected_when contract declarations."""
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill_name = resolve_skill_name(skill_cmd)
+        if not skill_name:
+            continue
+
+        contract = get_skill_contract(skill_name, manifest)
+        if contract is None:
+            continue
+
+        wb = contract.write_behavior
+        wew = contract.write_expected_when
+
+        if wb is not None and wb not in _VALID_WRITE_BEHAVIORS:
+            findings.append(
+                RuleFinding(
+                    rule="write-behavior-consistency",
+                    step_name=step_name,
+                    message=(
+                        f"Invalid write_behavior '{wb}'. "
+                        "Must be 'always', 'conditional', or absent."
+                    ),
+                    severity=Severity.ERROR,
+                )
+            )
+        if wb == "conditional" and not wew:
+            findings.append(
+                RuleFinding(
+                    rule="write-behavior-consistency",
+                    step_name=step_name,
+                    message="write_behavior='conditional' requires non-empty write_expected_when.",
+                    severity=Severity.ERROR,
+                )
+            )
+        if wb == "always" and wew:
+            findings.append(
+                RuleFinding(
+                    rule="write-behavior-consistency",
+                    step_name=step_name,
+                    message=(
+                        "write_behavior='always' must not have "
+                        "write_expected_when (contradictory)."
+                    ),
+                    severity=Severity.WARNING,
+                )
+            )
+        for pattern in wew:
+            try:
+                _re.compile(pattern)
+            except _re.error as exc:
+                findings.append(
+                    RuleFinding(
+                        rule="write-behavior-consistency",
+                        step_name=step_name,
+                        message=f"Invalid regex in write_expected_when: {exc}",
+                        severity=Severity.ERROR,
+                    )
+                )
+
+    return findings

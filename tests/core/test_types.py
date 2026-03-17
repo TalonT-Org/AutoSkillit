@@ -23,6 +23,7 @@ def test_retry_reason_values():
         RetryReason.NONE,
         RetryReason.BUDGET_EXHAUSTED,
         RetryReason.EARLY_STOP,
+        RetryReason.ZERO_WRITES,
     }
     assert RetryReason.NONE.value == "none"
 

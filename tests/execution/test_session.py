@@ -1034,6 +1034,7 @@ class TestSkillResult:
             "stderr",
             "token_usage",
             "write_path_warnings",
+            "write_call_count",
         }
         assert set(parsed.keys()) == expected
 

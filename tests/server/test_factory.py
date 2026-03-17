@@ -75,6 +75,7 @@ def test_make_context_all_service_fields_populated_includes_github_client():
     assert ctx.workspace_mgr is not None
     assert ctx.clone_mgr is not None
     assert ctx.github_client is not None
+    assert ctx.skill_resolver is not None
     assert isinstance(ctx.recipes, DefaultRecipeRepository)
     assert isinstance(ctx.migrations, DefaultMigrationService)
     assert isinstance(ctx.db_reader, DefaultDatabaseReader)

@@ -138,11 +138,75 @@ When a finding matches multiple tiers, use the highest severity.
 
 **Filter:** Include `critical` and `warning` only. Skip `info` findings entirely.
 
+### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes)
+
+Before applying any fix, validate every critical and warning finding against the actual
+codebase and git history. This analysis phase runs entirely before code changes are made.
+
+**Domain grouping:** Group all critical+warning findings by the top-level path segment of
+their `path` field:
+- `src/autoskillit/execution/headless.py` → group `execution`
+- `tests/skills/test_foo.py` → group `tests`
+- `src/autoskillit/server/tools_ci.py` → group `server`
+
+This produces 3–6 groups on a typical PR. Launch one parallel sub-agent per group using
+the Task tool (`model: "sonnet"`).
+
+**Sub-agent prompt template** — each sub-agent receives:
+- The list of comments in its domain group (with `path`, `line`, `body`, `diff_hunk`)
+- Instructions to read the actual code at each flagged line (±30 lines context)
+- Instructions to run `git log --follow -p --max-count=5 -- {path}` to trace original intent via git history
+- Instructions to classify each comment as `ACCEPT`, `REJECT`, or `DISCUSS` with:
+  - `verdict`: the classification (`ACCEPT` / `REJECT` / `DISCUSS`)
+  - `evidence`: specific references (line numbers, function names, API docs, contracts)
+  - `category` (for `REJECT` only): one of `api_direction_misunderstanding`,
+    `false_positive_intentional_pattern`, `design_intent_misread`, `stale_comment`, `other`
+  - `commit_sha_hint`: the most recent commit touching the flagged line (from `git log`)
+
+**Classification criteria:**
+- `ACCEPT` — the reviewer identified a real issue; a code fix is warranted
+- `REJECT` — the reviewer is factually wrong (misread a guard, misunderstood an API,
+  failed to recognize an intentional design pattern); do NOT change the code
+- `DISCUSS` — the comment raises a valid design question that requires a human decision;
+  flag for human review, do NOT change the code automatically
+
+**Output from each sub-agent** — a JSON array:
+```json
+[
+  {
+    "comment_id": 123,
+    "path": "src/autoskillit/execution/headless.py",
+    "line": 42,
+    "verdict": "REJECT",
+    "evidence": "The method never raises — this is contractual (see docstring line 12 and callers in tools_execution.py:88)",
+    "category": "false_positive_intentional_pattern",
+    "commit_sha_hint": "abc1234"
+  }
+]
+```
+
+**Fallback:** If a sub-agent fails or times out, classify all comments in that group as
+`DISCUSS` (safe fallback — no code is changed, human reviews). Log the failure.
+
+**Merge results** into a `classification_map: dict[comment_id, verdict_entry]`.
+
+**Write analysis report** to `temp/resolve-review/analysis_{pr_number}_{ts}.md` before
+any code changes are made. The report must include a summary banner:
+```
+Analysis complete (BEFORE any code changes)
+ACCEPT: N | REJECT: N | DISCUSS: N
+```
+
+Track: `accept_count`, `reject_count`, `discuss_count`.
+
+---
+
 ### Step 4: Apply Fixes (max 3 iterations)
 
 Initialize `addressed_thread_ids: list[str] = []` before processing findings.
 
-For each actionable finding (process critical findings first, then warnings):
+For each finding where the classification map shows `verdict = ACCEPT`
+(process critical findings first, then warnings):
 
 1. Read the referenced file and ±20 lines of context around the comment line
 2. Understand what the reviewer is requesting
@@ -157,6 +221,12 @@ For each actionable finding (process critical findings first, then warnings):
 
 **Apply the fix flow:** After committing the fix:
 - Append the finding's `thread_node_id` to `addressed_thread_ids` (if not `None`).
+
+**Classification gate — REJECT/DISCUSS bypass:**
+For findings where the classification map shows `verdict = REJECT` or `verdict = DISCUSS`:
+- For REJECT: record `(file, line, reason="classifier: REJECT — {evidence}")`
+- For DISCUSS: record `(file, line, reason="classifier: DISCUSS — {context}")`
+- Do NOT add these findings' `thread_node_id` to `addressed_thread_ids`
 
 **Skip a finding if:**
 - The referenced file does not exist in the current branch
@@ -204,6 +274,69 @@ This step is a best-effort operation. Failure to resolve any thread must never c
 overall skill to exit non-zero. Thread resolution failure does not affect the exit code of
 the overall skill.
 
+### Step 6.5: Post Inline Replies
+
+For every comment that was analyzed (i.e., every comment that passed the critical+warning
+filter in Step 3), post an inline reply using the GitHub comment reply API. Each analyzed
+comment receives exactly one reply based on its classification.
+
+```bash
+# Build reply body based on classification:
+# ACCEPT:
+BODY="Agreed — fixed in ${commit_sha}. ${evidence}"
+# REJECT:
+BODY="Investigated — this is intentional. ${evidence}"
+# DISCUSS:
+BODY="Valid observation — flagged for design decision. ${evidence}"
+
+gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies \
+  --method POST \
+  --field body="${BODY}"
+```
+
+For ACCEPT replies, use the `commit_sha` from the most recent commit made in Step 4
+(i.e., `git log --format="%H" -1` after committing the fix). If the comment was
+classified as ACCEPT but skipped in Step 4 (stale comment, etc.), omit the commit sha
+reference.
+
+For REJECT replies, include specific evidence (line numbers, design contracts, API
+references) from the sub-agent's `evidence` field so the reply is self-contained and
+suitable for future automated mining.
+
+Track:
+- `reply_posted_count: int` — successfully posted replies
+- `reply_failed_count: int` — replies that failed (log warning, continue)
+
+This step is best-effort: failure to post any reply must not affect the exit code.
+
+### Step 6.6: Persist Reject Patterns
+
+After Step 6.5, save all REJECT-classified comments to a JSON file for future analysis:
+
+```bash
+python3 -c "
+import json, pathlib
+reject_entries = [
+    {
+        'comment_id': c['comment_id'],
+        'path': c['path'],
+        'line': c['line'],
+        'body': c['body'],
+        'evidence': c['evidence'],
+        'category': c['category'],
+        'pr_number': {pr_number},
+        'feature_branch': '{feature_branch}',
+    }
+    for c in classification_map.values()
+    if c['verdict'] == 'REJECT'
+]
+pathlib.Path('temp/resolve-review/reject_patterns_{pr_number}_{ts}.json').write_text(
+    json.dumps(reject_entries, indent=2)
+)
+print(f'Saved {len(reject_entries)} reject patterns')
+"
+```
+
 ### Step 7: Report
 
 Print a structured summary to terminal:
@@ -215,16 +348,24 @@ Findings fetched: {total}
   - critical: {n}
   - warning: {n}
   - info: {n} (skipped — below threshold)
-Fixes applied: {n}
+Intent validation (before code changes):
+  - ACCEPT: {accept_count}
+  - REJECT: {reject_count}
+  - DISCUSS: {discuss_count}
+Fixes applied: {accept_count - skipped_in_fix_phase}
 Fixes skipped: {n}
   - {file}:{line} — {reason}
 Threads resolved: {resolved_count}/{len(addressed_thread_ids)}
   - {resolve_failed_count} failed (warnings logged above)
+Inline replies: {reply_posted_count} posted / {reply_failed_count} failed
+Reject patterns saved: temp/resolve-review/reject_patterns_{pr_number}_{ts}.json
 Test iterations: {n}
 Status: PASS
 ```
 
-Save full report to `temp/resolve-review/report_{pr_number}_{timestamp}.md`. (relative to the current working directory)
+Save full report to:
+- Analysis report: `temp/resolve-review/analysis_{pr_number}_{ts}.md` (written before code changes)
+- Final report: `temp/resolve-review/report_{pr_number}_{timestamp}.md`
 
 Exit 0.
 

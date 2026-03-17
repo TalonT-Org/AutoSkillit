@@ -564,6 +564,8 @@ steps:
         route: confirm_cleanup
       - when: "${{ result.pr_state }} == ejected"
         route: queue_ejected_fix
+      - when: "${{ result.pr_state }} == stalled"
+        route: reenroll_stalled_pr
       - route: confirm_cleanup
     on_failure: confirm_cleanup
     skip_when_false: "inputs.open_pr"
@@ -571,7 +573,18 @@ steps:
       Waits up to 15 minutes for the PR to merge through the queue.
       merged → proceed to confirm_cleanup (done).
       ejected → conflict fix cycle then re-enter.
+      stalled → lightweight re-enrollment (disable then re-enable auto-merge).
       timeout → confirm_cleanup (pipeline done; human monitors queue).
+
+  reenroll_stalled_pr:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --disable-auto && gh pr merge '${{ context.pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "reenroll_stalled_pr"
+    on_success: wait_for_queue
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
 
   queue_ejected_fix:
     tool: run_skill

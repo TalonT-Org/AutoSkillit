@@ -276,6 +276,8 @@ async def wait_for_merge_queue(
     remote_url: str = "",
     timeout_seconds: int = 600,
     poll_interval: int = 15,
+    stall_grace_period: int = 60,
+    max_stall_retries: int = 3,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Poll a PR's progress through GitHub's merge queue until merged, ejected, or timed out.
@@ -290,9 +292,19 @@ async def wait_for_merge_queue(
                     when both are provided.
         timeout_seconds: Total polling budget (default 600s).
         poll_interval: Seconds between polls (default 15s).
+        stall_grace_period: Seconds after auto-merge is enabled before stall recovery
+                    may trigger. Prevents intervention during normal queue processing
+                    (default 60s).
+        max_stall_retries: Maximum disable/re-enable toggle attempts before declaring
+                    the PR stalled and returning pr_state="stalled" (default 3).
 
     Returns:
-        JSON: {"success": bool, "pr_state": "merged"|"ejected"|"timeout"|"error", "reason": str}
+        JSON: {
+            "success": bool,
+            "pr_state": "merged"|"ejected"|"stalled"|"timeout"|"error",
+            "reason": str,
+            "stall_retries_attempted": int,
+        }
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -331,5 +343,7 @@ async def wait_for_merge_queue(
         cwd=cwd,
         timeout_seconds=timeout_seconds,
         poll_interval=poll_interval,
+        stall_grace_period=stall_grace_period,
+        max_stall_retries=max_stall_retries,
     )
     return json.dumps(result)

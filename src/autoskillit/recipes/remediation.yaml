@@ -577,11 +577,11 @@ steps:
       timeout → confirm_cleanup (pipeline done; human monitors queue).
 
   reenroll_stalled_pr:
-    tool: run_cmd
+    tool: toggle_auto_merge
     with:
-      cmd: "gh pr merge '${{ context.pr_number }}' --disable-auto && gh pr merge '${{ context.pr_number }}' --squash --auto"
+      pr_number: "${{ context.pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "reenroll_stalled_pr"
     on_success: wait_for_queue
     on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"

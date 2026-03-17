@@ -301,6 +301,7 @@ steps:
       cwd: "${{ context.worktree_path }}"
       step_name: "assess"
     on_success: test
+    on_context_limit: test
     on_failure: release_issue_failure
     on_exhausted: release_issue_failure
 

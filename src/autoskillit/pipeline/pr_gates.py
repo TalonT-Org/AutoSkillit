@@ -113,22 +113,7 @@ def partition_files_by_domain(
     file_paths: list[str],
     domain_paths: dict[str, list[str]] | None = None,
 ) -> dict[str, list[str]]:
-    """Partition a list of changed file paths into named analysis domains.
-
-    Each file is assigned to the first domain whose prefix it matches
-    (definition order in ``domain_paths``). Files matching no domain
-    prefix are placed in an ``"Other"`` bucket. Only non-empty buckets
-    are included in the returned dict.
-
-    Args:
-        file_paths: Relative paths of changed files (e.g. from git diff --name-only).
-        domain_paths: Override the default ``DOMAIN_PATHS`` mapping — useful for
-            tests that need deterministic, isolated domain definitions.
-
-    Returns:
-        Mapping of domain name → list of file paths in that domain.
-        Only domains with at least one matching file are present.
-    """
+    """Bucket each file path into the first matching domain prefix; unmatched paths go to "Other"."""
     mapping = domain_paths if domain_paths is not None else DOMAIN_PATHS
     buckets: dict[str, list[str]] = {}
 

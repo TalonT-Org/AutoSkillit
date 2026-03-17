@@ -87,7 +87,22 @@ def _check_pattern_examples_match(ctx: ValidationContext) -> list[RuleFinding]:
         if not contract or not contract.expected_output_patterns or not contract.pattern_examples:
             continue
         for pattern in contract.expected_output_patterns:
-            if not any(_re.search(pattern, ex) for ex in contract.pattern_examples):
+            try:
+                matched = any(_re.search(pattern, ex) for ex in contract.pattern_examples)
+            except _re.error:
+                findings.append(
+                    RuleFinding(
+                        rule="pattern-examples-match",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"Skill '{name}': pattern {pattern!r} is not a valid regex "
+                            f"and cannot be matched against pattern_examples."
+                        ),
+                    )
+                )
+                continue
+            if not matched:
                 findings.append(
                     RuleFinding(
                         rule="pattern-examples-match",

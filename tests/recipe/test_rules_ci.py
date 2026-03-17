@@ -1,9 +1,9 @@
-"""Tests for the ci-polling-inline-shell semantic rule."""
+"""Tests for CI semantic rules: ci-polling-inline-shell and ci-failure-missing-conflict-gate."""
 
 from __future__ import annotations
 
 from autoskillit.core import Severity
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
@@ -16,6 +16,18 @@ def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
         version="0.2.0",
         kitchen_rules="Use wait_for_ci.",
         steps=steps,
+    )
+
+
+def _make_workflow(steps: dict[str, dict]) -> Recipe:
+    """Helper that accepts YAML-style step dicts and constructs a Recipe."""
+    parsed_steps = {name: _parse_step(data) for name, data in steps.items()}
+    return Recipe(
+        name="test-ci-conflict-gate",
+        description="Test recipe for ci-failure-missing-conflict-gate rule.",
+        version="0.2.0",
+        kitchen_rules="Use conflict gates.",
+        steps=parsed_steps,
     )
 
 
@@ -81,3 +93,146 @@ def test_bundled_recipes_no_inline_ci_polling() -> None:
             f"Recipe '{yaml_path.stem}' has inline CI polling: "
             + ", ".join(f.message for f in ci_findings)
         )
+
+
+# ---------------------------------------------------------------------------
+# ci-failure-missing-conflict-gate rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_ci_failure_missing_conflict_gate_fires_on_direct_resolve() -> None:
+    """wait_for_ci → resolve_ci (resolve-failures) with no gate → ERROR."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {"tool": "wait_for_ci", "on_success": "done", "on_failure": "resolve_ci"},
+            "resolve_ci": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-failures work_dir plan_path main"},
+                "on_success": "done",
+                "on_failure": "done",
+            },
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    names = [f.rule for f in findings]
+    assert "ci-failure-missing-conflict-gate" in names
+
+
+def test_ci_failure_missing_gate_fires_through_diagnose_ci() -> None:
+    """wait_for_ci → diagnose_ci → resolve_ci with no gate → ERROR."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {"tool": "wait_for_ci", "on_success": "done", "on_failure": "diagnose_ci"},
+            "diagnose_ci": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci branch - - tests.yml"},
+                "on_success": "resolve_ci",
+                "on_failure": "resolve_ci",
+            },
+            "resolve_ci": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-failures work_dir plan main"},
+                "on_success": "done",
+                "on_failure": "done",
+            },
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    names = [f.rule for f in findings]
+    assert "ci-failure-missing-conflict-gate" in names
+
+
+def test_ci_failure_conflict_gate_passes_with_merge_base_cmd() -> None:
+    """wait_for_ci → detect_conflict(run_cmd merge-base) → resolve-failures → no error."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_success": "done",
+                "on_failure": "detect_conflict",
+            },
+            "detect_conflict": {
+                "tool": "run_cmd",
+                "with": {
+                    "cmd": (
+                        "git fetch origin main && ! git merge-base --is-ancestor origin/main HEAD"
+                    )
+                },
+                "on_success": "done",
+                "on_failure": "resolve_ci",
+            },
+            "resolve_ci": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-failures work plan main"},
+                "on_success": "done",
+                "on_failure": "done",
+            },
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    names = [f.rule for f in findings]
+    assert "ci-failure-missing-conflict-gate" not in names
+
+
+def test_ci_failure_conflict_gate_passes_with_resolve_merge_conflicts() -> None:
+    """wait_for_ci → resolve-merge-conflicts gate → no error."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {
+                "tool": "wait_for_ci",
+                "on_success": "done",
+                "on_failure": "ci_conflict_fix",
+            },
+            "ci_conflict_fix": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-merge-conflicts work plan main"},
+                "on_success": "resolve_ci",
+                "on_failure": "done",
+            },
+            "resolve_ci": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:resolve-failures work plan main"},
+                "on_success": "done",
+                "on_failure": "done",
+            },
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    names = [f.rule for f in findings]
+    assert "ci-failure-missing-conflict-gate" not in names
+
+
+def test_ci_failure_no_resolve_failures_skips_rule() -> None:
+    """wait_for_ci → diagnose_ci → cleanup (no resolve-failures) → no error."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {"tool": "wait_for_ci", "on_success": "done", "on_failure": "diagnose_ci"},
+            "diagnose_ci": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:diagnose-ci branch - - tests.yml"},
+                "on_success": "done",
+                "on_failure": "done",
+            },
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    names = [f.rule for f in findings]
+    assert "ci-failure-missing-conflict-gate" not in names
+
+
+def test_ci_failure_no_on_failure_skips_rule() -> None:
+    """wait_for_ci with no on_failure routing → no error."""
+    wf = _make_workflow(
+        {
+            "ci_watch": {"tool": "wait_for_ci", "on_success": "done"},
+            "done": {"action": "stop", "message": "done"},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    names = [f.rule for f in findings]
+    assert "ci-failure-missing-conflict-gate" not in names

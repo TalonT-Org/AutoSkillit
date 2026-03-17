@@ -32,6 +32,7 @@ class RetryReason(StrEnum):
     NONE = "none"
     BUDGET_EXHAUSTED = "budget_exhausted"
     EARLY_STOP = "early_stop"
+    ZERO_WRITES = "zero_writes"
 
 
 class MergeFailedStep(StrEnum):
@@ -548,6 +549,25 @@ SKILL_COMMAND_PREFIX: str = "/"
 # Canonical prefix for bundled autoskillit slash commands.
 AUTOSKILLIT_SKILL_PREFIX: str = "/autoskillit:"
 
+# Skills whose primary action is file modification — sessions that produce zero
+# Edit/Write tool calls on these skills are demoted to retriable failure.
+WRITE_EXPECTED_SKILLS: frozenset[str] = frozenset(
+    {
+        "dry-walkthrough",
+        "implement-worktree",
+        "implement-worktree-no-merge",
+        "resolve-failures",
+        "resolve-review",
+        "resolve-merge-conflicts",
+        "retry-worktree",
+        "rectify",
+        "make-plan",
+        "report-bug",
+        "design-guards",
+        "write-recipe",
+    }
+)
+
 
 @dataclass
 class FailureRecord:
@@ -594,6 +614,7 @@ class SkillResult:
     worktree_path: str | None = None
     cli_subtype: str = field(default="")
     write_path_warnings: list[str] = field(default_factory=list)
+    write_call_count: int = 0
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -609,6 +630,7 @@ class SkillResult:
             "stderr": self.stderr,
             "token_usage": self.token_usage,
             "write_path_warnings": self.write_path_warnings,
+            "write_call_count": self.write_call_count,
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path

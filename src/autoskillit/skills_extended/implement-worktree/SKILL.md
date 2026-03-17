@@ -180,6 +180,7 @@ If tests fail, fix the issue and re-run.
 ### Step 6: Rebase for Squash-and-Merge
 
 ```bash
+CURRENT_BRANCH=$(cat ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch")
 git fetch origin
 git rebase origin/${CURRENT_BRANCH}
 ```
@@ -194,6 +195,10 @@ Always confirm the merge went through before removing work tree.
 Do not merge until user confirms first!
 
 Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
+
+```bash
+CURRENT_BRANCH=$(cat ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch")
+```
 
 ```
 worktree_path = ${WORKTREE_PATH}

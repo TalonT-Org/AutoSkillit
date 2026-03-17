@@ -425,6 +425,20 @@ class TestSkillResolver:
         """SkillSource.BUNDLED_EXTENDED enum member exists."""
         assert SkillSource.BUNDLED_EXTENDED == "bundled_extended"
 
+    def test_list_all_no_cross_directory_name_collision(self) -> None:
+        """No skill name may appear in both skills/ and skills_extended/.
+
+        If a name collision exists, list_all() raises RuntimeError.
+        This test verifies the current filesystem has no collisions.
+        """
+        resolver = SkillResolver()
+        skills = resolver.list_all()
+        names = [s.name for s in skills]
+        dupes = {n for n in names if names.count(n) > 1}
+        assert not dupes, (
+            f"Skill name collision across skills/ and skills_extended/: {sorted(dupes)}"
+        )
+
 
 class TestSkillCategories:
     # T6 — read_skill_categories() and SkillInfo.categories

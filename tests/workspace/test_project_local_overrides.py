@@ -167,8 +167,12 @@ def test_init_session_logs_override_skip(tmp_path):
     assert any(e.get("skill") == "investigate" for e in skip_events)
 
 
-def test_init_session_cook_session_ignores_project_local_overrides(tmp_path):
-    """T-OVR-012: cook_session=True retains bundled skill despite project-local override."""
+def test_init_session_cook_session_excludes_project_local_overrides(tmp_path):
+    """T-OVR-012: cook_session=True excludes skills with project-local overrides.
+
+    Project-local overrides are already visible via CWD auto-discovery (Channel 3),
+    so the ephemeral dir (Channel 2) must NOT contain them — regardless of session mode.
+    """
     from autoskillit.workspace.session_skills import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
@@ -182,9 +186,9 @@ def test_init_session_cook_session_ignores_project_local_overrides(tmp_path):
 
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-cook", cook_session=True, project_dir=project_dir)
-    assert (skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists(), (
-        "cook_session=True must include bundled 'investigate' "
-        "even when a project-local override exists"
+    assert not (skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists(), (
+        "cook_session=True must NOT include 'investigate' when a project-local "
+        "override exists — CWD auto-discovery already provides it"
     )
 
 
@@ -205,26 +209,28 @@ def test_init_session_cook_session_ignores_disabled_subsets(tmp_path):
 
 
 def test_init_session_cook_full_skill_set_invariant(tmp_path):
-    """T-OVR-014: cook_session=True always yields the full bundled skill set
-    regardless of project_dir overrides and config.subsets.disabled."""
+    """T-OVR-014: cook_session=True yields all BUNDLED_EXTENDED skills minus
+    project-local overrides — but never BUNDLED (Tier 1) skills, which are
+    already served by --plugin-dir.
+
+    The cook bypasses subset-disable filtering but NOT channel deduplication.
+    """
     from autoskillit.config import AutomationConfig, SubsetsConfig
+    from autoskillit.core.types import SkillSource
     from autoskillit.workspace.session_skills import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
     )
     from autoskillit.workspace.skills import SkillResolver
 
-    # Set up maximally hostile project_dir: override every possible skill
+    # Override exactly one extended skill to test override exclusion
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    resolver = SkillResolver()
-    all_skills = resolver.list_all()
-    for skill in all_skills:
-        d = project_dir / ".claude" / "skills" / skill.name
-        d.mkdir(parents=True)
-        (d / "SKILL.md").write_text("# override")
+    override = project_dir / ".claude" / "skills" / "investigate"
+    override.mkdir(parents=True)
+    (override / "SKILL.md").write_text("# override")
 
-    # Config disables all known categories
+    # Config disables all known categories — cook should bypass this
     config = AutomationConfig(
         subsets=SubsetsConfig(disabled=["github", "audit", "arch-lens", "ci"])
     )
@@ -233,10 +239,99 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
         "sess-invariant", cook_session=True, config=config, project_dir=project_dir
     )
 
-    expected_names = {s.name for s in all_skills}
+    resolver = SkillResolver()
+    all_skills = resolver.list_all()
+    # Expected: all BUNDLED_EXTENDED skills except project-local overrides
+    expected_names = {s.name for s in all_skills if s.source != SkillSource.BUNDLED} - {
+        "investigate"
+    }
     skills_base = skills_dir / ".claude" / "skills"
     actual_names = {d.name for d in skills_base.iterdir() if d.is_dir()}
-    missing = expected_names - actual_names
+    assert actual_names == expected_names, (
+        f"cook_session=True ephemeral dir mismatch.\n"
+        f"  Missing: {sorted(expected_names - actual_names)}\n"
+        f"  Extra:   {sorted(actual_names - expected_names)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T-OVR-015..017: Channel-aware exclusion — Tier 1 deduplication
+# ---------------------------------------------------------------------------
+
+
+def test_cook_session_excludes_tier1_from_ephemeral_dir(tmp_path):
+    """T-OVR-015: init_session(cook_session=True) must NOT write BUNDLED skills
+    to the ephemeral dir — they are already served by --plugin-dir (Channel 1)."""
+    from autoskillit.core.types import SkillSource
+    from autoskillit.workspace.session_skills import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+    )
+    from autoskillit.workspace.skills import SkillResolver
+
+    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
+    skills_dir = mgr.init_session("sess-tier1", cook_session=True)
+
+    resolver = SkillResolver()
+    tier1_names = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED}
+    skills_base = skills_dir / ".claude" / "skills"
+    actual_names = {d.name for d in skills_base.iterdir() if d.is_dir()}
+    overlap = tier1_names & actual_names
+    assert not overlap, (
+        f"BUNDLED (Tier 1) skills must NOT appear in ephemeral dir — "
+        f"already served by --plugin-dir. Found: {sorted(overlap)}"
+    )
+
+
+def test_cook_session_excludes_project_local_overrides(tmp_path):
+    """T-OVR-016: init_session(cook_session=True) must NOT write skills that
+    have project-local overrides — CWD auto-discovery already surfaces them."""
+    from autoskillit.workspace.session_skills import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+    )
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    override = project_dir / ".claude" / "skills" / "investigate"
+    override.mkdir(parents=True)
+    (override / "SKILL.md").write_text("# custom investigate")
+
+    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
+    skills_dir = mgr.init_session("sess-ovr", cook_session=True, project_dir=project_dir)
+    assert not (skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists(), (
+        "cook_session=True must exclude 'investigate' when project-local override exists"
+    )
+
+
+def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
+    """T-OVR-017: Regression guard — cook_session=True still writes all
+    BUNDLED_EXTENDED skills that do NOT have project-local overrides."""
+    from autoskillit.core.types import SkillSource
+    from autoskillit.workspace.session_skills import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+    )
+    from autoskillit.workspace.skills import SkillResolver
+
+    # Override exactly one extended skill
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    override = project_dir / ".claude" / "skills" / "investigate"
+    override.mkdir(parents=True)
+    (override / "SKILL.md").write_text("# custom")
+
+    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
+    skills_dir = mgr.init_session("sess-retain", cook_session=True, project_dir=project_dir)
+
+    resolver = SkillResolver()
+    expected = {s.name for s in resolver.list_all() if s.source != SkillSource.BUNDLED} - {
+        "investigate"
+    }
+    skills_base = skills_dir / ".claude" / "skills"
+    actual = {d.name for d in skills_base.iterdir() if d.is_dir()}
+    missing = expected - actual
     assert not missing, (
-        f"cook_session=True must include ALL bundled skills. Missing: {sorted(missing)}"
+        f"cook_session=True must include all non-colliding extended skills. "
+        f"Missing: {sorted(missing)}"
     )

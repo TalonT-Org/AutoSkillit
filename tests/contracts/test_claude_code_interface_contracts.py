@@ -281,6 +281,94 @@ class TestChefsHatAddDirStructure:
         assert add_dir_seen, "Expected at least one --add-dir in command"
         assert not structure_errors, "\n".join(structure_errors)
 
+    def test_chefs_hat_add_dir_excludes_tier1_skills(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Tier 1 skills (open-kitchen, close-kitchen) must NOT appear in --add-dir.
+
+        They are already registered via --plugin-dir. Presence in --add-dir
+        creates duplicate slash commands in the picker.
+        """
+        from autoskillit.workspace.session_skills import (
+            DefaultSessionSkillManager,
+            SkillsDirectoryProvider,
+        )
+
+        ephemeral_root = tmp_path / "ephemeral"
+        ephemeral_root.mkdir()
+        mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root=ephemeral_root)
+        skills_dir = mgr.init_session("ds002-tier1-check", cook_session=True)
+
+        # "open-kitchen" and "close-kitchen" are literal strings — NOT from any constant.
+        for tier1_name in ("open-kitchen", "close-kitchen"):
+            assert not (skills_dir / ".claude" / "skills" / tier1_name / "SKILL.md").exists(), (
+                f"Tier 1 skill '{tier1_name}' found in --add-dir ephemeral dir. "
+                "It is already served by --plugin-dir and must NOT be duplicated."
+            )
+
+
+# ---------------------------------------------------------------------------
+# CC-CHANNEL: Multi-channel skill uniqueness contract
+# ---------------------------------------------------------------------------
+
+
+class TestMultiChannelSkillUniqueness:
+    """Guard: no skill name may appear in more than one discovery channel.
+
+    Channel 1: --plugin-dir (BUNDLED skills)
+    Channel 2: --add-dir (ephemeral session dir, written by init_session)
+    Channel 3: CWD auto-discovery (project-local .claude/skills/)
+
+    Overlap between any two channels produces duplicate slash commands.
+    """
+
+    @pytest.mark.parametrize("cook_session", [True, False], ids=["cook", "headless"])
+    def test_multi_channel_uniqueness_contract(self, tmp_path: Path, cook_session: bool) -> None:
+        from autoskillit.core.types import SkillSource
+        from autoskillit.workspace.session_skills import (
+            DefaultSessionSkillManager,
+            SkillsDirectoryProvider,
+        )
+        from autoskillit.workspace.skills import (
+            SkillResolver,
+            detect_project_local_overrides,
+        )
+
+        # Set up a project dir with one override to exercise Channel 3
+        project_dir = tmp_path / "project"
+        (project_dir / ".claude" / "skills" / "investigate").mkdir(parents=True)
+        (project_dir / ".claude" / "skills" / "investigate" / "SKILL.md").write_text("# custom")
+
+        mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
+        skills_dir = mgr.init_session(
+            "chan-uniq", cook_session=cook_session, project_dir=project_dir
+        )
+
+        # Channel 1: BUNDLED skill names (served by --plugin-dir)
+        resolver = SkillResolver()
+        channel_1 = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED}
+
+        # Channel 2: skills written to ephemeral dir
+        skills_base = skills_dir / ".claude" / "skills"
+        channel_2 = (
+            {d.name for d in skills_base.iterdir() if d.is_dir()}
+            if skills_base.is_dir()
+            else set()
+        )
+
+        # Channel 3: project-local overrides
+        channel_3 = set(detect_project_local_overrides(project_dir))
+
+        overlap_1_2 = channel_1 & channel_2
+        overlap_2_3 = channel_2 & channel_3
+
+        assert not overlap_1_2, (
+            f"Channel 1 (--plugin-dir) ∩ Channel 2 (--add-dir) overlap: {sorted(overlap_1_2)}"
+        )
+        assert not overlap_2_3, (
+            f"Channel 2 (--add-dir) ∩ Channel 3 (CWD) overlap: {sorted(overlap_2_3)}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # CC-005: .mcp.json structure contract

@@ -247,7 +247,7 @@ def test_init_session_skips_disabled_builtin_category(tmp_path: Path) -> None:
     provider.list_skills.return_value = [
         SkillInfo(
             name="fake-github-skill",
-            source=SkillSource.BUNDLED,
+            source=SkillSource.BUNDLED_EXTENDED,
             path=skill_dir / "SKILL.md",
             categories=frozenset({"github"}),
         )
@@ -281,7 +281,7 @@ def test_init_session_skips_disabled_custom_tag(tmp_path: Path) -> None:
     provider.list_skills.return_value = [
         SkillInfo(
             name="my-custom-skill",
-            source=SkillSource.BUNDLED,
+            source=SkillSource.BUNDLED_EXTENDED,
             path=skill_dir / "SKILL.md",
             categories=frozenset(),
         )
@@ -321,7 +321,7 @@ def test_init_session_includes_non_disabled_skills(tmp_path: Path) -> None:
     provider.list_skills.return_value = [
         SkillInfo(
             name="safe-skill",
-            source=SkillSource.BUNDLED,
+            source=SkillSource.BUNDLED_EXTENDED,
             path=skill_dir / "SKILL.md",
             categories=frozenset({"audit"}),
         )

@@ -20,6 +20,13 @@ from autoskillit.pipeline.gate import (
     headless_error_result,
 )
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog, McpResponseEntry
+from autoskillit.pipeline.pr_gates import (
+    DOMAIN_PATHS,
+    is_ci_passing,
+    is_review_passing,
+    partition_files_by_domain,
+    partition_prs,
+)
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 from autoskillit.pipeline.timings import DefaultTimingLog, TimingEntry
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
@@ -51,4 +58,10 @@ __all__ = [
     "TelemetryFormatter",
     # context
     "ToolContext",
+    # pr_gates
+    "is_ci_passing",
+    "is_review_passing",
+    "partition_prs",
+    "DOMAIN_PATHS",
+    "partition_files_by_domain",
 ]

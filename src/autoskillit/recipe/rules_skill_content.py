@@ -78,7 +78,10 @@ def _check_undefined_bash_placeholder(ctx: ValidationContext) -> list[RuleFindin
         if skill_md is None:
             continue  # unknown-skill-command rule handles missing skills
 
-        content = skill_md.read_text(encoding="utf-8")
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue  # file deleted or unreadable between resolution and read
         bash_blocks = extract_bash_blocks(content)
         if not bash_blocks:
             continue

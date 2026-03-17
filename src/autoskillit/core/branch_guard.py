@@ -6,12 +6,10 @@ No I/O, no subprocess calls — caller provides all inputs.
 
 from __future__ import annotations
 
-_DEFAULT_PROTECTED: list[str] = ["main", "integration", "stable"]
-
 
 def is_protected_branch(
     branch: str,
-    protected: list[str] | None = None,
+    protected: list[str],
 ) -> bool:
     """Return True if *branch* is in the protected list.
 
@@ -23,11 +21,9 @@ def is_protected_branch(
     branch:
         Branch name to check.
     protected:
-        Override list. When ``None``, uses the module default
-        (main, integration, stable). Pass an explicit list to
-        use config-driven values.
+        Caller-supplied list of protected branch names, typically
+        sourced from ``config.safety.protected_branches``.
     """
     if not branch:
         return False
-    targets = protected if protected is not None else _DEFAULT_PROTECTED
-    return branch in targets
+    return branch in protected

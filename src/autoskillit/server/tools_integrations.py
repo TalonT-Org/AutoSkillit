@@ -1063,8 +1063,8 @@ async def release_issue(
             )
 
         # Determine if staging is needed
-        default_branch = tool_ctx.config.branching.default_base_branch
-        should_stage = target_branch is not None and target_branch != default_branch
+        promotion_target = tool_ctx.config.branching.promotion_target
+        should_stage = target_branch is not None and target_branch != promotion_target
 
         staged = False
         effective_staged_label = staged_label or tool_ctx.config.github.staged_label
@@ -1075,7 +1075,9 @@ async def release_issue(
                 repo,
                 effective_staged_label,
                 color="0075ca",
-                description="Implementation staged and waiting for promotion to main",
+                description=(
+                    f"Implementation staged and waiting for promotion to {promotion_target}"
+                ),
             )
             if not ensure_result.get("success"):
                 return json.dumps(

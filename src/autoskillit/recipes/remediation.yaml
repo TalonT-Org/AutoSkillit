@@ -519,13 +519,13 @@ steps:
     capture:
       queue_available: "${{ result.stdout | trim }}"
     on_success: route_queue_mode
-    on_failure: confirm_cleanup
+    on_failure: release_issue_success
     skip_when_false: "inputs.open_pr"
     note: >
       Detects whether the target branch has an active merge queue via GraphQL.
       Captures "true" or "false" into context.queue_available.
-      On failure (gh error, parse error), degrades gracefully to confirm_cleanup
-      (non-queue path). Skipped when open_pr=false — no PR was opened.
+      On failure (gh error, parse error), degrades gracefully to release_issue_success
+      (success path). Skipped when open_pr=false — no PR was opened.
 
   route_queue_mode:
     action: route
@@ -534,7 +534,7 @@ steps:
         route: confirm_cleanup
       - when: "${{ context.queue_available }} == true"
         route: enable_auto_merge
-      - route: confirm_cleanup
+      - route: release_issue_success
     skip_when_false: "inputs.open_pr"
 
   enable_auto_merge:
@@ -562,7 +562,7 @@ steps:
       queue_pr_state: "${{ result.pr_state }}"
     on_result:
       - when: "${{ result.pr_state }} == merged"
-        route: confirm_cleanup
+        route: release_issue_success
       - when: "${{ result.pr_state }} == ejected"
         route: queue_ejected_fix
       - when: "${{ result.pr_state }} == stalled"
@@ -572,7 +572,9 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Waits up to 15 minutes for the PR to merge through the queue.
-      merged → proceed to confirm_cleanup (done).
+      merged → release_issue_success to apply staged label, then confirm_cleanup.
+      release_issue_success is optional with skip_when_false: inputs.issue_url — when
+      issue_url is absent the step is silently skipped and pipeline continues to confirm_cleanup.
       ejected → conflict fix cycle then re-enter.
       stalled → lightweight re-enrollment (disable then re-enable auto-merge).
       timeout → confirm_cleanup (pipeline done; human monitors queue).
@@ -681,6 +683,20 @@ steps:
       Pushes the CI-fixed feature branch back to the remote after resolve_ci succeeds.
       Routes back to ci_watch to verify the fix resolves CI. On push failure, escalates
       via cleanup_failure.
+
+  release_issue_success:
+    description: "Transition issue from in-progress to staged after successful pipeline completion"
+    tool: release_issue
+    optional: true
+    skip_when_false: inputs.issue_url
+    with:
+      issue_url: ${{ inputs.issue_url }}
+      target_branch: ${{ inputs.base_branch }}
+    on_success: confirm_cleanup
+    on_failure: confirm_cleanup
+    note: >
+      Applies staged label after successful PR merge; skipped when no issue_url.
+      optional=true so cleanup proceeds even if this step errors.
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"

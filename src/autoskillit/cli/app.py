@@ -98,6 +98,15 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         test_check_command=cfg.test_check.command,
     )
 
+    # Inject config-derived protected branches so hook scripts read consistent values.
+    # Guard: skip when the list is empty so hook scripts never receive "" and
+    # accidentally split it into [""] instead of [].
+    if cfg.safety.protected_branches:
+        os.environ.setdefault(
+            "AUTOSKILLIT_PROTECTED_BRANCHES",
+            ",".join(cfg.safety.protected_branches),
+        )
+
     plugin_dir = str(pkg_root())
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)

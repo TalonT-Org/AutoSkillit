@@ -92,6 +92,24 @@ class TestCustomProtectedList:
         )
         assert _decision(out) != "deny"
 
+    def test_hook_respects_custom_protected_branches_env_var(self) -> None:
+        """Hook blocks write to a custom protected branch injected via env var."""
+        out = _run_hook(
+            "mcp__autoskillit__merge_worktree",
+            {"worktree_path": "/tmp/wt", "base_branch": "release"},
+            env_override={"AUTOSKILLIT_PROTECTED_BRANCHES": "main,release"},
+        )
+        assert _decision(out) == "deny"
+
+    def test_hook_allows_branch_not_in_custom_list(self) -> None:
+        """Hook allows write to integration when it is not in the injected list."""
+        out = _run_hook(
+            "mcp__autoskillit__merge_worktree",
+            {"worktree_path": "/tmp/wt", "base_branch": "integration"},
+            env_override={"AUTOSKILLIT_PROTECTED_BRANCHES": "main,release"},
+        )
+        assert _decision(out) != "deny"
+
 
 class TestNonMatchingTools:
     def test_ignores_unrelated_tools(self) -> None:

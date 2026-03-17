@@ -159,6 +159,7 @@ class McpResponseConfig:
 @dataclass
 class BranchingConfig:
     default_base_branch: str = "main"
+    promotion_target: str = "main"  # Canonical upstream default for staged-label comparison.
 
 
 @dataclass
@@ -374,6 +375,7 @@ class AutomationConfig:
                 default_base_branch=str(
                     val(br, "default_base_branch", _br["default_base_branch"])
                 ),
+                promotion_target=str(val(br, "promotion_target", _br["promotion_target"])),
             ),
             ci=CIConfig(
                 workflow=val(ci, "workflow", _ci["workflow"]) or None,

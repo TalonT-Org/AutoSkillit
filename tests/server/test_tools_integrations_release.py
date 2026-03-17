@@ -163,3 +163,66 @@ class TestReleaseIssueStagedLifecycle:
             )
         )
         assert result["staged_label"] is None
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "default_base_branch,promotion_target,target_branch,expected_staged",
+        [
+            # production scenario: default_base_branch overridden to integration for routing
+            ("integration", "main", "integration", True),
+            # integration explicitly set as promotion_target: landing there = done
+            ("integration", "integration", "integration", False),
+            # non-default target against main promotion target
+            ("main", "main", "integration", True),
+            # promotion_target overridden to something other than main
+            ("main", "stable", "stable", False),
+            ("main", "stable", "integration", True),
+        ],
+    )
+    async def test_release_issue_staging_uses_promotion_target(
+        self,
+        tool_ctx,
+        monkeypatch,
+        default_base_branch,
+        promotion_target,
+        target_branch,
+        expected_staged,
+    ):
+        """Regression: staging comparison uses promotion_target, not default_base_branch.
+
+        When default_base_branch == target_branch (e.g. both "integration"),
+        staged label must still be applied if promotion_target != target_branch.
+        Conversely, no staged label when target_branch == promotion_target, regardless
+        of default_base_branch.
+        """
+        tool_ctx.config.branching.default_base_branch = default_base_branch
+        tool_ctx.config.branching.promotion_target = promotion_target
+        mock_client = AsyncMock()
+        mock_client.remove_label.return_value = {"success": True}
+        mock_client.ensure_label.return_value = {"success": True, "created": False}
+        mock_client.add_labels.return_value = {
+            "success": True,
+            "labels": [tool_ctx.config.github.staged_label],
+        }
+        monkeypatch.setattr(tool_ctx, "github_client", mock_client)
+        result = json.loads(
+            await release_issue(
+                issue_url="https://github.com/owner/repo/issues/42",
+                target_branch=target_branch,
+            )
+        )
+        assert result["staged"] is expected_staged, (
+            f"staged must be {expected_staged} when "
+            f"target_branch={target_branch!r}, promotion_target={promotion_target!r}, "
+            f"default_base_branch={default_base_branch!r}"
+        )
+        if expected_staged:
+            assert result.get("staged_label") is not None, (
+                f"staged_label must not be None when staged=True "
+                f"(target_branch={target_branch!r}, promotion_target={promotion_target!r})"
+            )
+        else:
+            assert result.get("staged_label") is None, (
+                f"staged_label must be None when staged=False "
+                f"(target_branch={target_branch!r}, promotion_target={promotion_target!r})"
+            )

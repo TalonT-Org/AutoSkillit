@@ -130,8 +130,12 @@ def test_inline_reply_posted_for_every_comment():
     assert "reply" in text.lower() or "replies" in text.lower(), (
         "SKILL.md must describe posting inline replies on review comments"
     )
-    # Every comment must get a reply
-    assert "every" in text.lower() or "each" in text.lower() or "all" in text.lower(), (
+    reply_idx = text.lower().find("inline repl")
+    if reply_idx == -1:
+        reply_idx = text.lower().find("repl")
+    assert reply_idx != -1, "SKILL.md must describe inline replies"
+    reply_context = text[reply_idx : reply_idx + 600].lower()
+    assert "every" in reply_context or "each" in reply_context or "all" in reply_context, (
         "SKILL.md must indicate replies are posted for every (each/all) analyzed comment"
     )
 

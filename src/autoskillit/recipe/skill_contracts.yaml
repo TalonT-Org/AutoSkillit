@@ -225,7 +225,7 @@ skills:
     - name: remediation_path
       type: file_path
     expected_output_patterns:
-    - "verdict\\s*=\\s*(GO|NO_GO)"
+    - "verdict\\s*=\\s*(GO|NO GO)"
   migrate-recipes:
     inputs: []
     outputs: []

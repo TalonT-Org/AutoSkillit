@@ -56,3 +56,21 @@ def test_skill_contracts_yaml_includes_issue_splitter(skills):
 def test_skill_contracts_yaml_includes_process_issues(skills):
     """process-issues must be registered with its ---process-issues-result--- delimiter."""
     _assert_skill_has_patterns(skills, "process-issues", "---process-issues-result---")
+
+
+def test_audit_impl_no_go_pattern_matches_literal_output(skills):
+    """The audit-impl pattern must match 'verdict = NO GO' (space-separated).
+
+    Regression guard for issue #418: pattern had NO_GO (underscore) while SKILL.md
+    mandates NO GO (space). Must stay RED until skill_contracts.yaml is fixed.
+    """
+    import re
+
+    patterns = skills.get("audit-impl", {}).get("expected_output_patterns", [])
+    assert patterns, "audit-impl must have expected_output_patterns"
+    no_go_output = "verdict = NO GO\n%%ORDER_UP%%"
+    for pattern in patterns:
+        assert re.search(pattern, no_go_output), (
+            f"Pattern {pattern!r} does not match 'verdict = NO GO' — "
+            f"SKILL.md line 340 mandates space-separated format."
+        )

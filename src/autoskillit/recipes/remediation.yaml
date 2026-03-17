@@ -570,6 +570,8 @@ steps:
     note: >
       Waits up to 15 minutes for the PR to merge through the queue.
       merged → release_issue_success to apply staged label, then confirm_cleanup.
+      release_issue_success is optional with skip_when_false: inputs.issue_url — when
+      issue_url is absent the step is silently skipped and pipeline continues to confirm_cleanup.
       ejected → conflict fix cycle then re-enter.
       timeout → confirm_cleanup (pipeline done; human monitors queue).
 
@@ -679,10 +681,8 @@ steps:
     on_success: confirm_cleanup
     on_failure: confirm_cleanup
     note: >
-      Called on the success path after PR merge is confirmed.
-      Passes target_branch so release_issue can determine whether to apply the
-      staged label (non-default target) or just remove in-progress (default target).
-      optional=true ensures pipeline still reaches confirm_cleanup if this step errors.
+      Applies staged label after successful PR merge; skipped when no issue_url.
+      optional=true so cleanup proceeds even if this step errors.
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"

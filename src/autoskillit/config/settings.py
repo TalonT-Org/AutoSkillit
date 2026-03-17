@@ -160,7 +160,6 @@ class McpResponseConfig:
 class BranchingConfig:
     default_base_branch: str = "main"
     promotion_target: str = "main"  # Canonical upstream default for staged-label comparison.
-    # Distinct from default_base_branch (pipeline routing).
 
 
 @dataclass

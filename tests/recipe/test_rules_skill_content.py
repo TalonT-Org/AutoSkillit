@@ -99,7 +99,7 @@ def test_valid_skill_passes_placeholder_rule(tmp_path: Path) -> None:
             """\
             name: test-recipe
             kitchen_rules:
-      - "Use run_skill only."
+              - "Use run_skill only."
             ingredients:
               plan_path:
                 description: plan path

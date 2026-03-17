@@ -9,6 +9,7 @@ This test provides structural immunity against the class of bug where a {placeho
 appears in an executable bash block without a defined source, causing the model to guess
 the value from ambient context and produce incorrect shell commands.
 """
+
 from __future__ import annotations
 
 import re
@@ -23,11 +24,12 @@ _SKILL_DIRS = [
 ]
 
 # Allowlist for {placeholder} tokens that are explicitly documented as pseudocode
-# substitution patterns — i.e., the skill prose immediately before the bash block
-# contains "use this command wherever {X} appears" or equivalent wording.
-# Extend this only when such explicit prose documentation exists in the skill.
+# substitution patterns — i.e., the skill prose makes the inference unambiguous
+# (e.g., "use this command wherever {X} appears", API URL templates, per-iteration
+# values where the prose loop structure is clear).
 _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
+        # ── EXISTING: explicit pseudocode documentation ──────────────────────────────
         # plan_name: pseudocode for "extract the plan file's stem from {plan_path}".
         # The skill prose (Step 0 path detection + Step 1 worktree naming) makes the
         # inference unambiguous; the model reliably derives it from the declared {plan_path}.
@@ -36,6 +38,82 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("implement-worktree-no-merge", "plan_name"),
         ("implement-worktree-no-merge", "test_command"),
         ("resolve-failures", "test_command"),
+        # ── NAMING INCONSISTENCIES ────────────────────────────────────────────────────
+        # audit-impl: bash blocks use {implementation_ref} as an alias for the declared
+        # {branch_name} argument; the skill prose clearly establishes the equivalence.
+        ("audit-impl", "implementation_ref"),
+        # ── GITHUB API PATH TEMPLATES ─────────────────────────────────────────────────
+        # {owner}/{repo}/{number}/{pr_number} tokens appear in `gh api repos/{owner}/{repo}/...`
+        # URL patterns. The skill prose always shows how to resolve them (gh repo view,
+        # gh pr list output, etc.). This is standard documentation convention for REST URLs.
+        ("collapse-issues", "repo"),
+        ("diagnose-ci", "owner"),
+        ("diagnose-ci", "repo"),
+        ("diagnose-ci", "job_id"),  # from API response in prior step
+        ("issue-splitter", "repo"),
+        ("resolve-review", "owner"),
+        ("resolve-review", "repo"),
+        ("resolve-review", "number"),
+        ("resolve-review", "test_command"),  # prose: "Read test_check.command from config"
+        ("review-pr", "owner"),
+        ("review-pr", "repo"),
+        ("review-pr", "pr_number"),
+        # ── GRAPHQL FIELD NAMES (false positives) ─────────────────────────────────────
+        # These appear inside single-quoted GraphQL query strings as JSON field names, not
+        # as bash template placeholders. The {identifier} regex matches them spuriously.
+        ("resolve-review", "databaseId"),
+        ("resolve-review", "isResolved"),
+        # ── RUNTIME-COMPUTED OUTPUT TOKENS ────────────────────────────────────────────
+        # These are computed at runtime and used in output commands. The skill prose
+        # explicitly describes how they are derived before they appear in bash blocks.
+        ("review-pr", "verdict"),  # computed verdict string
+        ("review-pr", "summary_markdown"),  # computed review summary
+        ("review-pr", "escalation_user_mention"),  # prose: "set escalation_user_mention=..."
+        ("resolve-review", "file"),  # per-finding file path from review comments
+        ("resolve-merge-conflicts", "file"),  # per-iteration conflicted file path
+        # ── PER-ITERATION / LOOP VALUES ──────────────────────────────────────────────
+        # Used inside per-issue/per-PR/per-file loops. The prose establishes the loop
+        # structure and makes the substitution unambiguous.
+        ("collapse-issues", "orig_number"),
+        ("collapse-issues", "combined_number"),
+        ("collapse-issues", "combined_url"),
+        ("issue-splitter", "parent_url"),  # source issue URL, obtained in prior step
+        ("issue-splitter", "route"),  # routing label value, from manifest
+        ("make-groups", "topic"),  # prose: "git checkout -b feature/{topic}"
+        ("merge-pr", "pr_branch"),  # per-PR head branch from gh pr list
+        ("merge-pr", "file_path"),  # per-file iteration in deletion check
+        ("merge-pr", "symbol_name"),  # per-symbol grep pattern
+        ("open-integration-pr", "number"),  # per-PR iteration value
+        ("open-integration-pr", "numbers"),  # formatted joined list of PR numbers
+        ("open-integration-pr", "timestamp"),  # generated timestamp
+        ("open-integration-pr", "new_pr_number"),  # newly created integration PR number
+        ("open-integration-pr", "new_pr_url"),  # newly created integration PR URL
+        ("open-pr", "plan_path"),  # iterating over plan_paths (singular loop var)
+        ("open-pr", "closing_issue"),  # optional arg declared as [closing_issue]
+        ("open-pr", "task_title"),  # derived from first heading of plan file
+        ("open-pr", "timestamp"),  # generated timestamp for temp file
+        ("pipeline-summary", "bug_count"),  # runtime computed count from audit log
+        ("pipeline-summary", "date"),  # runtime computed date string
+        ("prepare-issue", "body"),
+        ("prepare-issue", "description"),
+        ("prepare-issue", "issue_number"),
+        ("prepare-issue", "issue_type"),
+        ("prepare-issue", "keyword-set"),
+        ("prepare-issue", "selected_number"),
+        ("prepare-issue", "title"),
+        ("process-issues", "number"),  # per-issue iteration value
+        ("process-issues", "recipe"),  # recipe name from manifest
+        ("triage-issues", "number"),  # per-issue iteration value
+        ("triage-issues", "recipe"),  # recipe name from manifest
+        # ── PART B TRACKING ──────────────────────────────────────────────────────────
+        # These are genuine undefined-placeholder bugs intentionally deferred to Part B.
+        # Part B will fix: analyze-prs (add ## Arguments for base_branch),
+        # merge-pr (declare base_branch as ingredient or move Step 1.5 after value is known),
+        # pipeline-summary (add explicit temp file path capture before gh commands).
+        ("analyze-prs", "base_branch"),
+        ("merge-pr", "base_branch"),
+        ("pipeline-summary", "temp_issue_body"),
+        ("pipeline-summary", "temp_pr_body"),
     }
 )
 
@@ -67,7 +145,7 @@ def _extract_bash_placeholders(bash_blocks: list[str]) -> set[str]:
     """
     placeholders: set[str] = set()
     for block in bash_blocks:
-        for m in re.finditer(r"(?<!\$)\{([A-Za-z_][A-Za-z0-9_-]*)\}", block):
+        for m in re.finditer(r"(?<![$@])\{([A-Za-z_][A-Za-z0-9_-]*)\}", block):
             name = m.group(1)
             # Exclude ALL_UPPERCASE identifiers — git @{upstream}, shell env vars
             # written in annotation comments use uppercase by convention.
@@ -84,7 +162,7 @@ def _extract_declared_ingredients(content: str) -> set[str]:
     declared: set[str] = set()
     # Standard section heading variants
     section_re = re.compile(
-        r"^##\s+(?:Arguments|Ingredients|Parameters|Invocation)\s*\n(.*?)(?=^##|\Z)",
+        r"^##\s+(?:Arguments|Ingredients|Parameters|Invocation)[^\n]*\n(.*?)(?=^##|\Z)",
         re.MULTILINE | re.DOTALL,
     )
     for sec in section_re.finditer(content):

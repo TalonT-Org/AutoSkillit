@@ -563,7 +563,7 @@ class TestImplementationGroupsStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_ig_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> detect_ci_conflict."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> detect_ci_conflict."""  # noqa: E501
         step = recipe.steps["ci_watch"]
         assert step.on_success == "release_issue_success"
         assert step.on_failure == "detect_ci_conflict"

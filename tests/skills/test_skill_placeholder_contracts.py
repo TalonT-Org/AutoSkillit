@@ -22,6 +22,9 @@ from autoskillit.recipe._skill_placeholder_parser import (
     extract_declared_ingredients,
     shell_vars_assigned,
 )
+from autoskillit.recipe.rules_skill_content import (
+    _PSEUDOCODE_ALLOWLIST as _PROD_PSEUDOCODE_ALLOWLIST,
+)
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _SKILL_DIRS = [
@@ -33,17 +36,17 @@ _SKILL_DIRS = [
 # substitution patterns — i.e., the skill prose makes the inference unambiguous
 # (e.g., "use this command wherever {X} appears", API URL templates, per-iteration
 # values where the prose loop structure is clear).
+#
+# Extends the production allowlist from rules_skill_content to avoid drift.
 _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
-    {
+    _PROD_PSEUDOCODE_ALLOWLIST
+    | {
         # ── EXISTING: explicit pseudocode documentation ──────────────────────────────
         # plan_name: pseudocode for "extract the plan file's stem from {plan_path}".
         # The skill prose (Step 0 path detection + Step 1 worktree naming) makes the
         # inference unambiguous; the model reliably derives it from the declared {plan_path}.
         ("implement-worktree", "plan_name"),
-        ("implement-worktree", "test_command"),
         ("implement-worktree-no-merge", "plan_name"),
-        ("implement-worktree-no-merge", "test_command"),
-        ("resolve-failures", "test_command"),
         # ── NAMING INCONSISTENCIES ────────────────────────────────────────────────────
         # audit-impl: bash blocks use {implementation_ref} as an alias for the declared
         # {branch_name} argument; the skill prose clearly establishes the equivalence.
@@ -128,7 +131,14 @@ def _all_skill_mds() -> list[tuple[str, Path]]:
     return result
 
 
-@pytest.mark.parametrize("skill_name,skill_md", _all_skill_mds())
+_ALL_SKILL_MDS = _all_skill_mds()
+assert _ALL_SKILL_MDS, (
+    f"No SKILL.md files discovered in {_SKILL_DIRS}. "
+    "Check that skill directories exist and contain subdirectories with SKILL.md files."
+)
+
+
+@pytest.mark.parametrize("skill_name,skill_md", _ALL_SKILL_MDS)
 def test_no_undefined_bash_placeholders(skill_name: str, skill_md: Path) -> None:
     """
     Every {placeholder} in a SKILL.md bash block must be either declared as an
@@ -140,11 +150,11 @@ def test_no_undefined_bash_placeholders(skill_name: str, skill_md: Path) -> None
     content = skill_md.read_text(encoding="utf-8")
     bash_blocks = extract_bash_blocks(content)
     if not bash_blocks:
-        return
+        pytest.skip(reason="skill has no bash blocks")
 
     used = extract_bash_placeholders(bash_blocks)
     if not used:
-        return
+        pytest.skip(reason="skill has no {placeholder} tokens in bash blocks")
 
     declared = extract_declared_ingredients(content)
     assigned = shell_vars_assigned(bash_blocks)

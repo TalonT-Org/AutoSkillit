@@ -95,6 +95,7 @@ class DefaultMergeQueueWatcher:
         poll_interval: int = 15,
         stall_grace_period: int = 60,
         max_stall_retries: int = 3,
+        not_in_queue_confirmation_cycles: int = 2,
     ) -> dict[str, Any]:
         """Poll until PR is merged, ejected, stalled, or timeout expires.
 
@@ -102,7 +103,7 @@ class DefaultMergeQueueWatcher:
             pr_number: PR number to monitor.
             target_branch: Branch the merge queue targets.
             repo: "owner/name" format. Required.
-            cwd: Working directory (unused; retained for interface compatibility).
+            cwd: Working directory. Present to satisfy the MergeQueueWatcher protocol.
             timeout_seconds: Maximum polling duration (default 600s).
             poll_interval: Seconds between poll cycles (default 15s).
             stall_grace_period: Seconds after autoMergeRequest.enabledAt before stall
@@ -110,6 +111,9 @@ class DefaultMergeQueueWatcher:
                 queue processing.
             max_stall_retries: Maximum disable/re-enable toggle attempts before
                 returning pr_state="stalled" (default 3).
+            not_in_queue_confirmation_cycles: Consecutive "not in queue" cycles required
+                before acting on absence. Guards against race between queue exit and
+                merged=true propagation (default 2).
 
         Returns:
             {
@@ -166,9 +170,10 @@ class DefaultMergeQueueWatcher:
                 await asyncio.sleep(poll_interval)
                 continue
 
-            # Not in queue — Bug 1: confirmation window
+            # Confirmation window: guard against race between queue exit and
+            # merged=true propagation
             not_in_queue_cycles += 1
-            if not_in_queue_cycles < 2:
+            if not_in_queue_cycles < not_in_queue_confirmation_cycles:
                 # One extra cycle: gives time for merge-in-progress to reflect merged=true
                 await asyncio.sleep(poll_interval)
                 continue
@@ -245,16 +250,27 @@ class DefaultMergeQueueWatcher:
         if "errors" in data:
             raise RuntimeError(f"GraphQL error: {data['errors']}")
 
+        if not data.get("data") or data["data"] is None or "repository" not in data["data"]:
+            raise RuntimeError(f"GraphQL response missing 'repository' key: {str(data)[:200]}")
         repo_data = data["data"]["repository"]
         pr = repo_data["pullRequest"]
-        entries = repo_data.get("mergeQueue", {}) or {}
-        nodes = (entries.get("entries") or {}).get("nodes") or []
+        if pr is None:
+            raise RuntimeError(f"GraphQL returned null pullRequest for PR #{pr_number}")
+        entries_raw = repo_data.get("mergeQueue") or {}
+        entries = entries_raw if isinstance(entries_raw, dict) else {}
+        nodes_raw = (entries.get("entries") or {}).get("nodes")
+        nodes = nodes_raw if isinstance(nodes_raw, list) else []
 
         auto_merge = pr.get("autoMergeRequest") or {}
         enabled_at_raw = auto_merge.get("enabledAt")
         enabled_at: datetime | None = None
         if enabled_at_raw:
-            enabled_at = datetime.fromisoformat(enabled_at_raw.replace("Z", "+00:00"))
+            try:
+                enabled_at = datetime.fromisoformat(enabled_at_raw.replace("Z", "+00:00"))
+            except ValueError:
+                raise RuntimeError(
+                    f"Unexpected autoMergeRequest.enabledAt format: {enabled_at_raw!r}"
+                )
 
         queue_entry = next((n for n in nodes if n["pullRequest"]["number"] == pr_number), None)
         return {
@@ -267,12 +283,43 @@ class DefaultMergeQueueWatcher:
             "queue_state": queue_entry["state"] if queue_entry else None,
         }
 
+    async def toggle(
+        self,
+        pr_number: int,
+        target_branch: str,
+        repo: str | None = None,
+        cwd: str = ".",
+    ) -> dict[str, Any]:
+        """Disable then re-enable auto-merge for a PR to re-enroll it in the merge queue.
+
+        Fetches the PR node ID via a single GraphQL query, then applies the
+        disable/re-enable toggle. Never raises; returns a structured result dict.
+        """
+        if not repo or "/" not in repo:
+            return {
+                "success": False,
+                "error": f"Invalid repo format: {repo!r}. Expected 'owner/name'.",
+            }
+        owner, repo_name = repo.split("/", 1)
+        try:
+            state = await self._fetch_pr_and_queue_state(
+                pr_number, owner, repo_name, target_branch
+            )
+            await self._toggle_auto_merge(state["pr_node_id"])
+            return {"success": True, "pr_number": pr_number}
+        except Exception:
+            _log.warning("toggle_auto_merge failed", exc_info=True)
+            return {"success": False, "error": "toggle failed — see logs"}
+
     async def _toggle_auto_merge(self, pr_node_id: str) -> None:
         """Disable then re-enable auto-merge via GraphQL mutations."""
-        for mutation, variables in [
+        if not pr_node_id:
+            raise ValueError("pr_node_id must be a non-empty string")
+        mutations = [
             (_MUTATION_DISABLE_AUTO_MERGE, {"prId": pr_node_id}),
             (_MUTATION_ENABLE_AUTO_MERGE, {"prId": pr_node_id, "mergeMethod": "SQUASH"}),
-        ]:
+        ]
+        for i, (mutation, variables) in enumerate(mutations):
             resp = await self._client.post(
                 _GRAPHQL_ENDPOINT, json={"query": mutation, "variables": variables}
             )
@@ -280,4 +327,5 @@ class DefaultMergeQueueWatcher:
             body = resp.json()
             if "errors" in body:
                 raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
-        await asyncio.sleep(2)
+            if i < len(mutations) - 1:
+                await asyncio.sleep(2)

@@ -1157,6 +1157,7 @@ class TestRunSkillCwdValidation:
         assert result["success"] is False
         assert "cwd must be an absolute path" in result["error"]
         assert "../worktrees/impl-fix-20260316" in result["error"]
+        assert tool_ctx.runner.call_args_list == []
 
     @pytest.mark.anyio
     async def test_run_skill_accepts_empty_cwd(self, tool_ctx):

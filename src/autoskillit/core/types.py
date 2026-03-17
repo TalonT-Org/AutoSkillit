@@ -400,13 +400,14 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "claim_issue",
         "release_issue",
         "wait_for_ci",
+        "wait_for_merge_queue",
+        "toggle_auto_merge",
         "create_unique_branch",
         "write_telemetry_files",
         "get_pr_reviews",
         "bulk_close_issues",
         "check_pr_mergeable",
         "set_commit_status",
-        "wait_for_merge_queue",
         # Formerly ungated — now kitchen-gated:
         "fetch_github_issue",
         "get_issue_title",
@@ -488,6 +489,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     # ci
     "wait_for_ci": frozenset({"ci"}),
     "wait_for_merge_queue": frozenset({"ci"}),
+    "toggle_auto_merge": frozenset({"ci"}),
     "get_ci_status": frozenset({"ci"}),
     # clone
     "clone_repo": frozenset({"clone"}),
@@ -524,6 +526,7 @@ TOOL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "release_issue",
             "wait_for_ci",
             "wait_for_merge_queue",
+            "toggle_auto_merge",
             "get_pr_reviews",
             "bulk_close_issues",
         ),
@@ -1051,6 +1054,17 @@ class MergeQueueWatcher(Protocol):
         cwd: str = ".",
         timeout_seconds: int = 600,
         poll_interval: int = 15,
+        stall_grace_period: int = 60,
+        max_stall_retries: int = 3,
+        not_in_queue_confirmation_cycles: int = 2,
+    ) -> dict[str, Any]: ...
+
+    async def toggle(
+        self,
+        pr_number: int,
+        target_branch: str,
+        repo: str | None = None,
+        cwd: str = ".",
     ) -> dict[str, Any]: ...
 
 

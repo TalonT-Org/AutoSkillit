@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 39 MCP tools organized into three access levels that control which
+AutoSkillit provides 40 MCP tools organized into three access levels that control which
 session types can see each tool.
 
 ## Three Access Levels
@@ -41,7 +41,7 @@ remain hidden even after `open_kitchen`.
 | Tag | Meaning |
 |-----|---------|
 | `autoskillit` | Identifies the tool as belonging to AutoSkillit. Present on every tool. |
-| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 37 tools carry this tag. |
+| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 38 tools carry this tag. |
 | `headless` | Tool is revealed in headless sessions via `mcp.enable(tags={'headless'})`. Additive — also carries `kitchen`. |
 | `github` | Functional category: GitHub-interacting tools. Can be disabled as a subset. |
 | `ci` | Functional category: CI/merge-queue polling tools. Can be disabled as a subset. |
@@ -54,7 +54,7 @@ Server startup sequence:
 
 ```
 1. mcp.disable(tags={"kitchen"})
-   → hides 37 kitchen-tagged tools (including the 1 headless-tagged tool)
+   → hides 38 kitchen-tagged tools (including the 1 headless-tagged tool)
 
 2. mcp.disable(tags={subset}) for each entry in config.subsets.disabled
    → e.g. hides all github-tagged tools if "github" is disabled
@@ -64,7 +64,7 @@ Server startup sequence:
    → reveals test_check only (the sole headless-tagged tool)
 
 4. When open_kitchen is called:
-   ctx.enable_components(tags={"kitchen"})   → reveals all 37 kitchen tools
+   ctx.enable_components(tags={"kitchen"})   → reveals all 38 kitchen tools
    ctx.disable_components(tags={subset})     → re-hides each disabled subset
    (session-level enable overwrites server-level disable, so re-disabling is required)
 ```
@@ -85,7 +85,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 39 tools with their access level, tags, source file, and functional category.
+All 40 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
@@ -149,6 +149,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `wait_for_ci` | AS, K, CI | `server/tools_ci.py` |
 | `get_ci_status` | AS, K, CI | `server/tools_ci.py` |
 | `wait_for_merge_queue` | AS, K, CI | `server/tools_ci.py` |
+| `toggle_auto_merge` | AS, K, CI | `server/tools_ci.py` |
 | `set_commit_status` | AS, K, GH | `server/tools_integrations.py` |
 
 ---
@@ -194,7 +195,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 
 ---
 
-**Total: 39 tools** — 2 Free Range + 1 Headless-tagged + 36 Kitchen-only
+**Total: 40 tools** — 2 Free Range + 1 Headless-tagged + 37 Kitchen-only
 
 For subset configuration that can hide functional-category tools, see
 [Subset Categories](subset-categories.md).

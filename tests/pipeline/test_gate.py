@@ -22,7 +22,7 @@ def test_tool_sets_are_disjoint():
 def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert len(GATED_TOOLS) == 36
+    assert len(GATED_TOOLS) == 37
     assert len(UNGATED_TOOLS) == 2
 
 
@@ -55,6 +55,7 @@ def test_gated_tools_contains_expected_names():
         "check_pr_mergeable",
         "set_commit_status",
         "wait_for_merge_queue",
+        "toggle_auto_merge",
         # formerly ungated — now kitchen-gated:
         "fetch_github_issue",
         "get_issue_title",
@@ -227,7 +228,7 @@ def test_all_tool_sets_disjoint_and_complete():
     assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
     assert GATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert UNGATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
-    assert len(GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS) == 39
+    assert len(GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS) == 40
 
 
 def test_worker_tools_removed_from_core():

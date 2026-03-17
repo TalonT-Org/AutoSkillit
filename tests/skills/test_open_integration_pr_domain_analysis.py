@@ -9,7 +9,7 @@ SKILL_MD = (
 )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def skill_text() -> str:
     return SKILL_MD.read_text()
 

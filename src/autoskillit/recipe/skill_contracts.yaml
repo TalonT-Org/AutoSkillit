@@ -20,6 +20,8 @@ skills:
       type: string
     expected_output_patterns:
     - "diagnosis_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagnosis_path = /tmp/diagnosis.md\n%%ORDER_UP%%"
   resolve-failures:
     inputs:
     - name: worktree_path
@@ -56,6 +58,8 @@ skills:
       type: string
     expected_output_patterns:
     - "worktree_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
   resolve-review:
     inputs:
     - name: feature_branch
@@ -83,6 +87,8 @@ skills:
       type: string
     expected_output_patterns:
     - "worktree_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
   implement-worktree-no-merge:
     inputs:
     - name: plan_path
@@ -95,6 +101,8 @@ skills:
       type: string
     expected_output_patterns:
     - "worktree_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
   investigate:
     inputs:
     - name: topic
@@ -105,6 +113,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "investigation_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "investigation_path = /tmp/investigation.md\n%%ORDER_UP%%"
   make-groups:
     inputs:
     - name: source_doc
@@ -119,6 +129,8 @@ skills:
       type: file_path_list
     expected_output_patterns:
     - "groups_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "groups_path = /tmp/groups.json\n%%ORDER_UP%%"
   make-plan:
     inputs:
     - name: task
@@ -131,6 +143,8 @@ skills:
       type: file_path_list
     expected_output_patterns:
     - "plan_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "plan_path = /tmp/plan.md\n%%ORDER_UP%%"
   write-recipe:
     inputs: []
     outputs:
@@ -138,6 +152,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "recipe_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "recipe_path = /tmp/recipe.yaml\n%%ORDER_UP%%"
   mermaid:
     inputs: []
     outputs: []
@@ -168,6 +184,8 @@ skills:
       type: file_path_list
     expected_output_patterns:
     - "plan_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "plan_path = /tmp/plan.md\n%%ORDER_UP%%"
   retry-worktree:
     inputs:
     - name: plan_path
@@ -183,6 +201,8 @@ skills:
       type: string
     expected_output_patterns:
     - "worktree_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
   review-approach:
     inputs:
     - name: plan_path
@@ -193,6 +213,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "review_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "review_path = /tmp/review.md\n%%ORDER_UP%%"
   setup-project:
     inputs:
     - name: project_dir
@@ -205,6 +227,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "analysis_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "analysis_path = /tmp/analysis.md\n%%ORDER_UP%%"
   audit-friction:
     inputs: []
     outputs: []
@@ -226,6 +250,9 @@ skills:
       type: file_path
     expected_output_patterns:
     - "verdict\\s*=\\s*(GO|NO GO)"
+    pattern_examples:
+    - "verdict = GO\n%%ORDER_UP%%"
+    - "verdict = NO GO\nremediation_path = /tmp/remediation.md\n%%ORDER_UP%%"
   migrate-recipes:
     inputs: []
     outputs: []
@@ -251,6 +278,8 @@ skills:
       type: string
     expected_output_patterns:
     - "pr_order_file\\s*=\\s*.+"
+    pattern_examples:
+    - "pr_order_file = /tmp/pr_order.json\n%%ORDER_UP%%"
   merge-pr:
     inputs:
     - name: pr_number
@@ -278,6 +307,9 @@ skills:
       type: file_path
     expected_output_patterns:
     - "merged\\s*=\\s*(true|false)"
+    pattern_examples:
+    - "merged = true\n%%ORDER_UP%%"
+    - "merged = false\n%%ORDER_UP%%"
 
   open-pr:
     inputs:
@@ -299,6 +331,8 @@ skills:
     outputs: []
     expected_output_patterns:
     - "https://github\\.com/.*/pull/\\d+"
+    pattern_examples:
+    - "https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
 
   open-integration-pr:
     inputs:
@@ -319,6 +353,8 @@ skills:
       type: string
     expected_output_patterns:
     - "https://github\\.com/.*/pull/\\d+"
+    pattern_examples:
+    - "https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
 
   triage-issues:
     inputs: []
@@ -335,6 +371,8 @@ skills:
       type: string
     expected_output_patterns:
     - "triage_report\\s*=\\s*.+"
+    pattern_examples:
+    - "triage_report = temp/triage-issues/triage_report_20260310_120000.md\n%%ORDER_UP%%"
 
   review-pr:
     inputs:
@@ -353,6 +391,10 @@ skills:
         - needs_human
     expected_output_patterns:
     - "verdict\\s*=\\s*(approved|changes_requested|needs_human)"
+    pattern_examples:
+    - "verdict = approved\n%%ORDER_UP%%"
+    - "verdict = changes_requested\n%%ORDER_UP%%"
+    - "verdict = needs_human\n%%ORDER_UP%%"
 
   arch-lens-c4-container:
     inputs:
@@ -364,6 +406,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-concurrency:
     inputs:
@@ -375,6 +419,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-data-lineage:
     inputs:
@@ -386,6 +432,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-deployment:
     inputs:
@@ -397,6 +445,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-development:
     inputs:
@@ -408,6 +458,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-error-resilience:
     inputs:
@@ -419,6 +471,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-module-dependency:
     inputs:
@@ -430,6 +484,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-operational:
     inputs:
@@ -441,6 +497,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-process-flow:
     inputs:
@@ -452,6 +510,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-repository-access:
     inputs:
@@ -463,6 +523,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-scenarios:
     inputs:
@@ -474,6 +536,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-security:
     inputs:
@@ -485,6 +549,8 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   arch-lens-state-lifecycle:
     inputs:
@@ -496,11 +562,15 @@ skills:
       type: file_path
     expected_output_patterns:
     - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   prepare-issue:
     inputs: []
     outputs: []
     expected_output_patterns:
+    - "---prepare-issue-result---"
+    pattern_examples:
     - "---prepare-issue-result---"
 
   enrich-issues:
@@ -508,11 +578,15 @@ skills:
     outputs: []
     expected_output_patterns:
     - "---enrich-issues-result---"
+    pattern_examples:
+    - "---enrich-issues-result---"
 
   report-bug:
     inputs: []
     outputs: []
     expected_output_patterns:
+    - "---bug-fingerprint---"
+    pattern_examples:
     - "---bug-fingerprint---"
 
   collapse-issues:
@@ -520,15 +594,21 @@ skills:
     outputs: []
     expected_output_patterns:
     - "---collapse-issues-result---"
+    pattern_examples:
+    - "---collapse-issues-result---"
 
   issue-splitter:
     inputs: []
     outputs: []
     expected_output_patterns:
     - "---issue-splitter-result---"
+    pattern_examples:
+    - "---issue-splitter-result---"
 
   process-issues:
     inputs: []
     outputs: []
     expected_output_patterns:
+    - "---process-issues-result---"
+    pattern_examples:
     - "---process-issues-result---"

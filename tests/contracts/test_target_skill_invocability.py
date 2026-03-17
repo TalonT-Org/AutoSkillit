@@ -10,9 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.config import AutomationConfig
-from autoskillit.core import SkillSource
-from autoskillit.execution.headless import extract_skill_name, resolve_target_skill
+from autoskillit.config import AutomationConfig, load_config
+from autoskillit.core import SkillSource, extract_skill_name, resolve_target_skill
 from autoskillit.recipe import load_recipe
 from autoskillit.recipe.io import builtin_recipes_dir
 from autoskillit.workspace import (
@@ -34,7 +33,7 @@ def _make_session(
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, tmp_path)
     if config is None:
-        config = AutomationConfig()
+        config = load_config()
     session_id = "test-session-001"
     mgr.init_session(
         session_id,
@@ -56,7 +55,7 @@ class TestTargetSkillNotGatedAfterActivation:
     """Tier 2 target skills must have disable-model-invocation removed after activation."""
 
     def test_tier2_target_skill_not_gated_after_activation(self, tmp_path: Path) -> None:
-        config = AutomationConfig()
+        config = load_config()
         tier2 = list(config.skills.tier2)
         assert len(tier2) > 0, "No Tier 2 skills configured"
         target = tier2[0]
@@ -66,7 +65,7 @@ class TestTargetSkillNotGatedAfterActivation:
         assert "disable-model-invocation: true" not in content
 
     def test_other_tier2_skills_remain_gated(self, tmp_path: Path) -> None:
-        config = AutomationConfig()
+        config = load_config()
         tier2 = list(config.skills.tier2)
         assert len(tier2) > 1, "Need at least 2 Tier 2 skills"
         target = tier2[0]
@@ -81,7 +80,7 @@ class TestTargetSkillNotGatedAfterActivation:
                 )
 
     def test_tier3_target_skill_never_gated(self, tmp_path: Path) -> None:
-        config = AutomationConfig()
+        config = load_config()
         tier3 = list(config.skills.tier3)
         if not tier3:
             pytest.skip("No Tier 3 skills configured")
@@ -132,17 +131,17 @@ class TestAllRecipeSkillCommandsInvocable:
     def test_all_bundled_recipes_skill_commands_invocable_after_init_session(
         self, tmp_path: Path
     ) -> None:
-        config = AutomationConfig()
+        config = load_config()
         tier2 = frozenset(config.skills.tier2)
         resolver = SkillResolver()
         provider = SkillsDirectoryProvider()
 
         for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
             recipe = load_recipe(yaml_path)
-            for step in recipe.steps:
+            for step_name, step in recipe.steps.items():
                 if step.tool != "run_skill":
                     continue
-                sc = step.with_block.get("skill_command", "")
+                sc = step.with_args.get("skill_command", "")
                 if "${{" in sc:
                     continue  # skip dynamic skill commands
 
@@ -158,19 +157,19 @@ class TestAllRecipeSkillCommandsInvocable:
 
                 if info.source == SkillSource.BUNDLED_EXTENDED:
                     assert not resolved.startswith("/autoskillit:"), (
-                        f"Recipe '{yaml_path.stem}' step '{step.name}': "
+                        f"Recipe '{yaml_path.stem}' step '{step_name}': "
                         f"skill '{name}' is BUNDLED_EXTENDED but resolved to "
                         f"'{resolved}' (should use bare /name namespace)"
                     )
                 elif info.source == SkillSource.BUNDLED:
                     assert resolved.startswith("/autoskillit:"), (
-                        f"Recipe '{yaml_path.stem}' step '{step.name}': "
+                        f"Recipe '{yaml_path.stem}' step '{step_name}': "
                         f"skill '{name}' is BUNDLED but resolved to "
                         f"'{resolved}' (should use /autoskillit: namespace)"
                     )
 
                 # Verify activation: after init_session + activate_tier2, target is invocable
-                session_id = f"test-{yaml_path.stem}-{step.name}"
+                session_id = f"test-{yaml_path.stem}-{step_name}"
                 mgr = DefaultSessionSkillManager(provider, tmp_path)
                 mgr.init_session(session_id, cook_session=False, config=config)
                 if name in tier2:
@@ -179,6 +178,6 @@ class TestAllRecipeSkillCommandsInvocable:
                 if skill_md_path.exists():
                     content = skill_md_path.read_text()
                     assert "disable-model-invocation: true" not in content, (
-                        f"Recipe '{yaml_path.stem}' step '{step.name}': "
+                        f"Recipe '{yaml_path.stem}' step '{step_name}': "
                         f"target skill '{name}' still gated after activation"
                     )

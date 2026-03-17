@@ -674,6 +674,7 @@ class TestBuildSkillResultCrossValidation:
         "stderr",
         "token_usage",
         "write_path_warnings",
+        "write_call_count",
     }
 
     def test_empty_stdout_exit_zero_is_failure(self):

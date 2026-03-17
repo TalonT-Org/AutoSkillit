@@ -85,6 +85,8 @@ from .types import (
     TokenStore,
     ValidatedAddDir,
     WorkspaceManager,
+    extract_skill_name,
+    resolve_target_skill,
     truncate_text,
 )
 
@@ -122,6 +124,8 @@ __all__ = [
     "AUTOSKILLIT_PRIVATE_ENV_VARS",
     "AUTOSKILLIT_SKILL_PREFIX",
     "WRITE_EXPECTED_SKILLS",
+    "extract_skill_name",
+    "resolve_target_skill",
     "CATEGORY_TAGS",
     "TOOL_SUBSET_TAGS",
     "CONTEXT_EXHAUSTION_MARKER",

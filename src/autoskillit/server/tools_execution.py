@@ -206,7 +206,7 @@ async def run_skill(
     from pathlib import Path
     from uuid import uuid4
 
-    from autoskillit.execution.headless import resolve_target_skill
+    from autoskillit.core import resolve_target_skill
 
     # Resolve correct namespace and prepare for tier2 activation
     resolved_command = skill_command

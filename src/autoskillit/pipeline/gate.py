@@ -61,6 +61,7 @@ def gate_error_result(message: str | None = None) -> str:
             "stderr": "",
             "token_usage": None,
             "write_path_warnings": [],
+            "write_call_count": 0,
         }
     )
 
@@ -93,5 +94,6 @@ def headless_error_result(message: str | None = None) -> str:
             "stderr": "",
             "token_usage": None,
             "write_path_warnings": [],
+            "write_call_count": 0,
         }
     )

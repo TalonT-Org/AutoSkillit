@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import json
 
-from autoskillit.core import RetryReason
-from autoskillit.execution.headless import _build_skill_result, extract_skill_name
+from autoskillit.core import RetryReason, extract_skill_name
+from autoskillit.execution.headless import _build_skill_result
 from tests.conftest import _make_result
 
 

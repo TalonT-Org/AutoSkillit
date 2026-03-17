@@ -76,7 +76,13 @@ class TestRunSkillSessionOutcome:
     @pytest.mark.anyio
     async def test_success_not_retriable(self, tool_ctx):
         """Normal success -> needs_retry=False."""
-        stdout = json.dumps(
+        assistant = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "tool_use", "name": "Edit", "id": "tu1"}]},
+            }
+        )
+        result_record = json.dumps(
             {
                 "type": "result",
                 "subtype": "success",
@@ -85,6 +91,7 @@ class TestRunSkillSessionOutcome:
                 "session_id": "s1",
             }
         )
+        stdout = assistant + "\n" + result_record
         tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is False

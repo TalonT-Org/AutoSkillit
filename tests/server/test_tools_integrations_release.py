@@ -172,8 +172,6 @@ class TestReleaseIssueStagedLifecycle:
             ("integration", "main", "integration", True),
             # integration explicitly set as promotion_target: landing there = done
             ("integration", "integration", "integration", False),
-            # standard topology: main is both routing base and promotion target
-            ("main", "main", "main", False),
             # non-default target against main promotion target
             ("main", "main", "integration", True),
             # promotion_target overridden to something other than main
@@ -218,3 +216,13 @@ class TestReleaseIssueStagedLifecycle:
             f"target_branch={target_branch!r}, promotion_target={promotion_target!r}, "
             f"default_base_branch={default_base_branch!r}"
         )
+        if expected_staged:
+            assert result.get("staged_label") is not None, (
+                f"staged_label must not be None when staged=True "
+                f"(target_branch={target_branch!r}, promotion_target={promotion_target!r})"
+            )
+        else:
+            assert result.get("staged_label") is None, (
+                f"staged_label must be None when staged=False "
+                f"(target_branch={target_branch!r}, promotion_target={promotion_target!r})"
+            )

@@ -96,6 +96,9 @@ mcp_response:
 
 branching:
   default_base_branch: main
+  promotion_target: main      # Canonical "done" branch for staged-label comparison.
+                              # Override independently of default_base_branch when using
+                              # a multi-tier workflow (e.g. feature → integration → main).
 
 ci:
   workflow: null  # Workflow filename to filter CI runs, e.g. "tests.yml"

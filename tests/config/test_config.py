@@ -596,6 +596,42 @@ class TestBranchingConfig:
             f"disagrees with defaults.yaml ({yaml_default!r})"
         )
 
+    def test_branching_config_promotion_target_defaults_to_main(self) -> None:
+        """BranchingConfig.promotion_target defaults to main (package default)."""
+        from autoskillit.config.settings import BranchingConfig
+
+        assert BranchingConfig().promotion_target == "main"
+
+    def test_automation_config_branching_promotion_target_default(self) -> None:
+        """AutomationConfig propagates promotion_target default."""
+        from autoskillit.config.settings import AutomationConfig
+
+        assert AutomationConfig().branching.promotion_target == "main"
+
+    def test_branching_config_promotion_target_overridable(self) -> None:
+        """promotion_target can be set independently of default_base_branch."""
+        from autoskillit.config.settings import BranchingConfig
+
+        cfg = BranchingConfig(default_base_branch="integration", promotion_target="main")
+        assert cfg.default_base_branch == "integration"
+        assert cfg.promotion_target == "main"
+
+    def test_branching_config_promotion_target_defaults_match_yaml(self) -> None:
+        """Python default for promotion_target matches defaults.yaml."""
+        from autoskillit.config import load_config
+        from autoskillit.config.settings import BranchingConfig
+
+        loaded = load_config()  # loads only defaults.yaml + user config
+        assert loaded.branching.promotion_target == BranchingConfig().promotion_target
+
+    def test_branching_config_promotion_target_env_var_override(self, monkeypatch) -> None:
+        """AUTOSKILLIT_BRANCHING__PROMOTION_TARGET env var overrides promotion_target."""
+        from autoskillit.config import load_config
+
+        monkeypatch.setenv("AUTOSKILLIT_BRANCHING__PROMOTION_TARGET", "stable")
+        cfg = load_config()
+        assert cfg.branching.promotion_target == "stable"
+
 
 def test_resolve_ingredient_defaults_in_config():
     from autoskillit.config import resolve_ingredient_defaults

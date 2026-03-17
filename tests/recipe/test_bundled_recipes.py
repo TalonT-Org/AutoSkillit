@@ -354,10 +354,10 @@ class TestImplementationPipelineStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_ip_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> check_merge_queue; on_failure -> diagnose_ci."""
+        """T_CI2: ci_watch on_success -> check_merge_queue; on_failure -> detect_ci_conflict."""
         step = recipe.steps["ci_watch"]
         assert step.on_success == "check_merge_queue"
-        assert step.on_failure == "diagnose_ci"
+        assert step.on_failure == "detect_ci_conflict"
         assert "release_issue_success" in recipe.steps
 
     def test_ip_ci_watch_uses_merge_target(self, recipe) -> None:
@@ -404,6 +404,64 @@ class TestImplementationPipelineStructure:
         assert step.on_success == "extract_pr_number", (
             "open_pr_step must route to extract_pr_number"
         )
+
+    def test_ip_ci_watch_routes_failure_to_conflict_gate(self, recipe) -> None:
+        """ci_watch.on_failure must route to detect_ci_conflict, not directly to diagnose_ci."""
+        step = recipe.steps["ci_watch"]
+        assert step.on_failure == "detect_ci_conflict"
+
+    def test_ip_detect_ci_conflict_exists(self, recipe) -> None:
+        assert "detect_ci_conflict" in recipe.steps
+        step = recipe.steps["detect_ci_conflict"]
+        assert step.tool == "run_cmd"
+
+    def test_ip_detect_ci_conflict_uses_merge_base(self, recipe) -> None:
+        step = recipe.steps["detect_ci_conflict"]
+        cmd = (step.with_args or {}).get("cmd", "")
+        assert "merge-base" in cmd or "is-ancestor" in cmd
+
+    def test_ip_detect_ci_conflict_routing(self, recipe) -> None:
+        step = recipe.steps["detect_ci_conflict"]
+        assert step.on_success == "ci_conflict_fix"
+        assert step.on_failure == "diagnose_ci"
+
+    def test_ip_ci_conflict_fix_exists(self, recipe) -> None:
+        assert "ci_conflict_fix" in recipe.steps
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.tool == "run_skill"
+        skill_cmd = (step.with_args or {}).get("skill_command", "")
+        assert "resolve-merge-conflicts" in skill_cmd
+
+    def test_ip_ci_conflict_fix_routing(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.on_failure == "release_issue_failure"
+        assert step.on_exhausted == "release_issue_failure"
+        conditions = step.on_result.conditions if step.on_result else []
+        routes = {c.when: c.route for c in conditions}
+        assert any(
+            "escalation_required" in (w or "") and r == "release_issue_failure"
+            for w, r in routes.items()
+        )
+        default_routes = [r for w, r in routes.items() if w is None]
+        assert default_routes == ["re_push"]
+
+    def test_ip_detect_ci_conflict_skip_when_false(self, recipe) -> None:
+        step = recipe.steps["detect_ci_conflict"]
+        assert step.skip_when_false == "inputs.open_pr"
+
+    def test_ip_ci_conflict_fix_skip_when_false(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.skip_when_false == "inputs.open_pr"
+
+    def test_ip_recipe_passes_semantic_validation(self, recipe) -> None:
+        """After Part B, validate_recipe must report no errors."""
+        from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
+
+        errors = validate_recipe(recipe)
+        assert errors == [], f"Structural errors: {errors}"
+        findings = run_semantic_rules(recipe)
+        error_findings = [f for f in findings if f.severity.value == "error"]
+        assert error_findings == [], f"Semantic errors: {error_findings}"
 
 
 # ---------------------------------------------------------------------------
@@ -505,10 +563,10 @@ class TestImplementationGroupsStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_ig_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> diagnose_ci."""
+        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> detect_ci_conflict."""
         step = recipe.steps["ci_watch"]
         assert step.on_success == "release_issue_success"
-        assert step.on_failure == "diagnose_ci"
+        assert step.on_failure == "detect_ci_conflict"
 
     def test_ig_ci_watch_uses_merge_target(self, recipe) -> None:
         """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""
@@ -547,6 +605,64 @@ class TestImplementationGroupsStructure:
         with_args = recipe.steps["re_push"].with_args
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
+
+    def test_ig_ci_watch_routes_failure_to_conflict_gate(self, recipe) -> None:
+        """ci_watch.on_failure must route to detect_ci_conflict, not directly to diagnose_ci."""
+        step = recipe.steps["ci_watch"]
+        assert step.on_failure == "detect_ci_conflict"
+
+    def test_ig_detect_ci_conflict_exists(self, recipe) -> None:
+        assert "detect_ci_conflict" in recipe.steps
+        step = recipe.steps["detect_ci_conflict"]
+        assert step.tool == "run_cmd"
+
+    def test_ig_detect_ci_conflict_uses_merge_base(self, recipe) -> None:
+        step = recipe.steps["detect_ci_conflict"]
+        cmd = (step.with_args or {}).get("cmd", "")
+        assert "merge-base" in cmd or "is-ancestor" in cmd
+
+    def test_ig_detect_ci_conflict_routing(self, recipe) -> None:
+        step = recipe.steps["detect_ci_conflict"]
+        assert step.on_success == "ci_conflict_fix"
+        assert step.on_failure == "diagnose_ci"
+
+    def test_ig_ci_conflict_fix_exists(self, recipe) -> None:
+        assert "ci_conflict_fix" in recipe.steps
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.tool == "run_skill"
+        skill_cmd = (step.with_args or {}).get("skill_command", "")
+        assert "resolve-merge-conflicts" in skill_cmd
+
+    def test_ig_ci_conflict_fix_routing(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.on_failure == "release_issue_failure"
+        assert step.on_exhausted == "release_issue_failure"
+        conditions = step.on_result.conditions if step.on_result else []
+        routes = {c.when: c.route for c in conditions}
+        assert any(
+            "escalation_required" in (w or "") and r == "release_issue_failure"
+            for w, r in routes.items()
+        )
+        default_routes = [r for w, r in routes.items() if w is None]
+        assert default_routes == ["re_push"]
+
+    def test_ig_detect_ci_conflict_skip_when_false(self, recipe) -> None:
+        step = recipe.steps["detect_ci_conflict"]
+        assert step.skip_when_false == "inputs.open_pr"
+
+    def test_ig_ci_conflict_fix_skip_when_false(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.skip_when_false == "inputs.open_pr"
+
+    def test_ig_recipe_passes_semantic_validation(self, recipe) -> None:
+        """After Part B, validate_recipe must report no errors."""
+        from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
+
+        errors = validate_recipe(recipe)
+        assert errors == [], f"Structural errors: {errors}"
+        findings = run_semantic_rules(recipe)
+        error_findings = [f for f in findings if f.severity.value == "error"]
+        assert error_findings == [], f"Semantic errors: {error_findings}"
 
 
 # ---------------------------------------------------------------------------
@@ -694,10 +810,10 @@ class TestInvestigateFirstStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_if_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> check_merge_queue; on_failure -> diagnose_ci."""
+        """T_CI2: ci_watch on_success -> check_merge_queue; on_failure -> detect_ci_conflict."""
         step = recipe.steps["ci_watch"]
         assert step.on_success == "check_merge_queue"
-        assert step.on_failure == "diagnose_ci"
+        assert step.on_failure == "detect_ci_conflict"
         assert "release_issue_success" in recipe.steps
 
     def test_if_ci_watch_uses_merge_target(self, recipe) -> None:
@@ -796,6 +912,64 @@ class TestInvestigateFirstStructure:
             f"remediation.yaml assess step must declare on_context_limit: test, "
             f"got: {assess.on_context_limit!r}"
         )
+
+    def test_if_ci_watch_routes_failure_to_conflict_gate(self, recipe) -> None:
+        """ci_watch.on_failure must route to detect_ci_conflict, not directly to diagnose_ci."""
+        step = recipe.steps["ci_watch"]
+        assert step.on_failure == "detect_ci_conflict"
+
+    def test_if_detect_ci_conflict_exists(self, recipe) -> None:
+        assert "detect_ci_conflict" in recipe.steps
+        step = recipe.steps["detect_ci_conflict"]
+        assert step.tool == "run_cmd"
+
+    def test_if_detect_ci_conflict_uses_merge_base(self, recipe) -> None:
+        step = recipe.steps["detect_ci_conflict"]
+        cmd = (step.with_args or {}).get("cmd", "")
+        assert "merge-base" in cmd or "is-ancestor" in cmd
+
+    def test_if_detect_ci_conflict_routing(self, recipe) -> None:
+        step = recipe.steps["detect_ci_conflict"]
+        assert step.on_success == "ci_conflict_fix"
+        assert step.on_failure == "diagnose_ci"
+
+    def test_if_ci_conflict_fix_exists(self, recipe) -> None:
+        assert "ci_conflict_fix" in recipe.steps
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.tool == "run_skill"
+        skill_cmd = (step.with_args or {}).get("skill_command", "")
+        assert "resolve-merge-conflicts" in skill_cmd
+
+    def test_if_ci_conflict_fix_routing(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.on_failure == "release_issue_failure"
+        assert step.on_exhausted == "release_issue_failure"
+        conditions = step.on_result.conditions if step.on_result else []
+        routes = {c.when: c.route for c in conditions}
+        assert any(
+            "escalation_required" in (w or "") and r == "release_issue_failure"
+            for w, r in routes.items()
+        )
+        default_routes = [r for w, r in routes.items() if w is None]
+        assert default_routes == ["re_push"]
+
+    def test_if_detect_ci_conflict_skip_when_false(self, recipe) -> None:
+        step = recipe.steps["detect_ci_conflict"]
+        assert step.skip_when_false == "inputs.open_pr"
+
+    def test_if_ci_conflict_fix_skip_when_false(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.skip_when_false == "inputs.open_pr"
+
+    def test_if_recipe_passes_semantic_validation(self, recipe) -> None:
+        """After Part B, validate_recipe must report no errors."""
+        from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
+
+        errors = validate_recipe(recipe)
+        assert errors == [], f"Structural errors: {errors}"
+        findings = run_semantic_rules(recipe)
+        error_findings = [f for f in findings if f.severity.value == "error"]
+        assert error_findings == [], f"Semantic errors: {error_findings}"
 
 
 # ---------------------------------------------------------------------------

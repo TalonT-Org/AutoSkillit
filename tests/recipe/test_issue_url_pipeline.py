@@ -251,10 +251,9 @@ class TestClaimReleaseGates:
     RECIPES_WITH_RELEASE_SUCCESS_STEP = [
         "implementation-groups",
         "implementation",
-    ]
-    RECIPES_WITHOUT_RELEASE_SUCCESS_STEP = [
         "remediation",
     ]
+    RECIPES_WITHOUT_RELEASE_SUCCESS_STEP: list[str] = []
 
     def test_split_lists_are_exhaustive(self):
         """All RECIPES must appear in exactly one of the split lists."""

@@ -447,7 +447,7 @@ def push_to_remote(
         {"success": False, "error_type": str, "stderr": str} on classified failure.
     """
     # Protected-branch guard
-    if is_protected_branch(branch, protected=protected_branches):
+    if is_protected_branch(branch, protected=protected_branches or []):
         logger.error(
             "push_to_remote_protected_branch",
             clone_path=clone_path,

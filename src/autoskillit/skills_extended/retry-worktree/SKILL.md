@@ -27,7 +27,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 ```
 
 - **plan_path** — Path to the plan file (relative or absolute)
-- **worktree_path** — Path to the existing worktree directory
+- **worktree_path** — Absolute path to the existing worktree directory
 
 ## Critical Constraints
 

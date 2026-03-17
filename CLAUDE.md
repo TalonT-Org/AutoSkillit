@@ -173,10 +173,12 @@ src/autoskillit/
 │   ├── rules_inputs.py      #   Semantic rules for ingredient/version validation
 │   ├── rules_merge.py       #   Semantic rules for merge_worktree routing completeness
 │   ├── rules_recipe.py      #   Semantic rules for unknown sub-recipe references (unknown-sub-recipe rule)
+│   ├── rules_skill_content.py #  Semantic rules for SKILL.md bash-block placeholder validation (undefined-bash-placeholder)
 │   ├── rules_skills.py      #   Semantic rules for skill_command resolvability (unknown-skill-command)
 │   ├── rules_tools.py       #   Semantic rules for MCP tool name/param validity (unknown-tool, dead-with-param)
 │   ├── rules_verdict.py     #   Semantic rules for skill verdict routing completeness (unrouted-verdict-value)
 │   ├── rules_worktree.py    #   Semantic rules for worktree retry lifecycle
+│   ├── _skill_placeholder_parser.py #  Shared parser helpers for SKILL.md bash-block placeholder analysis
 │   ├── schema.py            #   Recipe, RecipeStep, DataFlowWarning, AUTOSKILLIT_VERSION_KEY
 │   ├── staleness_cache.py   #   Disk-backed staleness check cache (StalenessEntry, load_cache, save_cache)
 │   └── validator.py         #   validate_recipe, run_semantic_rules (re-exported), analyze_dataflow

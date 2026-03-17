@@ -4,6 +4,7 @@ Used by:
   - src/autoskillit/recipe/rules_skill_content.py (semantic rule)
   - tests/skills/test_skill_placeholder_contracts.py (structural linter)
 """
+
 from __future__ import annotations
 
 import re

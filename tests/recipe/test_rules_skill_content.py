@@ -1,4 +1,5 @@
 """Tests for the undefined-bash-placeholder semantic rule."""
+
 from __future__ import annotations
 
 import textwrap
@@ -8,7 +9,6 @@ from unittest.mock import patch
 import autoskillit.recipe.rules_skill_content as _rsc
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
-
 
 # Minimal recipe YAML that calls a synthetic bad skill with an undefined placeholder.
 # The YAML key for skill arguments is `with:` (maps to `with_args` via _parse_recipe).
@@ -28,7 +28,8 @@ _SYNTHETIC_BAD_SKILL_MD = textwrap.dedent(
 _RECIPE_CALLING_BAD_SKILL = textwrap.dedent(
     """\
     name: test-recipe
-    kitchen_rules: "Use run_skill only."
+    kitchen_rules:
+      - "Use run_skill only."
     ingredients:
       plan_path:
         description: plan path
@@ -97,7 +98,8 @@ def test_valid_skill_passes_placeholder_rule(tmp_path: Path) -> None:
         textwrap.dedent(
             """\
             name: test-recipe
-            kitchen_rules: "Use run_skill only."
+            kitchen_rules:
+      - "Use run_skill only."
             ingredients:
               plan_path:
                 description: plan path

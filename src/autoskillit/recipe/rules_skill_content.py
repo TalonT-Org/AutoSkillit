@@ -4,6 +4,7 @@ Validates that every {placeholder} in a SKILL.md bash block is either:
   - Declared as an ingredient in the skill's ## Arguments / ## Ingredients section
   - Assigned as a shell variable in one of the skill's bash blocks
 """
+
 from __future__ import annotations
 
 from pathlib import Path

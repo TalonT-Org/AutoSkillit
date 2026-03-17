@@ -784,13 +784,16 @@ class TestClaudeSessionResultContextExhausted:
         assert s.needs_retry is True
 
     def test_jsonl_flat_record_nonzero_output_tokens_not_detected(self):
-        """Flat assistant record with output_tokens > 0 does NOT trigger detection."""
-        import json
+        """Flat assistant record with output_tokens > 0 does NOT trigger detection.
 
+        The content deliberately contains CONTEXT_EXHAUSTION_MARKER so that only
+        the output_tokens != 0 guard suppresses detection — isolating the gate
+        under test.
+        """
         flat_record = json.dumps(
             {
                 "type": "assistant",
-                "content": [{"type": "text", "text": "Some normal output"}],
+                "content": [{"type": "text", "text": CONTEXT_EXHAUSTION_MARKER}],
                 "output_tokens": 42,
                 "input_tokens": 100,
             }

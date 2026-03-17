@@ -219,6 +219,13 @@ async def run_skill(
     if tool_ctx.output_pattern_resolver:
         expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
 
+    # Look up write-expectation metadata from skill contract
+    from autoskillit.core import WriteBehaviorSpec
+
+    write_spec: WriteBehaviorSpec | None = None
+    if tool_ctx.write_expected_resolver:
+        write_spec = tool_ctx.write_expected_resolver(skill_command)
+
     # Build validated add_dirs via DefaultSessionSkillManager
     from pathlib import Path
     from uuid import uuid4
@@ -263,6 +270,7 @@ async def run_skill(
             add_dirs=skill_add_dirs,
             step_name=step_name,
             expected_output_patterns=expected_output_patterns,
+            write_behavior=write_spec,
         )
         if skill_result.success:
             tool_ctx.audit.record_success(skill_command)

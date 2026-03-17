@@ -31,6 +31,7 @@ from autoskillit.core import (
     TimingStore,
     TokenStore,
     WorkspaceManager,
+    WriteExpectedResolver,
 )
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 
@@ -87,6 +88,7 @@ class ToolContext:
     ci_watcher: CIWatcher | None = field(default=None)
     merge_queue_watcher: MergeQueueWatcher | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
+    write_expected_resolver: WriteExpectedResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: TargetSkillResolver | None = field(default=None)
 

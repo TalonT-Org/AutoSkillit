@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING
 import structlog
 
 from autoskillit.core import (
-    WRITE_EXPECTED_SKILLS,
     ChannelConfirmation,
     ClaudeFlags,
     FailureRecord,
@@ -32,6 +31,7 @@ from autoskillit.core import (
     SkillResult,
     TerminationReason,
     ValidatedAddDir,
+    WriteBehaviorSpec,
     claude_code_project_dir,
     extract_skill_name,
     get_logger,
@@ -383,6 +383,7 @@ def _build_skill_result(
     max_consecutive_retries: int = 3,
     expected_output_patterns: Sequence[str] = (),
     cwd: str = "",
+    write_behavior: WriteBehaviorSpec | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
@@ -589,10 +590,18 @@ def _build_skill_result(
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
     # Zero-write gate: demote success to retriable failure when a write-expected
-    # skill produced zero Edit/Write calls (silent degradation detection)
-    if sr.success and sr.write_call_count == 0:
-        target_name = extract_skill_name(skill_command)
-        if target_name in WRITE_EXPECTED_SKILLS:
+    # skill produced zero Edit/Write calls (silent degradation detection).
+    # Write expectation is resolved from skill_contracts.yaml via WriteBehaviorSpec.
+    if sr.success and sr.write_call_count == 0 and write_behavior is not None:
+        write_expected = False
+        if write_behavior.mode == "always":
+            write_expected = True
+        elif write_behavior.mode == "conditional" and write_behavior.expected_when:
+            write_expected = _check_expected_patterns(
+                sr.result,
+                write_behavior.expected_when,
+            )
+        if write_expected:
             sr = dataclasses.replace(
                 sr,
                 success=False,
@@ -625,6 +634,7 @@ async def run_headless_core(
     timeout: float | None = None,
     stale_threshold: float | None = None,
     expected_output_patterns: Sequence[str] = (),
+    write_behavior: WriteBehaviorSpec | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -737,6 +747,7 @@ async def run_headless_core(
             audit=ctx.audit,
             expected_output_patterns=expected_output_patterns,
             cwd=cwd,
+            write_behavior=write_behavior,
         )
 
         # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
@@ -819,6 +830,7 @@ class DefaultHeadlessExecutor:
         timeout: float | None = None,
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),
+        write_behavior: WriteBehaviorSpec | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -833,4 +845,5 @@ class DefaultHeadlessExecutor:
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             expected_output_patterns=expected_output_patterns,
+            write_behavior=write_behavior,
         )

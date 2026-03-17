@@ -13,7 +13,7 @@ import os
 from typing import Any
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import SubprocessRunner, pkg_root
+from autoskillit.core import SubprocessRunner, WriteBehaviorSpec, pkg_root
 from autoskillit.execution import (
     DefaultCIWatcher,
     DefaultDatabaseReader,
@@ -127,7 +127,20 @@ def make_context(
             return []
         return contract.expected_output_patterns
 
+    def _resolve_write_behavior(skill_command: str) -> WriteBehaviorSpec:
+        name = resolve_skill_name(skill_command)
+        if not name:
+            return WriteBehaviorSpec()
+        contract = get_skill_contract(name, load_bundled_manifest())
+        if contract is None or contract.write_behavior is None:
+            return WriteBehaviorSpec()
+        return WriteBehaviorSpec(
+            mode=contract.write_behavior,
+            expected_when=tuple(contract.write_expected_when),
+        )
+
     ctx.output_pattern_resolver = _resolve_output_patterns
+    ctx.write_expected_resolver = _resolve_write_behavior
     ctx.executor = DefaultHeadlessExecutor(ctx)
     ctx.migrations = DefaultMigrationService(
         default_migration_engine(), run_headless=ctx.executor.run

@@ -281,6 +281,12 @@ async def report_bug(
         if tool_ctx.output_pattern_resolver:
             expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
 
+        from autoskillit.core import WriteBehaviorSpec
+
+        write_spec: WriteBehaviorSpec | None = None
+        if tool_ctx.write_expected_resolver:
+            write_spec = tool_ctx.write_expected_resolver(skill_command)
+
         if severity == "blocking":
             result = await _run_report_session(
                 skill_command,
@@ -294,6 +300,7 @@ async def report_bug(
                 step_name,
                 log_dir=log_dir,
                 expected_output_patterns=expected_output_patterns,
+                write_behavior=write_spec,
             )
             if not result["success"]:
                 await _notify(
@@ -319,6 +326,7 @@ async def report_bug(
                 step_name,
                 log_dir=log_dir,
                 expected_output_patterns=expected_output_patterns,
+                write_behavior=write_spec,
             )
         )
         _pending_report_tasks.add(task)
@@ -592,6 +600,7 @@ async def _run_report_session(
     step_name: str,
     log_dir: str,
     expected_output_patterns: list[str] | None = None,
+    write_behavior: Any = None,
 ) -> dict[str, Any]:
     """Run the headless session, write the report, and handle GitHub filing.
 
@@ -605,6 +614,7 @@ async def _run_report_session(
         step_name=step_name,
         timeout=float(cfg.timeout),
         expected_output_patterns=expected_output_patterns or [],
+        write_behavior=write_behavior,
     )
 
     report_text = skill_result.result or skill_result.stderr or "No report generated."
@@ -789,10 +799,17 @@ async def prepare_issue(
     if tool_ctx.output_pattern_resolver:
         expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
 
+    from autoskillit.core import WriteBehaviorSpec
+
+    write_spec: WriteBehaviorSpec | None = None
+    if tool_ctx.write_expected_resolver:
+        write_spec = tool_ctx.write_expected_resolver(skill_command)
+
     result = await tool_ctx.executor.run(
         skill_command,
         str(Path.cwd()),
         expected_output_patterns=expected_output_patterns,
+        write_behavior=write_spec,
     )
 
     if not result.success:
@@ -886,10 +903,17 @@ async def enrich_issues(
     if tool_ctx.output_pattern_resolver:
         expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
 
+    from autoskillit.core import WriteBehaviorSpec
+
+    write_spec: WriteBehaviorSpec | None = None
+    if tool_ctx.write_expected_resolver:
+        write_spec = tool_ctx.write_expected_resolver(skill_command)
+
     result = await tool_ctx.executor.run(
         skill_command,
         str(Path.cwd()),
         expected_output_patterns=expected_output_patterns,
+        write_behavior=write_spec,
     )
 
     if not result.success:

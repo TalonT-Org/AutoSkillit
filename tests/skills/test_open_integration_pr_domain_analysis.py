@@ -5,8 +5,7 @@ from pathlib import Path
 import pytest
 
 SKILL_MD = (
-    Path(__file__).parents[2]
-    / "src/autoskillit/skills_extended/open-integration-pr/SKILL.md"
+    Path(__file__).parents[2] / "src/autoskillit/skills_extended/open-integration-pr/SKILL.md"
 )
 
 
@@ -76,14 +75,8 @@ def test_skill_subagent_output_json_contract(skill_text: str) -> None:
 
 
 def test_skill_diff_truncation_guard(skill_text: str) -> None:
-    assert "12" in skill_text and (
-        "000" in skill_text or "000 char" in skill_text or "12000" in skill_text
-    )
+    assert "12 000" in skill_text or "12000" in skill_text or "12,000" in skill_text
 
 
 def test_skill_skips_empty_domains(skill_text: str) -> None:
-    assert (
-        "non-empty" in skill_text
-        or "no files" in skill_text
-        or "skip" in skill_text.lower()
-    )
+    assert "empty diffs" in skill_text or "removed from" in skill_text

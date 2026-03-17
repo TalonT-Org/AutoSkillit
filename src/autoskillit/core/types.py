@@ -1023,3 +1023,10 @@ class SessionSkillManager(Protocol):
     def activate_tier2(self, session_id: str, skill_name: str) -> bool: ...
 
     def cleanup_stale(self, max_age_seconds: int = 86400) -> int: ...
+
+
+@runtime_checkable
+class TargetSkillResolver(Protocol):
+    """Protocol for resolving skill names to their source tier."""
+
+    def resolve(self, name: str) -> Any: ...

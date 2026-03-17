@@ -115,6 +115,7 @@ def make_context(
         ci_watcher=DefaultCIWatcher(token=github_token),
         merge_queue_watcher=DefaultMergeQueueWatcher(token=github_token),
         session_skill_manager=session_mgr,
+        skill_resolver=provider.resolver,
     )
 
     def _resolve_output_patterns(skill_command: str) -> list[str]:

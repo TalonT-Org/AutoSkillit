@@ -139,6 +139,11 @@ class SkillsDirectoryProvider:
     def __init__(self) -> None:
         self._resolver = SkillResolver()
 
+    @property
+    def resolver(self) -> SkillResolver:
+        """Expose the underlying SkillResolver for target skill resolution."""
+        return self._resolver
+
     def list_skills(self) -> list[SkillInfo]:
         """List all public bundled skills."""
         return self._resolver.list_all()

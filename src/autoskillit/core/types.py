@@ -1051,6 +1051,8 @@ class MergeQueueWatcher(Protocol):
         cwd: str = ".",
         timeout_seconds: int = 600,
         poll_interval: int = 15,
+        stall_grace_period: int = 60,
+        max_stall_retries: int = 3,
     ) -> dict[str, Any]: ...
 
 

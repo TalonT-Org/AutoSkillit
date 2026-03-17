@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -176,11 +176,9 @@ class DefaultMergeQueueWatcher:
             # Confirmed: not in queue for 2+ cycles — check stall
             enabled_at = state["auto_merge_enabled_at"]
             merge_status = state["merge_state_status"]
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
 
-            is_stall_candidate = (
-                enabled_at is not None and merge_status in {"CLEAN", "HAS_HOOKS"}
-            )
+            is_stall_candidate = enabled_at is not None and merge_status in {"CLEAN", "HAS_HOOKS"}
 
             if is_stall_candidate:
                 stall_duration = (now - enabled_at).total_seconds()
@@ -215,7 +213,7 @@ class DefaultMergeQueueWatcher:
                     f"PR #{pr_number} stall unresolved after {max_stall_retries} toggle attempts",
                 )
 
-            # Not a stall (no auto_merge or bad merge state) and confirmed absent — genuine ejection
+            # Confirmed absent, not a stall candidate — genuine ejection
             return _make_result(
                 False,
                 "ejected",
@@ -258,9 +256,7 @@ class DefaultMergeQueueWatcher:
         if enabled_at_raw:
             enabled_at = datetime.fromisoformat(enabled_at_raw.replace("Z", "+00:00"))
 
-        queue_entry = next(
-            (n for n in nodes if n["pullRequest"]["number"] == pr_number), None
-        )
+        queue_entry = next((n for n in nodes if n["pullRequest"]["number"] == pr_number), None)
         return {
             "merged": pr["merged"],
             "state": pr["state"],

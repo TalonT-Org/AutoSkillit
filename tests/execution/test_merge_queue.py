@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -69,7 +69,10 @@ class TestDefaultMergeQueueWatcher:
         watcher = self._make_watcher()
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=self._queue_state(
-                merged=False, in_queue=False, auto_merge_enabled_at=None, merge_state_status="BLOCKED"
+                merged=False,
+                in_queue=False,
+                auto_merge_enabled_at=None,
+                merge_state_status="BLOCKED",
             )
         )
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
@@ -110,7 +113,7 @@ class TestDefaultMergeQueueWatcher:
         watcher = self._make_watcher()
         toggle_calls: list[int] = []
         call_count = 0
-        enabled_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+        enabled_at = datetime.now(UTC) - timedelta(seconds=120)
 
         async def _fetch_side(*_a: object, **_kw: object) -> dict:
             nonlocal call_count
@@ -131,8 +134,11 @@ class TestDefaultMergeQueueWatcher:
 
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             result = await watcher.wait(
-                pr_number=42, target_branch="main", repo="owner/repo",
-                poll_interval=1, stall_grace_period=60,
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                stall_grace_period=60,
             )
 
         assert result["success"] is True
@@ -333,7 +339,7 @@ class TestMergeQueueReliability:
         watcher = self._make_watcher()
         toggle_calls: list[object] = []
         call_count = 0
-        enabled_at = datetime.now(timezone.utc) - timedelta(seconds=30)
+        enabled_at = datetime.now(UTC) - timedelta(seconds=30)
 
         async def _fetch_side(*_a: object, **_kw: object) -> dict:
             nonlocal call_count
@@ -353,8 +359,11 @@ class TestMergeQueueReliability:
         watcher._toggle_auto_merge = _toggle_side  # type: ignore[method-assign]
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             result = await watcher.wait(
-                pr_number=42, target_branch="main", repo="owner/repo",
-                poll_interval=1, stall_grace_period=60,
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                stall_grace_period=60,
             )
         assert len(toggle_calls) == 0, "Toggle must NOT be called within grace period"
         assert result["success"] is True
@@ -365,7 +374,7 @@ class TestMergeQueueReliability:
         watcher = self._make_watcher()
         toggle_calls: list[object] = []
         call_count = 0
-        enabled_at = datetime.now(timezone.utc) - timedelta(seconds=90)
+        enabled_at = datetime.now(UTC) - timedelta(seconds=90)
 
         async def _fetch_side(*_a: object, **_kw: object) -> dict:
             nonlocal call_count
@@ -384,9 +393,12 @@ class TestMergeQueueReliability:
         watcher._fetch_pr_and_queue_state = _fetch_side  # type: ignore[method-assign]
         watcher._toggle_auto_merge = _toggle_side  # type: ignore[method-assign]
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
-            result = await watcher.wait(
-                pr_number=42, target_branch="main", repo="owner/repo",
-                poll_interval=1, stall_grace_period=60,
+            await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                stall_grace_period=60,
             )
         assert len(toggle_calls) >= 1, "Toggle must be called after grace period expires"
 
@@ -394,10 +406,11 @@ class TestMergeQueueReliability:
     async def test_max_stall_retries_exhausted_returns_stalled_not_ejected(self):
         """After max_stall_retries=2 toggle attempts, returns pr_state='stalled' not 'ejected'."""
         watcher = self._make_watcher()
-        enabled_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+        enabled_at = datetime.now(UTC) - timedelta(seconds=120)
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=self._queue_state(
-                merged=False, in_queue=False,
+                merged=False,
+                in_queue=False,
                 auto_merge_enabled_at=enabled_at,
                 merge_state_status="CLEAN",
             )
@@ -405,8 +418,12 @@ class TestMergeQueueReliability:
         watcher._toggle_auto_merge = AsyncMock()  # type: ignore[method-assign]
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             result = await watcher.wait(
-                pr_number=42, target_branch="main", repo="owner/repo",
-                poll_interval=1, stall_grace_period=60, max_stall_retries=2,
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                stall_grace_period=60,
+                max_stall_retries=2,
             )
         assert result["success"] is False
         assert result["pr_state"] == "stalled"
@@ -416,10 +433,11 @@ class TestMergeQueueReliability:
     async def test_exponential_backoff_between_stall_retries(self):
         """Backoff durations must be [30, 60, 120] seconds for retries 0, 1, 2."""
         watcher = self._make_watcher()
-        enabled_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+        enabled_at = datetime.now(UTC) - timedelta(seconds=120)
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=self._queue_state(
-                merged=False, in_queue=False,
+                merged=False,
+                in_queue=False,
                 auto_merge_enabled_at=enabled_at,
                 merge_state_status="CLEAN",
             )
@@ -432,8 +450,12 @@ class TestMergeQueueReliability:
 
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", side_effect=_capture_sleep):
             result = await watcher.wait(
-                pr_number=42, target_branch="main", repo="owner/repo",
-                poll_interval=1, stall_grace_period=60, max_stall_retries=3,
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                stall_grace_period=60,
+                max_stall_retries=3,
             )
         assert result["pr_state"] == "stalled"
         backoff_sleeps = [s for s in sleep_calls if s > 1]
@@ -443,7 +465,7 @@ class TestMergeQueueReliability:
     async def test_graphql_mutation_used_for_toggle(self):
         """Toggle must use disablePullRequestAutoMerge and enablePullRequestAutoMerge mutations."""
         watcher = self._make_watcher()
-        enabled_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+        enabled_at = datetime.now(UTC) - timedelta(seconds=120)
         call_count = 0
 
         async def _fetch_side(*_a: object, **_kw: object) -> dict:
@@ -452,7 +474,8 @@ class TestMergeQueueReliability:
             if call_count >= 4:
                 return self._queue_state(merged=True)
             return self._queue_state(
-                merged=False, in_queue=False,
+                merged=False,
+                in_queue=False,
                 auto_merge_enabled_at=enabled_at,
                 merge_state_status="CLEAN",
             )
@@ -465,7 +488,9 @@ class TestMergeQueueReliability:
             captured_bodies.append(body)
             query = body.get("query", "")
             if "disablePullRequestAutoMerge" in query:
-                data: dict = {"data": {"disablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
+                data: dict = {
+                    "data": {"disablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}
+                }
             elif "enablePullRequestAutoMerge" in query:
                 data = {"data": {"enablePullRequestAutoMerge": {"pullRequest": {"number": 42}}}}
             else:
@@ -475,11 +500,17 @@ class TestMergeQueueReliability:
         watcher._client.post = _mock_post  # type: ignore[method-assign]
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             await watcher.wait(
-                pr_number=42, target_branch="main", repo="owner/repo",
-                poll_interval=1, stall_grace_period=60, max_stall_retries=1,
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                stall_grace_period=60,
+                max_stall_retries=1,
             )
         queries = [b.get("query", "") for b in captured_bodies]
-        assert any("disablePullRequestAutoMerge" in q for q in queries), "Expected disable mutation"
+        assert any("disablePullRequestAutoMerge" in q for q in queries), (
+            "Expected disable mutation"
+        )
         assert any("enablePullRequestAutoMerge" in q for q in queries), "Expected enable mutation"
 
     @pytest.mark.anyio
@@ -488,14 +519,15 @@ class TestMergeQueueReliability:
         watcher = self._make_watcher()
         toggle_calls: list[object] = []
         call_count = 0
-        enabled_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+        enabled_at = datetime.now(UTC) - timedelta(seconds=120)
 
         async def _fetch_side(*_a: object, **_kw: object) -> dict:
             nonlocal call_count
             call_count += 1
             if call_count <= 2:
                 return self._queue_state(
-                    merged=False, in_queue=False,
+                    merged=False,
+                    in_queue=False,
                     auto_merge_enabled_at=enabled_at,
                     merge_state_status="CLEAN",
                 )
@@ -511,8 +543,12 @@ class TestMergeQueueReliability:
         watcher._toggle_auto_merge = _toggle_side  # type: ignore[method-assign]
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             result = await watcher.wait(
-                pr_number=42, target_branch="main", repo="owner/repo",
-                poll_interval=1, stall_grace_period=60, max_stall_retries=3,
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                stall_grace_period=60,
+                max_stall_retries=3,
             )
         assert result["success"] is True
         assert result["pr_state"] == "merged"
@@ -530,14 +566,18 @@ class TestMergeQueueReliability:
             return_value=self._queue_state(merged=True)
         )
         result = await watcher.wait(pr_number=1, target_branch="main", repo="owner/repo")
-        assert "stall_retries_attempted" in result, "merged response missing stall_retries_attempted"
+        assert "stall_retries_attempted" in result, (
+            "merged response missing stall_retries_attempted"
+        )
 
         # ejected (closed)
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=self._queue_state(state="CLOSED", merged=False)
         )
         result = await watcher.wait(pr_number=1, target_branch="main", repo="owner/repo")
-        assert "stall_retries_attempted" in result, "ejected response missing stall_retries_attempted"
+        assert "stall_retries_attempted" in result, (
+            "ejected response missing stall_retries_attempted"
+        )
 
         # timeout
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
@@ -547,17 +587,22 @@ class TestMergeQueueReliability:
                     return_value=self._queue_state(in_queue=True, queue_state="AWAITING_CHECKS")
                 )
                 result = await watcher.wait(
-                    pr_number=1, target_branch="main", repo="owner/repo",
+                    pr_number=1,
+                    target_branch="main",
+                    repo="owner/repo",
                     timeout_seconds=1000,
                 )
-        assert "stall_retries_attempted" in result, "timeout response missing stall_retries_attempted"
+        assert "stall_retries_attempted" in result, (
+            "timeout response missing stall_retries_attempted"
+        )
         assert result["pr_state"] == "timeout"
 
         # stalled
-        enabled_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+        enabled_at = datetime.now(UTC) - timedelta(seconds=120)
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=self._queue_state(
-                merged=False, in_queue=False,
+                merged=False,
+                in_queue=False,
                 auto_merge_enabled_at=enabled_at,
                 merge_state_status="CLEAN",
             )
@@ -565,10 +610,15 @@ class TestMergeQueueReliability:
         watcher._toggle_auto_merge = AsyncMock()  # type: ignore[method-assign]
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             result = await watcher.wait(
-                pr_number=1, target_branch="main", repo="owner/repo",
-                stall_grace_period=60, max_stall_retries=1,
+                pr_number=1,
+                target_branch="main",
+                repo="owner/repo",
+                stall_grace_period=60,
+                max_stall_retries=1,
             )
-        assert "stall_retries_attempted" in result, "stalled response missing stall_retries_attempted"
+        assert "stall_retries_attempted" in result, (
+            "stalled response missing stall_retries_attempted"
+        )
         assert result["pr_state"] == "stalled"
 
     @pytest.mark.anyio
@@ -579,8 +629,11 @@ class TestMergeQueueReliability:
             return_value=self._queue_state(merged=True)
         )
         result = await watcher.wait(
-            pr_number=42, target_branch="main", repo="owner/repo",
-            stall_grace_period=120, max_stall_retries=5,
+            pr_number=42,
+            target_branch="main",
+            repo="owner/repo",
+            stall_grace_period=120,
+            max_stall_retries=5,
         )
         assert result["success"] is True
         assert result["pr_state"] == "merged"

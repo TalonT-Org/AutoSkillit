@@ -19,6 +19,13 @@ _RELATIVE_ASSIGN_RE = re.compile(
     re.MULTILINE,
 )
 
+# Matches a subsequent absolute-resolution assignment: VAR="$(cd ...) or VAR=$(realpath ...)
+# These patterns follow a relative initial assignment and canonicalize the path to absolute.
+_ABSOLUTE_RESOLVE_RE = re.compile(
+    r'^([A-Z_]+)="?\$\(cd\b|^([A-Z_]+)="?\$\(realpath\b',
+    re.MULTILINE,
+)
+
 
 def _format_compat_check(
     skill_name: str,
@@ -27,6 +34,11 @@ def _format_compat_check(
 ) -> list[str]:
     """Check that SKILL.md bash assignments don't produce relative paths for
     outputs whose contract patterns require an absolute path (/.+).
+
+    A relative initial assignment is acceptable only when immediately followed
+    by an absolute-resolution statement (``$(cd ... && pwd)`` or
+    ``$(realpath ...)``).  If the relative assignment has no subsequent
+    resolution, it is reported as a failure.
 
     Returns a list of failure strings (empty = no issues).
     """
@@ -47,7 +59,16 @@ def _format_compat_check(
             if var_name != bash_key:
                 continue
             relative_value = m.group(2) or m.group(3) or m.group(4)
-            if relative_value:
+            if not relative_value:
+                continue
+            relative_pos = m.start()
+            # Allow relative initial assignment when a subsequent absolute-resolution
+            # assignment exists for the same variable (cd+pwd or realpath pattern).
+            has_later_resolution = any(
+                (rm.group(1) or rm.group(2)) == bash_key and rm.start() > relative_pos
+                for rm in _ABSOLUTE_RESOLVE_RE.finditer(content)
+            )
+            if not has_later_resolution:
                 assigned = m.group(0).split("=", 1)[1]
                 failures.append(
                     f"skill '{skill_name}': pattern {pattern!r} requires absolute path "

@@ -1161,13 +1161,21 @@ class TestRunSkillCwdValidation:
     @pytest.mark.anyio
     async def test_run_skill_accepts_empty_cwd(self, tool_ctx):
         """Empty cwd is accepted (some skills have no specific cwd requirement)."""
-        tool_ctx.runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
+        success_json = (
+            '{"type": "result", "subtype": "success", "is_error": false,'
+            ' "result": "done %%ORDER_UP%%", "session_id": "s1"}'
+        )
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
         result = json.loads(await run_skill("/investigate foo", cwd=""))
         assert result["success"] is True
 
     @pytest.mark.anyio
     async def test_run_skill_accepts_absolute_cwd(self, tool_ctx):
         """Absolute cwd passes the boundary check and proceeds normally."""
-        tool_ctx.runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
+        success_json = (
+            '{"type": "result", "subtype": "success", "is_error": false,'
+            ' "result": "done %%ORDER_UP%%", "session_id": "s1"}'
+        )
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
         result = json.loads(await run_skill("/investigate foo", cwd="/tmp"))
         assert result["success"] is True

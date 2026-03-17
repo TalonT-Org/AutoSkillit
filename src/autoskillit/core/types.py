@@ -553,24 +553,23 @@ SKILL_COMMAND_PREFIX: str = "/"
 # Canonical prefix for bundled autoskillit slash commands.
 AUTOSKILLIT_SKILL_PREFIX: str = "/autoskillit:"
 
-# Skills whose primary action is file modification — sessions that produce zero
-# Edit/Write tool calls on these skills are demoted to retriable failure.
-WRITE_EXPECTED_SKILLS: frozenset[str] = frozenset(
-    {
-        "dry-walkthrough",
-        "implement-worktree",
-        "implement-worktree-no-merge",
-        "resolve-failures",
-        "resolve-review",
-        "resolve-merge-conflicts",
-        "retry-worktree",
-        "rectify",
-        "make-plan",
-        "report-bug",
-        "design-guards",
-        "write-recipe",
-    }
-)
+
+@dataclass(frozen=True)
+class WriteBehaviorSpec:
+    """Write-expectation metadata resolved from skill contracts.
+
+    mode:
+        None  — no write expectation (gate inactive)
+        "always" — writes are always expected (gate active unconditionally)
+        "conditional" — writes expected only when expected_when patterns match
+    expected_when:
+        Regex patterns matched against session output. Only meaningful when
+        mode="conditional". If any pattern matches, writes are expected.
+    """
+
+    mode: str | None = None
+    expected_when: tuple[str, ...] = ()
+
 
 _SKILL_CMD_RE = re.compile(r"^/(?:autoskillit:)?([\w-]+)")
 
@@ -829,6 +828,7 @@ class HeadlessExecutor(Protocol):
         timeout: float | None = None,
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),
+        write_behavior: WriteBehaviorSpec | None = None,
     ) -> SkillResult: ...
 
 
@@ -881,6 +881,13 @@ class OutputPatternResolver(Protocol):
     """Protocol for resolving expected output patterns from a skill command."""
 
     def __call__(self, skill_command: str) -> Sequence[str]: ...
+
+
+@runtime_checkable
+class WriteExpectedResolver(Protocol):
+    """Protocol for resolving write-expectation metadata from skill contracts."""
+
+    def __call__(self, skill_command: str) -> WriteBehaviorSpec: ...
 
 
 @runtime_checkable

@@ -100,9 +100,13 @@ def test_only_accept_items_trigger_code_changes():
         or "accept items only" in text.lower()
         or ("accept" in text.lower() and "only" in text.lower())
     ), "SKILL.md must state that code changes are applied only for ACCEPT items"
-    # Confirm REJECT and DISCUSS are explicitly excluded from fixes
-    assert "reject" in text.lower() and (
-        "not" in text.lower() or "no code" in text.lower() or "excluded" in text.lower()
+    reject_idx = text.upper().find("REJECT")
+    assert reject_idx != -1, "SKILL.md must mention REJECT classification"
+    reject_context = text[reject_idx : reject_idx + 400].lower()
+    assert (
+        "no code" in reject_context
+        or "excluded" in reject_context
+        or ("not" in reject_context and "code" in reject_context)
     ), "SKILL.md must explicitly state that REJECT items do not trigger code changes"
 
 

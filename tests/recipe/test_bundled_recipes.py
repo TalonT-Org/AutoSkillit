@@ -784,6 +784,19 @@ class TestInvestigateFirstStructure:
             f"{[(f.step_name, f.message) for f in add_dir_dead]}"
         )
 
+    def test_remediation_assess_step_has_on_context_limit(self, recipe) -> None:
+        """REQ-RCP-002: assess step in remediation.yaml must declare on_context_limit: test.
+
+        assess runs resolve-failures inside an existing worktree. Partial fixes are committed
+        to disk, so routing to test checks whether partial work was sufficient — same rationale
+        as the fix step in implementation.yaml.
+        """
+        assess = recipe.steps["assess"]
+        assert assess.on_context_limit == "test", (
+            f"remediation.yaml assess step must declare on_context_limit: test, "
+            f"got: {assess.on_context_limit!r}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestSmokeTestStructure

@@ -478,6 +478,37 @@ class TestCLICook:
         assert "do-something" not in system_prompt
 
     @patch("autoskillit.cli.subprocess.run")
+    def test_orchestrator_prompt_contains_context_limit_routing(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Orchestrator prompt must instruct routing to on_context_limit when needs_retry=true."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.cook("test-script")
+
+        cmd = mock_run.call_args[0][0]
+        prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
+        system_prompt = cmd[prompt_idx + 1]
+        assert "needs_retry" in system_prompt, (
+            "Orchestrator prompt must mention needs_retry for context limit routing"
+        )
+        assert "on_context_limit" in system_prompt, (
+            "Orchestrator prompt must mention on_context_limit as a routing target"
+        )
+
+    @patch("autoskillit.cli.subprocess.run")
     def test_cook_propagates_exit_code(
         self,
         mock_run: MagicMock,

@@ -81,3 +81,23 @@ def test_normalize_retriable_success_empty_result_returns_empty_result():
     session = _session(subtype="success", result="", is_error=False)
     result = _normalize_subtype("success", SessionOutcome.RETRIABLE, session, "")
     assert result == "empty_result"
+
+
+def test_normalize_retriable_success_jsonl_exhausted_returns_context_exhausted():
+    """RETRIABLE + 'success' + jsonl_context_exhausted=True → 'context_exhausted'.
+
+    Without this fix, the missing completion marker path returns 'missing_completion_marker',
+    masking the true cause (context window exhaustion).
+    """
+    session = ClaudeSessionResult(
+        subtype="success",
+        is_error=False,
+        result="partial work done but no marker",
+        session_id="s1",
+        jsonl_context_exhausted=True,
+    )
+    result = _normalize_subtype("success", SessionOutcome.RETRIABLE, session, "%%ORDER_UP%%")
+    assert result == "context_exhausted", (
+        f"Expected 'context_exhausted', got '{result}'. "
+        "JSONL-detected context exhaustion must not be masked as missing_completion_marker."
+    )

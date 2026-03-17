@@ -746,6 +746,70 @@ class TestClaudeSessionResultContextExhausted:
         )
         assert s._is_context_exhausted() is False
 
+    def test_jsonl_flat_record_sets_context_exhausted_flag(self):
+        """parse_session_result sets jsonl_context_exhausted=True for flat assistant record."""
+        import json
+
+        flat_record = json.dumps(
+            {
+                "type": "assistant",
+                "content": [{"type": "text", "text": "Prompt is too long"}],
+                "output_tokens": 0,
+                "input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            }
+        )
+        result_record = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",
+                "session_id": "sess-1",
+            }
+        )
+        session = parse_session_result(flat_record + "\n" + result_record)
+        assert session.jsonl_context_exhausted is True
+
+    def test_jsonl_flat_record_is_context_exhausted_bypasses_is_error_guard(self):
+        """_is_context_exhausted() returns True via JSONL flag even when is_error=False."""
+        s = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="",
+            session_id="s1",
+            jsonl_context_exhausted=True,
+        )
+        assert s._is_context_exhausted() is True
+        assert s.needs_retry is True
+
+    def test_jsonl_flat_record_nonzero_output_tokens_not_detected(self):
+        """Flat assistant record with output_tokens > 0 does NOT trigger detection.
+
+        The content deliberately contains CONTEXT_EXHAUSTION_MARKER so that only
+        the output_tokens != 0 guard suppresses detection — isolating the gate
+        under test.
+        """
+        flat_record = json.dumps(
+            {
+                "type": "assistant",
+                "content": [{"type": "text", "text": CONTEXT_EXHAUSTION_MARKER}],
+                "output_tokens": 42,
+                "input_tokens": 100,
+            }
+        )
+        result_record = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done %%ORDER_UP%%",
+                "session_id": "sess-2",
+            }
+        )
+        session = parse_session_result(flat_record + "\n" + result_record)
+        assert session.jsonl_context_exhausted is False
+
 
 class TestClaudeSessionResultNeedsRetry:
     def test_needs_retry_true_for_max_turns(self):

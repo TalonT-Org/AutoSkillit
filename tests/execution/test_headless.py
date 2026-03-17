@@ -2570,7 +2570,7 @@ class TestBuildSkillResultChannelAPatternRecovery:
         sr = _build_skill_result(
             sub_result,
             completion_marker="%%ORDER_UP%%",
-            expected_output_patterns=["verdict\\s*=\\s*(GO|NO_GO)"],
+            expected_output_patterns=["verdict\\s*=\\s*(GO|NO GO)"],
         )
         assert sr.success is True, (
             "CHANNEL_A should recover patterns from assistant_messages, same as CHANNEL_B."
@@ -2610,7 +2610,7 @@ class TestBuildSkillResultChannelAPatternRecovery:
         sr = _build_skill_result(
             sub_result,
             completion_marker="%%ORDER_UP%%",
-            expected_output_patterns=["verdict\\s*=\\s*(GO|NO_GO)"],
+            expected_output_patterns=["verdict\\s*=\\s*(GO|NO GO)"],
         )
         assert sr.success is False
         assert sr.needs_retry is False

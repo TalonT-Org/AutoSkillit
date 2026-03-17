@@ -117,7 +117,7 @@ class TestComputeOutcomeLogging:
                 termination=TerminationReason.NATURAL_EXIT,
                 completion_marker="%%ORDER_UP%%",
                 channel_confirmation=ChannelConfirmation.CHANNEL_A,
-                expected_output_patterns=["verdict\\s*=\\s*(GO|NO_GO)"],
+                expected_output_patterns=["verdict\\s*=\\s*(GO|NO GO)"],
             )
         dead_end_logs = [r for r in logs if r.get("event") == "dead_end_guard"]
         assert dead_end_logs

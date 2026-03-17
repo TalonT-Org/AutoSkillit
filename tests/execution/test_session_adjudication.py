@@ -1258,11 +1258,11 @@ class TestContentStateEnum:
                 "verdict = GO\n%%ORDER_UP%%",
                 False,
                 "%%ORDER_UP%%",
-                ["verdict\\s*=\\s*(GO|NO_GO)"],
+                ["verdict\\s*=\\s*(GO|NO GO)"],
                 "complete",
             ),
             # ABSENT: empty result
-            ("", False, "%%ORDER_UP%%", ["verdict\\s*=\\s*(GO|NO_GO)"], "absent"),
+            ("", False, "%%ORDER_UP%%", ["verdict\\s*=\\s*(GO|NO GO)"], "absent"),
             # ABSENT: marker missing from non-empty result
             ("Some output, no marker", False, "%%ORDER_UP%%", [], "absent"),
             # CONTRACT_VIOLATION: result + marker present, patterns fail
@@ -1270,7 +1270,7 @@ class TestContentStateEnum:
                 "Done. %%ORDER_UP%%",
                 False,
                 "%%ORDER_UP%%",
-                ["verdict\\s*=\\s*(GO|NO_GO)"],
+                ["verdict\\s*=\\s*(GO|NO GO)"],
                 "contract_violation",
             ),
             # SESSION_ERROR: is_error=True
@@ -1339,7 +1339,7 @@ class TestDeadEndGuardContentState:
             termination=TerminationReason.COMPLETED,
             completion_marker="%%ORDER_UP%%",
             channel_confirmation=ChannelConfirmation.CHANNEL_B,
-            expected_output_patterns=["verdict\\s*=\\s*(GO|NO_GO)"],
+            expected_output_patterns=["verdict\\s*=\\s*(GO|NO GO)"],
         )
         assert outcome == SessionOutcome.FAILED
         assert retry_reason == RetryReason.NONE

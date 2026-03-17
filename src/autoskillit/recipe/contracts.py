@@ -56,6 +56,7 @@ class SkillContract:
     inputs: list[SkillInput]
     outputs: list[SkillOutput]
     expected_output_patterns: list[str] = dataclasses.field(default_factory=list)
+    pattern_examples: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -140,7 +141,13 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         SkillOutput(name=out["name"], type=out["type"]) for out in skill_data.get("outputs", [])
     ]
     patterns = skill_data.get("expected_output_patterns", [])
-    return SkillContract(inputs=inputs, outputs=outputs, expected_output_patterns=patterns)
+    examples = skill_data.get("pattern_examples", [])
+    return SkillContract(
+        inputs=inputs,
+        outputs=outputs,
+        expected_output_patterns=patterns,
+        pattern_examples=examples,
+    )
 
 
 def compute_skill_hash(skill_name: str, *, skills_dir: Path) -> str:
@@ -258,6 +265,7 @@ def generate_recipe_card(
                         ],
                         "outputs": [{"name": o.name, "type": o.type} for o in contract.outputs],
                         "expected_output_patterns": contract.expected_output_patterns,
+                        "pattern_examples": contract.pattern_examples,
                     }
                     if count_positional_args(skill_cmd) > 0:
                         # Positional args used — can't verify named inputs by ref

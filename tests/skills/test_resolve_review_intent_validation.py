@@ -4,16 +4,22 @@ Tests enforce that analysis runs before fixing, parallel sub-agents are used,
 ACCEPT/REJECT/DISCUSS classification gates code changes, git history is traced,
 inline replies are posted, and reject patterns are persisted for future mining.
 """
+
 from pathlib import Path
 
 SKILL_PATH = (
     Path(__file__).parent.parent.parent
-    / "src" / "autoskillit" / "skills_extended" / "resolve-review" / "SKILL.md"
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "resolve-review"
+    / "SKILL.md"
 )
 SKILL_TEXT = SKILL_PATH.read_text()
 
 
 # --- Phase ordering ---
+
 
 def test_analysis_phase_documented_before_fix_phase():
     """The intent-validation / analysis step must appear before the apply-fixes step."""
@@ -29,7 +35,8 @@ def test_analysis_phase_documented_before_fix_phase():
     assert analysis_idx != -1, "SKILL.md must describe an intent-validation or analysis phase"
     assert fix_idx != -1, "SKILL.md must describe a fix application step"
     assert analysis_idx < fix_idx, (
-        "Intent-validation (ACCEPT/REJECT/DISCUSS analysis) must appear before the fix-application step"
+        "Intent-validation (ACCEPT/REJECT/DISCUSS analysis) must appear before the"
+        " fix-application step"
     )
 
 
@@ -41,12 +48,11 @@ def test_analysis_report_written_before_code_changes():
         "before any code changes" in text.lower()
         or "before applying" in text.lower()
         or "before code changes" in text.lower()
-    ), (
-        "SKILL.md must state that the analysis report is written before any code changes are made"
-    )
+    ), "SKILL.md must state that the analysis report is written before any code changes are made"
 
 
 # --- Parallel sub-agents ---
+
 
 def test_parallel_subagents_per_domain_group():
     """The skill must describe parallel sub-agents grouped by domain/file-area."""
@@ -54,12 +60,9 @@ def test_parallel_subagents_per_domain_group():
     assert "domain" in text.lower() or "file-area" in text.lower() or "group" in text.lower(), (
         "SKILL.md must describe grouping comments by domain or file-area"
     )
-    assert (
-        "parallel" in text.lower()
-        and ("sub-agent" in text.lower() or "subagent" in text.lower() or "task" in text.lower())
-    ), (
-        "SKILL.md must describe launching parallel sub-agents (one per domain group)"
-    )
+    assert "parallel" in text.lower() and (
+        "sub-agent" in text.lower() or "subagent" in text.lower() or "task" in text.lower()
+    ), "SKILL.md must describe launching parallel sub-agents (one per domain group)"
 
 
 def test_intent_traced_via_git_history():
@@ -72,11 +75,13 @@ def test_intent_traced_via_git_history():
         or "pr provenance" in text.lower()
         or "original intent" in text.lower()
     ), (
-        "SKILL.md must instruct sub-agents to trace original intent via git history or PR provenance"
+        "SKILL.md must instruct sub-agents to trace original intent via git history or PR"
+        " provenance"
     )
 
 
 # --- ACCEPT/REJECT/DISCUSS classification ---
+
 
 def test_accept_reject_discuss_classification_present():
     """The skill must define ACCEPT, REJECT, and DISCUSS classifications."""
@@ -92,16 +97,13 @@ def test_only_accept_items_trigger_code_changes():
     assert (
         "only apply" in text.lower()
         or "accept items only" in text.lower()
-        or "accept" in text.lower() and "only" in text.lower()
-    ), (
-        "SKILL.md must state that code changes are applied only for ACCEPT items"
-    )
+        or "accept" in text.lower()
+        and "only" in text.lower()
+    ), "SKILL.md must state that code changes are applied only for ACCEPT items"
     # Confirm REJECT and DISCUSS are explicitly excluded from fixes
     assert "reject" in text.lower() and (
         "not" in text.lower() or "no code" in text.lower() or "excluded" in text.lower()
-    ), (
-        "SKILL.md must explicitly state that REJECT items do not trigger code changes"
-    )
+    ), "SKILL.md must explicitly state that REJECT items do not trigger code changes"
 
 
 def test_discuss_items_flagged_for_human_decision():
@@ -111,27 +113,21 @@ def test_discuss_items_flagged_for_human_decision():
     assert discuss_idx != -1, "SKILL.md must mention DISCUSS classification"
     discuss_context = text[discuss_idx : discuss_idx + 400].lower()
     assert (
-        "human" in discuss_context
-        or "flag" in discuss_context
-        or "decision" in discuss_context
-    ), (
-        "SKILL.md must describe DISCUSS items as flagged for human decision"
-    )
+        "human" in discuss_context or "flag" in discuss_context or "decision" in discuss_context
+    ), "SKILL.md must describe DISCUSS items as flagged for human decision"
 
 
 # --- Inline replies ---
 
+
 def test_inline_reply_posted_for_every_comment():
     """The skill must describe posting an inline reply for every analyzed comment."""
     text = SKILL_TEXT
-    assert (
-        "reply" in text.lower()
-        or "replies" in text.lower()
-    ), "SKILL.md must describe posting inline replies on review comments"
+    assert "reply" in text.lower() or "replies" in text.lower(), (
+        "SKILL.md must describe posting inline replies on review comments"
+    )
     # Every comment must get a reply
-    assert (
-        "every" in text.lower() or "each" in text.lower() or "all" in text.lower()
-    ), (
+    assert "every" in text.lower() or "each" in text.lower() or "all" in text.lower(), (
         "SKILL.md must indicate replies are posted for every (each/all) analyzed comment"
     )
 
@@ -140,11 +136,7 @@ def test_accept_reply_references_commit_sha():
     """ACCEPT replies must reference the commit SHA of the fix."""
     text = SKILL_TEXT
     # Find reply section and check that ACCEPT mentions sha
-    assert (
-        "commit_sha" in text
-        or "commit sha" in text.lower()
-        or "fixed in" in text.lower()
-    ), (
+    assert "commit_sha" in text or "commit sha" in text.lower() or "fixed in" in text.lower(), (
         "SKILL.md must state that ACCEPT replies reference the fixing commit SHA"
     )
 
@@ -156,9 +148,7 @@ def test_reject_reply_requires_specific_evidence():
     assert reject_idx != -1
     reject_context = text[reject_idx : reject_idx + 600].lower()
     assert (
-        "evidence" in reject_context
-        or "line" in reject_context
-        or "intentional" in reject_context
+        "evidence" in reject_context or "line" in reject_context or "intentional" in reject_context
     ), (
         "SKILL.md must require REJECT replies to include specific evidence "
         "(line numbers, design contracts, API references, etc.)"
@@ -180,22 +170,19 @@ def test_reply_api_endpoint_documented():
 
 # --- Reject pattern persistence ---
 
+
 def test_reject_patterns_persisted_to_json():
     """REJECT data must be saved to JSON for future reviewer-skill improvement mining."""
     text = SKILL_TEXT
-    assert (
-        "reject_patterns" in text
-        or "reject patterns" in text.lower()
-    ), (
+    assert "reject_patterns" in text or "reject patterns" in text.lower(), (
         "SKILL.md must describe saving reject patterns to a JSON file "
         "(for REQ-LOOP-001/002 feedback loop)"
     )
-    assert ".json" in text, (
-        "SKILL.md must specify a .json file for reject pattern persistence"
-    )
+    assert ".json" in text, "SKILL.md must specify a .json file for reject pattern persistence"
 
 
 # --- Enhanced report ---
+
 
 def test_report_includes_all_three_classification_counts():
     """The final report must show ACCEPT, REJECT, and DISCUSS statistics."""

@@ -1,7 +1,7 @@
 ---
 name: resolve-review
 categories: [github]
-description: Fetch PR review comments and apply fixes for each actionable finding. MCP-only — used exclusively by recipe orchestration via run_skill after review_pr reports changes_requested or needs_human verdict.
+description: Fetch PR review comments, run intent validation (ACCEPT/REJECT/DISCUSS) before applying fixes, and post inline replies. MCP-only — used exclusively by recipe orchestration via run_skill after review_pr reports changes_requested or needs_human verdict.
 ---
 
 # Resolve Review Skill
@@ -111,6 +111,7 @@ Build a lookup map from the threads response:
 
 If the GraphQL call fails (e.g., token lacks `read:discussion` scope), log a warning and
 set `comment_id_to_thread_id = {}`. Thread resolution will be silently skipped in Step 6.
+Flag this in the Step 7 report for human review.
 
 ### Step 3: Parse and Classify Findings
 
@@ -374,4 +375,4 @@ Exit 0.
 No structured output tokens are emitted. The recipe's `resolve_review` step has no
 `capture:` block — success/failure drives routing, not captured values.
 
-Summary written to: `temp/resolve-review/report_{pr_number}_{timestamp}.md`
+Summary written to: `temp/resolve-review/report_{pr_number}_{timestamp}.md` (relative to the current working directory)

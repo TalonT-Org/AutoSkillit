@@ -87,7 +87,9 @@ def test_mixed_files_across_multiple_domains():
         "tests/test_something.py",
     ]
     result = partition_files_by_domain(files)
-    assert len(result) == 3
+    assert "Server/MCP Tools" in result
+    assert "Pipeline/Execution" in result
+    assert "Tests" in result
 
 
 def test_custom_domain_paths_override():

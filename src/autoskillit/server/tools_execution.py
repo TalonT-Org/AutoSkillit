@@ -206,15 +206,32 @@ async def run_skill(
     from pathlib import Path
     from uuid import uuid4
 
+    from autoskillit.execution.headless import resolve_target_skill
+
+    # Resolve correct namespace and prepare for tier2 activation
+    resolved_command = skill_command
+    target_name: str | None = None
+    if tool_ctx.skill_resolver is not None:
+        resolved_command, target_name = resolve_target_skill(
+            skill_command, tool_ctx.skill_resolver
+        )
+
     skill_add_dirs: list[ValidatedAddDir] = []
     if tool_ctx.session_skill_manager is not None:
+        session_id = f"headless-{uuid4().hex[:12]}"
         session_root = tool_ctx.session_skill_manager.init_session(
-            f"headless-{uuid4().hex[:12]}",
+            session_id,
             cook_session=False,
             config=tool_ctx.config,
             project_dir=Path(cwd),
         )
         skill_add_dirs.append(session_root)
+
+        # Activate the target skill so it's invocable in the headless session
+        if target_name:
+            tier2_skills = frozenset(tool_ctx.config.skills.tier2)
+            if target_name in tier2_skills:
+                tool_ctx.session_skill_manager.activate_tier2(session_id, target_name)
     try:
         skill_add_dirs.append(validate_add_dir(Path(cwd)))
     except LayoutError:
@@ -223,7 +240,7 @@ async def run_skill(
     _start = time.monotonic()
     try:
         skill_result = await tool_ctx.executor.run(
-            skill_command,
+            resolved_command,
             cwd,
             model=model,
             add_dirs=skill_add_dirs,

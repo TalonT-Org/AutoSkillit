@@ -187,7 +187,8 @@ the Task tool (`model: "sonnet"`).
 ```
 
 **Fallback:** If a sub-agent fails or times out, classify all comments in that group as
-`DISCUSS` (safe fallback — no code is changed, human reviews). Log the failure.
+`DISCUSS` (safe fallback — no code is changed, human reviews). Log the failure including
+the error message, domain group name, and affected comment IDs.
 
 **Merge results** into a `classification_map: dict[comment_id, verdict_entry]`.
 

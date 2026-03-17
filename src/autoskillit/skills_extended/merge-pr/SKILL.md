@@ -82,6 +82,7 @@ deliberately deleted from the base branch after the PR's branch point.
 **This step runs for ALL PRs regardless of complexity tag.**
 
 ```bash
+BASE_BRANCH=$(gh pr view {pr_number} --json baseRefName --jq '.baseRefName')
 # 1. Find the divergence point between this PR and the base branch
 MERGE_BASE=$(git merge-base origin/${BASE_BRANCH} origin/{pr_branch})
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
 
 import structlog
 from fastmcp import Context
@@ -34,8 +35,6 @@ logger = get_logger(__name__)
 
 def _is_absolute_path(path: str) -> bool:
     """Return True if path is an absolute filesystem path."""
-    from pathlib import Path
-
     return Path(path).is_absolute()
 
 

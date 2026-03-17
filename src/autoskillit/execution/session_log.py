@@ -85,6 +85,7 @@ def flush_session_log(
     audit_record: dict[str, Any] | None = None,
     cli_subtype: str = "",
     write_path_warnings: list[str] | None = None,
+    write_call_count: int = 0,
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -195,6 +196,7 @@ def flush_session_log(
         "peak_fd_ratio": round(peak_fd_ratio, 3),
         "termination_reason": termination_reason,
         "write_path_warnings": effective_write_path_warnings,
+        "write_call_count": write_call_count,
     }
     summary_path = session_dir / "summary.json"
     _atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
@@ -239,6 +241,7 @@ def flush_session_log(
         "step_name": step_name,
         "input_tokens": token_usage.get("input_tokens", 0) if token_usage else 0,
         "output_tokens": token_usage.get("output_tokens", 0) if token_usage else 0,
+        "write_call_count": write_call_count,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

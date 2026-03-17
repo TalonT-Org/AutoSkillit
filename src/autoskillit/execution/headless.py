@@ -24,6 +24,7 @@ import structlog
 
 from autoskillit.core import (
     AUTOSKILLIT_SKILL_PREFIX,
+    WRITE_EXPECTED_SKILLS,
     ChannelConfirmation,
     ClaudeFlags,
     FailureRecord,
@@ -597,6 +598,9 @@ def _build_skill_result(
                 warnings=write_path_warnings[:5],
             )
 
+    # Behavioral write count: count Edit + Write tool calls in session
+    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
+
     if path_contamination:
         sr = SkillResult(
             success=False,
@@ -612,6 +616,7 @@ def _build_skill_result(
             worktree_path=extracted_worktree_path,
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
+            write_call_count=write_call_count,
         )
     else:
         sr = SkillResult(
@@ -628,8 +633,23 @@ def _build_skill_result(
             worktree_path=extracted_worktree_path,
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
+            write_call_count=write_call_count,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
+
+    # Zero-write gate: demote success to retriable failure when a write-expected
+    # skill produced zero Edit/Write calls (silent degradation detection)
+    if sr.success and sr.write_call_count == 0:
+        target_name = extract_skill_name(skill_command)
+        if target_name in WRITE_EXPECTED_SKILLS:
+            sr = dataclasses.replace(
+                sr,
+                success=False,
+                subtype="zero_writes",
+                needs_retry=True,
+                retry_reason=RetryReason.ZERO_WRITES,
+            )
+
     logger.debug(
         "build_skill_result_exit",
         success=sr.success,
@@ -638,6 +658,7 @@ def _build_skill_result(
         retry_reason=str(sr.retry_reason),
         is_error=sr.is_error,
         result_len=len(sr.result),
+        write_call_count=sr.write_call_count,
     )
     return sr
 

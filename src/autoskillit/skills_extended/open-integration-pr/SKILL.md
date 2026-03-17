@@ -60,7 +60,7 @@ to get a list of paths; filter out any empty strings. Store as `conflict_report_
 ### Step 2: Read pr_order_file
 
 Read the JSON file. Extract: `prs` array (each: `number`, `title`, `branch`,
-`complexity`, `additions`, `deletions`, `overlap_with_pr_numbers`). Also read
+`complexity`, `additions`, `deletions`, `overlap_with_pr_numbers`, `files_changed`). Also read
 `base_branch` from JSON as confirmation. Store the PR list as `pr_list`.
 
 ### Step 3: Fetch Closes/Fixes References from Original PR Bodies
@@ -96,6 +96,97 @@ Store as `changed_files`, `new_files`, `modified_files`.
 - Store as `conflict_resolution_table`.
 
 This step is skipped gracefully if any path is missing — log a warning and exclude that file.
+
+### Step 4c: Partition Files by Domain
+
+```bash
+python3 -c "
+from autoskillit.pipeline.pr_gates import partition_files_by_domain
+import json, sys
+files = json.loads(sys.argv[1])
+result = partition_files_by_domain(files)
+print(json.dumps(result))
+" '["path/to/file.py", ...]'
+```
+
+Pass `changed_files` as a JSON array argument. Store the parsed dict as `domain_partitions`.
+Skip entirely and set `domain_partitions = {}` if `changed_files` is empty.
+
+### Step 4d: Fetch Domain Diffs (parallel)
+
+For each domain name `D` in `domain_partitions` where `domain_partitions[D]` is non-empty,
+run the following in parallel (issue all Bash calls in a single message):
+
+```bash
+git diff {base_branch}..{integration_branch} -- {space-separated list of files in domain D}
+```
+
+Store results as `domain_diffs: dict[str, str]` mapping domain name → diff text.
+If a domain's diff text exceeds 12 000 characters, truncate to the first 12 000 characters
+and append `\n... [truncated — diff exceeds 12 000 chars]`. Domains with empty diffs are
+removed from `domain_diffs`.
+
+### Step 4e: Identify PRs per Domain
+
+For each domain `D` in `domain_partitions`, find every PR in `pr_list` whose
+`files_changed` list intersects with `domain_partitions[D]`.
+
+```python
+domain_pr_numbers = {
+    domain: [
+        pr["number"]
+        for pr in pr_list
+        if set(pr.get("files_changed", [])) & set(domain_partitions[domain])
+    ]
+    for domain in domain_partitions
+}
+```
+
+Store as `domain_pr_numbers: dict[str, list[int]]`.
+
+### Step 4f: Fetch Domain Commits (parallel)
+
+For each domain `D` in `domain_diffs` (domains that actually have diff content), run in
+parallel (all Bash calls in a single message):
+
+```bash
+git log {base_branch}..{integration_branch} --oneline -- {space-separated files in domain D}
+```
+
+Store as `domain_commits: dict[str, list[str]]` (each entry is a list of `"sha message"` strings).
+Empty results are stored as empty lists.
+
+### Step 4g: Run Parallel Domain Analysis Subagents
+
+For each domain `D` in `domain_diffs`, spawn a Task subagent (model: sonnet) in a single
+parallel message. **Issue all Task calls in a single message** to maximize parallelism.
+**Skip domains with no diff content** (not in `domain_diffs`) — do not spawn subagents for them.
+
+Each subagent receives a prompt with:
+- The domain name
+- The list of files changed in the domain
+- The diff content (already truncated at 12 000 chars)
+- The PR numbers and titles for PRs touching this domain (look up titles from `pr_list`)
+- The commit one-liners for the domain
+
+The subagent is instructed to return ONLY a JSON object with this exact shape:
+
+```json
+{
+  "domain": "Server/MCP Tools",
+  "summary": "3-4 sentence description of what changed and why it matters",
+  "key_changes": ["concise description of change 1", "concise description of change 2"],
+  "pr_numbers": [42, 47],
+  "commit_count": 5
+}
+```
+
+Parse each subagent's output as JSON. If parsing fails for a domain, log a warning and
+omit that domain from `domain_summaries`. Store the collected results as
+`domain_summaries: list[dict]`.
+
+The 7 canonical domain names are: **Server/MCP Tools**, **Pipeline/Execution**,
+**Recipe/Validation**, **CLI/Workspace**, **Skills**, **Tests**, **Core/Config/Infra**.
 
 ### Step 5: Select Arch-Lens Lenses
 
@@ -164,6 +255,21 @@ Collapsed {N} PRs into `{integration_branch}` targeting `{base_branch}`.
 |---|-------|-----------|-----------|-----------|---------|
 | #{number} | {title} | {complexity} | +{additions} | -{deletions} | {overlap_with_pr_numbers or "—"} |
 ...
+
+{If domain_summaries is non-empty:}
+## Domain Analysis
+
+{For each entry in domain_summaries (ordered by domain name):}
+### {entry.domain}
+
+{entry.summary}
+
+**Key changes:**
+{For each item in entry.key_changes:}
+- {item}
+
+**Contributing PRs:** {comma-separated #{N} for each N in entry.pr_numbers, or "—" if empty}
+**Commits:** {entry.commit_count} commit(s)
 
 {If audit_verdict is non-empty:}
 ## Audit

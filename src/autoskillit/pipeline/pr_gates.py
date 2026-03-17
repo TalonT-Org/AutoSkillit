@@ -90,3 +90,56 @@ def partition_prs(
         "ci_blocked_prs": ci_blocked,
         "review_blocked_prs": review_blocked,
     }
+
+
+DOMAIN_PATHS: dict[str, list[str]] = {
+    "Server/MCP Tools": ["src/autoskillit/server/"],
+    "Pipeline/Execution": ["src/autoskillit/execution/", "src/autoskillit/pipeline/"],
+    "Recipe/Validation": ["src/autoskillit/recipe/"],
+    "CLI/Workspace": ["src/autoskillit/cli/", "src/autoskillit/workspace/"],
+    "Skills": ["src/autoskillit/skills/", "src/autoskillit/skills_extended/"],
+    "Tests": ["tests/"],
+    "Core/Config/Infra": [
+        "src/autoskillit/core/",
+        "src/autoskillit/config/",
+        "src/autoskillit/migration/",
+        "src/autoskillit/hooks/",
+        "src/autoskillit/recipes/",
+    ],
+}
+
+
+def partition_files_by_domain(
+    file_paths: list[str],
+    domain_paths: dict[str, list[str]] | None = None,
+) -> dict[str, list[str]]:
+    """Partition a list of changed file paths into named analysis domains.
+
+    Each file is assigned to the first domain whose prefix it matches
+    (definition order in ``domain_paths``). Files matching no domain
+    prefix are placed in an ``"Other"`` bucket. Only non-empty buckets
+    are included in the returned dict.
+
+    Args:
+        file_paths: Relative paths of changed files (e.g. from git diff --name-only).
+        domain_paths: Override the default ``DOMAIN_PATHS`` mapping — useful for
+            tests that need deterministic, isolated domain definitions.
+
+    Returns:
+        Mapping of domain name → list of file paths in that domain.
+        Only domains with at least one matching file are present.
+    """
+    mapping = domain_paths if domain_paths is not None else DOMAIN_PATHS
+    buckets: dict[str, list[str]] = {}
+
+    for path in file_paths:
+        assigned = False
+        for domain, prefixes in mapping.items():
+            if any(path.startswith(prefix) for prefix in prefixes):
+                buckets.setdefault(domain, []).append(path)
+                assigned = True
+                break
+        if not assigned:
+            buckets.setdefault("Other", []).append(path)
+
+    return buckets

@@ -505,7 +505,7 @@ steps:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
     on_success: check_merge_queue
-    on_failure: diagnose_ci
+    on_failure: detect_ci_conflict
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -514,8 +514,8 @@ steps:
       (conclusion + failed job names) for downstream resolve_ci.
       Skipped when open_pr=false — no remote feature branch is opened in that mode.
       On success, routes to check_merge_queue to determine if the PR should enter
-      the merge queue. On failure, routes to diagnose_ci which fetches CI logs and
-      writes a diagnosis before routing to resolve_ci for targeted remediation.
+      the merge queue. On failure, routes to detect_ci_conflict which checks whether
+      the failure is caused by a stale base before falling through to diagnose_ci.
 
   check_merge_queue:
     tool: run_cmd
@@ -698,6 +698,46 @@ steps:
       Pushes the CI-fixed feature branch back to the remote after resolve_ci succeeds.
       Routes back to ci_watch to verify the fix resolves CI. On push failure, escalates
       via cleanup_failure.
+
+  detect_ci_conflict:
+    tool: run_cmd
+    with:
+      cmd: "git fetch origin ${{ inputs.base_branch }} && ! git merge-base --is-ancestor origin/${{ inputs.base_branch }} HEAD"
+      cwd: "${{ context.work_dir }}"
+      step_name: "detect_ci_conflict"
+    on_success: ci_conflict_fix
+    on_failure: diagnose_ci
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Detects whether the CI failure originates from a stale integration base rather than
+      a code-level test failure. Exit 0 (fetch succeeded AND base is NOT an ancestor of HEAD)
+      signals a stale base — routes to ci_conflict_fix. Exit 1 (fetch failed OR base is already
+      an ancestor) signals a real code failure or an unresolvable state — falls through to
+      diagnose_ci. This step insulates resolve_ci from being invoked for merge-conflict failures.
+
+  ci_conflict_fix:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "ci_conflict_fix"
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: release_issue_failure
+      - route: re_push
+    on_failure: release_issue_failure
+    retries: 1
+    on_exhausted: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Resolves a stale-base CI failure by rebasing the feature branch onto the latest
+      integration HEAD. Mirrors queue_ejected_fix: on clean rebase or goal-aware conflict
+      resolution, routes to re_push to re-trigger CI on the rebased branch. On escalation
+      (LOW confidence conflicts) or tool failure, routes to release_issue_failure.
+      retries: 1 bounds the loop; after 2 total attempts, escalates.
 
   release_issue_success:
     description: "Transition issue from in-progress to staged after successful pipeline completion"

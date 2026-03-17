@@ -96,8 +96,8 @@ def test_every_pattern_example_matches_its_patterns(skills):
                     f"Skill '{skill_name}': pattern {pattern!r} "
                     f"matches none of the examples {examples!r}"
                 )
-    assert not failures, (
-        "Contract patterns do not match their declared examples:\n" + "\n".join(failures)
+    assert not failures, "Contract patterns do not match their declared examples:\n" + "\n".join(
+        failures
     )
 
 

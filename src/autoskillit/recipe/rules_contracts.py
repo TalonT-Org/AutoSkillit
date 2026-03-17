@@ -69,8 +69,6 @@ def _check_missing_output_patterns(ctx: ValidationContext) -> list[RuleFinding]:
     severity=Severity.ERROR,
 )
 def _check_pattern_examples_match(ctx: ValidationContext) -> list[RuleFinding]:
-    """For skills with both patterns and examples, all patterns must match at least one
-    example. A mismatch is a definitive bug — the pattern will never match valid output."""
     findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
 
@@ -124,7 +122,6 @@ def _check_pattern_examples_match(ctx: ValidationContext) -> list[RuleFinding]:
     severity=Severity.WARNING,
 )
 def _check_missing_pattern_examples(ctx: ValidationContext) -> list[RuleFinding]:
-    """If a skill has patterns, it must also declare pattern_examples."""
     findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
 

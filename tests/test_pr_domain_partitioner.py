@@ -40,7 +40,7 @@ def test_skills_file_assigned_to_skills_domain():
 
 
 def test_test_file_assigned_to_tests_domain():
-    result = partition_files_by_domain(["tests/test_pr_domain_partitioner.py"])
+    result = partition_files_by_domain(["tests/test_something.py"])
     assert "Tests" in result
 
 

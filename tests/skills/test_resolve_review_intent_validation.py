@@ -15,6 +15,7 @@ SKILL_PATH = (
     / "resolve-review"
     / "SKILL.md"
 )
+assert SKILL_PATH.exists(), f"SKILL.md not found at {SKILL_PATH}"
 SKILL_TEXT = SKILL_PATH.read_text()
 
 

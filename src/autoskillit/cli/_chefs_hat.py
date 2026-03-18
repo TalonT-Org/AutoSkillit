@@ -50,8 +50,7 @@ def chefs_hat() -> None:
         return
 
     from autoskillit.config import load_config
-    from autoskillit.core import pkg_root
-    from autoskillit.core.logging import configure_logging
+    from autoskillit.core import configure_logging, pkg_root
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()

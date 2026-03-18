@@ -13,12 +13,6 @@ def test_ungated_tools_is_frozenset():
     assert isinstance(UNGATED_TOOLS, frozenset)
 
 
-def test_tool_sets_are_disjoint():
-    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
-
-    assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
-
-
 def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 

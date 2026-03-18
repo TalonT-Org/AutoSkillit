@@ -281,7 +281,6 @@ class TestOutdatedScriptVersionRule:
             ("0.1.0", "0.2.0", 1),  # MSR1: below installed → fires
             ("0.2.0", "0.2.0", 0),  # MSR2: matches installed → does not fire
             (None, "0.2.0", 1),  # MSR3: None → fires
-            ("0.1.0", "0.2.0", 1),  # MSR4: also fires (same as MSR1; severity checked separately)
         ],
     )
     def test_outdated_recipe_version_rule(

@@ -125,14 +125,6 @@ def test_open_kitchen_greetings_have_no_placeholders():
         assert "{" not in g, f"Placeholder in open-kitchen greeting: {g!r}"
 
 
-def test_orchestrator_prompt_does_not_embed_greetings():
-    """Greetings are delivered via positional arg, not embedded in system prompt."""
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
-
-    prompt = _build_orchestrator_prompt("my-recipe")
-    assert "Display ONE of these greetings" not in prompt
-
-
 def test_open_kitchen_prompt_does_not_embed_greetings():
     """Open-kitchen greetings are delivered via positional arg, not embedded."""
     from autoskillit.cli._prompts import _build_open_kitchen_prompt

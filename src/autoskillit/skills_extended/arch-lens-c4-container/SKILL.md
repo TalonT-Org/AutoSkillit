@@ -125,7 +125,7 @@ Use the mermaid skill conventions to create a diagram with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `temp/autoskillit:arch-lens-c4-container/arch_diag_c4_container_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `temp/arch-lens-c4-container/arch_diag_c4_container_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After writing the diagram file, emit a structured output line:
 

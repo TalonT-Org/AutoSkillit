@@ -6,7 +6,7 @@ for dependency injection and structural typing.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -18,7 +18,6 @@ from ._type_results import (
     ValidatedAddDir,
     WriteBehaviorSpec,
 )
-from ._type_subprocess import SubprocessResult
 
 __all__ = [
     "GatePolicy",

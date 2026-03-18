@@ -99,10 +99,16 @@ src/autoskillit/
 ├── .mcp.json                # MCP server config for plugin loading
 ├── core/                    # L0 foundation sub-package (zero autoskillit imports)
 │   ├── __init__.py          #   Re-exports full public surface
-│   ├── io.py                #   _atomic_write, ensure_project_temp, load_yaml, dump_yaml, YAMLError
+│   ├── io.py                #   atomic_write, ensure_project_temp, load_yaml, dump_yaml_str, YAMLError
 │   ├── logging.py           #   get_logger, configure_logging, PACKAGE_LOGGER_NAME
 │   ├── paths.py             #   pkg_root(), is_git_worktree() — canonical package root resolver
-│   ├── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
+│   ├── types.py             #   Thin re-export hub — imports * from all _type_*.py sub-modules
+│   ├── _type_enums.py       #   12 StrEnums: RetryReason, MergeState, ClaudeFlags, Severity, etc.
+│   ├── _type_subprocess.py  #   SubprocessResult, SubprocessRunner Protocol, _TERMINATION_CONTRACT
+│   ├── _type_constants.py   #   GATED_TOOLS, FREE_RANGE_TOOLS, SKILL_TOOLS, SKILL_COMMAND_PREFIX, etc.
+│   ├── _type_results.py     #   LoadResult, LoadReport, SkillResult, FailureRecord, CleanupResult, CIRunScope, etc.
+│   ├── _type_protocols.py   #   19 Protocols: GatePolicy, HeadlessExecutor, GitHubFetcher, CIWatcher, etc.
+│   ├── _type_helpers.py     #   extract_skill_name, resolve_target_skill, truncate_text
 │   ├── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
 │   ├── claude_conventions.py #  ClaudeDirectoryConventions — canonical skill discovery directory layout constants; LayoutError, validate_add_dir()
 │   └── github_url.py        #   parse_github_repo — canonical GitHub URL parser (str → owner/repo | None)

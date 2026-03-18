@@ -7,7 +7,7 @@ SubprocessRunner, and the termination contract sentinel.
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 

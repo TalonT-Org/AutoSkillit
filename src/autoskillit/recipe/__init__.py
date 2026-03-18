@@ -56,7 +56,16 @@ from autoskillit.recipe.io import (  # noqa: E402
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
-from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeStep  # noqa: E402
+from autoskillit.recipe.schema import (  # noqa: E402
+    AUTOSKILLIT_VERSION_KEY,
+    DataFlowReport,
+    Recipe,
+    RecipeInfo,
+    RecipeIngredient,
+    RecipeStep,
+    StepResultCondition,
+    StepResultRoute,
+)
 from autoskillit.recipe.staleness_cache import (  # noqa: E402
     StalenessEntry,
     compute_recipe_hash,
@@ -77,7 +86,12 @@ __all__ = [
     "RecipeListItem",
     "Recipe",
     "RecipeInfo",
+    "RecipeIngredient",
     "RecipeStep",
+    "AUTOSKILLIT_VERSION_KEY",
+    "StepResultCondition",
+    "StepResultRoute",
+    "DataFlowReport",
     "StaleItem",
     "StalenessEntry",
     "compute_recipe_hash",

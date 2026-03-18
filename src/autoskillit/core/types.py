@@ -296,7 +296,7 @@ class SubprocessRunner(Protocol):
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,
-        pty_mode: bool = True,
+        pty_mode: bool = False,
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
         linux_tracing_config: Any | None = None,

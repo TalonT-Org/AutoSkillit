@@ -141,9 +141,7 @@ def build_full_headless_cmd(
         When > 0, ``CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=<ms>`` is prepended.
     """
     prompt = _inject_cwd_anchor(
-        _inject_completion_directive(
-            _ensure_skill_prefix(skill_command), completion_marker
-        ),
+        _inject_completion_directive(_ensure_skill_prefix(skill_command), completion_marker),
         cwd,
     )
     spec = build_headless_cmd(prompt, model=model)

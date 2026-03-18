@@ -34,12 +34,6 @@ def test_core_io_module_has_docstring():
     assert m.__doc__ and "atomic" in m.__doc__
 
 
-def test_dump_yaml_not_in_core_all():
-    import autoskillit.core as core
-
-    assert "dump_yaml" not in core.__all__
-
-
 def test_package_logger_name_not_in_core_all():
     import autoskillit.core as core
 

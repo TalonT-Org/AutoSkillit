@@ -1073,6 +1073,7 @@ class TestGroupCMigration:
             "channel_a_confirmed",
             "channel_b_status",
             "channel_b_session_id",
+            "stdout_session_id",
         }  # REQ-SIG-008
 
     def test_race_signals_still_frozen(self):

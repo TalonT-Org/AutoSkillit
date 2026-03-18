@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import assert_never
 
 import anyio
 import anyio.abc
 
-from autoskillit.core import ChannelConfirmation, TerminationReason, get_logger
+from autoskillit.core import ChannelBStatus, ChannelConfirmation, TerminationReason, get_logger
 from autoskillit.execution._process_monitor import _heartbeat, _session_log_monitor
 
 logger = get_logger(__name__)
@@ -26,8 +28,9 @@ class RaceSignals:
     process_exited: bool
     process_returncode: int | None
     channel_a_confirmed: bool
-    channel_b_status: str | None  # "completion", "stale", or None
-    channel_b_session_id: str  # Claude Code session ID from JSONL filename stem, or ""
+    channel_b_status: ChannelBStatus | None
+    channel_b_session_id: str = ""  # Claude Code session ID from JSONL filename stem, or ""
+    stdout_session_id: str | None = None  # Session ID extracted from stdout type=system record
 
 
 @dataclass
@@ -43,8 +46,9 @@ class RaceAccumulator:
     process_exited: bool = False
     process_returncode: int | None = None
     channel_a_confirmed: bool = False
-    channel_b_status: str | None = None
+    channel_b_status: ChannelBStatus | None = None
     channel_b_session_id: str = ""
+    stdout_session_id: str | None = None
 
     def to_race_signals(self) -> RaceSignals:
         return RaceSignals(
@@ -53,6 +57,7 @@ class RaceAccumulator:
             channel_a_confirmed=self.channel_a_confirmed,
             channel_b_status=self.channel_b_status,
             channel_b_session_id=self.channel_b_session_id,
+            stdout_session_id=self.stdout_session_id,
         )
 
 
@@ -93,6 +98,48 @@ async def _watch_heartbeat(
     trigger.set()
 
 
+async def _extract_stdout_session_id(
+    stdout_path: Path,
+    acc: RaceAccumulator,
+    ready: anyio.Event,
+    _poll_interval: float = 0.3,
+    _timeout: float = 10.0,
+) -> None:
+    """Extract session ID from stdout type=system record and deposit on accumulator.
+
+    The Claude CLI writes a type=system record early in startup that contains the
+    session ID used as the JSONL filename stem. By extracting it from stdout (owned
+    by this session via create_temp_io), ownership is transitive — no discovery race.
+    """
+    import time as _time
+
+    start = _time.monotonic()
+    while _time.monotonic() - start < _timeout:
+        await anyio.sleep(_poll_interval)
+        try:
+            raw = stdout_path.read_bytes()
+        except OSError:
+            continue
+        content = raw.decode("utf-8", errors="replace")
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if isinstance(obj, dict) and obj.get("type") == "system":
+                sid = obj.get("session_id")
+                if sid:
+                    acc.stdout_session_id = sid
+                    logger.debug("stdout_session_id_extracted", session_id=sid)
+                    ready.set()
+                    return
+    logger.debug("stdout_session_id_extraction_timeout", timeout=_timeout)
+    ready.set()
+
+
 async def _watch_session_log(
     session_log_dir: Path,
     completion_marker: str,
@@ -107,13 +154,21 @@ async def _watch_session_log(
     _phase1_poll: float,
     _phase2_poll: float,
     _phase1_timeout: float,
+    stdout_session_id_ready: anyio.Event | None = None,
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
     When the session reports completion (not stale), a drain-wait window
     is opened via anyio.move_on_after so Channel A can fire first if it
     is about to confirm. The trigger is set after the B signal is deposited.
+
+    If ``stdout_session_id_ready`` is provided, waits briefly for session ID
+    extraction before starting Phase 1 to enable identity-based JSONL selection.
     """
+    if stdout_session_id_ready is not None:
+        with anyio.move_on_after(1.0):
+            await stdout_session_id_ready.wait()
+
     monitor_result = await _session_log_monitor(
         session_log_dir,
         completion_marker,
@@ -124,8 +179,9 @@ async def _watch_session_log(
         _phase1_poll=_phase1_poll,
         _phase2_poll=_phase2_poll,
         _phase1_timeout=_phase1_timeout,
+        expected_session_id=acc.stdout_session_id,
     )
-    if monitor_result.status == "completion":
+    if monitor_result.status == ChannelBStatus.COMPLETION:
         # Drain-wait: give Channel A a window to confirm before Channel B wins.
         # move_on_after absorbs timeout; trigger may already be set if A fired.
         with anyio.move_on_after(completion_drain_timeout):
@@ -135,7 +191,7 @@ async def _watch_session_log(
         "channel_b_result",
         status=monitor_result.status,
         session_id=monitor_result.session_id,
-        drain_window=monitor_result.status == "completion",
+        drain_window=monitor_result.status == ChannelBStatus.COMPLETION,
     )
     # These writes execute atomically before any cancellation delivery:
     # there is no await between them and the function return.
@@ -156,26 +212,38 @@ def resolve_termination(
 
     Priority for termination: process exit > stale > channel win.
     Channel confirmation is independent of termination.
+
+    Exhaustive match over ChannelBStatus ensures mypy flags any new member
+    that is added without updating the resolution logic.
     """
     # Channel confirmation: independent of termination reason
     if signals.channel_a_confirmed:
         channel = ChannelConfirmation.CHANNEL_A
-    elif signals.channel_b_status == "completion":
-        channel = ChannelConfirmation.CHANNEL_B
     else:
-        channel = ChannelConfirmation.UNMONITORED
+        match signals.channel_b_status:
+            case ChannelBStatus.COMPLETION:
+                channel = ChannelConfirmation.CHANNEL_B
+            case ChannelBStatus.STALE | None:
+                channel = ChannelConfirmation.UNMONITORED
+            case _ as unreachable:
+                assert_never(unreachable)
 
-    # Termination reason: priority order
+    # Termination reason: priority order (process exit > stale > channel win)
     if signals.process_exited:
         termination = TerminationReason.NATURAL_EXIT
-    elif signals.channel_b_status == "stale":
-        termination = TerminationReason.STALE
-    elif signals.channel_a_confirmed:
-        termination = TerminationReason.COMPLETED
-    elif signals.channel_b_status == "completion":
-        termination = TerminationReason.COMPLETED
     else:
-        termination = TerminationReason.NATURAL_EXIT  # fallback
+        match signals.channel_b_status:
+            case ChannelBStatus.STALE:
+                termination = TerminationReason.STALE
+            case ChannelBStatus.COMPLETION:
+                termination = TerminationReason.COMPLETED
+            case None:
+                if signals.channel_a_confirmed:
+                    termination = TerminationReason.COMPLETED
+                else:
+                    termination = TerminationReason.NATURAL_EXIT  # fallback
+            case _ as unreachable:
+                assert_never(unreachable)
 
     logger.debug(
         "resolve_termination",

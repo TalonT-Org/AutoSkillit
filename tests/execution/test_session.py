@@ -1122,3 +1122,212 @@ class TestSkillResult:
         sr = self._make(token_usage=None)
         parsed = json.loads(sr.to_json())
         assert parsed["token_usage"] is None
+
+
+# ---------------------------------------------------------------------------
+# CliSubtype sealed enum tests
+# ---------------------------------------------------------------------------
+
+
+class TestCliSubtypeExhaustiveCoverage:
+    """Every subtype returned by parse_session_result is a CliSubtype member."""
+
+    def test_success_subtype_is_cli_subtype(self):
+        from autoskillit.core.types import CliSubtype
+
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "ok",
+                "session_id": "s1",
+            }
+        )
+        session = parse_session_result(ndjson)
+        assert isinstance(session.subtype, CliSubtype)
+        assert session.subtype == CliSubtype.SUCCESS
+
+    def test_empty_output_subtype_is_cli_subtype(self):
+        from autoskillit.core.types import CliSubtype
+
+        session = parse_session_result("")
+        assert isinstance(session.subtype, CliSubtype)
+        assert session.subtype == CliSubtype.EMPTY_OUTPUT
+
+    def test_unparseable_subtype_is_cli_subtype(self):
+        from autoskillit.core.types import CliSubtype
+
+        session = parse_session_result("not json at all")
+        assert isinstance(session.subtype, CliSubtype)
+        assert session.subtype == CliSubtype.UNPARSEABLE
+
+    def test_unknown_cli_subtype_maps_to_unknown(self):
+        from autoskillit.core.types import CliSubtype
+
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "some_future_subtype",
+                "is_error": False,
+                "result": "ok",
+                "session_id": "s1",
+            }
+        )
+        session = parse_session_result(ndjson)
+        assert isinstance(session.subtype, CliSubtype)
+        assert session.subtype == CliSubtype.UNKNOWN
+
+    @pytest.mark.parametrize(
+        "raw_subtype",
+        [
+            "success",
+            "error_max_turns",
+            "error_during_execution",
+            "unknown",
+            "empty_output",
+            "unparseable",
+            "timeout",
+        ],
+    )
+    def test_all_known_subtypes_are_cli_subtype_members(self, raw_subtype: str):
+        from autoskillit.core.types import CliSubtype
+
+        ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": raw_subtype,
+                "is_error": False,
+                "result": "ok",
+                "session_id": "s1",
+            }
+        )
+        session = parse_session_result(ndjson)
+        assert isinstance(session.subtype, CliSubtype)
+
+    def test_string_subtype_coerced_in_post_init(self):
+        from autoskillit.core.types import CliSubtype
+
+        session = ClaudeSessionResult(
+            subtype="success",  # type: ignore[arg-type]
+            is_error=False,
+            result="ok",
+            session_id="s1",
+        )
+        assert isinstance(session.subtype, CliSubtype)
+        assert session.subtype == CliSubtype.SUCCESS
+
+
+# ---------------------------------------------------------------------------
+# Accumulator pattern tests: state preserved on fallback paths
+# ---------------------------------------------------------------------------
+
+
+class TestAccumulatorPreservesState:
+    """Ensure tool_uses, assistant_messages, and token_usage survive fallback paths."""
+
+    @staticmethod
+    def _tool_use_ndjson(*tool_names: str) -> str:
+        """Build NDJSON with tool_use blocks but NO type=result record."""
+        lines = []
+        for name in tool_names:
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {"type": "tool_use", "name": name, "id": f"tu_{name}"},
+                                {"type": "text", "text": f"using {name}"},
+                            ],
+                            "usage": {"input_tokens": 100, "output_tokens": 50},
+                            "model": "claude-test",
+                        },
+                    }
+                )
+            )
+        return "\n".join(lines)
+
+    def test_tool_uses_survive_fallback_path(self):
+        """tool_uses must be populated even when no type=result record exists."""
+        ndjson = self._tool_use_ndjson("Write", "Edit")
+        session = parse_session_result(ndjson)
+        assert session.subtype == "unparseable"
+        assert len(session.tool_uses) == 2
+        assert session.tool_uses[0]["name"] == "Write"
+        assert session.tool_uses[1]["name"] == "Edit"
+
+    def test_assistant_messages_survive_fallback_path(self):
+        """assistant_messages must be populated even when no type=result record exists."""
+        ndjson = self._tool_use_ndjson("Write")
+        session = parse_session_result(ndjson)
+        assert len(session.assistant_messages) > 0
+
+    def test_token_usage_survives_fallback_path(self):
+        """token_usage must be populated even when no type=result record exists."""
+        ndjson = self._tool_use_ndjson("Write")
+        session = parse_session_result(ndjson)
+        assert session.token_usage is not None
+
+    def test_context_exhaustion_via_flat_record_without_result(self):
+        """Flat context-exhaustion record sets CONTEXT_EXHAUSTION subtype."""
+        from autoskillit.core.types import CliSubtype
+
+        # Standard assistant record with tool uses
+        assistant = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "tool_use", "name": "Write", "id": "tu_1"},
+                        {"type": "text", "text": "writing file"},
+                    ],
+                    "usage": {"input_tokens": 100, "output_tokens": 50},
+                    "model": "claude-test",
+                },
+            }
+        )
+        # Flat context exhaustion record (no "message" key, zero output tokens)
+        flat_exhaust = json.dumps(
+            {
+                "type": "assistant",
+                "content": [{"type": "text", "text": "prompt is too long"}],
+                "output_tokens": 0,
+                "input_tokens": 0,
+            }
+        )
+        ndjson = assistant + "\n" + flat_exhaust
+        session = parse_session_result(ndjson)
+        assert session.subtype == CliSubtype.CONTEXT_EXHAUSTION
+        assert session.jsonl_context_exhausted is True
+        assert len(session.tool_uses) == 1
+
+
+# ---------------------------------------------------------------------------
+# Integration tests: full chain verification
+# ---------------------------------------------------------------------------
+
+
+class TestFullChainZeroWriteGate:
+    """Full chain: NDJSON → parse_session_result → write_call_count."""
+
+    def test_write_call_count_survives_unparseable(self):
+        """write_call_count must see writes even when session is unparseable."""
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {"type": "tool_use", "name": "Edit", "id": "tu_1"},
+                                {"type": "tool_use", "name": "Write", "id": "tu_2"},
+                            ],
+                        },
+                    }
+                ),
+            ]
+        )
+        session = parse_session_result(ndjson)
+        write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
+        assert write_call_count == 2

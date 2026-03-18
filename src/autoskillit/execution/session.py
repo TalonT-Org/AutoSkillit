@@ -17,6 +17,7 @@ from typing import Any, assert_never
 from autoskillit.core import (
     CONTEXT_EXHAUSTION_MARKER,
     ChannelConfirmation,
+    CliSubtype,
     RetryReason,
     SessionOutcome,
     SkillResult,
@@ -31,7 +32,7 @@ _truncate = truncate_text
 
 # Re-export SkillResult so existing callers (tests, migration_engine) can still
 # import from this module.  Canonical definition lives in core/types.py.
-__all__ = ["SkillResult"]
+__all__ = ["CliSubtype", "SkillResult"]
 
 
 _TOKEN_FIELDS = (
@@ -41,7 +42,9 @@ _TOKEN_FIELDS = (
     "cache_read_input_tokens",
 )
 
-_FAILURE_SUBTYPES = frozenset({"unknown", "empty_output", "unparseable", "timeout"})
+_FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
+    {CliSubtype.UNKNOWN, CliSubtype.EMPTY_OUTPUT, CliSubtype.UNPARSEABLE, CliSubtype.TIMEOUT}
+)
 
 
 class ContentState(StrEnum):
@@ -62,7 +65,7 @@ class ContentState(StrEnum):
 class ClaudeSessionResult:
     """Parsed result from a Claude Code headless session."""
 
-    subtype: str  # "success", "error_max_turns", "error_during_execution", etc.
+    subtype: CliSubtype
     is_error: bool
     result: str
     session_id: str
@@ -82,8 +85,12 @@ class ClaudeSessionResult:
                 self.result = "" if self.result is None else str(self.result)
         if not isinstance(self.errors, list):
             self.errors = [] if self.errors is None else [str(self.errors)]
-        if not isinstance(self.subtype, str):
-            self.subtype = "unknown" if self.subtype is None else str(self.subtype)
+        if not isinstance(self.subtype, CliSubtype):
+            self.subtype = (
+                CliSubtype.UNKNOWN
+                if self.subtype is None
+                else CliSubtype.from_cli(str(self.subtype))
+            )
         if not isinstance(self.session_id, str):
             self.session_id = "" if self.session_id is None else str(self.session_id)
         if not isinstance(self.jsonl_context_exhausted, bool):
@@ -114,7 +121,10 @@ class ClaudeSessionResult:
         if any(marker in e.lower() for e in self.errors):
             return True
         # Path 3: result text — restricted to error subtypes
-        if self.subtype in ("success", "error_max_turns") and marker in self.result.lower():
+        if (
+            self.subtype in (CliSubtype.SUCCESS, CliSubtype.ERROR_MAX_TURNS)
+            and marker in self.result.lower()
+        ):
             return True
         return False
 
@@ -133,7 +143,7 @@ class ClaudeSessionResult:
                 "The session made partial progress. "
                 "Use needs_retry and retry_reason to continue from where it left off."
             )
-        if self.subtype == "error_max_turns":
+        if self.subtype == CliSubtype.ERROR_MAX_TURNS:
             return (
                 "Turn limit reached during session execution. "
                 "The session made partial progress. "
@@ -144,7 +154,7 @@ class ClaudeSessionResult:
     @property
     def needs_retry(self) -> bool:
         """Whether the session didn't finish and should be retried."""
-        if self.subtype == "error_max_turns":
+        if self.subtype == CliSubtype.ERROR_MAX_TURNS:
             return True
         if self._is_context_exhausted():
             return True
@@ -279,25 +289,45 @@ def _detect_flat_context_exhaustion(stdout: str) -> bool:
     return False
 
 
+@dataclass
+class _ParseAccumulator:
+    """Mutable accumulator for parse_session_result's NDJSON scan.
+
+    Collects tool_uses, assistant_messages, and context exhaustion signals
+    across all NDJSON records. A single ClaudeSessionResult is constructed
+    from the accumulated state at the end of parsing — no early returns.
+    """
+
+    result_obj: dict[str, Any] | None = None
+    tool_uses: list[dict[str, Any]] = field(default_factory=list)
+    assistant_messages: list[str] = field(default_factory=list)
+    jsonl_context_exhausted: bool = False
+
+
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
     """Parse Claude Code's --output-format json stdout into a typed result.
 
     Handles multi-line NDJSON (Claude Code may emit multiple JSON objects;
     the last 'result' type object is authoritative).
     Falls back gracefully for non-JSON or missing fields.
+
+    Uses an accumulator pattern: all NDJSON records are scanned unconditionally
+    into a _ParseAccumulator, then a single ClaudeSessionResult is constructed
+    from the accumulated state. This ensures tool_uses, assistant_messages, and
+    token_usage are preserved on all paths — including fallback/unparseable.
     """
     if not stdout.strip():
         return ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
             errors=[],
         )
 
-    result_obj = None
-    assistant_messages: list[str] = []
-    tool_uses: list[dict[str, Any]] = []
+    acc = _ParseAccumulator()
+    marker = CONTEXT_EXHAUSTION_MARKER
+
     for line in stdout.strip().splitlines():
         line = line.strip()
         if not line:
@@ -308,66 +338,83 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                 continue
             record_type = obj.get("type")
             if record_type == "result":
-                result_obj = obj
+                acc.result_obj = obj
             elif record_type == "assistant":
                 msg = obj.get("message")
-                if not isinstance(msg, dict):
-                    continue
-                content = msg.get("content", "")
-                if isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "tool_use":
-                            tool_uses.append(
-                                {"name": block.get("name", ""), "id": block.get("id", "")}
-                            )
-                    text = "\n".join(
-                        block.get("text", "") for block in content if isinstance(block, dict)
-                    ).strip()
-                else:
-                    text = str(content).strip()
-                if text:
-                    assistant_messages.append(text)
+                if isinstance(msg, dict):
+                    content = msg.get("content", "")
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "tool_use":
+                                acc.tool_uses.append(
+                                    {"name": block.get("name", ""), "id": block.get("id", "")}
+                                )
+                        text = "\n".join(
+                            block.get("text", "") for block in content if isinstance(block, dict)
+                        ).strip()
+                    else:
+                        text = str(content).strip()
+                    if text:
+                        acc.assistant_messages.append(text)
+                elif "message" not in obj:
+                    # Flat assistant record (no "message" wrapper) — detect
+                    # context exhaustion inline instead of a separate scan pass.
+                    if obj.get("output_tokens", -1) == 0:
+                        flat_content = obj.get("content", [])
+                        if isinstance(flat_content, list) and any(
+                            isinstance(block, dict)
+                            and block.get("type") == "text"
+                            and marker in block.get("text", "").lower()
+                            for block in flat_content
+                        ):
+                            acc.jsonl_context_exhausted = True
         except json.JSONDecodeError:
             continue
 
-    if result_obj is None:
+    # Fallback: try to parse stdout as a single JSON object
+    if acc.result_obj is None:
         try:
             fallback = json.loads(stdout)
             if isinstance(fallback, dict) and fallback.get("type") == "result":
-                result_obj = fallback
-            else:
-                return ClaudeSessionResult(
-                    subtype="unparseable",
-                    is_error=True,
-                    result=stdout,
-                    session_id="",
-                    errors=[],
-                )
+                acc.result_obj = fallback
         except json.JSONDecodeError:
-            return ClaudeSessionResult(
-                subtype="unparseable",
-                is_error=True,
-                result=stdout,
-                session_id="",
-                errors=[],
-            )
+            pass
 
+    # Token usage extraction runs on ALL paths (not just when result_obj exists)
     token_usage = extract_token_usage(stdout)
 
-    extra_keys = frozenset(result_obj.keys()) - _KNOWN_RESULT_KEYS
-    if extra_keys:
-        logger.debug("unknown_result_keys", unknown_fields=sorted(extra_keys))
+    # Single construction point: build ClaudeSessionResult from accumulated state
+    if acc.result_obj is not None:
+        extra_keys = frozenset(acc.result_obj.keys()) - _KNOWN_RESULT_KEYS
+        if extra_keys:
+            logger.debug("unknown_result_keys", unknown_fields=sorted(extra_keys))
+
+        subtype = CliSubtype.from_cli(acc.result_obj.get("subtype") or "unknown")
+        is_error: bool = acc.result_obj.get("is_error", False)
+        result_text: str = acc.result_obj.get("result") or ""
+        session_id: str = acc.result_obj.get("session_id") or ""
+        errors: list[str] = acc.result_obj.get("errors") or []
+    else:
+        # No result record found: classify based on accumulated signals
+        if acc.jsonl_context_exhausted:
+            subtype = CliSubtype.CONTEXT_EXHAUSTION
+        else:
+            subtype = CliSubtype.UNPARSEABLE
+        is_error = True
+        result_text = stdout
+        session_id = ""
+        errors = []
 
     return ClaudeSessionResult(
-        subtype=result_obj.get("subtype") or "unknown",
-        is_error=result_obj.get("is_error", False),
-        result=result_obj.get("result") or "",
-        session_id=result_obj.get("session_id") or "",
-        errors=result_obj.get("errors") or [],
+        subtype=subtype,
+        is_error=is_error,
+        result=result_text,
+        session_id=session_id,
+        errors=errors,
         token_usage=token_usage,
-        assistant_messages=assistant_messages,
-        tool_uses=tool_uses,
-        jsonl_context_exhausted=_detect_flat_context_exhaustion(stdout),
+        assistant_messages=acc.assistant_messages,
+        tool_uses=acc.tool_uses,
+        jsonl_context_exhausted=acc.jsonl_context_exhausted,
     )
 
 
@@ -532,7 +579,9 @@ def _compute_success(
             # The process was killed by our own async_kill_process_tree
             # (signal -15 or -9), so a non-zero returncode is expected and
             # trustworthy when the session envelope says "success".
-            if returncode != 0 and not (session.subtype == "success" and session.result.strip()):
+            if returncode != 0 and not (
+                session.subtype == CliSubtype.SUCCESS and session.result.strip()
+            ):
                 return False
             content_ok = _check_session_content(
                 session, completion_marker, expected_output_patterns
@@ -565,11 +614,11 @@ def _compute_success(
             assert_never(unreachable)
 
 
-_KILL_ANOMALY_SUBTYPES: frozenset[str] = frozenset(
+_KILL_ANOMALY_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {
-        "unparseable",  # killed mid-write → partial NDJSON
-        "empty_output",  # killed before any stdout was written
-        "interrupted",  # killed mid-generation → real Claude CLI subtype
+        CliSubtype.UNPARSEABLE,  # killed mid-write → partial NDJSON
+        CliSubtype.EMPTY_OUTPUT,  # killed before any stdout was written
+        CliSubtype.INTERRUPTED,  # killed mid-generation → real Claude CLI subtype
     }
 )
 
@@ -591,7 +640,7 @@ def _is_kill_anomaly(session: ClaudeSessionResult) -> bool:
     """
     if session.subtype in _KILL_ANOMALY_SUBTYPES:
         return True
-    if session.subtype == "success" and not session.result.strip():
+    if session.subtype == CliSubtype.SUCCESS and not session.result.strip():
         return True
     return False
 
@@ -652,7 +701,7 @@ def _compute_retry(
             # emitting the completion marker (text-then-tool boundary).
             if (
                 returncode == 0
-                and session.subtype == "success"
+                and session.subtype == CliSubtype.SUCCESS
                 and session.result.strip()
                 and completion_marker
                 and completion_marker not in session.result
@@ -719,7 +768,7 @@ def _compute_retry(
 
 
 def _normalize_subtype(
-    raw_subtype: str,
+    raw_subtype: CliSubtype,
     outcome: SessionOutcome,
     session: ClaudeSessionResult,
     completion_marker: str,
@@ -729,35 +778,52 @@ def _normalize_subtype(
     Maps ``(raw_subtype, outcome, session, completion_marker) → adjudicated subtype``.
     Ensures ``subtype == "success"`` iff ``outcome == SUCCEEDED``.
 
+    Exhaustive match over CliSubtype ensures mypy flags any unhandled member
+    when the enum is extended.
+
     Class 2 fix (upward normalization):
       SUCCEEDED + error/diagnostic subtype → "success"
 
     Class 1 fix (downward normalization):
       non-SUCCEEDED + "success" → synthesized failure label based on why.
 
-    All other combinations are passed through unchanged.
+    Return type is str (not CliSubtype) because downward normalization synthesizes
+    labels that are SkillResult-level subtypes, not CliSubtype members.
     """
-    if outcome == SessionOutcome.SUCCEEDED:
-        # Any diagnostic error subtype with a successful outcome is a drain-race
-        # artifact — normalize up to "success".
-        if raw_subtype in _FAILURE_SUBTYPES:
-            return "success"
-        return raw_subtype
+    match raw_subtype:
+        case CliSubtype.SUCCESS:
+            if outcome == SessionOutcome.SUCCEEDED:
+                return raw_subtype
+            # Downward normalization: success subtype but adjudicated failure/retriable
+            if not session.result.strip():
+                return "empty_result"
+            if session.jsonl_context_exhausted:
+                return "context_exhausted"
+            if completion_marker and completion_marker not in session.result:
+                return "missing_completion_marker"
+            return "adjudicated_failure"
 
-    if raw_subtype != "success":
-        # Non-"success" subtype already carries a meaningful failure label.
-        return raw_subtype
+        case (
+            CliSubtype.UNKNOWN
+            | CliSubtype.EMPTY_OUTPUT
+            | CliSubtype.UNPARSEABLE
+            | CliSubtype.TIMEOUT
+        ):
+            # Failure subtypes: upward normalize to "success" when adjudicated SUCCEEDED
+            if outcome == SessionOutcome.SUCCEEDED:
+                return "success"
+            return raw_subtype
 
-    # raw_subtype == "success" but outcome is FAILED or RETRIABLE — synthesize.
-    if not session.result.strip():
-        return "empty_result"
-    # JSONL context exhaustion: report accurate subtype instead of masking as
-    # missing_completion_marker (REQ-CED-002).
-    if session.jsonl_context_exhausted:
-        return "context_exhausted"
-    if completion_marker and completion_marker not in session.result:
-        return "missing_completion_marker"
-    return "adjudicated_failure"
+        case (
+            CliSubtype.ERROR_MAX_TURNS
+            | CliSubtype.ERROR_DURING_EXECUTION
+            | CliSubtype.CONTEXT_EXHAUSTION
+            | CliSubtype.INTERRUPTED
+        ):
+            return raw_subtype
+
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _compute_outcome(

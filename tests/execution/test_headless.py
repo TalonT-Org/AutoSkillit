@@ -2615,3 +2615,75 @@ class TestBuildSkillResultChannelAPatternRecovery:
         assert sr.success is False
         assert sr.needs_retry is False
         assert sr.subtype == "adjudicated_failure"
+
+
+class TestTimedOutSessionPreservesState:
+    """TIMED_OUT branch must parse stdout to preserve tool_uses and assistant_messages."""
+
+    def test_timed_out_with_writes_preserves_write_call_count(self):
+        """Timed-out session with Write/Edit tool_use blocks must report write_call_count > 0."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = "\n".join(
+            [
+                _make_tool_use_line("Write", {"file_path": "/tmp/a.py", "content": "x"}),
+                _make_tool_use_line(
+                    "Edit", {"file_path": "/tmp/b.py", "old_string": "a", "new_string": "b"}
+                ),
+            ]
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.write_call_count == 2
+        assert sr.success is False
+        assert sr.needs_retry is False
+
+    def test_timed_out_with_empty_stdout_uses_timeout_subtype(self):
+        """Timed-out session with no stdout uses TIMEOUT subtype."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.success is False
+        assert sr.write_call_count == 0
+
+    def test_timed_out_with_success_result_overrides_to_timeout(self):
+        """When timed-out stdout has a success result, subtype is overridden to timeout."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = "\n".join(
+            [
+                _make_tool_use_line("Write", {"file_path": "/tmp/a.py", "content": "x"}),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": "Task completed.",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.cli_subtype == "timeout"
+        assert sr.write_call_count == 1

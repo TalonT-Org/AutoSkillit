@@ -883,6 +883,26 @@ class TestSessionLogMonitorSessionId:
         assert result.status == "stale"
         assert result.session_id == ""
 
+    @pytest.mark.anyio
+    async def test_session_log_monitor_status_is_channel_b_status_enum(self, tmp_path):
+        """SessionMonitorResult.status is a ChannelBStatus enum member."""
+        import json
+
+        from autoskillit.core.types import ChannelBStatus
+
+        session_uuid = "enum-check-session"
+        jsonl_file = tmp_path / f"{session_uuid}.jsonl"
+        jsonl_file.write_text(
+            json.dumps({"type": "assistant", "message": {"content": "done\n\nMARKER"}}) + "\n"
+        )
+        result = await _session_log_monitor(
+            tmp_path,
+            "MARKER",
+            stale_threshold=10.0,
+            spawn_time=time.time() - 1,
+        )
+        assert isinstance(result.status, ChannelBStatus)
+
 
 class TestWatchSessionLogSessionId:
     """_watch_session_log deposits session ID from monitor into accumulator."""
@@ -929,3 +949,59 @@ class TestWatchSessionLogSessionId:
             tg.cancel_scope.cancel()
 
         assert acc.channel_b_session_id == session_uuid
+
+
+class TestSessionIdBasedSelection:
+    """Phase 1 identity-based JSONL file selection."""
+
+    @pytest.mark.anyio
+    async def test_session_id_selects_correct_file_over_newer(self, tmp_path):
+        """When expected_session_id is provided, selects matching file regardless of ctime."""
+        import json
+
+        session_a = "session-aaa-target"
+        session_b = "session-bbb-newer"
+
+        # Create session A first
+        file_a = tmp_path / f"{session_a}.jsonl"
+        file_a.write_text(
+            json.dumps({"type": "assistant", "message": {"content": "done\n\nMARKER"}}) + "\n"
+        )
+
+        # Create session B slightly later (newer by ctime)
+        await anyio.sleep(0.05)
+        file_b = tmp_path / f"{session_b}.jsonl"
+        file_b.write_text(
+            json.dumps({"type": "assistant", "message": {"content": "done\n\nMARKER"}}) + "\n"
+        )
+
+        result = await _session_log_monitor(
+            tmp_path,
+            "MARKER",
+            stale_threshold=10.0,
+            spawn_time=time.time() - 2,
+            expected_session_id=session_a,
+        )
+        assert result.status == "completion"
+        assert result.session_id == session_a
+
+    @pytest.mark.anyio
+    async def test_session_id_falls_back_to_recency_when_no_match(self, tmp_path):
+        """When expected_session_id doesn't match any file, falls back to newest."""
+        import json
+
+        session_b = "session-bbb-only"
+        file_b = tmp_path / f"{session_b}.jsonl"
+        file_b.write_text(
+            json.dumps({"type": "assistant", "message": {"content": "done\n\nMARKER"}}) + "\n"
+        )
+
+        result = await _session_log_monitor(
+            tmp_path,
+            "MARKER",
+            stale_threshold=10.0,
+            spawn_time=time.time() - 2,
+            expected_session_id="nonexistent-session-id",
+        )
+        assert result.status == "completion"
+        assert result.session_id == session_b

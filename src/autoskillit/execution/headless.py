@@ -24,6 +24,7 @@ import structlog
 
 from autoskillit.core import (
     ChannelConfirmation,
+    CliSubtype,
     FailureRecord,
     RetryReason,
     SessionOutcome,
@@ -369,7 +370,7 @@ def _build_skill_result(
         stale_session = parse_session_result(result.stdout)
         stale_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_stale_recovery = (
-            stale_session.subtype == "success"
+            stale_session.subtype == CliSubtype.SUCCESS
             and stale_session.result.strip()
             and not stale_session.is_error
         )
@@ -426,13 +427,18 @@ def _build_skill_result(
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
-        session = ClaudeSessionResult(
-            subtype="timeout",
-            is_error=True,
-            result=_truncate(result.stdout) if result.stdout.strip() else "",
-            session_id="",
-            errors=[],
-        )
+        if result.stdout.strip():
+            session = parse_session_result(result.stdout)
+            if session.subtype == CliSubtype.SUCCESS:
+                session = dataclasses.replace(session, subtype=CliSubtype.TIMEOUT, is_error=True)
+        else:
+            session = ClaudeSessionResult(
+                subtype=CliSubtype.TIMEOUT,
+                is_error=True,
+                result="",
+                session_id="",
+                errors=[],
+            )
     else:
         returncode = result.returncode if result.returncode is not None else -1
         session = parse_session_result(result.stdout)

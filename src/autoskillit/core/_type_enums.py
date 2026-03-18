@@ -20,6 +20,8 @@ __all__ = [
     "TerminationReason",
     "ChannelConfirmation",
     "SessionOutcome",
+    "CliSubtype",
+    "ChannelBStatus",
 ]
 
 
@@ -203,3 +205,45 @@ class SessionOutcome(StrEnum):
     SUCCEEDED = "succeeded"
     RETRIABLE = "retriable"
     FAILED = "failed"
+
+
+class CliSubtype(StrEnum):
+    """Sealed enum for Claude CLI session subtypes.
+
+    Every subtype value emitted by the Claude CLI or synthesized internally
+    MUST be a member of this enum. The from_cli() constructor maps unknown
+    CLI strings to UNKNOWN instead of raising ValueError, because the Claude
+    CLI may introduce new subtype strings in future versions.
+    """
+
+    SUCCESS = "success"
+    ERROR_MAX_TURNS = "error_max_turns"
+    ERROR_DURING_EXECUTION = "error_during_execution"
+    CONTEXT_EXHAUSTION = "context_exhaustion"
+    UNKNOWN = "unknown"
+    EMPTY_OUTPUT = "empty_output"
+    UNPARSEABLE = "unparseable"
+    TIMEOUT = "timeout"
+    INTERRUPTED = "interrupted"
+
+    @classmethod
+    def from_cli(cls, raw: str) -> CliSubtype:
+        """Convert a raw CLI subtype string to a CliSubtype member.
+
+        Unknown strings map to UNKNOWN instead of raising ValueError.
+        """
+        try:
+            return cls(raw)
+        except ValueError:
+            return cls.UNKNOWN
+
+
+class ChannelBStatus(StrEnum):
+    """Sealed enum for Channel B monitor status values.
+
+    Replaces the raw string ``"completion"`` / ``"stale"`` convention with
+    compile-time exhaustiveness enforcement via assert_never.
+    """
+
+    COMPLETION = "completion"
+    STALE = "stale"

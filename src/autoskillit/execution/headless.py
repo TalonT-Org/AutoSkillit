@@ -24,7 +24,6 @@ import structlog
 
 from autoskillit.core import (
     ChannelConfirmation,
-    ClaudeFlags,
     FailureRecord,
     RetryReason,
     SessionOutcome,
@@ -35,7 +34,7 @@ from autoskillit.core import (
     claude_code_project_dir,
     get_logger,
 )
-from autoskillit.execution.commands import build_headless_cmd
+from autoskillit.execution.commands import build_full_headless_cmd
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
@@ -57,43 +56,6 @@ if TYPE_CHECKING:
     )
 
 logger = get_logger(__name__)
-
-
-def _ensure_skill_prefix(skill_command: str) -> str:
-    """Prompt-formatting helper: prepend 'Use ' to slash-commands for headless session loading.
-
-    This is NOT a validator. Non-slash input passes through unchanged by design —
-    runtime validation is enforced by the skill_command_guard PreToolUse hook.
-    """
-    stripped = skill_command.strip()
-    if stripped.startswith("/"):
-        return f"Use {stripped}"
-    return skill_command
-
-
-def _inject_completion_directive(skill_command: str, marker: str) -> str:
-    """Append an orchestration directive to make the session write a completion marker."""
-    directive = (
-        f"\n\nORCHESTRATION DIRECTIVE: When your task is complete, "
-        f"your final text output MUST end with: {marker}\n"
-        f"CRITICAL: Append {marker} at the very end of your substantive response, "
-        f"in the SAME message. Do NOT output {marker} as a separate standalone message."
-    )
-    return skill_command + directive
-
-
-def _inject_cwd_anchor(skill_command: str, cwd: str) -> str:
-    """Append a working directory anchor directive to prevent path contamination."""
-    if not cwd or not os.path.isabs(cwd):
-        return skill_command
-    directive = (
-        f"\n\nWORKING DIRECTORY ANCHOR: Your working directory is {cwd}. "
-        f"All relative paths (temp/, .autoskillit/, etc.) MUST resolve against {cwd}. "
-        f"Do NOT use any other directory as a base for relative paths, regardless of "
-        f"what paths appear in code-index tool responses or set_project_path results. "
-        f"The code-index project path is for READ-ONLY exploration only."
-    )
-    return skill_command + directive
 
 
 def _session_log_dir(cwd: str) -> Path:
@@ -647,33 +609,19 @@ async def run_headless_core(
         skill_command=original_skill_command[:100],
         step_name=step_name or None,
     ):
-        skill_command = _inject_cwd_anchor(
-            _inject_completion_directive(
-                _ensure_skill_prefix(skill_command), cfg.completion_marker
-            ),
-            cwd,
-        )
         effective_plugin_dir = ctx.plugin_dir
         resolved_model = _resolve_model(model, ctx.config)
-        spec = build_headless_cmd(skill_command, model=resolved_model)
-        cmd = spec.cmd + [
-            ClaudeFlags.PLUGIN_DIR,
-            effective_plugin_dir,
-            ClaudeFlags.OUTPUT_FORMAT,
-            cfg.output_format.value,
-        ]
-        # Apply any CLI flags required by the chosen output format.
-        for flag in cfg.output_format.required_cli_flags:
-            if flag not in cmd:
-                cmd.append(flag)
-        for validated_dir in add_dirs:
-            cmd.extend([ClaudeFlags.ADD_DIR, validated_dir.path])
-
-        env_vars = ["AUTOSKILLIT_HEADLESS=1"]
-        delay_ms = cfg.exit_after_stop_delay_ms
-        if delay_ms > 0:
-            env_vars.append(f"CLAUDE_CODE_EXIT_AFTER_STOP_DELAY={delay_ms}")
-        cmd = ["env"] + env_vars + cmd
+        cmd = build_full_headless_cmd(
+            skill_command,
+            cwd=cwd,
+            completion_marker=cfg.completion_marker,
+            model=resolved_model,
+            plugin_dir=effective_plugin_dir,
+            output_format_value=cfg.output_format.value,
+            output_format_required_flags=cfg.output_format.required_cli_flags,
+            add_dirs=add_dirs,
+            exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
+        )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold

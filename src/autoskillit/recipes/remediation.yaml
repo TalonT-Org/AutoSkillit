@@ -243,6 +243,7 @@ steps:
       review_path: "${{ result.review_path }}"
     on_success: dry_walkthrough
     on_failure: release_issue_failure
+    skip_when_false: "inputs.review_approach"
     note: "Only execute this step if review_approach input is 'true'. Otherwise skip directly to dry_walkthrough."
 
   dry_walkthrough:

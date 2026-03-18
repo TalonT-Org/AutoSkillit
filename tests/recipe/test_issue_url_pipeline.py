@@ -257,12 +257,11 @@ class TestClaimReleaseGates:
 
     RECIPES = ["implementation", "implementation-groups", "remediation"]
     # Recipes where ci_watch routes directly to release_issue_success
-    RECIPES_WITH_RELEASE_SUCCESS = [
-        "implementation-groups",
-    ]
+    RECIPES_WITH_RELEASE_SUCCESS: list[str] = []
     # Recipes where ci_watch routes to check_merge_queue (merge-queue path)
     RECIPES_WITHOUT_RELEASE_SUCCESS = [
         "implementation",
+        "implementation-groups",
         "remediation",
     ]
     # Recipes that have the release_issue_success step (independent of ci_watch routing)

@@ -1285,14 +1285,14 @@ class TestReviewPrRecipeIntegration:
     def test_open_pr_step_routes_to_review_pr(self, recipe: object) -> None:
         """T_RP1: open_pr_step.on_success routes per-recipe to the correct next step.
 
-        Queue-aware recipes (implementation, remediation) insert extract_pr_number between
-        open_pr_step and review_pr to capture the PR number for merge queue support.
-        Non-queue recipes (implementation-groups) route directly to review_pr.
+        All queue-aware recipes (implementation, remediation, implementation-groups) insert
+        extract_pr_number between open_pr_step and review_pr to capture the PR number for
+        merge queue support.
         """
         _expected: dict[str, str] = {
             "implementation": "extract_pr_number",
             "remediation": "extract_pr_number",
-            "implementation-groups": "review_pr",
+            "implementation-groups": "extract_pr_number",
         }
         recipe_name = recipe.name  # type: ignore[attr-defined]
         expected = _expected[recipe_name]

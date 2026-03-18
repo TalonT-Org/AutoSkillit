@@ -54,6 +54,8 @@ def _iter_session_log_entries(
     if since:
         try:
             since_dt = datetime.fromisoformat(since)
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=UTC)
         except ValueError:
             pass
 

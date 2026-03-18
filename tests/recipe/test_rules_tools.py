@@ -130,3 +130,130 @@ def test_dead_with_param_skips_unknown_tools() -> None:
     findings = run_semantic_rules(recipe)
     dead = [f for f in findings if f.rule == "dead-with-param"]
     assert not dead, "Unknown tools must not trigger dead-with-param"
+
+
+# ---------------------------------------------------------------------------
+# REQ-C4-01: _TOOL_PARAMS correctness tests
+# ---------------------------------------------------------------------------
+
+
+def test_run_cmd_rejects_command_param() -> None:
+    recipe = _make_recipe_with_args("run_cmd", {"command": "echo hi", "cwd": "/tmp"})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert dead, "stale param 'command' must trigger dead-with-param"
+    assert any("command" in f.message for f in dead)
+
+
+def test_run_cmd_accepts_cmd_param() -> None:
+    recipe = _make_recipe_with_args("run_cmd", {"cmd": "echo hi", "cwd": "/tmp"})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert not dead, "valid param 'cmd' must not trigger dead-with-param"
+
+
+def test_run_python_rejects_callable_path_param() -> None:
+    recipe = _make_recipe_with_args("run_python", {"callable_path": "mod.fn"})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert dead, "stale param 'callable_path' must trigger dead-with-param"
+
+
+def test_run_python_accepts_callable_param() -> None:
+    recipe = _make_recipe_with_args("run_python", {"callable": "mod.fn", "args": {}})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert not dead, "valid params 'callable'/'args' must not trigger dead-with-param"
+
+
+def test_clone_repo_rejects_stale_params() -> None:
+    recipe = _make_recipe_with_args("clone_repo", {"repo": "owner/repo", "target_dir": "/tmp/x"})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert len(dead) >= 2, "stale params 'repo' and 'target_dir' must trigger dead-with-param"
+
+
+def test_clone_repo_accepts_source_dir_param() -> None:
+    recipe = _make_recipe_with_args("clone_repo", {"source_dir": "/src", "run_name": "impl"})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert not dead, "valid params 'source_dir'/'run_name' must not trigger dead-with-param"
+
+
+def test_remove_clone_rejects_clone_dir() -> None:
+    recipe = _make_recipe_with_args("remove_clone", {"clone_dir": "/tmp/clone"})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert dead, "stale param 'clone_dir' must trigger dead-with-param"
+
+
+def test_remove_clone_accepts_clone_path() -> None:
+    recipe = _make_recipe_with_args("remove_clone", {"clone_path": "/tmp/clone", "keep": "false"})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert not dead
+
+
+def test_list_recipes_rejects_cwd_param() -> None:
+    recipe = _make_recipe_with_args("list_recipes", {"cwd": "/tmp"})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert dead, "param 'cwd' must trigger dead-with-param on list_recipes (no params)"
+
+
+def test_migrate_recipe_rejects_recipe_path() -> None:
+    recipe = _make_recipe_with_args("migrate_recipe", {"recipe_path": "/tmp/r.yaml"})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert dead, "stale param 'recipe_path' must trigger dead-with-param"
+
+
+def test_migrate_recipe_accepts_name() -> None:
+    recipe = _make_recipe_with_args("migrate_recipe", {"name": "my-recipe"})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert not dead
+
+
+def test_load_recipe_rejects_recipe_name() -> None:
+    recipe = _make_recipe_with_args("load_recipe", {"recipe_name": "impl", "ingredients": {}})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert len(dead) >= 2
+
+
+def test_load_recipe_accepts_name_and_overrides() -> None:
+    recipe = _make_recipe_with_args("load_recipe", {"name": "impl", "overrides": {}})
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert not dead
+
+
+def test_fetch_github_issue_rejects_stale_params() -> None:
+    recipe = _make_recipe_with_args(
+        "fetch_github_issue",
+        {"issue_number": "42", "repo": "owner/repo", "cwd": "/tmp"},
+    )
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert len(dead) >= 3
+
+
+def test_fetch_github_issue_accepts_issue_url() -> None:
+    recipe = _make_recipe_with_args(
+        "fetch_github_issue",
+        {"issue_url": "https://github.com/owner/repo/issues/42"},
+    )
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert not dead
+
+
+def test_wait_for_ci_rejects_poll_interval() -> None:
+    recipe = _make_recipe_with_args(
+        "wait_for_ci",
+        {"branch": "main", "poll_interval": "30"},
+    )
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert dead, "phantom param 'poll_interval' must trigger dead-with-param on wait_for_ci"

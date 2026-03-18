@@ -597,7 +597,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
 
     server/ is exempt at 12 files to accommodate tools_clone and tools_integrations modules.
     """
-    EXEMPTIONS: dict[str, int] = {"server": 14, "recipe": 27, "execution": 22, "core": 14}
+    EXEMPTIONS: dict[str, int] = {"server": 14, "recipe": 27, "execution": 23, "core": 14}
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
@@ -980,3 +980,29 @@ class TestGroupCMigration:
         )
         with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
             sig.process_exited = True  # REQ-SIG-008: frozen=True preserved
+
+
+def test_pipeline_fidelity_module_deleted():
+    """P2-F1: pipeline/fidelity.py must not exist after groupB."""
+    import pytest
+
+    with pytest.raises(ModuleNotFoundError):
+        import autoskillit.pipeline.fidelity  # noqa: F401
+
+
+def test_pipeline_pr_gates_no_longer_has_domain_paths():
+    """P2-F2: DOMAIN_PATHS must not be defined in pipeline/pr_gates.py."""
+    from pathlib import Path
+
+    src = (
+        Path(__file__).parent.parent.parent / "src/autoskillit/pipeline/pr_gates.py"
+    ).read_text()
+    assert "DOMAIN_PATHS" not in src
+
+
+def test_pipeline_init_no_longer_exports_domain_paths():
+    """P2-F2: DOMAIN_PATHS must not appear in pipeline.__all__."""
+    import autoskillit.pipeline as m
+
+    assert "DOMAIN_PATHS" not in m.__all__
+    assert "partition_files_by_domain" not in m.__all__

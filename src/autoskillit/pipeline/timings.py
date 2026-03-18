@@ -6,11 +6,13 @@ MCP tool retrieves the accumulated data grouped by step.
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger
+from autoskillit.pipeline.audit import _iter_session_log_entries
 
 logger = get_logger(__name__)
 
@@ -75,48 +77,8 @@ class DefaultTimingLog:
 
         Returns the count of session directories successfully loaded.
         """
-        import json
-        from datetime import UTC, datetime
-
-        index_path = Path(log_root) / "sessions.jsonl"
-        if not index_path.exists():
-            return 0
-
-        since_dt: datetime | None = None
-        if since:
-            try:
-                since_dt = datetime.fromisoformat(since)
-            except ValueError:
-                pass
-
         count = 0
-        for line in index_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                idx = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-            if since_dt:
-                try:
-                    entry_ts = datetime.fromisoformat(idx.get("timestamp", ""))
-                    if entry_ts.tzinfo is None:
-                        entry_ts = entry_ts.replace(tzinfo=UTC)
-                    if entry_ts < since_dt:
-                        continue
-                except (ValueError, TypeError):
-                    continue
-
-            dir_name = idx.get("dir_name", "")
-            if not dir_name:
-                continue
-
-            st_path = Path(log_root) / "sessions" / dir_name / "step_timing.json"
-            if not st_path.exists():
-                continue
-
+        for st_path in _iter_session_log_entries(log_root, since, "step_timing.json"):
             try:
                 data = json.loads(st_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):

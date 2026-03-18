@@ -9,6 +9,8 @@ store with a defensive copy getter.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +23,68 @@ STDERR_MAX_LEN = 500
 COMMAND_MAX_LEN = 200
 
 __all__ = ["FailureRecord", "DefaultAuditLog", "STDERR_MAX_LEN", "COMMAND_MAX_LEN"]
+
+
+def _iter_session_log_entries(
+    log_root: Path,
+    since: str,
+    filename: str,
+) -> Iterator[Path]:
+    """Yield per-session file paths from sessions.jsonl that pass the since filter.
+
+    Handles: JSONL parsing, since_dt filtering (ISO timestamp), dir_name extraction,
+    and per-session file existence check. Each caller is responsible only for
+    reading and accumulating the yielded file's JSON content.
+
+    Args:
+        log_root: Root of the session log directory (contains sessions.jsonl).
+        since:    ISO timestamp string; sessions before this are skipped.
+                  Empty string disables time filtering.
+        filename: Name of the per-session file to look for
+                  (e.g. "audit_log.json", "token_usage.json", "step_timing.json").
+
+    Yields:
+        Path to each matching per-session file that exists.
+    """
+    index_path = Path(log_root) / "sessions.jsonl"
+    if not index_path.exists():
+        return
+
+    since_dt: datetime | None = None
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+        except ValueError:
+            pass
+
+    for line in index_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            idx = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        if since_dt:
+            try:
+                entry_ts = datetime.fromisoformat(idx.get("timestamp", ""))
+                if entry_ts.tzinfo is None:
+                    entry_ts = entry_ts.replace(tzinfo=UTC)
+                if entry_ts < since_dt:
+                    continue
+            except (ValueError, TypeError):
+                continue
+
+        dir_name = idx.get("dir_name", "")
+        if not dir_name:
+            continue
+
+        session_file = Path(log_root) / "sessions" / dir_name / filename
+        if not session_file.exists():
+            continue
+
+        yield session_file
 
 
 class DefaultAuditLog:
@@ -113,47 +177,8 @@ class DefaultAuditLog:
 
         Returns the count of session directories successfully loaded.
         """
-        import json
-
-        index_path = Path(log_root) / "sessions.jsonl"
-        if not index_path.exists():
-            return 0
-
-        since_dt: datetime | None = None
-        if since:
-            try:
-                since_dt = datetime.fromisoformat(since)
-            except ValueError:
-                pass
-
         count = 0
-        for line in index_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                idx = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-            if since_dt:
-                try:
-                    entry_ts = datetime.fromisoformat(idx.get("timestamp", ""))
-                    if entry_ts.tzinfo is None:
-                        entry_ts = entry_ts.replace(tzinfo=UTC)
-                    if entry_ts < since_dt:
-                        continue
-                except (ValueError, TypeError):
-                    continue
-
-            dir_name = idx.get("dir_name", "")
-            if not dir_name:
-                continue
-
-            al_path = Path(log_root) / "sessions" / dir_name / "audit_log.json"
-            if not al_path.exists():
-                continue
-
+        for al_path in _iter_session_log_entries(log_root, since, "audit_log.json"):
             try:
                 data = json.loads(al_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):

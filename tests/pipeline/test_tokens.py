@@ -394,3 +394,31 @@ class TestDefaultTokenLogLoadFromLogDir:
         log = DefaultTokenLog()
         n = log.load_from_log_dir(tmp_path)
         assert n == 0
+
+
+class TestLoadFromLogDirDesignDocumentation:
+    """P9-F1: tokens.py must document design decisions inline."""
+
+    def test_load_from_log_dir_documents_timing_seconds_rename(self):
+        """tokens.py must comment the timing_seconds → elapsed_seconds key rename."""
+        from pathlib import Path
+
+        src = (
+            Path(__file__).parent.parent.parent / "src/autoskillit/pipeline/tokens.py"
+        ).read_text()
+        assert "timing_seconds" in src
+        assert "elapsed_seconds" in src
+
+    def test_load_from_log_dir_documents_invocation_count_design(self):
+        """tokens.py must comment why invocation_count += 1 per file is intentional."""
+        from pathlib import Path
+
+        src = (
+            Path(__file__).parent.parent.parent / "src/autoskillit/pipeline/tokens.py"
+        ).read_text()
+        assert "invocation_count" in src
+        assert (
+            "one file" in src.lower()
+            or "one invocation" in src.lower()
+            or "per file" in src.lower()
+        )

@@ -1,13 +1,13 @@
 """Tests for review-pr fidelity dimension: linked issue extraction and findings.
 
-These tests verify the Python helpers extracted in
-autoskillit.pipeline.fidelity, which support the fidelity subagent described
+These tests verify the Python helpers in
+autoskillit.execution.pr_analysis, which support the fidelity subagent described
 in the review-pr SKILL.md Steps 2.8 and 3.
 """
 
 from __future__ import annotations
 
-from autoskillit.pipeline.fidelity import (
+from autoskillit.execution.pr_analysis import (
     extract_linked_issues,
     is_valid_fidelity_finding,
 )

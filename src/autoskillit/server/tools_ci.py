@@ -92,7 +92,7 @@ async def wait_for_ci(
             if rc == 0:
                 head_sha = stdout.strip()
         except Exception:
-            pass
+            logger.warning("git rev-parse HEAD failed", exc_info=True)
 
     scope = CIRunScope(
         workflow=workflow or tool_ctx.default_ci_scope.workflow,

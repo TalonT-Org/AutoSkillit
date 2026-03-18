@@ -188,7 +188,7 @@ class TestBuildFullHeadlessCmd:
     def test_add_dirs_injected(self):
         from autoskillit.core import ValidatedAddDir
 
-        d = ValidatedAddDir(path="/skills/custom", label="custom")
+        d = ValidatedAddDir(path="/skills/custom")
         params = {**self.BASE, "add_dirs": [d]}
         cmd = build_full_headless_cmd("/investigate foo", **params)
         assert "--add-dir" in cmd

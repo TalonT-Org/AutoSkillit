@@ -20,6 +20,8 @@ def test_protocols_importable_from_sub_module():
 
 def test_types_hub_backward_compat():
     """All symbols must still be importable from autoskillit.core.types."""
+    import dataclasses
+
     from autoskillit.core.types import (
         FREE_RANGE_TOOLS,
         GATED_TOOLS,
@@ -34,17 +36,17 @@ def test_types_hub_backward_compat():
         extract_skill_name,
     )
 
-    assert RetryReason is not None  # _type_enums
-    assert SubprocessResult is not None  # _type_subprocess
-    assert SubprocessRunner is not None  # _type_subprocess
-    assert GATED_TOOLS is not None  # _type_constants
-    assert FREE_RANGE_TOOLS is not None  # _type_constants
-    assert LoadResult is not None  # _type_results
-    assert SkillResult is not None  # _type_results
-    assert FailureRecord is not None  # _type_results
-    assert GatePolicy is not None  # _type_protocols
-    assert HeadlessExecutor is not None  # _type_protocols
-    assert extract_skill_name is not None  # _type_helpers
+    assert issubclass(RetryReason, str)  # _type_enums — StrEnum
+    assert dataclasses.is_dataclass(SubprocessResult)  # _type_subprocess
+    assert callable(SubprocessRunner)  # _type_subprocess — Protocol
+    assert isinstance(GATED_TOOLS, frozenset)  # _type_constants
+    assert isinstance(FREE_RANGE_TOOLS, frozenset)  # _type_constants
+    assert dataclasses.is_dataclass(LoadResult)  # _type_results
+    assert dataclasses.is_dataclass(SkillResult)  # _type_results
+    assert dataclasses.is_dataclass(FailureRecord)  # _type_results
+    assert callable(GatePolicy)  # _type_protocols — Protocol
+    assert callable(HeadlessExecutor)  # _type_protocols — Protocol
+    assert callable(extract_skill_name)  # _type_helpers — function
 
 
 def test_types_hub_line_count_under_threshold():

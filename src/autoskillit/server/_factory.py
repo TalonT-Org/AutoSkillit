@@ -1,5 +1,5 @@
 """Composition Root: make_context() is the only location that legally instantiates
-all 11 service contracts simultaneously.
+all 22 service contracts simultaneously.
 
 server/ is L3 — the only layer permitted to import from both L1 (pipeline/)
 and L2 (recipe/, migration/) at the same time. This module is the canonical
@@ -13,7 +13,7 @@ import os
 from typing import Any
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import SubprocessRunner, WriteBehaviorSpec, pkg_root
+from autoskillit.core import SubprocessRunner, WriteBehaviorSpec, get_logger, pkg_root
 from autoskillit.execution import (
     DefaultCIWatcher,
     DefaultDatabaseReader,
@@ -44,6 +44,8 @@ from autoskillit.workspace import (
     resolve_ephemeral_root,
 )
 
+logger = get_logger(__name__)
+
 # Sentinel: distinguish "caller passed runner=None explicitly" from "not provided"
 _UNSET: Any = object()
 
@@ -59,7 +61,7 @@ def make_context(
     runner: SubprocessRunner | None = _UNSET,
     plugin_dir: str | None = None,
 ) -> ToolContext:
-    """Create a fully-wired ToolContext with all 12 service fields populated.
+    """Create a fully-wired ToolContext with all 22 service fields populated.
 
     This is the Composition Root — the only location that should instantiate
     all concrete service implementations simultaneously. Uses a three-step

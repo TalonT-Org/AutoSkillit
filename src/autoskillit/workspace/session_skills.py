@@ -38,6 +38,8 @@ _FM_PATTERN = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
 
 _SKILLS_SUBDIR = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
 
+logger = get_logger(__name__)
+
 
 def resolve_ephemeral_root() -> Path:
     """Return a writable ephemeral root directory for session skill dirs.
@@ -224,9 +226,7 @@ class DefaultSessionSkillManager:
             )
             unknown = configured - all_known
             if unknown:
-                get_logger(__name__).warning(
-                    "Unknown skill names in tier config (ignored): %s", sorted(unknown)
-                )
+                logger.warning("Unknown skill names in tier config (ignored): %s", sorted(unknown))
             tier2_skills = frozenset(config.skills.tier2)
 
         # Extract subset disable info from config (empty by default)
@@ -241,7 +241,7 @@ class DefaultSessionSkillManager:
         overrides: frozenset[str] = (
             detect_project_local_overrides(project_dir) if project_dir is not None else frozenset()
         )
-        _log = get_logger(__name__)
+        _log = logger
 
         session_skills_dir = self._root / session_id
         skills_base = session_skills_dir / _SKILLS_SUBDIR

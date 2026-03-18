@@ -96,14 +96,14 @@ steps:
   setup_remote:
     tool: run_cmd
     with:
-      cmd: "git remote set-url origin \"$(git -C ${{ inputs.source_dir }} remote get-url origin)\""
+      cmd: "git remote set-url origin \"${{ context.remote_url }}\""
       cwd: "${{ context.work_dir }}"
       step_name: "setup_remote"
     on_success: check_integration_exists
     on_failure: cleanup_failure
     note: >
-      The clone's origin initially points to the local source_dir path.
-      This step replaces it with the actual GitHub remote URL from source_dir,
+      The clone's origin initially points to a file:// URL (set by clone_repo for isolation).
+      This step replaces it with the actual GitHub remote URL captured from the clone step,
       so that gh CLI commands and git fetch origin work correctly in the clone.
 
   check_integration_exists:

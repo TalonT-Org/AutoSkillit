@@ -70,7 +70,7 @@ class StaleItem:
 
 
 @dataclasses.dataclass
-class DataflowEntry:
+class DataFlowEntry:
     step: str
     available: list[str]
     required: list[str]
@@ -83,7 +83,7 @@ class RecipeCard:
     bundled_manifest_version: str
     skill_hashes: dict[str, str]
     skills: dict[str, SkillContract]
-    dataflow: list[DataflowEntry]
+    dataflow: list[DataFlowEntry]
 
 
 # ---------------------------------------------------------------------------

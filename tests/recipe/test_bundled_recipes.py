@@ -453,6 +453,14 @@ class TestImplementationPipelineStructure:
         step = recipe.steps["ci_conflict_fix"]
         assert step.skip_when_false == "inputs.open_pr"
 
+    def test_ip_review_step_has_skip_when_false(self, recipe) -> None:
+        """REQ-C7-02: review step must declare skip_when_false: inputs.review_approach."""
+        step = recipe.steps["review"]
+        assert step.skip_when_false == "inputs.review_approach", (
+            "review step must declare skip_when_false: inputs.review_approach — "
+            "the skip intent is already in the note: field but not schema-enforced"
+        )
+
     def test_ip_recipe_passes_semantic_validation(self, recipe) -> None:
         """After Part B, validate_recipe must report no errors."""
         from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
@@ -563,10 +571,11 @@ class TestImplementationGroupsStructure:
         assert step.with_args.get("timeout_seconds") == 300
 
     def test_ig_ci_watch_routing(self, recipe) -> None:
-        """T_CI2: ci_watch on_success -> release_issue_success; on_failure -> detect_ci_conflict."""  # noqa: E501
+        """T_CI2: ci_watch on_success -> check_merge_queue; on_failure -> detect_ci_conflict."""  # noqa: E501
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "release_issue_success"
+        assert step.on_success == "check_merge_queue"
         assert step.on_failure == "detect_ci_conflict"
+        assert "release_issue_success" in recipe.steps
 
     def test_ig_ci_watch_uses_merge_target(self, recipe) -> None:
         """T_CI3: ci_watch uses branch param with context.merge_target, no inline shell."""
@@ -653,6 +662,72 @@ class TestImplementationGroupsStructure:
     def test_ig_ci_conflict_fix_skip_when_false(self, recipe) -> None:
         step = recipe.steps["ci_conflict_fix"]
         assert step.skip_when_false == "inputs.open_pr"
+
+    def test_ig_auto_merge_ingredient_exists(self, recipe) -> None:
+        """REQ-C7-01: auto_merge ingredient must exist in implementation-groups.yaml."""
+        assert "auto_merge" in recipe.ingredients, (
+            "auto_merge ingredient is missing — required for merge queue lifecycle"
+        )
+        assert recipe.ingredients["auto_merge"].default == "true"
+
+    def test_ig_extract_pr_number_step_exists(self, recipe) -> None:
+        """REQ-C7-01: extract_pr_number step must exist to supply pr_number to queue steps."""
+        assert "extract_pr_number" in recipe.steps
+        step = recipe.steps["extract_pr_number"]
+        assert step.tool == "run_cmd"
+        assert "pr_number" in step.capture
+        assert step.on_success == "review_pr"
+
+    def test_ig_open_pr_step_routes_to_extract_pr_number(self, recipe) -> None:
+        """REQ-C7-01: open_pr_step must route to extract_pr_number (not review_pr directly)."""
+        step = recipe.steps["open_pr_step"]
+        assert step.on_success == "extract_pr_number", (
+            "open_pr_step must route to extract_pr_number so pr_number is available "
+            "for enable_auto_merge and wait_for_queue"
+        )
+
+    def test_ig_ci_watch_routes_to_check_merge_queue(self, recipe) -> None:
+        """REQ-C7-01: ci_watch.on_success must route to check_merge_queue (not release_issue_success)."""  # noqa: E501
+        step = recipe.steps["ci_watch"]
+        assert step.on_success == "check_merge_queue", (
+            "ci_watch must route to check_merge_queue so the PR can enter the merge queue. "
+            "Routing directly to release_issue_success skips the queue lifecycle entirely."
+        )
+
+    def test_ig_check_merge_queue_step_exists(self, recipe) -> None:
+        """REQ-C7-01: check_merge_queue step must exist."""
+        assert "check_merge_queue" in recipe.steps
+        step = recipe.steps["check_merge_queue"]
+        assert step.tool == "run_cmd"
+        assert "queue_available" in step.capture
+
+    def test_ig_wait_for_queue_step_exists(self, recipe) -> None:
+        """REQ-C7-01: wait_for_queue step must exist with correct tool and routing."""
+        assert "wait_for_queue" in recipe.steps
+        step = recipe.steps["wait_for_queue"]
+        assert step.tool == "wait_for_merge_queue"
+        assert step.with_args.get("timeout_seconds") == 900
+        conds = step.on_result.conditions if step.on_result else []
+        merged_cond = next((c for c in conds if c.when and "merged" in c.when), None)
+        assert merged_cond is not None and merged_cond.route == "release_issue_success"
+
+    def test_ig_release_issue_success_has_target_branch(self, recipe) -> None:
+        """REQ-C7-01: release_issue_success must pass target_branch to trigger staged label."""
+        step = recipe.steps["release_issue_success"]
+        with_args = step.with_args or {}
+        assert "target_branch" in with_args, (
+            "release_issue_success must pass target_branch: ${{ inputs.base_branch }} — "
+            "without it release_issue cannot apply the staged label on non-default branches"
+        )
+        assert "inputs.base_branch" in with_args["target_branch"]
+
+    def test_ig_review_step_has_skip_when_false(self, recipe) -> None:
+        """REQ-C7-02: review step must declare skip_when_false: inputs.review_approach."""
+        step = recipe.steps["review"]
+        assert step.skip_when_false == "inputs.review_approach", (
+            "review step must declare skip_when_false: inputs.review_approach to make the "
+            "skip intent schema-enforced. Currently it is prose-only in the note: field."
+        )
 
     def test_ig_recipe_passes_semantic_validation(self, recipe) -> None:
         """After Part B, validate_recipe must report no errors."""
@@ -961,6 +1036,14 @@ class TestInvestigateFirstStructure:
         step = recipe.steps["ci_conflict_fix"]
         assert step.skip_when_false == "inputs.open_pr"
 
+    def test_if_review_step_has_skip_when_false(self, recipe) -> None:
+        """REQ-C7-02: review step in remediation.yaml must declare skip_when_false."""
+        step = recipe.steps["review"]
+        assert step.skip_when_false == "inputs.review_approach", (
+            "review step must declare skip_when_false: inputs.review_approach — "
+            "the skip intent is already in the note: field but not schema-enforced"
+        )
+
     def test_if_recipe_passes_semantic_validation(self, recipe) -> None:
         """After Part B, validate_recipe must report no errors."""
         from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
@@ -1202,14 +1285,14 @@ class TestReviewPrRecipeIntegration:
     def test_open_pr_step_routes_to_review_pr(self, recipe: object) -> None:
         """T_RP1: open_pr_step.on_success routes per-recipe to the correct next step.
 
-        Queue-aware recipes (implementation, remediation) insert extract_pr_number between
-        open_pr_step and review_pr to capture the PR number for merge queue support.
-        Non-queue recipes (implementation-groups) route directly to review_pr.
+        All queue-aware recipes (implementation, remediation, implementation-groups) insert
+        extract_pr_number between open_pr_step and review_pr to capture the PR number for
+        merge queue support.
         """
         _expected: dict[str, str] = {
             "implementation": "extract_pr_number",
             "remediation": "extract_pr_number",
-            "implementation-groups": "review_pr",
+            "implementation-groups": "extract_pr_number",
         }
         recipe_name = recipe.name  # type: ignore[attr-defined]
         expected = _expected[recipe_name]

@@ -1,4 +1,4 @@
-"""Tests for pipeline.branch_guard — protected-branch validation."""
+"""Tests for core.branch_guard — protected-branch validation."""
 
 import pytest
 

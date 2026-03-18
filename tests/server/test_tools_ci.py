@@ -350,6 +350,76 @@ async def test_wait_for_merge_queue_parses_remote_url_to_resolve_repo(tool_ctx):
     assert call_kwargs.kwargs.get("repo") == "owner/repo"
 
 
+class TestWaitForCiTiming:
+    """wait_for_ci records wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_wait_for_ci_step_name_records_timing(self, tool_ctx):
+        mock_watcher = AsyncMock()
+        mock_watcher.wait = AsyncMock(
+            return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+        )
+        tool_ctx.ci_watcher = mock_watcher
+        await wait_for_ci("main", step_name="ci_wait")
+        assert any(e["step_name"] == "ci_wait" for e in tool_ctx.timing_log.get_report())
+
+    @pytest.mark.anyio
+    async def test_wait_for_ci_empty_step_name_skips_timing(self, tool_ctx):
+        mock_watcher = AsyncMock()
+        mock_watcher.wait = AsyncMock(
+            return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+        )
+        tool_ctx.ci_watcher = mock_watcher
+        await wait_for_ci("main")
+        assert tool_ctx.timing_log.get_report() == []
+
+
+class TestWaitForMergeQueueTiming:
+    """wait_for_merge_queue records wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_wait_for_merge_queue_step_name_records_timing(self, tool_ctx):
+        mock_watcher = AsyncMock()
+        mock_watcher.wait = AsyncMock(
+            return_value={"success": True, "pr_state": "merged", "reason": "PR merged"}
+        )
+        tool_ctx.merge_queue_watcher = mock_watcher
+        with patch(
+            "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock,
+        ) as mock_proc:
+            proc_inst = AsyncMock()
+            proc_inst.communicate = AsyncMock(
+                return_value=(b"https://github.com/owner/repo.git\n", b"")
+            )
+            proc_inst.returncode = 0
+            mock_proc.return_value = proc_inst
+            await wait_for_merge_queue(
+                pr_number=1, target_branch="main", cwd=".", step_name="mq_wait"
+            )
+        assert any(e["step_name"] == "mq_wait" for e in tool_ctx.timing_log.get_report())
+
+    @pytest.mark.anyio
+    async def test_wait_for_merge_queue_empty_step_name_skips_timing(self, tool_ctx):
+        mock_watcher = AsyncMock()
+        mock_watcher.wait = AsyncMock(
+            return_value={"success": True, "pr_state": "merged", "reason": "PR merged"}
+        )
+        tool_ctx.merge_queue_watcher = mock_watcher
+        with patch(
+            "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock,
+        ) as mock_proc:
+            proc_inst = AsyncMock()
+            proc_inst.communicate = AsyncMock(
+                return_value=(b"https://github.com/owner/repo.git\n", b"")
+            )
+            proc_inst.returncode = 0
+            mock_proc.return_value = proc_inst
+            await wait_for_merge_queue(pr_number=1, target_branch="main", cwd=".")
+        assert tool_ctx.timing_log.get_report() == []
+
+
 @pytest.mark.anyio
 async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inference(
     tool_ctx, tmp_path

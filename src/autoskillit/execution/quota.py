@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from autoskillit.core import _atomic_write, get_logger
+from autoskillit.core import atomic_write, get_logger
 
 _log = get_logger(__name__)
 
@@ -70,7 +70,7 @@ def _write_cache(cache_path: str, status: QuotaStatus) -> None:
         }
         path = Path(cache_path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
-        _atomic_write(path, json.dumps(payload))
+        atomic_write(path, json.dumps(payload))
     except OSError as exc:
         _log.warning("quota cache write failed", path=cache_path, error=str(exc))
 

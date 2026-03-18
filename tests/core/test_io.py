@@ -111,8 +111,29 @@ def test_parse_issue_ref_importable_from_core():
     assert owner == "acme" and repo == "proj" and number == 42
 
 
-def test_parse_issue_ref_importable_from_core_io():
-    from autoskillit.core.io import _parse_issue_ref
+def test_parse_issue_ref_not_in_io():
+    import autoskillit.core.io as io_mod
 
-    owner, repo, number = _parse_issue_ref("acme/proj#7")
-    assert owner == "acme" and repo == "proj" and number == 7
+    assert not hasattr(io_mod, "_parse_issue_ref")
+    assert "_parse_issue_ref" not in io_mod.__all__
+
+
+def test_atomic_write_is_canonical_public_name():
+    """_atomic_write must not appear in core.io.__all__; atomic_write must."""
+    import autoskillit.core.io as io_mod
+
+    assert "atomic_write" in io_mod.__all__
+    assert "_atomic_write" not in io_mod.__all__
+
+
+def test_atomic_write_importable_via_core_gateway():
+    from autoskillit.core import atomic_write
+
+    assert callable(atomic_write)
+
+
+def test_atomic_write_private_alias_removed():
+    """_atomic_write must not be importable as a module attribute."""
+    import autoskillit.core.io as io_mod
+
+    assert not hasattr(io_mod, "_atomic_write")

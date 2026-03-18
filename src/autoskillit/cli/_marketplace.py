@@ -15,7 +15,7 @@ from autoskillit.cli._hooks import (
     _evict_stale_autoskillit_hooks,
     sync_hooks_to_settings,
 )
-from autoskillit.core import _atomic_write, is_git_worktree, pkg_root
+from autoskillit.core import atomic_write, is_git_worktree, pkg_root
 
 _VALID_SCOPES = {"user", "project", "local"}
 _MARKETPLACE_NAME = "autoskillit-local"
@@ -41,7 +41,7 @@ def _clear_plugin_cache() -> None:
             plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
             if plugin_ref in data:
                 del data[plugin_ref]
-                _atomic_write(installed_json, json.dumps(data, indent=2))
+                atomic_write(installed_json, json.dumps(data, indent=2))
         except (OSError, json.JSONDecodeError):
             pass  # non-fatal — install will proceed regardless
 
@@ -84,7 +84,7 @@ def _ensure_marketplace() -> Path:
             }
         ],
     }
-    _atomic_write(plugin_dir / "marketplace.json", json.dumps(manifest, indent=2) + "\n")
+    atomic_write(plugin_dir / "marketplace.json", json.dumps(manifest, indent=2) + "\n")
 
     # Symlink to the live package directory
     link_path = marketplace_dir / "plugins" / "autoskillit"
@@ -140,7 +140,7 @@ def install(*, scope: str = "user"):
     from autoskillit.hooks import generate_hooks_json
 
     hooks_json_path = pkg_root() / "hooks" / "hooks.json"
-    _atomic_write(hooks_json_path, json.dumps(generate_hooks_json(), indent=2) + "\n")
+    atomic_write(hooks_json_path, json.dumps(generate_hooks_json(), indent=2) + "\n")
 
     # Register the marketplace (idempotent)
     result = subprocess.run(
@@ -203,7 +203,7 @@ def upgrade():
         new_text = re.sub(r"^inputs:", "ingredients:", text, flags=re.MULTILINE)
         new_text = re.sub(r"^constraints:", "kitchen_rules:", new_text, flags=re.MULTILINE)
         if new_text != text:
-            _atomic_write(yaml_file, new_text)
+            atomic_write(yaml_file, new_text)
             changed += 1
 
     print(f"Upgraded: directory renamed, {changed} file(s) updated.")

@@ -302,3 +302,35 @@ def test_write_behavior_spec_dataclass() -> None:
     assert always.mode == "always"
     cond = WriteBehaviorSpec(mode="conditional", expected_when=("pat",))
     assert cond.expected_when == ("pat",)
+
+
+# ---------------------------------------------------------------------------
+# P10-F1 — SubprocessRunner.pty_mode default
+# ---------------------------------------------------------------------------
+
+
+def test_subprocess_runner_protocol_pty_mode_default_false():
+    import inspect
+
+    from autoskillit.core import SubprocessRunner
+
+    sig = inspect.signature(SubprocessRunner.__call__)
+    assert sig.parameters["pty_mode"].default is False
+
+
+def test_default_subprocess_runner_pty_mode_default_false():
+    import inspect
+
+    from autoskillit.execution.process import DefaultSubprocessRunner
+
+    sig = inspect.signature(DefaultSubprocessRunner.__call__)
+    assert sig.parameters["pty_mode"].default is False
+
+
+def test_run_managed_async_pty_mode_default_false():
+    import inspect
+
+    from autoskillit.execution.process import run_managed_async
+
+    sig = inspect.signature(run_managed_async)
+    assert sig.parameters["pty_mode"].default is False

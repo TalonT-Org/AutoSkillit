@@ -7,7 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from autoskillit.core import _atomic_write, get_logger
+from autoskillit.core import atomic_write, get_logger
 
 logger = get_logger(__name__)
 
@@ -47,7 +47,7 @@ def read_staleness_cache(cache_path: Path, recipe_name: str) -> StalenessEntry |
 
 
 def write_staleness_cache(cache_path: Path, recipe_name: str, entry: StalenessEntry) -> None:
-    """Atomically update entry using _atomic_write. Swallows OSError (best-effort)."""
+    """Atomically update entry using atomic_write. Swallows OSError (best-effort)."""
     try:
         existing: dict = {}
         if cache_path.is_file():
@@ -56,6 +56,6 @@ def write_staleness_cache(cache_path: Path, recipe_name: str, entry: StalenessEn
             except (json.JSONDecodeError, OSError):
                 existing = {}
         existing[recipe_name] = dataclasses.asdict(entry)
-        _atomic_write(cache_path, json.dumps(existing, indent=2))
+        atomic_write(cache_path, json.dumps(existing, indent=2))
     except OSError as exc:
         logger.warning("staleness_cache_write_failed", recipe_name=recipe_name, exc_info=exc)

@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from autoskillit.core import YAMLError, _atomic_write, dump_yaml_str, load_yaml
+from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
 from autoskillit.recipe import list_recipes
 
 _MARKER_CONTENT = """\
@@ -51,7 +51,7 @@ def _create_secrets_template(project_dir: Path) -> None:
     secrets_path = autoskillit_dir / ".secrets.yaml"
     if secrets_path.exists():
         return  # Never overwrite existing secrets
-    _atomic_write(
+    atomic_write(
         secrets_path,
         "# AutoSkillit secrets — never commit this file\n"
         "# This file is already listed in .gitignore\n\n"
@@ -138,7 +138,7 @@ def _register_mcp_server(claude_json_path: Path) -> None:
         "command": "autoskillit",
         "args": [],
     }
-    _atomic_write(claude_json_path, json.dumps(data, indent=2))
+    atomic_write(claude_json_path, json.dumps(data, indent=2))
 
 
 def _print_next_steps() -> None:
@@ -175,7 +175,7 @@ def _register_all(scope: str, project_dir: Path) -> None:
                     config_data = load_yaml(config_path) or {}
                     if not config_data.get("github", {}).get("default_repo"):
                         config_data.setdefault("github", {})["default_repo"] = github_repo
-                        _atomic_write(
+                        atomic_write(
                             config_path,
                             dump_yaml_str(
                                 config_data, default_flow_style=False, allow_unicode=True
@@ -187,7 +187,7 @@ def _register_all(scope: str, project_dir: Path) -> None:
             else:
                 autoskillit_dir = project_dir / ".autoskillit"
                 autoskillit_dir.mkdir(exist_ok=True)
-                _atomic_write(config_path, f"github:\n  default_repo: '{github_repo}'\n")
+                atomic_write(config_path, f"github:\n  default_repo: '{github_repo}'\n")
 
     _create_secrets_template(project_dir)
 

@@ -139,7 +139,7 @@ def test_no_direct_write_text_in_src() -> None:
                 violations.append(f"  {rel}:{node.lineno}")
     assert not violations, (
         "Direct path.write_text/write_bytes calls found in src/autoskillit/.\n"
-        "Use _atomic_write(path, content) from autoskillit.core.io instead:\n"
+        "Use atomic_write(path, content) from autoskillit.core.io instead:\n"
         + "\n".join(violations)
     )
 

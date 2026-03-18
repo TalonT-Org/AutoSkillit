@@ -25,7 +25,7 @@ from autoskillit.cli._init_helpers import (
     _prompt_test_command,
     _register_all,
 )
-from autoskillit.core import ClaudeFlags, RecipeSource, _atomic_write, pkg_root
+from autoskillit.core import ClaudeFlags, RecipeSource, atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
 
 app = App(
@@ -150,7 +150,7 @@ def init(
         else:
             cmd_parts = _prompt_test_command()
 
-        _atomic_write(config_path, _generate_config_yaml(cmd_parts))
+        atomic_write(config_path, _generate_config_yaml(cmd_parts))
         print(f"Config written to: {config_path}")
 
     _register_all(scope, project_dir)
@@ -313,7 +313,7 @@ def workspace_init(path: str):
 
     target.mkdir(parents=True, exist_ok=True)
     marker = target / marker_name
-    _atomic_write(
+    atomic_write(
         marker,
         _MARKER_CONTENT.format(
             timestamp=datetime.now(UTC).isoformat(),
@@ -448,7 +448,7 @@ def _get_subsets_needed(recipe: Recipe, disabled_subsets: frozenset[str]) -> fro
 
 def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> None:
     """Remove specified subsets from subsets.disabled in .autoskillit/config.yaml."""
-    from autoskillit.core import YAMLError, _atomic_write, dump_yaml_str, load_yaml
+    from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
 
     config_path = project_dir / ".autoskillit" / "config.yaml"
     try:
@@ -459,7 +459,7 @@ def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> N
     current_disabled: list[str] = subsets_section.get("disabled", [])
     subsets_section["disabled"] = [s for s in current_disabled if s not in subsets]
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(config_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
+    atomic_write(config_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
     print(f"Updated {config_path}: removed {sorted(subsets)} from subsets.disabled")
 
 

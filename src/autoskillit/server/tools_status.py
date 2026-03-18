@@ -127,6 +127,8 @@ async def get_token_summary(clear: bool = False, format: str = "json") -> str:
     - total: {input_tokens, output_tokens, cache_creation_input_tokens,
                cache_read_input_tokens}
 
+    This tool sends no MCP progress notifications.
+
     Args:
         clear: If True, reset the token log after returning current data.
         format: Output format — "json" (default) returns structured JSON,

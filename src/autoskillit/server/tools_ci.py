@@ -4,7 +4,6 @@ wait_for_merge_queue (gated).
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 from typing import Literal
@@ -87,18 +86,12 @@ async def wait_for_ci(
     # Infer head_sha from cwd if not provided
     if head_sha is None and cwd:
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "git",
-                "rev-parse",
-                "HEAD",
-                cwd=cwd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            rc, stdout, _ = await _run_subprocess(
+                ["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0
             )
-            stdout, _ = await proc.communicate()
-            if proc.returncode == 0:
-                head_sha = stdout.decode().strip()
-        except OSError:
+            if rc == 0:
+                head_sha = stdout.strip()
+        except Exception:
             pass
 
     scope = CIRunScope(

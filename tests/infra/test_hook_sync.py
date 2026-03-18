@@ -1,4 +1,5 @@
 """Sync tests: verify parallel stdlib-only hook scripts stay aligned with server code."""
+
 from __future__ import annotations
 
 from pathlib import Path

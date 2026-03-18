@@ -7,14 +7,14 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-from autoskillit.core import SkillResult
-from autoskillit.core.types import RetryReason
 from autoskillit.server.tools_integrations import (
     _format_diagnostics_section,
     _read_session_diagnostics,
     report_bug,
 )
+
+from autoskillit.core import SkillResult
+from autoskillit.core.types import RetryReason
 
 # ---------------------------------------------------------------------------
 # _read_session_diagnostics unit tests

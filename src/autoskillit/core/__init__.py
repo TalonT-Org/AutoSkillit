@@ -13,7 +13,6 @@ from .github_url import parse_github_repo as parse_github_repo
 from .io import (
     YAMLError,
     atomic_write,
-    dump_yaml,
     dump_yaml_str,
     ensure_project_temp,
     load_yaml,

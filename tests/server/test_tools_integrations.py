@@ -16,9 +16,7 @@ from autoskillit.server.helpers import _extract_block
 from autoskillit.server.tools_github import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
-    _format_diagnostics_section,
     _parse_fingerprint,
-    _read_session_diagnostics,
     fetch_github_issue,
     get_issue_title,
     report_bug,

@@ -645,9 +645,8 @@ def test_every_always_write_skill_has_contract(skill_name: str) -> None:
 
 def test_dataflow_entry_uppercase_f() -> None:
     """DataFlowEntry (uppercase F) must be importable; old DataflowEntry must be gone."""
-    from autoskillit.recipe.contracts import DataFlowEntry  # must not raise
-
     import autoskillit.recipe.contracts as m
+    from autoskillit.recipe.contracts import DataFlowEntry  # must not raise
 
     assert not hasattr(m, "DataflowEntry"), "DataflowEntry (lowercase f) must be removed"
     entry = DataFlowEntry(step="s", available=[], required=[], produced=[])

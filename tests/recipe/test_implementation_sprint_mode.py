@@ -129,11 +129,5 @@ def test_implementation_no_semantic_errors(impl_recipe) -> None:
 
     active, _ = _build_active_recipe(impl_recipe, None, pkg_root().parent)
     ctx = make_validation_context(active, available_sub_recipes=frozenset({"sprint-prefix"}))
-    # TODO Part B: remove "ci-failure-missing-conflict-gate" exclusion after updating
-    # implementation.yaml to add stale-base detection gates on the CI failure path.
-    errors = [
-        f
-        for f in run_semantic_rules(ctx)
-        if f.severity == Severity.ERROR and f.rule != "ci-failure-missing-conflict-gate"
-    ]
+    errors = [f for f in run_semantic_rules(ctx) if f.severity == Severity.ERROR]
     assert not errors, f"Semantic errors: {errors}"

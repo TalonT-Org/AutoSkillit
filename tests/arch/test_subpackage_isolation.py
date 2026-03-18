@@ -698,14 +698,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
     ),
-    # REQ-CNST-010-E2: tools_integrations.py consolidates all GitHub/issue/PR tool
-    # handlers. groupC will split this into per-domain files; until then exempt at 1300
-    # lines. Remove this entry once groupC lands and the module drops below 1000 lines.
-    "tools_integrations.py": (
-        1300,
-        "REQ-CNST-010-E2: GitHub/issue/PR tool handlers pre-groupC split — remove after "
-        "groupC splits tools_integrations into per-domain modules",
-    ),
 }
 
 

@@ -3,7 +3,7 @@
 import getpass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).parent.parent
+REPO_ROOT = Path(__file__).parent.parent.parent
 
 
 def test_no_personal_home_paths_in_test_files():

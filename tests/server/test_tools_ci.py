@@ -448,3 +448,38 @@ async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inferenc
     assert result["pr_state"] == "error"
     # The file:// URL must not resolve to a GitHub repo, so watcher receives repo=None
     assert mock_watcher.wait.call_args.kwargs.get("repo") is None
+
+
+# ---------------------------------------------------------------------------
+# MCP handler — workflow passed via scope (moved from execution/test_ci_params)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_handler_passes_workflow(tool_ctx):
+    """wait_for_ci MCP handler must forward workflow to watcher via scope."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"conclusion": "success", "failed_jobs": [], "run_id": 1}
+    )
+    tool_ctx.ci_watcher = mock_watcher
+
+    # cwd="" → head_sha inference skipped (empty string is falsy)
+    json.loads(await wait_for_ci(branch="main", workflow="tests.yml", cwd=""))
+
+    mock_watcher.wait.assert_called_once()
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs["scope"].workflow == "tests.yml"
+
+
+@pytest.mark.anyio
+async def test_get_ci_status_handler_passes_workflow(tool_ctx):
+    """get_ci_status MCP handler must forward workflow to watcher via scope."""
+    mock_watcher = AsyncMock()
+    mock_watcher.status = AsyncMock(return_value={"runs": []})
+    tool_ctx.ci_watcher = mock_watcher
+
+    await get_ci_status(branch="main", workflow="tests.yml")
+
+    call_kwargs = mock_watcher.status.call_args
+    assert call_kwargs.kwargs["scope"].workflow == "tests.yml"

@@ -3,7 +3,7 @@
 import tomllib
 from pathlib import Path
 
-PYPROJECT = Path(__file__).parent.parent / "pyproject.toml"
+PYPROJECT = Path(__file__).parent.parent.parent / "pyproject.toml"
 
 
 def _project():

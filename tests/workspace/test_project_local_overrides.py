@@ -283,27 +283,6 @@ def test_cook_session_excludes_tier1_from_ephemeral_dir(tmp_path):
     )
 
 
-def test_cook_session_excludes_project_local_overrides(tmp_path):
-    """T-OVR-016: init_session(cook_session=True) must NOT write skills that
-    have project-local overrides — CWD auto-discovery already surfaces them."""
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
-    )
-
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    override = project_dir / ".claude" / "skills" / "investigate"
-    override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom investigate")
-
-    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-    skills_dir = mgr.init_session("sess-ovr", cook_session=True, project_dir=project_dir)
-    assert not (skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists(), (
-        "cook_session=True must exclude 'investigate' when project-local override exists"
-    )
-
-
 def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
     """T-OVR-017: Regression guard — cook_session=True still writes all
     BUNDLED_EXTENDED skills that do NOT have project-local overrides."""

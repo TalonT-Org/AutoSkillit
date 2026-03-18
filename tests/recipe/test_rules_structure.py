@@ -20,16 +20,7 @@ from autoskillit.recipe.validator import (
     RuleFinding,
     run_semantic_rules,
 )
-
-# ---------------------------------------------------------------------------
-# Shared helper
-# ---------------------------------------------------------------------------
-
-
-def _make_workflow(steps: dict[str, dict]) -> Recipe:
-    parsed_steps = {name: _parse_step(data) for name, data in steps.items()}
-    return Recipe(name="test", description="test", steps=parsed_steps, kitchen_rules=["test"])
-
+from tests.recipe.conftest import _make_workflow
 
 # ---------------------------------------------------------------------------
 # Module-level semantic rule tests
@@ -262,13 +253,7 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
     for path in yaml_files:
         wf = load_recipe(path)
         findings = run_semantic_rules(wf)
-        # TODO Part B: remove "ci-failure-missing-conflict-gate" exclusion after updating
-        # bundled recipes (remediation.yaml, implementation.yaml, implementation-groups.yaml).
-        errors = [
-            f
-            for f in findings
-            if f.severity == Severity.ERROR and f.rule != "ci-failure-missing-conflict-gate"
-        ]
+        errors = [f for f in findings if f.severity == Severity.ERROR]
         assert not errors, (
             f"Bundled workflow {path.name} has error-severity semantic findings: {errors}"
         )
@@ -290,7 +275,6 @@ class TestOutdatedScriptVersionRule:
             ("0.1.0", "0.2.0", 1),  # MSR1: below installed → fires
             ("0.2.0", "0.2.0", 0),  # MSR2: matches installed → does not fire
             (None, "0.2.0", 1),  # MSR3: None → fires
-            ("0.1.0", "0.2.0", 1),  # MSR4: also fires (same as MSR1; severity checked separately)
         ],
     )
     def test_outdated_recipe_version_rule(
@@ -1527,7 +1511,6 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step in remediation.yaml has predicate on_result."""
         step = self.if_recipe.steps["merge"]
         assert step.on_result is not None
-        assert step.on_result.conditions, "merge step must have predicate conditions"
         assert len(step.on_result.conditions) == 6
 
         cond0 = step.on_result.conditions[0]
@@ -1564,7 +1547,6 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step in implementation.yaml has predicate on_result."""
         step = self.ip_recipe.steps["merge"]
         assert step.on_result is not None
-        assert step.on_result.conditions, "merge step must have predicate conditions"
         assert len(step.on_result.conditions) == 6
 
         cond0 = step.on_result.conditions[0]
@@ -1614,13 +1596,7 @@ class TestRecipeIntegrationPredicateRouting:
             (self.ip_recipe, "implementation"),
         ]:
             findings = run_semantic_rules(recipe)
-            # TODO Part B: remove "ci-failure-missing-conflict-gate" exclusion after
-            # updating bundled recipes to add stale-base detection gates.
-            errors = [
-                f
-                for f in findings
-                if f.severity == Severity.ERROR and f.rule != "ci-failure-missing-conflict-gate"
-            ]
+            errors = [f for f in findings if f.severity == Severity.ERROR]
             assert errors == [], f"{name} has ERROR-severity semantic findings: " + str(
                 [(f.rule, f.step_name, f.message) for f in errors]
             )

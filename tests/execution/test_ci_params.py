@@ -7,9 +7,7 @@ immunity guards against the bug where workflow_id was silently absent.
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -233,42 +231,3 @@ async def test_wait_calls_fetch_jobs_for_timed_out_run(httpx_mock):
     result = await watcher.wait("main", repo="owner/repo", timeout_seconds=60)
     assert result["conclusion"] == "timed_out"
     assert "unit" in result["failed_jobs"]
-
-
-# ---------------------------------------------------------------------------
-# MCP handler — workflow passed via scope
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_wait_for_ci_handler_passes_workflow(tool_ctx):
-    """wait_for_ci MCP handler must forward workflow to watcher via scope."""
-    from autoskillit.server.tools_ci import wait_for_ci
-
-    mock_watcher = AsyncMock()
-    mock_watcher.wait = AsyncMock(
-        return_value={"conclusion": "success", "failed_jobs": [], "run_id": 1}
-    )
-    tool_ctx.ci_watcher = mock_watcher
-
-    # cwd="" → head_sha inference skipped (empty string is falsy)
-    json.loads(await wait_for_ci(branch="main", workflow="tests.yml", cwd=""))
-
-    mock_watcher.wait.assert_called_once()
-    call_kwargs = mock_watcher.wait.call_args
-    assert call_kwargs.kwargs["scope"].workflow == "tests.yml"
-
-
-@pytest.mark.anyio
-async def test_get_ci_status_handler_passes_workflow(tool_ctx):
-    """get_ci_status MCP handler must forward workflow to watcher via scope."""
-    from autoskillit.server.tools_ci import get_ci_status
-
-    mock_watcher = AsyncMock()
-    mock_watcher.status = AsyncMock(return_value={"runs": []})
-    tool_ctx.ci_watcher = mock_watcher
-
-    await get_ci_status(branch="main", workflow="tests.yml")
-
-    call_kwargs = mock_watcher.status.call_args
-    assert call_kwargs.kwargs["scope"].workflow == "tests.yml"

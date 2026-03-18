@@ -18,13 +18,7 @@ class TestImplementationPipelineIssueUrl:
     def test_recipe_validates_clean(self):
         """implementation must validate with no errors after adding issue_url."""
         result = validate_from_path(_recipe_path("implementation"))
-        # TODO Part B: remove "ci-failure-missing-conflict-gate" exclusion after updating
-        # implementation.yaml to add stale-base detection gates on the CI failure path.
-        errors = [
-            f
-            for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") != "ci-failure-missing-conflict-gate"
-        ]
+        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_issue_url_ingredient_declared(self):
@@ -111,13 +105,7 @@ class TestImplementationPipelineIssueUrl:
 class TestInvestigateFirstIssueUrl:
     def test_recipe_validates_clean(self):
         result = validate_from_path(_recipe_path("remediation"))
-        # TODO Part B: remove "ci-failure-missing-conflict-gate" exclusion after updating
-        # remediation.yaml to add stale-base detection gates on the CI failure path.
-        errors = [
-            f
-            for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") != "ci-failure-missing-conflict-gate"
-        ]
+        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_issue_url_ingredient_declared(self):
@@ -202,13 +190,7 @@ class TestInvestigateFirstIssueUrl:
 class TestImplementationGroupsIssueTitle:
     def test_recipe_validates_clean(self):
         result = validate_from_path(_recipe_path("implementation-groups"))
-        # TODO Part B: remove "ci-failure-missing-conflict-gate" exclusion after updating
-        # implementation-groups.yaml to add stale-base detection gates on the CI failure path.
-        errors = [
-            f
-            for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") != "ci-failure-missing-conflict-gate"
-        ]
+        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_fetch_issue_step_replaced(self):

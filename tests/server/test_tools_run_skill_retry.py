@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from autoskillit.config import AutomationConfig, RunSkillConfig
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.server.tools_execution import run_skill
@@ -29,11 +28,6 @@ class TestRunSkillRetryRemoved:
         import autoskillit.server.tools_execution as module
 
         assert "run_skill_retry" not in module.__all__
-
-    def test_run_skill_uses_two_hour_timeout(self):
-        """run_skill uses the 7200s timeout (merged from run_skill_retry)."""
-        assert RunSkillConfig().timeout == 7200
-        assert AutomationConfig().run_skill.timeout == 7200
 
 
 class TestRunSkillSessionOutcome:

@@ -53,6 +53,7 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
         result_str = await _load_recipe_tool(name="test-recipe", overrides={"sprint_mode": "true"})
         result = json.loads(result_str)
         assert "error" not in result
+        assert result.get("valid") is True
 
         # Verify overrides were passed through to load_and_validate
         mock_recipes.load_and_validate.assert_called_once()
@@ -99,7 +100,9 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
             overrides={"sprint_mode": "true"},
             ctx=mock_mcp_ctx,
         )
-        json.loads(result_str)  # verify valid JSON
+        result = json.loads(result_str)
+        assert result.get("kitchen") == "open"
+        assert result.get("valid") is True
 
         # Verify overrides were passed through to load_and_validate
         mock_recipes.load_and_validate.assert_called_once()

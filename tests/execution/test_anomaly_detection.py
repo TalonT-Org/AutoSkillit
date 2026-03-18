@@ -127,7 +127,7 @@ def test_anomaly_record_structure():
     """Each anomaly record has the required fields."""
     snaps = [_snap(oom_score=900)]
     anomalies = detect_anomalies(snaps, pid=1234)
-    assert len(anomalies) >= 1
+    assert len(anomalies) == 1
     anomaly = anomalies[0]
     assert "ts" in anomaly
     assert "seq" in anomaly

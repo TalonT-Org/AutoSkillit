@@ -74,6 +74,7 @@ async def test_resolve_remote_repo_after_clone_uses_upstream(tmp_path: Path) -> 
 @pytest.mark.anyio
 async def test_infer_repo_from_remote_returns_empty_for_file_url(
     clone_isolation_repo: Path,
+    tmp_path: Path,
 ) -> None:
     """Regression guard: file:// origin, no upstream → infer_repo_from_remote returns ''.
 
@@ -84,7 +85,7 @@ async def test_infer_repo_from_remote_returns_empty_for_file_url(
 
     from autoskillit.server.helpers import infer_repo_from_remote
 
-    work_copy = clone_isolation_repo.parent / "work_copy"
+    work_copy = tmp_path / "work_copy"
     shutil.copytree(clone_isolation_repo, work_copy)
     try:
         # Remove the upstream remote so only file:// origin remains

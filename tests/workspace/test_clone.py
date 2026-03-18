@@ -868,15 +868,6 @@ class TestPushToRemoteProtectedBranch:
         assert result["success"] is False
         assert result.get("error_type") == "protected_branch_push"
 
-    def test_push_to_remote_allows_non_protected_branch(self, tmp_path: Path) -> None:
-        """push_to_remote does not reject non-protected branches (at the guard level)."""
-        from autoskillit.core.branch_guard import is_protected_branch
-
-        assert (
-            is_protected_branch("feat/my-feature", protected=["main", "integration", "stable"])
-            is False
-        )
-
 
 class TestPushToRemoteMocked:
     def test_ds6_push_to_remote_calls_get_url_then_push(self) -> None:

@@ -208,6 +208,7 @@ def test_severity_has_ok_member():
     assert Severity.OK == "ok"
     assert Severity.ERROR == "error"
     assert Severity.WARNING == "warning"
+    assert set(Severity) == {Severity.OK, Severity.ERROR, Severity.WARNING}
 
 
 def test_github_fetcher_protocol_has_label_methods():

@@ -23,7 +23,6 @@ class TestGitHubConfigStagedLabel:
         d = _make_dynaconf()
         cfg = AutomationConfig.from_dynaconf(d)
         assert cfg.github.staged_label == "awaiting-promotion"
-        monkeypatch.delenv("AUTOSKILLIT_GITHUB__STAGED_LABEL", raising=False)
 
     def test_github_config_staged_label_independent_of_in_progress_label(self):
         """staged_label and in_progress_label are independent fields."""

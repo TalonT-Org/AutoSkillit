@@ -21,8 +21,8 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-class TestMakeScriptSkillContract:
-    """make-script-skill SKILL.md must document the constraints field."""
+class TestWriteRecipeSkillContract:
+    """write-recipe SKILL.md must document the constraints field."""
 
     def _skill_md_text(self) -> str:
         skill_md = (
@@ -38,7 +38,7 @@ class TestMakeScriptSkillContract:
     def test_schema_table_includes_constraints(self):
         text = self._skill_md_text()
         assert "| `kitchen_rules`" in text, (
-            "make-script-skill SKILL.md schema table must include a 'kitchen_rules' row"
+            "write-recipe SKILL.md schema table must include a 'kitchen_rules' row"
         )
 
     def test_example_yaml_includes_constraints(self):
@@ -46,7 +46,7 @@ class TestMakeScriptSkillContract:
         yaml_blocks = re.findall(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
         has_constraints = any("kitchen_rules:" in block for block in yaml_blocks)
         assert has_constraints, (
-            "make-script-skill SKILL.md must include .kitchen_rules:' in at least one "
+            "write-recipe SKILL.md must include .kitchen_rules:' in at least one "
             "example YAML block"
         )
 
@@ -54,7 +54,7 @@ class TestMakeScriptSkillContract:
         text = self._skill_md_text()
         found = [t for t in PIPELINE_FORBIDDEN_TOOLS if t in text]
         assert len(found) >= 3, (
-            f"make-script-skill SKILL.md must name at least 3 forbidden tools, found only: {found}"
+            f"write-recipe SKILL.md must name at least 3 forbidden tools, found only: {found}"
         )
 
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 # ---------------------------------------------------------------------------
 # T5 — _drop_sub_recipe_step uses dataclasses.replace
 # ---------------------------------------------------------------------------
@@ -10,7 +9,6 @@ from __future__ import annotations
 
 def test_drop_sub_recipe_step_preserves_future_fields() -> None:
     """_drop_sub_recipe_step round-trips all Recipe fields (catches future field additions)."""
-    import dataclasses
 
     from autoskillit.recipe._api import _drop_sub_recipe_step
     from autoskillit.recipe.schema import Recipe, RecipeStep

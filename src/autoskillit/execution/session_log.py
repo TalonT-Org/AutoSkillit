@@ -270,6 +270,14 @@ def _enforce_retention(log_root: Path) -> None:
     # Rewrite sessions.jsonl to remove expired entries
     index_path = log_root / "sessions.jsonl"
     if index_path.is_file():
+        # Accepted read-modify-write race: between read_text() below and _atomic_write()
+        # at the end of this block, a concurrent flush_session_log() call may append a
+        # new entry to sessions.jsonl via open("a"). That entry will not be present in
+        # `lines`, so it will be silently lost when _atomic_write() overwrites the file.
+        # Worst case: one diagnostic index entry dropped per concurrent session flush that
+        # races this retention sweep. Correctness of the running session is unaffected.
+        # File locking (fcntl.flock) is not warranted: the overhead exceeds the value of
+        # protecting a best-effort diagnostic artifact.
         lines = index_path.read_text().splitlines()
         kept: list[str] = []
         for line in lines:

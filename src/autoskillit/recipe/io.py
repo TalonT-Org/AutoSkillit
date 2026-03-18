@@ -94,6 +94,42 @@ def find_recipe_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
 
 # --- internal helpers ---
 
+# Fields explicitly handled by _parse_step. Must match RecipeStep.__dataclass_fields__
+# exactly. When a field is added to RecipeStep, add handling in _parse_step AND add the
+# field name here — the assertion below will fail at import time otherwise.
+_PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
+    {
+        "tool",
+        "action",
+        "python",
+        "constant",
+        "with_args",
+        "on_success",
+        "on_failure",
+        "on_context_limit",
+        "on_result",
+        "retries",
+        "on_exhausted",
+        "message",
+        "note",
+        "capture",
+        "capture_list",
+        "optional",
+        "skip_when_false",
+        "model",
+        "description",
+        "sub_recipe",
+        "gate",
+    }
+)
+assert _PARSE_STEP_HANDLED_FIELDS == frozenset(RecipeStep.__dataclass_fields__), (
+    f"_parse_step field list is out of sync with RecipeStep schema.\n"
+    f"  Missing from handled: "
+    f"{frozenset(RecipeStep.__dataclass_fields__) - _PARSE_STEP_HANDLED_FIELDS}\n"
+    f"  Extra in handled:     "
+    f"{_PARSE_STEP_HANDLED_FIELDS - frozenset(RecipeStep.__dataclass_fields__)}"
+)
+
 
 def _parse_recipe(data: dict[str, Any]) -> Recipe:
     name = data.get("name", "")

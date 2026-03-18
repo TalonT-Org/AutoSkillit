@@ -59,7 +59,7 @@ def _is_explicit_condition(when: str | None, value: str) -> bool:
     ),
     severity=Severity.ERROR,
 )
-def check_unrouted_verdict_values(ctx: ValidationContext) -> list[RuleFinding]:
+def _check_unrouted_verdict_values(ctx: ValidationContext) -> list[RuleFinding]:
     """Error when any on_result step lets an allowed verdict value fall to a catch-all.
 
     For each step that:

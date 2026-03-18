@@ -615,7 +615,7 @@ steps:
     on_result:
       - when: "${{ inputs.auto_merge }} != 'true'"
         route: confirm_cleanup
-      - when: "${{ context.queue_available }} == true"
+      - when: "${{ context.queue_available }} == 'true'"
         route: enable_auto_merge
       - route: release_issue_success
     skip_when_false: "inputs.open_pr"

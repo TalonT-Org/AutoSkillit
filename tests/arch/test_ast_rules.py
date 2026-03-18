@@ -32,8 +32,8 @@ from tests.arch._helpers import (
 )
 from tests.arch._rules import (
     _DISPATCH_TABLE_EXEMPT_FUNCTIONS,
-    _rel,
     RuleDescriptor,
+    _rel,
 )
 
 

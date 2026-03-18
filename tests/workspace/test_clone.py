@@ -868,6 +868,7 @@ class TestPushToRemoteProtectedBranch:
         assert result["success"] is False
         assert result.get("error_type") == "protected_branch_push"
 
+
 class TestPushToRemoteMocked:
     def test_ds6_push_to_remote_calls_get_url_then_push(self) -> None:
         """T_DS6: push_to_remote calls git remote get-url origin then git push -u upstream."""

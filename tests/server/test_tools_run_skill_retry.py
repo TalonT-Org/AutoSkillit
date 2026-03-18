@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from autoskillit.config import AutomationConfig
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.server.tools_execution import run_skill

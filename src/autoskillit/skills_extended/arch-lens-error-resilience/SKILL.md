@@ -132,7 +132,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `temp/autoskillit:arch-lens-error-resilience/arch_diag_error_resilience_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `temp/arch-lens-error-resilience/arch_diag_error_resilience_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After writing the diagram file, emit a structured output line:
 

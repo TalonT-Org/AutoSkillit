@@ -134,7 +134,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `temp/autoskillit:arch-lens-data-lineage/arch_diag_data_lineage_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `temp/arch-lens-data-lineage/arch_diag_data_lineage_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After writing the diagram file, emit a structured output line:
 

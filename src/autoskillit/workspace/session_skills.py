@@ -19,7 +19,7 @@ from autoskillit.core import (
     ClaudeDirectoryConventions,
     SkillSource,
     ValidatedAddDir,
-    _atomic_write,
+    atomic_write,
     get_logger,
 )
 from autoskillit.workspace.skills import SkillInfo, SkillResolver, detect_project_local_overrides
@@ -265,7 +265,7 @@ class DefaultSessionSkillManager:
             skill_dir.mkdir(exist_ok=True)
             gated = (not cook_session) and (skill_info.name in tier2_skills)
             content = self._provider.get_skill_content(skill_info.name, gated=gated)
-            _atomic_write(skill_dir / "SKILL.md", content)
+            atomic_write(skill_dir / "SKILL.md", content)
         return ValidatedAddDir(path=str(session_skills_dir))
 
     def activate_tier2(self, session_id: str, skill_name: str) -> bool:
@@ -288,7 +288,7 @@ class DefaultSessionSkillManager:
             return False
         content = skill_md.read_text()
         updated = _remove_disable_model_invocation(content)
-        _atomic_write(skill_md, updated)
+        atomic_write(skill_md, updated)
         return True
 
     def cleanup_stale(self, max_age_seconds: int = 86400) -> int:

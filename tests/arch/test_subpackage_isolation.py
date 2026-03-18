@@ -281,18 +281,18 @@ def test_no_module_level_io_detects_yaml_load(tmp_path: Path) -> None:
 
 
 def test_severity_defined_in_types():
-    """Severity must be a top-level class in core/types.py."""
-    tree = _get_module_ast("core/types.py")
+    """Severity must be a top-level class in core/_type_enums.py (the enums sub-module)."""
+    tree = _get_module_ast("core/_type_enums.py")
     assert "Severity" in _top_level_class_names(tree), (
-        "Severity not found in core/types.py; it must be defined there"
+        "Severity not found in core/_type_enums.py; it must be defined there"
     )
 
 
 def test_skill_tools_defined_in_types():
-    """SKILL_TOOLS must be a top-level assignment in core/types.py."""
-    tree = _get_module_ast("core/types.py")
+    """SKILL_TOOLS must be a top-level assignment in core/_type_constants.py."""
+    tree = _get_module_ast("core/_type_constants.py")
     assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
-        "SKILL_TOOLS not found in core/types.py; it must be defined there"
+        "SKILL_TOOLS not found in core/_type_constants.py; it must be defined there"
     )
 
 
@@ -518,9 +518,64 @@ def test_cli_is_package() -> None:
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 14 Python files (REQ-DSGN-002)."""
+    """server/ must not exceed 16 Python files (REQ-DSGN-002).
+
+    Limit updated from 14 to 16 after tools_integrations was split into
+    tools_github, tools_issue_lifecycle, and tools_pr_ops.
+    """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 14, f"server/ has {len(py_files)} files, max is 14"
+    assert len(py_files) <= 16, f"server/ has {len(py_files)} files, max is 16"
+
+
+def test_tools_integrations_replaced_by_split_modules() -> None:
+    """tools_integrations.py deleted; three replacement modules exist."""
+    server = SRC_ROOT / "server"
+    assert not (server / "tools_integrations.py").exists()
+    assert (server / "tools_github.py").exists()
+    assert (server / "tools_issue_lifecycle.py").exists()
+    assert (server / "tools_pr_ops.py").exists()
+
+
+def test_split_files_under_750_lines() -> None:
+    """Each split module must stay under the 750-line threshold."""
+    server = SRC_ROOT / "server"
+    for name in ("tools_github.py", "tools_issue_lifecycle.py", "tools_pr_ops.py"):
+        lines = len((server / name).read_text().splitlines())
+        assert lines <= 750, f"{name} has {lines} lines, exceeds 750"
+
+
+def test_extract_block_moved_to_helpers() -> None:
+    """_extract_block moved to server/helpers.py after tools_integrations split."""
+    from autoskillit.server.helpers import _extract_block
+
+    assert callable(_extract_block)
+
+
+def test_all_tools_importable_from_split_modules() -> None:
+    """All 9 tools are importable from their new home modules."""
+    from autoskillit.server.tools_github import fetch_github_issue, get_issue_title, report_bug
+    from autoskillit.server.tools_issue_lifecycle import (
+        claim_issue,
+        enrich_issues,
+        prepare_issue,
+        release_issue,
+    )
+    from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
+
+    assert all(
+        callable(f)
+        for f in [
+            fetch_github_issue,
+            get_issue_title,
+            report_bug,
+            prepare_issue,
+            enrich_issues,
+            claim_issue,
+            release_issue,
+            get_pr_reviews,
+            bulk_close_issues,
+        ]
+    )
 
 
 def test_git_operations_moved_to_server_package() -> None:
@@ -595,9 +650,22 @@ def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
 def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 
-    server/ is exempt at 12 files to accommodate tools_clone and tools_integrations modules.
+    Exemptions (rule ID | rationale):
+      server/ — REQ-CNST-003-E1: server/ splits tool handlers into per-domain files
+        (tools_clone, tools_github, tools_issue_lifecycle, tools_pr_ops, tools_ci,
+        tools_git, tools_recipe, tools_status, tools_workspace, tools_execution,
+        tools_kitchen, helpers, git, _factory, _state, __init__); each file is a
+        thin routing layer. Exempt at 16 files.
+      recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
+        (rules_bypass, rules_ci, rules_clone, etc.) for independent testability.
+      execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
+        focused single-concern modules (_process_io, _process_kill, _process_race,
+        etc.) that cannot be merged without re-introducing the coupling they isolate.
+      core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
+        (_type_enums, _type_protocols, _type_results, _type_subprocess, etc.) to
+        prevent circular imports while keeping L0 types co-located. Exempt at 14 files.
     """
-    EXEMPTIONS: dict[str, int] = {"server": 14, "recipe": 27, "execution": 22}
+    EXEMPTIONS: dict[str, int] = {"server": 16, "recipe": 27, "execution": 23, "core": 14}
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":
@@ -608,6 +676,50 @@ def test_no_subpackage_exceeds_10_files() -> None:
             violations.append(f"{sub_dir.name}/: {len(py_files)} Python files (max {limit})")
     assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
         f"  {v}" for v in violations
+    )
+
+
+# ── REQ-CNST-010: Per-module source size limit ───────────────────────────────
+# REQ-CNST-010: No source module in src/autoskillit/ may exceed 1000 lines.
+# Modules that exceed this limit require a documented exemption with rule ID and
+# rationale. Splitting is REQUIRED once a module exceeds 1000 lines.
+#
+# session.py (currently 864 lines) is deliberately NOT in this list because it
+# is under the 1000-line limit. If it ever reaches 1000 lines, add it here —
+# but first assess whether the adjudication pipeline has grown beyond its
+# original single-responsibility scope (REQ-CNST-010-NOTE-1).
+
+_LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
+    # REQ-CNST-010-E1: core/types.py is the canonical type registry for the entire
+    # package. It defines all StrEnums, protocols, constants, and shared type aliases
+    # in one place to prevent circular imports across sub-packages. Exempt at 1200 lines.
+    "types.py": (
+        1200,
+        "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
+        "circular imports; all enums/protocols/constants consolidated here",
+    ),
+}
+
+
+def test_no_src_module_exceeds_line_limit() -> None:
+    """REQ-CNST-010: No source module may exceed 1000 lines (exemptions require rule IDs).
+
+    Exceptions are documented in _LINE_LIMIT_EXEMPTIONS with rationale.
+    session.py (adjudication pipeline, ~864 lines) is intentionally near this
+    limit; do NOT split below 1000 lines — see REQ-CNST-010-NOTE-1.
+    """
+    violations: list[str] = []
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        line_count = len(py_file.read_text().splitlines())
+        limit, _ = _LINE_LIMIT_EXEMPTIONS.get(py_file.name, (1000, ""))
+        if line_count > limit:
+            violations.append(
+                f"{py_file.relative_to(SRC_ROOT)}: {line_count} lines (limit {limit})"
+            )
+    assert not violations, (
+        "Source modules exceeding line limit "
+        "(add entry to _LINE_LIMIT_EXEMPTIONS with rule ID + rationale):\n"
+        + "\n".join(f"  {v}" for v in violations)
     )
 
 
@@ -704,17 +816,26 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     """
     AUTOSKILLIT_ROOT = SRC_ROOT
 
-    # Collect Protocol class names from core/types.py via AST
-    types_path = AUTOSKILLIT_ROOT / "core" / "types.py"
-    types_tree = ast.parse(types_path.read_text())
+    # Collect Protocol class names from core/types.py and its sub-modules via AST.
+    # After the types.py split, Protocol definitions live in _type_protocols.py and
+    # SubprocessRunner lives in _type_subprocess.py; types.py is a thin re-export hub.
     core_protocols: set[str] = set()
-    for node in ast.walk(types_tree):
-        if isinstance(node, ast.ClassDef):
-            for base in node.bases:
-                base_str = ast.unparse(base)
-                if "Protocol" in base_str:
-                    core_protocols.add(node.name)
-                    break
+    for types_filename in (
+        "core/types.py",
+        "core/_type_protocols.py",
+        "core/_type_subprocess.py",
+    ):
+        types_path = AUTOSKILLIT_ROOT / types_filename
+        if not types_path.exists():
+            continue
+        types_tree = ast.parse(types_path.read_text())
+        for node in ast.walk(types_tree):
+            if isinstance(node, ast.ClassDef):
+                for base in node.bases:
+                    base_str = ast.unparse(base)
+                    if "Protocol" in base_str:
+                        core_protocols.add(node.name)
+                        break
 
     # Collect ToolContext field annotations via AST
     context_path = AUTOSKILLIT_ROOT / "pipeline" / "context.py"
@@ -971,3 +1092,29 @@ class TestGroupCMigration:
         )
         with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
             sig.process_exited = True  # REQ-SIG-008: frozen=True preserved
+
+
+def test_pipeline_fidelity_module_deleted():
+    """P2-F1: pipeline/fidelity.py must not exist after groupB."""
+    import pytest
+
+    with pytest.raises(ModuleNotFoundError):
+        import autoskillit.pipeline.fidelity  # noqa: F401
+
+
+def test_pipeline_pr_gates_no_longer_has_domain_paths():
+    """P2-F2: DOMAIN_PATHS must not be defined in pipeline/pr_gates.py."""
+    from pathlib import Path
+
+    src = (
+        Path(__file__).parent.parent.parent / "src/autoskillit/pipeline/pr_gates.py"
+    ).read_text()
+    assert "DOMAIN_PATHS" not in src
+
+
+def test_pipeline_init_no_longer_exports_domain_paths():
+    """P2-F2: DOMAIN_PATHS must not appear in pipeline.__all__."""
+    import autoskillit.pipeline as m
+
+    assert "DOMAIN_PATHS" not in m.__all__
+    assert "partition_files_by_domain" not in m.__all__

@@ -50,8 +50,10 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Re-export all public symbols so callers using `from autoskillit.execution.process import X`
-# continue to work without modification (P8-2: backward-compatible public surface).
+# Aggregate __all__ collects all public symbols from the execution sub-modules
+# (_process_io, _process_jsonl, etc.) into a single facade. This keeps the
+# internal sub-module split private — callers import from the facade, not from
+# internal sub-module paths.
 __all__ = [
     "DefaultSubprocessRunner",
     "RaceAccumulator",

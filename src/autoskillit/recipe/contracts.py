@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 from autoskillit.core import (
     SKILL_TOOLS,
     Severity,
-    _atomic_write,
+    atomic_write,
     dump_yaml_str,
     get_logger,
     load_yaml,
@@ -311,7 +311,7 @@ def generate_recipe_card(
 
     card_path = recipes_dir / "contracts" / f"{pipeline_path.stem}.yaml"
     card_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(
+    atomic_write(
         card_path, dump_yaml_str(contract_data, default_flow_style=False, sort_keys=False)
     )
     return contract_data

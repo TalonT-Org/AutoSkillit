@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from autoskillit.pipeline.pr_gates import DOMAIN_PATHS, partition_files_by_domain
+from autoskillit.execution.pr_analysis import DOMAIN_PATHS, partition_files_by_domain
 
 
 def test_server_files_assigned_to_server_domain():

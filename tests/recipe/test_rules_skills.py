@@ -77,20 +77,31 @@ def test_non_skill_step_not_checked() -> None:
     assert not unknown, "run_cmd steps must not trigger unknown-skill-command"
 
 
-def test_bundled_skill_names_not_computed_at_import() -> None:
-    """Verify _get_bundled_skill_names is lazy, not computed at import time."""
-    import importlib
-    from unittest.mock import patch
-
+def test_get_bundled_skill_names_is_not_lru_cached() -> None:
+    """_get_bundled_skill_names must not use @lru_cache (Composition Root fix)."""
     import autoskillit.recipe.rules_skills as mod
 
-    # Clear the lru_cache so reload starts fresh
-    mod._get_bundled_skill_names.cache_clear()
+    assert not hasattr(mod._get_bundled_skill_names, "cache_clear"), (
+        "_get_bundled_skill_names must not be lru_cache-decorated"
+    )
+    assert not hasattr(mod._get_skill_category_map, "cache_clear"), (
+        "_get_skill_category_map must not be lru_cache-decorated"
+    )
+
+
+def test_bundled_skill_names_not_computed_at_import_v2() -> None:
+    """Importing rules_skills must not trigger SkillResolver.list_all."""
+    import importlib
+    import sys
+    from unittest.mock import patch
+
+    # Remove cached module so reload is a fresh import
+    mod_name = "autoskillit.recipe.rules_skills"
+    sys.modules.pop(mod_name, None)
+
     with patch("autoskillit.workspace.skills.SkillResolver.list_all") as mock_list:
-        importlib.reload(mod)
+        importlib.import_module(mod_name)
         mock_list.assert_not_called()
-    # Restore cache for other tests
-    mod._get_bundled_skill_names.cache_clear()
 
 
 def test_all_bundled_recipes_skill_commands_resolve() -> None:

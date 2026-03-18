@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.core import _atomic_write, pkg_root
+from autoskillit.core import atomic_write, pkg_root
 from autoskillit.hooks import HOOK_REGISTRY
 
 
@@ -22,7 +22,7 @@ def _load_settings_data(settings_path: Path) -> dict:
 def _write_settings_data(settings_path: Path, data: dict) -> None:
     """Write settings data back atomically, creating parent dirs if needed."""
     settings_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(settings_path, json.dumps(data, indent=2))
+    atomic_write(settings_path, json.dumps(data, indent=2))
 
 
 def _is_autoskillit_hook_command(command: str) -> bool:

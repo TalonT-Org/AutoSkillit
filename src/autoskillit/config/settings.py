@@ -394,7 +394,10 @@ def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
     disabled = list(raw.get("disabled", []))
     custom_tags_raw = raw.get("custom_tags", {}) or {}
     if not isinstance(custom_tags_raw, dict):
-        custom_tags_raw = {}
+        raise ValueError(
+            f"subsets.custom_tags must be a dict mapping tag names to skill lists, "
+            f"got {type(custom_tags_raw).__name__!r}: {custom_tags_raw!r}"
+        )
     custom_tags: dict[str, list[str]] = {}
     for k, v in custom_tags_raw.items():
         if isinstance(v, list):

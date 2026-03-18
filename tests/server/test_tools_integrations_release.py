@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.server.tools_integrations import release_issue
+from autoskillit.server.tools_issue_lifecycle import release_issue
 
 
 class TestReleaseIssueStagedLifecycle:

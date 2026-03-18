@@ -1,4 +1,4 @@
-"""Tests for session diagnostics helpers in tools_integrations."""
+"""Tests for session diagnostics helpers in tools_github."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.server.tools_integrations import (
+from autoskillit.server.tools_github import (
     _format_diagnostics_section,
     _read_session_diagnostics,
     report_bug,

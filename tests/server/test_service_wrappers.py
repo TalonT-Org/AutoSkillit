@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+import yaml
 
 import autoskillit
 
@@ -52,7 +53,6 @@ class TestDefaultMigrationService:
         self, tmp_path: Path, monkeypatch
     ) -> None:  # SW-UPD-1
         """A recipe whose autoskillit_version matches the installed version returns up_to_date."""
-        from autoskillit.core.io import dump_yaml
         from autoskillit.migration import DefaultMigrationService, default_migration_engine
         from autoskillit.recipe.schema import AUTOSKILLIT_VERSION_KEY
 
@@ -64,7 +64,9 @@ class TestDefaultMigrationService:
             "steps": [],
         }
         recipe_path = tmp_path / "test-recipe.yaml"
-        dump_yaml(recipe_data, recipe_path)
+        recipe_path.write_text(
+            yaml.dump(recipe_data, default_flow_style=False, allow_unicode=True)
+        )
 
         monkeypatch.setattr(
             "autoskillit.recipe.load_recipe_card", lambda *a, **kw: {"skill_hashes": {}}
@@ -85,7 +87,6 @@ class TestDefaultMigrationService:
         self, tmp_path: Path, monkeypatch
     ) -> None:  # SW-UPD-2
         """migrate() always returns a dict with 'name' and either 'status' or 'error'."""
-        from autoskillit.core.io import dump_yaml
         from autoskillit.migration import DefaultMigrationService, default_migration_engine
         from autoskillit.recipe.schema import AUTOSKILLIT_VERSION_KEY
 
@@ -97,7 +98,9 @@ class TestDefaultMigrationService:
             "steps": [],
         }
         recipe_path = tmp_path / "structure-test.yaml"
-        dump_yaml(recipe_data, recipe_path)
+        recipe_path.write_text(
+            yaml.dump(recipe_data, default_flow_style=False, allow_unicode=True)
+        )
 
         monkeypatch.setattr(
             "autoskillit.recipe.load_recipe_card", lambda *a, **kw: {"skill_hashes": {}}
@@ -118,7 +121,6 @@ class TestDefaultMigrationService:
         self, tmp_path: Path, monkeypatch
     ) -> None:
         """Recipe at current version with a stale contract returns status=migrated."""
-        from autoskillit.core.io import dump_yaml
         from autoskillit.migration import DefaultMigrationService, default_migration_engine
         from autoskillit.recipe import StaleItem
         from autoskillit.recipe.schema import AUTOSKILLIT_VERSION_KEY
@@ -131,7 +133,9 @@ class TestDefaultMigrationService:
             "steps": [],
         }
         recipe_path = tmp_path / "test-recipe.yaml"
-        dump_yaml(recipe_data, recipe_path)
+        recipe_path.write_text(
+            yaml.dump(recipe_data, default_flow_style=False, allow_unicode=True)
+        )
 
         monkeypatch.setattr(
             "autoskillit.recipe.load_recipe_card",
@@ -162,7 +166,6 @@ class TestDefaultMigrationService:
         self, tmp_path: Path, monkeypatch
     ) -> None:
         """Recipe at current version with a fresh contract returns status=up_to_date."""
-        from autoskillit.core.io import dump_yaml
         from autoskillit.migration import DefaultMigrationService, default_migration_engine
         from autoskillit.recipe.schema import AUTOSKILLIT_VERSION_KEY
 
@@ -174,7 +177,9 @@ class TestDefaultMigrationService:
             "steps": [],
         }
         recipe_path = tmp_path / "test-recipe.yaml"
-        dump_yaml(recipe_data, recipe_path)
+        recipe_path.write_text(
+            yaml.dump(recipe_data, default_flow_style=False, allow_unicode=True)
+        )
 
         monkeypatch.setattr(
             "autoskillit.recipe.load_recipe_card",
@@ -192,7 +197,6 @@ class TestDefaultMigrationService:
         self, tmp_path: Path, monkeypatch
     ) -> None:
         """Contract regeneration failure is non-fatal; migrate() does not raise."""
-        from autoskillit.core.io import dump_yaml
         from autoskillit.migration import DefaultMigrationService, default_migration_engine
         from autoskillit.recipe.schema import AUTOSKILLIT_VERSION_KEY
 
@@ -204,7 +208,9 @@ class TestDefaultMigrationService:
             "steps": [],
         }
         recipe_path = tmp_path / "test-recipe.yaml"
-        dump_yaml(recipe_data, recipe_path)
+        recipe_path.write_text(
+            yaml.dump(recipe_data, default_flow_style=False, allow_unicode=True)
+        )
 
         monkeypatch.setattr("autoskillit.recipe.load_recipe_card", lambda *a, **kw: None)
 
@@ -226,7 +232,6 @@ class TestDefaultMigrationService:
         """Full migration: version migration + stale contract both reflected in result."""
         import autoskillit.migration.loader as ml
         from autoskillit.core import RetryReason, SkillResult
-        from autoskillit.core.io import dump_yaml
         from autoskillit.migration import DefaultMigrationService, default_migration_engine
         from autoskillit.recipe.schema import AUTOSKILLIT_VERSION_KEY
 
@@ -243,7 +248,9 @@ class TestDefaultMigrationService:
             "steps": [],
         }
         recipe_path = recipes_dir / "test-recipe.yaml"
-        dump_yaml(recipe_data, recipe_path)
+        recipe_path.write_text(
+            yaml.dump(recipe_data, default_flow_style=False, allow_unicode=True)
+        )
 
         # Fake migration from 0.0.0 to current version
         fake_mig_dir = tmp_path / "migrations"

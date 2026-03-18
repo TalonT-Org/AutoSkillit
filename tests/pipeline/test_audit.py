@@ -236,3 +236,63 @@ class TestDefaultAuditLogLoadFromLogDir:
         log = DefaultAuditLog()
         n = log.load_from_log_dir(tmp_path)
         assert n == 3
+
+
+class TestIterSessionLogEntries:
+    """Tests for the _iter_session_log_entries shared generator (P6-F1)."""
+
+    def test_iter_session_log_entries_importable(self):
+        from autoskillit.pipeline.audit import _iter_session_log_entries
+
+        assert callable(_iter_session_log_entries)
+
+    def test_iter_session_log_entries_yields_matching_files(self, tmp_path):
+        import json
+
+        from autoskillit.pipeline.audit import _iter_session_log_entries
+
+        session_dir = tmp_path / "sessions" / "s001"
+        session_dir.mkdir(parents=True)
+        target = session_dir / "audit_log.json"
+        target.write_text("[]")
+        (tmp_path / "sessions.jsonl").write_text(
+            json.dumps({"dir_name": "s001", "timestamp": "2026-03-07T00:00:00+00:00"}) + "\n"
+        )
+
+        paths = list(_iter_session_log_entries(tmp_path, "", "audit_log.json"))
+        assert paths == [target]
+
+    def test_iter_session_log_entries_skips_missing_file(self, tmp_path):
+        import json
+
+        from autoskillit.pipeline.audit import _iter_session_log_entries
+
+        session_dir = tmp_path / "sessions" / "no-file"
+        session_dir.mkdir(parents=True)
+        (tmp_path / "sessions.jsonl").write_text(
+            json.dumps({"dir_name": "no-file", "timestamp": "2026-03-07T00:00:00+00:00"}) + "\n"
+        )
+        paths = list(_iter_session_log_entries(tmp_path, "", "audit_log.json"))
+        assert paths == []
+
+    def test_iter_session_log_entries_since_filter(self, tmp_path):
+        import json
+
+        from autoskillit.pipeline.audit import _iter_session_log_entries
+
+        session_dir = tmp_path / "sessions" / "old"
+        session_dir.mkdir(parents=True)
+        (session_dir / "audit_log.json").write_text("[]")
+        (tmp_path / "sessions.jsonl").write_text(
+            json.dumps({"dir_name": "old", "timestamp": "2025-01-01T00:00:00+00:00"}) + "\n"
+        )
+        paths = list(
+            _iter_session_log_entries(tmp_path, "2026-01-01T00:00:00+00:00", "audit_log.json")
+        )
+        assert paths == []
+
+    def test_iter_session_log_entries_no_index_returns_empty(self, tmp_path):
+        from autoskillit.pipeline.audit import _iter_session_log_entries
+
+        paths = list(_iter_session_log_entries(tmp_path, "", "audit_log.json"))
+        assert paths == []

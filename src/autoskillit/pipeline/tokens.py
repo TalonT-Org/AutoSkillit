@@ -9,12 +9,14 @@ with a defensive copy getter.
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger
+from autoskillit.pipeline.audit import _iter_session_log_entries
 
 logger = get_logger(__name__)
 
@@ -122,47 +124,8 @@ class DefaultTokenLog:
 
         Returns the count of session directories successfully loaded.
         """
-        import json
-
-        index_path = Path(log_root) / "sessions.jsonl"
-        if not index_path.exists():
-            return 0
-
-        since_dt: datetime | None = None
-        if since:
-            try:
-                since_dt = datetime.fromisoformat(since)
-            except ValueError:
-                pass
-
         count = 0
-        for line in index_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                idx = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-            if since_dt:
-                try:
-                    entry_ts = datetime.fromisoformat(idx.get("timestamp", ""))
-                    if entry_ts.tzinfo is None:
-                        entry_ts = entry_ts.replace(tzinfo=UTC)
-                    if entry_ts < since_dt:
-                        continue
-                except (ValueError, TypeError):
-                    continue
-
-            dir_name = idx.get("dir_name", "")
-            if not dir_name:
-                continue
-
-            tu_path = Path(log_root) / "sessions" / dir_name / "token_usage.json"
-            if not tu_path.exists():
-                continue
-
+        for tu_path in _iter_session_log_entries(log_root, since, "token_usage.json"):
             try:
                 data = json.loads(tu_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
@@ -179,7 +142,12 @@ class DefaultTokenLog:
             e.output_tokens += data.get("output_tokens", 0)
             e.cache_creation_input_tokens += data.get("cache_creation_input_tokens", 0)
             e.cache_read_input_tokens += data.get("cache_read_input_tokens", 0)
+            # timing_seconds is the on-disk key name written by session_log.py;
+            # elapsed_seconds is the in-memory field name on TokenEntry.
             e.elapsed_seconds += float(data.get("timing_seconds", 0.0))
+            # Each token_usage.json file represents a single run_skill invocation
+            # (one file = one invocation). Incrementing here reconstructs the
+            # invocation count that was accumulated live via record().
             e.invocation_count += 1
             count += 1
 

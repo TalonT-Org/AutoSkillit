@@ -11,7 +11,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import _atomic_write, get_logger
+from autoskillit.core import atomic_write, get_logger
 from autoskillit.pipeline import TelemetryFormatter
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
@@ -295,10 +295,10 @@ async def write_telemetry_files(
     token_total = tool_ctx.token_log.compute_total()
 
     token_path = out / "token_summary.md"
-    _atomic_write(token_path, TelemetryFormatter.format_token_table(token_steps, token_total))
+    atomic_write(token_path, TelemetryFormatter.format_token_table(token_steps, token_total))
 
     timing_path = out / "timing_summary.md"
-    _atomic_write(
+    atomic_write(
         timing_path,
         TelemetryFormatter.format_timing_table(
             tool_ctx.timing_log.get_report(), tool_ctx.timing_log.compute_total()
@@ -310,7 +310,7 @@ async def write_telemetry_files(
         "steps": tool_ctx.response_log.get_report(),
         "total": tool_ctx.response_log.compute_total(),
     }
-    _atomic_write(mcp_path, json.dumps(mcp_data, indent=2))
+    atomic_write(mcp_path, json.dumps(mcp_data, indent=2))
 
     return json.dumps(
         {

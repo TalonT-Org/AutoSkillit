@@ -9,6 +9,8 @@ import re
 
 _GITHUB_REPO_RE = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$")
 _OWNER_REPO_RE = re.compile(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
+_FULL_URL_RE = re.compile(r"https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)")
+_SHORTHAND_RE = re.compile(r"^([^/]+)/([^#]+)#(\d+)$")
 
 
 def normalize_owner_repo(hint: str) -> str | None:
@@ -41,3 +43,26 @@ def parse_github_repo(url: str) -> str | None:
         return None
     m = _GITHUB_REPO_RE.search(url)
     return m.group(1) if m else None
+
+
+def _parse_issue_ref(issue_ref: str) -> tuple[str, str, int]:
+    """Parse owner, repo, number from a GitHub issue reference.
+
+    Accepts:
+    - Full URL: https://github.com/owner/repo/issues/42
+    - Shorthand: owner/repo#42
+
+    Raises ValueError for unrecognised formats (including bare numbers).
+    Bare number resolution is the caller's responsibility.
+    """
+    m = _FULL_URL_RE.match(issue_ref.strip())
+    if m:
+        return m.group(1), m.group(2), int(m.group(3))
+    m = _SHORTHAND_RE.match(issue_ref.strip())
+    if m:
+        return m.group(1), m.group(2), int(m.group(3))
+    raise ValueError(
+        f"Cannot parse GitHub issue reference: {issue_ref!r}. "
+        "Expected a full URL (https://github.com/owner/repo/issues/N) "
+        "or shorthand (owner/repo#N)."
+    )

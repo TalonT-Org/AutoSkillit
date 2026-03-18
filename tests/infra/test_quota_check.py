@@ -319,3 +319,40 @@ def test_defaults_yaml_cache_max_age_is_300():
     defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
     assert isinstance(defaults, dict)
     assert defaults["quota_guard"]["cache_max_age"] == 300
+
+
+def test_resolve_quota_log_dir_and_resolve_log_dir_in_sync(monkeypatch):
+    """_resolve_quota_log_dir() must produce the same path as resolve_log_dir('') for
+    identical env inputs. Guards against independent evolution of the two implementations.
+
+    Constraint: these functions MUST NOT be merged — quota_check.py is stdlib-only
+    and self-contained. This test is the canonical drift guard.
+    """
+    from autoskillit.execution.session_log import resolve_log_dir
+    from autoskillit.hooks.quota_check import _resolve_quota_log_dir
+
+    # Case 1: platform default (no env overrides)
+    monkeypatch.delenv("AUTOSKILLIT_LOG_DIR", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+
+    quota_path = _resolve_quota_log_dir()
+    session_path = resolve_log_dir("")
+
+    assert quota_path is not None, "_resolve_quota_log_dir() must not return None"
+    assert quota_path == session_path, (
+        f"Log dir mismatch (no env overrides):\n"
+        f"  quota_check._resolve_quota_log_dir(): {quota_path}\n"
+        f"  session_log.resolve_log_dir(''): {session_path}"
+    )
+
+    # Case 2: XDG_DATA_HOME override
+    monkeypatch.setenv("XDG_DATA_HOME", "/tmp/xdg-test")
+    quota_path_xdg = _resolve_quota_log_dir()
+    session_path_xdg = resolve_log_dir("")
+
+    assert quota_path_xdg is not None
+    assert quota_path_xdg == session_path_xdg, (
+        f"Log dir mismatch (XDG_DATA_HOME set):\n"
+        f"  quota_check: {quota_path_xdg}\n"
+        f"  session_log: {session_path_xdg}"
+    )

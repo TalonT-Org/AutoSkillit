@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from autoskillit.core import SubprocessResult, TerminationReason
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
 from autoskillit.server.tools_ci import get_ci_status, wait_for_ci, wait_for_merge_queue
 
@@ -50,17 +51,17 @@ async def test_wait_for_ci_success_response(tool_ctx):
         return_value={"run_id": 12345, "conclusion": "success", "failed_jobs": []}
     )
     tool_ctx.ci_watcher = mock_watcher
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=0,
+            stdout="abc123\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
 
-    with patch(
-        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
-        new_callable=AsyncMock,
-    ) as mock_proc:
-        proc_inst = AsyncMock()
-        proc_inst.communicate = AsyncMock(return_value=(b"abc123\n", b""))
-        proc_inst.returncode = 0
-        mock_proc.return_value = proc_inst
-
-        result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+    result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
 
     assert result["run_id"] == 12345
     assert result["conclusion"] == "success"
@@ -78,17 +79,17 @@ async def test_wait_for_ci_failure_response(tool_ctx):
         }
     )
     tool_ctx.ci_watcher = mock_watcher
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=0,
+            stdout="abc123\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
 
-    with patch(
-        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
-        new_callable=AsyncMock,
-    ) as mock_proc:
-        proc_inst = AsyncMock()
-        proc_inst.communicate = AsyncMock(return_value=(b"abc123\n", b""))
-        proc_inst.returncode = 0
-        mock_proc.return_value = proc_inst
-
-        result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+    result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
 
     assert result["conclusion"] == "failure"
     assert sorted(result["failed_jobs"]) == ["lint", "test"]
@@ -107,21 +108,53 @@ async def test_wait_for_ci_infers_head_sha(tool_ctx):
         return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
     )
     tool_ctx.ci_watcher = mock_watcher
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=0,
+            stdout="abc123\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
 
-    with patch(
-        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
-        new_callable=AsyncMock,
-    ) as mock_proc:
-        proc_inst = AsyncMock()
-        proc_inst.communicate = AsyncMock(return_value=(b"abc123\n", b""))
-        proc_inst.returncode = 0
-        mock_proc.return_value = proc_inst
-
-        await wait_for_ci("main", cwd="/some/repo")
+    await wait_for_ci("main", cwd="/some/repo")
 
     # Verify that wait was called with the inferred head_sha inside scope
     call_kwargs = mock_watcher.wait.call_args
     assert call_kwargs.kwargs["scope"].head_sha == "abc123"
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_head_sha_uses_runner(tool_ctx):
+    """git rev-parse HEAD must flow through MockSubprocessRunner, not raw asyncio."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+    )
+    tool_ctx.ci_watcher = mock_watcher
+
+    # Pre-configure runner to return a valid SHA when git rev-parse is called
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=0,
+            stdout="deadbeef\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
+
+    await wait_for_ci("main", cwd="/some/repo")
+
+    # Runner must have been called with the git command
+    assert tool_ctx.runner.call_args_list, "runner was never called"
+    cmd = tool_ctx.runner.call_args_list[0][0]
+    assert cmd == ["git", "rev-parse", "HEAD"], f"Unexpected runner call: {cmd}"
+
+    # SHA extracted from runner output must have been passed to the CI watcher
+    scope = mock_watcher.wait.call_args.kwargs["scope"]
+    assert scope.head_sha == "deadbeef"
 
 
 # ---------------------------------------------------------------------------

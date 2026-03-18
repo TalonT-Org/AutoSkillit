@@ -17,10 +17,8 @@ from autoskillit.core.types import (
     ChannelConfirmation,
     RetryReason,
 )
-from autoskillit.execution.headless import (
-    _inject_completion_directive,
-    _session_log_dir,
-)
+from autoskillit.execution.commands import _inject_completion_directive
+from autoskillit.execution.headless import _session_log_dir
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
 )

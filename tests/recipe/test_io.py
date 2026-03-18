@@ -800,3 +800,35 @@ def test_bundled_recipes_all_skill_commands_start_with_slash() -> None:
                 if not sc.strip().startswith(SKILL_COMMAND_PREFIX):
                     violations.append(f"{yaml_path.name}:{step_name}: {sc!r}")
     assert not violations, f"Bundled recipe steps with prose skill_command: {violations}"
+
+
+# ---------------------------------------------------------------------------
+# T1 — schema-drift guard
+# ---------------------------------------------------------------------------
+
+
+def test_parse_step_handles_all_recipe_step_fields() -> None:
+    """_PARSE_STEP_HANDLED_FIELDS must equal RecipeStep.__dataclass_fields__ keys."""
+    from autoskillit.recipe.io import _PARSE_STEP_HANDLED_FIELDS
+    from autoskillit.recipe.schema import RecipeStep
+
+    schema_fields = frozenset(RecipeStep.__dataclass_fields__)
+    assert _PARSE_STEP_HANDLED_FIELDS == schema_fields, (
+        f"_parse_step field list is out of sync.\n"
+        f"  Missing from handled: {schema_fields - _PARSE_STEP_HANDLED_FIELDS}\n"
+        f"  Extra in handled:     {_PARSE_STEP_HANDLED_FIELDS - schema_fields}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T2 — _path_mtime_ns replaces the two old helpers
+# ---------------------------------------------------------------------------
+
+
+def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
+    """recipe/_api.py must expose _path_mtime_ns; _file_mtime_ns/_dir_mtime_ns removed."""
+    import autoskillit.recipe._api as api
+
+    assert hasattr(api, "_path_mtime_ns"), "_path_mtime_ns must exist"
+    assert not hasattr(api, "_file_mtime_ns"), "_file_mtime_ns must be removed"
+    assert not hasattr(api, "_dir_mtime_ns"), "_dir_mtime_ns must be removed"

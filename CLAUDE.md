@@ -99,10 +99,16 @@ src/autoskillit/
 ├── .mcp.json                # MCP server config for plugin loading
 ├── core/                    # L0 foundation sub-package (zero autoskillit imports)
 │   ├── __init__.py          #   Re-exports full public surface
-│   ├── io.py                #   _atomic_write, ensure_project_temp, load_yaml, dump_yaml, YAMLError
+│   ├── io.py                #   atomic_write, ensure_project_temp, load_yaml, dump_yaml_str, YAMLError
 │   ├── logging.py           #   get_logger, configure_logging, PACKAGE_LOGGER_NAME
 │   ├── paths.py             #   pkg_root(), is_git_worktree() — canonical package root resolver
-│   ├── types.py             #   StrEnums, protocols, constants (SubprocessRunner, LoadResult, etc.)
+│   ├── types.py             #   Thin re-export hub — imports * from all _type_*.py sub-modules
+│   ├── _type_enums.py       #   12 StrEnums: RetryReason, MergeState, ClaudeFlags, Severity, etc.
+│   ├── _type_subprocess.py  #   SubprocessResult, SubprocessRunner Protocol, _TERMINATION_CONTRACT
+│   ├── _type_constants.py   #   GATED_TOOLS, FREE_RANGE_TOOLS, SKILL_TOOLS, SKILL_COMMAND_PREFIX, etc.
+│   ├── _type_results.py     #   LoadResult, LoadReport, SkillResult, FailureRecord, CleanupResult, CIRunScope, etc.
+│   ├── _type_protocols.py   #   19 Protocols: GatePolicy, HeadlessExecutor, GitHubFetcher, CIWatcher, etc.
+│   ├── _type_helpers.py     #   extract_skill_name, resolve_target_skill, truncate_text
 │   ├── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
 │   ├── claude_conventions.py #  ClaudeDirectoryConventions — canonical skill discovery directory layout constants; LayoutError, validate_add_dir()
 │   └── github_url.py        #   parse_github_repo — canonical GitHub URL parser (str → owner/repo | None)
@@ -145,7 +151,8 @@ src/autoskillit/
 │   ├── github.py            #   GitHub issue fetcher (L1, httpx-based, never raises)
 │   ├── session.py           #   ClaudeSessionResult, SkillResult, extract_token_usage
 │   ├── remote_resolver.py   #   resolve_remote_repo — canonical async resolver (upstream > origin, clone-aware)
-│   └── testing.py           #   Pytest output parsing and pass/fail adjudication
+│   ├── testing.py           #   Pytest output parsing and pass/fail adjudication
+│   └── pr_analysis.py       #   PR analysis helpers: extract_linked_issues, is_valid_fidelity_finding, DOMAIN_PATHS, partition_files_by_domain
 ├── workspace/               # L1 workspace sub-package
 │   ├── __init__.py          #   Re-exports CleanupResult, SkillResolver, SessionSkillManager, clone_repo, remove_clone, push_to_remote
 │   ├── cleanup.py           #   Directory teardown utilities (CleanupResult, preserve list)
@@ -200,7 +207,9 @@ src/autoskillit/
 │   ├── tools_git.py         #   merge_worktree, classify_fix, create_unique_branch, check_pr_mergeable tool handlers
 │   ├── tools_recipe.py      #   migrate_recipe, load_recipe, list_recipes, validate_recipe tool handlers
 │   ├── tools_status.py      #   kitchen_status, get_pipeline_report, get_token_summary, get_timing_summary, get_quota_events, write_telemetry_files, read_db tool handlers
-│   ├── tools_integrations.py #  fetch_github_issue, get_issue_title, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, get_pr_reviews, bulk_close_issues tool handlers
+│   ├── tools_github.py      #   fetch_github_issue, get_issue_title, report_bug tool handlers
+│   ├── tools_issue_lifecycle.py #  prepare_issue, enrich_issues, claim_issue, release_issue tool handlers
+│   ├── tools_pr_ops.py      #   get_pr_reviews, bulk_close_issues tool handlers
 │   ├── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace tool handlers
 │   ├── _factory.py          #   Composition Root: make_context() wires ToolContext
 │   └── _state.py            #   Server state extraction (lazy init, plugin dir resolution)

@@ -101,7 +101,7 @@ This step is skipped gracefully if any path is missing — log a warning and exc
 
 ```bash
 python3 -c "
-from autoskillit.pipeline.pr_gates import partition_files_by_domain
+from autoskillit.execution.pr_analysis import partition_files_by_domain
 import json, sys
 files = json.loads(sys.argv[1])
 result = partition_files_by_domain(files)

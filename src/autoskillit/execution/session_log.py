@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import _atomic_write, claude_code_log_path, get_logger
+from autoskillit.core import atomic_write, claude_code_log_path, get_logger
 from autoskillit.execution.anomaly_detection import detect_anomalies
 
 logger = get_logger(__name__)
@@ -49,7 +49,7 @@ def write_telemetry_clear_marker(log_root: Path) -> None:
     try:
         log_root = Path(log_root)
         log_root.mkdir(parents=True, exist_ok=True)
-        _atomic_write(log_root / _CLEAR_MARKER_FILENAME, datetime.now(UTC).isoformat())
+        atomic_write(log_root / _CLEAR_MARKER_FILENAME, datetime.now(UTC).isoformat())
     except Exception:
         logger.debug("write_telemetry_clear_marker failed", exc_info=True)
 
@@ -199,7 +199,7 @@ def flush_session_log(
         "write_call_count": write_call_count,
     }
     summary_path = session_dir / "summary.json"
-    _atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
+    atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
 
     # Write per-session telemetry files when step_name is provided
     if step_name and token_usage is not None:
@@ -211,16 +211,16 @@ def flush_session_log(
             "cache_read_input_tokens": token_usage.get("cache_read_input_tokens", 0),
             "timing_seconds": timing_seconds if timing_seconds is not None else 0.0,
         }
-        _atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
+        atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
 
     if step_name and timing_seconds is not None:
-        _atomic_write(
+        atomic_write(
             session_dir / "step_timing.json",
             json.dumps({"step_name": step_name, "total_seconds": max(0.0, timing_seconds)}),
         )
 
     if step_name and audit_record is not None:
-        _atomic_write(session_dir / "audit_log.json", json.dumps([audit_record]))
+        atomic_write(session_dir / "audit_log.json", json.dumps([audit_record]))
 
     # Append to sessions.jsonl index
     index_entry = {
@@ -270,6 +270,14 @@ def _enforce_retention(log_root: Path) -> None:
     # Rewrite sessions.jsonl to remove expired entries
     index_path = log_root / "sessions.jsonl"
     if index_path.is_file():
+        # Accepted read-modify-write race: between read_text() below and atomic_write()
+        # at the end of this block, a concurrent flush_session_log() call may append a
+        # new entry to sessions.jsonl via open("a"). That entry will not be present in
+        # `lines`, so it will be silently lost when atomic_write() overwrites the file.
+        # Worst case: one diagnostic index entry dropped per concurrent session flush that
+        # races this retention sweep. Correctness of the running session is unaffected.
+        # File locking (fcntl.flock) is not warranted: the overhead exceeds the value of
+        # protecting a best-effort diagnostic artifact.
         lines = index_path.read_text().splitlines()
         kept: list[str] = []
         for line in lines:
@@ -281,7 +289,7 @@ def _enforce_retention(log_root: Path) -> None:
                     kept.append(line)
             except json.JSONDecodeError:
                 continue
-        _atomic_write(index_path, "\n".join(kept) + "\n" if kept else "")
+        atomic_write(index_path, "\n".join(kept) + "\n" if kept else "")
 
 
 def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") -> int:

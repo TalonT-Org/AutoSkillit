@@ -12,10 +12,6 @@ from autoskillit.pipeline.audit import (
     DefaultAuditLog,
 )
 from autoskillit.pipeline.context import ToolContext
-from autoskillit.pipeline.fidelity import (  # noqa: E402
-    extract_linked_issues,
-    is_valid_fidelity_finding,
-)
 from autoskillit.pipeline.gate import (
     GATED_TOOLS,
     UNGATED_TOOLS,
@@ -25,10 +21,8 @@ from autoskillit.pipeline.gate import (
 )
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog, McpResponseEntry
 from autoskillit.pipeline.pr_gates import (
-    DOMAIN_PATHS,
     is_ci_passing,
     is_review_passing,
-    partition_files_by_domain,
     partition_prs,
 )
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
@@ -62,13 +56,8 @@ __all__ = [
     "TelemetryFormatter",
     # context
     "ToolContext",
-    # fidelity
-    "extract_linked_issues",
-    "is_valid_fidelity_finding",
     # pr_gates
     "is_ci_passing",
     "is_review_passing",
     "partition_prs",
-    "DOMAIN_PATHS",
-    "partition_files_by_domain",
 ]

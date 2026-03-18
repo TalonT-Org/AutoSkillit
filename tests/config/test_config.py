@@ -633,6 +633,51 @@ class TestBranchingConfig:
         assert cfg.branching.promotion_target == "stable"
 
 
+class TestBuildSubsetsConfigCustomTagsValidation:
+    """CC-F2: _build_subsets_config must raise ValueError for non-dict custom_tags."""
+
+    def test_build_subsets_config_raises_for_non_dict_custom_tags(self):
+        """Non-dict custom_tags must raise ValueError, not silently coerce to {}."""
+        import pytest
+
+        from autoskillit.config.settings import _build_subsets_config
+
+        with pytest.raises(ValueError, match="custom_tags"):
+            _build_subsets_config({"custom_tags": ["list", "not", "dict"]})
+
+    def test_build_subsets_config_raises_for_string_custom_tags(self):
+        """String custom_tags must raise ValueError."""
+        import pytest
+
+        from autoskillit.config.settings import _build_subsets_config
+
+        with pytest.raises(ValueError, match="custom_tags"):
+            _build_subsets_config({"custom_tags": "oops"})
+
+    def test_build_subsets_config_raises_for_int_custom_tags(self):
+        """Integer custom_tags must raise ValueError."""
+        import pytest
+
+        from autoskillit.config.settings import _build_subsets_config
+
+        with pytest.raises(ValueError, match="custom_tags"):
+            _build_subsets_config({"custom_tags": 42})
+
+    def test_build_subsets_config_dict_custom_tags_accepted(self):
+        """Valid dict custom_tags must not raise."""
+        from autoskillit.config.settings import _build_subsets_config
+
+        result = _build_subsets_config({"custom_tags": {"my_tag": ["skill-a"]}})
+        assert result.custom_tags == {"my_tag": ["skill-a"]}
+
+    def test_build_subsets_config_empty_dict_custom_tags_accepted(self):
+        """Empty dict custom_tags must not raise."""
+        from autoskillit.config.settings import _build_subsets_config
+
+        result = _build_subsets_config({"custom_tags": {}})
+        assert result.custom_tags == {}
+
+
 def test_resolve_ingredient_defaults_in_config():
     from autoskillit.config import resolve_ingredient_defaults
 

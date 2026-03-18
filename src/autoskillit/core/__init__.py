@@ -7,14 +7,12 @@ explicit `from autoskillit.core.logging import get_logger`.
 
 from .branch_guard import is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions, LayoutError, validate_add_dir
+from .github_url import _parse_issue_ref as _parse_issue_ref
 from .github_url import normalize_owner_repo as normalize_owner_repo
 from .github_url import parse_github_repo as parse_github_repo
 from .io import (
     YAMLError,
-    _atomic_write,
-    _parse_issue_ref,
     atomic_write,
-    dump_yaml,
     dump_yaml_str,
     ensure_project_temp,
     load_yaml,
@@ -102,12 +100,10 @@ __all__ = [
     # github_url
     "normalize_owner_repo",
     "parse_github_repo",
+    "_parse_issue_ref",
     # io
     "YAMLError",
     "atomic_write",
-    "_atomic_write",
-    "_parse_issue_ref",
-    "dump_yaml",
     "dump_yaml_str",
     "ensure_project_temp",
     "load_yaml",

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 import re
 
 from autoskillit.core import AUTOSKILLIT_SKILL_PREFIX, SKILL_TOOLS, Severity
@@ -11,14 +10,12 @@ from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 
-@functools.lru_cache(maxsize=1)
 def _get_bundled_skill_names() -> frozenset[str]:
     from autoskillit.workspace import SkillResolver  # noqa: PLC0415
 
     return frozenset(s.name for s in SkillResolver().list_all())
 
 
-@functools.lru_cache(maxsize=1)
 def _get_skill_category_map() -> dict[str, frozenset[str]]:
     """Return {skill_name: categories} for all bundled skills."""
     from autoskillit.workspace import SkillResolver  # noqa: PLC0415

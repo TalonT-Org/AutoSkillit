@@ -13,9 +13,9 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
     _build_skill_result,
-    _ensure_skill_prefix,
     _extract_worktree_path,
     _resolve_model,
     _scan_jsonl_write_paths,
@@ -24,7 +24,7 @@ from tests.conftest import _make_result, _make_timeout_result
 
 
 def test_inject_completion_directive_appends_marker():
-    from autoskillit.execution.headless import _inject_completion_directive
+    from autoskillit.execution.commands import _inject_completion_directive
 
     result = _inject_completion_directive("/investigate foo", "%%DONE%%")
     assert "%%DONE%%" in result
@@ -2083,7 +2083,7 @@ class TestRetryBudgetEnforcement:
 
 class TestInjectCwdAnchor:
     def test_appends_cwd_directive(self):
-        from autoskillit.execution.headless import _inject_cwd_anchor
+        from autoskillit.execution.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("/investigate foo", "/some/clone/path")
         assert "WORKING DIRECTORY ANCHOR" in result
@@ -2091,27 +2091,27 @@ class TestInjectCwdAnchor:
         assert "/investigate foo" in result
 
     def test_preserves_original_command(self):
-        from autoskillit.execution.headless import _inject_cwd_anchor
+        from autoskillit.execution.commands import _inject_cwd_anchor
 
         original = "Use /autoskillit:make-plan detailed prompt here"
         result = _inject_cwd_anchor(original, "/clone/dir")
         assert result.startswith(original)
 
     def test_directive_mentions_temp_and_read_only(self):
-        from autoskillit.execution.headless import _inject_cwd_anchor
+        from autoskillit.execution.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("cmd", "/wd")
         assert "temp/" in result
         assert "READ-ONLY" in result
 
     def test_skips_when_cwd_empty(self):
-        from autoskillit.execution.headless import _inject_cwd_anchor
+        from autoskillit.execution.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("cmd", "")
         assert result == "cmd"
 
     def test_skips_when_cwd_relative(self):
-        from autoskillit.execution.headless import _inject_cwd_anchor
+        from autoskillit.execution.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("cmd", "relative/path")
         assert result == "cmd"

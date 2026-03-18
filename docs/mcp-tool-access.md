@@ -150,7 +150,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `get_ci_status` | AS, K, CI | `server/tools_ci.py` |
 | `wait_for_merge_queue` | AS, K, CI | `server/tools_ci.py` |
 | `toggle_auto_merge` | AS, K, CI | `server/tools_ci.py` |
-| `set_commit_status` | AS, K, GH | `server/tools_integrations.py` |
+| `set_commit_status` | AS, K, GH | `server/tools_ci.py` |
 
 ---
 
@@ -158,15 +158,15 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 
 | Tool | Tags | Source File |
 |------|------|-------------|
-| `fetch_github_issue` | AS, K, GH | `server/tools_integrations.py` |
-| `get_issue_title` | AS, K, GH | `server/tools_integrations.py` |
-| `report_bug` | AS, K, GH | `server/tools_integrations.py` |
-| `prepare_issue` | AS, K, GH | `server/tools_integrations.py` |
-| `enrich_issues` | AS, K, GH | `server/tools_integrations.py` |
-| `claim_issue` | AS, K, GH | `server/tools_integrations.py` |
-| `release_issue` | AS, K, GH | `server/tools_integrations.py` |
-| `get_pr_reviews` | AS, K, GH | `server/tools_integrations.py` |
-| `bulk_close_issues` | AS, K, GH | `server/tools_integrations.py` |
+| `fetch_github_issue` | AS, K, GH | `server/tools_github.py` |
+| `get_issue_title` | AS, K, GH | `server/tools_github.py` |
+| `report_bug` | AS, K, GH | `server/tools_github.py` |
+| `prepare_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
+| `enrich_issues` | AS, K, GH | `server/tools_issue_lifecycle.py` |
+| `claim_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
+| `release_issue` | AS, K, GH | `server/tools_issue_lifecycle.py` |
+| `get_pr_reviews` | AS, K, GH | `server/tools_pr_ops.py` |
+| `bulk_close_issues` | AS, K, GH | `server/tools_pr_ops.py` |
 
 ---
 

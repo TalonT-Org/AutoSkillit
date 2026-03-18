@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoskillit.core import _atomic_write
+from autoskillit.core import atomic_write
 
 
 @dataclass
@@ -51,7 +51,7 @@ class FailureStore:
                 retries_attempted=retries_attempted,
             ),
         }
-        _atomic_write(
+        atomic_write(
             self._path,
             json.dumps({k: asdict(v) for k, v in candidate.items()}, indent=2),
         )
@@ -61,7 +61,7 @@ class FailureStore:
         if name not in self._state:
             return
         candidate = {k: v for k, v in self._state.items() if k != name}
-        _atomic_write(
+        atomic_write(
             self._path,
             json.dumps({k: asdict(v) for k, v in candidate.items()}, indent=2),
         )

@@ -5,7 +5,6 @@ from __future__ import annotations
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import (
     _parse_recipe,
-    _parse_step,
     builtin_recipes_dir,
     load_recipe,
 )
@@ -16,16 +15,7 @@ from autoskillit.recipe.schema import (
 from autoskillit.recipe.validator import (
     run_semantic_rules,
 )
-
-# ---------------------------------------------------------------------------
-# Shared helper
-# ---------------------------------------------------------------------------
-
-
-def _make_workflow(steps: dict[str, dict]) -> Recipe:
-    parsed_steps = {name: _parse_step(data) for name, data in steps.items()}
-    return Recipe(name="test", description="test", steps=parsed_steps, kitchen_rules=["test"])
-
+from tests.recipe.conftest import _make_workflow
 
 # ---------------------------------------------------------------------------
 # retry-worktree-cwd tests

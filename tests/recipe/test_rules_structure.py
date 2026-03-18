@@ -20,16 +20,7 @@ from autoskillit.recipe.validator import (
     RuleFinding,
     run_semantic_rules,
 )
-
-# ---------------------------------------------------------------------------
-# Shared helper
-# ---------------------------------------------------------------------------
-
-
-def _make_workflow(steps: dict[str, dict]) -> Recipe:
-    parsed_steps = {name: _parse_step(data) for name, data in steps.items()}
-    return Recipe(name="test", description="test", steps=parsed_steps, kitchen_rules=["test"])
-
+from tests.recipe.conftest import _make_workflow
 
 # ---------------------------------------------------------------------------
 # Module-level semantic rule tests

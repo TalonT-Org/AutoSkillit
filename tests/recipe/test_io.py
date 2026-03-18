@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
 
 from autoskillit.core.types import RecipeSource
 from autoskillit.recipe.io import (
@@ -21,31 +20,7 @@ from autoskillit.recipe.schema import (
     RecipeStep,
     StepResultRoute,
 )
-
-VALID_RECIPE = {
-    "name": "test-recipe",
-    "description": "A test recipe",
-    "ingredients": {
-        "test_dir": {"description": "Dir to test", "required": True},
-        "branch": {"description": "Branch", "default": "main"},
-    },
-    "kitchen_rules": ["NEVER use native tools"],
-    "steps": {
-        "run_tests": {
-            "tool": "test_check",
-            "with": {"worktree_path": "${{ inputs.test_dir }}"},
-            "on_success": "done",
-            "on_failure": "escalate",
-        },
-        "done": {"action": "stop", "message": "Tests passed."},
-        "escalate": {"action": "stop", "message": "Need help."},
-    },
-}
-
-
-def _write_yaml(path: Path, data: dict) -> Path:
-    path.write_text(yaml.dump(data, default_flow_style=False))
-    return path
+from tests.recipe.conftest import VALID_RECIPE, _write_yaml
 
 
 def test_load_recipe_smoke() -> None:

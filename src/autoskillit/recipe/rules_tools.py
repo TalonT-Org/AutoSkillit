@@ -11,42 +11,65 @@ _ALL_TOOLS: frozenset[str] = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
 # Known parameter signatures for MCP tools that accept `with:` args in recipes.
 # Intentionally hardcoded — recipe validation runs without a live MCP server.
 _TOOL_PARAMS: dict[str, frozenset[str]] = {
+    # --- Execution tools ---
     "run_skill": frozenset({"skill_command", "cwd", "model", "step_name"}),
-    "run_cmd": frozenset({"command", "cwd", "timeout", "step_name"}),
-    "run_python": frozenset({"callable_path", "kwargs", "step_name"}),
-    "test_check": frozenset({"worktree_path"}),
-    "merge_worktree": frozenset({"worktree_path", "base_branch"}),
-    "reset_test_dir": frozenset({"test_dir", "force"}),
-    "classify_fix": frozenset({"worktree_path", "base_branch"}),
+    "run_cmd": frozenset({"cmd", "cwd", "timeout", "step_name"}),
+    "run_python": frozenset({"callable", "args", "timeout"}),
+    # --- Workspace tools ---
+    "test_check": frozenset({"worktree_path", "step_name"}),
+    "merge_worktree": frozenset({"worktree_path", "base_branch", "step_name"}),
+    "reset_test_dir": frozenset({"test_dir", "force", "step_name"}),
+    "classify_fix": frozenset({"worktree_path", "base_branch", "step_name"}),
     "reset_workspace": frozenset({"test_dir"}),
+    # --- Recipe tools ---
     "validate_recipe": frozenset({"script_path"}),
-    "clone_repo": frozenset({"repo", "branch", "target_dir"}),
-    "remove_clone": frozenset({"clone_dir", "keep"}),
-    "push_to_remote": frozenset({"clone_dir", "branch"}),
-    "report_bug": frozenset({"error_context", "report_path", "cwd"}),
-    "prepare_issue": frozenset({"title", "body", "labels", "cwd"}),
-    "enrich_issues": frozenset({"cwd"}),
-    "claim_issue": frozenset({"issue_number", "cwd"}),
-    "release_issue": frozenset({"issue_number", "cwd"}),
-    "wait_for_ci": frozenset({"branch", "repo", "cwd", "timeout_seconds", "poll_interval"}),
-    "wait_for_merge_queue": frozenset(
-        {"pr_number", "target_branch", "repo", "cwd", "timeout_seconds", "poll_interval"}
-    ),
-    "create_unique_branch": frozenset({"base_name", "cwd"}),
-    "check_pr_mergeable": frozenset({"pr_number", "cwd"}),
+    "migrate_recipe": frozenset({"name"}),
+    "load_recipe": frozenset({"name", "overrides"}),
+    "list_recipes": frozenset(),
+    # --- Clone tools ---
+    "clone_repo": frozenset({
+        "source_dir", "run_name", "branch", "strategy", "remote_url", "step_name",
+    }),
+    "remove_clone": frozenset({"clone_path", "keep", "step_name"}),
+    "push_to_remote": frozenset({
+        "clone_path", "branch", "source_dir", "remote_url", "step_name",
+    }),
+    # --- CI tools ---
+    "wait_for_ci": frozenset({
+        "branch", "repo", "remote_url", "head_sha", "workflow", "timeout_seconds", "cwd",
+    }),
+    "wait_for_merge_queue": frozenset({
+        "pr_number", "target_branch", "cwd", "repo", "remote_url",
+        "timeout_seconds", "poll_interval", "stall_grace_period",
+        "max_stall_retries", "not_in_queue_confirmation_cycles",
+    }),
+    "get_ci_status": frozenset({"branch", "run_id", "repo", "workflow", "cwd"}),
+    "set_commit_status": frozenset({
+        "sha", "state", "context", "description", "target_url", "repo", "cwd",
+    }),
+    # --- Git tools ---
+    "create_unique_branch": frozenset({
+        "slug", "issue_number", "remote", "cwd", "base_branch_name", "step_name",
+    }),
+    "check_pr_mergeable": frozenset({"pr_number", "cwd", "repo"}),
+    # --- Integration tools ---
+    "report_bug": frozenset({
+        "error_context", "cwd", "severity", "model", "step_name",
+    }),
+    "prepare_issue": frozenset({
+        "title", "body", "repo", "labels", "dry_run", "split",
+    }),
+    "enrich_issues": frozenset({"issue_number", "batch", "dry_run", "repo"}),
+    "claim_issue": frozenset({"issue_url", "label"}),
+    "release_issue": frozenset({"issue_url", "label", "target_branch", "staged_label"}),
+    "fetch_github_issue": frozenset({"issue_url", "include_comments"}),
+    "get_issue_title": frozenset({"issue_url"}),
+    # --- Status tools ---
+    "get_quota_events": frozenset({"n"}),
+    # --- Unchanged (verified correct) ---
     "write_telemetry_files": frozenset({"output_dir"}),
-    "get_pr_reviews": frozenset({"pr_number", "cwd"}),
+    "get_pr_reviews": frozenset({"pr_number", "cwd", "repo"}),
     "bulk_close_issues": frozenset({"issue_numbers", "comment", "cwd"}),
-    "set_commit_status": frozenset(
-        {"sha", "state", "context", "description", "target_url", "cwd"}
-    ),
-    "get_quota_events": frozenset({"minutes"}),
-    "migrate_recipe": frozenset({"recipe_path"}),
-    "load_recipe": frozenset({"recipe_name", "ingredients", "cwd"}),
-    "list_recipes": frozenset({"cwd"}),
-    "fetch_github_issue": frozenset({"issue_number", "repo", "cwd"}),
-    "get_issue_title": frozenset({"issue_number", "repo", "cwd"}),
-    "get_ci_status": frozenset({"branch", "repo", "cwd"}),
 }
 
 
@@ -79,7 +102,7 @@ def _check_constant_step_no_with_args(ctx: ValidationContext) -> list[RuleFindin
     description="step.tool must be a registered MCP tool name",
     severity=Severity.ERROR,
 )
-def _unknown_tool(ctx: ValidationContext) -> list[RuleFinding]:
+def _check_unknown_tool(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
         if step.tool is None:

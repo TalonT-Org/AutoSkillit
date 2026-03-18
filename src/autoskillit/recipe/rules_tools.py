@@ -124,7 +124,6 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
     "get_issue_title": frozenset({"issue_url"}),
     # --- Status tools ---
     "get_quota_events": frozenset({"n"}),
-    # --- Unchanged (verified correct) ---
     "write_telemetry_files": frozenset({"output_dir"}),
     "get_pr_reviews": frozenset({"pr_number", "cwd", "repo"}),
     "bulk_close_issues": frozenset({"issue_numbers", "comment", "cwd"}),

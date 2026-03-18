@@ -49,8 +49,8 @@ def _check_plan_parts_captured(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
-    "skill-command-missing-prefix",
-    "run_skill step has a skill_command that does not start with '/'",
+    name="skill-command-missing-prefix",
+    description="run_skill step has a skill_command that does not start with '/'",
     severity=Severity.WARNING,
 )
 def _check_skill_command_prefix(ctx: ValidationContext) -> list[RuleFinding]:
@@ -80,8 +80,8 @@ def _check_skill_command_prefix(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
-    "push-missing-explicit-remote-url",
-    "push_to_remote missing remote_url; implicit lookup fails for non-bare repos",
+    name="push-missing-explicit-remote-url",
+    description="push_to_remote missing remote_url; implicit lookup fails for non-bare repos",
     severity=Severity.WARNING,
 )
 def _check_push_missing_explicit_remote_url(ctx: ValidationContext) -> list[RuleFinding]:

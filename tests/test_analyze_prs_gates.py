@@ -126,7 +126,7 @@ def test_manifest_includes_blocked_lists():
     assert "review_blocked_prs" in result
 
     # Verify the result is JSON-serialisable (manifest written to file)
-    assert json.loads(json.dumps(result))
+    json.dumps(result)  # raises TypeError if not serialisable
 
 
 def test_eligible_prs_ordered_without_blocked():

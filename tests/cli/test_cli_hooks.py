@@ -6,11 +6,6 @@ import json
 from pathlib import Path
 
 
-# HK1
-def test_hooks_module_exists():
-    """cli/_hooks.py must exist as a module."""
-
-
 # HK9
 def test_claude_settings_path_user_scope():
     """_claude_settings_path('user') returns ~/.claude/settings.json."""

@@ -8,7 +8,7 @@ import pathlib
 
 def test_no_deferred_validator_imports_in_rule_modules() -> None:
     """T1: No rule sub-module should defer-import from validator.py inside a function body."""
-    recipe_dir = pathlib.Path("src/autoskillit/recipe")
+    recipe_dir = pathlib.Path(__file__).resolve().parents[2] / "src/autoskillit/recipe"
     rule_files = list(recipe_dir.glob("rules_*.py"))
     assert len(rule_files) >= 5, "Expected at least 5 rule sub-modules"
     for path in rule_files:
@@ -72,7 +72,9 @@ def test_analysis_module_importable() -> None:
 
 def test_analysis_module_no_validator_import() -> None:
     """T3b: _analysis.py must not import from validator.py."""
-    src = (pathlib.Path("src/autoskillit/recipe/_analysis.py")).read_text()
+    src = (
+        pathlib.Path(__file__).resolve().parents[2] / "src/autoskillit/recipe/_analysis.py"
+    ).read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
@@ -83,7 +85,9 @@ def test_analysis_module_no_validator_import() -> None:
 
 def test_validator_does_not_import_rules() -> None:
     """T4: validator.py no longer imports any rules module at module level."""
-    src = (pathlib.Path("src/autoskillit/recipe/validator.py")).read_text()
+    src = (
+        pathlib.Path(__file__).resolve().parents[2] / "src/autoskillit/recipe/validator.py"
+    ).read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):

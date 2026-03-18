@@ -151,7 +151,8 @@ src/autoskillit/
 │   ├── github.py            #   GitHub issue fetcher (L1, httpx-based, never raises)
 │   ├── session.py           #   ClaudeSessionResult, SkillResult, extract_token_usage
 │   ├── remote_resolver.py   #   resolve_remote_repo — canonical async resolver (upstream > origin, clone-aware)
-│   └── testing.py           #   Pytest output parsing and pass/fail adjudication
+│   ├── testing.py           #   Pytest output parsing and pass/fail adjudication
+│   └── pr_analysis.py       #   PR analysis helpers: extract_linked_issues, is_valid_fidelity_finding, DOMAIN_PATHS, partition_files_by_domain
 ├── workspace/               # L1 workspace sub-package
 │   ├── __init__.py          #   Re-exports CleanupResult, SkillResolver, SessionSkillManager, clone_repo, remove_clone, push_to_remote
 │   ├── cleanup.py           #   Directory teardown utilities (CleanupResult, preserve list)

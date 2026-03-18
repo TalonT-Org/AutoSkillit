@@ -241,6 +241,7 @@ async def push_to_remote(
             )
             return json.dumps(
                 {
+                    "success": False,
                     "error": "push failed",
                     "stderr": result.get("stderr", ""),
                     "error_type": result.get("error_type", ""),

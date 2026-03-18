@@ -120,10 +120,6 @@ def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> l
 async def get_token_summary(clear: bool = False, format: str = "json") -> str:
     """Return accumulated run_skill token usage grouped by step name.
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
-
     Returns JSON with:
     - steps: list of {step_name, input_tokens, output_tokens,
                        cache_creation_input_tokens, cache_read_input_tokens,
@@ -170,10 +166,6 @@ async def get_token_summary(clear: bool = False, format: str = "json") -> str:
 @track_response_size("get_timing_summary")
 async def get_timing_summary(clear: bool = False, format: str = "json") -> str:
     """Return accumulated wall-clock timing grouped by step name.
-
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
 
     Returns JSON with:
     - steps: list of {step_name, total_seconds, invocation_count}

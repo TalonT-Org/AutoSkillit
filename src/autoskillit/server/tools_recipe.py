@@ -144,6 +144,7 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     - run_cmd: {"success": false}
     - run_skill: {"success": false}
     - classify_fix: "error" key present in response
+    - push_to_remote: {"success": false} (also has "error" and "stderr" keys)
 
     To CREATE a new recipe, use the /autoskillit:write-recipe skill.
     This tool is for loading and executing existing recipes.
@@ -155,10 +156,6 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
 
     This tool is strictly read-only. It discovers, parses, and validates recipe
     YAML. To run migrations, use migrate_recipe.
-
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
 
     Response format: always JSON with ``content`` (raw YAML string),
     ``diagram`` (pre-generated Markdown string or null), and
@@ -203,10 +200,6 @@ async def validate_recipe(script_path: str) -> str:
     as /autoskillit:<name>. They are loaded via load_recipe and executed
     step-by-step by the agent. Recipes live in .autoskillit/recipes/
     as .yaml files.
-
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
 
     Args:
         script_path: Absolute path to the .yaml recipe file to validate.

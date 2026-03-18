@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from typing import Literal
 
 import structlog
@@ -35,6 +36,7 @@ async def wait_for_ci(
     workflow: str | None = None,
     timeout_seconds: int = 300,
     cwd: str = ".",
+    step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Wait for a GitHub Actions CI run to complete on the given branch.
@@ -55,6 +57,7 @@ async def wait_for_ci(
                   omitted, falls back to the project-level ci.workflow config.
         timeout_seconds: Maximum time to wait (default 300s).
         cwd: Working directory for git operations.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
 
     Returns:
         JSON with run_id, conclusion ("success", "failure", "cancelled",
@@ -117,25 +120,30 @@ async def wait_for_ci(
         },
     )
 
-    result = await tool_ctx.ci_watcher.wait(
-        branch,
-        repo=resolved_repo or None,
-        scope=scope,
-        timeout_seconds=timeout_seconds,
-        cwd=cwd,
-    )
+    _start = time.monotonic()
+    try:
+        result = await tool_ctx.ci_watcher.wait(
+            branch,
+            repo=resolved_repo or None,
+            scope=scope,
+            timeout_seconds=timeout_seconds,
+            cwd=cwd,
+        )
 
-    conclusion = result.get("conclusion", "unknown")
-    level = "info" if conclusion == "success" else "error"
-    await _notify(
-        ctx,
-        level,
-        f"CI result: {conclusion}",
-        "autoskillit.wait_for_ci",
-        extra={"run_id": result.get("run_id")},
-    )
+        conclusion = result.get("conclusion", "unknown")
+        level = "info" if conclusion == "success" else "error"
+        await _notify(
+            ctx,
+            level,
+            f"CI result: {conclusion}",
+            "autoskillit.wait_for_ci",
+            extra={"run_id": result.get("run_id")},
+        )
 
-    return json.dumps(result)
+        return json.dumps(result)
+    finally:
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -227,10 +235,6 @@ async def get_ci_status(
     cwd: str = ".",
 ) -> str:
     """Return current CI status for a branch or specific run without waiting.
-
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
 
     Args:
         branch: Git branch name. Required if run_id is not provided.
@@ -344,6 +348,7 @@ async def wait_for_merge_queue(
     stall_grace_period: int = 60,
     max_stall_retries: int = 3,
     not_in_queue_confirmation_cycles: int = 2,
+    step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Poll a PR's progress through GitHub's merge queue until merged, ejected, or timed out.
@@ -366,6 +371,7 @@ async def wait_for_merge_queue(
         not_in_queue_confirmation_cycles: Consecutive "not in queue" cycles required
                     before treating absence as definitive. Guards against race between
                     queue exit and merged=true propagation (default 2).
+        step_name: Optional YAML step key for wall-clock timing accumulation.
 
     Returns:
         JSON: {
@@ -405,15 +411,20 @@ async def wait_for_merge_queue(
 
     resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
 
-    result = await tool_ctx.merge_queue_watcher.wait(
-        pr_number=pr_number,
-        target_branch=target_branch,
-        repo=resolved_repo or None,
-        cwd=cwd,
-        timeout_seconds=timeout_seconds,
-        poll_interval=poll_interval,
-        stall_grace_period=stall_grace_period,
-        max_stall_retries=max_stall_retries,
-        not_in_queue_confirmation_cycles=not_in_queue_confirmation_cycles,
-    )
-    return json.dumps(result)
+    _start = time.monotonic()
+    try:
+        result = await tool_ctx.merge_queue_watcher.wait(
+            pr_number=pr_number,
+            target_branch=target_branch,
+            repo=resolved_repo or None,
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+            poll_interval=poll_interval,
+            stall_grace_period=stall_grace_period,
+            max_stall_retries=max_stall_retries,
+            not_in_queue_confirmation_cycles=not_in_queue_confirmation_cycles,
+        )
+        return json.dumps(result)
+    finally:
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

@@ -10,7 +10,13 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit import __version__
 from autoskillit.config import resolve_ingredient_defaults
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, TOOL_CATEGORIES, atomic_write, pkg_root
+from autoskillit.core import (
+    PIPELINE_FORBIDDEN_TOOLS,
+    TOOL_CATEGORIES,
+    atomic_write,
+    get_logger,
+    pkg_root,
+)
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _apply_triage_gate,
@@ -20,6 +26,8 @@ from autoskillit.server.helpers import (
     _require_not_headless,
     track_response_size,
 )
+
+logger = get_logger(__name__)
 
 
 def _write_hook_config() -> None:

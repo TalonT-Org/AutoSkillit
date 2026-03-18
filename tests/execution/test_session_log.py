@@ -114,7 +114,7 @@ def test_flush_session_log_creates_anomalies_file_only_when_anomalies_exist(tmp_
     anomalies_path = tmp_path / "sessions" / "anomaly-session" / "anomalies.jsonl"
     assert anomalies_path.is_file()
     lines = anomalies_path.read_text().strip().split("\n")
-    assert len(lines) >= 1
+    assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["kind"] == "oom_critical"
 

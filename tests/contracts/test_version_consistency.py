@@ -67,5 +67,5 @@ class TestVersionConsistency:
         )
         data = json.loads(manifest.read_text())
         plugins = data.get("plugins", [])
-        assert len(plugins) > 0
+        assert len(plugins) == 1
         assert plugins[0]["version"] == autoskillit.__version__

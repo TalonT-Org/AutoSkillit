@@ -126,7 +126,7 @@ class TestVersionInfo:
 
 
 class TestToolRegistration:
-    """All 31 tools are registered on the MCP server."""
+    """All 40 tools are registered on the MCP server."""
 
     @pytest.mark.anyio
     async def test_all_tools_exist(self):

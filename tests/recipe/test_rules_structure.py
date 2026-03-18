@@ -1527,7 +1527,6 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step in remediation.yaml has predicate on_result."""
         step = self.if_recipe.steps["merge"]
         assert step.on_result is not None
-        assert step.on_result.conditions, "merge step must have predicate conditions"
         assert len(step.on_result.conditions) == 6
 
         cond0 = step.on_result.conditions[0]
@@ -1564,7 +1563,6 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step in implementation.yaml has predicate on_result."""
         step = self.ip_recipe.steps["merge"]
         assert step.on_result is not None
-        assert step.on_result.conditions, "merge step must have predicate conditions"
         assert len(step.on_result.conditions) == 6
 
         cond0 = step.on_result.conditions[0]

@@ -650,7 +650,20 @@ def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
 def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 
-    server/ is exempt at 16 files after tools_integrations was split into 3 focused modules.
+    Exemptions (rule ID | rationale):
+      server/ — REQ-CNST-003-E1: server/ splits tool handlers into per-domain files
+        (tools_clone, tools_github, tools_issue_lifecycle, tools_pr_ops, tools_ci,
+        tools_git, tools_recipe, tools_status, tools_workspace, tools_execution,
+        tools_kitchen, helpers, git, _factory, _state, __init__); each file is a
+        thin routing layer. Exempt at 16 files.
+      recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
+        (rules_bypass, rules_ci, rules_clone, etc.) for independent testability.
+      execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
+        focused single-concern modules (_process_io, _process_kill, _process_race,
+        etc.) that cannot be merged without re-introducing the coupling they isolate.
+      core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
+        (_type_enums, _type_protocols, _type_results, _type_subprocess, etc.) to
+        prevent circular imports while keeping L0 types co-located. Exempt at 14 files.
     """
     EXEMPTIONS: dict[str, int] = {"server": 16, "recipe": 27, "execution": 23, "core": 14}
     violations: list[str] = []
@@ -663,6 +676,58 @@ def test_no_subpackage_exceeds_10_files() -> None:
             violations.append(f"{sub_dir.name}/: {len(py_files)} Python files (max {limit})")
     assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
         f"  {v}" for v in violations
+    )
+
+
+# ── REQ-CNST-010: Per-module source size limit ───────────────────────────────
+# REQ-CNST-010: No source module in src/autoskillit/ may exceed 1000 lines.
+# Modules that exceed this limit require a documented exemption with rule ID and
+# rationale. Splitting is REQUIRED once a module exceeds 1000 lines.
+#
+# session.py (currently 864 lines) is deliberately NOT in this list because it
+# is under the 1000-line limit. If it ever reaches 1000 lines, add it here —
+# but first assess whether the adjudication pipeline has grown beyond its
+# original single-responsibility scope (REQ-CNST-010-NOTE-1).
+
+_LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
+    # REQ-CNST-010-E1: core/types.py is the canonical type registry for the entire
+    # package. It defines all StrEnums, protocols, constants, and shared type aliases
+    # in one place to prevent circular imports across sub-packages. Exempt at 1200 lines.
+    "types.py": (
+        1200,
+        "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
+        "circular imports; all enums/protocols/constants consolidated here",
+    ),
+    # REQ-CNST-010-E2: tools_integrations.py consolidates all GitHub/issue/PR tool
+    # handlers. groupC will split this into per-domain files; until then exempt at 1300
+    # lines. Remove this entry once groupC lands and the module drops below 1000 lines.
+    "tools_integrations.py": (
+        1300,
+        "REQ-CNST-010-E2: GitHub/issue/PR tool handlers pre-groupC split — remove after "
+        "groupC splits tools_integrations into per-domain modules",
+    ),
+}
+
+
+def test_no_src_module_exceeds_line_limit() -> None:
+    """REQ-CNST-010: No source module may exceed 1000 lines (exemptions require rule IDs).
+
+    Exceptions are documented in _LINE_LIMIT_EXEMPTIONS with rationale.
+    session.py (adjudication pipeline, ~864 lines) is intentionally near this
+    limit; do NOT split below 1000 lines — see REQ-CNST-010-NOTE-1.
+    """
+    violations: list[str] = []
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        line_count = len(py_file.read_text().splitlines())
+        limit, _ = _LINE_LIMIT_EXEMPTIONS.get(py_file.name, (1000, ""))
+        if line_count > limit:
+            violations.append(
+                f"{py_file.relative_to(SRC_ROOT)}: {line_count} lines (limit {limit})"
+            )
+    assert not violations, (
+        "Source modules exceeding line limit "
+        "(add entry to _LINE_LIMIT_EXEMPTIONS with rule ID + rationale):\n"
+        + "\n".join(f"  {v}" for v in violations)
     )
 
 

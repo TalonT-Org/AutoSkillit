@@ -84,6 +84,41 @@ LAYER_RULES: dict[str, RuleDescriptor] = {
         severity="high",
         defense_standard="DS-001",
     ),
+    "REQ-LAYER-001": RuleDescriptor(
+        rule_id="REQ-LAYER-001",
+        name="no-raw-ctx-notification-calls-in-tool-handlers",
+        lens="module-dependency",
+        description=(
+            "All ctx.info/error/warning/debug calls in server/tools_*.py must be "
+            "replaced by _notify() from server/helpers.py."
+        ),
+        rationale=(
+            "Raw ctx.* notification calls bypass the _notify() validation layer that "
+            "enforces reserved-key safety and structured logging invariants in tool "
+            "handlers. Any raw call is a developer bypass of the server-layer contract."
+        ),
+        exemptions=frozenset(),
+        severity="error",
+        defense_standard="DS-001",
+    ),
+    "REQ-LAYER-002": RuleDescriptor(
+        rule_id="REQ-LAYER-002",
+        name="no-reserved-keys-in-notify-extra-dicts",
+        lens="module-dependency",
+        description=(
+            "No literal extra={} dict passed to _notify() in tools_*.py may contain "
+            "a key that matches a reserved LogRecord attribute."
+        ),
+        rationale=(
+            "Reserved LogRecord keys (e.g. 'message', 'levelname', 'filename') passed "
+            "as extra kwargs to structlog/logging calls shadow built-in fields, producing "
+            "malformed log records. Static detection at test time prevents silent "
+            "corruption of session diagnostics output."
+        ),
+        exemptions=frozenset(),
+        severity="error",
+        defense_standard="DS-001",
+    ),
 }
 
 

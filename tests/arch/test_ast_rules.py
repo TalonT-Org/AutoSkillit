@@ -33,6 +33,7 @@ from tests.arch._helpers import (
 from tests.arch._rules import (
     _DISPATCH_TABLE_EXEMPT_FUNCTIONS,
     _rel,
+    RuleDescriptor,
 )
 
 
@@ -111,6 +112,24 @@ def _find_enclosing_function(node: ast.AST, tree: ast.AST) -> str | None:
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
+
+NO_WRITE_TEXT_RULE = RuleDescriptor(
+    rule_id="REQ-AST-002",
+    name="no-direct-write-text-in-src",
+    lens="error-resilience",
+    description=(
+        "No src/autoskillit/ file may call .write_text() or .write_bytes() directly; "
+        "use _atomic_write() from autoskillit.core.io."
+    ),
+    rationale=(
+        "Non-atomic writes produce corrupted JSON when two concurrent recipe steps "
+        "interleave writes to the same file. _atomic_write() uses a temp-file + rename "
+        "pattern that is crash-safe and O_EXCL-safe on both Linux and macOS."
+    ),
+    exemptions=frozenset(),
+    severity="error",
+    defense_standard="DS-001",
+)
 
 
 def test_no_direct_write_text_in_src() -> None:
@@ -515,6 +534,26 @@ def _type_checking_linenos(tree: ast.AST) -> set[int]:
                 if hasattr(child, "lineno"):
                     linenos.add(child.lineno)  # type: ignore[attr-defined]
     return linenos
+
+
+HOOKS_STDLIB_RULE = RuleDescriptor(
+    rule_id="REQ-AST-001",
+    name="hooks-are-stdlib-only",
+    lens="security",
+    description=(
+        "Hook scripts in src/autoskillit/hooks/ must not import from autoskillit.* "
+        "at runtime; they execute outside the venv."
+    ),
+    rationale=(
+        "Claude Code hook scripts run in a subprocess without the autoskillit "
+        "venv active. Any autoskillit.* import at runtime causes an ImportError "
+        "that silently kills the hook. Only stdlib imports are safe. Imports inside "
+        "TYPE_CHECKING blocks are annotation-only and never executed."
+    ),
+    exemptions=frozenset({"TYPE_CHECKING"}),
+    severity="error",
+    defense_standard="DS-001",
+)
 
 
 def test_hooks_are_stdlib_only() -> None:

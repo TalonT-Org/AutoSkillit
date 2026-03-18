@@ -141,6 +141,9 @@ async def wait_for_ci(
         )
 
         return json.dumps(result)
+    except Exception as exc:
+        logger.error("autoskillit.wait_for_ci failed", exc_info=exc)
+        raise
     finally:
         if step_name:
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
@@ -425,6 +428,9 @@ async def wait_for_merge_queue(
             not_in_queue_confirmation_cycles=not_in_queue_confirmation_cycles,
         )
         return json.dumps(result)
+    except Exception as exc:
+        logger.error("autoskillit.wait_for_merge_queue failed", exc_info=exc)
+        raise
     finally:
         if step_name:
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

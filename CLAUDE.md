@@ -207,7 +207,9 @@ src/autoskillit/
 │   ├── tools_git.py         #   merge_worktree, classify_fix, create_unique_branch, check_pr_mergeable tool handlers
 │   ├── tools_recipe.py      #   migrate_recipe, load_recipe, list_recipes, validate_recipe tool handlers
 │   ├── tools_status.py      #   kitchen_status, get_pipeline_report, get_token_summary, get_timing_summary, get_quota_events, write_telemetry_files, read_db tool handlers
-│   ├── tools_integrations.py #  fetch_github_issue, get_issue_title, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, get_pr_reviews, bulk_close_issues tool handlers
+│   ├── tools_github.py      #   fetch_github_issue, get_issue_title, report_bug tool handlers
+│   ├── tools_issue_lifecycle.py #  prepare_issue, enrich_issues, claim_issue, release_issue tool handlers
+│   ├── tools_pr_ops.py      #   get_pr_reviews, bulk_close_issues tool handlers
 │   ├── tools_workspace.py   #   test_check, reset_test_dir, reset_workspace tool handlers
 │   ├── _factory.py          #   Composition Root: make_context() wires ToolContext
 │   └── _state.py            #   Server state extraction (lazy init, plugin dir resolution)

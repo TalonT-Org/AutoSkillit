@@ -1,0 +1,169 @@
+"""MCP tool handlers: get_pr_reviews, bulk_close_issues."""
+
+from __future__ import annotations
+
+import json
+
+import structlog
+from fastmcp import Context
+from fastmcp.dependencies import CurrentContext
+
+from autoskillit.core import get_logger
+from autoskillit.server import mcp
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    _run_subprocess,
+    track_response_size,
+)
+
+logger = get_logger(__name__)
+
+
+def _map_api_reviews(raw: list) -> list:
+    """Map gh api pulls/{n}/reviews response (user.login) to {author, state, body}."""
+    return [
+        {
+            "author": (r.get("user") or {}).get("login", ""),
+            "state": r["state"],
+            "body": r.get("body", ""),
+        }
+        for r in raw
+    ]
+
+
+def _map_pr_view_reviews(data: dict) -> list:
+    """Map gh pr view --json reviews response (author.login) to {author, state, body}."""
+    return [
+        {
+            "author": (r.get("author") or {}).get("login", ""),
+            "state": r["state"],
+            "body": r.get("body", ""),
+        }
+        for r in data.get("reviews", [])
+    ]
+
+
+async def _close_issues_sequentially(
+    issue_numbers: list[int],
+    comment: str,
+    cwd: str,
+) -> tuple[list[int], list[int]]:
+    """Run gh issue close for each number; return (closed, failed) lists."""
+    closed: list[int] = []
+    failed: list[int] = []
+    for num in issue_numbers:
+        cmd = ["gh", "issue", "close", str(num)]
+        if comment:
+            cmd.extend(["--comment", comment])
+        rc, _, _ = await _run_subprocess(cmd, cwd=cwd, timeout=30)
+        if rc == 0:
+            closed.append(num)
+        else:
+            failed.append(num)
+    return closed, failed
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@track_response_size("get_pr_reviews")
+async def get_pr_reviews(
+    pr_number: int,
+    cwd: str,
+    repo: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Fetch reviews for a GitHub pull request as a structured list.
+
+    When repo is provided, calls gh api repos/{repo}/pulls/{pr_number}/reviews
+    (returns raw API list with user.login). When repo is omitted, calls
+    gh pr view {pr_number} --json reviews (returns author.login).
+
+    Returns JSON with:
+      - reviews: list of {author, state, body}
+    On gh failure: {"success": false, "error": "..."}
+
+    Args:
+        pr_number: GitHub pull request number.
+        cwd: Working directory for gh commands.
+        repo: Repository as owner/repo. Uses gh api path when provided;
+              uses gh pr view when omitted.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    with structlog.contextvars.bound_contextvars(tool="get_pr_reviews", cwd=cwd):
+        logger.info("get_pr_reviews", pr_number=pr_number, repo=repo)
+        await _notify(
+            ctx,
+            "info",
+            f"get_pr_reviews: #{pr_number}",
+            "autoskillit.get_pr_reviews",
+            extra={"repo": repo},
+        )
+
+        if repo:
+            cmd = ["gh", "api", f"repos/{repo}/pulls/{pr_number}/reviews"]
+            rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
+            if rc != 0:
+                return json.dumps(
+                    {"success": False, "error": stderr.strip() or "gh command failed"}
+                )
+            try:
+                raw = json.loads(stdout)
+            except json.JSONDecodeError:
+                return json.dumps({"success": False, "error": "Failed to parse gh output"})
+            reviews = _map_api_reviews(raw)
+        else:
+            cmd = ["gh", "pr", "view", str(pr_number), "--json", "reviews"]
+            rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
+            if rc != 0:
+                return json.dumps(
+                    {"success": False, "error": stderr.strip() or "gh command failed"}
+                )
+            try:
+                data = json.loads(stdout)
+            except json.JSONDecodeError:
+                return json.dumps({"success": False, "error": "Failed to parse gh output"})
+            reviews = _map_pr_view_reviews(data)
+
+        return json.dumps({"reviews": reviews})
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@track_response_size("bulk_close_issues")
+async def bulk_close_issues(
+    issue_numbers: list[int],
+    comment: str,
+    cwd: str,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Close multiple GitHub issues, optionally with a comment.
+
+    Runs gh issue close for each number in sequence. Tracks which issues
+    closed successfully and which failed.
+
+    Returns JSON with:
+      - closed: list of issue numbers that closed successfully
+      - failed: list of issue numbers where gh returned non-zero
+    On gate closed: {"success": false, "subtype": "gate_error", ...}
+
+    Args:
+        issue_numbers: List of GitHub issue numbers to close.
+        comment: Optional comment to post when closing. Omitted when empty.
+        cwd: Working directory for gh commands.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+
+    with structlog.contextvars.bound_contextvars(tool="bulk_close_issues", cwd=cwd):
+        logger.info("bulk_close_issues", count=len(issue_numbers))
+        await _notify(
+            ctx,
+            "info",
+            f"bulk_close_issues: {len(issue_numbers)} issue(s)",
+            "autoskillit.bulk_close_issues",
+            extra={},
+        )
+
+        closed, failed = await _close_issues_sequentially(issue_numbers, comment, cwd)
+        return json.dumps({"closed": closed, "failed": failed})

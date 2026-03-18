@@ -229,7 +229,9 @@ def test_ungated_tools_do_not_call_require_enabled() -> None:
         tools_clone,
         tools_execution,
         tools_git,
-        tools_integrations,
+        tools_github,
+        tools_issue_lifecycle,
+        tools_pr_ops,
         tools_recipe,
         tools_status,
         tools_workspace,
@@ -242,7 +244,9 @@ def test_ungated_tools_do_not_call_require_enabled() -> None:
         tools_clone,
         tools_recipe,
         tools_status,
-        tools_integrations,
+        tools_github,
+        tools_issue_lifecycle,
+        tools_pr_ops,
     ]
 
     violations: list[str] = []

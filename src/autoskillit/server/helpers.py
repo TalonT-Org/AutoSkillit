@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
 from autoskillit.execution import (
-    resolve_log_dir,  # noqa: F401 — used by tools_integrations.py, tools_status.py
+    resolve_log_dir,  # noqa: F401 — used by tools_github.py, tools_status.py
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
 from autoskillit.pipeline import gate_error_result
@@ -206,6 +206,27 @@ def _validate_skill_command(skill_command: str) -> str | None:
             "Prose task descriptions are not valid skill invocations."
         )
     return None
+
+
+def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
+    """Return all lines between start_delim and end_delim (exclusive).
+
+    Returns an empty list if either delimiter is absent or the block is empty.
+    Lines are returned as-is (no stripping) to preserve JSON-parseable content.
+    """
+    in_block = False
+    block_lines: list[str] = []
+    for line in text.splitlines():
+        if line.strip() == start_delim:
+            in_block = True
+            continue
+        if line.strip() == end_delim:
+            if not in_block:
+                return []
+            return block_lines
+        if in_block:
+            block_lines.append(line)
+    return []  # end delimiter never found
 
 
 async def _apply_triage_gate(

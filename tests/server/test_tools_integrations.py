@@ -12,27 +12,30 @@ import pytest
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import UNGATED_TOOLS
-from autoskillit.server.tools_integrations import (
-    _ENRICH_RESULT_END,
-    _ENRICH_RESULT_START,
+from autoskillit.server.helpers import _extract_block
+from autoskillit.server.tools_github import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
-    _PREPARE_RESULT_END,
-    _PREPARE_RESULT_START,
-    _extract_block,
-    _parse_enrich_result,
+    _format_diagnostics_section,
     _parse_fingerprint,
-    _parse_prepare_result,
-    bulk_close_issues,
-    claim_issue,
-    enrich_issues,
+    _read_session_diagnostics,
     fetch_github_issue,
     get_issue_title,
-    get_pr_reviews,
-    prepare_issue,
-    release_issue,
     report_bug,
 )
+from autoskillit.server.tools_issue_lifecycle import (
+    _ENRICH_RESULT_END,
+    _ENRICH_RESULT_START,
+    _PREPARE_RESULT_END,
+    _PREPARE_RESULT_START,
+    _parse_enrich_result,
+    _parse_prepare_result,
+    claim_issue,
+    enrich_issues,
+    prepare_issue,
+    release_issue,
+)
+from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
 from tests.conftest import _make_result
 
 # ---------------------------------------------------------------------------

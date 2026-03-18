@@ -518,9 +518,64 @@ def test_cli_is_package() -> None:
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 14 Python files (REQ-DSGN-002)."""
+    """server/ must not exceed 16 Python files (REQ-DSGN-002).
+
+    Limit updated from 14 to 16 after tools_integrations was split into
+    tools_github, tools_issue_lifecycle, and tools_pr_ops.
+    """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 14, f"server/ has {len(py_files)} files, max is 14"
+    assert len(py_files) <= 16, f"server/ has {len(py_files)} files, max is 16"
+
+
+def test_tools_integrations_replaced_by_split_modules() -> None:
+    """tools_integrations.py deleted; three replacement modules exist."""
+    server = SRC_ROOT / "server"
+    assert not (server / "tools_integrations.py").exists()
+    assert (server / "tools_github.py").exists()
+    assert (server / "tools_issue_lifecycle.py").exists()
+    assert (server / "tools_pr_ops.py").exists()
+
+
+def test_split_files_under_750_lines() -> None:
+    """Each split module must stay under the 750-line threshold."""
+    server = SRC_ROOT / "server"
+    for name in ("tools_github.py", "tools_issue_lifecycle.py", "tools_pr_ops.py"):
+        lines = len((server / name).read_text().splitlines())
+        assert lines <= 750, f"{name} has {lines} lines, exceeds 750"
+
+
+def test_extract_block_moved_to_helpers() -> None:
+    """_extract_block moved to server/helpers.py after tools_integrations split."""
+    from autoskillit.server.helpers import _extract_block
+
+    assert callable(_extract_block)
+
+
+def test_all_tools_importable_from_split_modules() -> None:
+    """All 9 tools are importable from their new home modules."""
+    from autoskillit.server.tools_github import fetch_github_issue, get_issue_title, report_bug
+    from autoskillit.server.tools_issue_lifecycle import (
+        claim_issue,
+        enrich_issues,
+        prepare_issue,
+        release_issue,
+    )
+    from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
+
+    assert all(
+        callable(f)
+        for f in [
+            fetch_github_issue,
+            get_issue_title,
+            report_bug,
+            prepare_issue,
+            enrich_issues,
+            claim_issue,
+            release_issue,
+            get_pr_reviews,
+            bulk_close_issues,
+        ]
+    )
 
 
 def test_git_operations_moved_to_server_package() -> None:
@@ -595,9 +650,9 @@ def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
 def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 
-    server/ is exempt at 12 files to accommodate tools_clone and tools_integrations modules.
+    server/ is exempt at 16 files after tools_integrations was split into 3 focused modules.
     """
-    EXEMPTIONS: dict[str, int] = {"server": 14, "recipe": 27, "execution": 23, "core": 14}
+    EXEMPTIONS: dict[str, int] = {"server": 16, "recipe": 27, "execution": 23, "core": 14}
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":

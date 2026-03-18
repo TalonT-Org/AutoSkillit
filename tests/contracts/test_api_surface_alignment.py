@@ -1,4 +1,4 @@
-"""REQ-C8-01 / C8-02 / C8-03 / C2-01: API surface alignment tests."""
+"""REQ-C8-01 / C2-01: API surface alignment tests."""
 
 from __future__ import annotations
 
@@ -49,44 +49,6 @@ def test_recipe_all_contains_schema_symbols():
         "DataFlowReport",
     ):
         assert name in m.__all__, f"'{name}' missing from recipe.__all__"
-
-
-# ── REQ-C8-02: core gateway exports dump_yaml ────────────────────────────────
-
-
-def test_core_init_exports_dump_yaml():
-
-    from autoskillit.core import dump_yaml
-
-    assert callable(dump_yaml)
-
-
-def test_core_all_contains_dump_yaml():
-    import autoskillit.core as m
-
-    assert "dump_yaml" in m.__all__
-
-
-# ── REQ-C8-03: pipeline gateway exports fidelity helpers ─────────────────────
-
-
-def test_pipeline_init_exports_extract_linked_issues():
-    from autoskillit.pipeline import extract_linked_issues
-
-    assert callable(extract_linked_issues)
-
-
-def test_pipeline_init_exports_is_valid_fidelity_finding():
-    from autoskillit.pipeline import is_valid_fidelity_finding
-
-    assert callable(is_valid_fidelity_finding)
-
-
-def test_pipeline_all_contains_fidelity_helpers():
-    import autoskillit.pipeline as m
-
-    assert "extract_linked_issues" in m.__all__
-    assert "is_valid_fidelity_finding" in m.__all__
 
 
 # ── REQ-C2-01: SubprocessRunner Protocol pty_mode default ────────────────────

@@ -12,10 +12,6 @@ from autoskillit.pipeline.audit import (
     DefaultAuditLog,
 )
 from autoskillit.pipeline.context import ToolContext
-from autoskillit.pipeline.fidelity import (  # noqa: E402
-    extract_linked_issues,
-    is_valid_fidelity_finding,
-)
 from autoskillit.pipeline.gate import (
     GATED_TOOLS,
     UNGATED_TOOLS,
@@ -60,9 +56,6 @@ __all__ = [
     "TelemetryFormatter",
     # context
     "ToolContext",
-    # fidelity
-    "extract_linked_issues",
-    "is_valid_fidelity_finding",
     # pr_gates
     "is_ci_passing",
     "is_review_passing",

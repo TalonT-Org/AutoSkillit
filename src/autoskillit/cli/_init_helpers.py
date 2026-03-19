@@ -215,18 +215,17 @@ def _register_mcp_server(claude_json_path: Path) -> None:
 
 def _print_next_steps(*, context: str = "install") -> None:
     _B, _C, _D, _G, _Y, _R = _colors()
-    print()
     if context == "install":
         steps = [
-            ("autoskillit init", "create project config + register hooks"),
-            ("autoskillit cook setup-project", "explore project and generate recipes"),
+            ("autoskillit init", "create project config"),
             ("autoskillit doctor", "verify your setup"),
         ]
     else:
         steps = [
-            ("autoskillit cook setup-project", "explore project and generate recipes"),
-            ("autoskillit cook", "open an interactive session"),
-            ("autoskillit doctor", "verify your setup"),
+            ("autoskillit cook setup-project", "generate tailored recipes"),
+            ("autoskillit order <recipe>", "run a recipe pipeline"),
+            ("autoskillit cook", "interactive session"),
+            ("autoskillit doctor", "verify setup"),
         ]
     print(f"  {_B}Next steps:{_R}")
     for i, (cmd, desc) in enumerate(steps, 1):

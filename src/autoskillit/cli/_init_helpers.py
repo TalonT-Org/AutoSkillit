@@ -93,11 +93,34 @@ def _create_secrets_template(project_dir: Path) -> None:
         secrets_path,
         "# AutoSkillit secrets — never commit this file\n"
         "# This file is already listed in .gitignore\n\n"
+        "# GitHub authentication (choose one):\n"
+        "#   Option 1 (recommended): Run 'gh auth login' — the gh CLI handles auth\n"
+        "#     for all MCP tool commands (issues, PRs, CI status).\n"
+        "#   Option 2: Set a token below — used by background watchers (CI, merge queue)\n"
+        "#     that poll the GitHub API directly via httpx.\n"
+        "#   If gh is authenticated, the token below is optional.\n"
         "github:\n"
-        "  token: ''  # GitHub personal access token with repo + issues scope\n"
-        "             # Generate at: https://github.com/settings/tokens\n",
+        "  token: ''  # Optional — only needed if gh auth is unavailable\n",
     )
-    print(f"Created {secrets_path} — add your GitHub token to enable full functionality.")
+    # Check if gh is already authenticated
+    gh_authed = False
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "status"],
+            capture_output=True,
+            timeout=5,
+        )
+        gh_authed = result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    if gh_authed:
+        print("GitHub CLI is authenticated — no additional token setup needed.")
+    else:
+        print(
+            f"Created {secrets_path}\n"
+            "  Run 'gh auth login' to authenticate, or add a token to the file above."
+        )
 
 
 def _is_plugin_installed() -> bool:

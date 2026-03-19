@@ -35,13 +35,51 @@ def _prompt_test_command() -> list[str]:
     return (answer if answer else default).split()
 
 
+def _detect_github_repo() -> str | None:
+    """Try to detect owner/repo from the git remote URL."""
+    from autoskillit.core import parse_github_repo
+
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return parse_github_repo(result.stdout.strip())
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
 def _prompt_github_repo() -> str | None:
-    """Prompt the user for their GitHub repository in owner/repo format."""
-    print("\nGitHub repository (owner/repo format, e.g. 'acme/myproject'):")
+    """Prompt the user for their GitHub repository, auto-detecting from git remote."""
+    from autoskillit.core import parse_github_repo
+
+    detected = _detect_github_repo()
+    default_display = f" [{detected}]" if detected else ""
+
+    print(f"\nGitHub repository{default_display}:")
+    print("  Accepts: owner/repo, https://github.com/owner/repo, or a git remote URL.")
     print("  Used for issue management, PR creation, and CI status checks.")
-    print("  Leave blank to configure later in .autoskillit/config.yaml")
-    value = input("Repository []: ").strip()
-    return value or None
+    print("  Leave blank" + (f" to use {detected}" if detected else " to skip") + ".")
+    value = input(f"Repository{default_display}: ").strip()
+
+    if not value:
+        return detected
+
+    # Accept full URLs — parse_github_repo normalises them to owner/repo
+    parsed = parse_github_repo(value)
+    if parsed:
+        return parsed
+
+    # Accept bare owner/repo if it looks valid
+    if "/" in value and not value.startswith("http"):
+        return value
+
+    print(f"  Warning: '{value}' doesn't look like owner/repo — using as-is.")
+    return value
 
 
 def _create_secrets_template(project_dir: Path) -> None:

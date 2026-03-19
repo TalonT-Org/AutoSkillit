@@ -620,6 +620,9 @@ def test_get_logger_no_bind() -> None:
     BoundLoggerLazyProxy. Calling .bind() resolves the proxy against the current
     structlog config, freezing it before configure_logging() runs. This arch rule
     prevents regression to the eager-resolution pattern.
+
+    Uses AST Call+Attribute analysis (not string matching) to avoid false
+    positives from comments mentioning .bind().
     """
     import ast as _ast
 
@@ -627,9 +630,15 @@ def test_get_logger_no_bind() -> None:
     tree = _ast.parse(logging_py.read_text())
     for node in _ast.walk(tree):
         if isinstance(node, _ast.FunctionDef) and node.name == "get_logger":
-            body_source = _ast.get_source_segment(logging_py.read_text(), node)
-            assert body_source is not None, "Could not extract get_logger source"
-            assert ".bind(" not in body_source, (
+            # Walk the function body AST for Call nodes invoking .bind()
+            bind_calls = [
+                n
+                for n in _ast.walk(node)
+                if isinstance(n, _ast.Call)
+                and isinstance(n.func, _ast.Attribute)
+                and n.func.attr == "bind"
+            ]
+            assert not bind_calls, (
                 "get_logger() must not call .bind() on the structlog proxy — "
                 "it eagerly resolves the lazy proxy, freezing the pre-boot config. "
                 "Use proxy._initial_values instead to keep the proxy lazy."

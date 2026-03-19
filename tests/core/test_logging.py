@@ -33,7 +33,7 @@ class TestGetLogger:
 
     def test_module_level_logger_stays_lazy_proxy(self):
         """get_logger(__name__) must return a lazy proxy, not a resolved logger."""
-        from structlog._log import BoundLoggerLazyProxy
+        from structlog._config import BoundLoggerLazyProxy
 
         from autoskillit.core.logging import get_logger
 

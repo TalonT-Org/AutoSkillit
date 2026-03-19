@@ -31,6 +31,29 @@ class TestGetLogger:
         assert logs, "Expected at least one log record"
         assert logs[0]["logger"] == "autoskillit.server"
 
+    def test_module_level_logger_stays_lazy_proxy(self):
+        """get_logger(__name__) must return a lazy proxy, not a resolved logger."""
+        from structlog._log import BoundLoggerLazyProxy
+
+        from autoskillit.core.logging import get_logger
+
+        logger = get_logger("test.module")
+        assert isinstance(logger, BoundLoggerLazyProxy), (
+            f"get_logger() returned {type(logger).__name__}, expected BoundLoggerLazyProxy. "
+            f"Calling .bind() on the proxy eagerly resolves it — use _initial_values instead."
+        )
+
+    def test_get_logger_with_name_preserves_logger_field(self):
+        """get_logger(__name__) must include logger=name in emitted events."""
+        from autoskillit.core.logging import get_logger
+
+        with structlog.testing.capture_logs() as logs:
+            log = get_logger("my.module")
+            log.info("test_event")
+        assert any(
+            e.get("event") == "test_event" and e.get("logger") == "my.module" for e in logs
+        ), f"Logger field not found in events: {logs}"
+
 
 class TestNullHandlerContract:
     def test_no_output_before_configure(self, capsys: pytest.CaptureFixture[str]):
@@ -126,6 +149,48 @@ class TestConfigureLogging:
         _flush_logger_proxy_caches()
         get_logger("autoskillit.test").debug("second_config_probe")
         assert "second_config_probe" in stream2.getvalue()
+
+    def test_module_level_logger_respects_reconfigure(self):
+        """Module-level loggers must honor configure_logging() level filter."""
+        from autoskillit.core.logging import configure_logging, get_logger
+
+        # Simulate Phase 0: module-level structlog.configure (no wrapper_class)
+        structlog.configure(
+            cache_logger_on_first_use=True,
+            logger_factory=structlog.WriteLoggerFactory(file=io.StringIO()),
+        )
+
+        # Simulate Phase 1: module-level get_logger
+        logger = get_logger("test.module")
+
+        # Simulate Phase 2: configure_logging at INFO
+        buf = io.StringIO()
+        configure_logging(level=logging.INFO, stream=buf)
+
+        # Phase 3: first log call — debug must be suppressed
+        logger.debug("should_be_suppressed")
+        assert buf.getvalue() == "", f"Debug leaked through: {buf.getvalue()!r}"
+
+        # INFO should pass
+        logger.info("should_appear")
+        assert "should_appear" in buf.getvalue()
+
+    def test_pre_boot_configure_has_wrapper_class(self):
+        """Module-level structlog.configure() must include wrapper_class for defense-in-depth."""
+        import importlib
+
+        import autoskillit.core.logging as logging_mod
+
+        structlog.reset_defaults()
+        importlib.reload(logging_mod)
+
+        # After reload, the module-level configure should have set a filtering wrapper
+        cfg = structlog.get_config()
+        wrapper_name = cfg.get("wrapper_class", type(None)).__name__
+        assert "Filtering" in wrapper_name, (
+            f"Module-level structlog.configure() must set wrapper_class for defense-in-depth. "
+            f"Got: {wrapper_name}"
+        )
 
 
 class TestContextVarBinding:

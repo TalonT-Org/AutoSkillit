@@ -611,3 +611,28 @@ def test_init_files_are_pure_facades() -> None:
         "Sub-package __init__.py files must not define functions at module scope "
         "(pure re-export facades only):\n" + "\n".join(violations)
     )
+
+
+def test_get_logger_no_bind() -> None:
+    """get_logger() must not call .bind() on the proxy — it eagerly resolves.
+
+    The lazy proxy contract requires that get_logger() returns an unresolved
+    BoundLoggerLazyProxy. Calling .bind() resolves the proxy against the current
+    structlog config, freezing it before configure_logging() runs. This arch rule
+    prevents regression to the eager-resolution pattern.
+    """
+    import ast as _ast
+
+    logging_py = SRC_ROOT / "core" / "logging.py"
+    tree = _ast.parse(logging_py.read_text())
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.FunctionDef) and node.name == "get_logger":
+            body_source = _ast.get_source_segment(logging_py.read_text(), node)
+            assert body_source is not None, "Could not extract get_logger source"
+            assert ".bind(" not in body_source, (
+                "get_logger() must not call .bind() on the structlog proxy — "
+                "it eagerly resolves the lazy proxy, freezing the pre-boot config. "
+                "Use proxy._initial_values instead to keep the proxy lazy."
+            )
+            return
+    pytest.fail("get_logger() function not found in core/logging.py")

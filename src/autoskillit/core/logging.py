@@ -34,6 +34,7 @@ PACKAGE_LOGGER_NAME = "autoskillit"
 structlog.configure(
     cache_logger_on_first_use=True,
     logger_factory=structlog.WriteLoggerFactory(file=sys.stderr),
+    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
 )
 
 
@@ -52,9 +53,16 @@ def get_logger(name: str | None = None) -> Any:
     record emitted through this logger — regardless of the configured
     renderer (JSON, ConsoleRenderer, or testing capture).
     """
+    proxy = structlog.get_logger()
     if name is not None:
-        return structlog.get_logger().bind(logger=name)
-    return structlog.get_logger()
+        # Why _initial_values instead of .bind(): .bind() resolves the lazy proxy
+        # into a concrete BoundLoggerFilteringAtNotset, freezing the current config.
+        # We need to keep the proxy lazy so it resolves against the config active at
+        # first log call (after configure_logging() runs).
+        # Why not structlog.get_logger(logger=name): the "logger" kwarg collides with
+        # wrap_logger()'s first positional parameter, raising TypeError.
+        proxy._initial_values["logger"] = name
+    return proxy
 
 
 def configure_logging(

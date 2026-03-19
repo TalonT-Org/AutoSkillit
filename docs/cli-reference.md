@@ -51,12 +51,13 @@ Set up a project for AutoSkillit.
 
 Launch an interactive pipeline session.
 
-    autoskillit order <recipe>
+    autoskillit order [recipe]
 
 **Arguments:**
-- `recipe` — Recipe name to run.
+- `recipe` — Recipe name to run. If omitted, shows an interactive picker.
 
 **Behavior:**
+- If no recipe is given, presents a numbered list to choose from (including an "Open kitchen" option)
 - Validates the recipe YAML before launching
 - Opens a restricted Claude Code session (only `AskUserQuestion` + MCP tools)
 - Injects the recipe as the orchestrator's system prompt
@@ -66,6 +67,7 @@ Launch an interactive pipeline session.
 
 **Examples:**
 
+    autoskillit order                    # Interactive picker
     autoskillit order implementation     # Run implementation pipeline
     autoskillit order remediation        # Run remediation pipeline
 

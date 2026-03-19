@@ -67,7 +67,7 @@ analysis
 |---------|---------|
 | `autoskillit install` | Register plugin with Claude Code |
 | `autoskillit init` | Create project config |
-| `autoskillit order <recipe>` | Run a recipe |
+| `autoskillit order [recipe]` | Run a recipe (prompts if omitted) |
 | `autoskillit cook` | Launch Claude with all bundled skills as slash commands |
 
 See the [CLI Reference](docs/cli-reference.md) for all commands.

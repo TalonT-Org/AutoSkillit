@@ -142,8 +142,8 @@ def init(
     config_path = config_dir / "config.yaml"
 
     if config_path.exists() and not force:
-        print(f"Config already exists: {config_path}")
-        print("Use --force to overwrite.")
+        print(f"  Config already exists: {config_path}")
+        print("  Use --force to overwrite.")
     else:
         if test_command is not None:
             cmd_parts = test_command.split()
@@ -151,7 +151,6 @@ def init(
             cmd_parts = _prompt_test_command()
 
         atomic_write(config_path, _generate_config_yaml(cmd_parts))
-        print(f"Config written to: {config_path}")
 
     _register_all(scope, project_dir)
 
@@ -166,7 +165,7 @@ def install(
     from autoskillit.cli._marketplace import install as _install
 
     _install(scope=scope)
-    _print_next_steps()
+    _print_next_steps(context="install")
 
 
 @app.command

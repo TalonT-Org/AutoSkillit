@@ -171,7 +171,6 @@ def install(*, scope: str = "user"):
     settings_path = _hooks_mod._claude_settings_path(scope)
     _evict_stale_autoskillit_hooks(settings_path)
     sync_hooks_to_settings(settings_path)
-    _print_next_steps()
 
 
 def upgrade():
@@ -207,14 +206,3 @@ def upgrade():
             changed += 1
 
     print(f"Upgraded: directory renamed, {changed} file(s) updated.")
-
-
-def _print_next_steps() -> None:
-    """Print concise post-install getting started instructions."""
-    print("\nAutoskillit ready. Next steps:")
-    print("  1. cd to your project directory")
-    print("  2. autoskillit init           — create project config + register hooks")
-    print(
-        "  3. autoskillit cook setup-project  — explore your project and generate tailored recipes"
-    )
-    print("  4. autoskillit doctor          — verify your setup")

@@ -28,9 +28,9 @@ session types can see each tool.
 |---|---|---|---|
 | `$ claude` (plugin, no kitchen) | ✓ | ✗ | ✗ |
 | `$ claude` (after `/open-kitchen`) | ✓ | ✓ | ✗ |
-| `$ autoskillit chefs-hat` (before `/open-kitchen`) | ✓ | ✗ | ✗ |
-| `$ autoskillit chefs-hat` (after `/open-kitchen`) | ✓ | ✓ | ✗ |
-| `$ autoskillit cook` | ✓ | ✓ (pre-opened) | ✗ |
+| `$ autoskillit cook` (before `/open-kitchen`) | ✓ | ✗ | ✗ |
+| `$ autoskillit cook` (after `/open-kitchen`) | ✓ | ✓ | ✗ |
+| `$ autoskillit order` | ✓ | ✓ (pre-opened) | ✗ |
 | `run_skill` (headless) | ✓ | ✗ | ✓ |
 
 Note: Disabled subsets further restrict visibility within the Kitchen tier — their tools

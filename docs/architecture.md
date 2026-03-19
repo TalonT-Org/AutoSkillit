@@ -15,7 +15,7 @@ YAML pipeline definitions that describe a sequence of steps. Each step invokes a
 Markdown instruction files (`SKILL.md`) that define what a headless Claude session should do. Skills are registered as `/autoskillit:*` slash commands. Each skill runs in its own context window, so pipelines can run for hours without hitting context limits.
 
 ### The Orchestrator
-When you run `autoskillit cook`, Claude Code acts as a pipeline orchestrator. It reads the recipe, collects ingredients from you, and executes steps in sequence. The orchestrator never reads or writes code itself — it delegates all work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
+When you run `autoskillit order`, Claude Code acts as a pipeline orchestrator. It reads the recipe, collects ingredients from you, and executes steps in sequence. The orchestrator never reads or writes code itself — it delegates all work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
 
 ## Tool Visibility (Kitchen Gating)
 
@@ -28,7 +28,7 @@ AutoSkillit uses a three-tier tool visibility model:
   One kitchen tool (`test_check`) also carries the `headless` tag and is additionally
   pre-enabled in headless sessions.
 
-When you call `open_kitchen` (automatically done by `cook`), all 37 kitchen-tagged tools become
+When you call `open_kitchen` (automatically done by `order`), all 37 kitchen-tagged tools become
 available for that session. This keeps normal Claude Code sessions clean — no pipeline tools
 cluttering the tool list.
 
@@ -63,11 +63,11 @@ AutoSkillit supports four session modes with different tool and skill visibility
   (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 37 kitchen-tagged MCP
   tools become available.
 
-- **`$ autoskillit chefs-hat`**: Interactive development session. Sees all three skill tiers
+- **`$ autoskillit cook`**: Interactive development session. Sees all three skill tiers
   (Tier 1+2+3) via an ephemeral session directory. MCP tools are initially ungated (same as
   `$ claude`); `/open-kitchen` reveals kitchen tools.
 
-- **`$ autoskillit cook`**: Pipeline orchestrator session. Kitchen is pre-opened at startup —
+- **`$ autoskillit order`**: Pipeline orchestrator session. Kitchen is pre-opened at startup —
   all 40 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
   delegates work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
 

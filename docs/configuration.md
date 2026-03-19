@@ -282,7 +282,7 @@ When set to `"1"`, marks the MCP server instance as a headless session. This act
 - **`open_kitchen` blocked**: cannot be triggered from within a headless session
 - **Env isolation**: server-private env vars are stripped from any subprocess env passed to test runners, preventing leakage into user code
 
-This is automatically set by `autoskillit cook`, `chefs-hat`, and when launching sub-recipe headless sessions. Do **not** set this manually in user-facing orchestration sessions — it disables the protection that prevents the orchestrator from accidentally calling gated pipeline tools outside of a pipeline context.
+This is automatically set by `autoskillit order`, `cook`, and when launching sub-recipe headless sessions. Do **not** set this manually in user-facing orchestration sessions — it disables the protection that prevents the orchestrator from accidentally calling gated pipeline tools outside of a pipeline context.
 
 ## Skill Visibility
 
@@ -294,11 +294,11 @@ skills:
   tier1:   # Visible in plain $ claude sessions (plugin-scanned)
     - open-kitchen
     - close-kitchen
-  tier2:   # Visible in chefs-hat and headless sessions (interactive)
+  tier2:   # Visible in cook and headless sessions (interactive)
     - investigate
     - make-plan
     # ...full list from defaults.yaml...
-  tier3:   # Visible in chefs-hat and headless sessions (automation/pipeline)
+  tier3:   # Visible in cook and headless sessions (automation/pipeline)
     - open-pr
     - merge-pr
     # ...

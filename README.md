@@ -27,7 +27,7 @@ cd your-project
 autoskillit init
 
 # 2. Run the implementation recipe
-autoskillit cook implementation
+autoskillit order implementation
 ```
 
 ### First-Time Project Setup
@@ -35,7 +35,7 @@ autoskillit cook implementation
 After installation, run the setup wizard to configure AutoSkillit for your project:
 
 ```bash
-autoskillit chefs-hat
+autoskillit cook
 # Then in the Claude session:
 /autoskillit:setup-project
 ```
@@ -67,8 +67,8 @@ analysis
 |---------|---------|
 | `autoskillit install` | Register plugin with Claude Code |
 | `autoskillit init` | Create project config |
-| `autoskillit cook [recipe]` | Run a recipe |
-| `autoskillit chefs-hat` | Launch Claude with all bundled skills as slash commands |
+| `autoskillit order <recipe>` | Run a recipe |
+| `autoskillit cook` | Launch Claude with all bundled skills as slash commands |
 
 See the [CLI Reference](docs/cli-reference.md) for all commands.
 

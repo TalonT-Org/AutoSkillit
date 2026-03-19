@@ -19,7 +19,7 @@ tiers. See [Subset Categories](subset-categories.md) for subset configuration.
 - **Filesystem mechanism**: Claude Code auto-discovers skills via `--plugin-dir`; anything
   in `skills/` is registered as `/autoskillit:<name>`
 
-### Tier 2 — Chefs-Hat (Interactive Skills)
+### Tier 2 — Cook (Interactive Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (NOT plugin-scanned)
 - **Default members** (41 total):
@@ -30,8 +30,8 @@ tiers. See [Subset Categories](subset-categories.md) for subset configuration.
   `elaborate-phase`, `write-recipe`, `migrate-recipes`, `setup-project`,
   `sprint-planner`, `design-guards`, `triage-issues`, `collapse-issues`,
   `issue-splitter`, `enrich-issues`, `prepare-issue`, `process-issues`
-- **Visible in**: chefs-hat and headless sessions
-- **Mechanism**: copied to an ephemeral session directory (chefs-hat) or exposed via
+- **Visible in**: cook and headless sessions
+- **Mechanism**: copied to an ephemeral session directory (cook) or exposed via
   `--add-dir` (headless sessions launched by `run_skill`)
 
 ### Tier 3 — Pipeline-Only (Automation Skills)
@@ -42,7 +42,7 @@ tiers. See [Subset Categories](subset-categories.md) for subset configuration.
   `review-pr`, `resolve-review`, `implement-worktree-no-merge`, `resolve-failures`,
   `retry-worktree`, `resolve-merge-conflicts`, `audit-impl`, `smoke-task`,
   `report-bug`, `pipeline-summary`, `diagnose-ci`, `verify-diag`
-- **Visible in**: chefs-hat and headless sessions
+- **Visible in**: cook and headless sessions
 - **Distinction from Tier 2**: semantic only — both tiers live in `skills_extended/` and
   are available in the same session modes. The tier distinction lets users reclassify
   skills between "interactive" and "automation" via config without moving files.
@@ -53,12 +53,12 @@ tiers. See [Subset Categories](subset-categories.md) for subset configuration.
 Session Mode           Tier 1   Tier 2   Tier 3
 ─────────────────────  ───────  ───────  ───────
 $ claude (plugin)        ✓        ✗        ✗
-$ autoskillit chefs-hat  ✓        ✓        ✓
 $ autoskillit cook       ✓        ✓        ✓
+$ autoskillit order      ✓        ✓        ✓
 run_skill (headless)     ✓        ✓        ✓
 ```
 
-Note: All modes see Tier 1. Chefs-hat, cook, and headless sessions see Tiers 2 and 3.
+Note: All modes see Tier 1. Cook, order, and headless sessions see Tiers 2 and 3.
 Subset filtering applies after tier visibility — a disabled subset removes its members
 from all tiers.
 
@@ -70,7 +70,7 @@ Claude Code loads the plugin via `--plugin-dir <autoskillit-package>/`. It scans
 `skills/` and registers `open-kitchen` and `close-kitchen` as `/autoskillit:open-kitchen`
 and `/autoskillit:close-kitchen`. Skills in `skills_extended/` are never seen.
 
-### Chefs-hat session (`$ autoskillit chefs-hat`)
+### Cook session (`$ autoskillit cook`)
 
 1. AutoSkillit creates an ephemeral session directory at `/dev/shm/autoskillit-sessions/<id>/`
 2. Skills from both `skills/` and `skills_extended/` are copied into this ephemeral dir
@@ -80,9 +80,9 @@ and `/autoskillit:close-kitchen`. Skills in `skills_extended/` are never seen.
 4. All 60 bundled skills appear as `/autoskillit:*` slash commands within the session
 5. The ephemeral directory is cleaned up when the session ends
 
-### Cook session (`$ autoskillit cook`)
+### Order session (`$ autoskillit order`)
 
-Cook is similar to chefs-hat: AutoSkillit launches Claude Code with access to all tiers.
+Order is similar to cook: AutoSkillit launches Claude Code with access to all tiers.
 The key difference is the orchestrator (`sous-chef` skill) is injected and the kitchen
 is pre-opened so all 40 MCP tools are available from the start.
 
@@ -127,8 +127,8 @@ of tier. The two axes compose independently:
 | | Subset ENABLED | Subset DISABLED |
 |---|---|---|
 | **Tier 1** | Skill visible in all sessions | Skill hidden from all sessions |
-| **Tier 2** | Skill visible in chefs-hat + headless | Skill hidden from all sessions |
-| **Tier 3** | Skill visible in chefs-hat + headless | Skill hidden from all sessions |
+| **Tier 2** | Skill visible in cook + headless | Skill hidden from all sessions |
+| **Tier 3** | Skill visible in cook + headless | Skill hidden from all sessions |
 
 See [Subset Categories](subset-categories.md) for how to configure subset disablement.
 

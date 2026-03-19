@@ -216,7 +216,7 @@ src/autoskillit/
 ├── cli/                     # L3 CLI sub-package
 │   ├── __init__.py          #   Re-exports main entry point
 │   ├── _ansi.py             #   Terminal color utilities (supports_color, NO_COLOR/TERM=dumb)
-│   ├── _chefs_hat.py        #   chefs-hat command: ephemeral skill session launcher (claude --add-dir)
+│   ├── _cook.py             #   cook command: ephemeral skill session launcher (claude --add-dir)
 │   ├── _doctor.py           #   Doctor command -- 8 project setup checks
 │   ├── _hooks.py            #   Unified PreToolUse hook registration helpers
 │   ├── _init_helpers.py     #   Init command helpers: interactive prompts and workspace marker
@@ -249,7 +249,7 @@ src/autoskillit/
 │   └── sous-chef/           # Internal: injected by open_kitchen, not a slash cmd
 └── skills_extended/         # Tier 2+3 bundled skills (NOT plugin-scanned)
     │
-    │  ── Tier 2: Interactive skills (chefs-hat + headless) ──
+    │  ── Tier 2: Interactive skills (cook + headless) ──
     ├── investigate/          ├── make-plan/
     ├── implement-worktree/   ├── rectify/
     ├── dry-walkthrough/      ├── make-groups/

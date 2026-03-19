@@ -12,7 +12,7 @@ Walk through the implementation workflow end-to-end. You'll give AutoSkillit a G
 
 ```bash
 cd your-project
-autoskillit cook implementation
+autoskillit order implementation
 ```
 
 Select `implementation` from the menu, then confirm the launch.
@@ -109,7 +109,7 @@ Based on real pipeline runs:
 When you have a bug or regression, use the remediation recipe instead. It starts with deep investigation and root-cause analysis before planning:
 
 ```bash
-autoskillit cook remediation
+autoskillit order remediation
 ```
 
 See **[Recipes](recipes.md)** for details.
@@ -118,22 +118,22 @@ See **[Recipes](recipes.md)** for details.
 For architecture proposals, migration plans, or large feature specs, use `implementation-groups`. It decomposes the document into ordered groups and implements each one:
 
 ```bash
-autoskillit cook implementation-groups
+autoskillit order implementation-groups
 ```
 
 ### Consolidating PRs: `merge-prs`
 When you have multiple open PRs to merge together:
 
 ```bash
-autoskillit cook merge-prs
+autoskillit order merge-prs
 ```
 
-## Interactive Skills: Chefs Hat
+## Interactive Skills: Cook
 
 For one-off tasks without a full pipeline, launch an interactive session with all skills available:
 
 ```bash
-autoskillit chefs-hat
+autoskillit cook
 ```
 
 Then use any skill as a slash command: `/autoskillit:investigate`, `/autoskillit:review-pr`, `/autoskillit:audit-arch`, etc.

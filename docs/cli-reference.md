@@ -47,14 +47,14 @@ Set up a project for AutoSkillit.
 
 ---
 
-## autoskillit cook
+## autoskillit order
 
 Launch an interactive pipeline session.
 
-    autoskillit cook [recipe]
+    autoskillit order <recipe>
 
 **Arguments:**
-- `recipe` (optional) — Recipe name. If omitted, shows a selection menu.
+- `recipe` — Recipe name to run.
 
 **Behavior:**
 - Validates the recipe YAML before launching
@@ -62,12 +62,12 @@ Launch an interactive pipeline session.
 - Injects the recipe as the orchestrator's system prompt
 - Cannot be run from inside a Claude Code session
 
-**Note:** `cook` only accepts recipe names (e.g., `implementation`, `remediation`). Skills like `setup-project` are not recipes — use `autoskillit chefs-hat` and then `/autoskillit:setup-project` instead.
+**Note:** `order` only accepts recipe names (e.g., `implementation`, `remediation`). Skills like `setup-project` are not recipes — use `autoskillit cook` and then `/autoskillit:setup-project` instead.
 
 **Examples:**
 
-    autoskillit cook                    # Show recipe menu
-    autoskillit cook implementation     # Run implementation pipeline
+    autoskillit order implementation     # Run implementation pipeline
+    autoskillit order remediation        # Run remediation pipeline
 
 ---
 
@@ -86,13 +86,13 @@ version consistency, hook health, hook registration, recipe version health.
 
 ---
 
-## autoskillit chefs-hat
+## autoskillit cook
 
 Launch Claude Code with all skills as slash commands.
 
-    autoskillit chefs-hat
+    autoskillit cook
 
-Alias: `autoskillit chef`
+Alias: `autoskillit c`
 
 This gives you an unrestricted Claude session with all bundled skills
 available as `/autoskillit:*` slash commands and the kitchen pre-opened.

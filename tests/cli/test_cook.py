@@ -679,6 +679,149 @@ class TestCLIOrder:
             f"No greeting found as positional arg in: {cmd}"
         )
 
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_no_recipe_prompts_user(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order prompts for recipe name when none is provided."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "test-script")
+
+        cli.order()  # no recipe argument
+
+        mock_run.assert_called_once()
+
+    def test_order_no_recipe_no_available_exits(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """order exits 1 when no recipe is given and no recipes are available."""
+        from unittest.mock import MagicMock as _MagicMock
+
+        import autoskillit.recipe as _recipe_mod
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        mock_result = _MagicMock()
+        mock_result.items = []
+        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.order()
+        assert exc_info.value.code == 1
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_picker_shows_zero_option(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """Picker output includes '0. Open kitchen' line."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "test-script")
+
+        cli.order()
+
+        captured = capsys.readouterr()
+        assert "0. Open kitchen" in captured.out
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_picker_zero_launches_open_kitchen(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Typing '0' launches a session without a recipe YAML in the system prompt."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
+
+        cli.order()
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        system_prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT) + 1
+        assert "--- RECIPE ---" not in cmd[system_prompt_idx]
+
+    def test_order_picker_out_of_range_exits(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """Out-of-range numeric input exits 1 with an error message."""
+        import autoskillit.recipe as _recipe_mod
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        fake_recipe = MagicMock()
+        fake_recipe.name = "some-recipe"
+        mock_result = MagicMock()
+        mock_result.items = [fake_recipe]
+        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "99")
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.order()
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Invalid selection" in captured.out
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_open_kitchen_includes_positional_greeting(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Open-kitchen order sessions also pass a greeting as positional arg."""
+        from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
+
+        cli.order()
+
+        cmd = mock_run.call_args[0][0]
+        assert any(arg in _OPEN_KITCHEN_GREETINGS for arg in cmd), (
+            f"No open-kitchen greeting found as positional arg in: {cmd}"
+        )
+
 
 class TestOrderDisplayOwnership:
     """order() delegates recipe display to the Claude session via load_recipe."""

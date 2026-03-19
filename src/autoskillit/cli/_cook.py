@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import random
 import shutil
 import subprocess
 import uuid
@@ -50,9 +49,8 @@ def cook() -> None:
     if confirm in ("n", "no"):
         return
 
-    from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS, _build_open_kitchen_prompt
     from autoskillit.config import load_config
-    from autoskillit.core import ClaudeFlags, configure_logging, pkg_root
+    from autoskillit.core import configure_logging, pkg_root
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
@@ -65,12 +63,7 @@ def cook() -> None:
         session_id, cook_session=True, config=config, project_dir=Path.cwd()
     )
 
-    spec = build_interactive_cmd(
-        plugin_dir=pkg_root(),
-        add_dirs=[skills_dir],
-        initial_prompt=random.choice(_OPEN_KITCHEN_GREETINGS),
-    )
-    cmd = spec.cmd + [ClaudeFlags.APPEND_SYSTEM_PROMPT, _build_open_kitchen_prompt()]
+    cmd = build_interactive_cmd(plugin_dir=pkg_root(), add_dirs=[skills_dir]).cmd
     env = {**os.environ}
     try:
         result = subprocess.run(cmd, env=env)

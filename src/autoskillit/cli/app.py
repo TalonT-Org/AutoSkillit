@@ -470,7 +470,7 @@ def _cook_cmd() -> None:
 
 
 @app.command
-def order(recipe: str):
+def order(recipe: str | None = None):
     """Launch an interactive Claude Code session to execute a recipe.
 
     Starts Claude Code with hard tool restrictions: only AskUserQuestion
@@ -480,7 +480,7 @@ def order(recipe: str):
     Parameters
     ----------
     recipe
-        Name of the recipe (from .autoskillit/recipes/). Required.
+        Name of the recipe (from .autoskillit/recipes/). Prompts if omitted.
     """
     from autoskillit.cli._prompts import _build_orchestrator_prompt
     from autoskillit.recipe import (
@@ -494,6 +494,37 @@ def order(recipe: str):
         print("ERROR: 'order' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
+
+    if recipe is None:
+        from autoskillit.cli._prompts import (
+            _OPEN_KITCHEN_CHOICE,
+            _build_open_kitchen_prompt,
+            _resolve_recipe_input,
+        )
+
+        available = list_recipes(Path.cwd()).items
+        if not available:
+            print("No recipes found. Run 'autoskillit recipes list' to check.")
+            sys.exit(1)
+        print("Available recipes:")
+        print("  0. Open kitchen (no recipe)")
+        for i, r in enumerate(available, 1):
+            print(f"  {i}. {r.name}")
+        raw = input(f"Select recipe [0-{len(available)}]: ").strip()
+        resolved = _resolve_recipe_input(raw, available)
+        if resolved is _OPEN_KITCHEN_CHOICE:
+            from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+
+            greeting = random.choice(_OPEN_KITCHEN_GREETINGS)
+            _launch_cook_session(_build_open_kitchen_prompt(), initial_message=greeting)
+            return
+        elif resolved is None:
+            print(f"Invalid selection: '{raw}'")
+            sys.exit(1)
+        else:
+            if isinstance(resolved, str):
+                raise TypeError(f"Expected RecipeInfo, got str: {resolved!r}")
+            recipe = resolved.name
 
     from autoskillit.core import YAMLError
 

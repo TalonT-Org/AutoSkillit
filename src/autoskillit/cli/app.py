@@ -1,4 +1,4 @@
-"""CLI for autoskillit: serve, init, cook, config, skills, recipes, workspace."""
+"""CLI for autoskillit: serve, init, cook, order, config, skills, recipes, workspace."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 from cyclopts import App, Parameter
 
-from autoskillit.cli._chefs_hat import chefs_hat
+from autoskillit.cli._cook import cook as cook_interactive
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _generate_config_yaml,
@@ -463,8 +463,14 @@ def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> N
     print(f"Updated {config_path}: removed {sorted(subsets)} from subsets.disabled")
 
 
+@app.command(name="cook", alias="c")
+def _cook_cmd() -> None:
+    """Launch an interactive Claude session with all skills and kitchen tools."""
+    cook_interactive()
+
+
 @app.command
-def cook(recipe: str | None = None):
+def order(recipe: str):
     """Launch an interactive Claude Code session to execute a recipe.
 
     Starts Claude Code with hard tool restrictions: only AskUserQuestion
@@ -474,7 +480,7 @@ def cook(recipe: str | None = None):
     Parameters
     ----------
     recipe
-        Name of the recipe (from .autoskillit/recipes/). Prompts if omitted.
+        Name of the recipe (from .autoskillit/recipes/). Required.
     """
     from autoskillit.cli._prompts import _build_orchestrator_prompt
     from autoskillit.recipe import (
@@ -485,40 +491,9 @@ def cook(recipe: str | None = None):
     )
 
     if os.environ.get("CLAUDECODE"):
-        print("ERROR: 'cook' cannot run inside a Claude Code session.")
+        print("ERROR: 'order' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
-
-    if recipe is None:
-        from autoskillit.cli._prompts import (
-            _OPEN_KITCHEN_CHOICE,
-            _build_open_kitchen_prompt,
-            _resolve_recipe_input,
-        )
-
-        available = list_recipes(Path.cwd()).items
-        if not available:
-            print("No recipes found. Run 'autoskillit recipes list' to check.")
-            sys.exit(1)
-        print("Available recipes:")
-        print("  0. Open kitchen (no recipe)")
-        for i, r in enumerate(available, 1):
-            print(f"  {i}. {r.name}")
-        raw = input(f"Select recipe [0-{len(available)}]: ").strip()
-        resolved = _resolve_recipe_input(raw, available)
-        if resolved is _OPEN_KITCHEN_CHOICE:
-            from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
-
-            greeting = random.choice(_OPEN_KITCHEN_GREETINGS)
-            _launch_cook_session(_build_open_kitchen_prompt(), initial_message=greeting)
-            return
-        elif resolved is None:
-            print(f"Invalid selection: '{raw}'")
-            sys.exit(1)
-        else:
-            if isinstance(resolved, str):
-                raise TypeError(f"Expected RecipeInfo, got str: {resolved!r}")
-            recipe = resolved.name
 
     from autoskillit.core import YAMLError
 
@@ -598,12 +573,6 @@ def cook(recipe: str | None = None):
         initial_message=greeting,
         extra_env=_extra_env if _extra_env else None,
     )
-
-
-@app.command(name="chefs-hat", alias="chef")
-def _chefs_hat_cmd() -> None:
-    """Launch Claude with all bundled AutoSkillit skills as slash commands."""
-    chefs_hat()
 
 
 def main() -> None:

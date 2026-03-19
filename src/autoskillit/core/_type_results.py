@@ -54,7 +54,7 @@ class ValidatedAddDir:
 
     Implements ``__str__``, ``__fspath__``, and ``__truediv__`` so it works
     transparently with ``str(d)`` (used by ``build_interactive_cmd``),
-    ``shutil.rmtree`` (used by chefs-hat), and ``d / "subdir"`` (path
+    ``shutil.rmtree`` (used by cook), and ``d / "subdir"`` (path
     composition in tests and production code).
     """
 

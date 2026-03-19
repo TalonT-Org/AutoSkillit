@@ -1,4 +1,4 @@
-"""Tests for the chefs-hat CLI command."""
+"""Tests for the cook CLI command (interactive skill session)."""
 
 from __future__ import annotations
 
@@ -12,12 +12,10 @@ from autoskillit import cli
 from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 
 
-class TestChefsHat:
+class TestCookInteractive:
     # CH-1
-    def test_chefs_hat_init_session_cook(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """chefs-hat calls init_session with cook_session=True."""
+    def test_cook_init_session_cook(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """cook calls init_session with cook_session=True."""
         captured: dict = {}
         fake_skills_dir = tmp_path / "fake-skills"
         fake_skills_dir.mkdir()
@@ -32,14 +30,14 @@ class TestChefsHat:
         monkeypatch.setattr(subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0})())
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        cli.chefs_hat()
+        cli.cook()
         assert captured["cook_session"] is True
 
     # CH-2
-    def test_chefs_hat_launches_claude_add_dir(
+    def test_cook_launches_claude_add_dir(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """chefs-hat passes --add-dir <skills_dir> to the subprocess."""
+        """cook passes --add-dir <skills_dir> to the subprocess."""
         captured_cmd: list = []
         fake_skills_dir = tmp_path / "fake-skills-ch2"
         fake_skills_dir.mkdir()
@@ -57,15 +55,13 @@ class TestChefsHat:
         monkeypatch.setattr(subprocess, "run", fake_run)
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        cli.chefs_hat()
+        cli.cook()
         assert "--add-dir" in captured_cmd
         assert str(fake_skills_dir) in captured_cmd
 
     # CH-3
-    def test_chef_alias_invokes_chefs_hat(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """chef alias invokes the chefs-hat behavior via the CLI."""
+    def test_cook_alias_c(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """'c' alias invokes the cook behavior via the CLI."""
         from autoskillit.cli.app import app
 
         captured_cmd: list = []
@@ -86,27 +82,25 @@ class TestChefsHat:
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         with pytest.raises(SystemExit) as exc_info:
-            app(["chef"])
+            app(["c"])
         assert exc_info.value.code == 0
         assert "--add-dir" in captured_cmd
 
     # CH-5
-    def test_chefs_hat_exits_when_claude_not_on_path(
+    def test_cook_exits_when_claude_not_on_path(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """chefs-hat exits 1 with a message if claude is not on PATH."""
+        """cook exits 1 with a message if claude is not on PATH."""
         monkeypatch.setattr(shutil, "which", lambda x: None)
         with pytest.raises(SystemExit) as exc_info:
-            cli.chefs_hat()
+            cli.cook()
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "claude" in captured.out.lower() or "PATH" in captured.out
 
     # CH-6
-    def test_chefs_hat_passes_plugin_dir(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """chefs-hat subprocess call includes --plugin-dir <pkg_root()> (REQ-TIER-011)."""
+    def test_cook_passes_plugin_dir(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """cook subprocess call includes --plugin-dir <pkg_root()> (REQ-TIER-011)."""
         from unittest.mock import MagicMock, patch
 
         from autoskillit.core import pkg_root
@@ -116,18 +110,15 @@ class TestChefsHat:
         mock_mgr = MagicMock()
         mock_mgr.init_session.return_value = fake_skills_dir
 
-        # DefaultSessionSkillManager is imported inside the chefs_hat() function body,
-        # so it must be patched via its source module (autoskillit.workspace), not via
-        # the _chefs_hat module namespace.
         with (
             patch("shutil.which", return_value="/usr/bin/claude"),
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
         ):
-            import autoskillit.cli._chefs_hat as module
+            import autoskillit.cli._cook as module
 
-            module.chefs_hat()
+            module.cook()
 
         mock_mgr.init_session.assert_called_once()
         args = mock_run.call_args[0][0]
@@ -136,10 +127,10 @@ class TestChefsHat:
         assert args[idx + 1] == str(pkg_root())
 
     # CH-7
-    def test_chefs_hat_includes_dangerously_skip_permissions(
+    def test_cook_includes_dangerously_skip_permissions(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """chefs-hat subprocess cmd includes --dangerously-skip-permissions (REQ-TIER-012)."""
+        """cook subprocess cmd includes --dangerously-skip-permissions (REQ-TIER-012)."""
         from unittest.mock import MagicMock, patch
 
         fake_skills_dir = tmp_path / "skills"
@@ -153,9 +144,65 @@ class TestChefsHat:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
         ):
-            import autoskillit.cli._chefs_hat as module
+            import autoskillit.cli._cook as module
 
-            module.chefs_hat()
+            module.cook()
 
         args = mock_run.call_args[0][0]
         assert "--dangerously-skip-permissions" in args
+
+    # T1: cook auto-opens kitchen
+    def test_cook_launches_with_add_dir_and_system_prompt(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """cook passes both --add-dir (for skills) and --append-system-prompt."""
+        from unittest.mock import MagicMock, patch
+
+        from autoskillit.core import ClaudeFlags
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
+        ):
+            import autoskillit.cli._cook as module
+
+            module.cook()
+
+        args = mock_run.call_args[0][0]
+        assert "--add-dir" in args
+        assert ClaudeFlags.APPEND_SYSTEM_PROMPT in args
+
+    # T2: cook auto-opens kitchen content
+    def test_cook_auto_opens_kitchen(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """cook system prompt contains open_kitchen instruction."""
+        from unittest.mock import MagicMock, patch
+
+        from autoskillit.core import ClaudeFlags
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
+        ):
+            import autoskillit.cli._cook as module
+
+            module.cook()
+
+        args = mock_run.call_args[0][0]
+        prompt_idx = args.index(ClaudeFlags.APPEND_SYSTEM_PROMPT) + 1
+        assert "open_kitchen" in args[prompt_idx]

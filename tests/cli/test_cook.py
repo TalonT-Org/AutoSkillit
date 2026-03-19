@@ -1,4 +1,4 @@
-"""Tests for CLI cook, workspace, and skills list commands."""
+"""Tests for CLI order, workspace, and skills list commands."""
 
 from __future__ import annotations
 
@@ -88,7 +88,7 @@ class TestResolveRecipeInput:
         assert _resolve_recipe_input("", available) is None
 
 
-class TestCLICook:
+class TestCLIOrder:
     @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Stub terminal preview to avoid subprocess.run collision with git calls."""
@@ -299,54 +299,54 @@ class TestCLICook:
         assert "bundled" in captured.out
         assert "NAME" in captured.out
 
-    # --- cook ---
+    # --- order ---
 
-    def test_cook_blocked_inside_claude_session(
+    def test_order_blocked_inside_claude_session(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """cook exits 1 when CLAUDECODE env var is set."""
+        """order exits 1 when CLAUDECODE env var is set."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("CLAUDECODE", "1")
         with pytest.raises(SystemExit) as exc_info:
-            cli.cook("any-script")
+            cli.order("any-script")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "regular terminal" in captured.out.lower()
 
-    def test_cook_script_not_found(
+    def test_order_script_not_found(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """cook exits 1 when script name doesn't match any entry."""
+        """order exits 1 when script name doesn't match any entry."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.cook("nonexistent")
+            cli.order("nonexistent")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "nonexistent" in captured.out
 
-    def test_cook_no_scripts_dir(
+    def test_order_no_scripts_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """cook exits 1 with available bundled recipes listed when name not found."""
+        """order exits 1 with available bundled recipes listed when name not found."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.cook("anything")
+            cli.order("anything")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "Recipe not found: 'anything'" in captured.out
         assert "Available recipes:" in captured.out
         assert "implementation" in captured.out
 
-    def test_cook_available_scripts_listed(
+    def test_order_available_scripts_listed(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """cook lists available scripts when name doesn't match."""
+        """order lists available scripts when name doesn't match."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -354,16 +354,16 @@ class TestCLICook:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.cook("nonexistent")
+            cli.order("nonexistent")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "Available recipes:" in captured.out
         assert "test-script" in captured.out
 
-    def test_cook_claude_not_on_path(
+    def test_order_claude_not_on_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """cook exits 1 when claude command is not found."""
+        """order exits 1 when claude command is not found."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -373,36 +373,35 @@ class TestCLICook:
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.cook("test-script")
+            cli.order("test-script")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "claude" in captured.out.lower()
 
-    def test_cook_invalid_script_exits(
+    def test_order_invalid_script_exits(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """cook exits 1 when script YAML fails validation."""
+        """order exits 1 when script YAML fails validation."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
-        # Script with no steps (empty mapping) — will fail validation
         (scripts_dir / "bad-script.yaml").write_text("name: bad-script\nsteps: {}\n")
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.cook("bad-script")
+            cli.order("bad-script")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "validation" in captured.out.lower() or "error" in captured.out.lower()
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_builds_correct_command(
+    def test_order_builds_correct_command(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cook passes correct flags to subprocess.run."""
+        """order passes correct flags to subprocess.run."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -414,7 +413,7 @@ class TestCLICook:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        cli.cook("test-script")
+        cli.order("test-script")
 
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
@@ -428,23 +427,21 @@ class TestCLICook:
         tools_idx = cmd.index(ClaudeFlags.TOOLS)
         assert cmd[tools_idx + 1] == "AskUserQuestion"
         assert ClaudeFlags.APPEND_SYSTEM_PROMPT in cmd
-        # Interactive cook: must have --dangerously-skip-permissions, no -p
         assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in cmd
         assert ClaudeFlags.PRINT not in cmd
         assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS not in cmd
-        # Interactive passthrough: no capture_output, no stdin
         kwargs = mock_run.call_args[1] if mock_run.call_args[1] else {}
         assert "capture_output" not in kwargs
         assert "stdin" not in kwargs
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_system_prompt_contains_behavioral_instructions(
+    def test_order_system_prompt_contains_behavioral_instructions(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cook injects recipe name and behavioral instructions into system prompt."""
+        """order injects recipe name and behavioral instructions into system prompt."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -456,24 +453,18 @@ class TestCLICook:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        cli.cook("test-script")
+        cli.order("test-script")
 
         cmd = mock_run.call_args[0][0]
         prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
         system_prompt = cmd[prompt_idx + 1]
-        # Contains recipe name
         assert "test-script" in system_prompt
-        # Instructs Claude to call open_kitchen with recipe name
         assert "open_kitchen" in system_prompt
-        # Contains routing rules
         assert "ROUTING RULES" in system_prompt
-        # Contains failure predicates
         assert "FAILURE PREDICATES" in system_prompt
-        # Contains tool discipline block
         assert "capture:" in system_prompt
         assert "${{ context." in system_prompt
         assert "AutoSkillit MCP tools" in system_prompt
-        # Does NOT contain raw recipe YAML body
         assert "--- RECIPE ---" not in system_prompt
         assert "do-something" not in system_prompt
 
@@ -496,26 +487,22 @@ class TestCLICook:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        cli.cook("test-script")
+        cli.order("test-script")
 
         cmd = mock_run.call_args[0][0]
         prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
         system_prompt = cmd[prompt_idx + 1]
-        assert "needs_retry" in system_prompt, (
-            "Orchestrator prompt must mention needs_retry for context limit routing"
-        )
-        assert "on_context_limit" in system_prompt, (
-            "Orchestrator prompt must mention on_context_limit as a routing target"
-        )
+        assert "needs_retry" in system_prompt
+        assert "on_context_limit" in system_prompt
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_propagates_exit_code(
+    def test_order_propagates_exit_code(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cook does not raise SystemExit on returncode 0."""
+        """order does not raise SystemExit on returncode 0."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -527,17 +514,17 @@ class TestCLICook:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        cli.cook("test-script")  # should not raise
+        cli.order("test-script")  # should not raise
         mock_run.assert_called_once()
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_subprocess_failure_propagates(
+    def test_order_subprocess_failure_propagates(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cook propagates non-zero subprocess exit codes."""
+        """order propagates non-zero subprocess exit codes."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -550,62 +537,101 @@ class TestCLICook:
         )
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.cook("test-script")
+            cli.order("test-script")
         assert exc_info.value.code == 42
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_no_recipe_prompts_user(
+    def test_order_uses_dangerously_skip_permissions(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cook prompts for recipe name when none is provided."""
+        """order passes --dangerously-skip-permissions to claude."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "test-script")
 
-        cli.cook()  # no recipe argument
+        cli.order("test-script")
 
-        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in cmd
 
-    def test_cook_no_recipe_no_available_exits(
+    def test_order_recipe_not_found_exits(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
     ) -> None:
-        """cook exits 1 when no recipe is given and no recipes are available."""
-        from unittest.mock import MagicMock as _MagicMock
+        """order exits 1 when the given recipe name is not found."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
 
-        import autoskillit.recipe as _recipe_mod
+        with pytest.raises(SystemExit) as exc_info:
+            cli.order("totally-unknown-recipe-xyz")
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "totally-unknown-recipe-xyz" in captured.out
+
+    def test_order_malformed_yaml_exits(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """order exits 1 with YAML parse error message when load_recipe raises YAMLError."""
+        from autoskillit.core import YAMLError
 
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
 
-        mock_result = _MagicMock()
-        mock_result.items = []
-        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
+        with (
+            patch("autoskillit.recipe.find_recipe_by_name", return_value=MagicMock()),
+            patch("autoskillit.recipe.load_recipe", side_effect=YAMLError("bad yaml")),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            cli.order("bad-recipe")
 
-        with pytest.raises(SystemExit) as exc_info:
-            cli.cook()
         assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "YAML parse error" in captured.out
+
+    def test_order_structure_error_exits(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """order exits 1 with structure error message when load_recipe raises ValueError."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            patch("autoskillit.recipe.find_recipe_by_name", return_value=MagicMock()),
+            patch("autoskillit.recipe.load_recipe", side_effect=ValueError("bad structure")),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            cli.order("bad-recipe")
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "structure error" in captured.out
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_named_recipe_skips_picker_prompt(
+    def test_order_named_recipe_only_confirmation_prompt(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cook skips picker when name is provided; only confirmation prompt fires."""
+        """order only fires confirmation prompt (no picker)."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -619,295 +645,19 @@ class TestCLICook:
         prompts_seen: list[str] = []
         monkeypatch.setattr("builtins.input", lambda prompt="": prompts_seen.append(prompt) or "")
 
-        cli.cook("test-script")
+        cli.order("test-script")
 
         assert len(prompts_seen) == 1, "input() should be called exactly once (confirmation)"
         assert "Launch session" in prompts_seen[0]
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_uses_dangerously_skip_permissions(
+    def test_order_command_includes_positional_greeting(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cook passes --dangerously-skip-permissions to claude."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        scripts_dir.mkdir(parents=True)
-        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
-
-        cli.cook("test-script")
-
-        cmd = mock_run.call_args[0][0]
-        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in cmd
-
-    def test_cook_recipe_not_found_exits(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
-    ) -> None:
-        """cook exits 1 when the given recipe name is not found."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-
-        with pytest.raises(SystemExit) as exc_info:
-            cli.cook("totally-unknown-recipe-xyz")
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "totally-unknown-recipe-xyz" in captured.out
-
-    def test_cook_malformed_yaml_exits(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
-    ) -> None:
-        """cook exits 1 with YAML parse error message when load_recipe raises YAMLError."""
-        from autoskillit.core import YAMLError
-
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-
-        with (
-            patch("autoskillit.recipe.find_recipe_by_name", return_value=MagicMock()),
-            patch("autoskillit.recipe.load_recipe", side_effect=YAMLError("bad yaml")),
-            pytest.raises(SystemExit) as exc_info,
-        ):
-            cli.cook("bad-recipe")
-
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "YAML parse error" in captured.out
-
-    def test_cook_structure_error_exits(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
-    ) -> None:
-        """cook exits 1 with structure error message when load_recipe raises ValueError."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-
-        with (
-            patch("autoskillit.recipe.find_recipe_by_name", return_value=MagicMock()),
-            patch("autoskillit.recipe.load_recipe", side_effect=ValueError("bad structure")),
-            pytest.raises(SystemExit) as exc_info,
-        ):
-            cli.cook("bad-recipe")
-
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "structure error" in captured.out
-
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_picker_shows_zero_option(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
-    ) -> None:
-        """Picker output includes '0. Open kitchen' line."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        scripts_dir.mkdir(parents=True)
-        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "test-script")
-
-        cli.cook()
-
-        captured = capsys.readouterr()
-        assert "0. Open kitchen" in captured.out
-
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_picker_prompt_includes_range(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Picker prompt text includes 'Select recipe [0-'."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        scripts_dir.mkdir(parents=True)
-        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
-
-        prompts_seen: list[str] = []
-        monkeypatch.setattr(
-            "builtins.input", lambda prompt="": prompts_seen.append(prompt) or "test-script"
-        )
-
-        cli.cook()
-
-        assert any("Select recipe [0-" in p for p in prompts_seen)
-
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_picker_accepts_number_launches_recipe(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Typing '1' in the picker selects the first recipe and launches it."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        scripts_dir.mkdir(parents=True)
-        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "1")
-
-        cli.cook()
-
-        mock_run.assert_called_once()
-        cmd = mock_run.call_args[0][0]
-        assert ClaudeFlags.APPEND_SYSTEM_PROMPT in cmd
-
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_picker_zero_launches_open_kitchen(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Typing '0' launches a session without a recipe YAML in the system prompt."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        scripts_dir.mkdir(parents=True)
-        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
-
-        cli.cook()
-
-        mock_run.assert_called_once()
-        cmd = mock_run.call_args[0][0]
-        system_prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT) + 1
-        assert "--- RECIPE ---" not in cmd[system_prompt_idx]
-
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_picker_zero_system_prompt_contains_kitchen_open(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Option 0 injects an open-kitchen system prompt, not a recipe orchestrator."""
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        scripts_dir.mkdir(parents=True)
-        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
-
-        cli.cook()
-
-        cmd = mock_run.call_args[0][0]
-        system_prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT) + 1
-        assert "open_kitchen" in cmd[system_prompt_idx]
-
-    def test_cook_picker_out_of_range_exits(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
-    ) -> None:
-        """Out-of-range numeric input exits 1 with an error message."""
-        import autoskillit.recipe as _recipe_mod
-
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-
-        fake_recipe = MagicMock()
-        fake_recipe.name = "some-recipe"
-        mock_result = MagicMock()
-        mock_result.items = [fake_recipe]
-        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "99")
-
-        with pytest.raises(SystemExit) as exc_info:
-            cli.cook()
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "Invalid selection" in captured.out
-
-    def test_cook_picker_invalid_name_exits(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
-    ) -> None:
-        """Unknown recipe name exits 1 with an error message."""
-        import autoskillit.recipe as _recipe_mod
-
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-
-        fake_recipe = MagicMock()
-        fake_recipe.name = "some-recipe"
-        mock_result = MagicMock()
-        mock_result.items = [fake_recipe]
-        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "no-such-recipe")
-
-        with pytest.raises(SystemExit) as exc_info:
-            cli.cook()
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "Invalid selection" in captured.out
-
-    def test_cook_picker_empty_input_exits(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture,
-    ) -> None:
-        """cook exits 1 when picker receives empty input (empty name → not found)."""
-        import autoskillit.recipe as _recipe_mod
-
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-
-        fake_recipe = MagicMock()
-        fake_recipe.name = "some-recipe"
-        mock_result = MagicMock()
-        mock_result.items = [fake_recipe]
-        monkeypatch.setattr(_recipe_mod, "list_recipes", lambda _: mock_result)
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-
-        with pytest.raises(SystemExit) as exc_info:
-            cli.cook()
-
-        assert exc_info.value.code == 1
-
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_command_includes_positional_greeting(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """The cook command must pass a greeting as a positional argument."""
+        """The order command must pass a greeting as a positional argument."""
         from autoskillit.cli._prompts import _COOK_GREETINGS
 
         monkeypatch.delenv("CLAUDECODE", raising=False)
@@ -921,44 +671,17 @@ class TestCLICook:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        cli.cook("test-script")
+        cli.order("test-script")
 
         cmd = mock_run.call_args[0][0]
         greeting_candidates = [g.format(recipe_name="test-script") for g in _COOK_GREETINGS]
-        # Greeting must appear as one of the positional args (not a flag value)
         assert any(arg in greeting_candidates for arg in cmd), (
             f"No greeting found as positional arg in: {cmd}"
         )
 
-    @patch("autoskillit.cli.subprocess.run")
-    def test_cook_open_kitchen_includes_positional_greeting(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Open-kitchen cook sessions also pass a greeting as positional arg."""
-        from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
 
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        scripts_dir.mkdir(parents=True)
-        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "0")
-
-        cli.cook()
-
-        cmd = mock_run.call_args[0][0]
-        assert any(arg in _OPEN_KITCHEN_GREETINGS for arg in cmd), (
-            f"No open-kitchen greeting found as positional arg in: {cmd}"
-        )
-
-
-class TestCookDisplayOwnership:
-    """cook() delegates recipe display to the Claude session via load_recipe."""
+class TestOrderDisplayOwnership:
+    """order() delegates recipe display to the Claude session via load_recipe."""
 
     @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -980,7 +703,7 @@ class TestCookDisplayOwnership:
         return scripts_dir
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_system_prompt_does_not_contain_recipe_yaml(
+    def test_order_system_prompt_does_not_contain_recipe_yaml(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
@@ -992,7 +715,7 @@ class TestCookDisplayOwnership:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        cli.cook("test-script")
+        cli.order("test-script")
 
         cmd = mock_run.call_args[0][0]
         prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
@@ -1004,7 +727,7 @@ class TestCookDisplayOwnership:
         assert "on_success:" not in system_prompt
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_system_prompt_instructs_open_kitchen_with_recipe(
+    def test_order_system_prompt_instructs_open_kitchen_with_recipe(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
@@ -1016,7 +739,7 @@ class TestCookDisplayOwnership:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        cli.cook("test-script")
+        cli.order("test-script")
 
         cmd = mock_run.call_args[0][0]
         prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
@@ -1044,8 +767,8 @@ kitchen_rules:
 """
 
 
-class TestCookSubsetGate:
-    """Tests for the cook-time subset-disabled gate (T-VAL-008..010)."""
+class TestOrderSubsetGate:
+    """Tests for the order-time subset-disabled gate (T-VAL-008..010)."""
 
     @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1059,13 +782,13 @@ class TestCookSubsetGate:
         mock_cfg.subsets.disabled = disabled
         return mock_cfg
 
-    def test_cook_hard_error_non_interactive_on_disabled_subset(
+    def test_order_hard_error_non_interactive_on_disabled_subset(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
     ) -> None:
-        """T-VAL-008: cook exits 1 non-interactively when recipe references a disabled subset."""
+        """T-VAL-008: order exits 1 non-interactively when recipe references a disabled subset."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -1080,19 +803,19 @@ class TestCookSubsetGate:
         monkeypatch.setattr("sys.stdin", mock_stdin)
 
         with pytest.raises(SystemExit) as exc_info:
-            cli.cook("github-recipe")
+            cli.order("github-recipe")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "requires subset" in captured.out.lower()
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_cook_enable_temporarily_sets_env_override(
+    def test_order_enable_temporarily_sets_env_override(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """T-VAL-009: cook injects AUTOSKILLIT_SUBSETS__DISABLED env override for temp enable."""
+        """T-VAL-009: order injects AUTOSKILLIT_SUBSETS__DISABLED env override for temp enable."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -1113,19 +836,19 @@ class TestCookSubsetGate:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        cli.cook("github-recipe")
+        cli.order("github-recipe")
 
         mock_run.assert_called_once()
         passed_env = mock_run.call_args.kwargs["env"]
         assert "AUTOSKILLIT_SUBSETS__DISABLED" in passed_env
         assert passed_env["AUTOSKILLIT_SUBSETS__DISABLED"] == "@json []"
 
-    def test_cook_enable_permanently_updates_config(
+    def test_order_enable_permanently_updates_config(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """T-VAL-010: cook calls _enable_subsets_permanently on enable-permanently choice."""
+        """T-VAL-010: order calls _enable_subsets_permanently on enable-permanently choice."""
         import importlib
         import sys as _sys
 
@@ -1156,7 +879,7 @@ class TestCookSubsetGate:
         monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
         monkeypatch.setattr("autoskillit.cli._ansi.permissions_warning", lambda: "")
 
-        cli.cook("github-recipe")
+        cli.order("github-recipe")
 
         assert called_with, "_enable_subsets_permanently was not called"
         _, subsets = called_with[0]

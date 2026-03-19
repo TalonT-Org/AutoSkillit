@@ -173,12 +173,12 @@ class TestPluginDirLayoutContract:
 
 
 # ---------------------------------------------------------------------------
-# DS-002: chefs-hat integration guard (unmocked init_session)
+# DS-002: cook integration guard (unmocked init_session)
 # ---------------------------------------------------------------------------
 
 
-class TestChefsHatAddDirStructure:
-    """Guard: the directory passed as --add-dir by chefs_hat() must have
+class TestCookAddDirStructure:
+    """Guard: the directory passed as --add-dir by cook() must have
     .claude/skills/<name>/SKILL.md structure.
 
     This test does NOT mock init_session. It calls the real implementation
@@ -187,18 +187,18 @@ class TestChefsHatAddDirStructure:
     CRITICAL: Path components are HARDCODED STRING LITERALS. Do NOT use
     ClaudeDirectoryConventions or _SKILLS_SUBDIR here.
 
-    This test closes the double-mock gap in test_chefs_hat.py (all 7 tests
+    This test closes the double-mock gap in test_cook_interactive.py (all tests
     mock init_session and subprocess.run together, so no test verified
     the real directory structure from the real init_session call).
     """
 
-    def test_chefs_hat_add_dir_target_has_correct_structure(
+    def test_cook_add_dir_target_has_correct_structure(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         import shutil
         import subprocess
 
-        # Structure checks happen INSIDE fake_run: chefs_hat() deletes skills_dir in
+        # Structure checks happen INSIDE fake_run: cook() deletes skills_dir in
         # its finally block after subprocess.run() returns, so the directory is gone
         # by the time control returns to this test function.
         structure_errors: list[str] = []
@@ -236,10 +236,10 @@ class TestChefsHatAddDirStructure:
 
         monkeypatch.setattr(subprocess, "run", fake_run)
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
-        # chefs_hat() calls input() to confirm launch — mock it to auto-confirm.
+        # cook() calls input() to confirm launch — mock it to auto-confirm.
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
 
-        from autoskillit.cli._chefs_hat import chefs_hat
+        from autoskillit.cli._cook import cook
 
         # Use a fixed ephemeral root so cleanup is deterministic
         from autoskillit.workspace.session_skills import (
@@ -253,10 +253,9 @@ class TestChefsHatAddDirStructure:
         real_mgr = DefaultSessionSkillManager(
             SkillsDirectoryProvider(), ephemeral_root=ephemeral_root
         )
-        # Verified: _chefs_hat.py imports DefaultSessionSkillManager from
-        # autoskillit.workspace inside the chefs_hat() function body (lazy import),
-        # so patching autoskillit.workspace.DefaultSessionSkillManager intercepts it.
-        # The spy below confirms real_mgr.init_session is actually called.
+        # _cook.py imports DefaultSessionSkillManager from autoskillit.workspace
+        # inside the cook() function body (lazy import), so patching
+        # autoskillit.workspace.DefaultSessionSkillManager intercepts it.
         init_session_calls: list[bool] = []
         original_init_session = real_mgr.init_session
 
@@ -270,18 +269,18 @@ class TestChefsHatAddDirStructure:
             lambda *a, **kw: real_mgr,
         )
 
-        chefs_hat()
+        cook()
 
         assert init_session_calls, (
             "real_mgr.init_session was never called — "
             "patch target 'autoskillit.workspace.DefaultSessionSkillManager' "
-            "did not intercept chefs_hat()'s constructor call."
+            "did not intercept cook()'s constructor call."
         )
 
         assert add_dir_seen, "Expected at least one --add-dir in command"
         assert not structure_errors, "\n".join(structure_errors)
 
-    def test_chefs_hat_add_dir_excludes_tier1_skills(
+    def test_cook_add_dir_excludes_tier1_skills(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """Tier 1 skills (open-kitchen, close-kitchen) must NOT appear in --add-dir.
@@ -480,7 +479,7 @@ class TestRunSkillAddDirLayoutContract:
     CRITICAL: Path components (".claude", "skills", "SKILL.md") are literal
     strings here — NOT from ClaudeDirectoryConventions.
 
-    This is the headless-path counterpart of TestChefsHatAddDirStructure (DS-002).
+    This is the headless-path counterpart of TestCookAddDirStructure (DS-002).
     """
 
     def test_run_skill_add_dir_has_convention_layout(self, tmp_path: Path) -> None:

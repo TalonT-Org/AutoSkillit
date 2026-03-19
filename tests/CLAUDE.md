@@ -58,7 +58,7 @@ tests/
 ├── cli/                                 # CLI command tests
 │   ├── __init__.py
 │   ├── test_ansi.py
-│   ├── test_chefs_hat.py
+│   ├── test_cook_interactive.py
 │   ├── test_cli_hooks.py
 │   ├── test_cli_marketplace.py
 │   ├── test_cli_prompts.py

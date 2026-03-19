@@ -80,8 +80,8 @@ class TestBuildInteractiveCmdExtended:
         result = build_interactive_cmd()
         assert "--plugin-dir" not in result.cmd
 
-    def test_chefs_hat_uses_builder_output(self, tmp_path: Path) -> None:
-        """chefs-hat subprocess cmd is consistent with build_interactive_cmd output."""
+    def test_cook_uses_builder_output(self, tmp_path: Path) -> None:
+        """cook subprocess cmd starts with build_interactive_cmd output prefix."""
         from unittest.mock import MagicMock, patch
 
         from autoskillit.core import pkg_root
@@ -97,15 +97,17 @@ class TestBuildInteractiveCmdExtended:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
         ):
-            import autoskillit.cli._chefs_hat as module
+            import autoskillit.cli._cook as module
 
-            module.chefs_hat()
+            module.cook()
 
         actual_cmd = mock_run.call_args[0][0]
         expected_prefix = build_interactive_cmd(
             plugin_dir=pkg_root(), add_dirs=[fake_skills_dir]
         ).cmd
-        assert actual_cmd == expected_prefix
+        # cook() now appends --append-system-prompt after the builder output
+        for i, token in enumerate(expected_prefix):
+            assert actual_cmd[i] == token
 
 
 class TestBuildHeadlessCmd:

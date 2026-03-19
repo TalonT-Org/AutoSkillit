@@ -1,15 +1,16 @@
-"""chefs-hat command: ephemeral skill session launcher."""
+"""cook command: interactive skill session launcher."""
 
 from __future__ import annotations
 
 import os
+import random
 import shutil
 import subprocess
 import uuid
 from pathlib import Path
 
 
-def chefs_hat() -> None:
+def cook() -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
@@ -18,7 +19,7 @@ def chefs_hat() -> None:
     )
 
     if not shutil.which("claude"):
-        print("'claude' not found on PATH. Install Claude Code to use chefs-hat.")
+        print("'claude' not found on PATH. Install Claude Code to use cook.")
         raise SystemExit(1)
 
     from autoskillit import __version__
@@ -49,8 +50,9 @@ def chefs_hat() -> None:
     if confirm in ("n", "no"):
         return
 
+    from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS, _build_open_kitchen_prompt
     from autoskillit.config import load_config
-    from autoskillit.core import configure_logging, pkg_root
+    from autoskillit.core import ClaudeFlags, configure_logging, pkg_root
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
@@ -63,7 +65,12 @@ def chefs_hat() -> None:
         session_id, cook_session=True, config=config, project_dir=Path.cwd()
     )
 
-    cmd = build_interactive_cmd(plugin_dir=pkg_root(), add_dirs=[skills_dir]).cmd
+    spec = build_interactive_cmd(
+        plugin_dir=pkg_root(),
+        add_dirs=[skills_dir],
+        initial_prompt=random.choice(_OPEN_KITCHEN_GREETINGS),
+    )
+    cmd = spec.cmd + [ClaudeFlags.APPEND_SYSTEM_PROMPT, _build_open_kitchen_prompt()]
     env = {**os.environ}
     try:
         result = subprocess.run(cmd, env=env)

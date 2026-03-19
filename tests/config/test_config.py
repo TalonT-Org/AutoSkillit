@@ -795,9 +795,7 @@ class TestSubsetsConfig:
 
     # T4 — Unknown category warning, no crash
 
-    def test_load_config_unknown_disabled_category_logs_warning_not_crash(
-        self, tmp_path, caplog
-    ) -> None:
+    def test_load_config_unknown_disabled_category_logs_warning_not_crash(self, tmp_path) -> None:
         import logging
 
         config_dir = tmp_path / ".autoskillit"
@@ -805,10 +803,20 @@ class TestSubsetsConfig:
         (config_dir / "config.yaml").write_text(
             "subsets:\n  disabled:\n    - totally-unknown-category\n"
         )
-        with caplog.at_level(logging.WARNING, logger="autoskillit.config.settings"):
+        # Attach a handler directly to the logger to capture warnings reliably.
+        # caplog is unreliable here because the structlog capture_logs() autouse
+        # fixture can intercept the handler chain under xdist worker ordering.
+        captured: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = captured.append  # type: ignore[assignment]
+        logger = logging.getLogger("autoskillit.config.settings")  # noqa: TID251
+        logger.addHandler(handler)
+        try:
             cfg = load_config(tmp_path)
+        finally:
+            logger.removeHandler(handler)
         assert cfg.subsets.disabled == ["totally-unknown-category"]  # preserved as-is
-        assert any("totally-unknown-category" in r.message for r in caplog.records)
+        assert any("totally-unknown-category" in r.getMessage() for r in captured)
 
     def test_load_config_known_disabled_category_no_warning(self, tmp_path, caplog) -> None:
         import logging

@@ -114,13 +114,18 @@ async def _extract_stdout_session_id(
     import time as _time
 
     start = _time.monotonic()
+    scan_pos = 0
     while _time.monotonic() - start < _timeout:
         await anyio.sleep(_poll_interval)
         try:
             raw = stdout_path.read_bytes()
         except OSError:
             continue
-        content = raw.decode("utf-8", errors="replace")
+        new_raw = raw[scan_pos:]
+        scan_pos = len(raw)
+        if not new_raw:
+            continue
+        content = new_raw.decode("utf-8", errors="replace")
         for line in content.splitlines():
             line = line.strip()
             if not line:

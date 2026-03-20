@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from autoskillit.core import SubprocessResult, TerminationReason
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
 from autoskillit.server.tools_ci import get_ci_status, wait_for_ci, wait_for_merge_queue
 
@@ -19,9 +20,9 @@ def test_wait_for_ci_is_gated():
     assert "wait_for_ci" in GATED_TOOLS
 
 
-def test_get_ci_status_is_ungated():
-    assert "get_ci_status" in UNGATED_TOOLS
-    assert "get_ci_status" not in GATED_TOOLS
+def test_get_ci_status_is_gated():
+    assert "get_ci_status" in GATED_TOOLS
+    assert "get_ci_status" not in UNGATED_TOOLS
 
 
 # ---------------------------------------------------------------------------
@@ -50,17 +51,17 @@ async def test_wait_for_ci_success_response(tool_ctx):
         return_value={"run_id": 12345, "conclusion": "success", "failed_jobs": []}
     )
     tool_ctx.ci_watcher = mock_watcher
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=0,
+            stdout="abc123\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
 
-    with patch(
-        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
-        new_callable=AsyncMock,
-    ) as mock_proc:
-        proc_inst = AsyncMock()
-        proc_inst.communicate = AsyncMock(return_value=(b"abc123\n", b""))
-        proc_inst.returncode = 0
-        mock_proc.return_value = proc_inst
-
-        result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+    result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
 
     assert result["run_id"] == 12345
     assert result["conclusion"] == "success"
@@ -78,17 +79,17 @@ async def test_wait_for_ci_failure_response(tool_ctx):
         }
     )
     tool_ctx.ci_watcher = mock_watcher
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=0,
+            stdout="abc123\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
 
-    with patch(
-        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
-        new_callable=AsyncMock,
-    ) as mock_proc:
-        proc_inst = AsyncMock()
-        proc_inst.communicate = AsyncMock(return_value=(b"abc123\n", b""))
-        proc_inst.returncode = 0
-        mock_proc.return_value = proc_inst
-
-        result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+    result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
 
     assert result["conclusion"] == "failure"
     assert sorted(result["failed_jobs"]) == ["lint", "test"]
@@ -107,21 +108,53 @@ async def test_wait_for_ci_infers_head_sha(tool_ctx):
         return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
     )
     tool_ctx.ci_watcher = mock_watcher
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=0,
+            stdout="abc123\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
 
-    with patch(
-        "autoskillit.server.helpers.asyncio.create_subprocess_exec",
-        new_callable=AsyncMock,
-    ) as mock_proc:
-        proc_inst = AsyncMock()
-        proc_inst.communicate = AsyncMock(return_value=(b"abc123\n", b""))
-        proc_inst.returncode = 0
-        mock_proc.return_value = proc_inst
-
-        await wait_for_ci("main", cwd="/some/repo")
+    await wait_for_ci("main", cwd="/some/repo")
 
     # Verify that wait was called with the inferred head_sha inside scope
     call_kwargs = mock_watcher.wait.call_args
     assert call_kwargs.kwargs["scope"].head_sha == "abc123"
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_head_sha_uses_runner(tool_ctx):
+    """git rev-parse HEAD must flow through MockSubprocessRunner, not raw asyncio."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+    )
+    tool_ctx.ci_watcher = mock_watcher
+
+    # Pre-configure runner to return a valid SHA when git rev-parse is called
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=0,
+            stdout="deadbeef\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
+
+    await wait_for_ci("main", cwd="/some/repo")
+
+    # Runner must have been called with the git command
+    assert tool_ctx.runner.call_args_list, "runner was never called"
+    cmd = tool_ctx.runner.call_args_list[0][0]
+    assert cmd == ["git", "rev-parse", "HEAD"], f"Unexpected runner call: {cmd}"
+
+    # SHA extracted from runner output must have been passed to the CI watcher
+    scope = mock_watcher.wait.call_args.kwargs["scope"]
+    assert scope.head_sha == "deadbeef"
 
 
 # ---------------------------------------------------------------------------
@@ -143,27 +176,11 @@ async def test_wait_for_ci_no_watcher(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_get_ci_status_ungated(tool_ctx):
-    """get_ci_status works even when gate is closed."""
+async def test_get_ci_status_gate_check(tool_ctx):
+    """get_ci_status is now gated — returns gate_error when gate is closed."""
     tool_ctx.gate = DefaultGateState(enabled=False)
-    mock_watcher = AsyncMock()
-    mock_watcher.status = AsyncMock(
-        return_value={
-            "runs": [
-                {
-                    "id": 100,
-                    "status": "completed",
-                    "conclusion": "success",
-                    "failed_jobs": [],
-                }
-            ]
-        }
-    )
-    tool_ctx.ci_watcher = mock_watcher
-
     result = json.loads(await get_ci_status(branch="main", cwd="/repo"))
-    assert len(result["runs"]) == 1
-    assert result["runs"][0]["conclusion"] == "success"
+    assert result.get("subtype") == "gate_error"
 
 
 @pytest.mark.anyio
@@ -366,6 +383,76 @@ async def test_wait_for_merge_queue_parses_remote_url_to_resolve_repo(tool_ctx):
     assert call_kwargs.kwargs.get("repo") == "owner/repo"
 
 
+class TestWaitForCiTiming:
+    """wait_for_ci records wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_wait_for_ci_step_name_records_timing(self, tool_ctx):
+        mock_watcher = AsyncMock()
+        mock_watcher.wait = AsyncMock(
+            return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+        )
+        tool_ctx.ci_watcher = mock_watcher
+        await wait_for_ci("main", step_name="ci_wait")
+        assert any(e["step_name"] == "ci_wait" for e in tool_ctx.timing_log.get_report())
+
+    @pytest.mark.anyio
+    async def test_wait_for_ci_empty_step_name_skips_timing(self, tool_ctx):
+        mock_watcher = AsyncMock()
+        mock_watcher.wait = AsyncMock(
+            return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+        )
+        tool_ctx.ci_watcher = mock_watcher
+        await wait_for_ci("main")
+        assert tool_ctx.timing_log.get_report() == []
+
+
+class TestWaitForMergeQueueTiming:
+    """wait_for_merge_queue records wall-clock timing when step_name is provided."""
+
+    @pytest.mark.anyio
+    async def test_wait_for_merge_queue_step_name_records_timing(self, tool_ctx):
+        mock_watcher = AsyncMock()
+        mock_watcher.wait = AsyncMock(
+            return_value={"success": True, "pr_state": "merged", "reason": "PR merged"}
+        )
+        tool_ctx.merge_queue_watcher = mock_watcher
+        with patch(
+            "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock,
+        ) as mock_proc:
+            proc_inst = AsyncMock()
+            proc_inst.communicate = AsyncMock(
+                return_value=(b"https://github.com/owner/repo.git\n", b"")
+            )
+            proc_inst.returncode = 0
+            mock_proc.return_value = proc_inst
+            await wait_for_merge_queue(
+                pr_number=1, target_branch="main", cwd=".", step_name="mq_wait"
+            )
+        assert any(e["step_name"] == "mq_wait" for e in tool_ctx.timing_log.get_report())
+
+    @pytest.mark.anyio
+    async def test_wait_for_merge_queue_empty_step_name_skips_timing(self, tool_ctx):
+        mock_watcher = AsyncMock()
+        mock_watcher.wait = AsyncMock(
+            return_value={"success": True, "pr_state": "merged", "reason": "PR merged"}
+        )
+        tool_ctx.merge_queue_watcher = mock_watcher
+        with patch(
+            "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+            new_callable=AsyncMock,
+        ) as mock_proc:
+            proc_inst = AsyncMock()
+            proc_inst.communicate = AsyncMock(
+                return_value=(b"https://github.com/owner/repo.git\n", b"")
+            )
+            proc_inst.returncode = 0
+            mock_proc.return_value = proc_inst
+            await wait_for_merge_queue(pr_number=1, target_branch="main", cwd=".")
+        assert tool_ctx.timing_log.get_report() == []
+
+
 @pytest.mark.anyio
 async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inference(
     tool_ctx, tmp_path
@@ -394,3 +481,38 @@ async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inferenc
     assert result["pr_state"] == "error"
     # The file:// URL must not resolve to a GitHub repo, so watcher receives repo=None
     assert mock_watcher.wait.call_args.kwargs.get("repo") is None
+
+
+# ---------------------------------------------------------------------------
+# MCP handler — workflow passed via scope (moved from execution/test_ci_params)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_handler_passes_workflow(tool_ctx):
+    """wait_for_ci MCP handler must forward workflow to watcher via scope."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"conclusion": "success", "failed_jobs": [], "run_id": 1}
+    )
+    tool_ctx.ci_watcher = mock_watcher
+
+    # cwd="" → head_sha inference skipped (empty string is falsy)
+    json.loads(await wait_for_ci(branch="main", workflow="tests.yml", cwd=""))
+
+    mock_watcher.wait.assert_called_once()
+    call_kwargs = mock_watcher.wait.call_args
+    assert call_kwargs.kwargs["scope"].workflow == "tests.yml"
+
+
+@pytest.mark.anyio
+async def test_get_ci_status_handler_passes_workflow(tool_ctx):
+    """get_ci_status MCP handler must forward workflow to watcher via scope."""
+    mock_watcher = AsyncMock()
+    mock_watcher.status = AsyncMock(return_value={"runs": []})
+    tool_ctx.ci_watcher = mock_watcher
+
+    await get_ci_status(branch="main", workflow="tests.yml")
+
+    call_kwargs = mock_watcher.status.call_args
+    assert call_kwargs.kwargs["scope"].workflow == "tests.yml"

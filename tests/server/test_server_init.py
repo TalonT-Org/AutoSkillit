@@ -16,16 +16,9 @@ from autoskillit.config import (
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.helpers import _require_enabled
 from autoskillit.server.tools_kitchen import _close_kitchen_handler, _open_kitchen_handler
-from autoskillit.server.tools_recipe import (
-    list_recipes,
-    load_recipe,
-    validate_recipe,
-)
 from autoskillit.server.tools_status import (
-    get_pipeline_report,
     get_quota_events,
     get_token_summary,
-    kitchen_status,
 )
 
 
@@ -133,7 +126,7 @@ class TestVersionInfo:
 
 
 class TestToolRegistration:
-    """All 31 tools are registered on the MCP server."""
+    """All 40 tools are registered on the MCP server."""
 
     @pytest.mark.anyio
     async def test_all_tools_exist(self):
@@ -180,6 +173,7 @@ class TestToolRegistration:
             "release_issue",
             "wait_for_ci",
             "wait_for_merge_queue",
+            "toggle_auto_merge",
             "get_ci_status",
             "open_kitchen",
             "close_kitchen",
@@ -194,7 +188,7 @@ class TestToolRegistration:
 
     @pytest.mark.anyio
     async def test_ungated_tools_lack_kitchen_tag(self):
-        """Ungated tools are visible without kitchen and carry no 'kitchen' tag."""
+        """Ungated (free-range) tools are visible without kitchen and carry no 'kitchen' tag."""
         from fastmcp.client import Client
 
         from autoskillit.pipeline.gate import UNGATED_TOOLS
@@ -214,9 +208,19 @@ class TestToolRegistration:
                     f"Ungated tool '{name}' must not carry the 'kitchen' tag"
                 )
 
+        # test_check now has the kitchen tag (it's headless-tier, not free-range)
+        try:
+            mcp.enable(tags={"kitchen"})
+            all_tools_with_kitchen = {t.name: t for t in await mcp.list_tools()}
+        finally:
+            mcp.disable(tags={"kitchen"})
+        tc = all_tools_with_kitchen.get("test_check")
+        assert tc is not None, "test_check must be registered"
+        assert "kitchen" in tc.tags, "test_check must carry the 'kitchen' tag"
+
     @pytest.mark.anyio
-    async def test_kitchen_tools_have_both_tags(self):
-        """Every tool in GATED_TOOLS carries both 'automation' and 'kitchen' tags."""
+    async def test_kitchen_tools_have_autoskillit_and_kitchen_tags(self):
+        """Every tool in GATED_TOOLS carries both 'autoskillit' and 'kitchen' tags."""
         from autoskillit.pipeline.gate import GATED_TOOLS
         from autoskillit.server import mcp
 
@@ -228,37 +232,69 @@ class TestToolRegistration:
         for name in GATED_TOOLS:
             tool = all_tools.get(name)
             assert tool is not None, f"Gated tool '{name}' not registered on server"
-            assert "automation" in tool.tags, f"Gated tool '{name}' missing 'automation' tag"
+            assert "autoskillit" in tool.tags, f"Gated tool '{name}' missing 'autoskillit' tag"
             assert "kitchen" in tool.tags, f"Gated tool '{name}' missing 'kitchen' tag"
+            assert "automation" not in tool.tags, (
+                f"Gated tool '{name}' still has deprecated 'automation' tag"
+            )
 
     @pytest.mark.anyio
-    async def test_all_tools_tagged_automation(self):
-        """Every registered tool carries the 'automation' tag."""
+    async def test_all_tools_tagged_autoskillit(self):
+        """Every registered tool carries the 'autoskillit' tag."""
         from autoskillit.server import mcp
 
         try:
-            mcp.enable(tags={"kitchen"})
+            mcp.enable(tags={"kitchen", "headless"})
             all_tools = await mcp.list_tools()
         finally:
             mcp.disable(tags={"kitchen"})
+            mcp.disable(tags={"headless"})
         for tool in all_tools:
-            assert "automation" in tool.tags, f"Tool '{tool.name}' is missing the 'automation' tag"
+            assert "autoskillit" in tool.tags, f"Tool '{tool.name}' missing 'autoskillit' tag"
+            assert "automation" not in tool.tags, f"Tool '{tool.name}' still has 'automation' tag"
 
     def test_ungated_tools_docstrings_state_notification_free(self):
-        """P5-1: Each ungated tool docstring states it sends no MCP notifications."""
-        for tool_fn in [
-            kitchen_status,
-            list_recipes,
-            load_recipe,
-            validate_recipe,
-            get_pipeline_report,
-            get_token_summary,
-            get_quota_events,
-        ]:
+        """P5-1: Free-range tool docstrings state they send no MCP notifications."""
+
+        for tool_fn in [get_token_summary, get_quota_events]:
             doc = tool_fn.__doc__ or ""
             assert "no MCP" in doc or "no progress notification" in doc.lower(), (
                 f"{tool_fn.__name__} must document notification-free behavior"
             )
+
+    @pytest.mark.anyio
+    async def test_test_check_has_headless_tag(self):
+        from autoskillit.server import mcp
+
+        try:
+            mcp.enable(tags={"kitchen"})
+            all_tools = {t.name: t for t in await mcp.list_tools()}
+        finally:
+            mcp.disable(tags={"kitchen"})
+        tc = all_tools.get("test_check")
+        assert tc is not None
+        assert "headless" in tc.tags
+        assert "kitchen" in tc.tags
+        assert "autoskillit" in tc.tags
+
+    @pytest.mark.anyio
+    async def test_headless_enable_reveals_only_headless_tagged_tools(self):
+        from fastmcp.client import Client
+
+        from autoskillit.pipeline.gate import GATED_TOOLS
+        from autoskillit.server import mcp
+
+        try:
+            mcp.enable(tags={"headless"})
+            async with Client(mcp) as client:
+                visible = {t.name for t in await client.list_tools()}
+        finally:
+            mcp.disable(tags={"headless"})
+        assert "test_check" in visible
+        # Kitchen-only tools (no headless tag) must NOT be revealed
+        kitchen_only = GATED_TOOLS - {"test_check"}
+        for name in kitchen_only:
+            assert name not in visible, f"{name} should not be revealed by headless-only enable"
 
 
 class TestKitchenVisibility:
@@ -266,9 +302,10 @@ class TestKitchenVisibility:
 
     @pytest.mark.anyio
     async def test_kitchen_tools_hidden_at_startup(self):
-        """No kitchen tool appears in tools/list for a fresh session."""
+        """No kitchen tool (gated or headless-tagged) appears in tools/list for a fresh session."""
         from fastmcp.client import Client
 
+        from autoskillit.core.types import HEADLESS_TOOLS
         from autoskillit.pipeline.gate import GATED_TOOLS
         from autoskillit.server import mcp
 
@@ -277,10 +314,13 @@ class TestKitchenVisibility:
             tool_names = {t.name for t in tools}
             for name in GATED_TOOLS:
                 assert name not in tool_names, f"{name} should be hidden at startup"
+            # test_check has kitchen tag so it is also hidden at startup
+            for name in HEADLESS_TOOLS:
+                assert name not in tool_names, f"{name} should be hidden at startup"
 
     @pytest.mark.anyio
     async def test_ungated_tools_visible_at_startup(self):
-        """All ungated tools appear in tools/list for a fresh session."""
+        """Only free-range tools (open_kitchen, close_kitchen) are visible at startup."""
         from fastmcp.client import Client
 
         from autoskillit.pipeline.gate import UNGATED_TOOLS
@@ -291,6 +331,8 @@ class TestKitchenVisibility:
             tool_names = {t.name for t in tools}
             for name in UNGATED_TOOLS:
                 assert name in tool_names, f"{name} should be visible at startup"
+            # test_check must NOT be visible at startup (has kitchen tag)
+            assert "test_check" not in tool_names, "test_check should not be visible at startup"
 
 
 class TestGatedToolAccess:
@@ -1170,12 +1212,7 @@ class TestToolSchemas:
     @pytest.mark.anyio
     async def test_tool_docstrings_contain_required_cross_refs(self):
         """Tool docstrings must contain required cross-references."""
-        from fastmcp.client import Client
-
-        from autoskillit.server import mcp
-
-        async with Client(mcp) as client:
-            tools = {t.name: t for t in await client.list_tools()}
+        tools = await self._get_all_tools()
         for tool_name, required_terms in self.REQUIRED_CROSS_REFS.items():
             tool = tools.get(tool_name)
             assert tool is not None, f"Tool '{tool_name}' not found in server"
@@ -1198,12 +1235,7 @@ class TestToolSchemas:
     @pytest.mark.anyio
     async def test_recipe_tools_have_disambiguation(self):
         """All recipe-related tools must carry the 'NOT slash commands' disclaimer."""
-        from fastmcp.client import Client
-
-        from autoskillit.server import mcp
-
-        async with Client(mcp) as client:
-            tools = {t.name: t for t in await client.list_tools()}
+        tools = await self._get_all_tools()
         recipe_tools = ["list_recipes", "load_recipe", "validate_recipe"]
         for tool_name in recipe_tools:
             tool = tools.get(tool_name)
@@ -1216,12 +1248,7 @@ class TestToolSchemas:
     @pytest.mark.anyio
     async def test_load_recipe_names_all_forbidden_tools(self):
         """load_recipe must enumerate all forbidden native tools."""
-        from fastmcp.client import Client
-
-        from autoskillit.server import mcp
-
-        async with Client(mcp) as client:
-            tools = {t.name: t for t in await client.list_tools()}
+        tools = await self._get_all_tools()
         desc = tools["load_recipe"].description or ""
 
         missing = [t for t in self.FORBIDDEN_NATIVE_TOOLS if t not in desc]
@@ -1350,3 +1377,48 @@ async def test_open_kitchen_has_no_update_advisory(tool_ctx):
     assert "RECIPE UPDATE AVAILABLE" not in text
     assert "accept_recipe_update" not in text
     assert "decline_recipe_update" not in text
+
+
+# T-VIS-001
+def test_initialize_applies_subset_disables(monkeypatch):
+    """_initialize() must call mcp.disable(tags={subset}) for each disabled subset."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config.settings import AutomationConfig, SubsetsConfig
+    from autoskillit.pipeline import ToolContext
+
+    mock_mcp = MagicMock()
+    ctx = MagicMock(spec=ToolContext)
+    ctx.config = AutomationConfig(subsets=SubsetsConfig(disabled=["github", "ci"]))
+    ctx.session_skill_manager = None
+
+    with patch("autoskillit.server._ctx", None):
+        with patch("autoskillit.server.mcp", mock_mcp):
+            from autoskillit.server._state import _initialize
+
+            _initialize(ctx)
+
+    disabled_tag_sets = [c.kwargs.get("tags", set()) for c in mock_mcp.disable.call_args_list]
+    assert any("github" in tags for tags in disabled_tag_sets)
+    assert any("ci" in tags for tags in disabled_tag_sets)
+
+
+# T-VIS-002
+def test_initialize_skips_subset_disable_when_empty(monkeypatch):
+    """_initialize() must not call mcp.disable for subsets when list is empty."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config.settings import AutomationConfig, SubsetsConfig
+    from autoskillit.pipeline import ToolContext
+
+    mock_mcp = MagicMock()
+    ctx = MagicMock(spec=ToolContext)
+    ctx.config = AutomationConfig(subsets=SubsetsConfig(disabled=[]))
+    ctx.session_skill_manager = None
+
+    with patch("autoskillit.server.mcp", mock_mcp):
+        from autoskillit.server._state import _initialize
+
+        _initialize(ctx)
+
+    mock_mcp.disable.assert_not_called()

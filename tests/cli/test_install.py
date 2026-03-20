@@ -362,7 +362,7 @@ class TestGroupFInstall:
     """P8-2, P3-2, P5-4: CLI refactoring — install/quota/upgrade tests."""
 
     def test_upgrade_uses_atomic_write(self, tmp_path, monkeypatch):
-        """upgrade() must call _atomic_write, not yaml_file.write_text."""
+        """upgrade() must call atomic_write, not yaml_file.write_text."""
         import autoskillit.cli._marketplace as _mkt
         import autoskillit.core as _core
 
@@ -372,18 +372,18 @@ class TestGroupFInstall:
         (scripts_dir / "test.yaml").write_text("inputs:\n  foo: bar\n")
 
         atomic_calls: list[tuple] = []
-        original = _core._atomic_write
+        original = _core.atomic_write
 
         def capture(path, content):
             atomic_calls.append((path, content))
             return original(path, content)
 
-        monkeypatch.setattr(_mkt, "_atomic_write", capture)
+        monkeypatch.setattr(_mkt, "atomic_write", capture)
         from autoskillit.cli._marketplace import upgrade
 
         upgrade()
 
-        assert len(atomic_calls) == 1, "Expected exactly one _atomic_write call"
+        assert len(atomic_calls) == 1, "Expected exactly one atomic_write call"
         _, content = atomic_calls[0]
         assert "ingredients:" in content
         assert "inputs:" not in content

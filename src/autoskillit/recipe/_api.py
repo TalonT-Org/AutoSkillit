@@ -36,7 +36,7 @@ from autoskillit.recipe.io import (
 from autoskillit.recipe.io import (
     load_recipe as _load_recipe_from_path,
 )
-from autoskillit.recipe.schema import Recipe, StepResultCondition, StepResultRoute
+from autoskillit.recipe.schema import StepResultCondition, StepResultRoute
 from autoskillit.recipe.validator import (
     build_quality_dict,
     compute_recipe_validity,
@@ -45,7 +45,6 @@ from autoskillit.recipe.validator import (
     run_semantic_rules,
     validate_recipe,
 )
-from autoskillit.workspace import SkillResolver
 
 _logger = get_logger(__name__)
 
@@ -174,7 +173,7 @@ def _t(label: str, t0: float, name: str) -> float:
 # ---------------------------------------------------------------------------
 
 
-def _file_mtime_ns(path: Path) -> int:
+def _path_mtime_ns(path: Path) -> int:
     try:
         return path.stat().st_mtime_ns
     except OSError:
@@ -184,13 +183,6 @@ def _file_mtime_ns(path: Path) -> int:
 def _file_size(path: Path) -> int:
     try:
         return path.stat().st_size
-    except OSError:
-        return 0
-
-
-def _dir_mtime_ns(path: Path) -> int:
-    try:
-        return path.stat().st_mtime_ns
     except OSError:
         return 0
 
@@ -245,16 +237,7 @@ def list_all(project_dir: Path | None = None) -> dict[str, Any]:
 def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:
     """Return a new Recipe with the named sub_recipe placeholder step removed."""
     new_steps = {k: v for k, v in recipe.steps.items() if k != step_name}
-    return Recipe(
-        name=recipe.name,
-        description=recipe.description,
-        summary=recipe.summary,
-        ingredients=recipe.ingredients,
-        steps=new_steps,
-        kitchen_rules=recipe.kitchen_rules,
-        version=recipe.version,
-        experimental=recipe.experimental,
-    )
+    return dataclasses.replace(recipe, steps=new_steps)
 
 
 def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
@@ -348,15 +331,11 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
             merged_rules.append(rule)
             seen_rules.add(rule)
 
-    return Recipe(
-        name=parent.name,
-        description=parent.description,
-        summary=parent.summary,
-        ingredients=merged_ingredients,
+    return dataclasses.replace(
+        parent,
         steps=new_steps,
+        ingredients=merged_ingredients,
         kitchen_rules=merged_rules,
-        version=parent.version,
-        experimental=parent.experimental,
     )
 
 
@@ -445,6 +424,8 @@ def validate_from_path(path: Path) -> dict[str, Any]:
             "findings": [{"error": "File must contain a YAML mapping"}],
         }
 
+    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+
     recipe = _parse_recipe(data)
     errors = validate_recipe(recipe)
     known_skills = frozenset(s.name for s in SkillResolver().list_all())
@@ -512,9 +493,9 @@ def load_and_validate(
         cached = _LOAD_CACHE.get(cache_key)
 
     if cached is not None and cached.pkg_version == pkg_version:
-        pm = _dir_mtime_ns(project_recipes_dir)
-        bm = _dir_mtime_ns(_builtin_dir)
-        rm = _file_mtime_ns(cached.recipe_path)
+        pm = _path_mtime_ns(project_recipes_dir)
+        bm = _path_mtime_ns(_builtin_dir)
+        rm = _path_mtime_ns(cached.recipe_path)
         rs = _file_size(cached.recipe_path)
         if (
             pm == cached.project_dir_mtime
@@ -571,6 +552,8 @@ def load_and_validate(
             t0 = _t("validate_recipe", t0, name)
 
             # Stage: semantic rules (builds ValidationContext once — shared computation)
+            from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+
             known = frozenset(r.name for r in list_recipes(_pdir).items)
             known_skills = frozenset(s.name for s in SkillResolver().list_all())
             sub_recipes_dir = builtin_sub_recipes_dir()
@@ -686,10 +669,10 @@ def load_and_validate(
     if match is not None:
         entry = _LoadCacheEntry(
             recipe_path=match.path,
-            recipe_mtime=_file_mtime_ns(match.path),
+            recipe_mtime=_path_mtime_ns(match.path),
             recipe_size=_file_size(match.path),
-            project_dir_mtime=_dir_mtime_ns(project_recipes_dir),
-            builtin_dir_mtime=_dir_mtime_ns(_builtin_dir),
+            project_dir_mtime=_path_mtime_ns(project_recipes_dir),
+            builtin_dir_mtime=_path_mtime_ns(_builtin_dir),
             pkg_version=pkg_version,
             result=result,
         )

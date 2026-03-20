@@ -11,12 +11,6 @@ from autoskillit.server.tools_status import get_token_summary, write_telemetry_f
 
 
 class TestGetTokenSummaryMcpResponses:
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
-
     @pytest.mark.anyio
     async def test_includes_mcp_responses_section(self, tool_ctx):
         """get_token_summary returns an mcp_responses key with per-tool data."""

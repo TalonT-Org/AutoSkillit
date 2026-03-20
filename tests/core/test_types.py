@@ -23,6 +23,7 @@ def test_retry_reason_values():
         RetryReason.NONE,
         RetryReason.BUDGET_EXHAUSTED,
         RetryReason.EARLY_STOP,
+        RetryReason.ZERO_WRITES,
     }
     assert RetryReason.NONE.value == "none"
 
@@ -207,6 +208,7 @@ def test_severity_has_ok_member():
     assert Severity.OK == "ok"
     assert Severity.ERROR == "error"
     assert Severity.WARNING == "warning"
+    assert set(Severity) == {Severity.OK, Severity.ERROR, Severity.WARNING}
 
 
 def test_github_fetcher_protocol_has_label_methods():
@@ -275,3 +277,60 @@ def test_skill_result_to_json_omits_worktree_path_when_none():
     )
     data = json.loads(sr.to_json())
     assert "worktree_path" not in data
+
+
+# ---------------------------------------------------------------------------
+# WriteBehaviorSpec and WriteExpectedResolver
+# ---------------------------------------------------------------------------
+
+
+def test_write_expected_skills_frozenset_removed() -> None:
+    """WRITE_EXPECTED_SKILLS must not exist — replaced by contract-driven gate."""
+    import autoskillit.core.types as types_mod
+
+    assert not hasattr(types_mod, "WRITE_EXPECTED_SKILLS")
+
+
+def test_write_behavior_spec_dataclass() -> None:
+    """WriteBehaviorSpec must be importable with correct defaults."""
+    from autoskillit.core import WriteBehaviorSpec
+
+    default = WriteBehaviorSpec()
+    assert default.mode is None
+    assert default.expected_when == ()
+    always = WriteBehaviorSpec(mode="always")
+    assert always.mode == "always"
+    cond = WriteBehaviorSpec(mode="conditional", expected_when=("pat",))
+    assert cond.expected_when == ("pat",)
+
+
+# ---------------------------------------------------------------------------
+# P10-F1 — SubprocessRunner.pty_mode default
+# ---------------------------------------------------------------------------
+
+
+def test_subprocess_runner_protocol_pty_mode_default_false():
+    import inspect
+
+    from autoskillit.core import SubprocessRunner
+
+    sig = inspect.signature(SubprocessRunner.__call__)
+    assert sig.parameters["pty_mode"].default is False
+
+
+def test_default_subprocess_runner_pty_mode_default_false():
+    import inspect
+
+    from autoskillit.execution.process import DefaultSubprocessRunner
+
+    sig = inspect.signature(DefaultSubprocessRunner.__call__)
+    assert sig.parameters["pty_mode"].default is False
+
+
+def test_run_managed_async_pty_mode_default_false():
+    import inspect
+
+    from autoskillit.execution.process import run_managed_async
+
+    sig = inspect.signature(run_managed_async)
+    assert sig.parameters["pty_mode"].default is False

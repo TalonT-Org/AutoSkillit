@@ -1,4 +1,12 @@
-"""Migration API: top-level check_and_migrate convenience function."""
+"""Migration API: top-level check_and_migrate convenience function.
+
+Cross-L2 coupling note: migration/ (L2) imports from recipe/ (L2). This is
+architecturally correct — migration inherently needs to discover, parse, and
+validate recipes. The coupling is not extractable without inverting control in a
+way that would complicate callers. The # noqa: PLC0415 comments on the deferred
+recipe imports in this module and in engine.py exist to acknowledge this accepted
+coupling explicitly rather than suppress the lint warning silently.
+"""
 
 from __future__ import annotations
 
@@ -8,8 +16,6 @@ from typing import Any
 from autoskillit.core import RetryReason, SkillResult
 from autoskillit.migration.engine import MigrationFile, default_migration_engine
 from autoskillit.migration.loader import applicable_migrations
-from autoskillit.recipe import find_recipe_by_name
-from autoskillit.recipe import load_recipe as _parse
 
 
 async def check_and_migrate(
@@ -31,6 +37,9 @@ async def check_and_migrate(
         {"error": str, "name": name}            — failure or LLM needed
         {"error": str}                          — recipe not found
     """
+    from autoskillit.recipe import find_recipe_by_name  # noqa: PLC0415
+    from autoskillit.recipe import load_recipe as _parse  # noqa: PLC0415
+
     _pdir = project_dir if isinstance(project_dir, Path) else Path(project_dir)
     match = find_recipe_by_name(name, _pdir)
     if match is None:

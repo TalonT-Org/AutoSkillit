@@ -113,6 +113,15 @@ FAILURE PREDICATES — when to follow on_failure:
 - run_skill: "success: False" in output
 - classify_fix: "error:" line present in output
 
+CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
+- When run_skill returns "success: False" AND "needs_retry: true":
+  - If the current step defines an on_context_limit route → follow on_context_limit.
+  - If the current step has NO on_context_limit route → fall through to on_failure.
+- "needs_retry: true" means the session hit a context or turn limit with partial
+  progress on disk. Routing to on_context_limit (e.g., test or retry_worktree)
+  checks whether partial work was sufficient before re-running from scratch.
+- NEVER route needs_retry=true directly to on_failure when on_context_limit exists.
+
 TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
 - Tool-level failure (run_skill returns "success: False"): Follow on_failure. This fires
   BEFORE any result object exists. on_result conditions are NOT evaluated.

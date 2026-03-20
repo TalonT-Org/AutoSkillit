@@ -5,10 +5,11 @@ from __future__ import annotations
 import io
 import json
 import logging
-import sys
 
 import pytest
 import structlog
+
+from tests._helpers import _flush_structlog_proxy_caches as _flush_logger_proxy_caches
 
 
 class TestGetLogger:
@@ -30,6 +31,47 @@ class TestGetLogger:
         assert logs, "Expected at least one log record"
         assert logs[0]["logger"] == "autoskillit.server"
 
+    def test_module_level_logger_stays_lazy_proxy(self):
+        """get_logger(__name__) must return a lazy proxy, not a resolved logger."""
+        from structlog._config import BoundLoggerLazyProxy
+
+        from autoskillit.core.logging import get_logger
+
+        logger = get_logger("test.module")
+        assert isinstance(logger, BoundLoggerLazyProxy), (
+            f"get_logger() returned {type(logger).__name__}, expected BoundLoggerLazyProxy. "
+            f"Calling .bind() on the proxy eagerly resolves it — use _initial_values instead."
+        )
+
+    def test_structlog_initial_values_attribute_exists(self):
+        """BoundLoggerLazyProxy must expose _initial_values dict.
+
+        get_logger() mutates proxy._initial_values to inject the logger name
+        without calling .bind() (which resolves the proxy and corrupts MCP
+        stdout). If structlog renames this attribute, the assignment silently
+        creates a disconnected attribute and log records lose the logger field.
+        """
+        from structlog._config import BoundLoggerLazyProxy
+
+        proxy = BoundLoggerLazyProxy(None)
+        assert hasattr(proxy, "_initial_values"), (
+            "structlog.BoundLoggerLazyProxy no longer has _initial_values — "
+            "update get_logger() in core/logging.py"
+        )
+        proxy._initial_values["test_key"] = "test_val"
+        assert proxy._initial_values["test_key"] == "test_val"
+
+    def test_get_logger_with_name_preserves_logger_field(self):
+        """get_logger(__name__) must include logger=name in emitted events."""
+        from autoskillit.core.logging import get_logger
+
+        with structlog.testing.capture_logs() as logs:
+            log = get_logger("my.module")
+            log.info("test_event")
+        assert any(
+            e.get("event") == "test_event" and e.get("logger") == "my.module" for e in logs
+        ), f"Logger field not found in events: {logs}"
+
 
 class TestNullHandlerContract:
     def test_no_output_before_configure(self, capsys: pytest.CaptureFixture[str]):
@@ -46,42 +88,6 @@ class TestNullHandlerContract:
         captured = capsys.readouterr()
         assert "should_not_appear_before_configure" not in captured.err
         assert "should_not_appear_before_configure" not in captured.out
-
-
-def _flush_logger_proxy_caches() -> None:
-    """Reconnect autoskillit module-level loggers to the current structlog config.
-
-    Two separate caching mechanisms break capture_logs() after configure_logging():
-
-    1. BoundLoggerLazyProxy: configure_logging() (cache_logger_on_first_use=True)
-       replaces proxy.bind with a finalized_bind closure. reset_defaults() creates
-       a new processor list but does NOT remove the closure. Fix: pop "bind" from
-       the proxy's __dict__ so the next call re-evaluates from global config.
-
-    2. BoundLoggerFilteringAtNotset (returned by proxy.bind()):
-       Holds _processors as a reference to the processor list at bind() time.
-       reset_defaults() creates a new list — _processors is orphaned. Fix: reset
-       _processors to the current default processor list (which capture_logs()
-       modifies in-place).
-    """
-    import structlog._config as _sc
-
-    current_procs = structlog.get_config()["processors"]
-
-    for mod_name in list(sys.modules):
-        if not mod_name.startswith("autoskillit"):
-            continue
-        mod = sys.modules.get(mod_name)
-        if mod is None:
-            continue
-        for attr_name in ("logger", "_logger"):
-            lg = getattr(mod, attr_name, None)
-            if lg is None:
-                continue
-            if isinstance(lg, _sc.BoundLoggerLazyProxy):
-                lg.__dict__.pop("bind", None)
-            elif hasattr(lg, "_processors"):
-                lg._processors = current_procs
 
 
 class TestConfigureLogging:
@@ -161,6 +167,48 @@ class TestConfigureLogging:
         _flush_logger_proxy_caches()
         get_logger("autoskillit.test").debug("second_config_probe")
         assert "second_config_probe" in stream2.getvalue()
+
+    def test_module_level_logger_respects_reconfigure(self):
+        """Module-level loggers must honor configure_logging() level filter."""
+        from autoskillit.core.logging import configure_logging, get_logger
+
+        # Simulate Phase 0: module-level structlog.configure (no wrapper_class)
+        structlog.configure(
+            cache_logger_on_first_use=True,
+            logger_factory=structlog.WriteLoggerFactory(file=io.StringIO()),
+        )
+
+        # Simulate Phase 1: module-level get_logger
+        logger = get_logger("test.module")
+
+        # Simulate Phase 2: configure_logging at INFO
+        buf = io.StringIO()
+        configure_logging(level=logging.INFO, stream=buf)
+
+        # Phase 3: first log call — debug must be suppressed
+        logger.debug("should_be_suppressed")
+        assert buf.getvalue() == "", f"Debug leaked through: {buf.getvalue()!r}"
+
+        # INFO should pass
+        logger.info("should_appear")
+        assert "should_appear" in buf.getvalue()
+
+    def test_pre_boot_configure_has_wrapper_class(self):
+        """Module-level structlog.configure() must include wrapper_class for defense-in-depth."""
+        import importlib
+
+        import autoskillit.core.logging as logging_mod
+
+        structlog.reset_defaults()
+        importlib.reload(logging_mod)
+
+        # After reload, the module-level configure should have set a filtering wrapper
+        cfg = structlog.get_config()
+        wrapper_name = cfg.get("wrapper_class", type(None)).__name__
+        assert "Filtering" in wrapper_name, (
+            f"Module-level structlog.configure() must set wrapper_class for defense-in-depth. "
+            f"Got: {wrapper_name}"
+        )
 
 
 class TestContextVarBinding:

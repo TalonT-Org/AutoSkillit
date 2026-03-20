@@ -552,3 +552,30 @@ def test_pmp_re_push_review_integration_routes_to_ci_watch(recipe) -> None:
     """B22: re_push_review_integration.on_success must route to ci_watch_pr."""
     step = recipe.steps["re_push_review_integration"]
     assert step.on_success == "ci_watch_pr"
+
+
+def test_pmp_setup_remote_uses_context_remote_url(recipe) -> None:
+    """REQ-C7-03: setup_remote must use context.remote_url, not inputs.source_dir.
+
+    When source_dir defaults to "", git -C "" fails with 'fatal: cannot change to '''.
+    context.remote_url is already captured from the clone step and holds the actual
+    GitHub remote URL.
+    """
+    step = recipe.steps["setup_remote"]
+    cmd = step.with_args.get("cmd", "")
+    assert "context.remote_url" in cmd, (
+        "setup_remote must use context.remote_url instead of "
+        "git -C ${{ inputs.source_dir }} remote get-url origin — "
+        "source_dir defaults to empty string causing git -C '' to fail"
+    )
+
+
+def test_pmp_setup_remote_not_using_inputs_source_dir(recipe) -> None:
+    """REQ-C7-03: setup_remote must not reference inputs.source_dir in git -C."""
+    step = recipe.steps["setup_remote"]
+    cmd = step.with_args.get("cmd", "")
+    # The old pattern that fails on empty source_dir
+    assert "git -C" not in cmd or "inputs.source_dir" not in cmd, (
+        "setup_remote must not use 'git -C ${{ inputs.source_dir }}' — "
+        "fails when source_dir is empty (the default value)"
+    )

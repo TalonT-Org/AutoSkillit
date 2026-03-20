@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills"
+SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
 
 
 def _read(skill_name: str) -> str:
@@ -48,23 +48,20 @@ def test_merge_pr_includes_requirements_in_conflict_report():
 
 def test_requirements_section_header_consistent_across_skills():
     """All skills must use identical ## Requirements section header — no variation."""
+    checked = 0
     for skill_name in ["prepare-issue", "triage-issues", "open-pr", "pipeline-summary"]:
-        path = SKILLS_DIR / skill_name / "SKILL.md"
-        if not path.exists():
-            continue
-        text = path.read_text()
+        text = _read(skill_name)
         if "requirements" in text.lower():
             assert "## Requirements" in text, (
                 f"{skill_name}/SKILL.md references requirements but uses wrong header format"
             )
+            checked += 1
+    assert checked > 0, "No skills with requirements section found — test is vacuous"
 
 
 def test_req_id_format_consistent_across_skills():
     """All skills generating or consuming requirements must use REQ-{GRP}-NNN format."""
     generation_skills = ["prepare-issue", "triage-issues"]
     for skill_name in generation_skills:
-        path = SKILLS_DIR / skill_name / "SKILL.md"
-        if not path.exists():
-            continue
-        text = path.read_text()
+        text = _read(skill_name)
         assert "REQ-" in text, f"{skill_name}/SKILL.md must reference REQ- identifier format"

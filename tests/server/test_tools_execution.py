@@ -17,10 +17,8 @@ from autoskillit.core.types import (
     ChannelConfirmation,
     RetryReason,
 )
-from autoskillit.execution.headless import (
-    _inject_completion_directive,
-    _session_log_dir,
-)
+from autoskillit.execution.commands import _inject_completion_directive
+from autoskillit.execution.headless import _session_log_dir
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
 )
@@ -832,10 +830,11 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
             *,
             model: str = "",
             step_name: str = "",
-            add_dir: str = "",
+            add_dirs=(),
             timeout: float | None = None,
             stale_threshold: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
+            write_behavior=None,
         ) -> SkillResult:
             calls.append((skill_command, cwd))
             return SkillResult(
@@ -858,6 +857,106 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
 
     await run_skill("/test skill", "/tmp")
     assert calls == [("/test skill", "/tmp")]
+
+
+@pytest.mark.anyio
+async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> None:
+    """run_skill passes ValidatedAddDir instances (not raw strings) as add_dirs."""
+    from autoskillit.core import SkillResult, ValidatedAddDir
+
+    captured: dict = {}
+
+    class MockExecutor:
+        async def run(
+            self,
+            skill_command: str,
+            cwd: str,
+            *,
+            model: str = "",
+            step_name: str = "",
+            add_dirs=(),
+            timeout: float | None = None,
+            stale_threshold: float | None = None,
+            expected_output_patterns: tuple[str, ...] | list[str] = (),
+            write_behavior=None,
+        ) -> SkillResult:
+            captured["add_dirs"] = add_dirs
+            captured["cwd"] = cwd
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/test skill", "/tmp")
+    # All add_dirs must be ValidatedAddDir instances
+    assert len(captured["add_dirs"]) >= 1
+    assert all(isinstance(d, ValidatedAddDir) for d in captured["add_dirs"])
+    # Must not include raw skills_extended/ path
+    from autoskillit.workspace.skills import bundled_skills_extended_dir
+
+    skills_ext = str(bundled_skills_extended_dir())
+    add_dir_paths = [d.path for d in captured["add_dirs"]]
+    assert skills_ext not in add_dir_paths
+
+
+@pytest.mark.anyio
+async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monkeypatch) -> None:
+    """run_skill routes through session_skill_manager.init_session() for add_dirs."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import SkillResult, ValidatedAddDir
+
+    # Create a spy on init_session
+    fake_validated = ValidatedAddDir(path="/fake/session/dir")
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    tool_ctx.session_skill_manager = mock_ssm
+
+    captured: dict = {}
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            captured["add_dirs"] = add_dirs
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/test skill", "/tmp")
+
+    # init_session was called with cook_session=False (headless, not cook)
+    mock_ssm.init_session.assert_called_once()
+    call_kwargs = mock_ssm.init_session.call_args
+    assert call_kwargs.kwargs.get("cook_session") is False
+
+    # The returned ValidatedAddDir is in add_dirs
+    assert fake_validated in captured["add_dirs"]
 
 
 class TestHeadlessGateEnforcement:
@@ -1041,3 +1140,43 @@ class TestRunHeadlessCoreFlushTelemetry:
         assert len(report) == 1
         assert report[0]["step_name"] == "plan"
         assert report[0]["total_seconds"] >= 0.0
+
+
+class TestRunSkillCwdValidation:
+    """run_skill rejects non-empty relative cwd at the boundary."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_rejects_relative_cwd(self, tool_ctx):
+        """Non-empty relative cwd is rejected immediately with a clear diagnostic."""
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:retry-worktree plan.md ../worktrees/impl-fix",
+                cwd="../worktrees/impl-fix-20260316",
+            )
+        )
+        assert result["success"] is False
+        assert "cwd must be an absolute path" in result["error"]
+        assert "../worktrees/impl-fix-20260316" in result["error"]
+        assert tool_ctx.runner.call_args_list == []
+
+    @pytest.mark.anyio
+    async def test_run_skill_accepts_empty_cwd(self, tool_ctx):
+        """Empty cwd is accepted (some skills have no specific cwd requirement)."""
+        success_json = (
+            '{"type": "result", "subtype": "success", "is_error": false,'
+            ' "result": "done %%ORDER_UP%%", "session_id": "s1"}'
+        )
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
+        result = json.loads(await run_skill("/investigate foo", cwd=""))
+        assert result["success"] is True
+
+    @pytest.mark.anyio
+    async def test_run_skill_accepts_absolute_cwd(self, tool_ctx):
+        """Absolute cwd passes the boundary check and proceeds normally."""
+        success_json = (
+            '{"type": "result", "subtype": "success", "is_error": false,'
+            ' "result": "done %%ORDER_UP%%", "session_id": "s1"}'
+        )
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
+        result = json.loads(await run_skill("/investigate foo", cwd="/tmp"))
+        assert result["success"] is True

@@ -23,41 +23,7 @@ from autoskillit.recipe.validator import (
     run_semantic_rules,
     validate_recipe,
 )
-
-# ---------------------------------------------------------------------------
-# Importability assertions
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# VALID_RECIPE fixture data
-# ---------------------------------------------------------------------------
-
-VALID_RECIPE = {
-    "name": "test-recipe",
-    "description": "A test recipe",
-    "ingredients": {
-        "test_dir": {"description": "Dir to test", "required": True},
-        "branch": {"description": "Branch", "default": "main"},
-    },
-    "kitchen_rules": ["NEVER use native tools"],
-    "steps": {
-        "run_tests": {
-            "tool": "test_check",
-            "with": {"worktree_path": "${{ inputs.test_dir }}"},
-            "on_success": "done",
-            "on_failure": "escalate",
-        },
-        "done": {"action": "stop", "message": "Tests passed."},
-        "escalate": {"action": "stop", "message": "Need help."},
-    },
-}
-
-
-def _write_yaml(path: Path, data: dict) -> Path:
-    path.write_text(yaml.dump(data, default_flow_style=False))
-    return path
-
+from tests.recipe.conftest import VALID_RECIPE, _make_workflow, _write_yaml
 
 # ---------------------------------------------------------------------------
 # TestValidateRecipe — migrated from test_recipe_parser.py
@@ -625,11 +591,6 @@ class TestIsInstanceGuards:
 # ---------------------------------------------------------------------------
 # on_result self-consumption tests (T_OR1, T_OR2)
 # ---------------------------------------------------------------------------
-
-
-def _make_workflow(steps: dict[str, dict]) -> Recipe:
-    parsed_steps = {name: _parse_step(data) for name, data in steps.items()}
-    return Recipe(name="test", description="test", steps=parsed_steps, kitchen_rules=["test"])
 
 
 class TestOnResultConsumption:

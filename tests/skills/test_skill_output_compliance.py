@@ -162,6 +162,20 @@ def test_no_shared_scratch_files(skill_name: str) -> None:
 
 
 @pytest.mark.parametrize("skill_name", _get_file_producing_skills())
+def test_no_namespace_prefix_in_output_paths(skill_name: str) -> None:
+    """Output paths must not include the autoskillit: namespace prefix."""
+    resolver = SkillResolver()
+    info = resolver.resolve(skill_name)
+    assert info is not None
+    content = info.path.read_text()
+
+    assert "temp/autoskillit:" not in content, (
+        f"Skill '{skill_name}' uses namespace prefix in output path.\n"
+        f"Use bare skill name: temp/{skill_name}/... (no autoskillit: prefix)."
+    )
+
+
+@pytest.mark.parametrize("skill_name", _get_file_producing_skills())
 def test_file_producing_skills_have_cwd_anchor(skill_name: str) -> None:
     """Every file-producing skill must anchor temp/ writes to the current working directory."""
     resolver = SkillResolver()
@@ -215,7 +229,7 @@ def test_output_path_tokens_synchronized() -> None:
 
 def test_resolve_failures_skill_switches_code_index_to_worktree():
     """resolve-failures must set_project_path to worktree_path after env setup."""
-    skill_md = (pkg_root() / "skills" / "resolve-failures" / "SKILL.md").read_text()
+    skill_md = (pkg_root() / "skills_extended" / "resolve-failures" / "SKILL.md").read_text()
     # Must contain a set_project_path call with worktree_path as the path argument.
     # Use a regex so minor whitespace or quoting variations don't cause false failures.
     worktree_switch = re.search(r"set_project_path\([^)]*worktree_path[^)]*\)", skill_md)

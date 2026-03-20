@@ -39,6 +39,7 @@ from autoskillit.execution._process_pty import pty_wrap_command
 from autoskillit.execution._process_race import (
     RaceAccumulator,
     RaceSignals,
+    _extract_stdout_session_id,
     _watch_heartbeat,
     _watch_process,
     _watch_session_log,
@@ -50,10 +51,13 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Re-export all public symbols so callers using `from autoskillit.execution.process import X`
-# continue to work without modification (P8-2: backward-compatible public surface).
+# Aggregate __all__ collects all public symbols from the execution sub-modules
+# (_process_io, _process_jsonl, etc.) into a single facade. This keeps the
+# internal sub-module split private — callers import from the facade, not from
+# internal sub-module paths.
 __all__ = [
     "DefaultSubprocessRunner",
+    "_extract_stdout_session_id",
     "RaceAccumulator",
     "RaceSignals",
     "_has_active_api_connection",
@@ -149,6 +153,7 @@ async def run_managed_async(
             acc = RaceAccumulator()
             trigger = anyio.Event()
             channel_b_ready = anyio.Event()
+            stdout_session_id_ready = anyio.Event()
             timeout_scope = None  # bound inside task group body; initialized for safety
 
             async with anyio.create_task_group() as tg:
@@ -164,6 +169,12 @@ async def run_managed_async(
                 )
                 if session_log_dir is not None:
                     tg.start_soon(
+                        _extract_stdout_session_id,
+                        stdout_path,
+                        acc,
+                        stdout_session_id_ready,
+                    )
+                    tg.start_soon(
                         _watch_session_log,
                         session_log_dir,
                         completion_marker,
@@ -178,6 +189,7 @@ async def run_managed_async(
                         _phase1_poll,
                         _phase2_poll,
                         _phase1_timeout,
+                        stdout_session_id_ready,
                     )
                 tracing_handle = None
                 if linux_tracing_config is not None:

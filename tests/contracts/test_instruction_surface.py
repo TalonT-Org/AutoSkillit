@@ -21,17 +21,24 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-class TestMakeScriptSkillContract:
-    """make-script-skill SKILL.md must document the constraints field."""
+class TestWriteRecipeSkillContract:
+    """write-recipe SKILL.md must document the constraints field."""
 
     def _skill_md_text(self) -> str:
-        skill_md = _project_root() / "src" / "autoskillit" / "skills" / "write-recipe" / "SKILL.md"
+        skill_md = (
+            _project_root()
+            / "src"
+            / "autoskillit"
+            / "skills_extended"
+            / "write-recipe"
+            / "SKILL.md"
+        )
         return skill_md.read_text()
 
     def test_schema_table_includes_constraints(self):
         text = self._skill_md_text()
         assert "| `kitchen_rules`" in text, (
-            "make-script-skill SKILL.md schema table must include a 'kitchen_rules' row"
+            "write-recipe SKILL.md schema table must include a 'kitchen_rules' row"
         )
 
     def test_example_yaml_includes_constraints(self):
@@ -39,7 +46,7 @@ class TestMakeScriptSkillContract:
         yaml_blocks = re.findall(r"```yaml\s*\n(.*?)```", text, re.DOTALL)
         has_constraints = any("kitchen_rules:" in block for block in yaml_blocks)
         assert has_constraints, (
-            "make-script-skill SKILL.md must include .kitchen_rules:' in at least one "
+            "write-recipe SKILL.md must include .kitchen_rules:' in at least one "
             "example YAML block"
         )
 
@@ -47,7 +54,7 @@ class TestMakeScriptSkillContract:
         text = self._skill_md_text()
         found = [t for t in PIPELINE_FORBIDDEN_TOOLS if t in text]
         assert len(found) >= 3, (
-            f"make-script-skill SKILL.md must name at least 3 forbidden tools, found only: {found}"
+            f"write-recipe SKILL.md must name at least 3 forbidden tools, found only: {found}"
         )
 
 
@@ -128,7 +135,8 @@ class TestSkillMdToolNameCurrency:
     def test_write_recipe_skill_references_kitchen_status(self):
         """write-recipe SKILL.md must use kitchen_status, not old autoskillit_status."""
         skill_md = (
-            Path(__file__).parent.parent.parent / "src/autoskillit/skills/write-recipe/SKILL.md"
+            Path(__file__).parent.parent.parent
+            / "src/autoskillit/skills_extended/write-recipe/SKILL.md"
         )
         content = skill_md.read_text()
         assert "autoskillit_status" not in content, (
@@ -149,13 +157,14 @@ class TestRunPythonCallableContract:
 
     def _collect_callable_refs(self) -> list[tuple[str, str]]:
         """Returns list of (skill_name/SKILL.md relative path, dotted callable path)."""
-        skills_dir = _project_root() / "src" / "autoskillit" / "skills"
+        src_root = _project_root() / "src" / "autoskillit"
         refs = []
-        for skill_md in skills_dir.rglob("SKILL.md"):
-            content = skill_md.read_text()
-            skill_name = skill_md.parent.name
-            for match in _AUTOSKILLIT_CALLABLE_RE.finditer(content):
-                refs.append((f"{skill_name}/SKILL.md", match.group(0)))
+        for skill_root in (src_root / "skills", src_root / "skills_extended"):
+            for skill_md in skill_root.rglob("SKILL.md"):
+                content = skill_md.read_text()
+                skill_name = skill_md.parent.name
+                for match in _AUTOSKILLIT_CALLABLE_RE.finditer(content):
+                    refs.append((f"{skill_name}/SKILL.md", match.group(0)))
         return refs
 
     def test_all_callable_refs_are_importable(self):
@@ -202,12 +211,13 @@ class TestRunPythonCallableContract:
 
     def test_contract_validator_not_referenced_in_skill_mds(self):
         """autoskillit.contract_validator was deleted; no SKILL.md may reference it."""
-        skills_dir = _project_root() / "src" / "autoskillit" / "skills"
+        src_root = _project_root() / "src" / "autoskillit"
         stale_refs = []
-        for skill_md in skills_dir.rglob("SKILL.md"):
-            content = skill_md.read_text()
-            if "autoskillit.contract_validator" in content:
-                stale_refs.append(str(skill_md.relative_to(_project_root())))
+        for skill_dir in (src_root / "skills", src_root / "skills_extended"):
+            for skill_md in skill_dir.rglob("SKILL.md"):
+                content = skill_md.read_text()
+                if "autoskillit.contract_validator" in content:
+                    stale_refs.append(str(skill_md.relative_to(_project_root())))
         assert not stale_refs, (
             "Deleted module 'autoskillit.contract_validator' still referenced:\n"
             + "\n".join(stale_refs)
@@ -218,7 +228,7 @@ class TestMultiPartScopeContract:
     """Consuming skills must carry scope-fence instructions for multi-part plans."""
 
     def _skill_text(self, skill_name: str) -> str:
-        skills_dir = _project_root() / "src" / "autoskillit" / "skills"
+        skills_dir = _project_root() / "src" / "autoskillit" / "skills_extended"
         return (skills_dir / skill_name / "SKILL.md").read_text()
 
     def test_dry_walkthrough_detects_part_suffix(self):
@@ -351,7 +361,7 @@ def test_open_pr_skill_does_not_contain_git_push():
 
     from autoskillit.core.paths import pkg_root
 
-    skill_path = pkg_root() / "skills" / "open-pr" / "SKILL.md"
+    skill_path = pkg_root() / "skills_extended" / "open-pr" / "SKILL.md"
     content = skill_path.read_text()
     # Match lines that start with a step number and contain 'git push -u origin'
     push_step_pattern = re.compile(r"^\s*\d+\.\s.*git push\s+-u origin", re.MULTILINE)
@@ -374,7 +384,7 @@ class TestPathArgSkillsContract:
     SENTINEL = "path detection"
 
     def test_path_arg_skills_have_path_detection_instructions(self):
-        skills_root = _project_root() / "src" / "autoskillit" / "skills"
+        skills_root = _project_root() / "src" / "autoskillit" / "skills_extended"
         missing = []
         for skill_name in self.PATH_ARG_SKILLS:
             skill_md = skills_root / skill_name / "SKILL.md"
@@ -392,7 +402,12 @@ class TestResolveFailuresDirtyTreeContract:
 
     def test_resolve_failures_mentions_dirty_tree(self):
         skill_md = (
-            _project_root() / "src" / "autoskillit" / "skills" / "resolve-failures" / "SKILL.md"
+            _project_root()
+            / "src"
+            / "autoskillit"
+            / "skills_extended"
+            / "resolve-failures"
+            / "SKILL.md"
         )
         content = skill_md.read_text()
         assert "dirty" in content.lower() or "uncommitted" in content.lower(), (

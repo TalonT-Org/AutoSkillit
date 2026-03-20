@@ -7,8 +7,24 @@ import subprocess
 import sys
 from pathlib import Path
 
-from autoskillit.core import YAMLError, _atomic_write, dump_yaml_str, load_yaml
+from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
 from autoskillit.recipe import list_recipes
+
+
+def _colors() -> tuple[str, str, str, str, str, str]:
+    """Return (Bold, Cyan, Dim, Green, Yellow, Reset) respecting NO_COLOR."""
+    from autoskillit.cli._ansi import supports_color
+
+    c = supports_color()
+    return (
+        "\x1b[1m" if c else "",  # _B
+        "\x1b[96m" if c else "",  # _C
+        "\x1b[2m" if c else "",  # _D
+        "\x1b[32m" if c else "",  # _G
+        "\x1b[33m" if c else "",  # _Y
+        "\x1b[0m" if c else "",  # _R
+    )
+
 
 _MARKER_CONTENT = """\
 # autoskillit workspace - do not delete
@@ -35,13 +51,65 @@ def _prompt_test_command() -> list[str]:
     return (answer if answer else default).split()
 
 
+def _detect_github_repo() -> str | None:
+    """Try to detect owner/repo from the git remote URL."""
+    from autoskillit.core import parse_github_repo
+
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return parse_github_repo(result.stdout.strip())
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
 def _prompt_github_repo() -> str | None:
-    """Prompt the user for their GitHub repository in owner/repo format."""
-    print("\nGitHub repository (owner/repo format, e.g. 'acme/myproject'):")
-    print("  Used for issue management, PR creation, and CI status checks.")
-    print("  Leave blank to configure later in .autoskillit/config.yaml")
-    value = input("Repository []: ").strip()
-    return value or None
+    """Prompt the user for their GitHub repository, auto-detecting from git remote."""
+    from autoskillit.core import parse_github_repo
+
+    _B, _C, _D, _G, _Y, _R = _colors()
+    detected = _detect_github_repo()
+
+    if detected:
+        print(f"\n  {_Y}GitHub repo{_R}  {_G}{detected}{_R} {_D}(detected from git remote){_R}")
+        value = input(f"  {_D}Press Enter to confirm, or type a different repo:{_R} ").strip()
+    else:
+        print(f"\n  {_Y}GitHub repo{_R}  {_D}owner/repo, URL, or blank to skip{_R}")
+        value = input(f"  {_D}Repository:{_R} ").strip()
+
+    if not value:
+        return detected
+
+    # Accept full URLs — parse_github_repo normalises them to owner/repo
+    parsed = parse_github_repo(value)
+    if parsed:
+        return parsed
+
+    # Accept bare owner/repo if it looks valid
+    if "/" in value and not value.startswith("http"):
+        return value
+
+    print(f"  {_Y}Warning:{_R} '{value}' doesn't look like owner/repo — using as-is.")
+    return value
+
+
+def _is_gh_authenticated() -> bool:
+    """Return True if the gh CLI is authenticated."""
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "status"],
+            capture_output=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def _create_secrets_template(project_dir: Path) -> None:
@@ -51,15 +119,19 @@ def _create_secrets_template(project_dir: Path) -> None:
     secrets_path = autoskillit_dir / ".secrets.yaml"
     if secrets_path.exists():
         return  # Never overwrite existing secrets
-    _atomic_write(
+    atomic_write(
         secrets_path,
         "# AutoSkillit secrets — never commit this file\n"
         "# This file is already listed in .gitignore\n\n"
+        "# GitHub authentication (choose one):\n"
+        "#   Option 1 (recommended): Run 'gh auth login' — the gh CLI handles auth\n"
+        "#     for all MCP tool commands (issues, PRs, CI status).\n"
+        "#   Option 2: Set a token below — used by background watchers (CI, merge queue)\n"
+        "#     that poll the GitHub API directly via httpx.\n"
+        "#   If gh is authenticated, the token below is optional.\n"
         "github:\n"
-        "  token: ''  # GitHub personal access token with repo + issues scope\n"
-        "             # Generate at: https://github.com/settings/tokens\n",
+        "  token: ''  # Optional — only needed if gh auth is unavailable\n",
     )
-    print(f"Created {secrets_path} — add your GitHub token to enable full functionality.")
 
 
 def _is_plugin_installed() -> bool:
@@ -138,21 +210,30 @@ def _register_mcp_server(claude_json_path: Path) -> None:
         "command": "autoskillit",
         "args": [],
     }
-    _atomic_write(claude_json_path, json.dumps(data, indent=2))
+    atomic_write(claude_json_path, json.dumps(data, indent=2))
 
 
-def _print_next_steps() -> None:
-    print("\nAutoskillit ready. Next steps:")
-    print("  1. cd to your project directory")
-    print("  2. autoskillit init           — create project config + register hooks")
-    print(
-        "  3. autoskillit cook setup-project  — explore your project and generate tailored recipes"
-    )
-    print("  4. autoskillit doctor          — verify your setup")
+def _print_next_steps(*, context: str = "install") -> None:
+    _B, _C, _D, _G, _Y, _R = _colors()
+    if context == "install":
+        steps = [
+            ("autoskillit init", "create project config"),
+            ("autoskillit doctor", "verify your setup"),
+        ]
+    else:
+        steps = [
+            ("autoskillit cook setup-project", "generate tailored recipes"),
+            ("autoskillit order <recipe>", "run a recipe pipeline"),
+            ("autoskillit cook", "interactive session"),
+            ("autoskillit doctor", "verify setup"),
+        ]
+    print(f"  {_B}Next steps:{_R}")
+    for i, (cmd, desc) in enumerate(steps, 1):
+        print(f"  {_D}{i}.{_R} {_G}{cmd}{_R}  {_D}{desc}{_R}")
 
 
 def _register_all(scope: str, project_dir: Path) -> None:
-    """Ensure project temp dir, register hooks and MCP server, print next steps."""
+    """Ensure project temp dir, register hooks and MCP server, print summary."""
     from autoskillit.cli._hooks import (
         _claude_settings_path,
         _evict_stale_autoskillit_hooks,
@@ -160,12 +241,15 @@ def _register_all(scope: str, project_dir: Path) -> None:
     )
     from autoskillit.core import ensure_project_temp
 
+    _B, _C, _D, _G, _Y, _R = _colors()
+
     ensure_project_temp(project_dir)
     settings_path = _claude_settings_path(scope)
     _evict_stale_autoskillit_hooks(settings_path)
     sync_hooks_to_settings(settings_path)
 
     # Prompt for github.default_repo if running interactively
+    github_repo = None
     if sys.stdin.isatty():
         github_repo = _prompt_github_repo()
         if github_repo:
@@ -175,25 +259,43 @@ def _register_all(scope: str, project_dir: Path) -> None:
                     config_data = load_yaml(config_path) or {}
                     if not config_data.get("github", {}).get("default_repo"):
                         config_data.setdefault("github", {})["default_repo"] = github_repo
-                        _atomic_write(
+                        atomic_write(
                             config_path,
                             dump_yaml_str(
                                 config_data, default_flow_style=False, allow_unicode=True
                             ),
                         )
                 except (OSError, YAMLError) as exc:
-                    print(f"Warning: could not write github.default_repo to config: {exc}")
-            # Write even if config doesn't exist yet — create a minimal one
+                    print(f"  {_Y}Warning:{_R} could not write github.default_repo: {exc}")
             else:
                 autoskillit_dir = project_dir / ".autoskillit"
                 autoskillit_dir.mkdir(exist_ok=True)
-                _atomic_write(config_path, f"github:\n  default_repo: '{github_repo}'\n")
+                atomic_write(config_path, f"github:\n  default_repo: '{github_repo}'\n")
 
     _create_secrets_template(project_dir)
 
-    if _is_plugin_installed():
-        print("autoskillit is already registered as a Claude plugin — skipping mcpServers entry.")
-    else:
+    plugin_ok = _is_plugin_installed()
+    if not plugin_ok:
         _register_mcp_server(_user_claude_json_path())
 
-    _print_next_steps()
+    # --- Summary block ---
+    print()
+    from autoskillit import __version__
+
+    print(f"  {_B}{_C}AUTOSKILLIT {__version__}{_R}  {_D}Project initialized.{_R}")
+    print()
+    print(f"  {_Y}{'config':>12}{_R}  {_G}{project_dir / '.autoskillit' / 'config.yaml'}{_R}")
+    if github_repo:
+        print(f"  {_Y}{'github':>12}{_R}  {_G}{github_repo}{_R}")
+    gh_ok = _is_gh_authenticated()
+    if gh_ok:
+        print(f"  {_Y}{'gh auth':>12}{_R}  {_G}authenticated{_R}")
+    else:
+        print(f"  {_Y}{'gh auth':>12}{_R}  {_D}not found — run{_R} {_G}gh auth login{_R}")
+    if plugin_ok:
+        print(f"  {_Y}{'plugin':>12}{_R}  {_G}registered{_R}")
+    else:
+        print(f"  {_Y}{'plugin':>12}{_R}  {_G}registered via ~/.claude.json{_R}")
+    print(f"  {_Y}{'hooks':>12}{_R}  {_G}synced{_R} {_D}({scope} scope){_R}")
+    print()
+    _print_next_steps(context="init")

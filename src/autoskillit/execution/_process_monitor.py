@@ -9,7 +9,7 @@ from typing import NamedTuple
 import anyio
 import psutil
 
-from autoskillit.core import get_logger
+from autoskillit.core import ChannelBStatus, get_logger
 from autoskillit.execution._process_jsonl import _jsonl_contains_marker, _jsonl_has_record_type
 
 logger = get_logger(__name__)
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 class SessionMonitorResult(NamedTuple):
     """Result from _session_log_monitor with discovered session identity."""
 
-    status: str  # "completion" or "stale"
+    status: ChannelBStatus
     session_id: str  # Claude Code session ID from JSONL filename stem, or ""
 
 
@@ -98,6 +98,7 @@ async def _session_log_monitor(
     _phase2_poll: float = 2.0,
     _phase1_timeout: float = 30.0,
     _on_poll: Callable[[], None] | None = None,
+    expected_session_id: str | None = None,
 ) -> SessionMonitorResult:
     """Watch Claude Code session log for completion or staleness.
 
@@ -130,7 +131,7 @@ async def _session_log_monitor(
                 "Session log file not found within phase1_timeout (%.1fs); treating as stale",
                 _phase1_timeout,
             )
-            return SessionMonitorResult("stale", "")
+            return SessionMonitorResult(ChannelBStatus.STALE, "")
         await anyio.sleep(_phase1_poll)
         try:
             candidates = [
@@ -139,7 +140,22 @@ async def _session_log_monitor(
                 if f.suffix == ".jsonl" and f.stat().st_ctime > spawn_time
             ]
             if candidates:
-                session_file = max(candidates, key=lambda f: f.stat().st_ctime)
+                if expected_session_id:
+                    # Identity-based selection: match filename stem to session ID
+                    for f in candidates:
+                        if f.stem == expected_session_id:
+                            session_file = f
+                            break
+                    if session_file is None:
+                        logger.warning(
+                            "session_id_match_not_found",
+                            expected_session_id=expected_session_id,
+                            candidate_count=len(candidates),
+                            candidate_stems=[f.stem for f in candidates],
+                        )
+                        session_file = max(candidates, key=lambda f: f.stat().st_ctime)
+                else:
+                    session_file = max(candidates, key=lambda f: f.stat().st_ctime)
                 _chosen_ctime = session_file.stat().st_ctime
                 logger.debug(
                     "session_log_phase1_discovered",
@@ -148,6 +164,9 @@ async def _session_log_monitor(
                     ctime=_chosen_ctime,
                     spawn_time=spawn_time,
                     ctime_delta=_chosen_ctime - spawn_time,
+                    selection_method="session_id"
+                    if expected_session_id and session_file.stem == expected_session_id
+                    else "recency",
                 )
             os_error_count = 0
         except OSError:
@@ -196,7 +215,7 @@ async def _session_log_monitor(
                         file_size=current_size,
                         scan_pos=scan_pos,
                     )
-                    return SessionMonitorResult("completion", _session_id)
+                    return SessionMonitorResult(ChannelBStatus.COMPLETION, _session_id)
             except OSError:
                 pass
         else:
@@ -212,4 +231,4 @@ async def _session_log_monitor(
                         pid,
                     )
                 else:
-                    return SessionMonitorResult("stale", _session_id)
+                    return SessionMonitorResult(ChannelBStatus.STALE, _session_id)

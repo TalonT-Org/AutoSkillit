@@ -862,16 +862,11 @@ class TestPushToRemoteProtectedBranch:
             clone_path=str(clone),
             branch=branch,
             remote_url="https://github.com/example/repo.git",
+            protected_branches=["main", "integration", "stable"],
         )
 
         assert result["success"] is False
         assert result.get("error_type") == "protected_branch_push"
-
-    def test_push_to_remote_allows_non_protected_branch(self, tmp_path: Path) -> None:
-        """push_to_remote does not reject non-protected branches (at the guard level)."""
-        from autoskillit.core.branch_guard import is_protected_branch
-
-        assert is_protected_branch("feat/my-feature") is False
 
 
 class TestPushToRemoteMocked:

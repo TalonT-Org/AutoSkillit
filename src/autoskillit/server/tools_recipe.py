@@ -18,14 +18,13 @@ from autoskillit.server.helpers import (
     _apply_triage_gate,
     _notify,
     _require_enabled,
-    _require_not_headless,
     track_response_size,
 )
 
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("list_recipes")
 async def list_recipes() -> str:
     """List available recipes from .autoskillit/recipes/.
@@ -41,12 +40,10 @@ async def list_recipes() -> str:
     step-by-step by the agent. Recipes live in .autoskillit/recipes/ (NOT in
     .autoskillit/skills/ or any other directory).
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
+    This tool requires the kitchen to be open (gated by open_kitchen).
     """
-    if (h := _require_not_headless("list_recipes")) is not None:
-        return h
+    if (gate := _require_enabled()) is not None:
+        return gate
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps([])
@@ -54,7 +51,7 @@ async def list_recipes() -> str:
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("load_recipe")
 async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str:
     """Load a recipe by name and return its raw YAML content.
@@ -147,6 +144,7 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     - run_cmd: {"success": false}
     - run_skill: {"success": false}
     - classify_fix: "error" key present in response
+    - push_to_remote: {"success": false} (also has "error" and "stderr" keys)
 
     To CREATE a new recipe, use the /autoskillit:write-recipe skill.
     This tool is for loading and executing existing recipes.
@@ -159,17 +157,13 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     This tool is strictly read-only. It discovers, parses, and validates recipe
     YAML. To run migrations, use migrate_recipe.
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
-
     Response format: always JSON with ``content`` (raw YAML string),
     ``diagram`` (pre-generated Markdown string or null), and
     ``suggestions`` (list of semantic findings, possibly empty) keys.
     On error: JSON with ``error`` key.
     """
-    if (h := _require_not_headless("load_recipe")) is not None:
-        return h
+    if (gate := _require_enabled()) is not None:
+        return gate
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"error": "Server not initialized"})
@@ -186,7 +180,7 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("validate_recipe")
 async def validate_recipe(script_path: str) -> str:
     """Validate a recipe YAML file against the recipe schema.
@@ -207,15 +201,11 @@ async def validate_recipe(script_path: str) -> str:
     step-by-step by the agent. Recipes live in .autoskillit/recipes/
     as .yaml files.
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
-
     Args:
         script_path: Absolute path to the .yaml recipe file to validate.
     """
-    if (h := _require_not_headless("validate_recipe")) is not None:
-        return h
+    if (gate := _require_enabled()) is not None:
+        return gate
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"valid": False, "errors": ["Server not initialized"]})
@@ -223,7 +213,7 @@ async def validate_recipe(script_path: str) -> str:
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("migrate_recipe")
 async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     """Apply pending migration notes to a recipe file.

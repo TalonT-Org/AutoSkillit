@@ -11,6 +11,48 @@ This creates `.autoskillit/config.yaml` with the test command you provide.
 Everything else has sensible defaults. See [Getting Started](getting-started.md)
 for a full tutorial.
 
+## Common Configurations
+
+### Minimal (just a test command)
+
+```yaml
+# .autoskillit/config.yaml
+test_check:
+  command: ["pytest", "-v", "--tb=short"]
+```
+
+### Full config with GitHub integration
+
+```yaml
+# .autoskillit/config.yaml
+test_check:
+  command: ["task", "test-check"]
+
+model:
+  default: "claude-sonnet-4-6"
+
+worktree_setup:
+  command: ["task", "install-worktree"]
+
+branching:
+  default_base_branch: main
+
+github:
+  default_repo: "my-org/my-repo"
+```
+
+### Project without `task` runner
+
+```yaml
+# .autoskillit/config.yaml
+test_check:
+  command: ["pytest", "-v", "--tb=short"]
+  timeout: 600
+
+worktree_setup:
+  command: ["pip", "install", "-e", ".[dev]"]
+```
+
 ## Layered Resolution
 
 AutoSkillit uses layered YAML configuration. Resolution order (last wins):
@@ -103,12 +145,18 @@ Check current quota: `autoskillit quota-status`.
 
 ## GitHub Integration
 
+GitHub features (PR creation, issue management, CI status) require the `gh` CLI to be installed and authenticated:
+
+    gh auth login
+
+The `github.default_repo` setting is used when a bare issue number (`#42`) is provided without a full URL:
+
 ```yaml
 github:
-  default_repo: "owner/repo"   # used when a bare issue number (#42) is provided
+  default_repo: "owner/repo"
 ```
 
-Token goes in `.autoskillit/.secrets.yaml` (never commit).
+If you need a GitHub token for the AutoSkillit API (separate from `gh` CLI auth), place it in `.autoskillit/.secrets.yaml` (never commit).
 
 ## Branching
 
@@ -134,7 +182,7 @@ linux_tracing:
   tmpfs_path: "/dev/shm"  # RAM-backed path for crash resilience
 ```
 
-See [Session Diagnostics](developer.md#session-diagnostics-logging) for details on log output.
+See [Session Diagnostics](developer/session-diagnostics.md) for details on log output.
 
 ## Headless Sessions
 
@@ -227,12 +275,58 @@ report_bug:
 
 When set to `"1"`, marks the MCP server instance as a headless session. This activates several session-scoped behaviors:
 
-- **Kitchen pre-opened**: all kitchen-tagged pipeline tools are revealed at startup and the gate is pre-enabled — no `open_kitchen` call required
+- **Headless-tool reveal**: only `test_check` (headless-tagged) is revealed at startup.
+  Kitchen-only tools (`run_skill`, `run_cmd`, `run_python`, `merge_worktree`, etc.) remain
+  hidden — headless sessions do not orchestrate sub-sessions.
 - **Orchestration blocked**: `run_skill`, `run_cmd`, and `run_python` are denied (headless sessions execute tasks, they do not orchestrate sub-sessions)
 - **`open_kitchen` blocked**: cannot be triggered from within a headless session
 - **Env isolation**: server-private env vars are stripped from any subprocess env passed to test runners, preventing leakage into user code
 
-This is automatically set by `autoskillit cook`, `chefs-hat`, and when launching sub-recipe headless sessions. Do **not** set this manually in user-facing orchestration sessions — it disables the protection that prevents the orchestrator from accidentally calling gated pipeline tools outside of a pipeline context.
+This is automatically set by `autoskillit order`, `cook`, and when launching sub-recipe headless sessions. Do **not** set this manually in user-facing orchestration sessions — it disables the protection that prevents the orchestrator from accidentally calling gated pipeline tools outside of a pipeline context.
+
+## Skill Visibility
+
+Controls which skill tiers are visible in each session mode.
+
+```yaml
+# .autoskillit/config.yaml
+skills:
+  tier1:   # Visible in plain $ claude sessions (plugin-scanned)
+    - open-kitchen
+    - close-kitchen
+  tier2:   # Visible in cook and headless sessions (interactive)
+    - investigate
+    - make-plan
+    # ...full list from defaults.yaml...
+  tier3:   # Visible in cook and headless sessions (automation/pipeline)
+    - open-pr
+    - merge-pr
+    # ...
+```
+
+Any bundled skill can be promoted or demoted by adding it to the desired tier list. A skill
+in multiple tiers simultaneously is a validation error. See **[Skill Visibility](skill-visibility.md)**
+for the full tier breakdown, session mode table, and override rules.
+
+## Subset Categories
+
+Disables functional groups of tools and skills together.
+
+```yaml
+# .autoskillit/config.yaml
+subsets:
+  disabled:
+    - github     # hides all github-tagged tools and skills
+    - ci         # hides CI-polling tools and skills
+  custom_tags:
+    my-favorites:
+      - investigate
+      - make-plan
+```
+
+Disabling a subset hides its members from all session modes — even after `open_kitchen`.
+See **[Subset Categories](subset-categories.md)** for the complete category listing and
+FastMCP mechanics.
 
 ## Full Example
 

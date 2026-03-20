@@ -17,7 +17,7 @@ from autoskillit.server.helpers import _notify, _require_enabled, track_response
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
 @track_response_size("clone_repo")
 async def clone_repo(
     source_dir: str,
@@ -104,7 +104,7 @@ async def clone_repo(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
 @track_response_size("remove_clone")
 async def remove_clone(
     clone_path: str,
@@ -154,7 +154,7 @@ async def remove_clone(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("push_to_remote")
 async def push_to_remote(
     clone_path: str,
@@ -241,6 +241,7 @@ async def push_to_remote(
             )
             return json.dumps(
                 {
+                    "success": False,
                     "error": "push failed",
                     "stderr": result.get("stderr", ""),
                     "error_type": result.get("error_type", ""),

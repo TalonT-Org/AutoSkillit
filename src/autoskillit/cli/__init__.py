@@ -9,6 +9,7 @@ import shutil  # noqa: F401 — tests patch autoskillit.cli.shutil.which
 import subprocess  # noqa: F401 — tests patch autoskillit.cli.subprocess.run
 from pathlib import Path  # noqa: F401 — tests patch autoskillit.cli.Path.home
 
+from autoskillit.cli._cook import cook
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli._init_helpers import _prompt_recipe_choice
 from autoskillit.cli._prompts import (
@@ -21,15 +22,14 @@ from autoskillit.cli.app import (
     _generate_config_yaml,
     _prompt_test_command,
     app,
-    chefs_hat,
     config_app,
     config_show,
-    cook,
     doctor,
     init,
     install,
     main,
     migrate,
+    order,
     quota_status,
     recipes_app,
     recipes_list,
@@ -54,7 +54,6 @@ __all__ = [
     "_prompt_test_command",
     "_resolve_recipe_input",
     "app",
-    "chefs_hat",
     "config_app",
     "config_show",
     "cook",
@@ -63,6 +62,7 @@ __all__ = [
     "install",
     "main",
     "migrate",
+    "order",
     "quota_status",
     "recipes_app",
     "recipes_list",

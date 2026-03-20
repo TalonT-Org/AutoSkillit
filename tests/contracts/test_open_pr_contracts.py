@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills"
+SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
 SKILL = SKILLS_DIR / "open-pr/SKILL.md"
 
 

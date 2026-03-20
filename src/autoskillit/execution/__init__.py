@@ -44,6 +44,12 @@ from autoskillit.execution.linux_tracing import (
     start_linux_tracing,
 )
 from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
+from autoskillit.execution.pr_analysis import (
+    DOMAIN_PATHS,
+    extract_linked_issues,
+    is_valid_fidelity_finding,
+    partition_files_by_domain,
+)
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
     run_managed_async,
@@ -53,6 +59,7 @@ from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
 from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE, resolve_remote_repo
 from autoskillit.execution.session import (
     ClaudeSessionResult,
+    ContentState,
     extract_token_usage,
     parse_session_result,
 )
@@ -84,6 +91,7 @@ __all__ = [
     "check_and_sleep_if_needed",
     # session
     "ClaudeSessionResult",
+    "ContentState",
     "SkillResult",
     "extract_token_usage",
     "parse_session_result",
@@ -128,4 +136,9 @@ __all__ = [
     "recover_crashed_sessions",
     "resolve_log_dir",
     "write_telemetry_clear_marker",
+    # pr_analysis
+    "DOMAIN_PATHS",
+    "extract_linked_issues",
+    "is_valid_fidelity_finding",
+    "partition_files_by_domain",
 ]

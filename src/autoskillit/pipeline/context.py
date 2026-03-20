@@ -26,10 +26,12 @@ from autoskillit.core import (
     RecipeRepository,
     SessionSkillManager,
     SubprocessRunner,
+    TargetSkillResolver,
     TestRunner,
     TimingStore,
     TokenStore,
     WorkspaceManager,
+    WriteExpectedResolver,
 )
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 
@@ -64,6 +66,7 @@ class ToolContext:
     ci_watcher:           CIWatcher — watches GitHub Actions CI runs
     merge_queue_watcher:  MergeQueueWatcher — polls GitHub merge queue for a PR
     session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
+    skill_resolver:       TargetSkillResolver — resolves skill names to source tier
     """
 
     config: AutomationConfig
@@ -85,7 +88,9 @@ class ToolContext:
     ci_watcher: CIWatcher | None = field(default=None)
     merge_queue_watcher: MergeQueueWatcher | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
+    write_expected_resolver: WriteExpectedResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
+    skill_resolver: TargetSkillResolver | None = field(default=None)
 
     @property
     def default_ci_scope(self) -> CIRunScope:

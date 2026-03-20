@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from autoskillit.core.types import (
@@ -12,11 +14,13 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.session import (
     ClaudeSessionResult,
+    ContentState,
     _check_expected_patterns,
     _check_session_content,
     _compute_outcome,
     _compute_retry,
     _compute_success,
+    _evaluate_content_state,
     _is_kill_anomaly,
     parse_session_result,
 )
@@ -29,6 +33,25 @@ def _make_success_session(result: str = "done") -> ClaudeSessionResult:
         result=result,
         session_id="s1",
     )
+
+
+@pytest.fixture
+def make_session() -> Callable[..., ClaudeSessionResult]:
+    def _factory(
+        subtype: str = "success",
+        is_error: bool = False,
+        result: str = "",
+        assistant_messages: list[str] | None = None,
+    ) -> ClaudeSessionResult:
+        return ClaudeSessionResult(
+            subtype=subtype,
+            is_error=is_error,
+            result=result,
+            session_id="test-session",
+            assistant_messages=assistant_messages or [],
+        )
+
+    return _factory
 
 
 class TestComputeSuccess:
@@ -1215,3 +1238,157 @@ class TestComputeSuccessChannelBPatterns:
             expected_output_patterns=["---prepare-issue-result---"],
         )
         assert success is False, "Channel B bypass must not skip expected_output_patterns check"
+
+
+class TestContentStateEnum:
+    """ContentState enum exposes the four expected variants."""
+
+    def test_content_state_enum_variants(self) -> None:
+        """ContentState exposes the four expected variants."""
+        assert ContentState.COMPLETE == "complete"
+        assert ContentState.ABSENT == "absent"
+        assert ContentState.CONTRACT_VIOLATION == "contract_violation"
+        assert ContentState.SESSION_ERROR == "session_error"
+
+    @pytest.mark.parametrize(
+        "result, is_error, completion_marker, patterns, expected_state",
+        [
+            # COMPLETE: result present, marker present, patterns match
+            (
+                "verdict = GO\n%%ORDER_UP%%",
+                False,
+                "%%ORDER_UP%%",
+                ["verdict\\s*=\\s*(GO|NO GO)"],
+                "complete",
+            ),
+            # ABSENT: empty result
+            ("", False, "%%ORDER_UP%%", ["verdict\\s*=\\s*(GO|NO GO)"], "absent"),
+            # ABSENT: marker missing from non-empty result
+            ("Some output, no marker", False, "%%ORDER_UP%%", [], "absent"),
+            # CONTRACT_VIOLATION: result + marker present, patterns fail
+            (
+                "Done. %%ORDER_UP%%",
+                False,
+                "%%ORDER_UP%%",
+                ["verdict\\s*=\\s*(GO|NO GO)"],
+                "contract_violation",
+            ),
+            # SESSION_ERROR: is_error=True
+            ("Error: max turns exceeded", True, "%%ORDER_UP%%", [], "session_error"),
+        ],
+    )
+    def test_evaluate_content_state(
+        self,
+        result: str,
+        is_error: bool,
+        completion_marker: str,
+        patterns: list[str],
+        expected_state: str,
+        make_session: Callable[..., ClaudeSessionResult],
+    ) -> None:
+        session = make_session(subtype="success", is_error=is_error, result=result)
+        state = _evaluate_content_state(session, completion_marker, patterns)
+        assert state.value == expected_state
+
+
+class TestDeadEndGuardContentState:
+    """Dead-end guard must distinguish drain-race artifacts from terminal failures."""
+
+    def test_compute_outcome_channel_b_pattern_contract_violation_is_terminal(
+        self,
+        make_session: Callable[..., ClaudeSessionResult],
+    ) -> None:
+        """Dead-end guard must NOT promote to RETRIABLE when session has content + marker
+        but expected_output_patterns are absent — contract violation, not a drain race."""
+        session = make_session(
+            subtype="success",
+            is_error=False,
+            result="Investigation complete. %%ORDER_UP%%",
+            assistant_messages=[],  # no assistant_messages to recover from
+        )
+        outcome, retry_reason = _compute_outcome(
+            session=session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            expected_output_patterns=["investigation_path\\s*=\\s*/.+"],
+        )
+        # Contract violation: result is non-empty, marker is present, but patterns are absent.
+        # The dead-end guard must NOT promote this to RETRIABLE — retrying will never help.
+        assert outcome == SessionOutcome.FAILED, (
+            f"Expected FAILED for pattern contract violation, got {outcome}. "
+            "Dead-end guard is incorrectly treating contract violations as drain-race artifacts."
+        )
+        assert retry_reason == RetryReason.NONE
+
+    def test_compute_outcome_completed_channel_b_pattern_contract_violation_is_terminal(
+        self,
+        make_session: Callable[..., ClaudeSessionResult],
+    ) -> None:
+        """Same contract-violation guard check for COMPLETED + CHANNEL_B termination path."""
+        session = make_session(
+            subtype="success",
+            is_error=False,
+            result="Done. %%ORDER_UP%%",
+            assistant_messages=[],
+        )
+        outcome, retry_reason = _compute_outcome(
+            session=session,
+            returncode=0,
+            termination=TerminationReason.COMPLETED,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            expected_output_patterns=["verdict\\s*=\\s*(GO|NO GO)"],
+        )
+        assert outcome == SessionOutcome.FAILED
+        assert retry_reason == RetryReason.NONE
+
+    def test_compute_outcome_channel_b_empty_result_is_still_retriable(
+        self,
+        make_session: Callable[..., ClaudeSessionResult],
+    ) -> None:
+        """Regression test: drain-race rescue (empty result) must still be promoted to RETRIABLE.
+        The ContentState fix must NOT break the existing drain-race handling."""
+        session = make_session(
+            subtype="success",
+            is_error=False,
+            result="",  # empty — drain race candidate
+            assistant_messages=[],
+        )
+        outcome, retry_reason = _compute_outcome(
+            session=session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            expected_output_patterns=["investigation_path\\s*=\\s*/.+"],
+        )
+        assert outcome == SessionOutcome.RETRIABLE, (
+            "Empty result with channel confirmation must remain RETRIABLE (drain-race rescue)."
+        )
+        assert retry_reason == RetryReason.RESUME
+
+    def test_compute_outcome_channel_b_missing_marker_is_still_retriable(
+        self,
+        make_session: Callable[..., ClaudeSessionResult],
+    ) -> None:
+        """Regression: result present but marker absent is still RETRIABLE (partial drain)."""
+        session = make_session(
+            subtype="success",
+            is_error=False,
+            result="Some output without the marker",
+            assistant_messages=[],
+        )
+        outcome, retry_reason = _compute_outcome(
+            session=session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            expected_output_patterns=["investigation_path\\s*=\\s*/.+"],
+        )
+        assert outcome == SessionOutcome.RETRIABLE, (
+            "Missing completion marker with channel confirmation must remain RETRIABLE."
+        )
+        assert retry_reason == RetryReason.RESUME

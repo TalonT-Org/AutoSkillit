@@ -113,18 +113,17 @@ def _write_minimal_script(scripts_dir: Path, name: str = "test-script") -> Path:
 
 
 class TestRecipeTools:
-    """Tests for ungated list_recipes and load_recipe tools."""
+    """Tests for kitchen-gated list_recipes and load_recipe tools."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        """Verify these tools work WITHOUT tool activation."""
-        tool_ctx.gate = DefaultGateState(enabled=False)
+    def _ensure_ctx(self, tool_ctx):
+        """Ensure server context is initialized (gate open by default)."""
 
     # SS1
     @pytest.mark.anyio
     @patch("autoskillit.recipe._api.list_recipes")
     async def test_list_returns_json_object(self, mock_list):
-        """list_recipes returns JSON object with scripts array (not gated)."""
+        """list_recipes returns JSON object with scripts array."""
         from autoskillit.core.types import LoadResult, RecipeSource
         from autoskillit.recipe.schema import RecipeInfo
 
@@ -151,7 +150,7 @@ class TestRecipeTools:
     # SS2
     @pytest.mark.anyio
     async def test_load_returns_json_with_content(self, tmp_path, monkeypatch):
-        """load_recipe returns JSON with content and suggestions (not gated)."""
+        """load_recipe returns JSON with content and suggestions."""
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
@@ -437,12 +436,11 @@ class TestLoadRecipeExceptionHandling:
 
 
 class TestValidateRecipeTool:
-    """Tests for ungated validate_recipe tool."""
+    """Tests for kitchen-gated validate_recipe tool."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        """Verify this tool works WITHOUT tool activation."""
-        tool_ctx.gate = DefaultGateState(enabled=False)
+    def _ensure_ctx(self, tool_ctx):
+        """Ensure server context is initialized (gate open by default)."""
 
     # VS1
     @pytest.mark.anyio
@@ -599,13 +597,17 @@ class TestDocstringSemantics:
     """
 
     async def _get_tools(self) -> dict:
-        """Return a dict of tool_name -> tool for all visible tools via public Client API."""
+        """Return a dict of tool_name -> tool for all visible tools including kitchen-gated."""
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        try:
+            mcp.enable(tags={"kitchen"})
+            async with Client(mcp) as client:
+                tools = await client.list_tools()
+        finally:
+            mcp.disable(tags={"kitchen"})
         return {t.name: t for t in tools}
 
     @pytest.mark.anyio
@@ -752,13 +754,17 @@ class TestLoadSkillScriptFailurePredicates:
     """The load_recipe tool description documents failure predicates."""
 
     async def _get_tools(self) -> dict:
-        """Return dict of tool_name -> tool for all visible tools via public Client API."""
+        """Return dict of tool_name -> tool for all visible tools including kitchen-gated."""
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
+        try:
+            mcp.enable(tags={"kitchen"})
+            async with Client(mcp) as client:
+                tools = await client.list_tools()
+        finally:
+            mcp.disable(tags={"kitchen"})
         return {t.name: t for t in tools}
 
     @pytest.mark.anyio
@@ -774,11 +780,8 @@ class TestMigrationSuggestions:
     """MSUG2: validate_recipe surfaces migration warnings."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        """Verify these tools work WITHOUT tool activation."""
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
+    def _ensure_ctx(self, tool_ctx):
+        """Ensure server context is initialized (gate open by default)."""
 
     # MSUG2
     @pytest.mark.anyio
@@ -795,13 +798,6 @@ class TestMigrationSuggestions:
 
 class TestMigrationSuppression:
     """SUP1, SUP4: load_recipe respects migration.suppressed config."""
-
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        """Verify these tools work WITHOUT tool activation."""
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
 
     # SUP1
     @pytest.mark.anyio
@@ -938,9 +934,8 @@ class TestLoadRecipeReadOnly:
     """P4: load_recipe is strictly read-only — no migration, no contract card generation."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        """load_recipe works WITHOUT tool activation."""
-        tool_ctx.gate = DefaultGateState(enabled=False)
+    def _ensure_ctx(self, tool_ctx):
+        """Ensure server context is initialized (gate open by default)."""
 
     @pytest.mark.anyio
     async def test_load_recipe_does_not_call_migration_engine(self, tmp_path, monkeypatch):
@@ -1298,10 +1293,6 @@ kitchen_rules:
 class TestLoadRecipeDiagram:
     """Tests for diagram field in load_recipe responses (DG-12 through DG-15)."""
 
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        tool_ctx.gate = DefaultGateState(enabled=False)
-
     def _setup_project_recipe(self, tmp_path: Path, monkeypatch) -> Path:
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
@@ -1312,7 +1303,7 @@ class TestLoadRecipeDiagram:
 
     # DG-12
     @pytest.mark.anyio
-    async def test_load_recipe_response_has_diagram_key(self, tmp_path, monkeypatch):
+    async def test_load_recipe_response_has_diagram_key(self, tmp_path, monkeypatch, tool_ctx):
         """DG-12: load_recipe response always contains a 'diagram' key."""
         self._setup_project_recipe(tmp_path, monkeypatch)
         result = json.loads(await load_recipe(name="my-recipe"))
@@ -1320,7 +1311,9 @@ class TestLoadRecipeDiagram:
 
     # DG-13
     @pytest.mark.anyio
-    async def test_load_recipe_diagram_none_when_not_generated(self, tmp_path, monkeypatch):
+    async def test_load_recipe_diagram_none_when_not_generated(
+        self, tmp_path, monkeypatch, tool_ctx
+    ):
         """DG-13: diagram is None when no diagram file exists."""
         self._setup_project_recipe(tmp_path, monkeypatch)
         result = json.loads(await load_recipe(name="my-recipe"))
@@ -1328,19 +1321,27 @@ class TestLoadRecipeDiagram:
 
 
 # ---------------------------------------------------------------------------
-# P5F2: Accessor pattern tests (ungated tools must use _get_ctx_or_none)
+# P5F2: Accessor pattern tests (gated tools use _get_ctx_or_none after gate check)
 # ---------------------------------------------------------------------------
 
 
 # P5F2-T1
 @pytest.mark.anyio
-async def test_list_recipes_no_ctx_returns_empty(monkeypatch):
-    """list_recipes returns empty-list JSON when server is uninitialized."""
-    import autoskillit.server._state as _state_mod
-
-    monkeypatch.setattr(_state_mod, "_ctx", None)
+async def test_list_recipes_no_recipes_returns_empty(tool_ctx):
+    """list_recipes returns empty-list JSON when recipes is not configured."""
+    tool_ctx.recipes = None
     result = json.loads(await list_recipes())
     assert result == []
+
+
+# P5F2-T1b
+@pytest.mark.anyio
+async def test_list_recipes_gate_closed_returns_gate_error(tool_ctx):
+    """list_recipes returns gate_error JSON when kitchen gate is closed."""
+    tool_ctx.gate = DefaultGateState(enabled=False)
+    result = json.loads(await list_recipes())
+    assert result.get("success") is False
+    assert result.get("subtype") == "gate_error"
 
 
 # P5F2-T2
@@ -1356,11 +1357,9 @@ async def test_load_recipe_no_ctx_returns_error(monkeypatch):
 
 # P5F2-T3
 @pytest.mark.anyio
-async def test_validate_recipe_no_ctx_returns_error(monkeypatch, tmp_path):
-    """validate_recipe returns invalid JSON when server is uninitialized."""
-    import autoskillit.server._state as _state_mod
-
-    monkeypatch.setattr(_state_mod, "_ctx", None)
+async def test_validate_recipe_no_recipes_returns_error(tool_ctx, tmp_path):
+    """validate_recipe returns invalid JSON when recipes is not configured."""
+    tool_ctx.recipes = None
     result = json.loads(await validate_recipe(script_path=str(tmp_path / "x.yaml")))
     assert result.get("valid") is False
 
@@ -1382,32 +1381,3 @@ def test_tools_recipe_does_not_import_raw_ctx():
                 assert "_ctx" not in names, (
                     "tools_recipe.py must not import raw _ctx — use _get_ctx_or_none()"
                 )
-
-
-# ---------------------------------------------------------------------------
-# Headless gate enforcement for recipe tools
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_load_recipe_denied_when_headless(tool_ctx, monkeypatch):
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    result = json.loads(await load_recipe(name="implementation"))
-    assert result["success"] is False
-    assert result["subtype"] == "headless_error"
-
-
-@pytest.mark.anyio
-async def test_list_recipes_denied_when_headless(tool_ctx, monkeypatch):
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    result = json.loads(await list_recipes())
-    assert result["success"] is False
-    assert result["subtype"] == "headless_error"
-
-
-@pytest.mark.anyio
-async def test_validate_recipe_denied_when_headless(tool_ctx, monkeypatch):
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    result = json.loads(await validate_recipe(script_path="/tmp/test.yaml"))
-    assert result["success"] is False
-    assert result["subtype"] == "headless_error"

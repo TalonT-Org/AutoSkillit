@@ -13,9 +13,9 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
     _build_skill_result,
-    _ensure_skill_prefix,
     _extract_worktree_path,
     _resolve_model,
     _scan_jsonl_write_paths,
@@ -24,7 +24,7 @@ from tests.conftest import _make_result, _make_timeout_result
 
 
 def test_inject_completion_directive_appends_marker():
-    from autoskillit.execution.headless import _inject_completion_directive
+    from autoskillit.execution.commands import _inject_completion_directive
 
     result = _inject_completion_directive("/investigate foo", "%%DONE%%")
     assert "%%DONE%%" in result
@@ -674,6 +674,7 @@ class TestBuildSkillResultCrossValidation:
         "stderr",
         "token_usage",
         "write_path_warnings",
+        "write_call_count",
     }
 
     def test_empty_stdout_exit_zero_is_failure(self):
@@ -1043,6 +1044,26 @@ class TestExtractWorktreePath:
             result = _extract_worktree_path([msg])
             assert result == "/path/to/wt"
 
+    def test_relative_path_with_dotdot_is_discarded(self) -> None:
+        """Relative worktree_path tokens (../...) are silently discarded; returns None."""
+        result = _extract_worktree_path(["worktree_path = ../worktrees/impl-fix-20260307"])
+        assert result is None
+
+    def test_relative_path_without_slash_prefix_is_discarded(self) -> None:
+        """Any non-absolute form is silently discarded."""
+        result = _extract_worktree_path(["worktree_path = worktrees/impl-fix-20260307"])
+        assert result is None
+
+    def test_absolute_wins_over_subsequent_relative(self) -> None:
+        """If an absolute token appears before a relative one, the absolute path is returned."""
+        result = _extract_worktree_path(
+            [
+                "worktree_path = /abs/worktrees/impl-first",
+                "worktree_path = ../worktrees/impl-second",
+            ]
+        )
+        assert result == "/abs/worktrees/impl-first"
+
 
 class TestBuildSkillResultWorktreePath:
     """_build_skill_result extracts worktree_path on context exhaustion."""
@@ -1171,6 +1192,38 @@ class TestWorktreePathOnContextExhaustion:
         assert sr.success is False
         assert data["needs_retry"] is True
         assert data["worktree_path"] == path
+
+
+def test_relative_worktree_path_causes_adjudicated_failure() -> None:
+    """Regression guard for issue #412.
+
+    implement-worktree-no-merge emitting worktree_path = ../worktrees/...
+    must classify as adjudicated_failure, not success.
+    Uses the real contract pattern from skill_contracts.yaml.
+    """
+    ndjson = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": (
+                "worktree_path = ../worktrees/impl-fix-20260316\n"
+                "branch_name = impl-fix-20260316\n"
+                "%%ORDER_UP%%"
+            ),
+            "session_id": "test-412",
+        }
+    )
+    skill_result = _build_skill_result(
+        _sr(stdout=ndjson),
+        completion_marker="%%ORDER_UP%%",
+        expected_output_patterns=["worktree_path\\s*=\\s*/.+"],
+        cwd="/some/project",
+        skill_command="implement-worktree-no-merge",
+    )
+    assert skill_result.subtype == "adjudicated_failure"
+    assert skill_result.success is False
+    assert skill_result.needs_retry is False
 
 
 class TestBuildSkillResultCompleted:
@@ -2030,7 +2083,7 @@ class TestRetryBudgetEnforcement:
 
 class TestInjectCwdAnchor:
     def test_appends_cwd_directive(self):
-        from autoskillit.execution.headless import _inject_cwd_anchor
+        from autoskillit.execution.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("/investigate foo", "/some/clone/path")
         assert "WORKING DIRECTORY ANCHOR" in result
@@ -2038,27 +2091,27 @@ class TestInjectCwdAnchor:
         assert "/investigate foo" in result
 
     def test_preserves_original_command(self):
-        from autoskillit.execution.headless import _inject_cwd_anchor
+        from autoskillit.execution.commands import _inject_cwd_anchor
 
         original = "Use /autoskillit:make-plan detailed prompt here"
         result = _inject_cwd_anchor(original, "/clone/dir")
         assert result.startswith(original)
 
     def test_directive_mentions_temp_and_read_only(self):
-        from autoskillit.execution.headless import _inject_cwd_anchor
+        from autoskillit.execution.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("cmd", "/wd")
         assert "temp/" in result
         assert "READ-ONLY" in result
 
     def test_skips_when_cwd_empty(self):
-        from autoskillit.execution.headless import _inject_cwd_anchor
+        from autoskillit.execution.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("cmd", "")
         assert result == "cmd"
 
     def test_skips_when_cwd_relative(self):
-        from autoskillit.execution.headless import _inject_cwd_anchor
+        from autoskillit.execution.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("cmd", "relative/path")
         assert result == "cmd"
@@ -2479,3 +2532,158 @@ class TestBuildSkillResultChannelBPatternRecovery:
         )
         assert sr.success is True
         assert "---prepare-issue-result---" in sr.result
+
+
+class TestBuildSkillResultChannelAPatternRecovery:
+    """_build_skill_result must extend pattern recovery to CHANNEL_A wins, not just CHANNEL_B."""
+
+    def test_build_skill_result_channel_a_recovers_from_assistant_messages(self) -> None:
+        """_build_skill_result must attempt pattern recovery for CHANNEL_A, not just CHANNEL_B."""
+        block = "verdict = GO\n%%ORDER_UP%%"
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": block}],
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done. %%ORDER_UP%%",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["verdict\\s*=\\s*(GO|NO GO)"],
+        )
+        assert sr.success is True, (
+            "CHANNEL_A should recover patterns from assistant_messages, same as CHANNEL_B."
+        )
+
+    def test_build_skill_result_channel_a_pattern_contract_violation_is_terminal(
+        self,
+    ) -> None:
+        """After failed CHANNEL_A recovery, contract violation must be FAILED, not RETRIABLE."""
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "No verdict here. %%ORDER_UP%%"}],
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done. %%ORDER_UP%%",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["verdict\\s*=\\s*(GO|NO GO)"],
+        )
+        assert sr.success is False
+        assert sr.needs_retry is False
+        assert sr.subtype == "adjudicated_failure"
+
+
+class TestTimedOutSessionPreservesState:
+    """TIMED_OUT branch must parse stdout to preserve tool_uses and assistant_messages."""
+
+    def test_timed_out_with_writes_preserves_write_call_count(self):
+        """Timed-out session with Write/Edit tool_use blocks must report write_call_count > 0."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = "\n".join(
+            [
+                _make_tool_use_line("Write", {"file_path": "/tmp/a.py", "content": "x"}),
+                _make_tool_use_line(
+                    "Edit", {"file_path": "/tmp/b.py", "old_string": "a", "new_string": "b"}
+                ),
+            ]
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.write_call_count == 2
+        assert sr.success is False
+        assert sr.needs_retry is False
+
+    def test_timed_out_with_empty_stdout_uses_timeout_subtype(self):
+        """Timed-out session with no stdout uses TIMEOUT subtype."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.success is False
+        assert sr.write_call_count == 0
+
+    def test_timed_out_with_success_result_overrides_to_timeout(self):
+        """When timed-out stdout has a success result, subtype is overridden to timeout."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = "\n".join(
+            [
+                _make_tool_use_line("Write", {"file_path": "/tmp/a.py", "content": "x"}),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": "Task completed.",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.cli_subtype == "timeout"
+        assert sr.write_call_count == 1

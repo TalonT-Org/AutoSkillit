@@ -1,5 +1,15 @@
 # CLI Reference
 
+## autoskillit serve
+
+Start the MCP server. This is the default command when no subcommand is given.
+
+    autoskillit serve
+
+You rarely need to run this manually — Claude Code starts the server automatically via the plugin registration.
+
+---
+
 ## autoskillit install
 
 Register AutoSkillit as a Claude Code plugin.
@@ -37,25 +47,29 @@ Set up a project for AutoSkillit.
 
 ---
 
-## autoskillit cook
+## autoskillit order
 
 Launch an interactive pipeline session.
 
-    autoskillit cook [recipe]
+    autoskillit order [recipe]
 
 **Arguments:**
-- `recipe` (optional) — Recipe name. If omitted, shows a selection menu.
+- `recipe` — Recipe name to run. If omitted, shows an interactive picker.
 
 **Behavior:**
+- If no recipe is given, presents a numbered list to choose from (including an "Open kitchen" option)
 - Validates the recipe YAML before launching
 - Opens a restricted Claude Code session (only `AskUserQuestion` + MCP tools)
 - Injects the recipe as the orchestrator's system prompt
 - Cannot be run from inside a Claude Code session
 
+**Note:** `order` only accepts recipe names (e.g., `implementation`, `remediation`). Skills like `setup-project` are not recipes — use `autoskillit cook` and then `/autoskillit:setup-project` instead.
+
 **Examples:**
 
-    autoskillit cook                    # Show recipe menu
-    autoskillit cook implementation     # Run implementation pipeline
+    autoskillit order                    # Interactive picker
+    autoskillit order implementation     # Run implementation pipeline
+    autoskillit order remediation        # Run remediation pipeline
 
 ---
 
@@ -74,15 +88,15 @@ version consistency, hook health, hook registration, recipe version health.
 
 ---
 
-## autoskillit chefs-hat
+## autoskillit cook
 
 Launch Claude Code with all skills as slash commands.
 
-    autoskillit chefs-hat
+    autoskillit cook
 
-Alias: `autoskillit chef`
+Alias: `autoskillit c`
 
-This gives you an unrestricted Claude session with all 36 bundled skills
+This gives you an unrestricted Claude session with all bundled skills
 available as `/autoskillit:*` slash commands and the kitchen pre-opened.
 No recipe — use skills individually as needed.
 
@@ -157,7 +171,7 @@ List all bundled skills.
 
     autoskillit skills list
 
-Shows name, source, and path for each of the 36 bundled skills.
+Shows name, source, and path for all bundled skills (see `autoskillit skills list` for the full list).
 
 ---
 

@@ -118,6 +118,16 @@ tasks:
         echo "Smoke test output saved to: $TEST_OUTPUT"
         exit $PYTEST_EXIT
 
+  check-docs:
+    desc: Verify documentation counts match source code
+    cmds:
+      - python scripts/check_doc_counts.py
+
+  sync-plugin-version:
+    desc: Sync plugin.json version from pyproject.toml
+    cmds:
+      - python scripts/sync_plugin_json.py
+
   install-worktree:
     desc: Set up development environment (isolated venv in worktrees, direct install in main)
     status:

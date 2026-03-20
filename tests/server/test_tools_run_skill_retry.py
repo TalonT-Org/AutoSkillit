@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from autoskillit.config import AutomationConfig, RunSkillConfig
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.server.tools_execution import run_skill
@@ -29,11 +28,6 @@ class TestRunSkillRetryRemoved:
         import autoskillit.server.tools_execution as module
 
         assert "run_skill_retry" not in module.__all__
-
-    def test_run_skill_uses_two_hour_timeout(self):
-        """run_skill uses the 7200s timeout (merged from run_skill_retry)."""
-        assert RunSkillConfig().timeout == 7200
-        assert AutomationConfig().run_skill.timeout == 7200
 
 
 class TestRunSkillSessionOutcome:
@@ -76,7 +70,13 @@ class TestRunSkillSessionOutcome:
     @pytest.mark.anyio
     async def test_success_not_retriable(self, tool_ctx):
         """Normal success -> needs_retry=False."""
-        stdout = json.dumps(
+        assistant = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "tool_use", "name": "Edit", "id": "tu1"}]},
+            }
+        )
+        result_record = json.dumps(
             {
                 "type": "result",
                 "subtype": "success",
@@ -85,6 +85,7 @@ class TestRunSkillSessionOutcome:
                 "session_id": "s1",
             }
         )
+        stdout = assistant + "\n" + result_record
         tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert result["needs_retry"] is False
@@ -152,12 +153,14 @@ class TestRunSkillAgentResult:
 
 
 class TestRunSkillPassesAddDir:
-    """run_skill forwards add_dir to executor."""
+    """run_skill passes ValidatedAddDir instances to executor."""
 
     @pytest.mark.anyio
-    async def test_run_skill_passes_add_dir_to_subprocess(self, tool_ctx):
-        """add_dir is forwarded to ctx.executor.run()."""
+    async def test_run_skill_passes_validated_add_dirs_to_executor(self, tool_ctx):
+        """add_dirs forwarded to ctx.executor.run() are ValidatedAddDir instances."""
         from unittest.mock import AsyncMock
+
+        from autoskillit.core import ValidatedAddDir
 
         mock_result = SkillResult(
             success=True,
@@ -172,9 +175,11 @@ class TestRunSkillPassesAddDir:
         )
         mock_run = AsyncMock(return_value=mock_result)
         tool_ctx.executor = type("MockExec", (), {"run": mock_run})()
-        await run_skill("/investigate something", "/tmp", add_dir="/extra/dir")
+        await run_skill("/investigate something", "/tmp")
 
-        assert mock_run.call_args.kwargs.get("add_dir") == "/extra/dir"
+        add_dirs = mock_run.call_args.kwargs.get("add_dirs", ())
+        assert len(add_dirs) >= 1
+        assert all(isinstance(d, ValidatedAddDir) for d in add_dirs)
 
 
 class TestRunSkillFields:

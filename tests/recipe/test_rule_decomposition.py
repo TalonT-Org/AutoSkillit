@@ -8,7 +8,7 @@ import pathlib
 
 def test_no_deferred_validator_imports_in_rule_modules() -> None:
     """T1: No rule sub-module should defer-import from validator.py inside a function body."""
-    recipe_dir = pathlib.Path("src/autoskillit/recipe")
+    recipe_dir = pathlib.Path(__file__).resolve().parents[2] / "src/autoskillit/recipe"
     rule_files = list(recipe_dir.glob("rules_*.py"))
     assert len(rule_files) >= 5, "Expected at least 5 rule sub-modules"
     for path in rule_files:
@@ -24,7 +24,7 @@ def test_no_deferred_validator_imports_in_rule_modules() -> None:
 
 
 def test_all_rules_registered_across_submodules() -> None:
-    """T2: All 28 rules registered, distributed across sub-modules."""
+    """T2: All 29 rules registered, distributed across sub-modules."""
     import autoskillit.recipe  # noqa: F401 -- triggers rule registration
     from autoskillit.recipe.registry import _RULE_REGISTRY
 
@@ -57,6 +57,7 @@ def test_all_rules_registered_across_submodules() -> None:
         "telemetry-before-open-pr",
         "unknown-skill-command",
         "missing-output-patterns",
+        "ci-failure-missing-conflict-gate",
     }
     assert expected <= rule_names
 
@@ -71,7 +72,9 @@ def test_analysis_module_importable() -> None:
 
 def test_analysis_module_no_validator_import() -> None:
     """T3b: _analysis.py must not import from validator.py."""
-    src = (pathlib.Path("src/autoskillit/recipe/_analysis.py")).read_text()
+    src = (
+        pathlib.Path(__file__).resolve().parents[2] / "src/autoskillit/recipe/_analysis.py"
+    ).read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
@@ -82,7 +85,9 @@ def test_analysis_module_no_validator_import() -> None:
 
 def test_validator_does_not_import_rules() -> None:
     """T4: validator.py no longer imports any rules module at module level."""
-    src = (pathlib.Path("src/autoskillit/recipe/validator.py")).read_text()
+    src = (
+        pathlib.Path(__file__).resolve().parents[2] / "src/autoskillit/recipe/validator.py"
+    ).read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):

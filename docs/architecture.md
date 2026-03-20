@@ -1,188 +1,92 @@
 # Architecture
 
-AutoSkillit is a stateless workflow engine built as a Claude Code plugin. It
-orchestrates automated pipelines by delegating work to headless Claude Code
-sessions, each running a focused skill.
+How AutoSkillit works under the hood.
+
+## Overview
+
+AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 40 MCP tools and 61 bundled skills, organized into a gated visibility system.
 
 ## Core Concepts
 
-### Skills
-
-A skill is a focused task defined in a `SKILL.md` file. Skills run in their own
-headless Claude Code session with full tool access. Examples: `make-plan` (create
-an implementation plan), `implement-worktree` (implement code in a worktree),
-`review-pr` (review a PR with parallel audit subagents).
-
-AutoSkillit bundles 36 skills. Use `autoskillit skills list` to see them all.
-
 ### Recipes
+YAML pipeline definitions that describe a sequence of steps. Each step invokes an MCP tool or a skill. Recipes define the flow; skills do the work.
 
-A recipe is a YAML workflow that chains skills and MCP tools into an automated
-pipeline. Recipes define the step graph (what to run), ingredients (inputs),
-routing logic (what to do on success/failure), and kitchen rules (constraints
-for the orchestrator).
+### Skills
+Markdown instruction files (`SKILL.md`) that define what a headless Claude session should do. Skills are registered as `/autoskillit:*` slash commands. Each skill runs in its own context window, so pipelines can run for hours without hitting context limits.
 
 ### The Orchestrator
+When you run `autoskillit order`, Claude Code acts as a pipeline orchestrator. It reads the recipe, collects ingredients from you, and executes steps in sequence. The orchestrator never reads or writes code itself — it delegates all work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
 
-When you run `autoskillit cook`, an orchestrating Claude Code session reads the
-recipe and drives the pipeline. The orchestrator never reads or writes code itself.
-It only calls MCP tools: `run_skill` to delegate to headless sessions, `run_cmd`
-for shell commands, `test_check` to run tests, etc.
+## Tool Visibility (Kitchen Gating)
 
-Because the orchestrator only holds the recipe, current step result, and routing
-state, its context window stays small. Pipelines have run 48+ hours without context
-issues.
+AutoSkillit uses a three-tier tool visibility model:
 
-## Three-Tier Visibility System
+- **Free-range (2 tools)**: Always visible — `open_kitchen`, `close_kitchen`
+- **Headless tools (1 tool)**: Revealed in headless sessions via `mcp.enable({'headless'})` — `test_check`
+- **Kitchen tools (37 tools total, 36 kitchen-only)**: Gated behind `open_kitchen` — `run_skill`,
+  `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 30 more.
+  One kitchen tool (`test_check`) also carries the `headless` tag and is additionally
+  pre-enabled in headless sessions.
 
-AutoSkillit uses a three-tier visibility model so that its 36 MCP tools and 36
-skills never pollute your context window when you don't need them.
+When you call `open_kitchen` (automatically done by `order`), all 37 kitchen-tagged tools become
+available for that session. This keeps normal Claude Code sessions clean — no pipeline tools
+cluttering the tool list.
 
-### Tier 0: Always Visible (12 tools)
-
-These lightweight tools are visible in every Claude Code session immediately.
-They let you inspect recipes, check status, and fetch issues without opening
-the kitchen:
-
-`kitchen_status`, `list_recipes`, `load_recipe`, `validate_recipe`,
-`get_pipeline_report`, `get_token_summary`, `get_timing_summary`,
-`fetch_github_issue`, `get_issue_title`, `get_ci_status`,
-`open_kitchen`, `close_kitchen`
-
-### Tier 1: Kitchen-Gated (24 tools)
-
-The pipeline tools — `run_skill`, `run_cmd`, `test_check`, `merge_worktree`,
-`clone_repo`, and 19 others — are hidden at startup via FastMCP's tag-based
-visibility system. They don't appear in `tools/list`, so Claude never sees
-their descriptions and never wastes tokens on them.
-
-To reveal them, call `open_kitchen` (or launch via `autoskillit cook`, which
-opens the kitchen automatically). This:
-
-1. Enables the gate (`DefaultGateState.enable()`)
-2. Dynamically reveals all 24 kitchen tools to the MCP client
-3. Writes a hook config file for the quota guard
-4. Injects orchestrator discipline rules into the response
-
-`close_kitchen` reverses this: hides tools, disables the gate, removes config.
-
-### Tier 2: Human-Only Skills
-
-A subset of skills (currently `open-kitchen` and `close-kitchen`) have
-`disable-model-invocation: true` injected when running in headless/automated
-sessions. This prevents agents from autonomously opening the kitchen or
-escalating their own privileges. In `chefs-hat` mode (human-interactive),
-this restriction is removed.
-
-### Why This Matters
-
-Most MCP servers dump all their tools into every session, consuming context
-window space with tool descriptions the model may never use. AutoSkillit's
-gating means you pay zero token cost for pipeline tools during normal coding
-sessions. The full pipeline surface only appears when you explicitly ask for it.
+Functional category subsets (`github`, `ci`, `clone`, `telemetry`) can be disabled in config;
+those tools remain hidden even after `open_kitchen`.
+See **[MCP Tool Access Control](mcp-tool-access.md)** for the complete tool map.
 
 ## Clone Isolation
 
-Every pipeline that modifies code starts by cloning the source repository into
-`../autoskillit-runs/{run_name}-{timestamp}/`. This enforces a strict contract:
+All pipeline work happens in a cloned copy of your repository:
 
-- The source directory is never written to during a pipeline
-- All implementation happens in the clone
-- The clone's `origin` remote is rewritten to point to the real upstream
-  (not back to the local source)
-- Generated files are decontaminated from the clone's git index
+1. `clone_repo` creates a full clone at `../autoskillit-runs/<run>-<timestamp>/`
+2. Your working tree and uncommitted changes are never touched
+3. The clone's `origin` remote is rewritten to prevent Claude Code from confusing the clone with your real project
+4. After the pipeline, you choose whether to keep or delete the clone
 
-**Safety guards before cloning:**
-- Uncommitted changes are detected and the user is asked to choose:
-  `proceed` (clone committed state only) or `clone_local` (copy working tree)
-- Unpublished branches are detected and warned about
+## Worktree Isolation
 
-**On failure**, clones are always preserved (`keep: "true"`) for manual inspection.
-Cleanup requires explicit user confirmation via a `confirm` action step.
+Within the clone, implementation happens in git worktrees:
 
-## Headless Session Orchestration
+1. `implement-worktree-no-merge` creates a worktree branched from the feature branch
+2. Code changes are committed phase by phase inside the worktree
+3. `merge_worktree` rebases the worktree onto the target branch, runs tests, and merges
+4. The worktree is cleaned up after a successful merge
 
-`run_skill` launches a headless Claude Code session for each skill invocation.
-The system manages session lifecycle with several reliability mechanisms:
+## Session Model
 
-### Completion Marker
+AutoSkillit supports four session modes with different tool and skill visibility:
 
-Every headless session prompt is appended with a directive to include `%%ORDER_UP%%`
-as the last line of output. The orchestrator uses this marker to reliably detect
-session completion vs. stale/interrupted sessions.
+- **`$ claude` (plugin, no kitchen)**: Regular Claude Code session with the AutoSkillit plugin
+  loaded. Sees 2 Free Range MCP tools (`open_kitchen`, `close_kitchen`) and Tier 1 skills only
+  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 37 kitchen-tagged MCP
+  tools become available.
 
-Recovery paths handle two failure modes:
-- **Separate marker**: Model emits the marker as a standalone message (recovered
-  by joining all assistant messages)
-- **Stale with result**: Session goes stale but stdout contains a valid completed
-  result (recovered with `subtype: "recovered_from_stale"`)
+- **`$ autoskillit cook`**: Interactive development session. Sees all three skill tiers
+  (Tier 1+2+3) via an ephemeral session directory. MCP tools are initially ungated (same as
+  `$ claude`); `/open-kitchen` reveals kitchen tools.
 
-### Budget Guard
+- **`$ autoskillit order`**: Pipeline orchestrator session. Kitchen is pre-opened at startup —
+  all 40 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
+  delegates work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
 
-Consecutive failure counting prevents infinite retry loops. After
-`max_consecutive_retries` failures of the same skill, `needs_retry` is forced to
-`false` regardless of the session outcome.
+- **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees 2 Free Range
+  tools + `test_check` (headless-tagged). Cannot call `run_skill`, `run_cmd`, or `run_python`
+  — enforced by hooks and code guards. Has access to all native Claude Code tools (Read, Write,
+  Bash, etc.) and all skill tiers via `--add-dir skills_extended/`.
 
-### Model Resolution
+This prevents recursive session nesting and keeps the orchestrator as a pure routing engine.
+See **[Skill Visibility](skill-visibility.md)** for the full tier breakdown and configuration.
 
-Three-tier priority: `config.model.override` > per-step `model` field >
-`config.model.default`. The override prevents per-step model selection from
-escaping a budget constraint.
+## Safety
 
-### Session Diagnostics
+See **[Hooks & Safety](hooks-and-safety.md)** for the complete safety system: protected branches, quota management, format validation, and session boundary enforcement.
 
-On Linux, every headless session captures process-level snapshots (RSS, OOM score,
-file descriptors, signals, thread count) at 5-second intervals. Results are written
-to `~/.local/share/autoskillit/logs/` with anomaly detection for OOM spikes,
-zombies, and resource growth. See [Developer Guide](developer.md) for details.
+## Session Diagnostics
 
-## Hook System
+Pipeline sessions are logged to `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Each session records token usage, timing, and process traces.
 
-AutoSkillit registers Claude Code hooks that run on tool calls:
+Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`
 
-### PreToolUse Hooks (before tool execution)
-
-| Hook | Trigger | What it does |
-|------|---------|-------------|
-| `skill_cmd_check` | `run_skill` | Validates skill_command argument format |
-| `quota_check` | `run_skill` | Blocks when API quota exceeds threshold |
-| `skill_command_guard` | `run_skill` | Blocks non-slash skill commands |
-| `remove_clone_guard` | `remove_clone` | Blocks deletion unless branch is published |
-| `open_kitchen_guard` | `open_kitchen` | Blocks from headless sessions |
-
-### PostToolUse Hook (after tool execution)
-
-| Hook | Trigger | What it does |
-|------|---------|-------------|
-| `pretty_output` | All AutoSkillit tools | Reformats JSON as Markdown-KV (30-77% token reduction) |
-
-All hooks are stdlib-only (no autoskillit imports) and fail-open — a hook bug never
-blocks the user's session.
-
-## Contract Cards
-
-Each recipe has a contract card (generated YAML in `recipes/contracts/`) that
-captures the dataflow contract:
-
-- **Skill contracts**: What inputs each skill requires, what outputs it produces
-- **Dataflow entries**: Per-step tracking of available/required/produced context variables
-- **Staleness detection**: SHA256 hashes of SKILL.md files detect when a skill's
-  behavior has drifted from the contract
-
-Two validation rules:
-- `contract-unreferenced-required`: A required input is available but not referenced
-- `contract-unsatisfied-input`: A required input isn't available at that point
-
-## Safety Features Summary
-
-| Feature | What it prevents |
-|---------|-----------------|
-| Three-tier visibility | 24 pipeline tools hidden by default — zero token cost in normal sessions |
-| Clone isolation | Source repo never modified during pipelines |
-| Dry-walkthrough gate | Plans validated before implementation |
-| Test gate on merge | Tests must pass before merge is allowed |
-| Quota guard | Blocks new sessions when API usage is high |
-| Budget guard | Prevents infinite retry loops |
-| Remove-clone guard | Clones preserved unless branch is published |
-| Open-kitchen guard | Kitchen can't be opened from headless sessions |
-| Fail-open hooks | Hook failures never block user sessions |
+See **[Session Diagnostics](developer/session-diagnostics.md)** for details.

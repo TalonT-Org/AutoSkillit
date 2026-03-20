@@ -51,11 +51,10 @@ def _failed_session_json() -> str:
 
 
 class TestKitchenStatus:
-    """kitchen_status tool returns version health info (ungated)."""
+    """kitchen_status tool returns version health info."""
 
     @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx, monkeypatch, tmp_path):
-        tool_ctx.gate = DefaultGateState(enabled=False)
+    def _setup(self, tool_ctx, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
 
     @pytest.mark.anyio
@@ -83,13 +82,6 @@ class TestKitchenStatus:
         assert result["versions_match"] is False
         assert "warning" in result
         assert "mismatch" in result["warning"].lower()
-
-    @pytest.mark.anyio
-    async def test_status_works_without_enable(self, tool_ctx):
-        assert tool_ctx.gate.enabled is False
-        result = json.loads(await kitchen_status())
-        assert result["tools_enabled"] is False
-        assert isinstance(result["package_version"], str) and result["package_version"]
 
     @pytest.mark.anyio
     async def test_status_includes_token_usage_verbosity_default(self):
@@ -159,30 +151,24 @@ class TestKitchenStatus:
 
 
 class TestGetPipelineReport:
-    """get_pipeline_report is ungated and returns accumulated failures."""
-
-    # Override conftest to test WITHOUT open_kitchen
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
+    """get_pipeline_report is a gated tool that returns accumulated failures."""
 
     @pytest.mark.anyio
-    async def test_ungated_returns_empty_initially(self, tool_ctx):
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        """get_pipeline_report returns gate_error when kitchen gate is closed."""
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        result = json.loads(await get_pipeline_report())
+        assert result.get("success") is False
+        assert result.get("subtype") == "gate_error"
+
+    @pytest.mark.anyio
+    async def test_returns_empty_initially(self, tool_ctx):
         result = json.loads(await get_pipeline_report())
         assert result["total_failures"] == 0
         assert result["failures"] == []
 
     @pytest.mark.anyio
-    async def test_ungated_does_not_require_open_kitchen(self, tool_ctx):
-        """Must succeed even when gate is disabled."""
-        result = json.loads(await get_pipeline_report())
-        assert "error" not in result
-
-    @pytest.mark.anyio
     async def test_accumulates_failures_from_run_skill(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
 
         tool_ctx.gate = DefaultGateState(enabled=True)
         tool_ctx.runner.push(
@@ -207,18 +193,15 @@ class TestGetPipelineReport:
 
 
 class TestGetTokenSummary:
-    """get_token_summary is ungated and returns accumulated token usage."""
-
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
+    """get_token_summary is a gated tool that returns accumulated token usage."""
 
     @pytest.mark.anyio
-    async def test_ungated_does_not_require_open_kitchen(self, tool_ctx):
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        """get_token_summary returns gate_error when kitchen gate is closed."""
+        tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(await get_token_summary())
-        assert "error" not in result
+        assert result.get("success") is False
+        assert result.get("subtype") == "gate_error"
 
     @pytest.mark.anyio
     async def test_returns_empty_steps_initially(self, tool_ctx):
@@ -365,18 +348,15 @@ class TestGetTokenSummary:
 
 
 class TestGetTimingSummary:
-    """get_timing_summary is ungated and returns accumulated wall-clock timing."""
-
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        tool_ctx.gate = DefaultGateState(enabled=False)
+    """get_timing_summary is a gated tool that returns accumulated wall-clock timing."""
 
     @pytest.mark.anyio
-    async def test_ungated_does_not_require_open_kitchen(self, tool_ctx):
+    async def test_gate_closed_returns_gate_error(self, tool_ctx):
+        """get_timing_summary returns gate_error when kitchen gate is closed."""
+        tool_ctx.gate = DefaultGateState(enabled=False)
         result = json.loads(await get_timing_summary())
-        assert "error" not in result
+        assert result.get("success") is False
+        assert result.get("subtype") == "gate_error"
 
     @pytest.mark.anyio
     async def test_returns_empty_steps_initially(self, tool_ctx):
@@ -663,10 +643,6 @@ class TestWriteTelemetryFiles:
 class TestGetTokenSummaryFormat:
     """Tests for get_token_summary format parameter."""
 
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        tool_ctx.gate = DefaultGateState(enabled=False)
-
     @pytest.mark.anyio
     async def test_format_json_default(self, tool_ctx):
         """format='json' (default) returns JSON dict."""
@@ -709,10 +685,6 @@ class TestGetTokenSummaryFormat:
 
 class TestGetTimingSummaryFormat:
     """Tests for get_timing_summary format parameter."""
-
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        tool_ctx.gate = DefaultGateState(enabled=False)
 
     @pytest.mark.anyio
     async def test_format_json_default(self, tool_ctx):
@@ -836,24 +808,3 @@ class TestGetLogRoot:
 
         monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(tmp_path))
         assert isinstance(_get_log_root(), Path)
-
-
-# ---------------------------------------------------------------------------
-# Headless gate enforcement for status tools
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_kitchen_status_denied_when_headless(tool_ctx, monkeypatch):
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    result = json.loads(await kitchen_status())
-    assert result["success"] is False
-    assert result["subtype"] == "headless_error"
-
-
-@pytest.mark.anyio
-async def test_get_pipeline_report_denied_when_headless(tool_ctx, monkeypatch):
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    result = json.loads(await get_pipeline_report())
-    assert result["success"] is False
-    assert result["subtype"] == "headless_error"

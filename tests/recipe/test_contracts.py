@@ -16,7 +16,7 @@ from autoskillit.recipe.contracts import (
     load_recipe_card,
     validate_recipe_cards,
 )
-from autoskillit.workspace import bundled_skills_dir
+from autoskillit.workspace import bundled_skills_extended_dir
 
 # ---------------------------------------------------------------------------
 # Bundled manifest tests
@@ -265,7 +265,9 @@ def test_check_staleness_clean() -> None:
     contract = {
         "bundled_manifest_version": "0.1.0",
         "skill_hashes": {
-            "investigate": compute_skill_hash("investigate", skills_dir=bundled_skills_dir())
+            "investigate": compute_skill_hash(
+                "investigate", skills_dir=bundled_skills_extended_dir()
+            )
         },
     }
     stale = check_contract_staleness(contract)
@@ -575,3 +577,77 @@ def test_generate_recipe_card_includes_output_patterns(tmp_path: Path) -> None:
     assert open_pr_card["expected_output_patterns"], (
         "expected_output_patterns must be non-empty in the card"
     )
+
+
+# ---------------------------------------------------------------------------
+# write_behavior contract tests
+# ---------------------------------------------------------------------------
+
+
+def test_write_behavior_always_loaded() -> None:
+    """make-plan contract declares write_behavior='always' with no patterns."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("make-plan", manifest)
+    assert contract is not None
+    assert contract.write_behavior == "always"
+    assert contract.write_expected_when == []
+
+
+def test_write_behavior_conditional_loaded() -> None:
+    """resolve-merge-conflicts declares conditional write_behavior with patterns."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("resolve-merge-conflicts", manifest)
+    assert contract is not None
+    assert contract.write_behavior == "conditional"
+    assert len(contract.write_expected_when) > 0
+    assert any("conflict_report_path" in p for p in contract.write_expected_when)
+
+
+def test_write_behavior_defaults_to_none() -> None:
+    """investigate has no write_behavior — defaults to None."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("investigate", manifest)
+    assert contract is not None
+    assert contract.write_behavior is None
+
+
+ALWAYS_WRITE_SKILLS = {
+    "dry-walkthrough",
+    "implement-worktree",
+    "implement-worktree-no-merge",
+    "resolve-failures",
+    "resolve-review",
+    "retry-worktree",
+    "rectify",
+    "make-plan",
+    "report-bug",
+    "design-guards",
+    "write-recipe",
+    "diagnose-ci",
+}
+
+
+@pytest.mark.parametrize("skill_name", sorted(ALWAYS_WRITE_SKILLS))
+def test_every_always_write_skill_has_contract(skill_name: str) -> None:
+    """Every skill that should always write must declare write_behavior='always'."""
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract(skill_name, manifest)
+    assert contract is not None, f"Skill '{skill_name}' missing from skill_contracts.yaml"
+    assert contract.write_behavior == "always", (
+        f"Skill '{skill_name}' expected write_behavior='always', got '{contract.write_behavior}'"
+    )
+
+
+# ---------------------------------------------------------------------------
+# REQ-C4-02: DataFlowEntry rename
+# ---------------------------------------------------------------------------
+
+
+def test_dataflow_entry_uppercase_f() -> None:
+    """DataFlowEntry (uppercase F) must be importable; old DataflowEntry must be gone."""
+    import autoskillit.recipe.contracts as m
+    from autoskillit.recipe.contracts import DataFlowEntry  # must not raise
+
+    assert not hasattr(m, "DataflowEntry"), "DataflowEntry (lowercase f) must be removed"
+    entry = DataFlowEntry(step="s", available=[], required=[], produced=[])
+    assert entry.step == "s"

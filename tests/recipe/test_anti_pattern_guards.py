@@ -31,12 +31,24 @@ def test_all_run_cmd_steps_have_step_name(recipe_path):
 
 
 def test_implementation_ci_failure_routes_to_diagnose_ci():
-    """AP1: implementation.yaml must route ci_watch failure to diagnose_ci before resolve_ci."""
+    """AP1: implementation.yaml ci_watch failure must route through detect_ci_conflict gate.
+
+    After Part B, ci_watch routes to detect_ci_conflict (stale-base triage), which then
+    routes to either ci_conflict_fix (stale base) or diagnose_ci (real failure). This ensures
+    diagnose_ci is still reachable for real CI failures while stale-base failures are handled
+    separately, rather than routing directly to resolve_ci.
+    """
     recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
-    # ci_watch on_failure must be diagnose_ci (not resolve_ci directly)
+    # ci_watch on_failure must route to detect_ci_conflict gate (not resolve_ci directly)
     ci_watch = recipe.steps["ci_watch"]
-    assert ci_watch.on_failure == "diagnose_ci", (
-        "ci_watch.on_failure must route to diagnose_ci, not directly to resolve_ci"
+    assert ci_watch.on_failure == "detect_ci_conflict", (
+        "ci_watch.on_failure must route to detect_ci_conflict gate, not directly to resolve_ci"
+    )
+    # detect_ci_conflict must exist and route real failures to diagnose_ci
+    assert "detect_ci_conflict" in recipe.steps
+    gate = recipe.steps["detect_ci_conflict"]
+    assert gate.on_failure == "diagnose_ci", (
+        "detect_ci_conflict.on_failure must route to diagnose_ci for real CI failures"
     )
     # diagnose_ci must exist and call run_skill
     assert "diagnose_ci" in recipe.steps
@@ -47,9 +59,16 @@ def test_implementation_ci_failure_routes_to_diagnose_ci():
 
 
 def test_implementation_groups_ci_failure_routes_to_diagnose_ci():
-    """AP1: implementation-groups.yaml must route ci_watch failure through diagnose_ci."""
+    """AP1: implementation-groups.yaml ci_watch failure must route through detect_ci_conflict."""
     recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
-    assert recipe.steps["ci_watch"].on_failure == "diagnose_ci"
+    assert recipe.steps["ci_watch"].on_failure == "detect_ci_conflict", (
+        "ci_watch.on_failure must route to detect_ci_conflict gate, not directly to diagnose_ci"
+    )
+    # detect_ci_conflict must route real failures to diagnose_ci
+    assert "detect_ci_conflict" in recipe.steps
+    gate = recipe.steps["detect_ci_conflict"]
+    assert gate.on_failure == "diagnose_ci"
+    # diagnose_ci must exist and call run_skill
     assert "diagnose_ci" in recipe.steps
     diag = recipe.steps["diagnose_ci"]
     assert diag.tool == "run_skill"

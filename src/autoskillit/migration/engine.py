@@ -13,7 +13,7 @@ from autoskillit import __version__
 from autoskillit.core import (
     RetryReason,
     SkillResult,
-    _atomic_write,
+    atomic_write,
     dump_yaml_str,
     get_logger,
     load_yaml,
@@ -126,7 +126,7 @@ class MigrationEngine:
         # Write migrated content back to original file
         if result.migrated_content is not None:
             shutil.copy2(file.path, file.path.with_suffix(".yaml.bak"))
-            _atomic_write(file.path, result.migrated_content)
+            atomic_write(file.path, result.migrated_content)
             logger.info("migration.written_back", name=file.name, path=str(file.path))
 
         return result

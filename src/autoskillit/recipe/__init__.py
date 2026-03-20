@@ -16,6 +16,7 @@ from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401
 from autoskillit.recipe import rules_inputs as _rules_inputs  # noqa: E402 F401
 from autoskillit.recipe import rules_merge as _rules_merge  # noqa: E402 F401
 from autoskillit.recipe import rules_recipe as _rules_recipe  # noqa: E402 F401
+from autoskillit.recipe import rules_skill_content as _rules_skill_content  # noqa: E402 F401
 from autoskillit.recipe import rules_skills as _rules_skills  # noqa: E402 F401
 from autoskillit.recipe import rules_tools as _rules_tools  # noqa: E402 F401
 from autoskillit.recipe import rules_verdict as _rules_verdict  # noqa: E402 F401
@@ -55,7 +56,16 @@ from autoskillit.recipe.io import (  # noqa: E402
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
-from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeStep  # noqa: E402
+from autoskillit.recipe.schema import (  # noqa: E402
+    AUTOSKILLIT_VERSION_KEY,
+    DataFlowReport,
+    Recipe,
+    RecipeInfo,
+    RecipeIngredient,
+    RecipeStep,
+    StepResultCondition,
+    StepResultRoute,
+)
 from autoskillit.recipe.staleness_cache import (  # noqa: E402
     StalenessEntry,
     compute_recipe_hash,
@@ -65,6 +75,7 @@ from autoskillit.recipe.staleness_cache import (  # noqa: E402
 from autoskillit.recipe.validator import (  # noqa: E402
     RuleFinding,
     analyze_dataflow,
+    make_validation_context,
     run_semantic_rules,
     validate_recipe,
 )
@@ -75,7 +86,12 @@ __all__ = [
     "RecipeListItem",
     "Recipe",
     "RecipeInfo",
+    "RecipeIngredient",
     "RecipeStep",
+    "AUTOSKILLIT_VERSION_KEY",
+    "StepResultCondition",
+    "StepResultRoute",
+    "DataFlowReport",
     "StaleItem",
     "StalenessEntry",
     "compute_recipe_hash",
@@ -87,6 +103,7 @@ __all__ = [
     "find_recipe_by_name",
     "iter_steps_with_context",
     "validate_recipe",
+    "make_validation_context",
     "run_semantic_rules",
     "analyze_dataflow",
     "check_contract_staleness",

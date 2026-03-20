@@ -114,7 +114,7 @@ def test_flush_session_log_creates_anomalies_file_only_when_anomalies_exist(tmp_
     anomalies_path = tmp_path / "sessions" / "anomaly-session" / "anomalies.jsonl"
     assert anomalies_path.is_file()
     lines = anomalies_path.read_text().strip().split("\n")
-    assert len(lines) >= 1
+    assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["kind"] == "oom_critical"
 
@@ -726,3 +726,25 @@ def test_flush_session_log_none_warnings_treated_as_empty(tmp_path):
     _flush(tmp_path, session_id="default-warn", proc_snapshots=None)  # no write_path_warnings arg
     summary = json.loads((tmp_path / "sessions" / "default-warn" / "summary.json").read_text())
     assert summary["write_path_warnings"] == []
+
+
+def test_flush_session_log_includes_write_call_count_in_summary(tmp_path):
+    """summary.json records write_call_count."""
+    _flush(tmp_path, session_id="wc-session", write_call_count=5, proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "wc-session" / "summary.json").read_text())
+    assert summary["write_call_count"] == 5
+
+
+def test_flush_session_log_write_call_count_in_index(tmp_path):
+    """sessions.jsonl index includes write_call_count."""
+    _flush(tmp_path, session_id="wc-idx", write_call_count=3, proc_snapshots=None)
+    index_path = tmp_path / "sessions.jsonl"
+    entry = json.loads(index_path.read_text().strip().split("\n")[-1])
+    assert entry["write_call_count"] == 3
+
+
+def test_flush_session_log_write_call_count_defaults_to_zero(tmp_path):
+    """write_call_count defaults to 0 when not specified."""
+    _flush(tmp_path, session_id="wc-default", proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "wc-default" / "summary.json").read_text())
+    assert summary["write_call_count"] == 0

@@ -85,3 +85,15 @@ The `implementation` recipe includes a `sprint_entry` step gated on `sprint_mode
   per-issue dispatch → sprint report).
 
 The same pattern applies to the `remediation` recipe.
+
+### How Sprint Mode Works
+
+Sprint mode transforms a single-issue recipe into a batch processor:
+
+1. **Triage** — `triage-issues` analyzes open GitHub issues and produces a sequenced plan
+2. **Sprint Planning** — `sprint-planner` selects a conflict-free subset of issues for the sprint
+3. **User Confirmation** — the orchestrator presents the sprint plan and waits for approval
+4. **Dispatch** — for each issue in the sprint, the standard pipeline runs (plan → implement → test → merge → PR)
+5. **Sprint Report** — a summary issue is created linking all PRs from the sprint
+
+This reuses the existing recipe steps — the sub-recipe only adds the triage/planning prefix and the per-issue dispatch loop.

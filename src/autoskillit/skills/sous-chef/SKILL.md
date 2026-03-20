@@ -27,24 +27,28 @@ responsible for enforcing this regardless of what the plan says.
 
 ---
 
-## RETRY-WORKTREE VS RE-INVOKE — MANDATORY
+## CONTEXT LIMIT ROUTING — MANDATORY
 
-When `run_skill` returns `needs_retry=true` for an
-`implement-worktree-no-merge` call:
+When `run_skill` returns `needs_retry=true` for **any step**:
 
-- **Use `/autoskillit:retry-worktree`** — pass the existing `worktree_path`
-  from the partial session's output. The worktree is on disk with all commits
-  made so far; retry-worktree continues from where context was exhausted.
-- **Do NOT call `implement-worktree-no-merge` again.** A new call creates a
-  brand-new timestamped worktree, discarding all partial progress.
+- **If the step defines `on_context_limit`** → follow `on_context_limit`.
+  The worktree or partial state is on disk; route to the designated recovery step
+  (typically `test` or `retry_worktree`) to check whether partial work was sufficient.
+- **If the step has no `on_context_limit`** → fall through to `on_failure` as usual.
 
-When a completed worktree implementation needs to be redone (e.g., after a plan
-revision):
+**For `implement-worktree-no-merge` specifically:**
+- `on_context_limit` routes to `retry_worktree` in standard recipes.
+- Use `/autoskillit:retry-worktree` — pass the existing `worktree_path` from the
+  partial session's output. The worktree is on disk with all commits made so far.
+- **Do NOT call `implement-worktree-no-merge` again.** A new call creates a fresh
+  timestamped worktree, discarding all partial progress.
+
+When a completed worktree implementation needs to be redone (e.g., after a plan revision):
 - Call `implement-worktree-no-merge` on the revised plan (creates a fresh worktree).
 - Clean up the old worktree explicitly if needed.
 
-Summary: `needs_retry=true` → `retry-worktree`. Plan revision → new
-`implement-worktree-no-merge` call.
+Summary: `needs_retry=true` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + no `on_context_limit` → `on_failure`.
 
 ---
 

@@ -184,6 +184,25 @@ def test_toolcontext_github_client_annotated_with_protocol():
     assert GitHubFetcher in get_args(hints["github_client"])
 
 
+def test_toolcontext_response_log_annotated_with_mcp_response_store_protocol() -> None:
+    """ToolContext.response_log must be annotated with the McpResponseStore protocol.
+
+    response_log uses default_factory (Null Object pattern) not field(default=None),
+    so it is excluded from test_toolcontext_optional_fields_all_have_protocol_annotations.
+    This test closes that coverage gap.
+    """
+    from typing import get_type_hints
+
+    from autoskillit.core import McpResponseStore
+
+    hints = get_type_hints(ToolContext)
+    assert "response_log" in hints, "ToolContext must have a response_log field"
+    assert hints["response_log"] is McpResponseStore, (
+        f"ToolContext.response_log must be annotated with McpResponseStore protocol, "
+        f"got: {hints['response_log']!r}"
+    )
+
+
 def test_tool_context_has_timing_log_field(tmp_path):
     """ToolContext.timing_log is a non-None TimingStore instance."""
     from autoskillit.core import TimingStore

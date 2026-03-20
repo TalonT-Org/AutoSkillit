@@ -1,5 +1,5 @@
 """Composition Root: make_context() is the only location that legally instantiates
-all 11 service contracts simultaneously.
+all 22 service contracts simultaneously.
 
 server/ is L3 — the only layer permitted to import from both L1 (pipeline/)
 and L2 (recipe/, migration/) at the same time. This module is the canonical
@@ -13,7 +13,7 @@ import os
 from typing import Any
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import SubprocessRunner, pkg_root
+from autoskillit.core import SubprocessRunner, WriteBehaviorSpec, get_logger, pkg_root
 from autoskillit.execution import (
     DefaultCIWatcher,
     DefaultDatabaseReader,
@@ -44,6 +44,8 @@ from autoskillit.workspace import (
     resolve_ephemeral_root,
 )
 
+logger = get_logger(__name__)
+
 # Sentinel: distinguish "caller passed runner=None explicitly" from "not provided"
 _UNSET: Any = object()
 
@@ -59,7 +61,7 @@ def make_context(
     runner: SubprocessRunner | None = _UNSET,
     plugin_dir: str | None = None,
 ) -> ToolContext:
-    """Create a fully-wired ToolContext with all 12 service fields populated.
+    """Create a fully-wired ToolContext with all 22 service fields populated.
 
     This is the Composition Root — the only location that should instantiate
     all concrete service implementations simultaneously. Uses a three-step
@@ -77,8 +79,9 @@ def make_context(
                     to the autoskillit package directory (parent of server/).
 
     Returns:
-        ToolContext with gate starting closed (enabled=False). Call
-        gate.enable() (via the open_kitchen prompt) to activate gated tools.
+        ToolContext with gate starting closed (enabled=False) in all contexts.
+        Tag-based visibility (mcp.enable({'headless'}) or open_kitchen) controls
+        tool reveal — the gate itself is never pre-enabled at startup.
         All service fields are populated. When runner=None is passed explicitly,
         tester is left as None.
     """
@@ -92,8 +95,6 @@ def make_context(
 
     resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
     gate = DefaultGateState(enabled=False)
-    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-        gate.enable()
 
     provider = SkillsDirectoryProvider()
     ephemeral_root = resolve_ephemeral_root()
@@ -116,6 +117,7 @@ def make_context(
         ci_watcher=DefaultCIWatcher(token=github_token),
         merge_queue_watcher=DefaultMergeQueueWatcher(token=github_token),
         session_skill_manager=session_mgr,
+        skill_resolver=provider.resolver,
     )
 
     def _resolve_output_patterns(skill_command: str) -> list[str]:
@@ -127,7 +129,20 @@ def make_context(
             return []
         return contract.expected_output_patterns
 
+    def _resolve_write_behavior(skill_command: str) -> WriteBehaviorSpec:
+        name = resolve_skill_name(skill_command)
+        if not name:
+            return WriteBehaviorSpec()
+        contract = get_skill_contract(name, load_bundled_manifest())
+        if contract is None or contract.write_behavior is None:
+            return WriteBehaviorSpec()
+        return WriteBehaviorSpec(
+            mode=contract.write_behavior,
+            expected_when=tuple(contract.write_expected_when),
+        )
+
     ctx.output_pattern_resolver = _resolve_output_patterns
+    ctx.write_expected_resolver = _resolve_write_behavior
     ctx.executor = DefaultHeadlessExecutor(ctx)
     ctx.migrations = DefaultMigrationService(
         default_migration_engine(), run_headless=ctx.executor.run

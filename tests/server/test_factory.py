@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from autoskillit.config import AutomationConfig
 from autoskillit.core.types import SkillResult, SubprocessResult, TerminationReason
 from autoskillit.execution.db import DefaultDatabaseReader
@@ -46,11 +48,12 @@ def test_make_context_gate_starts_closed(monkeypatch):
     assert ctx.gate.enabled is False
 
 
-def test_make_context_gate_pre_enabled_in_headless_session(monkeypatch):
-    """Gate starts enabled when AUTOSKILLIT_HEADLESS=1 (headless worker)."""
+def test_make_context_gate_stays_closed_in_headless_session(monkeypatch):
+    """Gate is NOT pre-enabled when AUTOSKILLIT_HEADLESS=1.
+    Tag-based visibility (mcp.enable({'headless'})) handles tool reveal."""
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.gate.enabled is True
+    assert ctx.gate.enabled is False
 
 
 def test_make_context_executor_is_default_headless():
@@ -74,6 +77,7 @@ def test_make_context_all_service_fields_populated_includes_github_client():
     assert ctx.workspace_mgr is not None
     assert ctx.clone_mgr is not None
     assert ctx.github_client is not None
+    assert ctx.skill_resolver is not None
     assert isinstance(ctx.recipes, DefaultRecipeRepository)
     assert isinstance(ctx.migrations, DefaultMigrationService)
     assert isinstance(ctx.db_reader, DefaultDatabaseReader)
@@ -133,7 +137,7 @@ def test_make_context_protocol_substitution():
             *,
             model: str = "",
             step_name: str = "",
-            add_dir: str = "",
+            add_dirs=(),
         ) -> SkillResult:
             return SkillResult(
                 success=True,
@@ -178,4 +182,75 @@ def test_output_patterns_nonempty_for_investigate() -> None:
     assert contract is not None
     assert contract.expected_output_patterns, (
         "investigate must have non-empty expected_output_patterns"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Write-expected resolver integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_write_expected_resolver_wired_on_context() -> None:
+    """make_context() must wire a write_expected_resolver onto ToolContext."""
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.write_expected_resolver is not None
+    spec = ctx.write_expected_resolver("/autoskillit:make-plan some task")
+    assert spec.mode == "always"
+
+
+def test_write_expected_resolver_unknown_skill() -> None:
+    """Unknown skills produce a WriteBehaviorSpec with mode=None."""
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.write_expected_resolver is not None
+    spec = ctx.write_expected_resolver("/autoskillit:nonexistent-skill foo")
+    assert spec.mode is None
+
+
+def test_write_expected_resolver_conditional_skill() -> None:
+    """resolve-merge-conflicts produces mode='conditional' with patterns."""
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.write_expected_resolver is not None
+    spec = ctx.write_expected_resolver("/autoskillit:resolve-merge-conflicts")
+    assert spec.mode == "conditional"
+    assert len(spec.expected_when) > 0
+
+
+def test_cook_and_factory_session_skill_manager_ctor_args_in_sync() -> None:
+    """Sync test: _cook.py and _factory.py must call DefaultSessionSkillManager
+    with the same number of positional arguments.
+
+    Both are separate entry points (REQ-TIER-011) and must not be merged, but they
+    must stay structurally aligned. This AST-based test catches constructor drift
+    without requiring the paths to be unified.
+    """
+    import ast
+
+    from autoskillit.core import pkg_root
+
+    def _count_ctor_positional_args(src_path: Path) -> int:
+        """Return the positional arg count of the first DefaultSessionSkillManager(...) call."""
+        tree = ast.parse(src_path.read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "DefaultSessionSkillManager"
+            ):
+                return len(node.args)
+        return -1
+
+    root = pkg_root()
+    cook_path = root / "cli" / "_cook.py"
+    factory_path = root / "server" / "_factory.py"
+
+    cook_count = _count_ctor_positional_args(cook_path)
+    factory_count = _count_ctor_positional_args(factory_path)
+
+    assert cook_count != -1, "No DefaultSessionSkillManager call found in _cook.py"
+    assert factory_count != -1, "No DefaultSessionSkillManager call found in _factory.py"
+    assert cook_count == factory_count, (
+        f"DefaultSessionSkillManager constructor arg count mismatch:\n"
+        f"  _cook.py:    {cook_count} positional arg(s)\n"
+        f"  _factory.py: {factory_count} positional arg(s)\n"
+        "Align both call sites or update this test if the API intentionally diverged."
     )

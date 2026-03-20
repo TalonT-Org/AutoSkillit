@@ -36,8 +36,10 @@ from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe
 
 logger = get_logger(__name__)
 
-# Re-export registry symbols so existing ``from autoskillit.recipe.validator import X``
-# imports continue to work without modification.
+# Re-export registry symbols here so the public interface stays in validator.py.
+# The registry was extracted to registry.py to break the circular import between
+# validator.py and the rule modules (rules_*.py all import from validator via the
+# registry). Callers import from validator.py as the single public entry point.
 __all__ = [
     "RuleFinding",
     "RuleSpec",

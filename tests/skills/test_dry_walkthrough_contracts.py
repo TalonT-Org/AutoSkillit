@@ -12,7 +12,7 @@ from autoskillit.core.paths import pkg_root
 
 @pytest.fixture(scope="module")
 def skill_text() -> str:
-    skill_path = pkg_root() / "skills" / "dry-walkthrough" / "SKILL.md"
+    skill_path = pkg_root() / "skills_extended" / "dry-walkthrough" / "SKILL.md"
     assert skill_path.exists(), f"SKILL.md not found at {skill_path}"
     return skill_path.read_text()
 

@@ -210,3 +210,20 @@ def test_check_staleness_stale_hit_still_returns_items(monkeypatch, tmp_path):
     assert len(result) == 1
     assert result[0].skill == "make-plan"
     assert result[0].reason == "hash_mismatch"
+
+
+# ---------------------------------------------------------------------------
+# T7 — race-condition comment exists in write_staleness_cache
+# ---------------------------------------------------------------------------
+
+
+def test_staleness_cache_race_comment_present() -> None:
+    """write_staleness_cache docstring or body must document the best-effort race acceptance."""
+    import inspect
+
+    from autoskillit.recipe.staleness_cache import write_staleness_cache
+
+    source = inspect.getsource(write_staleness_cache)
+    assert "best-effort" in source.lower() or "race" in source.lower(), (
+        "write_staleness_cache must contain a comment explaining the accepted race condition"
+    )

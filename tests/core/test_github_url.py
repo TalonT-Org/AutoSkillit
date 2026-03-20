@@ -31,3 +31,23 @@ from autoskillit.core import parse_github_repo
 )
 def test_parse_github_repo(url: str, expected: str | None) -> None:
     assert parse_github_repo(url) == expected
+
+
+def test_parse_issue_ref_in_github_url():
+    from autoskillit.core.github_url import _parse_issue_ref
+
+    owner, repo, num = _parse_issue_ref("https://github.com/acme/proj/issues/42")
+    assert owner == "acme" and repo == "proj" and num == 42
+
+
+def test_parse_issue_ref_shorthand_in_github_url():
+    from autoskillit.core.github_url import _parse_issue_ref
+
+    owner, repo, num = _parse_issue_ref("acme/proj#7")
+    assert owner == "acme" and repo == "proj" and num == 7
+
+
+def test_parse_issue_ref_still_importable_via_core_gateway():
+    from autoskillit.core import _parse_issue_ref
+
+    assert callable(_parse_issue_ref)

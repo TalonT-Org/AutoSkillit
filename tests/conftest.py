@@ -1,6 +1,5 @@
 """Shared test fixtures for autoskillit."""
 
-import subprocess
 import sys
 from pathlib import Path as _Path
 
@@ -12,6 +11,7 @@ from autoskillit.core.types import (
     SubprocessRunner,
     TerminationReason,
 )
+from tests._helpers import _flush_structlog_proxy_caches
 
 
 class StatefulMockTester:
@@ -79,33 +79,6 @@ class MockSubprocessRunner(SubprocessRunner):
         if self._queue:
             return self._queue.pop(0)
         return self._default
-
-
-def _flush_structlog_proxy_caches() -> None:
-    """Repair any autoskillit loggers cached before this fixture ran.
-
-    Secondary defense only — the primary mechanism is cache_logger_on_first_use=False
-    set at fixture entry, which prevents new caching during the test. This flush
-    handles the edge case of module-level loggers cached at import time.
-
-    Scans ALL module attributes (not just 'logger'/'_logger') so that loggers
-    stored under any name (e.g. '_log' in execution.quota) are repaired.
-    """
-    import structlog
-    import structlog._config as _sc
-
-    current_procs = structlog.get_config()["processors"]
-    for mod_name in list(sys.modules):
-        if not mod_name.startswith("autoskillit"):
-            continue
-        mod = sys.modules.get(mod_name)
-        if mod is None:
-            continue
-        for lg in vars(mod).values():
-            if isinstance(lg, _sc.BoundLoggerLazyProxy):
-                lg.__dict__.pop("bind", None)
-            elif hasattr(lg, "_processors"):
-                lg._processors = current_procs
 
 
 @pytest.fixture(autouse=True)
@@ -216,7 +189,6 @@ def _clear_headless_env(monkeypatch):
     Also resets mcp kitchen visibility transforms when the server module is
     already imported.
     """
-    import sys
 
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     if "autoskillit.server" in sys.modules:
@@ -229,31 +201,6 @@ def _clear_headless_env(monkeypatch):
 def anyio_backend():
     """Lock all @pytest.mark.anyio tests to the asyncio backend."""
     return "asyncio"
-
-
-@pytest.fixture(scope="session")
-def clone_isolation_repo(tmp_path_factory):
-    """
-    Creates a clone-isolated git repo mirroring what clone_repo produces:
-    - origin → file://{clone_path}  (isolation)
-    - upstream → https://github.com/testowner/testrepo.git  (real remote)
-
-    Session-scoped to avoid repeated git subprocess calls per test.
-    Use shutil.copytree in tests that mutate remotes.
-    """
-    base = tmp_path_factory.mktemp("clone_isolation")
-    repo = base / "clone"
-    repo.mkdir()
-    subprocess.run(["git", "init", str(repo)], check=True)
-    subprocess.run(
-        ["git", "remote", "add", "origin", f"file://{base}/other"], cwd=str(repo), check=True
-    )
-    subprocess.run(
-        ["git", "remote", "add", "upstream", "https://github.com/testowner/testrepo.git"],
-        cwd=str(repo),
-        check=True,
-    )
-    return repo
 
 
 @pytest.fixture

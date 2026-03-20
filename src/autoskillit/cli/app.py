@@ -1,4 +1,4 @@
-"""CLI for autoskillit: serve, init, cook, config, skills, recipes, workspace."""
+"""CLI for autoskillit: serve, init, cook, order, config, skills, recipes, workspace."""
 
 from __future__ import annotations
 
@@ -14,18 +14,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 if TYPE_CHECKING:
-    from autoskillit.recipe import RecipeInfo
+    from autoskillit.recipe import Recipe, RecipeInfo
 
 from cyclopts import App, Parameter
 
-from autoskillit.cli._chefs_hat import chefs_hat
+from autoskillit.cli._cook import cook as cook_interactive
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _generate_config_yaml,
     _prompt_test_command,
     _register_all,
 )
-from autoskillit.core import ClaudeFlags, RecipeSource, _atomic_write, pkg_root
+from autoskillit.core import ClaudeFlags, RecipeSource, atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
 
 app = App(
@@ -98,6 +98,15 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         test_check_command=cfg.test_check.command,
     )
 
+    # Inject config-derived protected branches so hook scripts read consistent values.
+    # Guard: skip when the list is empty so hook scripts never receive "" and
+    # accidentally split it into [""] instead of [].
+    if cfg.safety.protected_branches:
+        os.environ.setdefault(
+            "AUTOSKILLIT_PROTECTED_BRANCHES",
+            ",".join(cfg.safety.protected_branches),
+        )
+
     plugin_dir = str(pkg_root())
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
@@ -133,16 +142,15 @@ def init(
     config_path = config_dir / "config.yaml"
 
     if config_path.exists() and not force:
-        print(f"Config already exists: {config_path}")
-        print("Use --force to overwrite.")
+        print(f"  Config already exists: {config_path}")
+        print("  Use --force to overwrite.")
     else:
         if test_command is not None:
             cmd_parts = test_command.split()
         else:
             cmd_parts = _prompt_test_command()
 
-        _atomic_write(config_path, _generate_config_yaml(cmd_parts))
-        print(f"Config written to: {config_path}")
+        atomic_write(config_path, _generate_config_yaml(cmd_parts))
 
     _register_all(scope, project_dir)
 
@@ -157,7 +165,7 @@ def install(
     from autoskillit.cli._marketplace import install as _install
 
     _install(scope=scope)
-    _print_next_steps()
+    _print_next_steps(context="install")
 
 
 @app.command
@@ -304,7 +312,7 @@ def workspace_init(path: str):
 
     target.mkdir(parents=True, exist_ok=True)
     marker = target / marker_name
-    _atomic_write(
+    atomic_write(
         marker,
         _MARKER_CONTENT.format(
             timestamp=datetime.now(UTC).isoformat(),
@@ -392,7 +400,12 @@ def recipes_render(name: str | None = None) -> None:
     print(diagram if diagram else f"No diagram. Run /render-recipe {name}")
 
 
-def _launch_cook_session(system_prompt: str, *, initial_message: str | None = None) -> None:
+def _launch_cook_session(
+    system_prompt: str,
+    *,
+    initial_message: str | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> None:
     """Launch an interactive Claude Code cook session with the given system prompt."""
     if shutil.which("claude") is None:
         print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
@@ -406,13 +419,57 @@ def _launch_cook_session(system_prompt: str, *, initial_message: str | None = No
         ClaudeFlags.APPEND_SYSTEM_PROMPT,
         system_prompt,
     ]
-    result = subprocess.run(cmd, env={**os.environ, **spec.env})
+    env = {**os.environ, **spec.env}
+    if extra_env:
+        env.update(extra_env)
+    result = subprocess.run(cmd, env=env)
     if result.returncode != 0:
         sys.exit(result.returncode)
 
 
+def _get_subsets_needed(recipe: Recipe, disabled_subsets: frozenset[str]) -> frozenset[str]:
+    """Return the subset names from disabled_subsets that are actually referenced in recipe."""
+    import re
+
+    from autoskillit.recipe import make_validation_context, run_semantic_rules
+
+    ctx = make_validation_context(recipe, disabled_subsets=disabled_subsets)
+    findings = run_semantic_rules(ctx)
+    needed: set[str] = set()
+    for f in findings:
+        if f.rule not in ("subset-disabled-skill", "subset-disabled-tool"):
+            continue
+        m = re.search(r"disabled subset '([^']+)'", f.message)
+        if m:
+            needed.add(m.group(1))
+    return frozenset(needed)
+
+
+def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> None:
+    """Remove specified subsets from subsets.disabled in .autoskillit/config.yaml."""
+    from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
+
+    config_path = project_dir / ".autoskillit" / "config.yaml"
+    try:
+        data: dict = (load_yaml(config_path) or {}) if config_path.exists() else {}
+    except YAMLError:
+        data = {}
+    subsets_section = data.setdefault("subsets", {})
+    current_disabled: list[str] = subsets_section.get("disabled", [])
+    subsets_section["disabled"] = [s for s in current_disabled if s not in subsets]
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(config_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
+    print(f"Updated {config_path}: removed {sorted(subsets)} from subsets.disabled")
+
+
+@app.command(name="cook", alias="c")
+def _cook_cmd() -> None:
+    """Launch an interactive Claude session with all skills and kitchen tools."""
+    cook_interactive()
+
+
 @app.command
-def cook(recipe: str | None = None):
+def order(recipe: str | None = None):
     """Launch an interactive Claude Code session to execute a recipe.
 
     Starts Claude Code with hard tool restrictions: only AskUserQuestion
@@ -433,7 +490,7 @@ def cook(recipe: str | None = None):
     )
 
     if os.environ.get("CLAUDECODE"):
-        print("ERROR: 'cook' cannot run inside a Claude Code session.")
+        print("ERROR: 'order' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
@@ -498,6 +555,37 @@ def cook(recipe: str | None = None):
             print(f"  - {err}")
         sys.exit(1)
 
+    # Subset-disabled gate (REQ-VAL-004)
+    from autoskillit.config import load_config as _load_config
+
+    _cfg = _load_config(Path.cwd())
+    _disabled = frozenset(_cfg.subsets.disabled)
+    _extra_env: dict[str, str] = {}
+
+    if _disabled:
+        _needed = _get_subsets_needed(parsed, _disabled)
+        if _needed:
+            if not sys.stdin.isatty():
+                print(
+                    f"ERROR: Recipe '{recipe}' requires subset(s) "
+                    f"{sorted(_needed)} which are currently disabled."
+                )
+                print("Enable the subset(s) in .autoskillit/config.yaml or run interactively.")
+                sys.exit(1)
+            # Interactive prompt
+            subset_list = ", ".join(sorted(_needed))
+            print(f"\nThis recipe requires the following disabled subset(s): {subset_list}")
+            print("  1. Enable temporarily (for this run only)")
+            print("  2. Enable permanently (update .autoskillit/config.yaml)")
+            print("  3. Cancel")
+            _choice = input("Choose [1/2/3]: ").strip()
+            if _choice == "1":
+                _extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
+            elif _choice == "2":
+                _enable_subsets_permanently(Path.cwd(), _needed)
+            else:
+                return
+
     from autoskillit.cli._prompts import _COOK_GREETINGS, show_cook_preview
 
     show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
@@ -510,13 +598,11 @@ def cook(recipe: str | None = None):
         return
 
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
-    _launch_cook_session(_build_orchestrator_prompt(recipe), initial_message=greeting)
-
-
-@app.command(name="chefs-hat", alias="chef")
-def _chefs_hat_cmd() -> None:
-    """Launch Claude with all bundled AutoSkillit skills as slash commands."""
-    chefs_hat()
+    _launch_cook_session(
+        _build_orchestrator_prompt(recipe),
+        initial_message=greeting,
+        extra_env=_extra_env if _extra_env else None,
+    )
 
 
 def main() -> None:

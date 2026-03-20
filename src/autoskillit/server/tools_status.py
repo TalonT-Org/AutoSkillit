@@ -11,13 +11,12 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import _atomic_write, get_logger
+from autoskillit.core import atomic_write, get_logger
 from autoskillit.pipeline import TelemetryFormatter
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
     _require_enabled,
-    _require_not_headless,
     resolve_log_dir,
     track_response_size,
     write_telemetry_clear_marker,
@@ -33,7 +32,7 @@ def _get_log_root() -> Path:
     return resolve_log_dir(_get_ctx().config.linux_tracing.log_dir)
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("kitchen_status")
 async def kitchen_status() -> str:
     """Return version health and configuration status for the running server.
@@ -42,12 +41,10 @@ async def kitchen_status() -> str:
     tools enabled state, and active configuration summary. Call this after
     enabling tools or anytime you need to verify the server is healthy.
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
+    This tool requires the kitchen to be open (gated by open_kitchen).
     """
-    if (h := _require_not_headless("kitchen_status")) is not None:
-        return h
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_config, _get_ctx, version_info
 
     info = version_info()
@@ -74,7 +71,7 @@ async def kitchen_status() -> str:
     return json.dumps(status)
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("get_pipeline_report")
 async def get_pipeline_report(clear: bool = False) -> str:
     """Return accumulated run_skill failures since last clear.
@@ -88,12 +85,10 @@ async def get_pipeline_report(clear: bool = False) -> str:
       - failures: list of {timestamp, skill_command, exit_code, subtype,
                             needs_retry, retry_reason, stderr}
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
+    This tool requires the kitchen to be open (gated by open_kitchen).
     """
-    if (h := _require_not_headless("get_pipeline_report")) is not None:
-        return h
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_ctx
 
     failures = _get_ctx().audit.get_report_as_dicts()
@@ -120,14 +115,10 @@ def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> l
     return steps
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
 @track_response_size("get_token_summary")
 async def get_token_summary(clear: bool = False, format: str = "json") -> str:
     """Return accumulated run_skill token usage grouped by step name.
-
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
 
     Returns JSON with:
     - steps: list of {step_name, input_tokens, output_tokens,
@@ -136,11 +127,15 @@ async def get_token_summary(clear: bool = False, format: str = "json") -> str:
     - total: {input_tokens, output_tokens, cache_creation_input_tokens,
                cache_read_input_tokens}
 
+    This tool sends no MCP progress notifications.
+
     Args:
         clear: If True, reset the token log after returning current data.
         format: Output format — "json" (default) returns structured JSON,
                 "table" returns a pre-formatted markdown table string.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_ctx
 
     ctx = _get_ctx()
@@ -169,14 +164,10 @@ async def get_token_summary(clear: bool = False, format: str = "json") -> str:
     )
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
 @track_response_size("get_timing_summary")
 async def get_timing_summary(clear: bool = False, format: str = "json") -> str:
     """Return accumulated wall-clock timing grouped by step name.
-
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
 
     Returns JSON with:
     - steps: list of {step_name, total_seconds, invocation_count}
@@ -187,6 +178,8 @@ async def get_timing_summary(clear: bool = False, format: str = "json") -> str:
         format: Output format — "json" (default) returns structured JSON,
                 "table" returns a pre-formatted markdown table string.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_ctx
 
     steps = _get_ctx().timing_log.get_report()
@@ -226,7 +219,7 @@ def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
     return list(reversed(events))[:n], total  # most recent first
 
 
-@mcp.tool(tags={"automation"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
 @track_response_size("get_quota_events")
 async def get_quota_events(n: int = 50) -> str:
     """Return the most recent quota guard events from the diagnostic log.
@@ -243,10 +236,11 @@ async def get_quota_events(n: int = 50) -> str:
     Args:
         n: Maximum number of events to return (default 50).
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
+    This tool requires the kitchen to be open (gated by open_kitchen).
+    This tool sends no MCP progress notifications.
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     from autoskillit.server import _get_ctx
 
     ctx = _get_ctx()
@@ -255,7 +249,7 @@ async def get_quota_events(n: int = 50) -> str:
     return json.dumps({"events": events, "total_count": total})
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
 @track_response_size("write_telemetry_files")
 async def write_telemetry_files(
     output_dir: str,
@@ -301,10 +295,10 @@ async def write_telemetry_files(
     token_total = tool_ctx.token_log.compute_total()
 
     token_path = out / "token_summary.md"
-    _atomic_write(token_path, TelemetryFormatter.format_token_table(token_steps, token_total))
+    atomic_write(token_path, TelemetryFormatter.format_token_table(token_steps, token_total))
 
     timing_path = out / "timing_summary.md"
-    _atomic_write(
+    atomic_write(
         timing_path,
         TelemetryFormatter.format_timing_table(
             tool_ctx.timing_log.get_report(), tool_ctx.timing_log.compute_total()
@@ -316,7 +310,7 @@ async def write_telemetry_files(
         "steps": tool_ctx.response_log.get_report(),
         "total": tool_ctx.response_log.compute_total(),
     }
-    _atomic_write(mcp_path, json.dumps(mcp_data, indent=2))
+    atomic_write(mcp_path, json.dumps(mcp_data, indent=2))
 
     return json.dumps(
         {
@@ -327,7 +321,7 @@ async def write_telemetry_files(
     )
 
 
-@mcp.tool(tags={"automation", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
 @track_response_size("read_db")
 async def read_db(
     db_path: str,

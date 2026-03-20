@@ -162,6 +162,22 @@ class TestPushToRemoteTool:
         assert "error" in result
         assert "remote rejected" in result["stderr"]
 
+    @pytest.mark.anyio
+    async def test_push_to_remote_failure_response_includes_success_false(self, tool_ctx):
+        """REQ-C9-01: failure payload must include success=False for on_failure routing."""
+        mock_mgr = MagicMock()
+        mock_mgr.push_to_remote.return_value = {
+            "success": False,
+            "stderr": "remote rejected",
+            "error_type": "push_rejected",
+        }
+        tool_ctx.clone_mgr = mock_mgr
+        result = json.loads(
+            await push_to_remote(clone_path="/clone", source_dir="/src", branch="main")
+        )
+        assert result.get("success") is False
+        assert "error" in result
+
 
 class TestCloneRepoTiming:
     """clone_repo records wall-clock timing when step_name is provided."""

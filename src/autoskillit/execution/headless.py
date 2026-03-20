@@ -24,16 +24,18 @@ import structlog
 
 from autoskillit.core import (
     ChannelConfirmation,
-    ClaudeFlags,
+    CliSubtype,
     FailureRecord,
     RetryReason,
     SessionOutcome,
     SkillResult,
     TerminationReason,
+    ValidatedAddDir,
+    WriteBehaviorSpec,
     claude_code_project_dir,
     get_logger,
 )
-from autoskillit.execution.commands import build_headless_cmd
+from autoskillit.execution.commands import build_full_headless_cmd
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
@@ -55,43 +57,6 @@ if TYPE_CHECKING:
     )
 
 logger = get_logger(__name__)
-
-
-def _ensure_skill_prefix(skill_command: str) -> str:
-    """Prompt-formatting helper: prepend 'Use ' to slash-commands for headless session loading.
-
-    This is NOT a validator. Non-slash input passes through unchanged by design —
-    runtime validation is enforced by the skill_command_guard PreToolUse hook.
-    """
-    stripped = skill_command.strip()
-    if stripped.startswith("/"):
-        return f"Use {stripped}"
-    return skill_command
-
-
-def _inject_completion_directive(skill_command: str, marker: str) -> str:
-    """Append an orchestration directive to make the session write a completion marker."""
-    directive = (
-        f"\n\nORCHESTRATION DIRECTIVE: When your task is complete, "
-        f"your final text output MUST end with: {marker}\n"
-        f"CRITICAL: Append {marker} at the very end of your substantive response, "
-        f"in the SAME message. Do NOT output {marker} as a separate standalone message."
-    )
-    return skill_command + directive
-
-
-def _inject_cwd_anchor(skill_command: str, cwd: str) -> str:
-    """Append a working directory anchor directive to prevent path contamination."""
-    if not cwd or not os.path.isabs(cwd):
-        return skill_command
-    directive = (
-        f"\n\nWORKING DIRECTORY ANCHOR: Your working directory is {cwd}. "
-        f"All relative paths (temp/, .autoskillit/, etc.) MUST resolve against {cwd}. "
-        f"Do NOT use any other directory as a base for relative paths, regardless of "
-        f"what paths appear in code-index tool responses or set_project_path results. "
-        f"The code-index project path is for READ-ONLY exploration only."
-    )
-    return skill_command + directive
 
 
 def _session_log_dir(cwd: str) -> Path:
@@ -160,8 +125,8 @@ def _recover_block_from_assistant_messages(
     session: ClaudeSessionResult,
     expected_output_patterns: Sequence[str],
 ) -> ClaudeSessionResult | None:
-    """When session.result lacks expected_output_patterns (Channel B win before
-    stdout drain), attempt to find the patterns in session.assistant_messages.
+    """When session.result lacks expected_output_patterns (drain-race condition
+    on either channel), attempt to find the patterns in session.assistant_messages.
     If found, return a new ClaudeSessionResult with result reconstructed from
     assistant_messages. Return None if patterns cannot be found there either.
     """
@@ -171,7 +136,7 @@ def _recover_block_from_assistant_messages(
     if not _check_expected_patterns(combined, expected_output_patterns):
         return None
     logger.warning(
-        "channel_b_pattern_recovered_from_assistant_messages",
+        "pattern_recovered_from_assistant_messages",
         patterns=list(expected_output_patterns),
     )
     # Preserve any content already drained into session.result before appending
@@ -380,6 +345,7 @@ def _build_skill_result(
     max_consecutive_retries: int = 3,
     expected_output_patterns: Sequence[str] = (),
     cwd: str = "",
+    write_behavior: WriteBehaviorSpec | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
@@ -404,7 +370,7 @@ def _build_skill_result(
         stale_session = parse_session_result(result.stdout)
         stale_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_stale_recovery = (
-            stale_session.subtype == "success"
+            stale_session.subtype == CliSubtype.SUCCESS
             and stale_session.result.strip()
             and not stale_session.is_error
         )
@@ -461,13 +427,18 @@ def _build_skill_result(
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
-        session = ClaudeSessionResult(
-            subtype="timeout",
-            is_error=True,
-            result=_truncate(result.stdout) if result.stdout.strip() else "",
-            session_id="",
-            errors=[],
-        )
+        if result.stdout.strip():
+            session = parse_session_result(result.stdout)
+            if session.subtype == CliSubtype.SUCCESS:
+                session = dataclasses.replace(session, subtype=CliSubtype.TIMEOUT, is_error=True)
+        else:
+            session = ClaudeSessionResult(
+                subtype=CliSubtype.TIMEOUT,
+                is_error=True,
+                result="",
+                session_id="",
+                errors=[],
+            )
     else:
         returncode = result.returncode if result.returncode is not None else -1
         session = parse_session_result(result.stdout)
@@ -479,13 +450,13 @@ def _build_skill_result(
         if recovered is not None:
             session = recovered
 
-    # Channel B pattern recovery: when Channel B wins before stdout is drained,
-    # expected_output_patterns content may only exist in assistant_messages.
-    # Attempt recovery so that _compute_success sees the block in session.result.
+    # Pattern recovery: when a drain-race occurs on either channel, expected_output_patterns
+    # content may only exist in assistant_messages. Attempt recovery so that _compute_success
+    # sees the block in session.result.
     if (
-        result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        result.channel_confirmation != ChannelConfirmation.UNMONITORED
         and expected_output_patterns
-        and not _check_expected_patterns(session.result, expected_output_patterns)
+        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
     ):
         pattern_recovered = _recover_block_from_assistant_messages(
             session, expected_output_patterns
@@ -546,6 +517,9 @@ def _build_skill_result(
                 warnings=write_path_warnings[:5],
             )
 
+    # Behavioral write count: count Edit + Write tool calls in session
+    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
+
     if path_contamination:
         sr = SkillResult(
             success=False,
@@ -561,6 +535,7 @@ def _build_skill_result(
             worktree_path=extracted_worktree_path,
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
+            write_call_count=write_call_count,
         )
     else:
         sr = SkillResult(
@@ -577,8 +552,31 @@ def _build_skill_result(
             worktree_path=extracted_worktree_path,
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
+            write_call_count=write_call_count,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
+
+    # Zero-write gate: demote success to retriable failure when a write-expected
+    # skill produced zero Edit/Write calls (silent degradation detection).
+    # Write expectation is resolved from skill_contracts.yaml via WriteBehaviorSpec.
+    if sr.success and sr.write_call_count == 0 and write_behavior is not None:
+        write_expected = False
+        if write_behavior.mode == "always":
+            write_expected = True
+        elif write_behavior.mode == "conditional" and write_behavior.expected_when:
+            write_expected = _check_expected_patterns(
+                sr.result,
+                write_behavior.expected_when,
+            )
+        if write_expected:
+            sr = dataclasses.replace(
+                sr,
+                success=False,
+                subtype="zero_writes",
+                needs_retry=True,
+                retry_reason=RetryReason.ZERO_WRITES,
+            )
+
     logger.debug(
         "build_skill_result_exit",
         success=sr.success,
@@ -587,6 +585,7 @@ def _build_skill_result(
         retry_reason=str(sr.retry_reason),
         is_error=sr.is_error,
         result_len=len(sr.result),
+        write_call_count=sr.write_call_count,
     )
     return sr
 
@@ -598,10 +597,11 @@ async def run_headless_core(
     *,
     model: str = "",
     step_name: str = "",
-    add_dir: str = "",
+    add_dirs: Sequence[ValidatedAddDir] = (),
     timeout: float | None = None,
     stale_threshold: float | None = None,
     expected_output_patterns: Sequence[str] = (),
+    write_behavior: WriteBehaviorSpec | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -615,33 +615,19 @@ async def run_headless_core(
         skill_command=original_skill_command[:100],
         step_name=step_name or None,
     ):
-        skill_command = _inject_cwd_anchor(
-            _inject_completion_directive(
-                _ensure_skill_prefix(skill_command), cfg.completion_marker
-            ),
-            cwd,
-        )
         effective_plugin_dir = ctx.plugin_dir
         resolved_model = _resolve_model(model, ctx.config)
-        spec = build_headless_cmd(skill_command, model=resolved_model)
-        cmd = spec.cmd + [
-            ClaudeFlags.PLUGIN_DIR,
-            effective_plugin_dir,
-            ClaudeFlags.OUTPUT_FORMAT,
-            cfg.output_format.value,
-        ]
-        # Apply any CLI flags required by the chosen output format.
-        for flag in cfg.output_format.required_cli_flags:
-            if flag not in cmd:
-                cmd.append(flag)
-        if add_dir:
-            cmd.extend([ClaudeFlags.ADD_DIR, add_dir])
-
-        env_vars = ["AUTOSKILLIT_HEADLESS=1"]
-        delay_ms = cfg.exit_after_stop_delay_ms
-        if delay_ms > 0:
-            env_vars.append(f"CLAUDE_CODE_EXIT_AFTER_STOP_DELAY={delay_ms}")
-        cmd = ["env"] + env_vars + cmd
+        cmd = build_full_headless_cmd(
+            skill_command,
+            cwd=cwd,
+            completion_marker=cfg.completion_marker,
+            model=resolved_model,
+            plugin_dir=effective_plugin_dir,
+            output_format_value=cfg.output_format.value,
+            output_format_required_flags=cfg.output_format.required_cli_flags,
+            add_dirs=add_dirs,
+            exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
+        )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
@@ -653,7 +639,7 @@ async def run_headless_core(
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             plugin_dir=str(effective_plugin_dir),
-            add_dir=add_dir or None,
+            add_dirs=list(add_dirs) if add_dirs else None,
         )
 
         runner = ctx.runner
@@ -714,6 +700,7 @@ async def run_headless_core(
             audit=ctx.audit,
             expected_output_patterns=expected_output_patterns,
             cwd=cwd,
+            write_behavior=write_behavior,
         )
 
         # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
@@ -752,6 +739,7 @@ async def run_headless_core(
                     timing_seconds=timing_seconds,
                     audit_record=audit_record,
                     write_path_warnings=skill_result.write_path_warnings,
+                    write_call_count=skill_result.write_call_count,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)
@@ -791,10 +779,11 @@ class DefaultHeadlessExecutor:
         *,
         model: str = "",
         step_name: str = "",
-        add_dir: str = "",
+        add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),
+        write_behavior: WriteBehaviorSpec | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -805,8 +794,9 @@ class DefaultHeadlessExecutor:
             self._ctx,
             model=model,
             step_name=step_name,
-            add_dir=add_dir,
+            add_dirs=add_dirs,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             expected_output_patterns=expected_output_patterns,
+            write_behavior=write_behavior,
         )

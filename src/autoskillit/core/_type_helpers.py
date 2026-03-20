@@ -59,6 +59,7 @@ def resolve_target_skill(
     # Reconstruct: replace the skill reference, preserve trailing arguments
     stripped = skill_command.strip()
     m = _SKILL_CMD_RE.match(stripped)
-    assert m is not None  # guaranteed by extract_skill_name succeeding
+    if m is None:
+        raise RuntimeError(f"regex failed after extract_skill_name succeeded: {stripped!r}")
     remainder = stripped[m.end() :]
     return correct_prefix + remainder, name

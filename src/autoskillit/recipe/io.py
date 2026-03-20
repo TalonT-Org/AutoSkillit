@@ -122,13 +122,14 @@ _PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
         "gate",
     }
 )
-assert _PARSE_STEP_HANDLED_FIELDS == frozenset(RecipeStep.__dataclass_fields__), (
-    f"_parse_step field list is out of sync with RecipeStep schema.\n"
-    f"  Missing from handled: "
-    f"{frozenset(RecipeStep.__dataclass_fields__) - _PARSE_STEP_HANDLED_FIELDS}\n"
-    f"  Extra in handled:     "
-    f"{_PARSE_STEP_HANDLED_FIELDS - frozenset(RecipeStep.__dataclass_fields__)}"
-)
+if _PARSE_STEP_HANDLED_FIELDS != frozenset(RecipeStep.__dataclass_fields__):
+    raise RuntimeError(
+        "_parse_step field list is out of sync with RecipeStep schema.\n"
+        f"  Missing from handled: "
+        f"{frozenset(RecipeStep.__dataclass_fields__) - _PARSE_STEP_HANDLED_FIELDS}\n"
+        f"  Extra in handled:     "
+        f"{_PARSE_STEP_HANDLED_FIELDS - frozenset(RecipeStep.__dataclass_fields__)}"
+    )
 
 
 def _parse_recipe(data: dict[str, Any]) -> Recipe:

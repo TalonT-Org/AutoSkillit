@@ -13,6 +13,7 @@ import pytest
 
 from tests.arch._helpers import _scan
 from tests.arch._rules import (
+    _ASYNCIO_PIPE_EXEMPT,
     _BROAD_EXCEPT_EXEMPT,
     _PRINT_EXEMPT,
     RULES,
@@ -90,15 +91,22 @@ def test_rule_registry_completeness() -> None:
 
 
 def test_all_rules_have_defense_standard() -> None:
-    """P13 LOW: every entry in RULES must declare a defense_standard.
+    """Every entry in RULES, LAYER_RULES, and ISOLATION_RULES must declare
+    a defense_standard.
 
-    Prevents future @semantic_rule additions from silently omitting
-    the defense_standard field, which would break audit-defense-standards
-    traceability.
+    Prevents future rule additions from silently omitting the defense_standard
+    field, which would break audit-defense-standards traceability.
     """
-    missing = [r.rule_id for r in RULES if r.defense_standard is None]
+    import tests.arch.test_layer_enforcement as le_mod
+    import tests.arch.test_subpackage_isolation as si_mod
+
+    all_rules: list[RuleDescriptor] = list(RULES)
+    all_rules.extend(le_mod.LAYER_RULES.values())
+    all_rules.extend(si_mod.ISOLATION_RULES.values())
+
+    missing = [r.rule_id for r in all_rules if r.defense_standard is None]
     assert not missing, (
-        f"RULES entries missing defense_standard: {missing}. "
+        f"Rule entries missing defense_standard: {missing}. "
         "Every architectural rule must trace to a defense standard."
     )
 
@@ -233,6 +241,20 @@ def test_arch003_exemptions_match_broad_except_set() -> None:
     assert arch003.exemptions == _BROAD_EXCEPT_EXEMPT
 
 
+# ── P13-9: ARCH-004 exemptions sync ──────────────────────────────────────────
+
+
+def test_arch004_exemptions_match_asyncio_pipe_exempt_set() -> None:
+    """P13-9: ARCH-004 RuleDescriptor.exemptions must equal _ASYNCIO_PIPE_EXEMPT.
+
+    If execution/process.py is renamed or the ARCH-004 exemption set drifts,
+    this test catches the staleness before the AST visitor silently skips
+    the new filename.
+    """
+    arch004 = next(r for r in RULES if r.rule_id == "ARCH-004")
+    assert arch004.exemptions == _ASYNCIO_PIPE_EXEMPT
+
+
 # ── P13-5: REQ-ARCH-001/002/003 descriptors exist ────────────────────────────
 
 
@@ -250,3 +272,5 @@ def test_req_arch_rules_have_descriptors() -> None:
     assert "REQ-ARCH-001" in layer_ids
     assert "REQ-ARCH-003" in layer_ids
     assert "REQ-ARCH-002" in isolation_ids
+    assert "REQ-LAYER-001" in layer_ids
+    assert "REQ-LAYER-002" in layer_ids

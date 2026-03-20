@@ -13,17 +13,11 @@ def test_ungated_tools_is_frozenset():
     assert isinstance(UNGATED_TOOLS, frozenset)
 
 
-def test_tool_sets_are_disjoint():
-    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
-
-    assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
-
-
 def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert len(GATED_TOOLS) >= 24
-    assert len(UNGATED_TOOLS) >= 12
+    assert len(GATED_TOOLS) == 37
+    assert len(UNGATED_TOOLS) == 2
 
 
 def test_gated_tools_contains_expected_names():
@@ -34,7 +28,6 @@ def test_gated_tools_contains_expected_names():
         "run_python",
         "read_db",
         "run_skill",
-        "test_check",
         "merge_worktree",
         "reset_test_dir",
         "classify_fix",
@@ -54,6 +47,21 @@ def test_gated_tools_contains_expected_names():
         "get_pr_reviews",
         "bulk_close_issues",
         "check_pr_mergeable",
+        "set_commit_status",
+        "wait_for_merge_queue",
+        "toggle_auto_merge",
+        # formerly ungated — now kitchen-gated:
+        "fetch_github_issue",
+        "get_issue_title",
+        "get_ci_status",
+        "get_pipeline_report",
+        "get_quota_events",
+        "get_timing_summary",
+        "get_token_summary",
+        "kitchen_status",
+        "list_recipes",
+        "load_recipe",
+        "validate_recipe",
     }
     assert GATED_TOOLS == expected
 
@@ -70,20 +78,7 @@ def test_check_quota_not_in_ungated_tools():
 def test_ungated_tools_contains_expected_names():
     from autoskillit.pipeline.gate import UNGATED_TOOLS
 
-    expected = {
-        "kitchen_status",
-        "get_pipeline_report",
-        "get_token_summary",
-        "get_timing_summary",
-        "list_recipes",
-        "load_recipe",
-        "validate_recipe",
-        "fetch_github_issue",
-        "get_issue_title",
-        "get_ci_status",
-        "open_kitchen",
-        "close_kitchen",
-    }
+    expected = {"open_kitchen", "close_kitchen"}
     assert UNGATED_TOOLS == expected
 
 
@@ -182,3 +177,98 @@ def test_gate_imports_only_from_core():
                     assert "autoskillit" not in alias.name, (
                         "gate.py must not use bare autoskillit imports"
                     )
+
+
+def test_gated_tools_does_not_contain_run_recipe():
+    from autoskillit.pipeline.gate import GATED_TOOLS
+
+    assert "run_recipe" not in GATED_TOOLS
+
+
+def test_headless_tools_is_frozenset():
+    from autoskillit.core.types import HEADLESS_TOOLS
+
+    assert isinstance(HEADLESS_TOOLS, frozenset)
+
+
+def test_headless_tools_contains_expected_names():
+    from autoskillit.core.types import HEADLESS_TOOLS
+
+    assert HEADLESS_TOOLS == {"test_check"}
+
+
+def test_free_range_tools_is_frozenset():
+    from autoskillit.core.types import FREE_RANGE_TOOLS
+
+    assert isinstance(FREE_RANGE_TOOLS, frozenset)
+
+
+def test_free_range_tools_contains_expected_names():
+    from autoskillit.core.types import FREE_RANGE_TOOLS
+
+    assert FREE_RANGE_TOOLS == {"open_kitchen", "close_kitchen"}
+
+
+def test_ungated_tools_equals_free_range_tools():
+    from autoskillit.core.types import FREE_RANGE_TOOLS, UNGATED_TOOLS
+
+    assert UNGATED_TOOLS == FREE_RANGE_TOOLS
+
+
+def test_all_tool_sets_disjoint_and_complete():
+    from autoskillit.core.types import HEADLESS_TOOLS
+    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
+
+    assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
+    assert GATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
+    assert UNGATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
+    assert len(GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS) == 40
+
+
+def test_worker_tools_removed_from_core():
+    import autoskillit.core.types as t
+
+    assert not hasattr(t, "WORKER_TOOLS"), "WORKER_TOOLS must be removed"
+    assert not hasattr(t, "HEADLESS_BLOCKED_UNGATED_TOOLS"), (
+        "HEADLESS_BLOCKED_UNGATED_TOOLS must be removed"
+    )
+
+
+def test_headless_error_result_fields():
+    import json
+
+    from autoskillit.pipeline.gate import headless_error_result
+
+    parsed = json.loads(headless_error_result())
+    assert parsed["success"] is False
+    assert parsed["is_error"] is True
+    assert parsed["subtype"] == "headless_error"
+    assert parsed["exit_code"] == -1
+    assert parsed["needs_retry"] is False
+    assert parsed["retry_reason"] == "none"
+    assert "session_id" in parsed
+    assert "stderr" in parsed
+    assert "token_usage" in parsed
+
+
+def test_headless_error_result_field_parity():
+    import json
+
+    from autoskillit.pipeline.gate import gate_error_result, headless_error_result
+
+    gate = json.loads(gate_error_result())
+    headless = json.loads(headless_error_result())
+    assert set(gate.keys()) == set(headless.keys())
+    assert headless["token_usage"] is None
+    assert headless["cli_subtype"] == ""
+    assert headless["write_path_warnings"] == []
+
+
+def test_headless_error_result_accepts_custom_message():
+    import json
+
+    from autoskillit.pipeline.gate import headless_error_result
+
+    parsed = json.loads(headless_error_result("Custom headless error"))
+    assert parsed["result"] == "Custom headless error"
+    assert parsed["subtype"] == "headless_error"

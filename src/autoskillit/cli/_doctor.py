@@ -4,62 +4,135 @@ from __future__ import annotations
 
 import json
 import shutil
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
-from autoskillit.core import Severity, is_git_worktree, pkg_root
+from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
+from autoskillit.core import Severity
+from autoskillit.hook_registry import HOOK_REGISTRY
 
 
 @dataclass
 class DoctorResult:
-    """Outcome of a single doctor check.
-
-    The ``fix`` field is for **external programmatic callers** that want to
-    inspect results and apply remediation themselves.  ``run_doctor`` does not
-    dispatch ``fix`` — it passes ``fix=True`` directly into each check function,
-    which applies the fix inline and returns an ``OK`` result immediately.
-    External callers (e.g. tests or integrations) may call ``result.fix()``
-    after receiving an ``ERROR`` result from a check function invoked with
-    ``fix=False``.
-    """
+    """Outcome of a single doctor check."""
 
     severity: Severity
     check: str
     message: str
-    fix: Callable[[], None] | None = field(default=None, repr=False)
 
 
-def _is_plugin_installed() -> bool:
-    """Check if autoskillit is installed as a Claude Code plugin."""
-    settings_path = Path.home() / ".claude" / "settings.json"
-    if not settings_path.is_file():
-        return False
+def _check_mcp_server_registered(claude_json_path: Path | None = None) -> DoctorResult:
+    """Check that autoskillit MCP server is registered (via mcpServers or plugin)."""
+    import subprocess
+
+    if claude_json_path is None:
+        claude_json_path = Path.home() / ".claude.json"
+
+    # Check 1: direct mcpServers entry (legacy / init-based registration)
+    if claude_json_path.exists():
+        try:
+            data = json.loads(claude_json_path.read_text())
+            if "autoskillit" in data.get("mcpServers", {}):
+                return DoctorResult(
+                    severity=Severity.OK,
+                    check="mcp_server_registered",
+                    message="autoskillit registered in mcpServers",
+                )
+        except OSError as exc:
+            return DoctorResult(
+                severity=Severity.ERROR,
+                check="mcp_server_registered",
+                message=f"~/.claude.json could not be read: {exc}",
+            )
+        except json.JSONDecodeError as exc:
+            return DoctorResult(
+                severity=Severity.ERROR,
+                check="mcp_server_registered",
+                message=f"~/.claude.json is not valid JSON: {exc}",
+            )
+
+    # Check 2: plugin-based registration (install-based)
+    _plugin_check_detail = ""
     try:
-        data = json.loads(settings_path.read_text())
-        enabled = data.get("enabledPlugins", {})
-        return any(key.startswith("autoskillit@") for key in enabled if enabled[key])
-    except (json.JSONDecodeError, AttributeError):
-        return False
+        result = subprocess.run(
+            ["claude", "plugin", "list"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and "autoskillit" in result.stdout:
+            return DoctorResult(
+                severity=Severity.OK,
+                check="mcp_server_registered",
+                message="autoskillit registered as Claude plugin",
+            )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        _plugin_check_detail = f" (claude plugin list unavailable: {type(exc).__name__})"
+    else:
+        _plugin_check_detail = ""
+
+    return DoctorResult(
+        severity=Severity.WARNING,
+        check="mcp_server_registered",
+        message=(
+            "autoskillit not registered. Run 'autoskillit install' to install as a plugin, "
+            "or 'autoskillit init' to register in mcpServers." + _plugin_check_detail
+        ),
+    )
 
 
-def run_doctor(
-    *, output_json: bool = False, plugin_dir: str | None = None, fix: bool = False
-) -> None:
+def _check_hook_registration(settings_path: Path) -> DoctorResult:
+    data = _load_settings_data(settings_path)
+    registered = " ".join(
+        hook.get("command", "")
+        for event_entries in data.get("hooks", {}).values()
+        if isinstance(event_entries, list)
+        for entry in event_entries
+        for hook in entry.get("hooks", [])
+    )
+    missing = [
+        script for hdef in HOOK_REGISTRY for script in hdef.scripts if script not in registered
+    ]
+    if missing:
+        return DoctorResult(
+            severity=Severity.WARNING,
+            check="hook_registration",
+            message=f"Missing hooks: {', '.join(missing)}. Run 'autoskillit init'.",
+        )
+    return DoctorResult(
+        severity=Severity.OK,
+        check="hook_registration",
+        message="All HOOK_REGISTRY scripts present in settings.json.",
+    )
+
+
+def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
+    from autoskillit.cli._marketplace import _clear_plugin_cache
+
+    _clear_plugin_cache()
+
     results: list[DoctorResult] = []
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
     stale_servers: list[str] = []
-    has_standalone_autoskillit = False
+    _stale_parse_error = False
     claude_json = Path.home() / ".claude.json"
     if claude_json.is_file():
-        data = json.loads(claude_json.read_text())
+        try:
+            data = json.loads(claude_json.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            results.append(
+                DoctorResult(
+                    Severity.ERROR,
+                    "stale_mcp_servers",
+                    f"~/.claude.json could not be parsed: {exc}",
+                )
+            )
+            _stale_parse_error = True
+            data = {}
         servers = data.get("mcpServers", {})
         for name, entry in servers.items():
-            if name == "autoskillit":
-                has_standalone_autoskillit = True
-                continue
             cmd = entry.get("command", "")
             if not cmd:
                 continue
@@ -74,52 +147,17 @@ def run_doctor(
                     f"MCP server '{name}' command not found: {cmd}. "
                     f"Remove with: claude mcp remove --scope user {name}"
                 )
-    if stale_servers:
-        for msg in stale_servers:
-            results.append(DoctorResult(Severity.ERROR, "stale_mcp_servers", msg))
-    else:
-        results.append(
-            DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")
-        )
+    if not _stale_parse_error:
+        if stale_servers:
+            for msg in stale_servers:
+                results.append(DoctorResult(Severity.ERROR, "stale_mcp_servers", msg))
+        else:
+            results.append(
+                DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")
+            )
 
-    # Check 1b: Duplicate autoskillit — standalone entry alongside plugin install
-    plugin_installed = _is_plugin_installed()
-    if has_standalone_autoskillit and plugin_installed:
-        results.append(
-            DoctorResult(
-                Severity.ERROR,
-                "duplicate_mcp_server",
-                "Standalone 'autoskillit' MCP server in ~/.claude.json duplicates "
-                "the plugin registration. This spawns two server processes per session. "
-                "Remove with: claude mcp remove autoskillit",
-            )
-        )
-    elif has_standalone_autoskillit and not plugin_installed:
-        results.append(
-            DoctorResult(
-                Severity.WARNING,
-                "duplicate_mcp_server",
-                "Standalone 'autoskillit' MCP server found in ~/.claude.json. "
-                "Consider using 'autoskillit install' for persistent plugin registration instead.",
-            )
-        )
-    else:
-        results.append(
-            DoctorResult(Severity.OK, "duplicate_mcp_server", "No duplicate MCP registrations")
-        )
-
-    # Check 2: Plugin metadata exists in package
-    pkg_dir = pkg_root()
-    if not (pkg_dir / ".claude-plugin" / "plugin.json").is_file():
-        results.append(
-            DoctorResult(
-                Severity.ERROR,
-                "plugin_metadata",
-                "Plugin metadata missing. Reinstall autoskillit.",
-            )
-        )
-    else:
-        results.append(DoctorResult(Severity.OK, "plugin_metadata", "Plugin metadata exists"))
+    # Check 2: MCP server registered in ~/.claude.json or via plugin
+    results.append(_check_mcp_server_registered(claude_json_path=Path.home() / ".claude.json"))
 
     # Check 3: autoskillit command on PATH
     if shutil.which("autoskillit") is None:
@@ -147,96 +185,35 @@ def run_doctor(
     else:
         results.append(DoctorResult(Severity.OK, "project_config", "Project config exists"))
 
-    # Check 5: Version consistency — plugin.json vs package version
-    from autoskillit.version import version_info
+    # Check 5: Version consistency — package version must match plugin.json
+    import importlib.metadata
+    import importlib.resources as _ir
 
-    info = version_info(plugin_dir=plugin_dir)
-    if info["plugin_json_version"] is None:
+    pkg_version = importlib.metadata.version("autoskillit")
+    plugin_json_path = Path(str(_ir.files("autoskillit"))) / ".claude-plugin" / "plugin.json"
+    try:
+        plugin_version = json.loads(plugin_json_path.read_text()).get("version")
+    except (json.JSONDecodeError, OSError):
+        plugin_version = None
+    if plugin_version == pkg_version:
         results.append(
             DoctorResult(
-                Severity.ERROR,
+                Severity.OK,
                 "version_consistency",
-                "Cannot verify version consistency: plugin.json not found. "
-                "Reinstall: autoskillit install",
-            )
-        )
-    elif not info["match"]:
-        results.append(
-            DoctorResult(
-                Severity.ERROR,
-                "version_consistency",
-                f"Package version is {info['package_version']} but plugin.json "
-                f"reports {info['plugin_json_version']}. "
-                f"Update plugin.json or reinstall: autoskillit install",
+                f"Version {pkg_version} installed",
             )
         )
     else:
         results.append(
             DoctorResult(
-                Severity.OK,
-                "version_consistency",
-                f"Version {info['package_version']} consistent across package and plugin.json",
-            )
-        )
-
-    # Check 6: Marketplace symlink freshness
-    pkg_version = info["package_version"]
-    marketplace_link = Path.home() / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
-    if marketplace_link.is_symlink():
-        target = marketplace_link.resolve()
-        if not target.is_dir():
-            results.append(
-                DoctorResult(
-                    Severity.ERROR,
-                    "marketplace_freshness",
-                    f"Marketplace symlink points to missing directory: {target}. "
-                    f"Re-run: autoskillit install",
-                )
-            )
-        elif is_git_worktree(target):
-            results.append(
-                DoctorResult(
-                    Severity.ERROR,
-                    "marketplace_freshness",
-                    f"Marketplace symlink target is inside a git worktree: {target}\n"
-                    "The symlink will break when the worktree is deleted.\n"
-                    "Run 'autoskillit install' from the main project checkout to fix.",
-                )
-            )
-        else:
-            mkt_json = marketplace_link.parent.parent / ".claude-plugin" / "marketplace.json"
-            if mkt_json.is_file():
-                mkt_data = json.loads(mkt_json.read_text())
-                plugins = mkt_data.get("plugins", [])
-                mkt_version = plugins[0].get("version", "") if plugins else ""
-                if mkt_version != pkg_version:
-                    results.append(
-                        DoctorResult(
-                            Severity.WARNING,
-                            "marketplace_freshness",
-                            f"Marketplace manifest version ({mkt_version}) "
-                            f"differs from installed version ({pkg_version}). "
-                            f"Re-run: autoskillit install",
-                        )
-                    )
-                else:
-                    results.append(
-                        DoctorResult(
-                            Severity.OK,
-                            "marketplace_freshness",
-                            "Marketplace manifest version matches installed version",
-                        )
-                    )
-    elif (Path.home() / ".autoskillit" / "marketplace").is_dir():
-        results.append(
-            DoctorResult(
                 Severity.WARNING,
-                "marketplace_freshness",
-                "Marketplace symlink missing. Re-run: autoskillit install",
+                "version_consistency",
+                f"Package version {pkg_version} does not match "
+                f"plugin.json {plugin_version!r}. Reinstall autoskillit to fix.",
             )
         )
 
-    # Check 8: Hook executability — validates scripts from the canonical registry
+    # Check 6: Hook executability — validates scripts from the canonical registry
     from autoskillit.hooks import generate_hooks_json
 
     hooks_data = generate_hooks_json()
@@ -260,7 +237,10 @@ def run_doctor(
     else:
         results.append(DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible"))
 
-    # Check 7: Script version health
+    # Check 7: Hook registration in settings.json
+    results.append(_check_hook_registration(_claude_settings_path("user")))
+
+    # Check 8: Script version health
     from autoskillit import __version__
     from autoskillit.core import RecipeSource
     from autoskillit.migration import FailureStore, default_store_path

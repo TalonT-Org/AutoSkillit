@@ -17,8 +17,10 @@ from autoskillit import cli
 class TestCLIInstall:
     def test_install_validates_scope(self, capsys: pytest.CaptureFixture) -> None:
         """install rejects invalid scope values."""
+        from autoskillit.cli._marketplace import install
+
         with pytest.raises(SystemExit) as exc_info:
-            cli.install(scope="invalid")
+            install(scope="invalid")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "Invalid scope" in captured.out
@@ -34,8 +36,10 @@ class TestCLIInstall:
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+        from autoskillit.cli._marketplace import install
+
         with pytest.raises(SystemExit) as exc_info:
-            cli.install()
+            install()
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "claude plugin marketplace add" in captured.out
@@ -49,7 +53,9 @@ class TestCLIInstall:
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        marketplace_dir = cli._ensure_marketplace()
+        from autoskillit.cli._marketplace import _ensure_marketplace
+
+        marketplace_dir = _ensure_marketplace()
         assert (marketplace_dir / ".claude-plugin" / "marketplace.json").is_file()
         assert (marketplace_dir / "plugins" / "autoskillit").is_symlink()
 
@@ -64,7 +70,9 @@ class TestCLIInstall:
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        marketplace_dir = cli._ensure_marketplace()
+        from autoskillit.cli._marketplace import _ensure_marketplace
+
+        marketplace_dir = _ensure_marketplace()
         link = marketplace_dir / "plugins" / "autoskillit"
         expected = Path(ir.files("autoskillit"))
         assert link.resolve() == expected.resolve()
@@ -78,14 +86,16 @@ class TestCLIInstall:
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        marketplace_dir = cli._ensure_marketplace()
+        from autoskillit.cli._marketplace import _ensure_marketplace
+
+        marketplace_dir = _ensure_marketplace()
         data = json.loads((marketplace_dir / ".claude-plugin" / "marketplace.json").read_text())
         assert data["name"] == "autoskillit-local"
         assert len(data["plugins"]) == 1
         assert data["plugins"][0]["name"] == "autoskillit"
         assert data["plugins"][0]["source"] == "./plugins/autoskillit"
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli._marketplace.subprocess.run")
     def test_install_calls_claude_cli(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -100,8 +110,9 @@ class TestCLIInstall:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
+        from autoskillit.cli._marketplace import install
 
-        cli.install(scope="user")
+        install(scope="user")
 
         assert mock_run.call_count == 2
         marketplace_call = mock_run.call_args_list[0]
@@ -113,7 +124,7 @@ class TestCLIInstall:
         assert "--scope" in install_call[0][0]
         assert "user" in install_call[0][0]
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli._marketplace.subprocess.run")
     def test_install_passes_scope_to_claude(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -129,14 +140,15 @@ class TestCLIInstall:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
+        from autoskillit.cli._marketplace import install
 
-        cli.install(scope="project")
+        install(scope="project")
 
         install_call = mock_run.call_args_list[1][0][0]
         scope_idx = install_call.index("--scope")
         assert install_call[scope_idx + 1] == "project"
 
-    @patch("autoskillit.cli.subprocess.run")
+    @patch("autoskillit.cli._marketplace.subprocess.run")
     def test_install_idempotent_marketplace(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -152,9 +164,10 @@ class TestCLIInstall:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
+        from autoskillit.cli._marketplace import install
 
-        cli.install()
-        cli.install()  # second run should not fail
+        install()
+        install()  # second run should not fail
 
         assert (tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit").is_symlink()
 
@@ -298,9 +311,10 @@ class TestInstallCommand:
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: True)
+        from autoskillit.cli._marketplace import _ensure_marketplace
 
         with pytest.raises(SystemExit, match="worktree"):
-            cli._ensure_marketplace()
+            _ensure_marketplace()
 
     def test_ensure_marketplace_succeeds_in_main_checkout(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -311,8 +325,9 @@ class TestInstallCommand:
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+        from autoskillit.cli._marketplace import _ensure_marketplace
 
-        result = cli._ensure_marketplace()
+        result = _ensure_marketplace()
         assert result == tmp_path / ".autoskillit" / "marketplace"
 
     def test_install_symlink_target_is_not_inside_git_worktree(
@@ -330,7 +345,9 @@ class TestInstallCommand:
             pytest.skip("Cannot verify non-worktree install from a worktree environment")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        marketplace_dir = cli._ensure_marketplace()
+        from autoskillit.cli._marketplace import _ensure_marketplace
+
+        marketplace_dir = _ensure_marketplace()
         link = marketplace_dir / "plugins" / "autoskillit"
 
         target = link.resolve()
@@ -345,7 +362,7 @@ class TestGroupFInstall:
     """P8-2, P3-2, P5-4: CLI refactoring — install/quota/upgrade tests."""
 
     def test_upgrade_uses_atomic_write(self, tmp_path, monkeypatch):
-        """upgrade() must call _atomic_write, not yaml_file.write_text."""
+        """upgrade() must call atomic_write, not yaml_file.write_text."""
         import autoskillit.cli._marketplace as _mkt
         import autoskillit.core as _core
 
@@ -355,16 +372,18 @@ class TestGroupFInstall:
         (scripts_dir / "test.yaml").write_text("inputs:\n  foo: bar\n")
 
         atomic_calls: list[tuple] = []
-        original = _core._atomic_write
+        original = _core.atomic_write
 
         def capture(path, content):
             atomic_calls.append((path, content))
             return original(path, content)
 
-        monkeypatch.setattr(_mkt, "_atomic_write", capture)
-        cli.upgrade()
+        monkeypatch.setattr(_mkt, "atomic_write", capture)
+        from autoskillit.cli._marketplace import upgrade
 
-        assert len(atomic_calls) == 1, "Expected exactly one _atomic_write call"
+        upgrade()
+
+        assert len(atomic_calls) == 1, "Expected exactly one atomic_write call"
         _, content = atomic_calls[0]
         assert "ingredients:" in content
         assert "inputs:" not in content
@@ -394,14 +413,19 @@ class TestGroupFInstall:
         assert hook_script.exists(), f"Expected hook script at {hook_script}"
 
     def test_generate_hooks_json_includes_quota_hook(self):
-        """generate_hooks_json() must include quota_check.py in output structure."""
+        """generate_hooks_json() must include quota_check.py in PreToolUse and pretty_output.py in PostToolUse."""  # noqa: E501
         from autoskillit.hook_registry import generate_hooks_json
 
         data = generate_hooks_json()
-        commands = [
+        pretooluse_commands = [
             hook["command"] for entry in data["hooks"]["PreToolUse"] for hook in entry["hooks"]
         ]
-        assert any(cmd.endswith("quota_check.py") for cmd in commands)
+        assert any(cmd.endswith("quota_check.py") for cmd in pretooluse_commands)
+        assert "PostToolUse" in data["hooks"]
+        posttooluse_commands = [
+            hook["command"] for entry in data["hooks"]["PostToolUse"] for hook in entry["hooks"]
+        ]
+        assert any(cmd.endswith("pretty_output.py") for cmd in posttooluse_commands)
 
     def test_install_writes_pretooluse_hooks(self, tmp_path, monkeypatch):
         """install must register the quota PreToolUse hook in .claude/settings.json."""
@@ -422,8 +446,9 @@ class TestGroupFInstall:
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        from autoskillit.cli._marketplace import install
 
-        cli.install(scope="local")
+        install(scope="local")
 
         data = json.loads(settings_path.read_text())
         hooks = data.get("hooks", {})
@@ -456,8 +481,9 @@ class TestGroupFInstall:
         _app_mod = importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        from autoskillit.cli._marketplace import install
 
-        cli.install(scope="local")
+        install(scope="local")
 
         data = json.loads(settings_path.read_text())
         hooks = data.get("hooks", {})
@@ -482,9 +508,10 @@ class TestGroupFInstall:
         _app_mod = importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        from autoskillit.cli._marketplace import install
 
-        cli.install(scope="local")
-        cli.install(scope="local")
+        install(scope="local")
+        install(scope="local")
 
         data = json.loads(settings_path.read_text())
         pretooluse = data.get("hooks", {}).get("PreToolUse", [])

@@ -4,19 +4,36 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autoskillit"
-version = "0.2.0"
+version = "0.5.2"
 description = "MCP server for orchestrating automated skill-driven workflows with Claude Code"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Talon Trecek", email = "talontrecek@gmail.com"},
+]
+keywords = ["claude", "claude-code", "automation", "ai", "mcp", "plugin"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 requires-python = ">=3.11"
 dependencies = [
     "anyio>=4.6.0",
     "dynaconf>=3.2.12,<4.0",
-    "fastmcp>=3.0.2",
+    "fastmcp>=3.1.1,<4.0",
     "httpx>=0.28,<0.29",
+    "igraph>=1.0",
     "packaging>=23.0",
     "psutil>=7.2.0",
     "pyyaml>=6.0",
     "cyclopts>=4.0",
-    "structlog>=25.0",
+    "structlog>=25.0,<26.0",
 ]
 
 [project.optional-dependencies]
@@ -31,6 +48,12 @@ dev = [
     "packaging>=25.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/TalonT-Org/AutoSkillit"
+Repository = "https://github.com/TalonT-Org/AutoSkillit"
+Documentation = "https://github.com/TalonT-Org/AutoSkillit/tree/stable/docs"
+"Bug Tracker" = "https://github.com/TalonT-Org/AutoSkillit/issues"
+
 [project.scripts]
 autoskillit = "autoskillit.cli:main"
 
@@ -42,6 +65,14 @@ artifacts = [
     "src/autoskillit/migrations/**",
     "src/autoskillit/hooks/**",
     "src/autoskillit/config/defaults.yaml",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/autoskillit/**",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
 ]
 
 [tool.pytest.ini_options]
@@ -73,6 +104,9 @@ root_packages = ["autoskillit"]
 # inside TYPE_CHECKING blocks to avoid circular imports at runtime.
 exclude_type_checking_imports = true
 
+# IL-001 | Lens: module-dependency | DS-001
+# Rationale: L0 (core) is the foundation layer; it must have zero upward imports to
+# remain independently testable and importable outside the autoskillit package.
 [[tool.importlinter.contracts]]
 name = "L0 core has no autoskillit upward imports"
 type = "forbidden"
@@ -88,6 +122,10 @@ forbidden_modules = [
     "autoskillit.cli",
 ]
 
+# IL-002 | Lens: module-dependency | DS-001
+# Rationale: L1 config resolves settings from layered sources; allowing it to import
+# pipeline/execution/recipe would create hidden initialization-time coupling that
+# breaks independent layered testing.
 [[tool.importlinter.contracts]]
 name = "L1 config imports only L0"
 type = "forbidden"
@@ -102,6 +140,10 @@ forbidden_modules = [
     "autoskillit.cli",
 ]
 
+# IL-003 | Lens: module-dependency | DS-001
+# Rationale: pipeline/ holds cross-session gate and audit state; importing from L2
+# (recipe, migration) would create initialization-order coupling and prevent L1
+# packages from being tested in isolation without a full L2 import graph.
 [[tool.importlinter.contracts]]
 name = "L1 pipeline does not import L2 or L3"
 type = "forbidden"
@@ -115,6 +157,10 @@ forbidden_modules = [
     "autoskillit.cli",
 ]
 
+# IL-004 | Lens: module-dependency | DS-001
+# Rationale: execution/ manages subprocess lifecycle; it must not import config,
+# pipeline, workspace, recipe, migration, server, or cli to remain a leaf L1 service
+# that can be tested without spinning up the full autoskillit stack.
 [[tool.importlinter.contracts]]
 name = "L1 execution imports only L0"
 type = "forbidden"
@@ -129,6 +175,10 @@ forbidden_modules = [
     "autoskillit.cli",
 ]
 
+# IL-005 | Lens: module-dependency | DS-001
+# Rationale: workspace/ manages cloning and skill resolution; importing from config
+# or pipeline would introduce a circular risk since config and pipeline both may
+# depend on workspace for path resolution.
 [[tool.importlinter.contracts]]
 name = "L1 workspace imports only L0"
 type = "forbidden"
@@ -143,6 +193,10 @@ forbidden_modules = [
     "autoskillit.cli",
 ]
 
+# IL-006 | Lens: module-dependency | DS-001
+# Rationale: recipe/ is an L2 service that orchestrates validation over workspace
+# artifacts; importing config, pipeline, execution, migration, server, or cli
+# would conflate recipe semantics with runtime session management.
 [[tool.importlinter.contracts]]
 name = "L2 recipe imports only L0 and workspace"
 type = "forbidden"
@@ -156,6 +210,9 @@ forbidden_modules = [
     "autoskillit.cli",
 ]
 
+# IL-007 | Lens: module-dependency | DS-001
+# Rationale: migration/ must not import config or pipeline to stay independently
+# runnable as a schema-upgrade step without a live pipeline context.
 [[tool.importlinter.contracts]]
 name = "L2 migration does not import L3 or config"
 type = "forbidden"

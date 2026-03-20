@@ -12,29 +12,28 @@ import pytest
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import UNGATED_TOOLS
-from autoskillit.server.tools_integrations import (
-    _ENRICH_RESULT_END,
-    _ENRICH_RESULT_START,
+from autoskillit.server.helpers import _extract_block
+from autoskillit.server.tools_github import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
-    _PREPARE_RESULT_END,
-    _PREPARE_RESULT_START,
-    _extract_block,
-    _format_diagnostics_section,
-    _parse_enrich_result,
     _parse_fingerprint,
-    _parse_prepare_result,
-    _read_session_diagnostics,
-    bulk_close_issues,
-    claim_issue,
-    enrich_issues,
     fetch_github_issue,
     get_issue_title,
-    get_pr_reviews,
-    prepare_issue,
-    release_issue,
     report_bug,
 )
+from autoskillit.server.tools_issue_lifecycle import (
+    _ENRICH_RESULT_END,
+    _ENRICH_RESULT_START,
+    _PREPARE_RESULT_END,
+    _PREPARE_RESULT_START,
+    _parse_enrich_result,
+    _parse_prepare_result,
+    claim_issue,
+    enrich_issues,
+    prepare_issue,
+    release_issue,
+)
+from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
 from tests.conftest import _make_result
 
 # ---------------------------------------------------------------------------
@@ -567,8 +566,11 @@ async def test_fetch_github_issue_client_error_propagated(tool_ctx):
     assert result["success"] is False
 
 
-def test_fetch_github_issue_in_ungated_tools():
-    assert "fetch_github_issue" in UNGATED_TOOLS
+def test_fetch_github_issue_in_gated_tools():
+    from autoskillit.pipeline.gate import GATED_TOOLS
+
+    assert "fetch_github_issue" in GATED_TOOLS
+    assert "fetch_github_issue" not in UNGATED_TOOLS
 
 
 def test_github_config_defaults():
@@ -620,12 +622,12 @@ class TestGetIssueTitleTool:
         result = json.loads(await get_issue_title("owner/repo#404"))
         assert result["success"] is False
 
-    def test_get_issue_title_is_ungated(self):
-        """'get_issue_title' in UNGATED_TOOLS."""
+    def test_get_issue_title_is_gated(self):
+        """'get_issue_title' in GATED_TOOLS."""
         from autoskillit.pipeline.gate import GATED_TOOLS
 
-        assert "get_issue_title" in UNGATED_TOOLS
-        assert "get_issue_title" not in GATED_TOOLS
+        assert "get_issue_title" in GATED_TOOLS
+        assert "get_issue_title" not in UNGATED_TOOLS
 
 
 # ---------------------------------------------------------------------------
@@ -777,6 +779,244 @@ class TestPrepareIssueTool:
         assert result["success"] is False
         assert result["subtype"] == "gate_error"
 
+    @pytest.mark.anyio
+    async def test_prepare_issue_success_with_result_block(self, tool_ctx):
+        """Happy path: executor returns success=True with a valid result block."""
+        result_text = (
+            f"{_PREPARE_RESULT_START}\n"
+            '{"issue_url": "https://github.com/o/r/issues/1", "issue_number": 1, '
+            '"route": "recipe:implementation", "issue_type": "enhancement", '
+            '"confidence": 0.9, "rationale": "ok", "labels_applied": [], '
+            '"dry_run": false, "sub_issues": []}\n'
+            f"{_PREPARE_RESULT_END}"
+        )
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result=result_text,
+            session_id="sid123",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await prepare_issue("Test title", "Test body"))
+
+        assert result["success"] is True
+        assert result["status"] == "complete"
+        assert result["issue_number"] == 1
+        assert "error" not in result
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_success_empty_result_channel_b_drain_race(self, tool_ctx):
+        """Channel B drain race: executor returns success=True but result is empty.
+        Response must be success=False with diagnostics — THE KEY CONTRADICTION TEST.
+        """
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="",
+            session_id="sid123",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await prepare_issue("Test title", "Test body"))
+
+        assert result["success"] is False
+        assert result["session_id"] == "sid123"
+        assert result["subtype"] == "success"
+        assert result["error"] == "session completed but output was empty (drain race)"
+        assert result["status"] != "complete"  # contradiction must be impossible
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_failure_with_diagnostics(self, tool_ctx):
+        """Executor failure: response must surface session_id, stderr, subtype, exit_code."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="",
+            session_id="sid456",
+            subtype="missing_completion_marker",
+            is_error=True,
+            exit_code=1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="Claude exited unexpectedly",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await prepare_issue("Test title", "Test body"))
+
+        assert result["success"] is False
+        assert result["session_id"] == "sid456"
+        assert result["stderr"] == "Claude exited unexpectedly"
+        assert result["subtype"] == "missing_completion_marker"
+        assert result["exit_code"] == 1
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_passes_expected_output_patterns_to_executor(self, tool_ctx):
+        """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="",
+            session_id="sid",
+            subtype="error",
+            is_error=True,
+            exit_code=1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+        tool_ctx.output_pattern_resolver = lambda cmd: ["---prepare-issue-result---"]
+
+        await prepare_issue("Title", "Body")
+
+        call_kwargs = mock_executor.run.call_args.kwargs
+        assert call_kwargs.get("expected_output_patterns") == ["---prepare-issue-result---"]
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_response_success_field_never_overwritten_by_parsed_spread(
+        self, tool_ctx
+    ):
+        """When parsed block contains 'success': false, the outer success=True is preserved."""
+        result_text = (
+            f"{_PREPARE_RESULT_START}\n"
+            '{"success": false, "error": "skill-internal error"}\n'
+            f"{_PREPARE_RESULT_END}"
+        )
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result=result_text,
+            session_id="sid",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await prepare_issue("Title", "Body"))
+
+        assert result["success"] is True
+        assert result["status"] == "complete"
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "skill_success,skill_result_text",
+        [
+            (True, ""),  # drain race: session ok but no output
+            (False, ""),  # session failure
+        ],
+    )
+    async def test_prepare_issue_contradictory_state_is_impossible(
+        self, tool_ctx, skill_success, skill_result_text
+    ):
+        """status=complete and success=False must never co-exist in any response."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=skill_success,
+            result=skill_result_text,
+            session_id="sid",
+            subtype="success" if skill_success else "error",
+            is_error=not skill_success,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await prepare_issue("Title", "Body"))
+
+        assert result["success"] is False
+        assert result["status"] == "failed"
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_no_result_block_includes_stderr(self, tool_ctx):
+        """success=True + non-empty result + no delimiters → stderr surfaced."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="I created the issue. All steps complete.",
+            session_id="abc-123",
+            stderr="ImportError: cannot import x from autoskillit",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+        )
+        tool_ctx.executor = mock_executor
+        response = json.loads(await prepare_issue("Test Issue", ""))
+        assert response["success"] is False
+        assert response["error"] == "no result block found"
+        assert "stderr" in response, "stderr must be in block-parse-failure response"
+        assert response["stderr"] == "ImportError: cannot import x from autoskillit"
+        assert response["session_id"] == "abc-123"
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_empty_output_includes_stderr(self, tool_ctx):
+        """success=True + empty result (drain race) → stderr surfaced."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="",
+            session_id="abc-456",
+            stderr="Connection reset by peer",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+        )
+        tool_ctx.executor = mock_executor
+        response = json.loads(await prepare_issue("Test Issue", ""))
+        assert response["success"] is False
+        assert "drain race" in response["error"]
+        assert "stderr" in response, "stderr must be in drain-race failure response"
+        assert response["stderr"] == "Connection reset by peer"
+        assert response["session_id"] == "abc-456"
+
+    @pytest.mark.anyio
+    async def test_prepare_issue_session_failure_uses_subtype_not_block_sentinel(self, tool_ctx):
+        """success=False must NOT call _parse_prepare_result.
+        The error must reflect actual failure reason, not 'no result block found'.
+        """
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="Session context exhausted. Cannot continue.",
+            session_id="abc-789",
+            stderr="",
+            subtype="stale",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=True,
+            retry_reason=RetryReason.RESUME,
+        )
+        tool_ctx.executor = mock_executor
+        response = json.loads(await prepare_issue("Test Issue", ""))
+        assert response["success"] is False
+        assert response["error"] != "no result block found", (
+            "Wrong-branch masking: failure path must not call _parse_prepare_result"
+        )
+        assert response["subtype"] == "stale"
+
 
 class TestEnrichIssuesTool:
     def test_enrich_issues_is_gated(self):
@@ -792,6 +1032,280 @@ class TestEnrichIssuesTool:
         result = json.loads(await enrich_issues())
         assert result["success"] is False
         assert result["subtype"] == "gate_error"
+
+    @pytest.mark.anyio
+    async def test_enrich_issues_success_empty_result_includes_diagnostics(self, tool_ctx):
+        """Drain race for enrich_issues: success=True with empty result must yield failure."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="",
+            session_id="sid789",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await enrich_issues())
+
+        assert result["success"] is False
+        assert result["session_id"] == "sid789"
+
+    @pytest.mark.anyio
+    async def test_enrich_issues_failure_includes_session_id_and_stderr(self, tool_ctx):
+        """Executor failure: response includes session_id and stderr for diagnosis."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="",
+            session_id="sid-fail",
+            subtype="missing_completion_marker",
+            is_error=True,
+            exit_code=2,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="Session timed out",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await enrich_issues())
+
+        assert result["success"] is False
+        assert result["session_id"] == "sid-fail"
+        assert result["stderr"] == "Session timed out"
+
+    @pytest.mark.anyio
+    async def test_enrich_issues_passes_expected_output_patterns_to_executor(self, tool_ctx):
+        """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="",
+            session_id="sid",
+            subtype="error",
+            is_error=True,
+            exit_code=1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+        tool_ctx.output_pattern_resolver = lambda cmd: ["---enrich-issues-result---"]
+
+        await enrich_issues()
+
+        call_kwargs = mock_executor.run.call_args.kwargs
+        assert call_kwargs.get("expected_output_patterns") == ["---enrich-issues-result---"]
+
+    @pytest.mark.anyio
+    async def test_enrich_issues_no_result_block_includes_stderr(self, tool_ctx):
+        """success=True + non-empty result + no delimiters → stderr surfaced."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="All issues enriched. Workflow complete.",
+            session_id="enrich-123",
+            stderr="Warning: contract stale",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+        )
+        tool_ctx.executor = mock_executor
+        response = json.loads(await enrich_issues())
+        assert response["success"] is False
+        assert response["error"] == "no result block found"
+        assert "stderr" in response, "stderr must be in block-parse-failure response"
+        assert response["stderr"] == "Warning: contract stale"
+        assert response["session_id"] == "enrich-123"
+
+
+_REQUIRED_FAILURE_KEYS = frozenset(
+    {"success", "error", "session_id", "stderr", "subtype", "exit_code"}
+)
+
+# Intentional scope: only prepare_issue and enrich_issues call
+# _build_headless_error_response. claim_issue, release_issue, and report_bug
+# use separate error-response paths and are covered by their own tests.
+_HEADLESS_FAILURE_SCENARIOS = [
+    pytest.param(
+        "prepare_issue",
+        dict(
+            success=False,
+            result="",
+            session_id="s1",
+            stderr="e1",
+            subtype="stale",
+            exit_code=-1,
+            needs_retry=True,
+            is_error=True,
+            retry_reason=RetryReason.RESUME,
+        ),
+        id="prepare_issue-session_failed",
+    ),
+    pytest.param(
+        "prepare_issue",
+        dict(
+            success=True,
+            result="",
+            session_id="s2",
+            stderr="e2",
+            subtype="success",
+            exit_code=0,
+            needs_retry=False,
+            is_error=False,
+            retry_reason=RetryReason.NONE,
+        ),
+        id="prepare_issue-drain_race",
+    ),
+    pytest.param(
+        "prepare_issue",
+        dict(
+            success=True,
+            result="prose without delimiters",
+            session_id="s3",
+            stderr="e3",
+            subtype="success",
+            exit_code=0,
+            needs_retry=False,
+            is_error=False,
+            retry_reason=RetryReason.NONE,
+        ),
+        id="prepare_issue-block_parse_error",
+    ),
+    pytest.param(
+        "enrich_issues",
+        dict(
+            success=False,
+            result="",
+            session_id="s4",
+            stderr="e4",
+            subtype="stale",
+            exit_code=-1,
+            needs_retry=True,
+            is_error=True,
+            retry_reason=RetryReason.RESUME,
+        ),
+        id="enrich_issues-session_failed",
+    ),
+    pytest.param(
+        "enrich_issues",
+        dict(
+            success=True,
+            result="",
+            session_id="s5",
+            stderr="e5",
+            subtype="success",
+            exit_code=0,
+            needs_retry=False,
+            is_error=False,
+            retry_reason=RetryReason.NONE,
+        ),
+        id="enrich_issues-drain_race",
+    ),
+    pytest.param(
+        "enrich_issues",
+        dict(
+            success=True,
+            result="prose without delimiters",
+            session_id="s6",
+            stderr="e6",
+            subtype="success",
+            exit_code=0,
+            needs_retry=False,
+            is_error=False,
+            retry_reason=RetryReason.NONE,
+        ),
+        id="enrich_issues-block_parse_error",
+    ),
+]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("tool_name,skill_result_kwargs", _HEADLESS_FAILURE_SCENARIOS)
+async def test_headless_tool_failure_paths_include_all_diagnostic_fields(
+    tool_name, skill_result_kwargs, tool_ctx
+):
+    """Contract test: every failure path of every headless session tool
+    must surface the full diagnostic set: success, error, session_id,
+    stderr, subtype, exit_code.
+    """
+    tool_fn = {"prepare_issue": prepare_issue, "enrich_issues": enrich_issues}[tool_name]
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = SkillResult(**skill_result_kwargs)
+    tool_ctx.executor = mock_executor
+
+    kwargs: dict = {}
+    if tool_name == "prepare_issue":
+        kwargs = {"title": "Test Issue", "body": ""}
+
+    response = json.loads(await tool_fn(**kwargs))
+    missing = _REQUIRED_FAILURE_KEYS - set(response.keys())
+    assert not missing, f"tool={tool_name!r} missing failure response keys: {missing}"
+    assert response["success"] is False
+    assert response["stderr"] == skill_result_kwargs["stderr"]
+    assert response["session_id"] == skill_result_kwargs["session_id"]
+
+
+class TestReportBugTool:
+    @pytest.mark.anyio
+    async def test_report_bug_failure_includes_session_id_and_stderr(self, tool_ctx, tmp_path):
+        """Blocking failure response must include session_id and stderr for diagnosis."""
+        tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+        tool_ctx.config.report_bug.github_filing = False
+
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result="",
+            session_id="fail-session-id",
+            subtype="missing_completion_marker",
+            is_error=True,
+            exit_code=1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="Claude crashed",
+        )
+        tool_ctx.executor = mock_executor
+
+        result = json.loads(await report_bug("some error", str(tmp_path), severity="blocking"))
+
+        assert result["success"] is False
+        assert result["session_id"] == "fail-session-id"
+        assert result["stderr"] == "Claude crashed"
+
+    @pytest.mark.anyio
+    async def test_report_bug_passes_expected_output_patterns_to_executor(
+        self, tool_ctx, tmp_path
+    ):
+        """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
+        tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+        tool_ctx.config.report_bug.github_filing = False
+
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result="## Report\nfindings",
+            session_id="sid",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        tool_ctx.executor = mock_executor
+        tool_ctx.output_pattern_resolver = lambda cmd: ["---bug-fingerprint---"]
+
+        await report_bug("error ctx", str(tmp_path), severity="blocking")
+
+        call_kwargs = mock_executor.run.call_args.kwargs
+        assert call_kwargs.get("expected_output_patterns") == ["---bug-fingerprint---"]
 
 
 class TestGetPrReviews:
@@ -891,412 +1405,3 @@ class TestBulkCloseIssues:
         result = json.loads(await bulk_close_issues([1], "", "."))
         assert result["success"] is False
         assert result["subtype"] == "gate_error"
-
-
-# ---------------------------------------------------------------------------
-# _read_session_diagnostics unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_read_session_diagnostics_returns_none_for_empty_session_id(tmp_path):
-    """Empty session_id → None, no filesystem access."""
-    result = _read_session_diagnostics("", str(tmp_path))
-    assert result is None
-
-
-def test_read_session_diagnostics_returns_none_for_no_session_prefix(tmp_path):
-    """no_session_* session IDs → None (not meaningful diagnostics)."""
-    assert _read_session_diagnostics("no_session_2026-01-01T00-00-00", str(tmp_path)) is None
-
-
-def test_read_session_diagnostics_returns_none_for_crashed_prefix(tmp_path):
-    """crashed_* session IDs → None (not meaningful diagnostics)."""
-    assert _read_session_diagnostics("crashed_12345_2026-01-01T00-00-00", str(tmp_path)) is None
-
-
-def test_read_session_diagnostics_returns_none_for_path_traversal_session_id(tmp_path):
-    """Path-traversal session IDs blocked by _SAFE_SESSION_ID_RE → None."""
-    assert _read_session_diagnostics("../../../etc/passwd", str(tmp_path)) is None
-    assert _read_session_diagnostics("..%2F..%2Fetc%2Fpasswd", str(tmp_path)) is None
-    assert _read_session_diagnostics("abc/../../etc", str(tmp_path)) is None
-
-
-def test_read_session_diagnostics_returns_none_when_directory_missing(tmp_path):
-    """Valid session_id but no directory on disk → None."""
-    result = _read_session_diagnostics("abc-123", str(tmp_path))
-    assert result is None
-
-
-def test_read_session_diagnostics_reads_summary_json(tmp_path):
-    """Reads and returns summary.json contents."""
-    session_id = "test-session-abc"
-    session_dir = tmp_path / "sessions" / session_id
-    session_dir.mkdir(parents=True)
-    summary = {
-        "session_id": session_id,
-        "duration_seconds": 42.0,
-        "peak_rss_kb": 1024,
-        "peak_oom_score": 5,
-        "anomaly_count": 0,
-        "termination_reason": "NATURAL_EXIT",
-        "exit_code": 0,
-        "claude_code_log": "/path/to/log.jsonl",
-    }
-    (session_dir / "summary.json").write_text(json.dumps(summary))
-
-    result = _read_session_diagnostics(session_id, str(tmp_path))
-    assert result is not None
-    assert result["summary"]["duration_seconds"] == 42.0
-    assert result["session_id"] == session_id
-    assert result["session_dir"] == str(session_dir)
-
-
-def test_read_session_diagnostics_reads_anomalies_jsonl(tmp_path):
-    """Reads all records from anomalies.jsonl."""
-    session_id = "test-session-def"
-    session_dir = tmp_path / "sessions" / session_id
-    session_dir.mkdir(parents=True)
-    (session_dir / "summary.json").write_text(json.dumps({"session_id": session_id}))
-    anomalies = [
-        {"kind": "oom_spike", "severity": "warning", "detail": {"delta": 250}},
-        {"kind": "rss_growth", "severity": "warning", "detail": {"ratio": 2.5}},
-    ]
-    (session_dir / "anomalies.jsonl").write_text("\n".join(json.dumps(a) for a in anomalies))
-
-    result = _read_session_diagnostics(session_id, str(tmp_path))
-    assert len(result["anomalies"]) == 2
-    assert result["anomalies"][0]["kind"] == "oom_spike"
-
-
-def test_read_session_diagnostics_reads_proc_trace_tail_10(tmp_path):
-    """Reads only the last 10 lines of proc_trace.jsonl."""
-    session_id = "test-session-ghi"
-    session_dir = tmp_path / "sessions" / session_id
-    session_dir.mkdir(parents=True)
-    (session_dir / "summary.json").write_text(json.dumps({"session_id": session_id}))
-    snapshots = [{"seq": i, "vm_rss_kb": i * 100} for i in range(15)]
-    (session_dir / "proc_trace.jsonl").write_text("\n".join(json.dumps(s) for s in snapshots))
-
-    result = _read_session_diagnostics(session_id, str(tmp_path))
-    assert len(result["proc_trace_tail"]) == 10
-    assert result["proc_trace_tail"][0]["seq"] == 5  # starts from seq=5 (last 10 of 15)
-
-
-def test_read_session_diagnostics_handles_missing_optional_files(tmp_path):
-    """Returns empty lists when anomalies.jsonl and proc_trace.jsonl are absent."""
-    session_id = "test-session-jkl"
-    session_dir = tmp_path / "sessions" / session_id
-    session_dir.mkdir(parents=True)
-    (session_dir / "summary.json").write_text(json.dumps({"session_id": session_id}))
-
-    result = _read_session_diagnostics(session_id, str(tmp_path))
-    assert result["anomalies"] == []
-    assert result["proc_trace_tail"] == []
-
-
-# ---------------------------------------------------------------------------
-# _format_diagnostics_section unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_format_diagnostics_section_full_includes_metrics_table():
-    """Full format includes the metrics table."""
-    diag = {
-        "session_id": "abc-123",
-        "session_dir": "/logs/sessions/abc-123",
-        "summary": {
-            "session_id": "abc-123",
-            "duration_seconds": 30.5,
-            "peak_rss_kb": 2048,
-            "peak_oom_score": 10,
-            "anomaly_count": 1,
-            "termination_reason": "NATURAL_EXIT",
-            "exit_code": 0,
-            "claude_code_log": "/logs/claude.jsonl",
-        },
-        "anomalies": [{"kind": "oom_spike", "severity": "warning", "detail": {"delta": 210}}],
-        "proc_trace_tail": [],
-    }
-    output = _format_diagnostics_section(diag, condensed=False)
-    assert "## Session Diagnostics" in output
-    assert "Session ID" in output
-    assert "abc-123" in output
-    assert "30.5s" in output
-    assert "2048 KB" in output
-
-
-def test_format_diagnostics_section_full_includes_anomalies_details_block():
-    """Full format includes <details> block when anomalies present."""
-    diag = {
-        "session_id": "abc-123",
-        "session_dir": "/logs/sessions/abc-123",
-        "summary": {"session_id": "abc-123", "anomaly_count": 1},
-        "anomalies": [{"kind": "oom_spike", "severity": "warning", "detail": {}}],
-        "proc_trace_tail": [],
-    }
-    output = _format_diagnostics_section(diag, condensed=False)
-    assert "<details>" in output
-    assert "Anomalies (1)" in output
-
-
-def test_format_diagnostics_section_full_includes_proc_trace_block():
-    """Full format includes <details> block for proc trace when snapshots present."""
-    diag = {
-        "session_id": "abc-123",
-        "session_dir": "/logs/sessions/abc-123",
-        "summary": {"session_id": "abc-123"},
-        "anomalies": [],
-        "proc_trace_tail": [{"seq": 0, "vm_rss_kb": 100}],
-    }
-    output = _format_diagnostics_section(diag, condensed=False)
-    assert "Process Trace" in output
-    assert "```json" in output
-
-
-def test_format_diagnostics_section_full_omits_blocks_when_empty():
-    """Full format omits <details> blocks when no anomalies and no proc trace."""
-    diag = {
-        "session_id": "abc-123",
-        "session_dir": "/logs/sessions/abc-123",
-        "summary": {"session_id": "abc-123", "anomaly_count": 0},
-        "anomalies": [],
-        "proc_trace_tail": [],
-    }
-    output = _format_diagnostics_section(diag, condensed=False)
-    assert "<details>" not in output
-
-
-def test_format_diagnostics_section_full_includes_local_paths():
-    """Full format includes local path links."""
-    diag = {
-        "session_id": "abc-123",
-        "session_dir": "/logs/sessions/abc-123",
-        "summary": {"session_id": "abc-123", "claude_code_log": "/claude/log.jsonl"},
-        "anomalies": [],
-        "proc_trace_tail": [],
-    }
-    output = _format_diagnostics_section(diag, condensed=False)
-    assert "/logs/sessions/abc-123" in output
-    assert "/claude/log.jsonl" in output
-
-
-def test_format_diagnostics_section_condensed_has_metrics_only():
-    """Condensed format has metrics table but no <details> blocks or paths."""
-    diag = {
-        "session_id": "abc-123",
-        "session_dir": "/logs/sessions/abc-123",
-        "summary": {
-            "session_id": "abc-123",
-            "duration_seconds": 5.0,
-            "peak_rss_kb": 512,
-            "peak_oom_score": 2,
-            "anomaly_count": 0,
-            "termination_reason": "NATURAL_EXIT",
-            "exit_code": 0,
-            "claude_code_log": "/claude/log.jsonl",
-        },
-        "anomalies": [{"kind": "oom_spike", "severity": "warning", "detail": {}}],
-        "proc_trace_tail": [{"seq": 0}],
-    }
-    output = _format_diagnostics_section(diag, condensed=True)
-    assert "## Session Diagnostics" in output
-    assert "<details>" not in output
-    assert "Local paths" not in output
-
-
-# ---------------------------------------------------------------------------
-# Integration test helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_mock_executor(success: bool, result: str, session_id: str) -> MagicMock:
-    """Return a mock HeadlessExecutor whose run() returns a SkillResult."""
-    skill_result = SkillResult(
-        success=success,
-        result=result,
-        session_id=session_id,
-        subtype="success" if success else "error",
-        is_error=not success,
-        exit_code=0,
-        needs_retry=False,
-        retry_reason=RetryReason.NONE,
-        stderr="",
-    )
-    executor = MagicMock()
-    executor.run = AsyncMock(return_value=skill_result)
-    return executor
-
-
-def _make_mock_github(search_total: int, existing_body: str = "") -> MagicMock:
-    """Return a mock GitHubFetcher for issue search + create/comment."""
-    client = MagicMock()
-    client.has_token = True
-    items = (
-        [
-            {
-                "number": 1,
-                "html_url": "https://github.com/o/r/issues/1",
-                "body": existing_body,
-            }
-        ]
-        if search_total > 0
-        else []
-    )
-    client.search_issues = AsyncMock(
-        return_value={"success": True, "total_count": search_total, "items": items}
-    )
-    client.create_issue = AsyncMock(
-        return_value={"success": True, "url": "https://github.com/o/r/issues/99"}
-    )
-    client.add_comment = AsyncMock(return_value={"success": True})
-    return client
-
-
-def _make_session_dir(
-    tmp_path: Path,
-    session_id: str,
-    summary_extra: dict | None = None,
-    anomalies: list | None = None,
-    proc_trace: list | None = None,
-) -> Path:
-    """Helper: create a fake session log directory."""
-    session_dir = tmp_path / "session_logs" / "sessions" / session_id
-    session_dir.mkdir(parents=True)
-    summary: dict = {
-        "session_id": session_id,
-        "duration_seconds": 10.0,
-        "peak_rss_kb": 1024,
-        "peak_oom_score": 5,
-        "anomaly_count": len(anomalies or []),
-        "termination_reason": "NATURAL_EXIT",
-        "exit_code": 0,
-        "claude_code_log": None,
-    }
-    summary.update(summary_extra or {})
-    (session_dir / "summary.json").write_text(json.dumps(summary))
-    if anomalies:
-        (session_dir / "anomalies.jsonl").write_text("\n".join(json.dumps(a) for a in anomalies))
-    if proc_trace:
-        (session_dir / "proc_trace.jsonl").write_text("\n".join(json.dumps(s) for s in proc_trace))
-    return session_dir
-
-
-# ---------------------------------------------------------------------------
-# Integration tests: full report_bug flow with diagnostics
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_report_bug_includes_diagnostics_in_new_issue_body(tool_ctx, tmp_path):
-    """New issue body includes the Session Diagnostics section when diagnostics are available."""
-    session_id = "diag-session-001"
-    _make_session_dir(tmp_path, session_id)
-
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-    tool_ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
-
-    tool_ctx.executor = _make_mock_executor(
-        success=True,
-        result="---bug-fingerprint---\nfp-001\n---/bug-fingerprint---\nReport text.",
-        session_id=session_id,
-    )
-    github_mock = _make_mock_github(search_total=0)
-    tool_ctx.github_client = github_mock
-
-    result = json.loads(
-        await report_bug(error_context="Test error", cwd=str(tmp_path), severity="blocking")
-    )
-
-    assert result["success"] is True
-    _args = github_mock.create_issue.call_args
-    call_body = _args.kwargs.get("body", _args.args[3])
-    assert "## Session Diagnostics" in call_body
-    assert session_id in call_body
-
-
-@pytest.mark.anyio
-async def test_report_bug_includes_condensed_diagnostics_in_duplicate_comment(tool_ctx, tmp_path):
-    """Duplicate comment includes condensed metrics but no <details> blocks."""
-    session_id = "diag-session-002"
-    _make_session_dir(
-        tmp_path,
-        session_id,
-        anomalies=[{"kind": "oom_spike", "severity": "warning", "detail": {}}],
-    )
-
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-    tool_ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
-
-    tool_ctx.executor = _make_mock_executor(
-        success=True,
-        result="---bug-fingerprint---\nfp-002\n---/bug-fingerprint---\nReport text.",
-        session_id=session_id,
-    )
-    github_mock = _make_mock_github(search_total=1, existing_body="different error")
-    tool_ctx.github_client = github_mock
-
-    await report_bug(error_context="Test error", cwd=str(tmp_path), severity="blocking")
-
-    _args = github_mock.add_comment.call_args
-    comment_body = _args.kwargs.get("body", _args.args[3])
-    assert "Session Diagnostics" in comment_body
-    assert "<details>" not in comment_body  # condensed — no details blocks
-
-
-@pytest.mark.anyio
-async def test_report_bug_proceeds_without_diagnostics_when_session_dir_missing(
-    tool_ctx, tmp_path
-):
-    """GitHub issue is still filed even when no session diagnostics directory exists."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-    tool_ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
-
-    tool_ctx.executor = _make_mock_executor(
-        success=True,
-        result="---bug-fingerprint---\nfp-003\n---/bug-fingerprint---\nReport text.",
-        session_id="nonexistent-session-id",  # no directory on disk
-    )
-    github_mock = _make_mock_github(search_total=0)
-    tool_ctx.github_client = github_mock
-
-    result = json.loads(
-        await report_bug(error_context="Test error", cwd=str(tmp_path), severity="blocking")
-    )
-
-    assert result["success"] is True
-    assert github_mock.create_issue.called
-    _args = github_mock.create_issue.call_args
-    call_body = _args.kwargs.get("body", _args.args[3])
-    assert "## Session Diagnostics" not in call_body  # graceful skip
-
-
-@pytest.mark.anyio
-async def test_report_bug_skips_diagnostics_for_fallback_session_id(tool_ctx, tmp_path):
-    """Fallback session IDs (no_session_*) never trigger diagnostics read."""
-    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-    tool_ctx.config.report_bug.github_filing = True
-    tool_ctx.config.github.default_repo = "owner/repo"
-    tool_ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
-
-    tool_ctx.executor = _make_mock_executor(
-        success=True,
-        result="---bug-fingerprint---\nfp-004\n---/bug-fingerprint---\nReport.",
-        session_id="no_session_2026-01-01T00-00-00",
-    )
-    github_mock = _make_mock_github(search_total=0)
-    tool_ctx.github_client = github_mock
-
-    result = json.loads(
-        await report_bug(error_context="Test error", cwd=str(tmp_path), severity="blocking")
-    )
-
-    assert result["success"] is True
-    _args = github_mock.create_issue.call_args
-    call_body = _args.kwargs.get("body", _args.args[3])
-    assert "## Session Diagnostics" not in call_body

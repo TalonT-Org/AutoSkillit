@@ -8,12 +8,15 @@ import re
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from autoskillit.workspace import SkillResolver
 
 from autoskillit.core import (
     SKILL_TOOLS,
     Severity,
-    _atomic_write,
+    atomic_write,
     dump_yaml_str,
     get_logger,
     load_yaml,
@@ -26,7 +29,6 @@ from autoskillit.recipe.staleness_cache import (
     read_staleness_cache,
     write_staleness_cache,
 )
-from autoskillit.workspace import bundled_skills_dir
 
 logger = get_logger(__name__)
 
@@ -54,6 +56,9 @@ class SkillContract:
     inputs: list[SkillInput]
     outputs: list[SkillOutput]
     expected_output_patterns: list[str] = dataclasses.field(default_factory=list)
+    pattern_examples: list[str] = dataclasses.field(default_factory=list)
+    write_behavior: str | None = None
+    write_expected_when: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -65,7 +70,7 @@ class StaleItem:
 
 
 @dataclasses.dataclass
-class DataflowEntry:
+class DataFlowEntry:
     step: str
     available: list[str]
     required: list[str]
@@ -78,7 +83,7 @@ class RecipeCard:
     bundled_manifest_version: str
     skill_hashes: dict[str, str]
     skills: dict[str, SkillContract]
-    dataflow: list[DataflowEntry]
+    dataflow: list[DataFlowEntry]
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +143,17 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         SkillOutput(name=out["name"], type=out["type"]) for out in skill_data.get("outputs", [])
     ]
     patterns = skill_data.get("expected_output_patterns", [])
-    return SkillContract(inputs=inputs, outputs=outputs, expected_output_patterns=patterns)
+    examples = skill_data.get("pattern_examples", [])
+    write_behavior = skill_data.get("write_behavior")
+    write_expected_when = skill_data.get("write_expected_when", [])
+    return SkillContract(
+        inputs=inputs,
+        outputs=outputs,
+        expected_output_patterns=patterns,
+        pattern_examples=examples,
+        write_behavior=write_behavior,
+        write_expected_when=write_expected_when,
+    )
 
 
 def compute_skill_hash(skill_name: str, *, skills_dir: Path) -> str:
@@ -249,13 +264,20 @@ def generate_recipe_card(
             if skill_name:
                 contract = get_skill_contract(skill_name, manifest)
                 if contract:
-                    skills[skill_name] = {
+                    skill_entry: dict[str, Any] = {
                         "inputs": [
                             {"name": i.name, "type": i.type, "required": i.required}
                             for i in contract.inputs
                         ],
                         "outputs": [{"name": o.name, "type": o.type} for o in contract.outputs],
+                        "expected_output_patterns": contract.expected_output_patterns,
+                        "pattern_examples": contract.pattern_examples,
                     }
+                    if contract.write_behavior is not None:
+                        skill_entry["write_behavior"] = contract.write_behavior
+                    if contract.write_expected_when:
+                        skill_entry["write_expected_when"] = contract.write_expected_when
+                    skills[skill_name] = skill_entry
                     if count_positional_args(skill_cmd) > 0:
                         # Positional args used — can't verify named inputs by ref
                         entry["required"] = []
@@ -289,7 +311,7 @@ def generate_recipe_card(
 
     card_path = recipes_dir / "contracts" / f"{pipeline_path.stem}.yaml"
     card_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(
+    atomic_write(
         card_path, dump_yaml_str(contract_data, default_flow_style=False, sort_keys=False)
     )
     return contract_data
@@ -358,6 +380,7 @@ def check_contract_staleness(
     recipe_path: Path | None = None,
     cache_path: Path | None = None,
     skills_dir: Path | None = None,
+    resolver: SkillResolver | None = None,
 ) -> list[StaleItem]:
     """Check a pipeline contract for staleness against the current manifest.
 
@@ -398,9 +421,30 @@ def check_contract_staleness(
             )
         )
 
-    effective_skills_dir = skills_dir if skills_dir is not None else bundled_skills_dir()
+    if skills_dir is not None:
+        _resolver = None
+        effective_skills_dir: Path | None = skills_dir
+    else:
+        if resolver is None:
+            from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+
+            resolver = SkillResolver()
+        _resolver = resolver
+        effective_skills_dir = None
     for skill_name, stored_hash in contract.get("skill_hashes", {}).items():
-        current_hash = compute_skill_hash(skill_name, skills_dir=effective_skills_dir)
+        if effective_skills_dir is not None:
+            current_hash = compute_skill_hash(skill_name, skills_dir=effective_skills_dir)
+        else:
+            if _resolver is None:
+                raise RuntimeError(
+                    "check_staleness called without effective_skills_dir or resolver"
+                )
+            info = _resolver.resolve(skill_name)
+            current_hash = (
+                compute_skill_hash(skill_name, skills_dir=info.path.parent.parent)
+                if info is not None
+                else ""
+            )
         if current_hash and stored_hash != current_hash:
             stale.append(
                 StaleItem(

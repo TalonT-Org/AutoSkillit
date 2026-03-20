@@ -9,15 +9,9 @@ import shutil  # noqa: F401 — tests patch autoskillit.cli.shutil.which
 import subprocess  # noqa: F401 — tests patch autoskillit.cli.subprocess.run
 from pathlib import Path  # noqa: F401 — tests patch autoskillit.cli.Path.home
 
+from autoskillit.cli._cook import cook
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli._init_helpers import _prompt_recipe_choice
-from autoskillit.cli._marketplace import (
-    _clear_plugin_cache,
-    _ensure_marketplace,
-    _print_next_steps,
-    install,
-    upgrade,
-)
 from autoskillit.cli._prompts import (
     _OPEN_KITCHEN_CHOICE,
     _build_open_kitchen_prompt,
@@ -30,11 +24,12 @@ from autoskillit.cli.app import (
     app,
     config_app,
     config_show,
-    cook,
     doctor,
     init,
+    install,
     main,
     migrate,
+    order,
     quota_status,
     recipes_app,
     recipes_list,
@@ -43,6 +38,7 @@ from autoskillit.cli.app import (
     serve,
     skills_app,
     skills_list,
+    upgrade,
     workspace_app,
     workspace_clean,
     workspace_init,
@@ -52,11 +48,8 @@ __all__ = [
     "_OPEN_KITCHEN_CHOICE",
     "_build_open_kitchen_prompt",
     "_build_orchestrator_prompt",
-    "_clear_plugin_cache",
     "_claude_settings_path",
-    "_ensure_marketplace",
     "_generate_config_yaml",
-    "_print_next_steps",
     "_prompt_recipe_choice",
     "_prompt_test_command",
     "_resolve_recipe_input",
@@ -69,6 +62,7 @@ __all__ = [
     "install",
     "main",
     "migrate",
+    "order",
     "quota_status",
     "recipes_app",
     "recipes_list",

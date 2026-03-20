@@ -8,10 +8,10 @@ and every other command in source_dir. All pipeline work runs in clone_path.
 L1 module: depends only on stdlib and autoskillit.core.logging.
 Three callables are registered as run_python entry points in bundled recipes.
 
-Note: clone_repo uses the default git clone path, which leverages hardlinks when
-source and destination are on the same filesystem (fast, low disk usage). This is
-safe for single-user ephemeral pipelines. For multi-tenant deployments where repos
-may be owned by different users, pass --no-hardlinks to git clone to avoid the
+Note: The ``clone_local`` strategy (``shutil.copytree``) leverages hardlinks when
+source and destination are on the same filesystem (fast, low disk usage). The
+default and ``proceed`` strategies clone from the remote URL and do not use hardlinks.
+For multi-tenant deployments using ``clone_local``, pass --no-hardlinks to avoid the
 cross-user hardlink risk (CVE-2024-32020).
 """
 
@@ -21,7 +21,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from autoskillit.core import GENERATED_FILES, get_logger
+from autoskillit.core import GENERATED_FILES, get_logger, is_protected_branch
 
 logger = get_logger(__name__)
 
@@ -143,6 +143,59 @@ def detect_unpublished_branch(source_dir: str, branch: str) -> bool:
     return ls_remote.returncode == 2
 
 
+def _add_or_set_upstream(clone_path: Path, url: str) -> None:
+    """Add or update the upstream remote in the clone.
+
+    Handles the case where upstream already exists (clone_local copies .git as-is
+    and the source may already have an upstream remote).
+    """
+    result = subprocess.run(
+        ["git", "remote", "add", "upstream", url],
+        cwd=str(clone_path),
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        stderr = (
+            result.stderr.decode(errors="replace")
+            if isinstance(result.stderr, bytes)
+            else result.stderr
+        )
+        if "already exists" not in stderr:
+            raise RuntimeError(
+                f"git remote add upstream failed: {stderr.strip()}"
+                f"\nclone_path={clone_path}, url={url}"
+            )
+        # upstream already exists (e.g. clone_local copied it from source); update the URL
+        set_url = subprocess.run(
+            ["git", "remote", "set-url", "upstream", url],
+            cwd=str(clone_path),
+            capture_output=True,
+        )
+        if set_url.returncode != 0:
+            set_stderr = (
+                set_url.stderr.decode(errors="replace")
+                if isinstance(set_url.stderr, bytes)
+                else set_url.stderr
+            )
+            raise RuntimeError(
+                f"git remote set-url upstream failed: {set_stderr.strip()}"
+                f"\nclone_path={clone_path}, url={url}"
+            )
+
+
+def _resolve_clone_source(source: Path, detected_url: str) -> str:
+    """Select the clone source for the proceed git-clone strategy.
+
+    Always uses the remote URL when source has a configured origin.
+    Falls back to the local filesystem path only when no remote origin
+    is configured. Never falls back based on branch availability or
+    network reachability — when a remote URL is known, it is always
+    used as the clone source. The clone_local strategy bypasses this
+    function entirely (shutil.copytree, always local).
+    """
+    return detected_url if detected_url else str(source)
+
+
 def clone_repo(
     source_dir: str,
     run_name: str,
@@ -167,6 +220,14 @@ def clone_repo(
     of cloning. The caller may re-invoke with strategy="proceed" (clone remote
     committed state only) or strategy="clone_local" (copytree — includes working-tree
     changes).
+
+    When using the ``proceed`` strategy, the git clone is always performed from the
+    remote URL when source_dir has a configured origin. Falls back to the local path
+    only when no remote origin is configured. If a branch is requested that does not
+    exist on the remote, git clone will fail with RuntimeError — use
+    ``strategy="clone_local"`` to clone a local-only branch. The ``clone_local``
+    strategy always copies directly from the local filesystem path regardless of
+    remote configuration.
 
     After this function returns, source_dir is off-limits except for push_to_remote
     reading its remote URL. See module docstring for the full SOURCE ISOLATION contract.
@@ -228,14 +289,31 @@ def clone_repo(
     clone_path = runs_parent / f"{run_name}-{timestamp}"
     runs_parent.mkdir(parents=True, exist_ok=True)
 
+    try:
+        _pre_url_result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=str(source),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        _pre_url_result = None
+    detected_url = (
+        _pre_url_result.stdout.strip()
+        if _pre_url_result is not None and _pre_url_result.returncode == 0
+        else ""
+    )
+
     if strategy == "clone_local":
         shutil.copytree(str(source), str(clone_path))
         logger.info("clone_created_local_copy", clone_path=str(clone_path), source=str(source))
     else:
+        clone_source = _resolve_clone_source(source, detected_url)
         cmd = ["git", "clone"]
         if branch:
             cmd += ["--branch", branch]
-        cmd += [str(source), str(clone_path)]
+        cmd += [clone_source, str(clone_path)]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(
@@ -245,42 +323,30 @@ def clone_repo(
             )
         logger.info("clone_created", clone_path=str(clone_path), source=str(source), branch=branch)
 
-    # Resolve real upstream URL once at clone time (INIT_ONLY field)
-    detected_url = ""
-    url_result = subprocess.run(
-        ["git", "remote", "get-url", "origin"],
-        cwd=str(source),
-        capture_output=True,
-        text=True,
-    )
-    if url_result.returncode == 0:
-        detected_url = url_result.stdout.strip()
-
-    # Use caller-supplied override if provided; fall back to detected source origin
+    # Use caller-supplied override if provided; fall back to pre-clone detected URL
     effective_url = remote_url if remote_url else detected_url
 
-    # Enforce invariant: clone.origin == effective_url at creation time (INIT_ONLY field gate)
+    # Isolate the clone: store the real URL in 'upstream', set 'origin' to a local file:// URL
+    # that is unique to this clone path. Claude Code reads 'origin' to resolve the project root;
+    # a file:// URL cannot match any registered GitHub project, so the clone is treated as a
+    # fresh project rooted at clone_path — not aliased to the source repo.
     if effective_url:
-        rewrite_result = subprocess.run(
-            ["git", "remote", "set-url", "origin", effective_url],
+        _add_or_set_upstream(clone_path, effective_url)
+        set_origin = subprocess.run(
+            ["git", "remote", "set-url", "origin", f"file://{clone_path}"],
             cwd=str(clone_path),
             capture_output=True,
-            text=True,
         )
-        if rewrite_result.returncode != 0:
-            logger.warning(
-                "clone_repo_origin_rewrite_failed",
-                clone_path=str(clone_path),
-                remote_url=effective_url,
-                stderr=rewrite_result.stderr.strip(),
+        if set_origin.returncode != 0:
+            set_origin_stderr = (
+                set_origin.stderr.decode(errors="replace")
+                if isinstance(set_origin.stderr, bytes)
+                else set_origin.stderr
             )
-            if remote_url:
-                return {
-                    "error": "remote_url_rewrite_failed",
-                    "clone_path": str(clone_path),
-                    "remote_url": effective_url,
-                    "stderr": rewrite_result.stderr.strip(),
-                }
+            raise RuntimeError(
+                f"git remote set-url origin failed: {set_origin_stderr.strip()}"
+                f"\nclone_path={clone_path}"
+            )
 
     # Decontaminate: untrack inherited generated files
     ls_gen = subprocess.run(
@@ -360,6 +426,7 @@ def push_to_remote(
     branch: str = "",
     *,
     remote_url: str = "",
+    protected_branches: list[str] | None = None,
 ) -> dict[str, str | bool]:
     """Push the merged branch from the clone directly to the upstream remote.
 
@@ -379,6 +446,29 @@ def push_to_remote(
         {"success": False, "stderr": str} on failure (does not raise).
         {"success": False, "error_type": str, "stderr": str} on classified failure.
     """
+    # Protected-branch guard
+    if protected_branches is None:
+        logger.warning(
+            "push_to_remote_no_protected_branches",
+            clone_path=clone_path,
+            branch=branch,
+            note="protected_branches not provided; branch protection is disabled for this call",
+        )
+    if is_protected_branch(branch, protected=protected_branches or []):
+        logger.error(
+            "push_to_remote_protected_branch",
+            clone_path=clone_path,
+            branch=branch,
+        )
+        return {
+            "success": False,
+            "error_type": "protected_branch_push",
+            "stderr": (
+                f"Refusing to push to protected branch '{branch}'. "
+                f"Protected branches: {protected_branches or ['main', 'integration', 'stable']}"
+            ),
+        }
+
     resolved_url = remote_url
     if not resolved_url:
         if not source_dir:
@@ -422,7 +512,7 @@ def push_to_remote(
         }
 
     push_result = subprocess.run(
-        ["git", "push", "-u", "origin", branch],
+        ["git", "push", "-u", "upstream", branch],
         cwd=clone_path,
         capture_output=True,
         text=True,
@@ -465,6 +555,18 @@ class DefaultCloneManager:
         return remove_clone(clone_path, keep)
 
     def push_to_remote(
-        self, clone_path: str, source_dir: str = "", branch: str = "", *, remote_url: str = ""
+        self,
+        clone_path: str,
+        source_dir: str = "",
+        branch: str = "",
+        *,
+        remote_url: str = "",
+        protected_branches: list[str] | None = None,
     ) -> dict[str, str | bool]:
-        return push_to_remote(clone_path, source_dir, branch, remote_url=remote_url)
+        return push_to_remote(
+            clone_path,
+            source_dir,
+            branch,
+            remote_url=remote_url,
+            protected_branches=protected_branches,
+        )

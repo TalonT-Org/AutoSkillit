@@ -29,6 +29,7 @@ class TestCLIInit:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         cli.init(test_command="pytest -v")
         assert (tmp_path / ".autoskillit").is_dir()
 
@@ -37,6 +38,7 @@ class TestCLIInit:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         cli.init(test_command="pytest -v")
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         assert config_path.is_file()
@@ -49,6 +51,7 @@ class TestCLIInit:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         with patch("autoskillit.cli.app._prompt_test_command", return_value=["npm", "test"]):
             cli.init()
         config_path = tmp_path / ".autoskillit" / "config.yaml"
@@ -60,6 +63,7 @@ class TestCLIInit:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_path = config_dir / "config.yaml"
@@ -91,6 +95,7 @@ class TestCLIInit:
 
     def test_init_force_overwrites(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_path = config_dir / "config.yaml"
@@ -131,6 +136,7 @@ class TestCLIInit:
     ) -> None:
         """init writes a config file containing commented advanced sections."""
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         cli.init(test_command="pytest -v")
 
         config_path = tmp_path / ".autoskillit" / "config.yaml"
@@ -143,6 +149,7 @@ class TestCLIInit:
     ) -> None:
         """--test-command combined with --force overwrites existing config."""
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("old: true\n")
@@ -155,11 +162,86 @@ class TestCLIInit:
     def test_init_idempotent_rerun(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Running init twice is safe — config preserved on second run."""
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         cli.init(test_command="pytest -v")
         config_before = (tmp_path / ".autoskillit" / "config.yaml").read_text()
         # Re-run init — should not overwrite without --force
         cli.init(test_command="pytest -v")
         assert (tmp_path / ".autoskillit" / "config.yaml").read_text() == config_before
+
+    # CI-SCOPE-1
+    def test_init_registers_mcp_server_in_claude_json(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """init --scope user writes mcpServers.autoskillit to ~/.claude.json."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+        cli.init(scope="user", test_command="task test-all")
+        claude_json = tmp_path / ".claude.json"
+        data = json.loads(claude_json.read_text())
+        assert "autoskillit" in data["mcpServers"]
+        assert data["mcpServers"]["autoskillit"]["command"] == "autoskillit"
+        assert data["mcpServers"]["autoskillit"]["args"] == []
+
+    # CI-SCOPE-2
+    def test_init_registers_hooks_in_settings_json(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """init --scope user registers all HOOK_REGISTRY hooks in settings.json."""
+        from autoskillit.hook_registry import HOOK_REGISTRY
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cli.init(scope="user", test_command="task test-all")
+        settings_path = tmp_path / ".claude" / "settings.json"
+        data = json.loads(settings_path.read_text())
+        registered = " ".join(
+            cmd
+            for event_entries in data["hooks"].values()
+            for entry in event_entries
+            for hook in entry.get("hooks", [])
+            for cmd in [hook.get("command", "")]
+        )
+        for hdef in HOOK_REGISTRY:
+            for script in hdef.scripts:
+                assert script in registered, f"Expected hook script {script!r} to be registered"
+
+    # CI-SCOPE-3
+    def test_init_idempotent_no_duplicates(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Running init twice does not duplicate mcpServers.autoskillit or hook entries."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+        cli.init(scope="user", test_command="task test-all")
+        cli.init(scope="user", test_command="task test-all")
+        claude_json = tmp_path / ".claude.json"
+        data = json.loads(claude_json.read_text())
+        assert list(data["mcpServers"].keys()).count("autoskillit") == 1
+        settings_path = tmp_path / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text())
+        pretooluse = settings.get("hooks", {}).get("PreToolUse", [])
+        matchers = [e.get("matcher", "") for e in pretooluse]
+        # No duplicate matchers — each matcher string appears exactly once
+        assert len(matchers) == len(set(matchers)), (
+            f"Duplicate PreToolUse matchers after double init: {matchers}"
+        )
+
+    # CI-SCOPE-4
+    def test_init_default_scope_is_user(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """init without --scope defaults to user scope (writes to ~/.claude.json)."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        monkeypatch.chdir(project_dir)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+        cli.init(test_command="task test-all")
+        # MCP server should be registered to user home, not project dir
+        assert (tmp_path / ".claude.json").exists()
 
 
 class TestEnsureProjectTemp:
@@ -180,7 +262,9 @@ class TestEnsureProjectTemp:
 
         ensure_project_temp(tmp_path)
         gitignore = tmp_path / ".autoskillit" / ".gitignore"
-        assert gitignore.read_text() == "temp/\n"
+        content = gitignore.read_text()
+        assert "temp/" in content
+        assert ".secrets.yaml" in content
 
     def test_ensure_project_temp_is_idempotent(self, tmp_path):
         from autoskillit.core.io import ensure_project_temp
@@ -188,6 +272,19 @@ class TestEnsureProjectTemp:
         ensure_project_temp(tmp_path)
         ensure_project_temp(tmp_path)  # second call must not raise
         assert (tmp_path / ".autoskillit" / "temp").is_dir()
+
+    def test_ensure_project_temp_backfills_secrets_into_existing_gitignore(self, tmp_path):
+        from autoskillit.core.io import ensure_project_temp
+
+        # Simulate a pre-fix .gitignore with only temp/
+        autoskillit_dir = tmp_path / ".autoskillit"
+        autoskillit_dir.mkdir()
+        (autoskillit_dir / ".gitignore").write_text("temp/\n")
+
+        ensure_project_temp(tmp_path)
+        content = (autoskillit_dir / ".gitignore").read_text()
+        assert ".secrets.yaml" in content
+        assert "temp/" in content
 
 
 class TestServeStartupLog:
@@ -240,3 +337,28 @@ class TestServeStartupLog:
         startup = next((entry for entry in logs if entry.get("event") == "serve_startup"), None)
         assert startup is not None
         assert startup["config_path"] is None
+
+
+def test_init_prompts_for_github_default_repo() -> None:
+    """autoskillit init must prompt the user for github.default_repo."""
+    import inspect
+
+    from autoskillit.cli._init_helpers import _register_all
+
+    source = inspect.getsource(_register_all)
+    assert "github" in source.lower() and (
+        "default_repo" in source or "_prompt_github_repo" in source
+    ), "init flow must prompt for github.default_repo (REQ-CFG-002)"
+
+
+def test_init_creates_secrets_template(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """autoskillit init must create .secrets.yaml with a token placeholder."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".autoskillit").mkdir()
+    from autoskillit.cli._init_helpers import _create_secrets_template
+
+    _create_secrets_template(tmp_path)
+    secrets_path = tmp_path / ".autoskillit" / ".secrets.yaml"
+    assert secrets_path.exists(), ".secrets.yaml template not created"
+    content = secrets_path.read_text()
+    assert "github" in content.lower() and "token" in content.lower()

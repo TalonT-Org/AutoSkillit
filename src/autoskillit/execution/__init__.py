@@ -24,8 +24,17 @@ from autoskillit.execution.db import (
 from autoskillit.execution.db import (
     _execute_readonly_query as execute_readonly_query,
 )
+from autoskillit.execution.diff_annotator import (
+    FilterResult,
+    annotate_diff,
+    filter_findings,
+    parse_hunk_ranges,
+)
 from autoskillit.execution.github import DefaultGitHubFetcher
-from autoskillit.execution.headless import DefaultHeadlessExecutor, run_headless_core
+from autoskillit.execution.headless import (
+    DefaultHeadlessExecutor,
+    run_headless_core,
+)
 from autoskillit.execution.linux_tracing import (
     LINUX_TRACING_AVAILABLE,
     LinuxTracingHandle,
@@ -34,21 +43,32 @@ from autoskillit.execution.linux_tracing import (
     read_starttime_ticks,
     start_linux_tracing,
 )
+from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
+from autoskillit.execution.pr_analysis import (
+    DOMAIN_PATHS,
+    extract_linked_issues,
+    is_valid_fidelity_finding,
+    partition_files_by_domain,
+)
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
     run_managed_async,
     run_managed_sync,
 )
 from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE, resolve_remote_repo
 from autoskillit.execution.session import (
     ClaudeSessionResult,
+    ContentState,
     extract_token_usage,
     parse_session_result,
 )
 from autoskillit.execution.session_log import (
     flush_session_log,
+    read_telemetry_clear_marker,
     recover_crashed_sessions,
     resolve_log_dir,
+    write_telemetry_clear_marker,
 )
 from autoskillit.execution.testing import (
     DefaultTestRunner,
@@ -71,6 +91,7 @@ __all__ = [
     "check_and_sleep_if_needed",
     # session
     "ClaudeSessionResult",
+    "ContentState",
     "SkillResult",
     "extract_token_usage",
     "parse_session_result",
@@ -83,6 +104,16 @@ __all__ = [
     "DefaultTestRunner",
     # ci
     "DefaultCIWatcher",
+    # merge_queue
+    "DefaultMergeQueueWatcher",
+    # remote_resolver
+    "REMOTE_PRECEDENCE",
+    "resolve_remote_repo",
+    # diff_annotator
+    "FilterResult",
+    "annotate_diff",
+    "filter_findings",
+    "parse_hunk_ranges",
     # db
     "execute_readonly_query",
     "DefaultDatabaseReader",
@@ -101,6 +132,13 @@ __all__ = [
     "AnomalySeverity",
     # session_log
     "flush_session_log",
+    "read_telemetry_clear_marker",
     "recover_crashed_sessions",
     "resolve_log_dir",
+    "write_telemetry_clear_marker",
+    # pr_analysis
+    "DOMAIN_PATHS",
+    "extract_linked_issues",
+    "is_valid_fidelity_finding",
+    "partition_files_by_domain",
 ]

@@ -165,16 +165,24 @@ class TestCIWorkflow:
                         " from minor releases"
                     )
 
-    def test_ci_push_trigger_includes_integration(self) -> None:
-        """CI must trigger on push to integration branch."""
+    def test_ci_push_trigger_excludes_integration(self) -> None:
+        """Push trigger must NOT include integration — PRs from integration already
+        get CI via pull_request trigger, and including it in push causes duplicate checks."""
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         # PyYAML parses the YAML 'on:' key as Python True (boolean)
         triggers = workflow.get(True, workflow.get("on", {}))
         push_branches = triggers["push"]["branches"]
-        assert "integration" in push_branches, (
-            "CI must trigger on push to integration branch — "
-            "this is the permanent accumulator that also needs CI on direct pushes"
+        assert "integration" not in push_branches, (
+            "integration must not be in push branches — "
+            "it causes duplicate CI checks when a PR is open from integration"
         )
+
+    def test_ci_pull_request_trigger_includes_integration(self) -> None:
+        """PR trigger must include integration so PRs targeting it get CI."""
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        triggers = workflow.get(True, workflow.get("on", {}))
+        pr_branches = triggers["pull_request"]["branches"]
+        assert "integration" in pr_branches, "CI must trigger on PRs targeting integration branch"
 
     def test_ci_preflight_outputs_os_matrix(self) -> None:
         """preflight job must export an os-matrix output computed from base_ref."""
@@ -207,26 +215,58 @@ class TestCIWorkflow:
             s
             for s in steps
             if any(kw in str(s.get("run", "")) for kw in ("base_ref", "github.ref"))
-            and "integration" in str(s.get("run", ""))
+            and "stable" in str(s.get("run", ""))
         ]
         assert matrix_steps, (
             "preflight must have a step that branches on github.base_ref (for PRs) "
             "or github.ref (for pushes) to produce the os-matrix output"
         )
 
-    def test_ci_integration_target_produces_ubuntu_only_matrix(self) -> None:
-        """The integration branch must produce a single-element ubuntu matrix."""
+    def test_ci_stable_target_produces_dual_os_matrix(self) -> None:
+        """The stable branch must produce a dual-element ubuntu+macos matrix."""
         workflow = yaml.safe_load(CI_WORKFLOW.read_text())
         steps = workflow["jobs"]["preflight"]["steps"]
         for step in steps:
             run = step.get("run", "")
-            if "integration" in run and ("base_ref" in run or "github.ref" in run):
-                assert '["ubuntu-latest"]' in run, (
-                    "When branch targets integration, matrix must contain ubuntu-latest only"
-                )
+            if "stable" in run and ("base_ref" in run or "github.ref" in run):
+                assert "macos" in run, "When branch targets stable, matrix must include macOS"
                 break
         else:
-            pytest.fail("No step computes integration-specific matrix in preflight")
+            pytest.fail("No step computes stable-specific matrix in preflight")
+
+    def test_ci_push_trigger_includes_stable(self) -> None:
+        """CI must trigger on push to stable branch.
+
+        stable is the production-ready branch — direct pushes (from admin bypass or
+        automated tooling) must still run CI. Without this trigger, a push to stable
+        skips all checks.
+        """
+        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        triggers = workflow.get(True, workflow.get("on", {}))
+        push_branches = triggers.get("push", {}).get("branches", [])
+        assert "stable" in push_branches, (
+            "CI must trigger on push to stable branch — add 'stable' to push.branches in tests.yml"
+        )
+
+
+class TestRecipeWorkflowField:
+    def test_ci_watch_steps_carry_workflow_field(self):
+        """All wait_for_ci steps in bundled top-level recipes must specify a workflow.
+
+        Without a workflow field, wait_for_ci queries all workflows on the branch,
+        causing false failures when unrelated workflows (version bumps, labelers)
+        complete with failure before the test workflow runs.
+        """
+        recipes_dir = REPO_ROOT / "src" / "autoskillit" / "recipes"
+        for recipe_path in recipes_dir.glob("*.yaml"):
+            recipe = yaml.safe_load(recipe_path.read_text())
+            for step_name, step in recipe.get("steps", {}).items():
+                if step.get("tool") == "wait_for_ci":
+                    assert "workflow" in step.get("with", {}), (
+                        f"{recipe_path.name}:{step_name} missing workflow in with: — "
+                        "add 'workflow: \"tests.yml\"' to scope CI polling to the correct"
+                        " workflow"
+                    )
 
 
 class TestPtyTestGuard:

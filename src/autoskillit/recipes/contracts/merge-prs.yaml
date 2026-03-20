@@ -1,0 +1,433 @@
+generated_at: '2026-03-02T02:12:42.454223+00:00'
+bundled_manifest_version: 0.1.0
+skill_hashes:
+  make-plan: sha256:4d33f1e86f9ffb91d29924a65b968d056887c271a73249f4472b874126291e0c
+  dry-walkthrough: sha256:a479c92bcf9afe200fb84fdbe8cd46b7b376e63d9e3b134a1caab2fe5611e095
+  implement-worktree-no-merge: sha256:86515d79175468eb205e964d033ad48598812e7997014f7c0e6b52d80a7c002d
+  retry-worktree: sha256:c66703245d49df7f94a71456a4f76da62c3527652f03bec62b71cc344d5028b9
+  resolve-failures: sha256:81ee708f6c8f1e75edb27a5f68dde6d1eac7db229fd5e18690f4c74185de8b45
+  audit-impl: sha256:d8fca36db95f0de3ca32c1d1201d6b913f0dbcd541dfa12c7f868f04c8f4c411
+skills:
+  make-plan:
+    inputs:
+    - name: task
+      type: string
+      required: true
+    outputs:
+    - name: plan_path
+      type: file_path
+    - name: plan_parts
+      type: file_path_list
+  dry-walkthrough:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    outputs: []
+  implement-worktree-no-merge:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    outputs:
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
+  retry-worktree:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: worktree_path
+      type: directory_path
+      required: true
+    outputs:
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
+  resolve-failures:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs: []
+  audit-impl:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: branch_name
+      type: string
+      required: false
+    - name: base_branch
+      type: string
+      required: false
+    outputs:
+    - name: verdict
+      type: string
+    - name: remediation_path
+      type: file_path
+dataflow:
+- step: clone
+  available:
+  - audit
+  - base_branch
+  - keep_clone_on_failure
+  - run_name
+  - source_dir
+  required: []
+  produced:
+  - work_dir
+- step: setup_remote
+  available:
+  - audit
+  - base_branch
+  - keep_clone_on_failure
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: analyze_prs
+  available:
+  - audit
+  - base_branch
+  - keep_clone_on_failure
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - pr_order_file
+  - integration_branch
+- step: create_integration_branch
+  available:
+  - audit
+  - base_branch
+  - integration_branch
+  - keep_clone_on_failure
+  - pr_order_file
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: merge_pr
+  available:
+  - audit
+  - base_branch
+  - integration_branch
+  - keep_clone_on_failure
+  - pr_order_file
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - needs_plan
+  - task
+- step: plan
+  available:
+  - audit
+  - base_branch
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  required: []
+  produced:
+  - plan_path
+- step: verify
+  available:
+  - audit
+  - base_branch
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  required: []
+  produced: []
+- step: implement
+  available:
+  - audit
+  - base_branch
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  required: []
+  produced:
+  - worktree_path
+- step: retry_worktree
+  available:
+  - audit
+  - base_branch
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - worktree_path
+- step: test
+  available:
+  - audit
+  - base_branch
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: merge_to_integration
+  available:
+  - audit
+  - base_branch
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - cleanup_succeeded
+- step: fix
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: next_part_or_next_pr
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: push_integration_branch
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: collect_artifacts
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: audit_impl
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - verdict
+  - remediation_path
+- step: remediate
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - remediation_path
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: open_integration_pr
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - remediation_path
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: cleanup_success
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - remediation_path
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: cleanup_failure
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - remediation_path
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: done
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - remediation_path
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: escalate_stop
+  available:
+  - audit
+  - base_branch
+  - cleanup_succeeded
+  - integration_branch
+  - keep_clone_on_failure
+  - needs_plan
+  - plan_path
+  - pr_order_file
+  - remediation_path
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []

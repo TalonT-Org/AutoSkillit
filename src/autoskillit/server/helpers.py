@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
+import functools
+import json
+import os
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
-from autoskillit.execution import resolve_log_dir  # noqa: F401 — used by tools_integrations.py
+from autoskillit.execution import (
+    resolve_log_dir,  # noqa: F401 — used by tools_github.py, tools_status.py
+    write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
+)
 from autoskillit.pipeline import gate_error_result
 from autoskillit.recipe import (
     StaleItem,
@@ -84,6 +92,95 @@ def _get_config():  # type: ignore[return]
     return _cfg_fn()
 
 
+def _get_ctx_or_none():  # type: ignore[return]
+    """Deferred import of _get_ctx_or_none from _state to avoid circular imports."""
+    from autoskillit.server._state import _get_ctx_or_none as _ctx_none_fn
+
+    return _ctx_none_fn()
+
+
+def track_response_size(
+    tool_name: str,
+) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
+    """Decorator: measure the JSON string size of a tool response and record to response_log.
+
+    Apply BELOW @mcp.tool() so the wrapped function is what FastMCP registers:
+
+        @mcp.tool(tags={"automation"})
+        @track_response_size("get_token_summary")
+        async def get_token_summary(...) -> str:
+            ...
+    """
+
+    def decorator(fn: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+        @functools.wraps(fn)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                result = await fn(*args, **kwargs)
+            except Exception as exc:
+                result = json.dumps(
+                    {
+                        "success": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "exit_code": -1,
+                        "subtype": "tool_exception",
+                    }
+                )
+                logger.exception("Unhandled exception in tool %s", tool_name)
+            try:
+                ctx = _get_ctx_or_none()
+                if ctx is not None:
+                    response_str = result if isinstance(result, str) else json.dumps(result)
+                    threshold = ctx.config.mcp_response.alert_threshold_tokens
+                    exceeded = ctx.response_log.record(
+                        tool_name, response_str, alert_threshold_tokens=threshold
+                    )
+                    if exceeded:
+                        from fastmcp import Context as FmcpContext
+
+                        mcp_ctx = next(
+                            (a for a in args if isinstance(a, FmcpContext)),
+                            next(
+                                (v for v in kwargs.values() if isinstance(v, FmcpContext)),
+                                None,
+                            ),
+                        )
+                        if mcp_ctx is not None:
+                            await _notify(
+                                mcp_ctx,
+                                "info",
+                                f"MCP tool '{tool_name}' response exceeded "
+                                f"{threshold} estimated token threshold",
+                                logger_name="autoskillit.server.response_size",
+                            )
+            except Exception:
+                logger.warning(
+                    "track_response_size_failed",
+                    tool_name=tool_name,
+                    exc_info=True,
+                )
+            return result
+
+        return wrapper
+
+    return decorator
+
+
+def _require_not_headless(tool_name: str = "") -> str | None:
+    """Return headless_error JSON if called from a headless session; None if safe."""
+    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
+        from autoskillit.pipeline import headless_error_result
+
+        msg = (
+            f"{tool_name} cannot be called from headless sessions. "
+            "Only the Tier 1 orchestrator may call this tool."
+            if tool_name
+            else None
+        )
+        return headless_error_result(msg)
+    return None
+
+
 def _require_enabled() -> str | None:
     """Return error JSON if tools are not enabled, None if OK.
 
@@ -109,6 +206,27 @@ def _validate_skill_command(skill_command: str) -> str | None:
             "Prose task descriptions are not valid skill invocations."
         )
     return None
+
+
+def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
+    """Return all lines between start_delim and end_delim (exclusive).
+
+    Returns an empty list if either delimiter is absent or the block is empty.
+    Lines are returned as-is (no stripping) to preserve JSON-parseable content.
+    """
+    in_block = False
+    block_lines: list[str] = []
+    for line in text.splitlines():
+        if line.strip() == start_delim:
+            in_block = True
+            continue
+        if line.strip() == end_delim:
+            if not in_block:
+                return []
+            return block_lines
+        if in_block:
+            block_lines.append(line)
+    return []  # end delimiter never found
 
 
 async def _apply_triage_gate(
@@ -279,7 +397,6 @@ async def _import_and_call(
     Returns dict with 'success', 'result' (or 'error').
     Handles sync and async callables, with timeout protection.
     """
-    import asyncio
     import importlib
     import inspect
 
@@ -344,6 +461,17 @@ def _find_recipe(name: str, cwd: Path) -> Any:
     This function provides the architecture-compliant bridge to autoskillit.recipe.
     """
     return find_recipe_by_name(name, cwd)
+
+
+async def infer_repo_from_remote(cwd: str, hint: str | None = None) -> str:
+    """Return 'owner/repo' from git remote URL, or '' on failure.
+
+    hint: optional owner/repo string or full GitHub URL; parsed before
+          git remote inference. Passes through to resolve_remote_repo.
+    """
+    from autoskillit.execution import resolve_remote_repo
+
+    return await resolve_remote_repo(cwd, hint=hint) or ""
 
 
 async def _prime_quota_cache() -> None:

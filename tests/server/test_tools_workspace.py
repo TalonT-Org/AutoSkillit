@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from unittest.mock import MagicMock
 
 import pytest
@@ -13,6 +14,7 @@ from autoskillit.config import (
     ResetWorkspaceConfig,
     SafetyConfig,
 )
+from autoskillit.core.types import AUTOSKILLIT_PRIVATE_ENV_VARS
 from autoskillit.server.tools_status import read_db
 from autoskillit.server.tools_workspace import reset_test_dir, reset_workspace, test_check
 from autoskillit.workspace import CleanupResult
@@ -113,6 +115,21 @@ class TestTestCheck:
     """test_check returns unambiguous PASS/FAIL with cross-validation."""
 
     @pytest.mark.anyio
+    async def test_test_check_accessible_without_gate(self, tool_ctx):
+        """test_check must not be blocked by gate — _require_enabled() was removed."""
+        from autoskillit.pipeline.gate import DefaultGateState
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        # Still need runner to be set up — push a result for it
+        tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
+        result_str = await test_check(worktree_path="/tmp/wt")
+        result = json.loads(result_str)
+        assert result.get("subtype") != "gate_error", (
+            "test_check must not be gated — _require_enabled() was removed"
+        )
+        assert "passed" in result
+
+    @pytest.mark.anyio
     async def test_passes_on_clean_run(self, tool_ctx):
         """returncode=0 with passing summary -> passed=True."""
         tool_ctx.runner.push(_make_result(0, "= 100 passed =\n", ""))
@@ -206,6 +223,43 @@ class TestTestCheck:
         tool_ctx.runner.push(_make_result(0, "100 passed in 1.50s\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is True
+
+    @pytest.mark.anyio
+    async def test_test_check_resolves_relative_worktree_path(self, tool_ctx):
+        """test_check must apply os.path.realpath() to worktree_path so that relative
+        paths are resolved against os.getcwd() consistently, matching reset_test_dir
+        and reset_workspace behavior."""
+        relative_path = "../some_worktree"
+        expected_resolved = os.path.realpath(relative_path)
+
+        await test_check(worktree_path=relative_path)
+
+        _cmd, cwd, _timeout, _kwargs = tool_ctx.runner.call_args_list[-1]
+        assert str(cwd) == expected_resolved, (
+            f"Expected cwd={expected_resolved!r}, got {str(cwd)!r}. "
+            "test_check must apply os.path.realpath() to worktree_path."
+        )
+
+    @pytest.mark.anyio
+    async def test_test_check_does_not_pass_headless_env_to_subprocess(
+        self, tool_ctx, monkeypatch
+    ):
+        """When AUTOSKILLIT_HEADLESS is set in the calling process (simulating a headless
+        MCP server), test_check must not pass it to the subprocess runner."""
+        # Simulate running inside a headless session — set all private vars
+        for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
+            monkeypatch.setenv(var, "1")
+
+        await test_check(worktree_path="/tmp/wt")
+
+        assert tool_ctx.runner.call_args_list, "Runner was not called"
+        _cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[-1]
+        env = kwargs.get("env")
+        assert env is not None, "test_check must pass an explicit env= to the runner"
+        for var in AUTOSKILLIT_PRIVATE_ENV_VARS:
+            assert var not in env, (
+                f"{var} must not appear in env passed to subprocess by test_check"
+            )
 
 
 class TestResetGuard:

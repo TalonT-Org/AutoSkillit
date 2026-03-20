@@ -1,27 +1,32 @@
-"""CLI for autoskillit: serve, init, cook, config, skills, recipes, workspace."""
+"""CLI for autoskillit: serve, init, cook, order, config, skills, recipes, workspace."""
 
 from __future__ import annotations
 
 import dataclasses
 import json
 import os
+import random
 import shutil
 import subprocess
 import sys
 from datetime import UTC
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from autoskillit.recipe import Recipe, RecipeInfo
 
 from cyclopts import App, Parameter
 
+from autoskillit.cli._cook import cook as cook_interactive
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _generate_config_yaml,
     _prompt_test_command,
+    _register_all,
 )
-from autoskillit.core import ClaudeFlags, _atomic_write, pkg_root
+from autoskillit.core import ClaudeFlags, RecipeSource, atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
-from autoskillit.recipe import list_recipes
 
 app = App(
     name="autoskillit",
@@ -46,10 +51,10 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
 
     from autoskillit.config import load_config
     from autoskillit.core import configure_logging, get_logger
-    from autoskillit.server import _initialize, make_context, mcp
 
     # Phase 1: Early init at INFO (or DEBUG if --verbose) — ensures logging
-    # works for config load errors.
+    # works for config load errors.  MUST run before importing
+    # autoskillit.server so that module-level loggers resolve to stderr.
     cli_level = _stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO
     configure_logging(
         level=cli_level,
@@ -74,6 +79,10 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
             stream=sys.stderr,
         )
 
+    # Import server AFTER logging is configured so module-level loggers
+    # resolve to stderr+JSON, not stdout+ConsoleRenderer (structlog default).
+    from autoskillit.server import _initialize, make_context, mcp
+
     project_path = project_dir / ".autoskillit" / "config.yaml"
     user_path = Path.home() / ".autoskillit" / "config.yaml"
     resolved_path: str | None = (
@@ -89,6 +98,15 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         test_check_command=cfg.test_check.command,
     )
 
+    # Inject config-derived protected branches so hook scripts read consistent values.
+    # Guard: skip when the list is empty so hook scripts never receive "" and
+    # accidentally split it into [""] instead of [].
+    if cfg.safety.protected_branches:
+        os.environ.setdefault(
+            "AUTOSKILLIT_PROTECTED_BRANCHES",
+            ",".join(cfg.safety.protected_branches),
+        )
+
     plugin_dir = str(pkg_root())
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
@@ -100,11 +118,12 @@ def init(
     *,
     force: bool = False,
     test_command: str | None = None,
+    scope: Annotated[str, Parameter(help="Registration scope: user or project")] = "user",
 ):
     """Initialize autoskillit for a project.
 
-    Creates .autoskillit/config.yaml. Bundled skills are served automatically
-    via the MCP server — no installation needed.
+    Creates .autoskillit/config.yaml, registers the MCP server in ~/.claude.json,
+    and registers hooks in settings.json.
 
     Parameters
     ----------
@@ -112,54 +131,57 @@ def init(
         Overwrite existing config without prompting.
     test_command
         Test command string for non-interactive init (e.g. "pytest -v").
+    scope
+        Registration scope for hooks: "user" or "project".
     """
-    from autoskillit.core import ensure_project_temp
-
+    if scope not in ("user", "project"):
+        raise SystemExit(f"Error: --scope must be 'user' or 'project', got '{scope}'")
     project_dir = Path.cwd()
     config_dir = project_dir / ".autoskillit"
     config_dir.mkdir(exist_ok=True)
     config_path = config_dir / "config.yaml"
 
     if config_path.exists() and not force:
-        print(f"Config already exists: {config_path}")
-        print("Use --force to overwrite.")
+        print(f"  Config already exists: {config_path}")
+        print("  Use --force to overwrite.")
     else:
         if test_command is not None:
             cmd_parts = test_command.split()
         else:
             cmd_parts = _prompt_test_command()
 
-        _atomic_write(config_path, _generate_config_yaml(cmd_parts))
-        print(f"Config written to: {config_path}")
+        atomic_write(config_path, _generate_config_yaml(cmd_parts))
 
-    ensure_project_temp(project_dir)
-
-    print("\nReady! Start Claude Code and open the kitchen:")
-    print("  claude")
-    from autoskillit.cli._doctor import _is_plugin_installed
-
-    if _is_plugin_installed():
-        print("  /mcp__plugin_autoskillit_autoskillit__open_kitchen")
-    else:
-        print("  /mcp__autoskillit__open_kitchen")
+    _register_all(scope, project_dir)
 
 
 @app.command
-def doctor(*, output_json: bool = False, fix: bool = False):
-    """Check project setup for common issues.
+def install(
+    *,
+    scope: Annotated[str, Parameter(help="Registration scope: user, project, or local")] = "user",
+):
+    """Install the plugin for Claude Code and refresh the cache."""
+    from autoskillit.cli._init_helpers import _print_next_steps
+    from autoskillit.cli._marketplace import install as _install
 
-    Parameters
-    ----------
-    output_json
-        Output results as JSON instead of human-readable text.
-    fix
-        Auto-remediate fixable errors (e.g. remove stale gate files).
-    """
+    _install(scope=scope)
+    _print_next_steps(context="install")
+
+
+@app.command
+def upgrade() -> None:
+    """Migrate project from .autoskillit/scripts/ format to .autoskillit/recipes/ format."""
+    from autoskillit.cli._marketplace import upgrade as _upgrade
+
+    _upgrade()
+
+
+@app.command
+def doctor(*, output_json: bool = False):
+    """Check project setup for common issues."""
     from autoskillit.cli._doctor import run_doctor
-    from autoskillit.server import _get_plugin_dir
 
-    plugin_dir = _get_plugin_dir()
-    run_doctor(output_json=output_json, plugin_dir=plugin_dir, fix=fix)
+    run_doctor(output_json=output_json)
 
 
 @app.command
@@ -290,7 +312,7 @@ def workspace_init(path: str):
 
     target.mkdir(parents=True, exist_ok=True)
     marker = target / marker_name
-    _atomic_write(
+    atomic_write(
         marker,
         _MARKER_CONTENT.format(
             timestamp=datetime.now(UTC).isoformat(),
@@ -355,46 +377,40 @@ def recipes_show(name: str):
     print(match.path.read_text())
 
 
+def _recipes_dir_for(info: RecipeInfo) -> Path:
+    if getattr(info, "source", None) == RecipeSource.BUILTIN:
+        return pkg_root() / "recipes"
+    return Path.cwd() / ".autoskillit" / "recipes"
+
+
 @recipes_app.command(name="render")
 def recipes_render(name: str | None = None) -> None:
-    """Pre-generate flow diagram(s) for recipe(s).
+    """Show pre-rendered diagram. Diagrams are generated by /render-recipe."""
+    from autoskillit.recipe import find_recipe_by_name, list_recipes, load_recipe_diagram
 
-    Parameters
-    ----------
-    name
-        Name of a single recipe to render. Renders all recipes if omitted.
-    """
-    from autoskillit.core import RecipeSource
-    from autoskillit.recipe import find_recipe_by_name, generate_recipe_diagram, list_recipes
-
-    project_dir = Path.cwd()
-
-    def _recipes_dir(info: object) -> Path:
-        if getattr(info, "source", None) == RecipeSource.BUILTIN:
-            return pkg_root() / "recipes"
-        return project_dir / ".autoskillit" / "recipes"
-
-    if name is not None:
-        match = find_recipe_by_name(name, project_dir)
-        if match is None:
-            print(f"Recipe '{name}' not found.", file=sys.stderr)
-            sys.exit(1)
-        generate_recipe_diagram(match.path, _recipes_dir(match))
-        print(f"Rendered: {name}")
-    else:
-        result = list_recipes(project_dir)
-        for info in result.items:
-            generate_recipe_diagram(info.path, _recipes_dir(info))
-            print(f"Rendered: {info.name}")
+    if name is None:
+        for info in list_recipes(Path.cwd()).items:
+            print(f"  {info.name}")
+        return
+    match = find_recipe_by_name(name, Path.cwd())
+    if match is None:
+        print(f"Recipe '{name}' not found.", file=sys.stderr)
+        sys.exit(1)
+    diagram = load_recipe_diagram(name, _recipes_dir_for(match))
+    print(diagram if diagram else f"No diagram. Run /render-recipe {name}")
 
 
-def _launch_cook_session(system_prompt: str) -> None:
+def _launch_cook_session(
+    system_prompt: str,
+    *,
+    initial_message: str | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> None:
     """Launch an interactive Claude Code cook session with the given system prompt."""
     if shutil.which("claude") is None:
-        print("ERROR: 'claude' command not found on PATH.")
-        print("Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code")
+        print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
-    spec = build_interactive_cmd()
+    spec = build_interactive_cmd(initial_prompt=initial_message)
     cmd = spec.cmd + [
         ClaudeFlags.PLUGIN_DIR,
         str(pkg_root()),
@@ -403,19 +419,62 @@ def _launch_cook_session(system_prompt: str) -> None:
         ClaudeFlags.APPEND_SYSTEM_PROMPT,
         system_prompt,
     ]
-    result = subprocess.run(cmd, env={**os.environ, **spec.env})
+    env = {**os.environ, **spec.env}
+    if extra_env:
+        env.update(extra_env)
+    result = subprocess.run(cmd, env=env)
     if result.returncode != 0:
         sys.exit(result.returncode)
 
 
+def _get_subsets_needed(recipe: Recipe, disabled_subsets: frozenset[str]) -> frozenset[str]:
+    """Return the subset names from disabled_subsets that are actually referenced in recipe."""
+    import re
+
+    from autoskillit.recipe import make_validation_context, run_semantic_rules
+
+    ctx = make_validation_context(recipe, disabled_subsets=disabled_subsets)
+    findings = run_semantic_rules(ctx)
+    needed: set[str] = set()
+    for f in findings:
+        if f.rule not in ("subset-disabled-skill", "subset-disabled-tool"):
+            continue
+        m = re.search(r"disabled subset '([^']+)'", f.message)
+        if m:
+            needed.add(m.group(1))
+    return frozenset(needed)
+
+
+def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> None:
+    """Remove specified subsets from subsets.disabled in .autoskillit/config.yaml."""
+    from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
+
+    config_path = project_dir / ".autoskillit" / "config.yaml"
+    try:
+        data: dict = (load_yaml(config_path) or {}) if config_path.exists() else {}
+    except YAMLError:
+        data = {}
+    subsets_section = data.setdefault("subsets", {})
+    current_disabled: list[str] = subsets_section.get("disabled", [])
+    subsets_section["disabled"] = [s for s in current_disabled if s not in subsets]
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(config_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
+    print(f"Updated {config_path}: removed {sorted(subsets)} from subsets.disabled")
+
+
+@app.command(name="cook", alias="c")
+def _cook_cmd() -> None:
+    """Launch an interactive Claude session with all skills and kitchen tools."""
+    cook_interactive()
+
+
 @app.command
-def cook(recipe: str | None = None):
+def order(recipe: str | None = None):
     """Launch an interactive Claude Code session to execute a recipe.
 
     Starts Claude Code with hard tool restrictions: only AskUserQuestion
-    (built-in) and AutoSkillit MCP tools are available. The recipe is
-    injected via --append-system-prompt so the session starts ready to
-    execute.
+    (built-in) and AutoSkillit MCP tools are available. The session
+    discovers recipe content by calling load_recipe as its first action.
 
     Parameters
     ----------
@@ -423,9 +482,15 @@ def cook(recipe: str | None = None):
         Name of the recipe (from .autoskillit/recipes/). Prompts if omitted.
     """
     from autoskillit.cli._prompts import _build_orchestrator_prompt
+    from autoskillit.recipe import (
+        find_recipe_by_name,
+        list_recipes,
+        load_recipe,
+        validate_recipe,
+    )
 
     if os.environ.get("CLAUDECODE"):
-        print("ERROR: 'cook' cannot run inside a Claude Code session.")
+        print("ERROR: 'order' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
@@ -447,7 +512,10 @@ def cook(recipe: str | None = None):
         raw = input(f"Select recipe [0-{len(available)}]: ").strip()
         resolved = _resolve_recipe_input(raw, available)
         if resolved is _OPEN_KITCHEN_CHOICE:
-            _launch_cook_session(_build_open_kitchen_prompt())
+            from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+
+            greeting = random.choice(_OPEN_KITCHEN_GREETINGS)
+            _launch_cook_session(_build_open_kitchen_prompt(), initial_message=greeting)
             return
         elif resolved is None:
             print(f"Invalid selection: '{raw}'")
@@ -458,7 +526,6 @@ def cook(recipe: str | None = None):
             recipe = resolved.name
 
     from autoskillit.core import YAMLError
-    from autoskillit.recipe import find_recipe_by_name, validate_recipe
 
     _match = find_recipe_by_name(recipe, Path.cwd())
     if _match is None:
@@ -471,13 +538,9 @@ def cook(recipe: str | None = None):
         else:
             print("No recipes found")
         sys.exit(1)
-    recipe_yaml = _match.path.read_text()
-
     # Validate recipe before launching session
-    from autoskillit.recipe import load_recipe as _load_for_cook
-
     try:
-        parsed = _load_for_cook(_match.path)
+        parsed = load_recipe(_match.path)
     except YAMLError as exc:
         print(f"Recipe YAML parse error: {exc}")
         sys.exit(1)
@@ -492,7 +555,54 @@ def cook(recipe: str | None = None):
             print(f"  - {err}")
         sys.exit(1)
 
-    _launch_cook_session(_build_orchestrator_prompt(recipe_yaml))
+    # Subset-disabled gate (REQ-VAL-004)
+    from autoskillit.config import load_config as _load_config
+
+    _cfg = _load_config(Path.cwd())
+    _disabled = frozenset(_cfg.subsets.disabled)
+    _extra_env: dict[str, str] = {}
+
+    if _disabled:
+        _needed = _get_subsets_needed(parsed, _disabled)
+        if _needed:
+            if not sys.stdin.isatty():
+                print(
+                    f"ERROR: Recipe '{recipe}' requires subset(s) "
+                    f"{sorted(_needed)} which are currently disabled."
+                )
+                print("Enable the subset(s) in .autoskillit/config.yaml or run interactively.")
+                sys.exit(1)
+            # Interactive prompt
+            subset_list = ", ".join(sorted(_needed))
+            print(f"\nThis recipe requires the following disabled subset(s): {subset_list}")
+            print("  1. Enable temporarily (for this run only)")
+            print("  2. Enable permanently (update .autoskillit/config.yaml)")
+            print("  3. Cancel")
+            _choice = input("Choose [1/2/3]: ").strip()
+            if _choice == "1":
+                _extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
+            elif _choice == "2":
+                _enable_subsets_permanently(Path.cwd(), _needed)
+            else:
+                return
+
+    from autoskillit.cli._prompts import _COOK_GREETINGS, show_cook_preview
+
+    show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
+
+    from autoskillit.cli._ansi import permissions_warning
+
+    print(permissions_warning())
+    confirm = input("Launch session? [Enter/n]: ").strip().lower()
+    if confirm in ("n", "no"):
+        return
+
+    greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
+    _launch_cook_session(
+        _build_orchestrator_prompt(recipe),
+        initial_message=greeting,
+        extra_env=_extra_env if _extra_env else None,
+    )
 
 
 def main() -> None:

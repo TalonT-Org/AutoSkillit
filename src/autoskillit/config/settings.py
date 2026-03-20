@@ -11,15 +11,24 @@ Resolution order (low → high priority):
 from __future__ import annotations
 
 import dataclasses
+import logging
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import OutputFormat, dump_yaml_str, load_yaml, pkg_root
+from autoskillit.core import (
+    CATEGORY_TAGS,
+    OutputFormat,
+    dump_yaml_str,
+    load_yaml,
+    pkg_root,
+)
 
 if TYPE_CHECKING:
     from dynaconf import Dynaconf
+
+_logger = logging.getLogger(__name__)  # noqa: TID251
 
 
 @dataclass
@@ -55,6 +64,9 @@ class SafetyConfig:
     reset_guard_marker: str = ".autoskillit-workspace"
     require_dry_walkthrough: bool = True
     test_gate_on_merge: bool = True
+    protected_branches: list[str] = field(
+        default_factory=lambda: ["main", "integration", "stable"]
+    )
 
 
 @dataclass
@@ -79,7 +91,7 @@ class RunSkillConfig:
 
 @dataclass
 class ModelConfig:
-    default: str | None = None
+    default: str = "sonnet"
     override: str | None = None
 
 
@@ -113,6 +125,7 @@ class GitHubConfig:
     token: str | None = None
     default_repo: str | None = None
     in_progress_label: str = "in-progress"
+    staged_label: str = "staged"
 
 
 @dataclass
@@ -136,6 +149,41 @@ class LinuxTracingConfig:
     proc_interval: float = 5.0
     log_dir: str = ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
     tmpfs_path: str = "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
+
+
+@dataclass
+class McpResponseConfig:
+    alert_threshold_tokens: int = 2000
+
+
+@dataclass
+class BranchingConfig:
+    default_base_branch: str = "main"
+    promotion_target: str = "main"  # Canonical upstream default for staged-label comparison.
+
+
+@dataclass
+class CIConfig:
+    workflow: str | None = None
+
+
+@dataclass
+class SkillsConfig:
+    tier1: list[str] = field(default_factory=list)
+    tier2: list[str] = field(default_factory=list)
+    tier3: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        t1, t2, t3 = set(self.tier1), set(self.tier2), set(self.tier3)
+        dupes = (t1 & t2) | (t1 & t3) | (t2 & t3)
+        if dupes:
+            raise ValueError(f"Skills assigned to multiple tiers: {sorted(dupes)}")
+
+
+@dataclass
+class SubsetsConfig:
+    disabled: list[str] = field(default_factory=list)
+    custom_tags: dict[str, list[str]] = field(default_factory=dict)
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:
@@ -167,6 +215,11 @@ class AutomationConfig:
     report_bug: ReportBugConfig = field(default_factory=ReportBugConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     linux_tracing: LinuxTracingConfig = field(default_factory=LinuxTracingConfig)
+    mcp_response: McpResponseConfig = field(default_factory=McpResponseConfig)
+    branching: BranchingConfig = field(default_factory=BranchingConfig)
+    ci: CIConfig = field(default_factory=CIConfig)
+    skills: SkillsConfig = field(default_factory=SkillsConfig)
+    subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -199,6 +252,11 @@ class AutomationConfig:
         rb = sec("report_bug")
         lg = sec("logging")
         lt = sec("linux_tracing")
+        mr = sec("mcp_response")
+        br = sec("branching")
+        ci = sec("ci")
+        sk = sec("skills")
+        _sub = sec("subsets")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -216,6 +274,10 @@ class AutomationConfig:
         _rb = _field_defaults(ReportBugConfig)
         _lg = _field_defaults(LoggingConfig)
         _lt = _field_defaults(LinuxTracingConfig)
+        _mr = _field_defaults(McpResponseConfig)
+        _br = _field_defaults(BranchingConfig)
+        _ci = _field_defaults(CIConfig)
+        _sk = _field_defaults(SkillsConfig)
 
         return cls(
             test_check=TestCheckConfig(
@@ -239,6 +301,7 @@ class AutomationConfig:
                     val(sf, "require_dry_walkthrough", _sf["require_dry_walkthrough"])
                 ),
                 test_gate_on_merge=bool(val(sf, "test_gate_on_merge", _sf["test_gate_on_merge"])),
+                protected_branches=list(val(sf, "protected_branches", _sf["protected_branches"])),
             ),
             read_db=ReadDbConfig(
                 timeout=int(val(rd, "timeout", _rd["timeout"])),
@@ -256,7 +319,7 @@ class AutomationConfig:
                 ),
             ),
             model=ModelConfig(
-                default=val(mc, "default", _mc["default"]) or None,
+                default=_d if (_d := val(mc, "default", None)) is not None else _mc["default"],
                 override=val(mc, "override", _mc["override"]) or None,
             ),
             worktree_setup=WorktreeSetupConfig(
@@ -280,6 +343,7 @@ class AutomationConfig:
                 token=val(gh, "token", _gh["token"]) or None,
                 default_repo=val(gh, "default_repo", _gh["default_repo"]) or None,
                 in_progress_label=str(val(gh, "in_progress_label", _gh["in_progress_label"])),
+                staged_label=str(val(gh, "staged_label", _gh["staged_label"])),
             ),
             report_bug=ReportBugConfig(
                 timeout=int(val(rb, "timeout", _rb["timeout"])),
@@ -302,7 +366,57 @@ class AutomationConfig:
                 log_dir=str(val(lt, "log_dir", _lt["log_dir"])),
                 tmpfs_path=str(val(lt, "tmpfs_path", _lt["tmpfs_path"])),
             ),
+            mcp_response=McpResponseConfig(
+                alert_threshold_tokens=int(
+                    val(mr, "alert_threshold_tokens", _mr["alert_threshold_tokens"])
+                ),
+            ),
+            branching=BranchingConfig(
+                default_base_branch=str(
+                    val(br, "default_base_branch", _br["default_base_branch"])
+                ),
+                promotion_target=str(val(br, "promotion_target", _br["promotion_target"])),
+            ),
+            ci=CIConfig(
+                workflow=val(ci, "workflow", _ci["workflow"]) or None,
+            ),
+            skills=SkillsConfig(
+                tier1=list(val(sk, "tier1", _sk["tier1"])),
+                tier2=list(val(sk, "tier2", _sk["tier2"])),
+                tier3=list(val(sk, "tier3", _sk["tier3"])),
+            ),
+            subsets=_build_subsets_config(_sub),
         )
+
+
+def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
+    """Parse subsets section, emitting warnings for unknown disabled categories."""
+    disabled = list(raw.get("disabled", []))
+    custom_tags_raw = raw.get("custom_tags", {}) or {}
+    if not isinstance(custom_tags_raw, dict):
+        raise ValueError(
+            f"subsets.custom_tags must be a dict mapping tag names to skill lists, "
+            f"got {type(custom_tags_raw).__name__!r}: {custom_tags_raw!r}"
+        )
+    custom_tags: dict[str, list[str]] = {}
+    for k, v in custom_tags_raw.items():
+        if isinstance(v, list):
+            custom_tags[str(k)] = [str(item) for item in v]
+        else:
+            _logger.warning(
+                "Ignoring non-list value for custom_tags entry %r: %r",
+                k,
+                v,
+            )
+    known_categories = CATEGORY_TAGS | frozenset(custom_tags.keys())
+    for tag in disabled:
+        if tag not in known_categories:
+            _logger.warning(
+                "Unknown category %r in subsets.disabled"
+                " (not in CATEGORY_TAGS and not a custom_tag)",
+                tag,
+            )
+    return SubsetsConfig(disabled=disabled, custom_tags=custom_tags)
 
 
 def _to_optional_list(value: Any) -> list[str] | None:

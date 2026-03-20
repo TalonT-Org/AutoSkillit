@@ -11,6 +11,7 @@ from autoskillit.core.types import (
     SubprocessRunner,
     TerminationReason,
 )
+from tests._helpers import _flush_structlog_proxy_caches
 
 
 class StatefulMockTester:
@@ -42,6 +43,9 @@ class MockSubprocessRunner(SubprocessRunner):
 
     Inherits from SubprocessRunner (Protocol) so mypy verifies the __call__
     signature matches the protocol at class definition, not just at call sites.
+
+    call_args_list stores (cmd, cwd, timeout, kwargs) tuples.
+    IMPORTANT: Assert [N][1] (cwd) when testing cwd propagation.
     """
 
     def __init__(self) -> None:
@@ -75,33 +79,6 @@ class MockSubprocessRunner(SubprocessRunner):
         if self._queue:
             return self._queue.pop(0)
         return self._default
-
-
-def _flush_structlog_proxy_caches() -> None:
-    """Repair any autoskillit loggers cached before this fixture ran.
-
-    Secondary defense only — the primary mechanism is cache_logger_on_first_use=False
-    set at fixture entry, which prevents new caching during the test. This flush
-    handles the edge case of module-level loggers cached at import time.
-
-    Scans ALL module attributes (not just 'logger'/'_logger') so that loggers
-    stored under any name (e.g. '_log' in execution.quota) are repaired.
-    """
-    import structlog
-    import structlog._config as _sc
-
-    current_procs = structlog.get_config()["processors"]
-    for mod_name in list(sys.modules):
-        if not mod_name.startswith("autoskillit"):
-            continue
-        mod = sys.modules.get(mod_name)
-        if mod is None:
-            continue
-        for lg in vars(mod).values():
-            if isinstance(lg, _sc.BoundLoggerLazyProxy):
-                lg.__dict__.pop("bind", None)
-            elif hasattr(lg, "_processors"):
-                lg._processors = current_procs
 
 
 @pytest.fixture(autouse=True)
@@ -205,14 +182,19 @@ def parse_stdout_json(capsys):
 
 
 @pytest.fixture(autouse=True)
-def _clear_kitchen_open_env(monkeypatch):
-    """Ensure AUTOSKILLIT_KITCHEN_OPEN is unset at the start of every test.
+def _clear_headless_env(monkeypatch):
+    """Ensure AUTOSKILLIT_HEADLESS is unset at the start of every test.
 
-    make_context() reads this env var to decide whether to start with the gate
-    open. Any residual value from the shell environment would silently break
-    tests that assert the gate starts closed.
+    Tools check this env var to block calls from headless sessions.
+    Also resets mcp kitchen visibility transforms when the server module is
+    already imported.
     """
-    monkeypatch.delenv("AUTOSKILLIT_KITCHEN_OPEN", raising=False)
+
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    if "autoskillit.server" in sys.modules:
+        from autoskillit.server import mcp
+
+        mcp.disable(tags={"kitchen"})
 
 
 @pytest.fixture(scope="function")

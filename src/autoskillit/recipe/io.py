@@ -48,6 +48,28 @@ def builtin_recipes_dir() -> Path:
     return pkg_root() / "recipes"
 
 
+def builtin_sub_recipes_dir() -> Path:
+    """Return the path to the built-in sub-recipes directory."""
+    return pkg_root() / "recipes" / "sub-recipes"
+
+
+def find_sub_recipe_by_name(name: str, project_dir: Path) -> Path | None:
+    """Find a sub-recipe YAML file by name.
+
+    Searches project-local sub-recipes first (project takes precedence),
+    then falls back to built-in sub-recipes.
+    Sub-recipe files are stored in {dir}/sub-recipes/{name}.yaml and are
+    NOT listed by list_recipes() (they are implementation details, not
+    user-facing recipes).
+    """
+    project_sub_dir = project_dir / ".autoskillit" / "recipes" / "sub-recipes"
+    for directory in [project_sub_dir, builtin_sub_recipes_dir()]:
+        candidate = directory / f"{name}.yaml"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def iter_steps_with_context(
     recipe: Recipe,
 ) -> Iterator[tuple[str, RecipeStep, frozenset[str]]]:
@@ -72,6 +94,43 @@ def find_recipe_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
 
 # --- internal helpers ---
 
+# Fields explicitly handled by _parse_step. Must match RecipeStep.__dataclass_fields__
+# exactly. When a field is added to RecipeStep, add handling in _parse_step AND add the
+# field name here — the assertion below will fail at import time otherwise.
+_PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
+    {
+        "tool",
+        "action",
+        "python",
+        "constant",
+        "with_args",
+        "on_success",
+        "on_failure",
+        "on_context_limit",
+        "on_result",
+        "retries",
+        "on_exhausted",
+        "message",
+        "note",
+        "capture",
+        "capture_list",
+        "optional",
+        "skip_when_false",
+        "model",
+        "description",
+        "sub_recipe",
+        "gate",
+    }
+)
+if _PARSE_STEP_HANDLED_FIELDS != frozenset(RecipeStep.__dataclass_fields__):
+    raise RuntimeError(
+        "_parse_step field list is out of sync with RecipeStep schema.\n"
+        f"  Missing from handled: "
+        f"{frozenset(RecipeStep.__dataclass_fields__) - _PARSE_STEP_HANDLED_FIELDS}\n"
+        f"  Extra in handled:     "
+        f"{_PARSE_STEP_HANDLED_FIELDS - frozenset(RecipeStep.__dataclass_fields__)}"
+    )
+
 
 def _parse_recipe(data: dict[str, Any]) -> Recipe:
     name = data.get("name", "")
@@ -85,6 +144,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
                 description=inp_data.get("description", ""),
                 required=inp_data.get("required", False),
                 default=inp_data.get("default"),
+                hidden=bool(inp_data.get("hidden", False)),
             )
 
     steps: dict[str, RecipeStep] = {}
@@ -104,6 +164,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         steps=steps,
         kitchen_rules=kitchen_rules,
         version=data.get(AUTOSKILLIT_VERSION_KEY),
+        experimental=bool(data.get("experimental", False)),
     )
 
 
@@ -154,6 +215,8 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         skip_when_false=data.get("skip_when_false"),
         model=data.get("model"),
         description=data.get("description", ""),
+        sub_recipe=data.get("sub_recipe"),
+        gate=data.get("gate"),
     )
 
 

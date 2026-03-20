@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills/analyze-prs/SKILL.md"
+SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/analyze-prs/SKILL.md"
 
 
 @pytest.fixture(scope="module")

@@ -17,15 +17,14 @@ def test_core_logging_importable():
 def test_core_io_importable():
     from autoskillit.core.io import (  # noqa: F401
         YAMLError,
-        _atomic_write,
-        dump_yaml,
+        atomic_write,
         dump_yaml_str,
         ensure_project_temp,
         load_yaml,
     )
 
     assert callable(load_yaml)
-    assert callable(dump_yaml)
+    assert callable(atomic_write)
 
 
 def test_core_io_module_has_docstring():
@@ -36,8 +35,19 @@ def test_core_io_module_has_docstring():
 
 def test_dump_yaml_not_in_core_all():
     import autoskillit.core as core
+    import autoskillit.core.io as core_io
 
     assert "dump_yaml" not in core.__all__
+    assert "dump_yaml" not in core_io.__all__
+    assert not hasattr(core_io, "dump_yaml")
+
+
+def test_dump_yaml_not_in_io():
+    """dump_yaml must be removed entirely from core.io."""
+    import autoskillit.core.io as io_mod
+
+    assert not hasattr(io_mod, "dump_yaml")
+    assert "dump_yaml" not in io_mod.__all__
 
 
 def test_package_logger_name_not_in_core_all():

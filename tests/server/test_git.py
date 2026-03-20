@@ -41,9 +41,30 @@ async def test_perform_merge_returns_error_for_nonexistent_path(
     from autoskillit.server.git import perform_merge
 
     result = await perform_merge(
-        "/nonexistent/path", "main", config=default_config, runner=conftest_mock_runner
+        "/nonexistent/path", "dev", config=default_config, runner=conftest_mock_runner
     )
     assert "error" in result
+
+
+@pytest.mark.anyio
+async def test_perform_merge_rejects_protected_branch(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """perform_merge must reject when base_branch is a protected branch."""
+    from autoskillit.core.types import MergeFailedStep, MergeState
+    from autoskillit.server.git import perform_merge
+
+    wt = tmp_path / "wt"
+    wt.mkdir()
+
+    result = await perform_merge(
+        str(wt), "main", config=default_config, runner=conftest_mock_runner
+    )
+
+    assert result["failed_step"] == MergeFailedStep.PROTECTED_BRANCH
+    assert result["state"] == MergeState.WORKTREE_INTACT
+    assert "protected" in result["error"].lower()
+    assert len(conftest_mock_runner.call_args_list) == 0  # no git commands run
 
 
 @pytest.mark.anyio
@@ -61,7 +82,7 @@ async def test_perform_merge_rejects_dirty_worktree(
     conftest_mock_runner.push(_make_result(0, " M hooks.json\n", ""))  # git status --porcelain
 
     result = await perform_merge(
-        fake_wt, "main", config=default_config, runner=conftest_mock_runner
+        fake_wt, "dev", config=default_config, runner=conftest_mock_runner
     )
     assert "error" in result
     assert result["failed_step"] == MergeFailedStep.DIRTY_TREE
@@ -85,7 +106,7 @@ async def test_perform_merge_dirty_tree_reports_files(
     conftest_mock_runner.push(_make_result(0, dirty_output, ""))  # git status --porcelain
 
     result = await perform_merge(
-        fake_wt, "main", config=default_config, runner=conftest_mock_runner
+        fake_wt, "dev", config=default_config, runner=conftest_mock_runner
     )
     assert result["failed_step"] == MergeFailedStep.DIRTY_TREE
     assert len(result["dirty_files"]) == 3
@@ -108,7 +129,7 @@ async def test_perform_merge_blocks_on_failing_tests(
     conftest_mock_runner.push(_make_result(1, "= 1 failed =", ""))  # test
 
     result = await perform_merge(
-        fake_wt, "main", config=default_config, runner=conftest_mock_runner
+        fake_wt, "dev", config=default_config, runner=conftest_mock_runner
     )
     assert "error" in result
     assert result["failed_step"] == MergeFailedStep.TEST_GATE
@@ -141,7 +162,7 @@ async def test_perform_merge_returns_success_on_green_tests(
 
     result = await perform_merge(
         fake_wt,
-        "main",
+        "dev",
         config=default_config,
         runner=conftest_mock_runner,
         tester=tester,
@@ -174,7 +195,7 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
 
     result = await perform_merge(
-        str(tmp_path), "main", config=default_config, runner=conftest_mock_runner, tester=tester
+        str(tmp_path), "dev", config=default_config, runner=conftest_mock_runner, tester=tester
     )
 
     assert "error" in result
@@ -207,7 +228,7 @@ async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_run
 
     result = await perform_merge(
         fake_wt,
-        "main",
+        "dev",
         config=default_config,
         runner=conftest_mock_runner,
         tester=tester,
@@ -293,7 +314,7 @@ async def test_perform_merge_strips_tracked_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
     result = await perform_merge(
-        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester
+        fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
     )
     assert result.get("merge_succeeded") is True
 
@@ -342,7 +363,7 @@ async def test_perform_merge_noop_when_no_generated_files_tracked(
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
     result = await perform_merge(
-        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester
+        fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
     )
     assert result.get("merge_succeeded") is True
 
@@ -373,7 +394,7 @@ async def test_perform_merge_fails_on_generated_file_cleanup_error(
     conftest_mock_runner.push(_make_result(1, "", "error: pathspec"))  # git rm --cached fails
 
     result = await perform_merge(
-        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester
+        fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
     )
     assert "error" in result
     assert result["failed_step"] == MergeFailedStep.GENERATED_FILE_CLEANUP
@@ -396,8 +417,8 @@ async def test_perform_merge_dirty_check_ignores_generated_files(
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (no tracked generated files)
-    # git status --porcelain returns only a diagram file as untracked
-    dirty_out = "?? src/autoskillit/recipes/diagrams/implementation.md\n"
+    # git status --porcelain returns only a generated config file as untracked
+    dirty_out = "?? src/autoskillit/hooks/hooks.json\n"
     conftest_mock_runner.push(_make_result(0, dirty_out, ""))  # git status --porcelain
     conftest_mock_runner.push(_make_result(0, "", ""))  # fetch
     conftest_mock_runner.push(_make_result(0, "", ""))  # ref check
@@ -409,7 +430,7 @@ async def test_perform_merge_dirty_check_ignores_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
     result = await perform_merge(
-        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester
+        fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
     )
     assert result.get("merge_succeeded") is True
     assert "dirty_files" not in result
@@ -446,7 +467,7 @@ async def test_perform_merge_strips_generated_files_before_dirty_check(
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
     result = await perform_merge(
-        fake_wt, "main", config=default_config, runner=conftest_mock_runner, tester=tester
+        fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
     )
     assert result.get("merge_succeeded") is True
 

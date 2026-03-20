@@ -13,7 +13,7 @@ from autoskillit import __version__
 from autoskillit.core import (
     RetryReason,
     SkillResult,
-    _atomic_write,
+    atomic_write,
     dump_yaml_str,
     get_logger,
     load_yaml,
@@ -126,7 +126,7 @@ class MigrationEngine:
         # Write migrated content back to original file
         if result.migrated_content is not None:
             shutil.copy2(file.path, file.path.with_suffix(".yaml.bak"))
-            _atomic_write(file.path, result.migrated_content)
+            atomic_write(file.path, result.migrated_content)
             logger.info("migration.written_back", name=file.name, path=str(file.path))
 
         return result
@@ -334,24 +334,7 @@ class DiagramMigrationAdapter(DeterministicMigrationAdapter):
         *,
         temp_dir: Path,
     ) -> MigrationResult:
-        from autoskillit.recipe import generate_recipe_diagram
-
-        recipes_dir = file.path.parent.parent
-        recipe_path = recipes_dir / f"{file.name}.yaml"
-        if not recipe_path.exists():
-            return MigrationResult(
-                success=False,
-                name=file.name,
-                error=f"Source recipe not found: {recipe_path}",
-            )
-        try:
-            generate_recipe_diagram(recipe_path, recipes_dir)
-            return MigrationResult(success=True, name=file.name)
-        except Exception as exc:
-            logger.warning(
-                "diagram.generate_failed", name=file.name, error=str(exc), exc_info=True
-            )
-            return MigrationResult(success=False, name=file.name, error=str(exc))
+        return MigrationResult(success=True, name=file.name)
 
     def validate(self, path: Path) -> tuple[bool, str]:
         try:

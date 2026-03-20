@@ -199,9 +199,9 @@ def test_record_persists_to_disk(tmp_path: Path) -> None:
 # FS-IM4: failed disk write does not corrupt in-memory state
 # ---------------------------------------------------------------------------
 def test_record_does_not_mutate_state_on_disk_failure(tmp_path: Path) -> None:
-    """If _atomic_write raises, _state remains unchanged."""
+    """If atomic_write raises, _state remains unchanged."""
     store = FailureStore(tmp_path / "failures.json")
-    with patch("autoskillit.migration.store._atomic_write", side_effect=OSError("disk full")):
+    with patch("autoskillit.migration.store.atomic_write", side_effect=OSError("disk full")):
         with pytest.raises(OSError):
             store.record("alpha", Path("/a.yaml"), "recipe", "err", 1)
     assert not store.has_failure("alpha")

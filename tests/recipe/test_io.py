@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
 
 from autoskillit.core.types import RecipeSource
 from autoskillit.recipe.io import (
@@ -21,38 +20,14 @@ from autoskillit.recipe.schema import (
     RecipeStep,
     StepResultRoute,
 )
-
-VALID_RECIPE = {
-    "name": "test-recipe",
-    "description": "A test recipe",
-    "ingredients": {
-        "test_dir": {"description": "Dir to test", "required": True},
-        "branch": {"description": "Branch", "default": "main"},
-    },
-    "kitchen_rules": ["NEVER use native tools"],
-    "steps": {
-        "run_tests": {
-            "tool": "test_check",
-            "with": {"worktree_path": "${{ inputs.test_dir }}"},
-            "on_success": "done",
-            "on_failure": "escalate",
-        },
-        "done": {"action": "stop", "message": "Tests passed."},
-        "escalate": {"action": "stop", "message": "Need help."},
-    },
-}
-
-
-def _write_yaml(path: Path, data: dict) -> Path:
-    path.write_text(yaml.dump(data, default_flow_style=False))
-    return path
+from tests.recipe.conftest import VALID_RECIPE, _write_yaml
 
 
 def test_load_recipe_smoke() -> None:
     """load_recipe(path) returns a Recipe with correct name."""
-    path = builtin_recipes_dir() / "audit-and-fix.yaml"
+    path = builtin_recipes_dir() / "implementation.yaml"
     recipe = load_recipe(path)
-    assert recipe.name == "audit-and-fix"
+    assert recipe.name == "implementation"
 
 
 def test_parse_recipe_accepts_raw_dict() -> None:
@@ -141,11 +116,11 @@ class TestRecipeParser:
     def test_project_recipe_overrides_builtin(self, tmp_path: Path) -> None:
         wf_dir = tmp_path / ".autoskillit" / "recipes"
         wf_dir.mkdir(parents=True)
-        override = {**VALID_RECIPE, "name": "bugfix-loop", "description": "Custom override"}
-        _write_yaml(wf_dir / "bugfix-loop.yaml", override)
+        override = {**VALID_RECIPE, "name": "implementation", "description": "Custom override"}
+        _write_yaml(wf_dir / "implementation.yaml", override)
 
         recipes = list_recipes(tmp_path).items
-        match = next(w for w in recipes if w.name == "bugfix-loop")
+        match = next(w for w in recipes if w.name == "implementation")
         assert match.source == RecipeSource.PROJECT
         assert match.description == "Custom override"
 
@@ -500,7 +475,6 @@ class TestListRecipes:
         result = list_recipes(tmp_path)
         recipes = result.items
         names = {w.name for w in recipes}
-        assert "bugfix-loop" in names
         assert "implementation" in names
         assert len(recipes) > 0
         assert all(r.source.value in ("project", "builtin") for r in recipes)
@@ -826,3 +800,35 @@ def test_bundled_recipes_all_skill_commands_start_with_slash() -> None:
                 if not sc.strip().startswith(SKILL_COMMAND_PREFIX):
                     violations.append(f"{yaml_path.name}:{step_name}: {sc!r}")
     assert not violations, f"Bundled recipe steps with prose skill_command: {violations}"
+
+
+# ---------------------------------------------------------------------------
+# T1 — schema-drift guard
+# ---------------------------------------------------------------------------
+
+
+def test_parse_step_handles_all_recipe_step_fields() -> None:
+    """_PARSE_STEP_HANDLED_FIELDS must equal RecipeStep.__dataclass_fields__ keys."""
+    from autoskillit.recipe.io import _PARSE_STEP_HANDLED_FIELDS
+    from autoskillit.recipe.schema import RecipeStep
+
+    schema_fields = frozenset(RecipeStep.__dataclass_fields__)
+    assert _PARSE_STEP_HANDLED_FIELDS == schema_fields, (
+        f"_parse_step field list is out of sync.\n"
+        f"  Missing from handled: {schema_fields - _PARSE_STEP_HANDLED_FIELDS}\n"
+        f"  Extra in handled:     {_PARSE_STEP_HANDLED_FIELDS - schema_fields}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T2 — _path_mtime_ns replaces the two old helpers
+# ---------------------------------------------------------------------------
+
+
+def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
+    """recipe/_api.py must expose _path_mtime_ns; _file_mtime_ns/_dir_mtime_ns removed."""
+    import autoskillit.recipe._api as api
+
+    assert hasattr(api, "_path_mtime_ns"), "_path_mtime_ns must exist"
+    assert not hasattr(api, "_file_mtime_ns"), "_file_mtime_ns must be removed"
+    assert not hasattr(api, "_dir_mtime_ns"), "_dir_mtime_ns must be removed"

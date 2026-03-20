@@ -4,26 +4,42 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
 
 import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, truncate_text
+from autoskillit.core import (
+    PIPELINE_FORBIDDEN_TOOLS,
+    LayoutError,
+    ValidatedAddDir,
+    get_logger,
+    truncate_text,
+    validate_add_dir,
+)
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
     _import_and_call,
     _notify,
     _require_enabled,
+    _require_not_headless,
     _run_subprocess,
     _validate_skill_command,
+    track_response_size,
 )
 
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+def _is_absolute_path(path: str) -> bool:
+    """Return True if path is an absolute filesystem path."""
+    return Path(path).is_absolute()
+
+
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@track_response_size("run_cmd")
 async def run_cmd(
     cmd: str,
     cwd: str,
@@ -39,6 +55,8 @@ async def run_cmd(
         timeout: Max seconds before killing the process (default 600).
         step_name: Optional YAML step key for wall-clock timing accumulation.
     """
+    if (headless := _require_not_headless("run_cmd")) is not None:
+        return headless
     if (gate := _require_enabled()) is not None:
         return gate
     structlog.contextvars.clear_contextvars()
@@ -76,7 +94,8 @@ async def run_cmd(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@track_response_size("run_python")
 async def run_python(
     callable: str,
     args: dict[str, object] | None = None,
@@ -98,6 +117,8 @@ async def run_python(
         args: Keyword arguments to pass to the function.
         timeout: Max seconds before aborting the call (default 30).
     """
+    if (headless := _require_not_headless("run_python")) is not None:
+        return headless
     if (gate := _require_enabled()) is not None:
         return gate
     structlog.contextvars.clear_contextvars()
@@ -122,11 +143,11 @@ async def run_python(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@track_response_size("run_skill")
 async def run_skill(
     skill_command: str,
     cwd: str,
-    add_dir: str = "",
     model: str = "",
     step_name: str = "",
     ctx: Context = CurrentContext(),
@@ -151,15 +172,27 @@ async def run_skill(
     Args:
         skill_command: The full prompt including skill invocation (e.g. "/investigate ...").
         cwd: Working directory for the claude session.
-        add_dir: Optional additional directory to add to the session context.
         model: Model to use (e.g. "sonnet", "opus"). Empty string = use config default.
         step_name: Optional YAML step key (e.g. "implement"). When set, token usage is
             accumulated in the server-side token log, grouped by this name.
     """
+    if (headless := _require_not_headless("run_skill")) is not None:
+        return headless
     if (gate := _require_enabled()) is not None:
         return gate
     if (cmd_error := _validate_skill_command(skill_command)) is not None:
         return cmd_error
+    if cwd and not _is_absolute_path(cwd):
+        return json.dumps(
+            {
+                "success": False,
+                "error": (
+                    f"run_skill: cwd must be an absolute path, got: {cwd!r}. "
+                    "Check that the skill resolved the worktree_path to absolute "
+                    '(e.g. WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)").'
+                ),
+            }
+        )
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="run_skill", cwd=cwd)
     logger.info("run_skill", command=skill_command[:80], cwd=cwd)
@@ -186,15 +219,58 @@ async def run_skill(
     if tool_ctx.output_pattern_resolver:
         expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
 
+    # Look up write-expectation metadata from skill contract
+    from autoskillit.core import WriteBehaviorSpec
+
+    write_spec: WriteBehaviorSpec | None = None
+    if tool_ctx.write_expected_resolver:
+        write_spec = tool_ctx.write_expected_resolver(skill_command)
+
+    # Build validated add_dirs via DefaultSessionSkillManager
+    from pathlib import Path
+    from uuid import uuid4
+
+    from autoskillit.core import resolve_target_skill
+
+    # Resolve correct namespace and prepare for tier2 activation
+    resolved_command = skill_command
+    target_name: str | None = None
+    if tool_ctx.skill_resolver is not None:
+        resolved_command, target_name = resolve_target_skill(
+            skill_command, tool_ctx.skill_resolver
+        )
+
+    skill_add_dirs: list[ValidatedAddDir] = []
+    if tool_ctx.session_skill_manager is not None:
+        session_id = f"headless-{uuid4().hex[:12]}"
+        session_root = tool_ctx.session_skill_manager.init_session(
+            session_id,
+            cook_session=False,
+            config=tool_ctx.config,
+            project_dir=Path(cwd),
+        )
+        skill_add_dirs.append(session_root)
+
+        # Activate the target skill so it's invocable in the headless session
+        if target_name:
+            tier2_skills = frozenset(tool_ctx.config.skills.tier2)
+            if target_name in tier2_skills:
+                tool_ctx.session_skill_manager.activate_tier2(session_id, target_name)
+    try:
+        skill_add_dirs.append(validate_add_dir(Path(cwd)))
+    except LayoutError:
+        pass  # cwd has no project-local skills — already accessible as working dir
+
     _start = time.monotonic()
     try:
         skill_result = await tool_ctx.executor.run(
-            skill_command,
+            resolved_command,
             cwd,
             model=model,
-            add_dir=add_dir,
+            add_dirs=skill_add_dirs,
             step_name=step_name,
             expected_output_patterns=expected_output_patterns,
+            write_behavior=write_spec,
         )
         if skill_result.success:
             tool_ctx.audit.record_success(skill_command)

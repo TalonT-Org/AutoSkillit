@@ -13,12 +13,18 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger, truncate_text
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, _run_subprocess
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    _run_subprocess,
+    track_response_size,
+)
 
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"autoskillit", "kitchen", "headless"}, annotations={"readOnlyHint": True})
+@track_response_size("test_check")
 async def test_check(
     worktree_path: str,
     step_name: str = "",
@@ -38,8 +44,6 @@ async def test_check(
         worktree_path: Path to the git worktree to run tests in.
         step_name: Optional YAML step key for wall-clock timing accumulation.
     """
-    if (gate := _require_enabled()) is not None:
-        return gate
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(tool="test_check", cwd=worktree_path)
     logger.info("test_check", worktree=worktree_path)
@@ -59,7 +63,8 @@ async def test_check(
 
     _start = time.monotonic()
     try:
-        passed, output = await tool_ctx.tester.run(Path(worktree_path))
+        resolved = os.path.realpath(worktree_path)
+        passed, output = await tool_ctx.tester.run(Path(resolved))
 
         if not passed:
             await _notify(
@@ -76,7 +81,8 @@ async def test_check(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@track_response_size("reset_test_dir")
 async def reset_test_dir(
     test_dir: str,
     force: bool = False,
@@ -151,7 +157,8 @@ async def reset_test_dir(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@track_response_size("reset_workspace")
 async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str:
     """Runs a configured reset command then deletes directory contents,
     preserving configured directories and the reset guard marker.

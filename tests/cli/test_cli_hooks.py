@@ -6,11 +6,6 @@ import json
 from pathlib import Path
 
 
-# HK1
-def test_hooks_module_exists():
-    """cli/_hooks.py must exist as a module."""
-
-
 # HK9
 def test_claude_settings_path_user_scope():
     """_claude_settings_path('user') returns ~/.claude/settings.json."""
@@ -38,11 +33,14 @@ def test_registered_hooks_use_absolute_paths(tmp_path):
     settings = tmp_path / "settings.json"
     sync_hooks_to_settings(settings)
     data = json.loads(settings.read_text())
-    for entry in data["hooks"]["PreToolUse"]:
-        for hook in entry.get("hooks", []):
-            cmd = hook["command"]
-            assert "python3 -m" not in cmd, f"Registered hook uses python3 -m: {cmd}"
-            assert "${" not in cmd, f"Registered hook uses env var: {cmd}"
+    for event_type, entries in data["hooks"].items():
+        for entry in entries:
+            for hook in entry.get("hooks", []):
+                cmd = hook["command"]
+                assert "python3 -m" not in cmd, (
+                    f"Registered hook in {event_type} uses python3 -m: {cmd}"
+                )
+                assert "${" not in cmd, f"Registered hook in {event_type} uses env var: {cmd}"
 
 
 # HK12
@@ -51,18 +49,39 @@ def test_hooks_py_covers_full_registry(tmp_path):
     from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
     from autoskillit.hooks import HOOK_REGISTRY
 
-    all_registry_scripts = {s for h in HOOK_REGISTRY for s in h.scripts}
     settings = tmp_path / "settings.json"
     _evict_stale_autoskillit_hooks(settings)
     sync_hooks_to_settings(settings)
     data = json.loads(settings.read_text())
-    registered_commands = [
-        h["command"] for entry in data["hooks"]["PreToolUse"] for h in entry.get("hooks", [])
+
+    # Verify PreToolUse entries cover all PreToolUse registry entries
+    pretooluse_scripts = {
+        s for h in HOOK_REGISTRY if h.event_type == "PreToolUse" for s in h.scripts
+    }
+    registered_pretooluse = [
+        h["command"]
+        for entry in data["hooks"].get("PreToolUse", [])
+        for h in entry.get("hooks", [])
     ]
-    registered_scripts = {cmd.split("/")[-1] for cmd in registered_commands}
-    assert all_registry_scripts == registered_scripts, (
-        f"Missing: {all_registry_scripts - registered_scripts}, "
-        f"Extra: {registered_scripts - all_registry_scripts}"
+    registered_pretooluse_scripts = {cmd.split("/")[-1] for cmd in registered_pretooluse}
+    assert pretooluse_scripts == registered_pretooluse_scripts, (
+        f"PreToolUse missing: {pretooluse_scripts - registered_pretooluse_scripts}, "
+        f"Extra: {registered_pretooluse_scripts - pretooluse_scripts}"
+    )
+
+    # Verify PostToolUse entries cover all PostToolUse registry entries
+    posttooluse_scripts = {
+        s for h in HOOK_REGISTRY if h.event_type == "PostToolUse" for s in h.scripts
+    }
+    registered_posttooluse = [
+        h["command"]
+        for entry in data["hooks"].get("PostToolUse", [])
+        for h in entry.get("hooks", [])
+    ]
+    registered_posttooluse_scripts = {cmd.split("/")[-1] for cmd in registered_posttooluse}
+    assert posttooluse_scripts == registered_posttooluse_scripts, (
+        f"PostToolUse missing: {posttooluse_scripts - registered_posttooluse_scripts}, "
+        f"Extra: {registered_posttooluse_scripts - posttooluse_scripts}"
     )
 
 
@@ -137,7 +156,7 @@ def test_install_production_order_includes_quota_check(tmp_path, monkeypatch):
     """install() must register quota_check.py regardless of function call order."""
     import importlib
 
-    import autoskillit.cli as cli
+    from autoskillit.cli._marketplace import install
 
     settings_path = tmp_path / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
@@ -152,7 +171,7 @@ def test_install_production_order_includes_quota_check(tmp_path, monkeypatch):
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-    cli.install(scope="local")
+    install(scope="local")
 
     data = json.loads(settings_path.read_text())
     pretooluse = data.get("hooks", {}).get("PreToolUse", [])
@@ -167,7 +186,7 @@ def test_settings_json_matches_hook_registry_after_install(tmp_path, monkeypatch
     """After install(), settings.json must contain every script from HOOK_REGISTRY."""
     import importlib
 
-    import autoskillit.cli as cli
+    from autoskillit.cli._marketplace import install
     from autoskillit.hooks import HOOK_REGISTRY
 
     settings_path = tmp_path / ".claude" / "settings.json"
@@ -183,19 +202,21 @@ def test_settings_json_matches_hook_registry_after_install(tmp_path, monkeypatch
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-    cli.install(scope="local")
+    install(scope="local")
 
     data = json.loads(settings_path.read_text())
-    pretooluse = data.get("hooks", {}).get("PreToolUse", [])
     for hook_def in HOOK_REGISTRY:
-        matching = [e for e in pretooluse if e.get("matcher") == hook_def.matcher]
+        event_entries = data.get("hooks", {}).get(hook_def.event_type, [])
+        matching = [e for e in event_entries if e.get("matcher") == hook_def.matcher]
         assert len(matching) == 1, (
-            f"Expected exactly 1 entry for matcher {hook_def.matcher!r}, got {len(matching)}"
+            f"Expected exactly 1 {hook_def.event_type} entry for matcher "
+            f"{hook_def.matcher!r}, got {len(matching)}"
         )
         entry_commands = [h["command"] for h in matching[0].get("hooks", [])]
         for script in hook_def.scripts:
             assert any(script in c for c in entry_commands), (
-                f"Script {script!r} missing from matcher {hook_def.matcher!r} in settings.json"
+                f"Script {script!r} missing from matcher {hook_def.matcher!r} "
+                f"in {hook_def.event_type} section of settings.json"
             )
 
 
@@ -209,11 +230,28 @@ def test_sync_hooks_to_settings_writes_all_registry_scripts(tmp_path):
     sync_hooks_to_settings(settings)
 
     data = json.loads(settings.read_text())
-    pretooluse = data["hooks"]["PreToolUse"]
-    assert len(pretooluse) == len(HOOK_REGISTRY), (
-        f"Expected {len(HOOK_REGISTRY)} PreToolUse entries, got {len(pretooluse)}"
+
+    # Verify PreToolUse entry count matches registry
+    pretooluse_registry_entries = [h for h in HOOK_REGISTRY if h.event_type == "PreToolUse"]
+    pretooluse = data["hooks"].get("PreToolUse", [])
+    assert len(pretooluse) == len(pretooluse_registry_entries), (
+        f"Expected {len(pretooluse_registry_entries)} PreToolUse entries, got {len(pretooluse)}"
     )
-    all_commands = [h["command"] for e in pretooluse for h in e.get("hooks", [])]
+
+    # Verify PostToolUse entries exist
+    posttooluse_registry_entries = [h for h in HOOK_REGISTRY if h.event_type == "PostToolUse"]
+    posttooluse = data["hooks"].get("PostToolUse", [])
+    assert len(posttooluse) == len(posttooluse_registry_entries), (
+        f"Expected {len(posttooluse_registry_entries)} PostToolUse entries, got {len(posttooluse)}"
+    )
+
+    # All scripts from all event types must be present
+    all_commands = [
+        h["command"]
+        for event_entries in data["hooks"].values()
+        for entry in event_entries
+        for h in entry.get("hooks", [])
+    ]
     for hook_def in HOOK_REGISTRY:
         for script in hook_def.scripts:
             assert any(script in c for c in all_commands), (
@@ -234,7 +272,16 @@ def test_sync_hooks_to_settings_is_idempotent(tmp_path):
     sync_hooks_to_settings(settings)
 
     data = json.loads(settings.read_text())
-    pretooluse = data["hooks"]["PreToolUse"]
-    assert len(pretooluse) == len(HOOK_REGISTRY), (
-        f"Duplicate entries after evict+sync twice: {len(pretooluse)} entries"
+
+    pretooluse_count = len([h for h in HOOK_REGISTRY if h.event_type == "PreToolUse"])
+    posttooluse_count = len([h for h in HOOK_REGISTRY if h.event_type == "PostToolUse"])
+
+    pretooluse = data["hooks"].get("PreToolUse", [])
+    posttooluse = data["hooks"].get("PostToolUse", [])
+
+    assert len(pretooluse) == pretooluse_count, (
+        f"Duplicate entries after evict+sync twice: {len(pretooluse)} PreToolUse entries"
+    )
+    assert len(posttooluse) == posttooluse_count, (
+        f"Duplicate entries after evict+sync twice: {len(posttooluse)} PostToolUse entries"
     )

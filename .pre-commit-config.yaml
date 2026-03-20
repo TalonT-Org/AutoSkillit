@@ -30,7 +30,14 @@ repos:
         name: Block generated config files from being committed
         entry: "Machine-generated file — must not be committed. Run 'autoskillit install' to regenerate."
         language: fail
-        files: '(src/autoskillit/hooks/hooks\.json|\.claude/settings\.json|src/autoskillit/recipes/diagrams/)'
+        files: '(src/autoskillit/hooks/hooks\.json|\.claude/settings\.json)'
+
+      - id: doc-counts
+        name: doc count accuracy
+        entry: python scripts/check_doc_counts.py
+        language: system
+        files: ^(docs/|README\.md|src/autoskillit/skills/|src/autoskillit/recipes/|src/autoskillit/core/_type_constants\.py)
+        pass_filenames: false
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0

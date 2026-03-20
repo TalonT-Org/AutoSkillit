@@ -18,7 +18,10 @@ Produce a compact, structured overview of an AutoSkillit recipe. Reads the recip
 - Modify any source code or recipe files
 - Invent steps, ingredients, or routing not in the YAML
 - Add decorative flair, emoji, or unnecessary commentary
-- Create files outside `temp/render-recipe/`
+- Create files outside `temp/render-recipe/` and `recipes/diagrams/`
+- Use Unicode characters, emoji, or non-ASCII symbols. ASCII only — use `*` for pass, `x` for fail, `?` for confirm, `|` for spine, `+` for joins. No box-drawing characters, no arrows like `→` or `↑`, no check marks, no crosses. Write `->` and `(up)` instead.
+- Include HTML comments, hash markers, format version markers, or any metadata in the output. No `<!-- ... -->` lines.
+- Include "Agent-managed" lines listing internal context variables. The user doesn't need to see plumbing state.
 
 **ALWAYS:**
 - Read the recipe YAML carefully and render exactly what exists
@@ -29,67 +32,77 @@ Produce a compact, structured overview of an AutoSkillit recipe. Reads the recip
 
 ## Rendering Specification
 
-The output has exactly three sections. Follow this structure precisely.
+The output has exactly two sections. Follow this structure precisely.
+
+**Note:** The inputs table is NOT part of the diagram output. It is generated at runtime from the recipe YAML by `_format_ingredients_table` (single source of truth). Do not include an inputs table in the diagram file.
 
 ### Section 1: Header
 
 ```
 ## {name}
-{description}
 ```
+
+Just the name. No description — the user already chose the recipe from the picker.
 
 ### Section 2: Flow Diagram
 
 Build an ASCII flow diagram showing the step graph. This is the core visual.
 
 **Infrastructure steps to hide:**
-Steps whose sole purpose is capturing a value via `run_cmd` (e.g., `capture_base_sha`, `set_merge_target`, shell one-liners that just `printf` or `git rev-parse`) should be **omitted** from the diagram. They are plumbing — the user does not need to see them. If in doubt: if a step uses `run_cmd` and its `note:` describes it as capturing/setting a value, hide it.
+The diagram shows ONLY the *skill work* — `run_skill` invocations and `test_check`. Everything else is plumbing. Hide:
+- **All `run_cmd` steps** — value capture, shell one-liners, branch computation. All plumbing.
+- **All `push_to_remote` steps** — mechanical transport.
+- **All `clone_repo` steps** — setup plumbing.
+- **All issue lifecycle steps** — `get_issue_title`, `claim_issue`, `release_issue`. Plumbing.
+- **All branch creation steps** — `create_unique_branch`, `create_branch`. Plumbing.
+- **All CI/CD steps** — `wait_for_ci`, `wait_for_merge_queue`, `enable_auto_merge`, `route_queue_mode`, `reenter_merge_queue`, `queue_ejected_fix`, `diagnose_ci`. Plumbing.
+- **All `merge_worktree` steps** — worktree-back-to-branch merge. Plumbing.
+- **All cleanup steps** — `delete_clone`, `cleanup_failure`, `confirm_cleanup`. Teardown.
+- **All post-PR steps** — `review_pr`, `resolve_review`, `diagnose_ci`, `resolve_ci`. Post-delivery plumbing.
+- **All `action: route` steps** — pure routing nodes with no work.
+
+If a hidden step is the *only* path between two visible steps, collapse the route — just connect the visible steps directly. The reader should see: "what skills run, in what order, and what happens on failure."
 
 **Diagram layout:**
 
-Use a vertical spine with `├──` branches. The structure reads top-to-bottom:
+Use a vertical spine with `|` and `+--` branches. ASCII only — no Unicode.
 
 1. **Main flow** runs down the left spine. Show meaningful steps in order.
-2. **Optional steps** are shown in brackets `[step-name]` with a right-side annotation: `← only if {condition}`.
-3. **Iteration loops** are wrapped in a `FOR EACH` block using box-drawing characters (`┌────┤` / `└────┘`). Only use this when `note:` fields indicate iteration over plan_parts or groups.
-4. **Failure branches** are shown inline where they diverge: `fix ───┘ (on failure)`.
+2. **Optional steps** always go on their own `+--` branch off the vertical spine: `+-- [step-name] (optional)`. They are never inlined on a horizontal chain. Never repeat the step name outside the brackets.
+3. **Iteration loops** are wrapped in a `FOR EACH` block using `+----+` / `+----+`. Only use this when `note:` fields indicate iteration over plan_parts or groups.
+4. **Self-loops** go on the same line with a bidirectional arrow: `step <-> [x fail -> handler]`.
 5. **Multi-way routing** (`on_result`) is shown with labeled paths on separate lines.
-6. **Retry blocks** are noted parenthetically on the step: `(retry ×N)`. Use `×∞` for `max_attempts: 0`.
-7. **Back-edges** use `↑` suffix: `→ verify↑`, `→ plan↑`.
-8. **Terminal steps** go at the bottom after a separator line.
-9. Do **not** show model annotations (e.g., `[sonnet]`) in the diagram.
+6. **Back-edges** use brackets: `-> plan [-> dry_walkthrough]`.
+7. **Terminal steps** are omitted. The last visible step is the end of the diagram.
+8. Do **not** show retry counts, model annotations, or other per-step metadata.
+9. **`test_check` steps** display as `test`.
+10. **Use the skill name, not the step key** for `run_skill` steps. But apply these short display names:
+    - `implement-worktree-no-merge` -> `implement`
+    - `audit-impl` -> `audit`
+    - `resolve-failures` -> `fix`
+    - `open-integration-pr` -> `open-pr`
+    - Everything else: use the skill name as-is (e.g., `make-plan`, `dry-walkthrough`, `rectify`)
+11. **FOR EACH loop routing** (more parts? / all done?) is implicit — omit it. The loop block itself conveys iteration. The first step inside the loop connects directly to the `+----+` box — no extra `|` line needed between them.
+12. **Context limit recovery** (`retry_worktree`, `on_context_limit`) is automatic plumbing — omit it.
+13. **Consistent failure language.** Always use `x fail` for failure branches. Never use "NO GO", "FAIL", "failure", or other variants.
+14. **Back-edge targets must be the actual destination, not an intermediate optional step.** When a back-edge (e.g. audit fail) routes to a step that then passes through an optional step before reaching the real target, show the back-edge pointing to the real target directly. Example: if audit fail routes to `make_plan` and `make_plan.on_success` is `dry_walkthrough`, show `x fail [-> make-plan]` with the arrow going to `make-plan`, not to `review-approach`. The optional step is only reachable from its primary path, not from back-edges that happen to pass through the same chain.
+15. **Center step names on the vertical spine.** When a step name appears on the main spine (not on a branch), center the text relative to the `|` character column. All spine-level step names should align to the same visual center.
 
 **Reference example for implementation:**
 
 ```
-    clone
-      │
-      ├── [create_branch]          ← only if open_pr=true
-      │
-      ├── [group]                  ← only if make_groups=true
-      │
- ┌────┤ FOR EACH GROUP:
- │    │
- │    plan ─── [review] ─── verify ─── implement (retry ×∞) ─── test ─── merge ─── push
- │         │                                │                      │
- │         │                         retry_worktree (retry ×3)   fix ───┘ (on failure → test↑)
- │         │
- │         └── next_or_done: more parts?  → verify↑
- │                           more groups? → plan↑
- │                           all done?    ↓
- └────┘
-      │
-      ├── [audit_impl]             ← only if audit=true
-      │     GO    → open_pr_step
-      │     NO GO → remediate → plan↑
-      │
-      ├── [open_pr_step]           ← only if open_pr=true
-      │
-    cleanup_success ─── done
-
-  ─────────────────────────────────
-  done       "Pipeline complete."
-  escalate   "Failed — human intervention needed."
+      +-- [make-groups] (optional)
+      |
+ +----+ FOR EACH GROUP:
+ |    |
+ |    make-plan --- [review-approach] (optional) --- dry-walkthrough --- implement --- test <-> [x fail -> fix]
+ |
+ +----+
+      |
+      +-- [audit] (optional)
+      |     x fail [-> make-plan]
+      |
+    open-pr
 ```
 
 **Adapting to simpler recipes:**
@@ -97,33 +110,6 @@ Use a vertical spine with `├──` branches. The structure reads top-to-botto
 - Recipes with few optional steps can show them inline on the main flow: `clone ─── audit ─── investigate ─── plan ─── implement ─── test ─── merge ─── push`.
 - Very simple recipes (under 8 meaningful steps) can use a single horizontal chain.
 - Always adapt the shape to the recipe — do not force a complex layout on a simple recipe.
-
-### Section 3: Inputs Table
-
-Render all ingredients as a single Markdown table.
-
-```
-### Inputs
-
-| Name | Description | Default |
-|------|-------------|---------|
-| task | What to implement | — |
-| source_dir | Repository path | auto-detect |
-| base_branch | Merge target | main |
-| run_name | Run name prefix | impl |
-| make_groups | Decompose into groups | off |
-| review_approach | Research first | off |
-| audit | Post-merge audit | on |
-| open_pr | PR instead of direct merge | off |
-```
-
-**Rules:**
-- Keep descriptions short — one phrase, not a sentence.
-- Show `—` for no default (required inputs).
-- Show `off`/`on` for boolean-like flags with `"false"`/`"true"` defaults.
-- Show `auto-detect` for empty-string defaults that auto-resolve.
-- If an ingredient is conditionally required (e.g., `task` required when `make_groups=false`), note it parenthetically: "What to implement (when no groups)".
-- Omit agent-managed state (ingredients with no default that are populated by step captures). If any exist, add a brief line below the table: `Agent-managed: work_dir, worktree_path, plan_path, ...`
 
 ---
 
@@ -134,12 +120,11 @@ Render all ingredients as a single Markdown table.
 Read the recipe YAML from the prompt context or from disk if a path is given. Identify:
 - All ingredients and their properties
 - All steps in declaration order
-- Infrastructure steps to hide (run_cmd steps that just capture values)
+- Infrastructure steps to hide (see expanded list in Section 2)
 - The happy path (follow on_success chain from first step)
 - Branch points (on_failure to non-terminal, on_result routing)
 - Back-edges (on_success/on_failure targets that appear earlier in declaration order)
 - Optional steps (optional: true)
-- Retry blocks
 - Terminal steps (action: stop)
 
 ### Step 2: Build the Flow Diagram
@@ -157,13 +142,13 @@ Before writing, check the diagram for alignment errors. Scan every line and veri
 
 If any check fails, fix the diagram before proceeding. This is a mechanical check — count character positions, do not eyeball it.
 
-### Step 4: Build the Inputs Table
+### Step 4: Assemble and Write
 
-Construct the table following the rules in Section 3.
+Combine both sections and write to two locations:
+1. `temp/render-recipe/{recipe-name}_{YYYY-MM-DD_HHMMSS}.md` — timestamped history copy
+2. The recipe's diagram file — for bundled recipes: `src/autoskillit/recipes/diagrams/{recipe-name}.md`; for project recipes: `.autoskillit/recipes/diagrams/{recipe-name}.md`. This is the file that `load_recipe` serves to Claude.
 
-### Step 5: Assemble and Write
-
-Combine all three sections. Write to `temp/render-recipe/{recipe-name}_{YYYY-MM-DD_HHMMSS}.md` (timestamp ensures no overwrites). Print the full content to terminal.
+Print the full content to terminal.
 
 ---
 
@@ -171,5 +156,5 @@ Combine all three sections. Write to `temp/render-recipe/{recipe-name}_{YYYY-MM-
 
 | Content | Destination |
 |---------|-------------|
-| Rendered recipe overview | `temp/render-recipe/{recipe-name}_{YYYY-MM-DD_HHMMSS}.md` AND terminal |
-| Validation warnings (if any) | Terminal only, as a brief note after the render |
+| Rendered recipe overview | `temp/render-recipe/` (history) + `recipes/diagrams/` (live) + terminal |
+| Validation warnings (if any) | Terminal only |

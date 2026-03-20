@@ -10,7 +10,6 @@ import yaml
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import (
     _parse_recipe,
-    _parse_step,
     builtin_recipes_dir,
     load_recipe,
 )
@@ -21,16 +20,7 @@ from autoskillit.recipe.schema import (
 from autoskillit.recipe.validator import (
     run_semantic_rules,
 )
-
-# ---------------------------------------------------------------------------
-# Shared helper
-# ---------------------------------------------------------------------------
-
-
-def _make_workflow(steps: dict[str, dict]) -> Recipe:
-    parsed_steps = {name: _parse_step(data) for name, data in steps.items()}
-    return Recipe(name="test", description="test", steps=parsed_steps, kitchen_rules=["test"])
-
+from tests.recipe.conftest import _make_workflow
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -936,3 +926,80 @@ class TestUncapturedHandoffConsumerRule:
         findings = run_semantic_rules(recipe)
         handoff = [f for f in findings if f.rule == "uncaptured-handoff-consumer"]
         assert handoff == []
+
+
+# ---------------------------------------------------------------------------
+# TestTelemetryBeforeOpenPrRule
+# ---------------------------------------------------------------------------
+
+
+class TestTelemetryBeforeOpenPrRule:
+    def test_open_pr_after_write_telemetry_no_finding(self) -> None:
+        """write_telemetry_files before open-pr — no warning."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "telemetry"},
+                "telemetry": {
+                    "tool": "write_telemetry_files",
+                    "with": {"output_dir": "/tmp/out"},
+                    "on_success": "open_pr",
+                },
+                "open_pr": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:open-pr plan.md main main"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "telemetry-before-open-pr"]
+        assert findings == []
+
+    def test_open_pr_after_get_token_summary_no_finding(self) -> None:
+        """get_token_summary before open-pr — no warning."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "tokens"},
+                "tokens": {
+                    "tool": "get_token_summary",
+                    "on_success": "open_pr",
+                },
+                "open_pr": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:open-pr plan.md main main"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "telemetry-before-open-pr"]
+        assert findings == []
+
+    def test_open_pr_without_telemetry_fires_warning(self) -> None:
+        """open-pr reachable without any telemetry step — WARNING."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "open_pr"},
+                "open_pr": {
+                    "tool": "run_skill",
+                    "with": {"skill_command": "/autoskillit:open-pr plan.md main main"},
+                    "on_success": "done",
+                },
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "telemetry-before-open-pr"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARNING
+        assert findings[0].step_name == "open_pr"
+
+    def test_no_open_pr_step_no_finding(self) -> None:
+        """Recipe has no open-pr step — rule is silent."""
+        recipe = _make_workflow(
+            {
+                "start": {"tool": "run_cmd", "on_success": "done"},
+                "done": {"action": "stop", "message": "Done."},
+            }
+        )
+        findings = [f for f in run_semantic_rules(recipe) if f.rule == "telemetry-before-open-pr"]
+        assert findings == []

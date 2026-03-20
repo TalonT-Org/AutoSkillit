@@ -11,6 +11,7 @@ Public API:
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import re
 import time
@@ -22,21 +23,26 @@ from typing import TYPE_CHECKING
 import structlog
 
 from autoskillit.core import (
-    ClaudeFlags,
+    ChannelConfirmation,
+    CliSubtype,
     FailureRecord,
     RetryReason,
     SessionOutcome,
     SkillResult,
     TerminationReason,
+    ValidatedAddDir,
+    WriteBehaviorSpec,
     claude_code_project_dir,
     get_logger,
 )
-from autoskillit.execution.commands import build_headless_cmd
+from autoskillit.execution.commands import build_full_headless_cmd
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
+    _check_expected_patterns,
     _compute_outcome,
     _compute_success,
+    _normalize_subtype,
     _truncate,
     parse_session_result,
 )
@@ -51,29 +57,6 @@ if TYPE_CHECKING:
     )
 
 logger = get_logger(__name__)
-
-
-def _ensure_skill_prefix(skill_command: str) -> str:
-    """Prompt-formatting helper: prepend 'Use ' to slash-commands for headless session loading.
-
-    This is NOT a validator. Non-slash input passes through unchanged by design —
-    runtime validation is enforced by the skill_command_guard PreToolUse hook.
-    """
-    stripped = skill_command.strip()
-    if stripped.startswith("/"):
-        return f"Use {stripped}"
-    return skill_command
-
-
-def _inject_completion_directive(skill_command: str, marker: str) -> str:
-    """Append an orchestration directive to make the session write a completion marker."""
-    directive = (
-        f"\n\nORCHESTRATION DIRECTIVE: When your task is complete, "
-        f"your final text output MUST end with: {marker}\n"
-        f"CRITICAL: Append {marker} at the very end of your substantive response, "
-        f"in the SAME message. Do NOT output {marker} as a separate standalone message."
-    )
-    return skill_command + directive
 
 
 def _session_log_dir(cwd: str) -> Path:
@@ -138,6 +121,30 @@ def _recover_from_separate_marker(
     return dataclasses.replace(session, result=combined)
 
 
+def _recover_block_from_assistant_messages(
+    session: ClaudeSessionResult,
+    expected_output_patterns: Sequence[str],
+) -> ClaudeSessionResult | None:
+    """When session.result lacks expected_output_patterns (drain-race condition
+    on either channel), attempt to find the patterns in session.assistant_messages.
+    If found, return a new ClaudeSessionResult with result reconstructed from
+    assistant_messages. Return None if patterns cannot be found there either.
+    """
+    if not session.assistant_messages or not expected_output_patterns:
+        return None
+    combined = "\n\n".join(session.assistant_messages)
+    if not _check_expected_patterns(combined, expected_output_patterns):
+        return None
+    logger.warning(
+        "pattern_recovered_from_assistant_messages",
+        patterns=list(expected_output_patterns),
+    )
+    # Preserve any content already drained into session.result before appending
+    # the recovered assistant_messages block.
+    recovered = (session.result + "\n\n" + combined) if session.result else combined
+    return dataclasses.replace(session, result=recovered)
+
+
 def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     """Resolve model selection: config override > step > config default."""
     if config.model.override:
@@ -153,7 +160,7 @@ def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     return None
 
 
-_WORKTREE_PATH_PATTERN: re.Pattern[str] = re.compile(r"^worktree_path=(.+)$", re.MULTILINE)
+_WORKTREE_PATH_PATTERN: re.Pattern[str] = re.compile(r"^worktree_path\s*=\s*(.+)$", re.MULTILINE)
 
 
 def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
@@ -166,6 +173,138 @@ def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
             if os.path.isabs(candidate):
                 last = candidate
     return last
+
+
+_OUTPUT_PATH_TOKENS: frozenset[str] = frozenset(
+    {
+        "plan_path",
+        "plan_parts",
+        "investigation_path",
+        "diagnosis_path",
+        "report_path",
+        "review_path",
+        "groups_path",
+        "manifest_path",
+        "summary_path",
+        "analysis_path",
+        "remediation_path",
+        "diagram_path",
+        "triage_report",
+        "triage_manifest",
+        "pr_order_file",
+        "analysis_file",
+        "conflict_report_path",
+        "config_path",
+        "recipe_path",
+    }
+)
+
+_OUTPUT_PATH_PATTERN: re.Pattern[str] = re.compile(
+    r"^(" + "|".join(re.escape(t) for t in sorted(_OUTPUT_PATH_TOKENS)) + r")\s*=\s*(.+)$",
+    re.MULTILINE,
+)
+
+
+def _extract_output_paths(assistant_messages: list[str]) -> dict[str, str]:
+    """Extract structured output path tokens from session output."""
+    paths: dict[str, str] = {}
+    for msg in assistant_messages:
+        for m in _OUTPUT_PATH_PATTERN.finditer(msg):
+            token, value = m.group(1), m.group(2).strip()
+            if os.path.isabs(value):
+                paths[token] = value
+    return paths
+
+
+def _validate_output_paths(
+    extracted_paths: dict[str, str],
+    cwd: str,
+) -> str | None:
+    """Return a diagnostic string if any path is outside cwd, else None."""
+    if not os.path.isabs(cwd) or cwd == "/":
+        return None
+    cwd_prefix = cwd.rstrip("/") + "/"
+    violations = []
+    for token, path in extracted_paths.items():
+        if not path.startswith(cwd_prefix) and path != cwd.rstrip("/"):
+            violations.append(f"{token} '{path}' is outside session cwd '{cwd}'")
+    return "; ".join(violations) if violations else None
+
+
+_WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})
+_BASH_TOOL_NAME: str = "Bash"
+_ABS_PATH_PATTERN: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+:-]+))')
+# Exclude paths of 4 chars or fewer (/tmp, /etc, /bin, /var) as low-signal noise.
+_MIN_BASH_PATH_LEN: int = 5
+
+
+def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
+    """Scan raw JSONL stdout for Write/Edit/Bash tool calls outside cwd.
+
+    Parses assistant records from the JSONL stream and extracts file_path
+    arguments from Write and Edit tool_use blocks, plus absolute paths from
+    Bash commands. Returns warning strings for any path outside cwd.
+
+    Non-blocking: caller decides whether to surface or suppress warnings.
+    Returns [] when stdout is empty or cwd is empty/relative.
+    """
+    if not stdout.strip() or not cwd or not os.path.isabs(cwd):
+        return []
+
+    cwd_prefix = cwd.rstrip("/") + "/"
+    warnings: list[str] = []
+
+    for raw_line in stdout.strip().splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict) or obj.get("type") != "assistant":
+            continue
+        msg = obj.get("message")
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
+                continue
+            tool_name = block.get("name", "")
+            inputs = block.get("input") or {}
+            if not isinstance(inputs, dict):
+                continue
+
+            if tool_name in _WRITE_TOOL_NAMES:
+                file_path = inputs.get("file_path", "")
+                if (
+                    isinstance(file_path, str)
+                    and os.path.isabs(file_path)
+                    and not file_path.startswith(cwd_prefix)
+                    and file_path != cwd.rstrip("/")
+                ):
+                    warnings.append(
+                        f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'"
+                    )
+
+            elif tool_name == _BASH_TOOL_NAME:
+                command = inputs.get("command", "")
+                if isinstance(command, str):
+                    for match in _ABS_PATH_PATTERN.finditer(command):
+                        path = match.group(1)
+                        if (
+                            len(path) >= _MIN_BASH_PATH_LEN
+                            and not path.startswith(cwd_prefix)
+                            and path != cwd.rstrip("/")
+                        ):
+                            warnings.append(
+                                f"Bash command contained path '{path}' outside session cwd '{cwd}'"
+                            )
+
+    return warnings
 
 
 def _apply_budget_guard(
@@ -205,6 +344,8 @@ def _build_skill_result(
     audit: AuditStore | None = None,
     max_consecutive_retries: int = 3,
     expected_output_patterns: Sequence[str] = (),
+    cwd: str = "",
+    write_behavior: WriteBehaviorSpec | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
@@ -229,7 +370,7 @@ def _build_skill_result(
         stale_session = parse_session_result(result.stdout)
         stale_returncode = result.returncode if result.returncode is not None else -1
         can_attempt_stale_recovery = (
-            stale_session.subtype == "success"
+            stale_session.subtype == CliSubtype.SUCCESS
             and stale_session.result.strip()
             and not stale_session.is_error
         )
@@ -286,13 +427,18 @@ def _build_skill_result(
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
-        session = ClaudeSessionResult(
-            subtype="timeout",
-            is_error=True,
-            result=_truncate(result.stdout) if result.stdout.strip() else "",
-            session_id="",
-            errors=[],
-        )
+        if result.stdout.strip():
+            session = parse_session_result(result.stdout)
+            if session.subtype == CliSubtype.SUCCESS:
+                session = dataclasses.replace(session, subtype=CliSubtype.TIMEOUT, is_error=True)
+        else:
+            session = ClaudeSessionResult(
+                subtype=CliSubtype.TIMEOUT,
+                is_error=True,
+                result="",
+                session_id="",
+                errors=[],
+            )
     else:
         returncode = result.returncode if result.returncode is not None else -1
         session = parse_session_result(result.stdout)
@@ -303,6 +449,20 @@ def _build_skill_result(
         recovered = _recover_from_separate_marker(session, completion_marker)
         if recovered is not None:
             session = recovered
+
+    # Pattern recovery: when a drain-race occurs on either channel, expected_output_patterns
+    # content may only exist in assistant_messages. Attempt recovery so that _compute_success
+    # sees the block in session.result.
+    if (
+        result.channel_confirmation != ChannelConfirmation.UNMONITORED
+        and expected_output_patterns
+        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
+    ):
+        pattern_recovered = _recover_block_from_assistant_messages(
+            session, expected_output_patterns
+        )
+        if pattern_recovered is not None:
+            session = pattern_recovered
 
     outcome, retry_reason = _compute_outcome(
         session,
@@ -315,11 +475,13 @@ def _build_skill_result(
     success = outcome == SessionOutcome.SUCCEEDED
     needs_retry = outcome == SessionOutcome.RETRIABLE
 
+    normalized_subtype = _normalize_subtype(session.subtype, outcome, session, completion_marker)
+
     if not success or needs_retry:
         _capture_failure(
             skill_command,
             exit_code=returncode,
-            subtype=session.subtype,
+            subtype=normalized_subtype,
             needs_retry=needs_retry,
             retry_reason=retry_reason.value,
             stderr=result.stderr if result.stderr else "",
@@ -334,20 +496,87 @@ def _build_skill_result(
     if needs_retry:
         extracted_worktree_path = _extract_worktree_path(session.assistant_messages)
 
-    sr = SkillResult(
-        success=success,
-        result=result_text,
-        session_id=session.session_id,
-        subtype=session.subtype,
-        is_error=session.is_error,
-        exit_code=returncode,
-        needs_retry=needs_retry,
-        retry_reason=retry_reason,
-        stderr=_truncate(result.stderr),
-        token_usage=session.token_usage,
-        worktree_path=extracted_worktree_path,
-    )
+    # Path contamination detection
+    path_contamination: str | None = None
+    if not cwd:
+        logger.debug("path_contamination_check_skipped", reason="cwd not provided")
+    else:
+        extracted_paths = _extract_output_paths(session.assistant_messages)
+        path_contamination = _validate_output_paths(extracted_paths, cwd)
+        if path_contamination:
+            logger.warning("path_contamination_detected", detail=path_contamination, cwd=cwd)
+
+    write_path_warnings: list[str] = []
+    if cwd:
+        write_path_warnings = _scan_jsonl_write_paths(result.stdout, cwd)
+        if write_path_warnings:
+            logger.warning(
+                "write_path_warnings_detected",
+                count=len(write_path_warnings),
+                cwd=cwd,
+                warnings=write_path_warnings[:5],
+            )
+
+    # Behavioral write count: count Edit + Write tool calls in session
+    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
+
+    if path_contamination:
+        sr = SkillResult(
+            success=False,
+            result=result_text,
+            session_id=session.session_id,
+            subtype="path_contamination",
+            is_error=session.is_error,
+            exit_code=returncode,
+            needs_retry=True,
+            retry_reason=RetryReason.RESUME,
+            stderr=_truncate(result.stderr),
+            token_usage=session.token_usage,
+            worktree_path=extracted_worktree_path,
+            cli_subtype=session.subtype,
+            write_path_warnings=write_path_warnings,
+            write_call_count=write_call_count,
+        )
+    else:
+        sr = SkillResult(
+            success=success,
+            result=result_text,
+            session_id=session.session_id,
+            subtype=normalized_subtype,
+            is_error=session.is_error,
+            exit_code=returncode,
+            needs_retry=needs_retry,
+            retry_reason=retry_reason,
+            stderr=_truncate(result.stderr),
+            token_usage=session.token_usage,
+            worktree_path=extracted_worktree_path,
+            cli_subtype=session.subtype,
+            write_path_warnings=write_path_warnings,
+            write_call_count=write_call_count,
+        )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
+
+    # Zero-write gate: demote success to retriable failure when a write-expected
+    # skill produced zero Edit/Write calls (silent degradation detection).
+    # Write expectation is resolved from skill_contracts.yaml via WriteBehaviorSpec.
+    if sr.success and sr.write_call_count == 0 and write_behavior is not None:
+        write_expected = False
+        if write_behavior.mode == "always":
+            write_expected = True
+        elif write_behavior.mode == "conditional" and write_behavior.expected_when:
+            write_expected = _check_expected_patterns(
+                sr.result,
+                write_behavior.expected_when,
+            )
+        if write_expected:
+            sr = dataclasses.replace(
+                sr,
+                success=False,
+                subtype="zero_writes",
+                needs_retry=True,
+                retry_reason=RetryReason.ZERO_WRITES,
+            )
+
     logger.debug(
         "build_skill_result_exit",
         success=sr.success,
@@ -356,6 +585,7 @@ def _build_skill_result(
         retry_reason=str(sr.retry_reason),
         is_error=sr.is_error,
         result_len=len(sr.result),
+        write_call_count=sr.write_call_count,
     )
     return sr
 
@@ -367,10 +597,11 @@ async def run_headless_core(
     *,
     model: str = "",
     step_name: str = "",
-    add_dir: str = "",
+    add_dirs: Sequence[ValidatedAddDir] = (),
     timeout: float | None = None,
     stale_threshold: float | None = None,
     expected_output_patterns: Sequence[str] = (),
+    write_behavior: WriteBehaviorSpec | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -384,30 +615,19 @@ async def run_headless_core(
         skill_command=original_skill_command[:100],
         step_name=step_name or None,
     ):
-        skill_command = _inject_completion_directive(
-            _ensure_skill_prefix(skill_command), cfg.completion_marker
-        )
         effective_plugin_dir = ctx.plugin_dir
         resolved_model = _resolve_model(model, ctx.config)
-        spec = build_headless_cmd(skill_command, model=resolved_model)
-        cmd = spec.cmd + [
-            ClaudeFlags.PLUGIN_DIR,
-            effective_plugin_dir,
-            ClaudeFlags.OUTPUT_FORMAT,
-            cfg.output_format.value,
-        ]
-        # Apply any CLI flags required by the chosen output format.
-        for flag in cfg.output_format.required_cli_flags:
-            if flag not in cmd:
-                cmd.append(flag)
-        if add_dir:
-            cmd.extend([ClaudeFlags.ADD_DIR, add_dir])
-
-        env_vars = ["AUTOSKILLIT_HEADLESS=1"]
-        delay_ms = cfg.exit_after_stop_delay_ms
-        if delay_ms > 0:
-            env_vars.append(f"CLAUDE_CODE_EXIT_AFTER_STOP_DELAY={delay_ms}")
-        cmd = ["env"] + env_vars + cmd
+        cmd = build_full_headless_cmd(
+            skill_command,
+            cwd=cwd,
+            completion_marker=cfg.completion_marker,
+            model=resolved_model,
+            plugin_dir=effective_plugin_dir,
+            output_format_value=cfg.output_format.value,
+            output_format_required_flags=cfg.output_format.required_cli_flags,
+            add_dirs=add_dirs,
+            exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
+        )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
@@ -419,7 +639,7 @@ async def run_headless_core(
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             plugin_dir=str(effective_plugin_dir),
-            add_dir=add_dir or None,
+            add_dirs=list(add_dirs) if add_dirs else None,
         )
 
         runner = ctx.runner
@@ -464,6 +684,8 @@ async def run_headless_core(
                     )
                 except Exception:
                     logger.debug("flush_session_log during crash failed", exc_info=True)
+        if _result is None:
+            raise RuntimeError("runner() did not return a result — cannot build SkillResult")
         _elapsed = time.monotonic() - _start_mono
         _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
         result = dataclasses.replace(  # type: ignore[arg-type]
@@ -477,6 +699,8 @@ async def run_headless_core(
             skill_command=original_skill_command,
             audit=ctx.audit,
             expected_output_patterns=expected_output_patterns,
+            cwd=cwd,
+            write_behavior=write_behavior,
         )
 
         # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
@@ -502,6 +726,7 @@ async def run_headless_core(
                     skill_command=original_skill_command,
                     success=skill_result.success,
                     subtype=skill_result.subtype,
+                    cli_subtype=skill_result.cli_subtype,
                     exit_code=skill_result.exit_code,
                     start_ts=result.start_ts,
                     end_ts=result.end_ts,
@@ -513,6 +738,8 @@ async def run_headless_core(
                     token_usage=skill_result.token_usage,
                     timing_seconds=timing_seconds,
                     audit_record=audit_record,
+                    write_path_warnings=skill_result.write_path_warnings,
+                    write_call_count=skill_result.write_call_count,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)
@@ -526,13 +753,16 @@ async def run_headless_core(
         )
 
         if step_name:
-            ctx.token_log.record(
-                step_name,
-                skill_result.token_usage,
-                start_ts=result.start_ts,
-                end_ts=result.end_ts,
-                elapsed_seconds=result.elapsed_seconds,
-            )
+            try:
+                ctx.token_log.record(
+                    step_name,
+                    skill_result.token_usage,
+                    start_ts=result.start_ts,
+                    end_ts=result.end_ts,
+                    elapsed_seconds=result.elapsed_seconds,
+                )
+            except Exception:
+                logger.debug("token_log_record_failed", exc_info=True)
         return skill_result
 
 
@@ -549,10 +779,11 @@ class DefaultHeadlessExecutor:
         *,
         model: str = "",
         step_name: str = "",
-        add_dir: str = "",
+        add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),
+        write_behavior: WriteBehaviorSpec | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -563,8 +794,9 @@ class DefaultHeadlessExecutor:
             self._ctx,
             model=model,
             step_name=step_name,
-            add_dir=add_dir,
+            add_dirs=add_dirs,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             expected_output_patterns=expected_output_patterns,
+            write_behavior=write_behavior,
         )

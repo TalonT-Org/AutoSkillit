@@ -31,6 +31,22 @@ def _initialize(ctx: ToolContext) -> None:
     global _ctx
     _ctx = ctx
 
+    # Apply server-level subset visibility from config.
+    # Uses a deferred local import to avoid module-level circular import
+    # (server/__init__.py imports from _state.py at module level).
+    if ctx.config.subsets.disabled:
+        try:
+            from autoskillit.server import mcp  # noqa: PLC0415
+
+            for subset in ctx.config.subsets.disabled:
+                mcp.disable(tags={subset})
+        except ImportError:
+            logger.error(
+                "Could not import mcp for subset disable at startup"
+                " — subset-disabled tools may be unexpectedly visible",
+                exc_info=True,
+            )
+
     # Recovery sweep: finalize any orphaned tmpfs trace files from crashed sessions.
     try:
         from autoskillit.execution import recover_crashed_sessions
@@ -49,11 +65,14 @@ def _initialize(ctx: ToolContext) -> None:
     try:
         from datetime import datetime, timedelta
 
-        from autoskillit.execution import resolve_log_dir
+        from autoskillit.execution import read_telemetry_clear_marker, resolve_log_dir
 
         cfg = ctx.config.linux_tracing
         log_root = resolve_log_dir(cfg.log_dir)
         since_dt = datetime.now(tz=UTC) - timedelta(hours=24)
+        clear_marker = read_telemetry_clear_marker(log_root)
+        if clear_marker is not None and clear_marker > since_dt:
+            since_dt = clear_marker
         since_str = since_dt.isoformat()
 
         n_tok = ctx.token_log.load_from_log_dir(log_root, since=since_str)

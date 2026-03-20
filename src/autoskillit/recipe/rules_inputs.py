@@ -22,6 +22,7 @@ from autoskillit.recipe.contracts import (
 )
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.schema import _TERMINAL_TARGETS
 
 logger = get_logger(__name__)
 
@@ -222,8 +223,8 @@ def _check_unreachable_steps(ctx: ValidationContext) -> list[RuleFinding]:
                 referenced.add(cond.route)
         if step.on_exhausted:
             referenced.add(step.on_exhausted)
-    referenced.discard("done")
-    referenced.discard("escalate")
+    for sentinel in _TERMINAL_TARGETS:
+        referenced.discard(sentinel)
 
     first_step = next(iter(wf.steps))
     findings: list[RuleFinding] = []

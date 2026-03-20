@@ -14,7 +14,7 @@ at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
 Those rules belong in the toolchain, not duplicated here.
 
 Exemptions:
-  - cli/app.py, cli/_doctor.py: may use print() for user-facing terminal output
+  - cli/app.py, cli/_doctor.py, cli/_cook.py: may use print() for user-facing terminal output
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from tests.arch._helpers import (
 )
 from tests.arch._rules import (
     _DISPATCH_TABLE_EXEMPT_FUNCTIONS,
+    RuleDescriptor,
     _rel,
 )
 
@@ -112,6 +113,24 @@ def _find_enclosing_function(node: ast.AST, tree: ast.AST) -> str | None:
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
+NO_WRITE_TEXT_RULE = RuleDescriptor(
+    rule_id="REQ-AST-002",
+    name="no-direct-write-text-in-src",
+    lens="error-resilience",
+    description=(
+        "No src/autoskillit/ file may call .write_text() or .write_bytes() directly; "
+        "use _atomic_write() from autoskillit.core.io."
+    ),
+    rationale=(
+        "Non-atomic writes produce corrupted JSON when two concurrent recipe steps "
+        "interleave writes to the same file. _atomic_write() uses a temp-file + rename "
+        "pattern that is crash-safe and O_EXCL-safe on both Linux and macOS."
+    ),
+    exemptions=frozenset(),
+    severity="error",
+    defense_standard="DS-001",
+)
+
 
 def test_no_direct_write_text_in_src() -> None:
     """No src/autoskillit/ file may call .write_text() or .write_bytes() directly.
@@ -139,7 +158,7 @@ def test_no_direct_write_text_in_src() -> None:
                 violations.append(f"  {rel}:{node.lineno}")
     assert not violations, (
         "Direct path.write_text/write_bytes calls found in src/autoskillit/.\n"
-        "Use _atomic_write(path, content) from autoskillit.core.io instead:\n"
+        "Use atomic_write(path, content) from autoskillit.core.io instead:\n"
         + "\n".join(violations)
     )
 
@@ -382,9 +401,12 @@ def test_no_raw_claude_list_construction() -> None:
     """
     ALLOWED = {
         ("_marketplace.py", "install"),
+        ("_cook.py", "cook"),
         ("_llm_triage.py", "_triage_batch"),
         ("commands.py", "build_interactive_cmd"),
         ("commands.py", "build_headless_cmd"),
+        ("_init_helpers.py", "_is_plugin_installed"),
+        ("_doctor.py", "_check_mcp_server_registered"),
     }
     violations: list[str] = []
     for path in SRC_ROOT.rglob("*.py"):
@@ -497,24 +519,67 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
 # ── P14-2: Sub-package __init__.py facade enforcement ─────────────────────────
 
 
+def _type_checking_linenos(tree: ast.AST) -> set[int]:
+    """Return line numbers of all AST nodes inside `if TYPE_CHECKING:` guards."""
+    linenos: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        test = node.test
+        is_guard = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+            isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+        )
+        if is_guard:
+            for child in ast.walk(node):
+                if hasattr(child, "lineno"):
+                    linenos.add(child.lineno)  # type: ignore[attr-defined]
+    return linenos
+
+
+HOOKS_STDLIB_RULE = RuleDescriptor(
+    rule_id="REQ-AST-001",
+    name="hooks-are-stdlib-only",
+    lens="security",
+    description=(
+        "Hook scripts in src/autoskillit/hooks/ must not import from autoskillit.* "
+        "at runtime; they execute outside the venv."
+    ),
+    rationale=(
+        "Claude Code hook scripts run in a subprocess without the autoskillit "
+        "venv active. Any autoskillit.* import at runtime causes an ImportError "
+        "that silently kills the hook. Only stdlib imports are safe. Imports inside "
+        "TYPE_CHECKING blocks are annotation-only and never executed."
+    ),
+    exemptions=frozenset({"TYPE_CHECKING"}),
+    severity="error",
+    defense_standard="DS-001",
+)
+
+
 def test_hooks_are_stdlib_only() -> None:
-    """Hook scripts must not import from autoskillit.* — they run outside the venv."""
+    """Hook scripts must not import from autoskillit.* — they run outside the venv.
+
+    Exemption: imports inside `if TYPE_CHECKING:` blocks are annotation-only and
+    are never executed at runtime, so they do not break the stdlib-only constraint.
+    """
     hooks_dir = SRC_ROOT / "hooks"
     violations: list[str] = []
     for py_file in sorted(hooks_dir.glob("*.py")):
         if py_file.name == "__init__.py":
             continue
         tree = ast.parse(py_file.read_text())
+        exempt = _type_checking_linenos(tree)
         for node in ast.walk(tree):
             if (
                 isinstance(node, ast.ImportFrom)
                 and node.module
                 and node.module.startswith("autoskillit")
+                and node.lineno not in exempt
             ):
                 violations.append(f"  {py_file.name}:{node.lineno}: imports from {node.module}")
             elif isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name.startswith("autoskillit"):
+                    if alias.name.startswith("autoskillit") and node.lineno not in exempt:
                         violations.append(f"  {py_file.name}:{node.lineno}: imports {alias.name}")
     assert not violations, (
         "Hook scripts must be stdlib-only (no autoskillit.* imports) — "
@@ -546,3 +611,37 @@ def test_init_files_are_pure_facades() -> None:
         "Sub-package __init__.py files must not define functions at module scope "
         "(pure re-export facades only):\n" + "\n".join(violations)
     )
+
+
+def test_get_logger_no_bind() -> None:
+    """get_logger() must not call .bind() on the proxy — it eagerly resolves.
+
+    The lazy proxy contract requires that get_logger() returns an unresolved
+    BoundLoggerLazyProxy. Calling .bind() resolves the proxy against the current
+    structlog config, freezing it before configure_logging() runs. This arch rule
+    prevents regression to the eager-resolution pattern.
+
+    Uses AST Call+Attribute analysis (not string matching) to avoid false
+    positives from comments mentioning .bind().
+    """
+    import ast as _ast
+
+    logging_py = SRC_ROOT / "core" / "logging.py"
+    tree = _ast.parse(logging_py.read_text())
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.FunctionDef) and node.name == "get_logger":
+            # Walk the function body AST for Call nodes invoking .bind()
+            bind_calls = [
+                n
+                for n in _ast.walk(node)
+                if isinstance(n, _ast.Call)
+                and isinstance(n.func, _ast.Attribute)
+                and n.func.attr == "bind"
+            ]
+            assert not bind_calls, (
+                "get_logger() must not call .bind() on the structlog proxy — "
+                "it eagerly resolves the lazy proxy, freezing the pre-boot config. "
+                "Use proxy._initial_values instead to keep the proxy lazy."
+            )
+            return
+    pytest.fail("get_logger() function not found in core/logging.py")

@@ -205,7 +205,6 @@ async def test_migration_check_and_migrate_up_to_date(tmp_path):
 
 
 def test_factory_make_context_returns_toolcontext(monkeypatch):
-    monkeypatch.delenv("AUTOSKILLIT_KITCHEN_OPEN", raising=False)
     from autoskillit.config import AutomationConfig
     from autoskillit.core.paths import pkg_root
     from autoskillit.pipeline.audit import DefaultAuditLog

@@ -12,22 +12,28 @@ from dataclasses import dataclass, field
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     AuditStore,
+    CIRunScope,
     CIWatcher,
     CloneManager,
     DatabaseReader,
     GatePolicy,
     GitHubFetcher,
     HeadlessExecutor,
+    McpResponseStore,
+    MergeQueueWatcher,
     MigrationService,
     OutputPatternResolver,
     RecipeRepository,
     SessionSkillManager,
     SubprocessRunner,
+    TargetSkillResolver,
     TestRunner,
     TimingStore,
     TokenStore,
     WorkspaceManager,
+    WriteExpectedResolver,
 )
+from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 
 
 @dataclass
@@ -44,6 +50,7 @@ class ToolContext:
     audit:                AuditStore — records pipeline failures
     token_log:            TokenStore — per-step token tracking
     timing_log:           TimingStore — per-step wall-clock duration tracking
+    response_log:         McpResponseStore — per-tool MCP response size tracking
     gate:                 GatePolicy — enables/disables gated tools
     plugin_dir:           Absolute path string to the autoskillit package directory
     runner:               SubprocessRunner implementation (DefaultSubprocessRunner in production,
@@ -57,7 +64,9 @@ class ToolContext:
     clone_mgr:            CloneManager — clone-based pipeline run isolation
     github_client:        GitHubFetcher — fetches GitHub issue content
     ci_watcher:           CIWatcher — watches GitHub Actions CI runs
+    merge_queue_watcher:  MergeQueueWatcher — polls GitHub merge queue for a PR
     session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
+    skill_resolver:       TargetSkillResolver — resolves skill names to source tier
     """
 
     config: AutomationConfig
@@ -67,6 +76,7 @@ class ToolContext:
     gate: GatePolicy
     plugin_dir: str
     runner: SubprocessRunner | None
+    response_log: McpResponseStore = field(default_factory=DefaultMcpResponseLog)
     executor: HeadlessExecutor | None = field(default=None)
     tester: TestRunner | None = field(default=None)
     recipes: RecipeRepository | None = field(default=None)
@@ -76,5 +86,14 @@ class ToolContext:
     clone_mgr: CloneManager | None = field(default=None)
     github_client: GitHubFetcher | None = field(default=None)
     ci_watcher: CIWatcher | None = field(default=None)
+    merge_queue_watcher: MergeQueueWatcher | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
+    write_expected_resolver: WriteExpectedResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
+    skill_resolver: TargetSkillResolver | None = field(default=None)
+
+    @property
+    def default_ci_scope(self) -> CIRunScope:
+        """Build the default CI scope from config. Used by handlers as fallback when
+        the caller does not supply a workflow argument."""
+        return CIRunScope(workflow=self.config.ci.workflow)

@@ -7,7 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from autoskillit.core import _atomic_write, get_logger
+from autoskillit.core import atomic_write, get_logger
 
 logger = get_logger(__name__)
 
@@ -47,7 +47,15 @@ def read_staleness_cache(cache_path: Path, recipe_name: str) -> StalenessEntry |
 
 
 def write_staleness_cache(cache_path: Path, recipe_name: str, entry: StalenessEntry) -> None:
-    """Atomically update entry using _atomic_write. Swallows OSError (best-effort)."""
+    """Atomically update entry using atomic_write. Swallows OSError (best-effort).
+
+    Race condition note: this function performs a read-modify-write cycle on the shared
+    cache JSON file without a file lock. Under pytest-xdist -n 4, two processes can race
+    and one will silently drop the other's write. This is intentional and acceptable:
+    the staleness cache is explicitly best-effort — a dropped write causes a redundant
+    re-check on the next load, not data loss or correctness failure. Adding a file lock
+    here would introduce cross-process coordination for a non-critical optimisation.
+    """
     try:
         existing: dict = {}
         if cache_path.is_file():
@@ -56,6 +64,6 @@ def write_staleness_cache(cache_path: Path, recipe_name: str, entry: StalenessEn
             except (json.JSONDecodeError, OSError):
                 existing = {}
         existing[recipe_name] = dataclasses.asdict(entry)
-        _atomic_write(cache_path, json.dumps(existing, indent=2))
+        atomic_write(cache_path, json.dumps(existing, indent=2))
     except OSError as exc:
         logger.warning("staleness_cache_write_failed", recipe_name=recipe_name, exc_info=exc)

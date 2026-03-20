@@ -13,17 +13,18 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
     _build_skill_result,
-    _ensure_skill_prefix,
     _extract_worktree_path,
     _resolve_model,
+    _scan_jsonl_write_paths,
 )
 from tests.conftest import _make_result, _make_timeout_result
 
 
 def test_inject_completion_directive_appends_marker():
-    from autoskillit.execution.headless import _inject_completion_directive
+    from autoskillit.execution.commands import _inject_completion_directive
 
     result = _inject_completion_directive("/investigate foo", "%%DONE%%")
     assert "%%DONE%%" in result
@@ -565,6 +566,57 @@ class TestRunHeadlessCore:
             assert flag in cmd, f"Missing required flag {flag!r} in assembled command: {cmd}"
 
 
+class TestHeadlessTelemetryContainment:
+    """Telemetry errors in run_headless_core must not suppress the
+    fully-built SkillResult."""
+
+    def _success_payload(self, completion_marker: str) -> str:
+        import json
+
+        return json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": f"Task completed. {completion_marker}",
+                "session_id": "sess-telemetry-test",
+            }
+        )
+
+    @pytest.mark.anyio
+    async def test_run_headless_core_token_log_error_does_not_suppress_skill_result(
+        self, tool_ctx, monkeypatch
+    ):
+        """token_log.record() raising must not suppress the skill_result."""
+        import structlog.testing
+
+        from autoskillit.core.types import SkillResult as _SkillResult
+        from autoskillit.execution.headless import run_headless_core
+
+        def bad_record(*args: object, **kwargs: object) -> None:
+            raise TypeError("simulated bad token_usage shape")
+
+        monkeypatch.setattr(tool_ctx.token_log, "record", bad_record)
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        tool_ctx.runner.push(
+            SubprocessResult(
+                0, self._success_payload(marker), "", TerminationReason.NATURAL_EXIT, pid=1
+            )
+        )
+
+        with structlog.testing.capture_logs() as cap:
+            result = await run_headless_core(
+                "/investigate foo", cwd="/tmp", ctx=tool_ctx, step_name="test-step"
+            )
+
+        assert isinstance(result, _SkillResult)
+        assert result.success is True, f"Expected success=True, got result: {result}"
+        assert any(e.get("event") == "token_log_record_failed" for e in cap), (
+            f"Expected 'token_log_record_failed' in captured logs, got: {cap}"
+        )
+
+
 class TestEnsureSkillPrefix:
     """Unit tests for _ensure_skill_prefix helper."""
 
@@ -614,12 +666,15 @@ class TestBuildSkillResultCrossValidation:
         "result",
         "session_id",
         "subtype",
+        "cli_subtype",
         "is_error",
         "exit_code",
         "needs_retry",
         "retry_reason",
         "stderr",
         "token_usage",
+        "write_path_warnings",
+        "write_call_count",
     }
 
     def test_empty_stdout_exit_zero_is_failure(self):
@@ -976,13 +1031,46 @@ class TestExtractWorktreePath:
         msg = "worktree_path=/some/path   \n"
         assert _extract_worktree_path([msg]) == "/some/path"
 
+    def test_extract_worktree_path_with_spaces_around_equals(self):
+        """Regex handles 'worktree_path = /path' format (spaces around =)."""
+        msg = "Worktree created.\nworktree_path = /path/to/wt\nbranch_name = impl"
+        result = _extract_worktree_path([msg])
+        assert result == "/path/to/wt"
+
+    def test_extract_worktree_path_mixed_spacing(self):
+        """Regex handles mixed spacing: 'worktree_path= /path' and 'worktree_path =/path'."""
+        for token in ["worktree_path= /path/to/wt", "worktree_path =/path/to/wt"]:
+            msg = f"Done.\n{token}\nbranch_name=impl"
+            result = _extract_worktree_path([msg])
+            assert result == "/path/to/wt"
+
+    def test_relative_path_with_dotdot_is_discarded(self) -> None:
+        """Relative worktree_path tokens (../...) are silently discarded; returns None."""
+        result = _extract_worktree_path(["worktree_path = ../worktrees/impl-fix-20260307"])
+        assert result is None
+
+    def test_relative_path_without_slash_prefix_is_discarded(self) -> None:
+        """Any non-absolute form is silently discarded."""
+        result = _extract_worktree_path(["worktree_path = worktrees/impl-fix-20260307"])
+        assert result is None
+
+    def test_absolute_wins_over_subsequent_relative(self) -> None:
+        """If an absolute token appears before a relative one, the absolute path is returned."""
+        result = _extract_worktree_path(
+            [
+                "worktree_path = /abs/worktrees/impl-first",
+                "worktree_path = ../worktrees/impl-second",
+            ]
+        )
+        assert result == "/abs/worktrees/impl-first"
+
 
 class TestBuildSkillResultWorktreePath:
     """_build_skill_result extracts worktree_path on context exhaustion."""
 
     def test_extracts_worktree_path_on_context_exhaustion(self):
         """worktree_path from early Step 1 emission flows into SkillResult."""
-        path = "/home/talon/projects/autoskillit-runs/worktrees/impl-fix-20260307"
+        path = "/tmp/worktrees/impl-fix-20260307"
         sub_result = SubprocessResult(
             returncode=-1,
             stdout=_context_exhausted_with_worktree_ndjson(path),
@@ -1069,7 +1157,7 @@ class TestWorktreePathOnContextExhaustion:
 
     def test_worktree_path_in_json_response_on_context_limit(self):
         """Full stack: NDJSON with early token → SkillResult → to_json()."""
-        path = "/home/talon/projects/autoskillit-runs/worktrees/impl-fix"
+        path = "/tmp/worktrees/impl-fix"
         assistant = json.dumps(
             {
                 "type": "assistant",
@@ -1104,6 +1192,38 @@ class TestWorktreePathOnContextExhaustion:
         assert sr.success is False
         assert data["needs_retry"] is True
         assert data["worktree_path"] == path
+
+
+def test_relative_worktree_path_causes_adjudicated_failure() -> None:
+    """Regression guard for issue #412.
+
+    implement-worktree-no-merge emitting worktree_path = ../worktrees/...
+    must classify as adjudicated_failure, not success.
+    Uses the real contract pattern from skill_contracts.yaml.
+    """
+    ndjson = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": (
+                "worktree_path = ../worktrees/impl-fix-20260316\n"
+                "branch_name = impl-fix-20260316\n"
+                "%%ORDER_UP%%"
+            ),
+            "session_id": "test-412",
+        }
+    )
+    skill_result = _build_skill_result(
+        _sr(stdout=ndjson),
+        completion_marker="%%ORDER_UP%%",
+        expected_output_patterns=["worktree_path\\s*=\\s*/.+"],
+        cwd="/some/project",
+        skill_command="implement-worktree-no-merge",
+    )
+    assert skill_result.subtype == "adjudicated_failure"
+    assert skill_result.success is False
+    assert skill_result.needs_retry is False
 
 
 class TestBuildSkillResultCompleted:
@@ -1182,10 +1302,11 @@ class TestBuildSkillResultCompleted:
         assert parsed["success"] is False
         assert parsed["needs_retry"] is True
         assert parsed["retry_reason"] == RetryReason.RESUME.value
-        assert parsed["subtype"] == "success"
+        assert parsed["subtype"] == "empty_result"
+        assert parsed["cli_subtype"] == "success"
 
     def test_success_empty_completed_subtype_captured_in_audit_log(self, tool_ctx):
-        """_capture_failure must be called with subtype='success' for audit log integrity."""
+        """_capture_failure receives the normalized subtype for audit log integrity."""
         stdout = json.dumps(
             {
                 "type": "result",
@@ -1201,13 +1322,75 @@ class TestBuildSkillResultCompleted:
             termination_reason=TerminationReason.COMPLETED,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
-        _build_skill_result(
+        sr = _build_skill_result(
             result, completion_marker="", skill_command="/test", audit=tool_ctx.audit
         )
         report = tool_ctx.audit.get_report()
         assert len(report) == 1
-        assert report[0].subtype == "success"
+        assert report[0].subtype == "empty_result"
         assert report[0].needs_retry is True
+        assert sr.cli_subtype == "success"
+
+    def test_build_skill_result_subtype_never_contradicts_success(self, tool_ctx):
+        """Test B: _build_skill_result never produces contradictory (success, subtype) pairs."""
+        # Path 1: COMPLETED + UNMONITORED + "success" + empty result → RETRIABLE
+        stdout_empty = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",
+                "session_id": "s1",
+            }
+        )
+        result1 = _make_result(
+            returncode=0,
+            stdout=stdout_empty,
+            termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr1 = _build_skill_result(result1, completion_marker="", skill_command="/test")
+        assert sr1.success is False
+        assert sr1.subtype != "success", (
+            f"subtype must not be 'success' when success=False, got {sr1.subtype!r}"
+        )
+        assert sr1.cli_subtype == "success"
+
+        # Path 2: NATURAL_EXIT + rc=0 + "success" + missing marker → RETRIABLE (EARLY_STOP)
+        stdout_missing_marker = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "I did the work but forgot the marker.",
+                "session_id": "s2",
+            }
+        )
+        result2 = _make_result(
+            returncode=0,
+            stdout=stdout_missing_marker,
+            termination_reason=TerminationReason.NATURAL_EXIT,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr2 = _build_skill_result(result2, completion_marker="%%ORDER_UP%%", skill_command="/test")
+        assert sr2.success is False
+        assert sr2.subtype != "success", (
+            f"subtype must not be 'success' when success=False, got {sr2.subtype!r}"
+        )
+        assert sr2.cli_subtype == "success"
+
+    def test_build_skill_result_channel_b_empty_stdout_subtype_is_success(self, tool_ctx):
+        """Test C: CHANNEL_B + empty stdout normalizes subtype up to 'success'."""
+        result = _make_result(
+            returncode=0,
+            stdout="",
+            termination_reason=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        sr = _build_skill_result(result, completion_marker="", skill_command="/test")
+        assert sr.success is True
+        assert sr.subtype == "success"
+        assert sr.cli_subtype == "empty_output"
 
 
 class TestMarkerCrossValidation:
@@ -1891,3 +2074,616 @@ class TestRetryBudgetEnforcement:
         )
         assert sr.needs_retry is False
         assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED
+
+
+# ---------------------------------------------------------------------------
+# Test: _inject_cwd_anchor (Step 1a)
+# ---------------------------------------------------------------------------
+
+
+class TestInjectCwdAnchor:
+    def test_appends_cwd_directive(self):
+        from autoskillit.execution.commands import _inject_cwd_anchor
+
+        result = _inject_cwd_anchor("/investigate foo", "/some/clone/path")
+        assert "WORKING DIRECTORY ANCHOR" in result
+        assert "/some/clone/path" in result
+        assert "/investigate foo" in result
+
+    def test_preserves_original_command(self):
+        from autoskillit.execution.commands import _inject_cwd_anchor
+
+        original = "Use /autoskillit:make-plan detailed prompt here"
+        result = _inject_cwd_anchor(original, "/clone/dir")
+        assert result.startswith(original)
+
+    def test_directive_mentions_temp_and_read_only(self):
+        from autoskillit.execution.commands import _inject_cwd_anchor
+
+        result = _inject_cwd_anchor("cmd", "/wd")
+        assert "temp/" in result
+        assert "READ-ONLY" in result
+
+    def test_skips_when_cwd_empty(self):
+        from autoskillit.execution.commands import _inject_cwd_anchor
+
+        result = _inject_cwd_anchor("cmd", "")
+        assert result == "cmd"
+
+    def test_skips_when_cwd_relative(self):
+        from autoskillit.execution.commands import _inject_cwd_anchor
+
+        result = _inject_cwd_anchor("cmd", "relative/path")
+        assert result == "cmd"
+
+
+# ---------------------------------------------------------------------------
+# Test: _extract_output_paths (Step 1b)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractOutputPaths:
+    def test_extracts_single_path(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        msgs = ["plan_path = /correct/path/temp/make-plan/foo.md"]
+        result = _extract_output_paths(msgs)
+        assert result == {"plan_path": "/correct/path/temp/make-plan/foo.md"}
+
+    def test_extracts_multiple_tokens(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        msg = (
+            "plan_path = /clone/temp/make-plan/plan.md\n"
+            "report_path = /clone/temp/report/report.md\n"
+            "investigation_path = /clone/temp/investigate/inv.md"
+        )
+        result = _extract_output_paths([msg])
+        assert result == {
+            "plan_path": "/clone/temp/make-plan/plan.md",
+            "report_path": "/clone/temp/report/report.md",
+            "investigation_path": "/clone/temp/investigate/inv.md",
+        }
+
+    def test_returns_empty_when_no_tokens(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        result = _extract_output_paths(["no tokens here", "just regular text"])
+        assert result == {}
+
+    def test_ignores_non_absolute_paths(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        result = _extract_output_paths(["plan_path = temp/make-plan/foo.md"])
+        assert result == {}
+
+    def test_extracts_from_multiple_messages(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        msgs = [
+            "plan_path = /first/path",
+            "report_path = /second/path",
+        ]
+        result = _extract_output_paths(msgs)
+        assert result == {
+            "plan_path": "/first/path",
+            "report_path": "/second/path",
+        }
+
+    def test_last_occurrence_wins(self):
+        from autoskillit.execution.headless import _extract_output_paths
+
+        msgs = [
+            "plan_path = /first/path",
+            "plan_path = /second/path",
+        ]
+        result = _extract_output_paths(msgs)
+        assert result == {"plan_path": "/second/path"}
+
+
+# ---------------------------------------------------------------------------
+# Test: _validate_output_paths (Step 1c)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateOutputPaths:
+    def test_returns_none_when_all_paths_under_cwd(self):
+        from autoskillit.execution.headless import _validate_output_paths
+
+        paths = {
+            "plan_path": "/clone/path/temp/make-plan/foo.md",
+            "report_path": "/clone/path/temp/report/bar.md",
+        }
+        result = _validate_output_paths(paths, "/clone/path")
+        assert result is None
+
+    def test_returns_diagnostic_when_path_outside_cwd(self):
+        from autoskillit.execution.headless import _validate_output_paths
+
+        paths = {
+            "plan_path": "/source/repo/temp/make-plan/foo.md",
+        }
+        result = _validate_output_paths(paths, "/clone/path")
+        assert result is not None
+        assert "plan_path" in result
+        assert "/source/repo/temp/make-plan/foo.md" in result
+        assert "/clone/path" in result
+
+    def test_returns_none_for_empty_paths(self):
+        from autoskillit.execution.headless import _validate_output_paths
+
+        result = _validate_output_paths({}, "/clone/path")
+        assert result is None
+
+    def test_cwd_trailing_slash_handling(self):
+        from autoskillit.execution.headless import _validate_output_paths
+
+        paths = {"plan_path": "/clone/path/temp/foo.md"}
+        assert _validate_output_paths(paths, "/clone/path/") is None
+        assert _validate_output_paths(paths, "/clone/path") is None
+
+    def test_multiple_violations(self):
+        from autoskillit.execution.headless import _validate_output_paths
+
+        paths = {
+            "plan_path": "/wrong/temp/plan.md",
+            "report_path": "/wrong/temp/report.md",
+        }
+        result = _validate_output_paths(paths, "/clone")
+        assert result is not None
+        assert "plan_path" in result
+        assert "report_path" in result
+
+
+# ---------------------------------------------------------------------------
+# Test: _build_skill_result path contamination detection (Step 1d)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSkillResultPathContamination:
+    @staticmethod
+    def _assistant_ndjson(text: str) -> str:
+        """Build an NDJSON assistant message line."""
+        return json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"text": text}]},
+            }
+        )
+
+    def test_path_contamination_detected(self):
+        """Output paths outside cwd override success to False."""
+        path = "/wrong/source/repo/temp/make-plan/foo.md"
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {path}")
+            + "\n"
+            + _success_session_json("Plan created.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/correct/clone")
+        assert sr.success is False
+        assert sr.subtype == "path_contamination"
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.RESUME
+
+    def test_no_contamination_when_paths_under_cwd(self):
+        """All output paths under cwd yields normal result."""
+        path = "/correct/clone/temp/make-plan/foo.md"
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {path}")
+            + "\n"
+            + _success_session_json("Plan created.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/correct/clone")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_no_contamination_when_cwd_empty(self):
+        """Empty cwd skips path validation — direct callers without clone context."""
+        path = "/any/path/temp/foo.md"
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {path}") + "\n" + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="")
+        assert sr.success is True
+
+    def test_no_contamination_when_no_path_tokens(self):
+        """No output path tokens means validation passes."""
+        stdout = _success_session_json("Done with no file output.")
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/clone/path")
+        assert sr.success is True
+
+
+# ---------------------------------------------------------------------------
+# Test: run_headless_core passes cwd (Step 1f)
+# ---------------------------------------------------------------------------
+
+
+class TestRunHeadlessCorePassesCwd:
+    @pytest.mark.anyio
+    async def test_cwd_anchor_injected_into_prompt(self, tool_ctx):
+        """Verify run_headless_core injects cwd anchor into the skill prompt."""
+        from autoskillit.execution.headless import run_headless_core
+
+        payload = _success_session_json("Result text %%ORDER_UP%%")
+        tool_ctx.runner.push(
+            SubprocessResult(0, payload, "", TerminationReason.NATURAL_EXIT, pid=1)
+        )
+        await run_headless_core(
+            "/autoskillit:investigate test",
+            "/some/test/cwd",
+            tool_ctx,
+        )
+        assert tool_ctx.runner.call_args_list, "Runner was never called"
+        last_cmd = tool_ctx.runner.call_args_list[-1][0]
+        # cmd is ["env", ...vars, "claude", "-p", <prompt>, ...]
+        p_idx = last_cmd.index("-p")
+        prompt_arg = last_cmd[p_idx + 1]
+        assert "WORKING DIRECTORY ANCHOR" in prompt_arg
+        assert "/some/test/cwd" in prompt_arg
+
+
+def _make_tool_use_line(name: str, input_dict: dict) -> str:
+    return json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "tool_use", "name": name, "id": "x", "input": input_dict}]
+            },
+        }
+    )
+
+
+class TestScanJsonlWritePaths:
+    CWD = "/clone/worktree"
+
+    def test_returns_empty_for_clean_write_inside_cwd(self):
+        line = _make_tool_use_line(
+            "Write", {"file_path": f"{self.CWD}/temp/out.md", "content": "x"}
+        )
+        assert _scan_jsonl_write_paths(line, self.CWD) == []
+
+    def test_detects_write_outside_cwd(self):
+        line = _make_tool_use_line(
+            "Write", {"file_path": "/source/repo/temp/stolen.md", "content": "x"}
+        )
+        warnings = _scan_jsonl_write_paths(line, self.CWD)
+        assert len(warnings) == 1
+        assert "/source/repo/temp/stolen.md" in warnings[0]
+
+    def test_detects_edit_outside_cwd(self):
+        line = _make_tool_use_line(
+            "Edit",
+            {
+                "file_path": "/source/repo/src/autoskillit/file.py",
+                "old_string": "a",
+                "new_string": "b",
+            },
+        )
+        warnings = _scan_jsonl_write_paths(line, self.CWD)
+        assert len(warnings) == 1
+        assert "Edit" in warnings[0]
+
+    def test_detects_bash_with_absolute_path_outside_cwd(self):
+        line = _make_tool_use_line(
+            "Bash", {"command": "cat /source/repo/README.md > /tmp/out.txt"}
+        )
+        warnings = _scan_jsonl_write_paths(line, self.CWD)
+        assert len(warnings) >= 1
+        assert any("/source/repo" in w for w in warnings)
+
+    def test_no_warnings_for_empty_stdout(self):
+        assert _scan_jsonl_write_paths("", self.CWD) == []
+
+    def test_no_warnings_for_malformed_jsonl(self):
+        assert _scan_jsonl_write_paths("not json at all\n{broken", self.CWD) == []
+
+    def test_no_warnings_for_read_only_tool_calls(self):
+        line = _make_tool_use_line("Read", {"file_path": "/source/repo/some_file.py"})
+        assert _scan_jsonl_write_paths(line, self.CWD) == []
+
+    def test_multiple_violations_in_one_session(self):
+        lines = "\n".join(
+            [
+                _make_tool_use_line("Write", {"file_path": "/source/repo/a.md", "content": "x"}),
+                _make_tool_use_line(
+                    "Edit",
+                    {"file_path": "/source/repo/b.py", "old_string": "a", "new_string": "b"},
+                ),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "result": "done",
+                        "session_id": "",
+                        "is_error": False,
+                    }
+                ),
+            ]
+        )
+        warnings = _scan_jsonl_write_paths(lines, self.CWD)
+        assert len(warnings) == 2
+
+    def test_no_warning_when_cwd_empty(self):
+        line = _make_tool_use_line("Write", {"file_path": "/any/path/file.md", "content": "x"})
+        assert _scan_jsonl_write_paths(line, "") == []
+
+    def test_no_warning_when_cwd_is_relative(self):
+        line = _make_tool_use_line("Write", {"file_path": "/any/path/file.md", "content": "x"})
+        assert _scan_jsonl_write_paths(line, "relative/path") == []
+
+
+class TestBuildSkillResultWritePathWarnings:
+    def test_write_path_warnings_empty_for_clean_session(self):
+        stdout = (
+            _make_tool_use_line(
+                "Write", {"file_path": "/clone/worktree/temp/out.md", "content": "x"}
+            )
+            + "\n"
+            + _success_session_json("Done %%DONE%%")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/clone/worktree")
+        assert sr.write_path_warnings == []
+
+    def test_write_path_warnings_populated_for_contaminated_session(self):
+        stdout = (
+            _make_tool_use_line(
+                "Write", {"file_path": "/source/repo/temp/stolen.md", "content": "x"}
+            )
+            + "\n"
+            + _success_session_json("Done %%DONE%%")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/clone/worktree")
+        assert len(sr.write_path_warnings) == 1
+        assert "/source/repo/temp/stolen.md" in sr.write_path_warnings[0]
+
+    def test_write_path_warnings_appear_in_to_json(self):
+        stdout = (
+            _make_tool_use_line("Write", {"file_path": "/source/repo/bad.md", "content": "x"})
+            + "\n"
+            + _success_session_json("Done %%DONE%%")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/clone/worktree")
+        data = json.loads(sr.to_json())
+        assert "write_path_warnings" in data
+        assert len(data["write_path_warnings"]) == 1
+
+    def test_write_path_warnings_independent_of_output_token_contamination(self):
+        """Warnings are populated even when _validate_output_paths also fires."""
+        # plan_path token must appear in an assistant text message for
+        # _validate_output_paths to detect it (it scans assistant_messages,
+        # not the final result record).
+        path_token_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "plan_path = /source/repo/temp/plan.md"}]
+                },
+            }
+        )
+        stdout = (
+            _make_tool_use_line("Write", {"file_path": "/source/repo/bad.md", "content": "x"})
+            + "\n"
+            + path_token_line
+            + "\n"
+            + _success_session_json("Done %%DONE%%")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/clone/worktree")
+        # subtype is path_contamination (from _validate_output_paths)
+        assert sr.subtype == "path_contamination"
+        # write_path_warnings also populated from JSONL scan
+        assert len(sr.write_path_warnings) >= 1
+
+
+class TestBuildSkillResultChannelBPatternRecovery:
+    """When Channel B wins and pattern is absent from result but present in
+    assistant_messages, _build_skill_result should recover and produce success=True.
+    """
+
+    def test_build_skill_result_channel_b_recovers_pattern_from_assistant_messages(
+        self,
+    ) -> None:
+        """Channel B wins before stdout drain; pattern found in assistant_messages
+        → recovery produces success=True with block in result.
+        """
+        block = "---prepare-issue-result---\n{}\n---/prepare-issue-result---"
+        # Assistant message has the block but NOT a standalone %%ORDER_UP%% marker,
+        # so _recover_from_separate_marker will not activate. The new
+        # _recover_block_from_assistant_messages must find the block here instead.
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": block}],
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",  # stdout not yet drained — Channel B won the race
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.COMPLETED,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["---prepare-issue-result---"],
+        )
+        assert sr.success is True
+        assert "---prepare-issue-result---" in sr.result
+
+
+class TestBuildSkillResultChannelAPatternRecovery:
+    """_build_skill_result must extend pattern recovery to CHANNEL_A wins, not just CHANNEL_B."""
+
+    def test_build_skill_result_channel_a_recovers_from_assistant_messages(self) -> None:
+        """_build_skill_result must attempt pattern recovery for CHANNEL_A, not just CHANNEL_B."""
+        block = "verdict = GO\n%%ORDER_UP%%"
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": block}],
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done. %%ORDER_UP%%",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["verdict\\s*=\\s*(GO|NO GO)"],
+        )
+        assert sr.success is True, (
+            "CHANNEL_A should recover patterns from assistant_messages, same as CHANNEL_B."
+        )
+
+    def test_build_skill_result_channel_a_pattern_contract_violation_is_terminal(
+        self,
+    ) -> None:
+        """After failed CHANNEL_A recovery, contract violation must be FAILED, not RETRIABLE."""
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "No verdict here. %%ORDER_UP%%"}],
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done. %%ORDER_UP%%",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["verdict\\s*=\\s*(GO|NO GO)"],
+        )
+        assert sr.success is False
+        assert sr.needs_retry is False
+        assert sr.subtype == "adjudicated_failure"
+
+
+class TestTimedOutSessionPreservesState:
+    """TIMED_OUT branch must parse stdout to preserve tool_uses and assistant_messages."""
+
+    def test_timed_out_with_writes_preserves_write_call_count(self):
+        """Timed-out session with Write/Edit tool_use blocks must report write_call_count > 0."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = "\n".join(
+            [
+                _make_tool_use_line("Write", {"file_path": "/tmp/a.py", "content": "x"}),
+                _make_tool_use_line(
+                    "Edit", {"file_path": "/tmp/b.py", "old_string": "a", "new_string": "b"}
+                ),
+            ]
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.write_call_count == 2
+        assert sr.success is False
+        assert sr.needs_retry is False
+
+    def test_timed_out_with_empty_stdout_uses_timeout_subtype(self):
+        """Timed-out session with no stdout uses TIMEOUT subtype."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.success is False
+        assert sr.write_call_count == 0
+
+    def test_timed_out_with_success_result_overrides_to_timeout(self):
+        """When timed-out stdout has a success result, subtype is overridden to timeout."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        ndjson = "\n".join(
+            [
+                _make_tool_use_line("Write", {"file_path": "/tmp/a.py", "content": "x"}),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": "Task completed.",
+                        "session_id": "s1",
+                    }
+                ),
+            ]
+        )
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+        )
+        sr = _build_skill_result(sub_result)
+        assert sr.cli_subtype == "timeout"
+        assert sr.write_call_count == 1

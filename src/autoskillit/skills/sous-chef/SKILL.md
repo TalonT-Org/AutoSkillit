@@ -27,24 +27,28 @@ responsible for enforcing this regardless of what the plan says.
 
 ---
 
-## RETRY-WORKTREE VS RE-INVOKE — MANDATORY
+## CONTEXT LIMIT ROUTING — MANDATORY
 
-When `run_skill` returns `needs_retry=true` for an
-`implement-worktree-no-merge` call:
+When `run_skill` returns `needs_retry=true` for **any step**:
 
-- **Use `/autoskillit:retry-worktree`** — pass the existing `worktree_path`
-  from the partial session's output. The worktree is on disk with all commits
-  made so far; retry-worktree continues from where context was exhausted.
-- **Do NOT call `implement-worktree-no-merge` again.** A new call creates a
-  brand-new timestamped worktree, discarding all partial progress.
+- **If the step defines `on_context_limit`** → follow `on_context_limit`.
+  The worktree or partial state is on disk; route to the designated recovery step
+  (typically `test` or `retry_worktree`) to check whether partial work was sufficient.
+- **If the step has no `on_context_limit`** → fall through to `on_failure` as usual.
 
-When a completed worktree implementation needs to be redone (e.g., after a plan
-revision):
+**For `implement-worktree-no-merge` specifically:**
+- `on_context_limit` routes to `retry_worktree` in standard recipes.
+- Use `/autoskillit:retry-worktree` — pass the existing `worktree_path` from the
+  partial session's output. The worktree is on disk with all commits made so far.
+- **Do NOT call `implement-worktree-no-merge` again.** A new call creates a fresh
+  timestamped worktree, discarding all partial progress.
+
+When a completed worktree implementation needs to be redone (e.g., after a plan revision):
 - Call `implement-worktree-no-merge` on the revised plan (creates a fresh worktree).
 - Clean up the old worktree explicitly if needed.
 
-Summary: `needs_retry=true` → `retry-worktree`. Plan revision → new
-`implement-worktree-no-merge` call.
+Summary: `needs_retry=true` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + no `on_context_limit` → `on_failure`.
 
 ---
 
@@ -69,7 +73,7 @@ Rules:
 absolute paths:
 
 ```
-plan_parts=/abs/path/to/plan_part_a_....md
+plan_parts = /abs/path/to/plan_part_a_....md
 /abs/path/to/plan_part_b_....md
 ```
 
@@ -80,3 +84,29 @@ Act on this list as follows:
 3. Each subsequent part's worktree must be created from the post-merge state of
    the base branch — not from the original base commit.
 4. **Never batch-implement** multiple parts from the same base commit.
+
+---
+
+## MULTIPLE ISSUES — MANDATORY
+
+When the user provides **more than one issue or task** in a single request:
+
+1. **If the user says "parallel"** (or "run in parallel", "simultaneously", "at the
+   same time", "concurrently") → launch N independent pipeline sessions **immediately**.
+   No questions, no pushback, no alternative suggestions.
+
+2. **If the user says "sequential"** (or "one at a time", "in order", "one by one") →
+   run them one at a time without asking.
+
+3. **If the user does not specify** → ask **exactly one question** using AskUserQuestion:
+   > "Do you want to run these sequentially (one at a time) or in parallel (all at once)?"
+   Present exactly **two options**. Nothing else.
+
+**NEVER:**
+- Claim "the recipe handles one issue at a time" — each pipeline instance is fully
+  independent (separate clones, branches, PRs). Parallel execution is fully supported.
+- Suggest switching to `implementation-groups` — that recipe is for coordinated
+  multi-issue planning with a shared plan, not independent parallel execution.
+- Suggest picking a subset of the given issues — the user chose the scope.
+- Offer any option other than sequential or parallel when asking.
+- Ask the user to clarify scope, prioritization, or issue ordering.

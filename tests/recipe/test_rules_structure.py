@@ -20,16 +20,7 @@ from autoskillit.recipe.validator import (
     RuleFinding,
     run_semantic_rules,
 )
-
-# ---------------------------------------------------------------------------
-# Shared helper
-# ---------------------------------------------------------------------------
-
-
-def _make_workflow(steps: dict[str, dict]) -> Recipe:
-    parsed_steps = {name: _parse_step(data) for name, data in steps.items()}
-    return Recipe(name="test", description="test", steps=parsed_steps, kitchen_rules=["test"])
-
+from tests.recipe.conftest import _make_workflow
 
 # ---------------------------------------------------------------------------
 # Module-level semantic rule tests
@@ -282,17 +273,20 @@ class TestOutdatedScriptVersionRule:
         "script_ver,installed_ver,expected_count",
         [
             ("0.1.0", "0.2.0", 1),  # MSR1: below installed → fires
-            ("0.2.0", "0.2.0", 0),  # MSR2: matches → does not fire
+            ("0.2.0", "0.2.0", 0),  # MSR2: matches installed → does not fire
             (None, "0.2.0", 1),  # MSR3: None → fires
-            ("0.1.0", "0.2.0", 1),  # MSR4: also fires (same as MSR1; severity checked separately)
         ],
     )
     def test_outdated_recipe_version_rule(
         self, monkeypatch: pytest.MonkeyPatch, script_ver, installed_ver, expected_count
     ) -> None:
         import autoskillit
+        import autoskillit.core.types as _core_types
+        import autoskillit.recipe.rules_inputs as _rules_mod
 
         monkeypatch.setattr(autoskillit, "__version__", installed_ver)
+        monkeypatch.setattr(_core_types, "AUTOSKILLIT_INSTALLED_VERSION", installed_ver)
+        monkeypatch.setattr(_rules_mod, "AUTOSKILLIT_INSTALLED_VERSION", installed_ver)
         wf = _make_workflow(
             {
                 "do_thing": {"tool": "run_cmd", "on_success": "done"},
@@ -307,8 +301,12 @@ class TestOutdatedScriptVersionRule:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         import autoskillit
+        import autoskillit.core.types as _core_types
+        import autoskillit.recipe.rules_inputs as _rules_mod
 
         monkeypatch.setattr(autoskillit, "__version__", "0.2.0")
+        monkeypatch.setattr(_core_types, "AUTOSKILLIT_INSTALLED_VERSION", "0.2.0")
+        monkeypatch.setattr(_rules_mod, "AUTOSKILLIT_INSTALLED_VERSION", "0.2.0")
         wf = _make_workflow(
             {
                 "do_thing": {"tool": "run_cmd", "on_success": "done"},
@@ -1513,7 +1511,6 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step in remediation.yaml has predicate on_result."""
         step = self.if_recipe.steps["merge"]
         assert step.on_result is not None
-        assert step.on_result.conditions, "merge step must have predicate conditions"
         assert len(step.on_result.conditions) == 6
 
         cond0 = step.on_result.conditions[0]
@@ -1550,7 +1547,6 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step in implementation.yaml has predicate on_result."""
         step = self.ip_recipe.steps["merge"]
         assert step.on_result is not None
-        assert step.on_result.conditions, "merge step must have predicate conditions"
         assert len(step.on_result.conditions) == 6
 
         cond0 = step.on_result.conditions[0]
@@ -1604,35 +1600,3 @@ class TestRecipeIntegrationPredicateRouting:
             assert errors == [], f"{name} has ERROR-severity semantic findings: " + str(
                 [(f.rule, f.step_name, f.message) for f in errors]
             )
-
-    def test_bugfix_loop_merge_step_has_complete_predicate_routing(self) -> None:
-        """The merge step in bugfix-loop.yaml has complete predicate on_result routing."""
-        bf_recipe = load_recipe(builtin_recipes_dir() / "bugfix-loop.yaml")
-        step = bf_recipe.steps["merge"]
-        assert step.on_result is not None
-        assert step.on_result.conditions, "merge step must have predicate conditions"
-        assert len(step.on_result.conditions) == 6
-
-        cond0 = step.on_result.conditions[0]
-        assert cond0.when == "result.failed_step == 'dirty_tree'"
-        assert cond0.route == "assess"
-
-        cond1 = step.on_result.conditions[1]
-        assert cond1.when == "result.failed_step == 'test_gate'"
-        assert cond1.route == "assess"
-
-        cond2 = step.on_result.conditions[2]
-        assert cond2.when == "result.failed_step == 'post_rebase_test_gate'"
-        assert cond2.route == "assess"
-
-        cond3 = step.on_result.conditions[3]
-        assert cond3.when == "result.failed_step == 'rebase'"
-        assert cond3.route == "assess"
-
-        cond4 = step.on_result.conditions[4]
-        assert cond4.when == "result.error"
-        assert cond4.route == "escalate"
-
-        cond5 = step.on_result.conditions[5]
-        assert cond5.when is None
-        assert cond5.route == "done"

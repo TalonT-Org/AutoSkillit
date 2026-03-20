@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from autoskillit.execution.session_log import (
     flush_session_log,
+    read_telemetry_clear_marker,
     recover_crashed_sessions,
     resolve_log_dir,
+    write_telemetry_clear_marker,
 )
 
 
@@ -111,7 +114,7 @@ def test_flush_session_log_creates_anomalies_file_only_when_anomalies_exist(tmp_
     anomalies_path = tmp_path / "sessions" / "anomaly-session" / "anomalies.jsonl"
     assert anomalies_path.is_file()
     lines = anomalies_path.read_text().strip().split("\n")
-    assert len(lines) >= 1
+    assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["kind"] == "oom_critical"
 
@@ -666,3 +669,82 @@ def test_audit_log_json_schema(tmp_path):
     assert len(al) == 1
     assert al[0]["skill_command"] == "/foo"
     assert al[0]["exit_code"] == 1
+
+
+# Clear marker tests
+
+
+def test_write_read_clear_marker_roundtrip(tmp_path):
+    before = datetime.now(UTC)
+    write_telemetry_clear_marker(tmp_path)
+    after = datetime.now(UTC)
+    result = read_telemetry_clear_marker(tmp_path)
+    assert result is not None
+    assert before <= result <= after
+
+
+def test_read_clear_marker_missing_returns_none(tmp_path):
+    assert read_telemetry_clear_marker(tmp_path) is None
+
+
+def test_read_clear_marker_corrupt_returns_none(tmp_path):
+    (tmp_path / ".telemetry_cleared_at").write_text("not-a-date")
+    assert read_telemetry_clear_marker(tmp_path) is None
+
+
+def test_write_clear_marker_is_atomic(tmp_path):
+    # Calling write twice does not corrupt — second write wins
+    write_telemetry_clear_marker(tmp_path)
+    t1 = read_telemetry_clear_marker(tmp_path)
+    write_telemetry_clear_marker(tmp_path)
+    t2 = read_telemetry_clear_marker(tmp_path)
+    assert t1 is not None
+    assert t2 is not None
+    assert t2 >= t1
+
+
+def test_flush_session_log_includes_write_path_warnings_in_summary(tmp_path):
+    """summary.json records write_path_warnings list."""
+    warnings = [
+        "Write tool wrote to /source/repo/temp/foo.md (outside cwd /clone)",
+        "Edit tool wrote to /source/repo/src/file.py (outside cwd /clone)",
+    ]
+    _flush(tmp_path, session_id="warn-session", write_path_warnings=warnings, proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "warn-session" / "summary.json").read_text())
+    assert summary["write_path_warnings"] == warnings
+
+
+def test_flush_session_log_empty_warnings_produce_empty_list(tmp_path):
+    """No warnings → write_path_warnings is [] in summary."""
+    _flush(tmp_path, session_id="clean-session", write_path_warnings=[], proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "clean-session" / "summary.json").read_text())
+    assert summary["write_path_warnings"] == []
+
+
+def test_flush_session_log_none_warnings_treated_as_empty(tmp_path):
+    """write_path_warnings=None (default) produces empty list in summary."""
+    _flush(tmp_path, session_id="default-warn", proc_snapshots=None)  # no write_path_warnings arg
+    summary = json.loads((tmp_path / "sessions" / "default-warn" / "summary.json").read_text())
+    assert summary["write_path_warnings"] == []
+
+
+def test_flush_session_log_includes_write_call_count_in_summary(tmp_path):
+    """summary.json records write_call_count."""
+    _flush(tmp_path, session_id="wc-session", write_call_count=5, proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "wc-session" / "summary.json").read_text())
+    assert summary["write_call_count"] == 5
+
+
+def test_flush_session_log_write_call_count_in_index(tmp_path):
+    """sessions.jsonl index includes write_call_count."""
+    _flush(tmp_path, session_id="wc-idx", write_call_count=3, proc_snapshots=None)
+    index_path = tmp_path / "sessions.jsonl"
+    entry = json.loads(index_path.read_text().strip().split("\n")[-1])
+    assert entry["write_call_count"] == 3
+
+
+def test_flush_session_log_write_call_count_defaults_to_zero(tmp_path):
+    """write_call_count defaults to 0 when not specified."""
+    _flush(tmp_path, session_id="wc-default", proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "wc-default" / "summary.json").read_text())
+    assert summary["write_call_count"] == 0

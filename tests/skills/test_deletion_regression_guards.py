@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 
-SKILLS_ROOT = pkg_root() / "skills"
+SKILLS_ROOT = pkg_root() / "skills_extended"
 MERGE_PR_SKILL = SKILLS_ROOT / "merge-pr" / "SKILL.md"
 REVIEW_PR_SKILL = SKILLS_ROOT / "review-pr" / "SKILL.md"
 
@@ -20,6 +20,11 @@ def merge_pr_text():
 
 @pytest.fixture(scope="module")
 def review_pr_text():
+    if not REVIEW_PR_SKILL.exists():
+        pytest.fail(
+            f"Bundled skill review-pr is missing at {REVIEW_PR_SKILL}. "
+            "Bundled skills must not be deleted without removing all recipe references."
+        )
     return REVIEW_PR_SKILL.read_text()
 
 

@@ -20,5 +20,8 @@ safety:
 #   marker: "Dry-walkthrough verified = TRUE"
 #   skill_names: ["/autoskillit:implement-worktree", "/autoskillit:implement-worktree-no-merge"]
 
+branching:
+  default_base_branch: "integration"
+
 github:
   default_repo: "TalonT-Org/AutoSkillit"

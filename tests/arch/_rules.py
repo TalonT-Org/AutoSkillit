@@ -56,12 +56,15 @@ _LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "e
 
 _PRINT_EXEMPT = frozenset(
     {
+        "_cook.py",
         "_init_helpers.py",
         "app.py",
         "_doctor.py",
         "_marketplace.py",
         "_prompts.py",
         "_workspace.py",
+        "branch_protection_guard.py",
+        "pretty_output.py",
         "quota_check.py",
         "remove_clone_guard.py",
         "skill_cmd_check.py",
@@ -72,6 +75,7 @@ _PRINT_EXEMPT = frozenset(
 # Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON
 _BROAD_EXCEPT_EXEMPT = frozenset(
     {
+        "pretty_output.py",
         "quota_check.py",
         "remove_clone_guard.py",
         "skill_cmd_check.py",

@@ -11,11 +11,13 @@ import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any, assert_never
 
 from autoskillit.core import (
     CONTEXT_EXHAUSTION_MARKER,
     ChannelConfirmation,
+    CliSubtype,
     RetryReason,
     SessionOutcome,
     SkillResult,
@@ -30,7 +32,7 @@ _truncate = truncate_text
 
 # Re-export SkillResult so existing callers (tests, migration_engine) can still
 # import from this module.  Canonical definition lives in core/types.py.
-__all__ = ["SkillResult"]
+__all__ = ["CliSubtype", "SkillResult"]
 
 
 _TOKEN_FIELDS = (
@@ -40,14 +42,30 @@ _TOKEN_FIELDS = (
     "cache_read_input_tokens",
 )
 
-_FAILURE_SUBTYPES = frozenset({"unknown", "empty_output", "unparseable", "timeout"})
+_FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
+    {CliSubtype.UNKNOWN, CliSubtype.EMPTY_OUTPUT, CliSubtype.UNPARSEABLE, CliSubtype.TIMEOUT}
+)
+
+
+class ContentState(StrEnum):
+    """Describes why a session's content evaluation succeeded or failed.
+
+    Separates three distinct failure categories so that the dead-end guard
+    can distinguish drain-race artifacts (transient, retriable) from pattern-
+    contract violations and session errors (terminal, not retriable).
+    """
+
+    COMPLETE = "complete"
+    ABSENT = "absent"  # Empty result or missing marker — drain-race candidate
+    CONTRACT_VIOLATION = "contract_violation"  # Result + marker present, but patterns fail
+    SESSION_ERROR = "session_error"  # is_error=True or process-level failure
 
 
 @dataclass
 class ClaudeSessionResult:
     """Parsed result from a Claude Code headless session."""
 
-    subtype: str  # "success", "error_max_turns", "error_during_execution", etc.
+    subtype: CliSubtype
     is_error: bool
     result: str
     session_id: str
@@ -55,6 +73,7 @@ class ClaudeSessionResult:
     token_usage: dict[str, Any] | None = None
     assistant_messages: list[str] = field(default_factory=list)
     tool_uses: list[dict[str, Any]] = field(default_factory=list)
+    jsonl_context_exhausted: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
@@ -66,29 +85,46 @@ class ClaudeSessionResult:
                 self.result = "" if self.result is None else str(self.result)
         if not isinstance(self.errors, list):
             self.errors = [] if self.errors is None else [str(self.errors)]
-        if not isinstance(self.subtype, str):
-            self.subtype = "unknown" if self.subtype is None else str(self.subtype)
+        if not isinstance(self.subtype, CliSubtype):
+            self.subtype = (
+                CliSubtype.UNKNOWN
+                if self.subtype is None
+                else CliSubtype.from_cli(str(self.subtype))
+            )
         if not isinstance(self.session_id, str):
             self.session_id = "" if self.session_id is None else str(self.session_id)
+        if not isinstance(self.jsonl_context_exhausted, bool):
+            self.jsonl_context_exhausted = bool(self.jsonl_context_exhausted)
 
     def _is_context_exhausted(self) -> bool:
         """Detect context window exhaustion from Claude's error output.
 
-        Requires both ``is_error=True`` AND the marker to appear in the
-        ``errors`` list (structured CLI signal).  Falls back to checking
-        ``result`` only when the subtype is a known error subtype, to
-        narrow false-positives from model prose that happens to contain
-        the marker phrase.
+        Three detection paths (evaluated in priority order):
+
+        1. JSONL flat-record fallback (Channel B): when parse_session_result detected
+           a flat assistant record with zero output tokens and the marker text. This
+           path fires regardless of is_error — it is race-resilient because it reads
+           the raw NDJSON stream rather than the drained result field.
+
+        2. Primary: is_error=True AND marker in the structured errors list.
+
+        3. Fallback: is_error=True AND marker in session.result, restricted to known
+           error subtypes to avoid false positives from model prose.
         """
+        # Path 1: JSONL flat-record detection — bypasses is_error guard
+        if self.jsonl_context_exhausted:
+            return True
         if not self.is_error:
             return False
-        # Primary: check the structured errors list from Claude CLI
+        # Path 2: structured errors list from Claude CLI
         marker = CONTEXT_EXHAUSTION_MARKER
         if any(marker in e.lower() for e in self.errors):
             return True
-        # Fallback: only trust result text for error subtypes, not execution errors
-        # where the model's own output could contain the marker phrase
-        if self.subtype in ("success", "error_max_turns") and marker in self.result.lower():
+        # Path 3: result text — restricted to error subtypes
+        if (
+            self.subtype in (CliSubtype.SUCCESS, CliSubtype.ERROR_MAX_TURNS)
+            and marker in self.result.lower()
+        ):
             return True
         return False
 
@@ -107,7 +143,7 @@ class ClaudeSessionResult:
                 "The session made partial progress. "
                 "Use needs_retry and retry_reason to continue from where it left off."
             )
-        if self.subtype == "error_max_turns":
+        if self.subtype == CliSubtype.ERROR_MAX_TURNS:
             return (
                 "Turn limit reached during session execution. "
                 "The session made partial progress. "
@@ -118,7 +154,7 @@ class ClaudeSessionResult:
     @property
     def needs_retry(self) -> bool:
         """Whether the session didn't finish and should be retried."""
-        if self.subtype == "error_max_turns":
+        if self.subtype == CliSubtype.ERROR_MAX_TURNS:
             return True
         if self._is_context_exhausted():
             return True
@@ -203,25 +239,95 @@ _KNOWN_RESULT_KEYS: frozenset[str] = frozenset(
 )
 
 
+def _detect_flat_context_exhaustion(stdout: str) -> bool:
+    """Detect context exhaustion from a flat assistant JSONL record.
+
+    Claude Code CLI emits a flat (no 'message' wrapper) assistant record when
+    the context window is exhausted with is_error=False:
+
+        {"type": "assistant",
+         "content": [{"type": "text", "text": "Prompt is too long"}],
+         "output_tokens": 0, "input_tokens": 0, ...}
+
+    This record does NOT appear in session.result (stdout drain race) and is
+    NOT captured by the existing is_error-gated detection paths. Scanning the
+    raw NDJSON stream for this pattern makes detection race-resilient.
+
+    Returns True only when:
+    - record type is "assistant"
+    - record has no "message" key (flat structure)
+    - "output_tokens" at top level is 0
+    - at least one content text block contains CONTEXT_EXHAUSTION_MARKER
+    """
+    marker = CONTEXT_EXHAUSTION_MARKER
+    for line in stdout.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        if obj.get("type") != "assistant":
+            continue
+        if "message" in obj:
+            continue  # standard wrapped record — not the flat context-exhaustion format
+        if obj.get("output_tokens", -1) != 0:
+            continue
+        content = obj.get("content", [])
+        if not isinstance(content, list):
+            continue
+        if any(
+            isinstance(block, dict)
+            and block.get("type") == "text"
+            and marker in block.get("text", "").lower()
+            for block in content
+        ):
+            return True
+    return False
+
+
+@dataclass
+class _ParseAccumulator:
+    """Mutable accumulator for parse_session_result's NDJSON scan.
+
+    Collects tool_uses, assistant_messages, and context exhaustion signals
+    across all NDJSON records. A single ClaudeSessionResult is constructed
+    from the accumulated state at the end of parsing — no early returns.
+    """
+
+    result_obj: dict[str, Any] | None = None
+    tool_uses: list[dict[str, Any]] = field(default_factory=list)
+    assistant_messages: list[str] = field(default_factory=list)
+    jsonl_context_exhausted: bool = False
+
+
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
     """Parse Claude Code's --output-format json stdout into a typed result.
 
     Handles multi-line NDJSON (Claude Code may emit multiple JSON objects;
     the last 'result' type object is authoritative).
     Falls back gracefully for non-JSON or missing fields.
+
+    Uses an accumulator pattern: all NDJSON records are scanned unconditionally
+    into a _ParseAccumulator, then a single ClaudeSessionResult is constructed
+    from the accumulated state. This ensures tool_uses, assistant_messages, and
+    token_usage are preserved on all paths — including fallback/unparseable.
     """
     if not stdout.strip():
         return ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
             errors=[],
         )
 
-    result_obj = None
-    assistant_messages: list[str] = []
-    tool_uses: list[dict[str, Any]] = []
+    acc = _ParseAccumulator()
+    marker = CONTEXT_EXHAUSTION_MARKER
+
     for line in stdout.strip().splitlines():
         line = line.strip()
         if not line:
@@ -232,66 +338,106 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                 continue
             record_type = obj.get("type")
             if record_type == "result":
-                result_obj = obj
+                acc.result_obj = obj
             elif record_type == "assistant":
                 msg = obj.get("message")
-                if not isinstance(msg, dict):
-                    continue
-                content = msg.get("content", "")
-                if isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "tool_use":
-                            tool_uses.append(
-                                {"name": block.get("name", ""), "id": block.get("id", "")}
-                            )
-                    text = "\n".join(
-                        block.get("text", "") for block in content if isinstance(block, dict)
-                    ).strip()
-                else:
-                    text = str(content).strip()
-                if text:
-                    assistant_messages.append(text)
+                if isinstance(msg, dict):
+                    content = msg.get("content", "")
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "tool_use":
+                                acc.tool_uses.append(
+                                    {"name": block.get("name", ""), "id": block.get("id", "")}
+                                )
+                        text = "\n".join(
+                            block.get("text", "") for block in content if isinstance(block, dict)
+                        ).strip()
+                    else:
+                        text = str(content).strip()
+                    if text:
+                        acc.assistant_messages.append(text)
+                elif "message" not in obj:
+                    # Flat assistant record (no "message" wrapper) — detect
+                    # context exhaustion inline instead of a separate scan pass.
+                    if obj.get("output_tokens", -1) == 0:
+                        flat_content = obj.get("content", [])
+                        if isinstance(flat_content, list) and any(
+                            isinstance(block, dict)
+                            and block.get("type") == "text"
+                            and marker in block.get("text", "").lower()
+                            for block in flat_content
+                        ):
+                            acc.jsonl_context_exhausted = True
         except json.JSONDecodeError:
             continue
 
-    if result_obj is None:
+    # Fallback: try to parse stdout as a single JSON object
+    if acc.result_obj is None:
         try:
             fallback = json.loads(stdout)
             if isinstance(fallback, dict) and fallback.get("type") == "result":
-                result_obj = fallback
-            else:
-                return ClaudeSessionResult(
-                    subtype="unparseable",
-                    is_error=True,
-                    result=stdout,
-                    session_id="",
-                    errors=[],
-                )
+                acc.result_obj = fallback
         except json.JSONDecodeError:
-            return ClaudeSessionResult(
-                subtype="unparseable",
-                is_error=True,
-                result=stdout,
-                session_id="",
-                errors=[],
-            )
+            pass
 
+    # Token usage extraction runs on ALL paths (not just when result_obj exists)
     token_usage = extract_token_usage(stdout)
 
-    extra_keys = frozenset(result_obj.keys()) - _KNOWN_RESULT_KEYS
-    if extra_keys:
-        logger.debug("unknown_result_keys", unknown_fields=sorted(extra_keys))
+    # Single construction point: build ClaudeSessionResult from accumulated state
+    if acc.result_obj is not None:
+        extra_keys = frozenset(acc.result_obj.keys()) - _KNOWN_RESULT_KEYS
+        if extra_keys:
+            logger.debug("unknown_result_keys", unknown_fields=sorted(extra_keys))
+
+        subtype = CliSubtype.from_cli(acc.result_obj.get("subtype") or "unknown")
+        is_error: bool = acc.result_obj.get("is_error", False)
+        result_text: str = acc.result_obj.get("result") or ""
+        session_id: str = acc.result_obj.get("session_id") or ""
+        errors: list[str] = acc.result_obj.get("errors") or []
+    else:
+        # No result record found: classify based on accumulated signals
+        if acc.jsonl_context_exhausted:
+            subtype = CliSubtype.CONTEXT_EXHAUSTION
+        else:
+            subtype = CliSubtype.UNPARSEABLE
+        is_error = True
+        result_text = stdout
+        session_id = ""
+        errors = []
 
     return ClaudeSessionResult(
-        subtype=result_obj.get("subtype") or "unknown",
-        is_error=result_obj.get("is_error", False),
-        result=result_obj.get("result") or "",
-        session_id=result_obj.get("session_id") or "",
-        errors=result_obj.get("errors") or [],
+        subtype=subtype,
+        is_error=is_error,
+        result=result_text,
+        session_id=session_id,
+        errors=errors,
         token_usage=token_usage,
-        assistant_messages=assistant_messages,
-        tool_uses=tool_uses,
+        assistant_messages=acc.assistant_messages,
+        tool_uses=acc.tool_uses,
+        jsonl_context_exhausted=acc.jsonl_context_exhausted,
     )
+
+
+def _check_expected_patterns(result: str, patterns: Sequence[str]) -> bool:
+    """Return True if ALL expected_output_patterns are found in result, or if
+    no patterns are configured. This check MUST run on all session outcome paths,
+    including the Channel B bypass path.
+
+    AND semantics are intentional: patterns represent content contracts (e.g.,
+    block start/end delimiters) that must all be present simultaneously.
+
+    If any pattern is an invalid regex, returns False rather than raising.
+    """
+    if not patterns:
+        return True
+    for p in patterns:
+        try:
+            if not re.search(p, result):
+                return False
+        except re.error:
+            logger.warning("invalid_expected_output_pattern", pattern=p)
+            return False
+    return True
 
 
 def _check_session_content(
@@ -322,18 +468,66 @@ def _check_session_content(
                 result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
             )
             return False
-    if expected_output_patterns:
-        result_text = session.result.strip()
-        matched = any(re.search(p, result_text) for p in expected_output_patterns)
-        if not matched:
-            logger.warning(
-                "content_check_failed",
-                reason="expected_artifact_absent",
-                patterns=list(expected_output_patterns),
-            )
-            return False
+    if not _check_expected_patterns(session.result.strip(), expected_output_patterns):
+        logger.warning(
+            "content_check_failed",
+            reason="expected_artifact_absent",
+            patterns=list(expected_output_patterns),
+        )
+        return False
     logger.debug("content_check_passed")
     return True
+
+
+def _evaluate_content_state(
+    session: ClaudeSessionResult,
+    completion_marker: str,
+    expected_output_patterns: Sequence[str],
+) -> ContentState:
+    """Classify the content completeness and contract compliance of a session result.
+
+    Returns:
+        ContentState.COMPLETE: Result is non-empty, marker present (if configured),
+            and all expected_output_patterns match. Session is fully successful.
+        ContentState.ABSENT: Result is empty OR completion marker is absent from a
+            non-empty result. Indicates a drain-race artifact — the session may have
+            completed but stdout was not fully flushed. Retriable.
+        ContentState.CONTRACT_VIOLATION: Result is non-empty and contains the marker,
+            but one or more expected_output_patterns are absent. The session ran to
+            completion but the model did not produce the required output tokens.
+            Terminal — retrying will not produce different output.
+        ContentState.SESSION_ERROR: The CLI session itself reported an error
+            (is_error=True) or produced a failure subtype. Terminal.
+    """
+    # Process-level / CLI-level failure — terminal regardless of content
+    if session.is_error:
+        return ContentState.SESSION_ERROR
+
+    result = session.result.strip()
+
+    # Empty result — drain-race candidate regardless of content requirements.
+    # This must come before the "no requirements" shortcut so that CHANNEL_A
+    # dead-end guard can detect drain-race artifacts even when no marker or
+    # patterns are configured.
+    if not result:
+        return ContentState.ABSENT
+
+    # No content requirements configured and result is non-empty: CHANNEL_B
+    # confirmation alone is sufficient. Returning COMPLETE here preserves the
+    # existing behaviour for skills that produce non-empty output without a
+    # marker (e.g. fire-and-forget commands with plain text output).
+    if not completion_marker and not expected_output_patterns:
+        return ContentState.COMPLETE
+
+    # Marker absent — partial drain candidate
+    if completion_marker and completion_marker not in result:
+        return ContentState.ABSENT
+
+    # Result non-empty, marker present (or not configured) — check pattern contract
+    if expected_output_patterns and not _check_expected_patterns(result, expected_output_patterns):
+        return ContentState.CONTRACT_VIOLATION
+
+    return ContentState.COMPLETE
 
 
 def _compute_success(
@@ -356,6 +550,17 @@ def _compute_success(
     # Gate 0.5: Channel B provenance bypass — session JSONL is authoritative.
     match channel_confirmation:
         case ChannelConfirmation.CHANNEL_B:
+            # PRECONDITION: _recover_block_from_assistant_messages MUST be called
+            # (and its recovered session substituted) before this function when
+            # channel_confirmation=CHANNEL_B and expected_output_patterns is set.
+            # Callers that bypass _build_skill_result must honour this contract.
+            if not _check_expected_patterns(session.result.strip(), expected_output_patterns):
+                logger.debug(
+                    "channel_b_content_check_failed",
+                    result_len=len(session.result),
+                    pattern_count=len(expected_output_patterns),
+                )
+                return False
             logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
             return True
         case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
@@ -374,7 +579,9 @@ def _compute_success(
             # The process was killed by our own async_kill_process_tree
             # (signal -15 or -9), so a non-zero returncode is expected and
             # trustworthy when the session envelope says "success".
-            if returncode != 0 and not (session.subtype == "success" and session.result.strip()):
+            if returncode != 0 and not (
+                session.subtype == CliSubtype.SUCCESS and session.result.strip()
+            ):
                 return False
             content_ok = _check_session_content(
                 session, completion_marker, expected_output_patterns
@@ -407,11 +614,11 @@ def _compute_success(
             assert_never(unreachable)
 
 
-_KILL_ANOMALY_SUBTYPES: frozenset[str] = frozenset(
+_KILL_ANOMALY_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {
-        "unparseable",  # killed mid-write → partial NDJSON
-        "empty_output",  # killed before any stdout was written
-        "interrupted",  # killed mid-generation → real Claude CLI subtype
+        CliSubtype.UNPARSEABLE,  # killed mid-write → partial NDJSON
+        CliSubtype.EMPTY_OUTPUT,  # killed before any stdout was written
+        CliSubtype.INTERRUPTED,  # killed mid-generation → real Claude CLI subtype
     }
 )
 
@@ -433,7 +640,7 @@ def _is_kill_anomaly(session: ClaudeSessionResult) -> bool:
     """
     if session.subtype in _KILL_ANOMALY_SUBTYPES:
         return True
-    if session.subtype == "success" and not session.result.strip():
+    if session.subtype == CliSubtype.SUCCESS and not session.result.strip():
         return True
     return False
 
@@ -494,7 +701,7 @@ def _compute_retry(
             # emitting the completion marker (text-then-tool boundary).
             if (
                 returncode == 0
-                and session.subtype == "success"
+                and session.subtype == CliSubtype.SUCCESS
                 and session.result.strip()
                 and completion_marker
                 and completion_marker not in session.result
@@ -560,6 +767,65 @@ def _compute_retry(
             assert_never(unreachable)
 
 
+def _normalize_subtype(
+    raw_subtype: CliSubtype,
+    outcome: SessionOutcome,
+    session: ClaudeSessionResult,
+    completion_marker: str,
+) -> str:
+    """Normalize raw_subtype against the adjudicated outcome to eliminate contradictions.
+
+    Maps ``(raw_subtype, outcome, session, completion_marker) → adjudicated subtype``.
+    Ensures ``subtype == "success"`` iff ``outcome == SUCCEEDED``.
+
+    Exhaustive match over CliSubtype ensures mypy flags any unhandled member
+    when the enum is extended.
+
+    Class 2 fix (upward normalization):
+      SUCCEEDED + error/diagnostic subtype → "success"
+
+    Class 1 fix (downward normalization):
+      non-SUCCEEDED + "success" → synthesized failure label based on why.
+
+    Return type is str (not CliSubtype) because downward normalization synthesizes
+    labels that are SkillResult-level subtypes, not CliSubtype members.
+    """
+    match raw_subtype:
+        case CliSubtype.SUCCESS:
+            if outcome == SessionOutcome.SUCCEEDED:
+                return raw_subtype
+            # Downward normalization: success subtype but adjudicated failure/retriable
+            if not session.result.strip():
+                return "empty_result"
+            if session.jsonl_context_exhausted:
+                return "context_exhausted"
+            if completion_marker and completion_marker not in session.result:
+                return "missing_completion_marker"
+            return "adjudicated_failure"
+
+        case (
+            CliSubtype.UNKNOWN
+            | CliSubtype.EMPTY_OUTPUT
+            | CliSubtype.UNPARSEABLE
+            | CliSubtype.TIMEOUT
+        ):
+            # Failure subtypes: upward normalize to "success" when adjudicated SUCCEEDED
+            if outcome == SessionOutcome.SUCCEEDED:
+                return "success"
+            return raw_subtype
+
+        case (
+            CliSubtype.ERROR_MAX_TURNS
+            | CliSubtype.ERROR_DURING_EXECUTION
+            | CliSubtype.CONTEXT_EXHAUSTION
+            | CliSubtype.INTERRUPTED
+        ):
+            return raw_subtype
+
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
 def _compute_outcome(
     session: ClaudeSessionResult,
     returncode: int,
@@ -615,18 +881,35 @@ def _compute_outcome(
             reason="retry_signal_authoritative",
         )
 
-    # Dead-end guard: channel confirmation means the session reached a natural end;
-    # failure to parse content is a data-availability issue, not a terminal failure.
+    # Dead-end guard: channel confirmation means the session signalled completion, but
+    # content checks failed and no retry was scheduled by _compute_retry.
+    # Only promote to RETRIABLE when the failure is a drain-race artifact (ABSENT state):
+    #   - empty result → stdout not fully flushed
+    #   - marker missing → partial flush
+    # Do NOT promote CONTRACT_VIOLATION or SESSION_ERROR — these are terminal failures
+    # that retrying will never resolve.
     if not success and not needs_retry:
         match channel_confirmation:
             case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.CHANNEL_B:
-                needs_retry = True
-                retry_reason = RetryReason.RESUME
-                logger.debug(
-                    "dead_end_guard",
-                    action="promoted_to_retriable",
-                    channel=str(channel_confirmation),
+                content_state = _evaluate_content_state(
+                    session, completion_marker, expected_output_patterns
                 )
+                if content_state == ContentState.ABSENT:
+                    needs_retry = True
+                    retry_reason = RetryReason.RESUME
+                    logger.debug(
+                        "dead_end_guard",
+                        action="promoted_to_retriable",
+                        content_state=content_state.value,
+                        channel=channel_confirmation.value,
+                    )
+                else:
+                    logger.debug(
+                        "dead_end_guard",
+                        action="terminal_failure_not_promoted",
+                        content_state=content_state.value,
+                        channel=channel_confirmation.value,
+                    )
             case ChannelConfirmation.UNMONITORED:
                 pass  # legitimate terminal failure — no channel confirmed completion
             case _ as unreachable_cc:

@@ -5,39 +5,33 @@ autoskillit_version: "0.3.0"
 
 ingredients:
   source_doc:
-    description: Path to source document for group decomposition
+    description: Source document for group decomposition
     required: true
   source_dir:
-    description: >
-      Path to the source repository to clone and work in.
-      Leave empty to auto-detect from git rev-parse --show-toplevel.
+    description: Source repository
     required: false
     default: ""
   run_name:
-    description: >
-      Name prefix for this pipeline run. Used as the first path component
-      of the feature branch name (e.g. impl/124 or impl/20260304) and
-      in the clone directory name.
+    description: Run name prefix
     default: "impl"
   base_branch:
-    description: Branch to merge into (defaults to current branch)
-    default: main
+    description: Merge target
+    default: ""
   review_approach:
-    description: Run /review-approach before implementation? (true/false)
+    description: Research approaches first
     default: "false"
   audit:
-    description: Run /autoskillit:audit-impl once after all groups/parts have been merged, to check overall implementation quality and optionally trigger a remediation round (true/false)
+    description: Post-merge quality gate
     default: "true"
   open_pr:
-    description: Create a feature branch (named from run_name) and open a GitHub PR to merge it into base_branch. The standard workflow — all worktree merges target the feature branch, then a PR is opened to base_branch. Set to false to merge directly into base_branch without a PR. (true/false)
+    description: PR instead of direct merge
+    default: "true"
+  auto_merge:
+    description: Enroll the PR in the merge queue automatically after checks pass
     default: "true"
   issue_url:
-    description: >
-      Optional GitHub issue URL (e.g. https://github.com/owner/repo/issues/42).
-      When provided, the issue content is fetched and used to enrich planning,
-      and the resulting PR will include "Closes #N" to auto-close the issue on merge.
+    description: GitHub issue to close on merge
     required: false
-    default: ""
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -82,6 +76,7 @@ steps:
     with:
       cmd: "git -C ${{ context.work_dir }} rev-parse ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
+      step_name: "capture_base_sha"
     capture:
       base_sha: "${{ result.stdout | trim }}"
     on_success: set_merge_target
@@ -97,6 +92,7 @@ steps:
     with:
       cmd: "printf '%s' '${{ inputs.base_branch }}'"
       cwd: "${{ context.work_dir }}"
+      step_name: "set_merge_target"
     capture:
       merge_target: "${{ result.stdout }}"
     on_success: get_issue_title
@@ -139,11 +135,11 @@ steps:
       claimed: "${{ result.claimed }}"
     on_result:
       - when: "${{ result.claimed }} == true"
-        route: create_branch
+        route: compute_branch
       - route: escalate_stop
     on_failure: escalate_stop
 
-  create_branch:
+  compute_branch:
     tool: run_cmd
     with:
       cmd: >-
@@ -151,35 +147,38 @@ steps:
         RUN="${{ inputs.run_name }}" &&
         PREFIX="${SLUG:-$RUN}" &&
         ISSUE="${{ context.issue_number }}" &&
-        REMOTE="${{ context.remote_url }}" &&
         if [ -n "$ISSUE" ]; then
-          BRANCH="${PREFIX}/${ISSUE}"
+          printf '%s' "${PREFIX}/${ISSUE}"
         else
-          BRANCH="${PREFIX}/$(date +%Y%m%d)"
-        fi &&
-        CANDIDATE="$BRANCH" &&
-        i=1 &&
-        while git ls-remote --heads "$REMOTE" "$CANDIDATE" 2>/dev/null | grep -q .; do
-          CANDIDATE="${BRANCH}-${i}" &&
-          i=$((i + 1))
-        done &&
-        git checkout -b "$CANDIDATE" &&
-        printf '%s' "$CANDIDATE"
+          printf '%s' "${PREFIX}/$(date +%Y%m%d)"
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "compute_branch"
+    capture:
+      proposed_branch: "${{ result.stdout | trim }}"
+    on_success: create_branch
+    on_failure: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Computes the proposed branch name from slug/issue or slug/date — no git operations.
+      Result is passed to create_branch for atomic collision check and checkout.
+
+  create_branch:
+    tool: create_unique_branch
+    with:
+      base_branch_name: "${{ context.proposed_branch }}"
       cwd: "${{ context.work_dir }}"
     capture:
-      merge_target: "${{ result.stdout }}"
+      merge_target: "${{ result.branch_name }}"
     on_success: push_merge_target
     on_failure: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Computes a unique branch name and checks out the branch.
-      When context.issue_slug is available (from get_issue_title), it is used as
-      the branch prefix (e.g. fix-merge-conflict-triage/42). Falls back to
-      inputs.run_name when no issue URL is provided (e.g. impl/20260304).
-      Checks the remote for existing branches with the same name and appends
-      -1, -2, etc. for collision avoidance. Captures the final branch name as
-      merge_target, overriding the fallback set by set_merge_target.
+      Atomic branch creation: ls-remote collision check → checkout -b. Uses the
+      create_unique_branch MCP tool so the orchestrator cannot insert extra git fetch
+      or checkout calls between the collision check and branch creation.
 
   push_merge_target:
     tool: push_to_remote
@@ -260,6 +259,7 @@ steps:
       review_path: "${{ result.review_path }}"
     on_success: verify
     on_failure: release_issue_failure
+    skip_when_false: "inputs.review_approach"
     note: "Only execute this step if review_approach input is 'true'. Otherwise skip directly to verify."
 
   verify:
@@ -418,7 +418,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "open_pr"
       issue_number: "${{ context.issue_number }}"
-    on_success: review_pr
+    on_success: extract_pr_number
     on_failure: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -431,14 +431,28 @@ steps:
       accumulated across group iterations. The open-pr skill splits and synthesizes
       PR content from all plans.
       TOKEN SUMMARY: Before invoking this step, the orchestrator MUST:
-      1. Call get_token_summary(clear=false) to retrieve accumulated token usage.
-      2. Format the JSON result as a markdown table with columns: Step, input, output,
-         cache_create, cache_read. Include a bold Total row.
-      3. Write the formatted table to temp/open-pr/token_summary.md via run_cmd.
-      4. Append the file path as a 4th positional argument to the skill_command.
-      5. If context.issue_number is a non-empty string (set by fetch_issue), append it
+      1. Call get_token_summary(clear=false, format=table) — returns a pre-formatted markdown table.
+      2. Write the result to temp/open-pr/token_summary.md via run_cmd.
+      3. Append the file path as a 4th positional argument to the skill_command.
+      4. If context.issue_number is a non-empty string (set by fetch_issue), append it
          as a 5th positional argument to the skill_command. The open-pr skill will insert
          "Closes #{issue_number}" into the PR body to auto-close the issue on merge.
+
+  extract_pr_number:
+    tool: run_cmd
+    with:
+      cmd: "gh pr view '${{ context.merge_target }}' --json number -q .number"
+      cwd: "${{ context.work_dir }}"
+      step_name: "extract_pr_number"
+    capture:
+      pr_number: "${{ result.stdout | trim }}"
+    on_success: review_pr
+    on_failure: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Extracts the integer PR number from the feature branch opened by open_pr_step.
+      pr_number is required by the queue finale steps (enable_auto_merge, wait_for_queue).
 
   review_pr:
     tool: run_skill
@@ -501,13 +515,15 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.merge_target }}"
+      workflow: "tests.yml"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
-    on_success: release_issue_success
-    on_failure: resolve_ci
+    on_success: check_merge_queue
+    on_failure: detect_ci_conflict
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -515,13 +531,33 @@ steps:
       using the wait_for_ci MCP tool (timeout: 300 s). Captures structured output
       (conclusion + failed job names) for downstream resolve_ci.
       Skipped when open_pr=false — no remote feature branch is opened in that mode.
-      On success, the pipeline is done — cleanup_success removes the clone.
-      On failure, resolve_ci receives ci_failed_jobs context for targeted fixes.
+      On success, routes to check_merge_queue to determine if the PR should enter
+      the merge queue. On failure, routes to detect_ci_conflict which checks whether
+      the failure is caused by a stale base before falling through to diagnose_ci.
+
+  diagnose_ci:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - tests.yml"
+      cwd: "${{ context.work_dir }}"
+      step_name: "diagnose_ci"
+      ci_failed_jobs: "${{ context.ci_failed_jobs }}"
+    capture:
+      diagnosis_path: "${{ result.diagnosis_path }}"
+    on_success: resolve_ci
+    on_failure: resolve_ci
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes
+      a structured diagnosis to temp/diagnose-ci/. Routes to resolve_ci on success
+      OR failure (best-effort: resolve-failures proceeds even without a diagnosis).
+      diagnosis_path is passed to resolve_ci for targeted remediation context.
 
   resolve_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.ci_conclusion }} ${{ context.ci_failed_jobs }}"
+      skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.ci_conclusion }} ${{ context.ci_failed_jobs }} ${{ context.diagnosis_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_ci"
     retries: 2
@@ -549,8 +585,140 @@ steps:
       Routes back to ci_watch to verify the fix resolves CI. On push failure, escalates
       via cleanup_failure.
 
-  release_issue_success:
-    description: "Release the in-progress claim after successful completion"
+  check_merge_queue:
+    tool: run_cmd
+    with:
+      cmd: >
+        REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||') &&
+        OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
+        BRANCH="${{ inputs.base_branch }}" &&
+        gh api graphql -f query="query {
+          repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
+            mergeQueue(branch:\"$BRANCH\") { id }
+          }
+        }" | jq -r 'if .data.repository.mergeQueue != null then "true" else "false" end'
+      cwd: "${{ context.work_dir }}"
+      step_name: "check_merge_queue"
+    capture:
+      queue_available: "${{ result.stdout | trim }}"
+    on_success: route_queue_mode
+    on_failure: release_issue_success
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Detects whether the target branch has an active merge queue via GraphQL.
+      Captures "true" or "false" into context.queue_available.
+      On failure (gh error, parse error), degrades gracefully to release_issue_success
+      (non-queue path). Skipped when open_pr=false — no PR was opened.
+
+  route_queue_mode:
+    action: route
+    on_result:
+      - when: "${{ inputs.auto_merge }} != 'true'"
+        route: confirm_cleanup
+      - when: "${{ context.queue_available }} == 'true'"
+        route: enable_auto_merge
+      - route: release_issue_success
+    skip_when_false: "inputs.open_pr"
+
+  enable_auto_merge:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "enable_auto_merge"
+    on_success: wait_for_queue
+    on_failure: confirm_cleanup
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Submits the PR to the merge queue. On failure (PR not mergeable, already merged),
+      degrades to confirm_cleanup.
+
+  wait_for_queue:
+    tool: wait_for_merge_queue
+    with:
+      pr_number: "${{ context.pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
+      timeout_seconds: 900
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+    capture:
+      queue_pr_state: "${{ result.pr_state }}"
+    on_result:
+      - when: "${{ result.pr_state }} == merged"
+        route: release_issue_success
+      - when: "${{ result.pr_state }} == ejected"
+        route: queue_ejected_fix
+      - when: "${{ result.pr_state }} == stalled"
+        route: reenroll_stalled_pr
+      - when: "${{ result.pr_state }} == timeout"
+        route: release_issue_timeout
+      - route: release_issue_timeout
+    on_failure: release_issue_timeout
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Waits up to 15 minutes for the PR to merge through the queue.
+      merged → release_issue_success to transition issue state then confirm_cleanup.
+      ejected → conflict fix cycle then re-enter.
+      stalled → lightweight re-enrollment (disable then re-enable auto-merge).
+      timeout → release_issue_timeout (release claim without staged label; merge unconfirmed).
+
+  reenroll_stalled_pr:
+    tool: toggle_auto_merge
+    with:
+      pr_number: "${{ context.pr_number }}"
+      target_branch: "${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+    on_success: wait_for_queue
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+
+  queue_ejected_fix:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "queue_ejected_fix"
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: release_issue_failure
+      - route: re_push_queue_fix
+    on_failure: release_issue_failure
+    retries: 1
+    on_exhausted: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Resolves rebase conflicts on the feature branch after queue ejection.
+      Uses the clone working directory (context.work_dir) with the feature branch
+      (context.merge_target) checked out. context.plan_path provides resolution guidance.
+      escalation_required=true → release_issue_failure for human review.
+
+  re_push_queue_fix:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.merge_target }}"
+    on_success: reenter_merge_queue
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+
+  reenter_merge_queue:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "reenter_merge_queue"
+    on_success: wait_for_queue
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Re-submits the PR after conflict resolution. Routes back to wait_for_queue.
+      If re-entry fails, release_issue_failure preserves the clone for debugging.
+
+  release_issue_timeout:
+    description: "Release in-progress claim after queue timeout without applying staged label"
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
@@ -558,6 +726,67 @@ steps:
       issue_url: ${{ inputs.issue_url }}
     on_success: confirm_cleanup
     on_failure: confirm_cleanup
+    note: >
+      Called when wait_for_merge_queue times out or errors. Releases the in-progress
+      claim without passing target_branch, so the staged label is not applied. The
+      merge is unconfirmed; a human must verify queue state independently.
+      Routes to confirm_cleanup so the pipeline completes cleanly.
+
+  detect_ci_conflict:
+    tool: run_cmd
+    with:
+      cmd: "git fetch origin ${{ inputs.base_branch }} && ! git merge-base --is-ancestor origin/${{ inputs.base_branch }} HEAD"
+      cwd: "${{ context.work_dir }}"
+      step_name: "detect_ci_conflict"
+    on_success: ci_conflict_fix
+    on_failure: diagnose_ci
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Detects whether the CI failure originates from a stale integration base rather than
+      a code-level test failure. Exit 0 (fetch succeeded AND base is NOT an ancestor of HEAD)
+      signals a stale base — routes to ci_conflict_fix. Exit 1 (fetch failed OR base is already
+      an ancestor) signals a real code failure or an unresolvable state — falls through to
+      diagnose_ci. This step insulates resolve_ci from being invoked for merge-conflict failures.
+
+  ci_conflict_fix:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "ci_conflict_fix"
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: release_issue_failure
+      - route: re_push
+    on_failure: release_issue_failure
+    retries: 1
+    on_exhausted: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Resolves a stale-base CI failure by rebasing the feature branch onto the latest
+      integration HEAD. On clean rebase or goal-aware conflict resolution, routes to
+      re_push to re-trigger CI on the rebased branch. On escalation (LOW confidence
+      conflicts) or tool failure, routes to release_issue_failure.
+      retries: 1 bounds the loop; after 2 total attempts, escalates.
+
+  release_issue_success:
+    description: "Transition issue from in-progress to staged after successful pipeline completion"
+    tool: release_issue
+    optional: true
+    skip_when_false: inputs.issue_url
+    with:
+      issue_url: ${{ inputs.issue_url }}
+      target_branch: ${{ inputs.base_branch }}
+    on_success: confirm_cleanup
+    on_failure: confirm_cleanup
+    note: >
+      Called on the success path after PR merge is confirmed.
+      Passes target_branch so release_issue can determine whether to apply the
+      staged label (non-default target) or just remove in-progress (default target).
+      optional=true ensures pipeline still reaches confirm_cleanup if this step errors.
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"

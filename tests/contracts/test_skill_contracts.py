@@ -1,0 +1,100 @@
+"""Contract tests: every delimiter-emitting skill must be registered in skill_contracts.yaml."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+import yaml
+
+_CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
+
+
+@pytest.fixture(scope="module")
+def skills() -> dict:
+    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    return raw.get("skills", {})
+
+
+def _assert_skill_has_patterns(skills: dict, skill_name: str, expected_delimiter: str) -> None:
+    assert skill_name in skills, (
+        f"{skill_name!r} not found in skill_contracts.yaml — "
+        f"delimiter-emitting skills must be registered"
+    )
+    patterns = skills[skill_name].get("expected_output_patterns", [])
+    assert patterns, f"{skill_name!r} has no expected_output_patterns"
+    assert expected_delimiter in patterns, (
+        f"No pattern matching {expected_delimiter!r} found for {skill_name!r}; got {patterns!r}"
+    )
+
+
+def test_skill_contracts_yaml_includes_prepare_issue(skills):
+    """prepare-issue must be registered with its ---prepare-issue-result--- delimiter."""
+    _assert_skill_has_patterns(skills, "prepare-issue", "---prepare-issue-result---")
+
+
+def test_skill_contracts_yaml_includes_enrich_issues(skills):
+    """enrich-issues must be registered with its ---enrich-issues-result--- delimiter."""
+    _assert_skill_has_patterns(skills, "enrich-issues", "---enrich-issues-result---")
+
+
+def test_skill_contracts_yaml_includes_report_bug(skills):
+    """report-bug must be registered with its ---bug-fingerprint--- delimiter."""
+    _assert_skill_has_patterns(skills, "report-bug", "---bug-fingerprint---")
+
+
+def test_skill_contracts_yaml_includes_collapse_issues(skills):
+    """collapse-issues must be registered with its ---collapse-issues-result--- delimiter."""
+    _assert_skill_has_patterns(skills, "collapse-issues", "---collapse-issues-result---")
+
+
+def test_skill_contracts_yaml_includes_issue_splitter(skills):
+    """issue-splitter must be registered with its ---issue-splitter-result--- delimiter."""
+    _assert_skill_has_patterns(skills, "issue-splitter", "---issue-splitter-result---")
+
+
+def test_skill_contracts_yaml_includes_process_issues(skills):
+    """process-issues must be registered with its ---process-issues-result--- delimiter."""
+    _assert_skill_has_patterns(skills, "process-issues", "---process-issues-result---")
+
+
+def test_every_pattern_example_matches_its_patterns(skills):
+    """For every skill with expected_output_patterns and pattern_examples,
+    every pattern must re.search-match at least one example.
+
+    Permanent architectural guard: pattern/SKILL.md divergence fails CI before production.
+    """
+    import re
+
+    failures = []
+    for skill_name, contract in skills.items():
+        patterns = contract.get("expected_output_patterns", [])
+        examples = contract.get("pattern_examples", [])
+        if not patterns or not examples:
+            continue
+        for pattern in patterns:
+            if not any(re.search(pattern, ex) for ex in examples):
+                failures.append(
+                    f"Skill '{skill_name}': pattern {pattern!r} "
+                    f"matches none of the examples {examples!r}"
+                )
+    assert not failures, "Contract patterns do not match their declared examples:\n" + "\n".join(
+        failures
+    )
+
+
+def test_every_skill_with_patterns_has_examples(skills):
+    """Every skill with expected_output_patterns must also declare pattern_examples.
+
+    Prevents adding patterns without verifiable examples.
+    """
+    missing = [
+        skill_name
+        for skill_name, contract in skills.items()
+        if contract.get("expected_output_patterns") and not contract.get("pattern_examples")
+    ]
+    assert not missing, (
+        "These skills have expected_output_patterns but no pattern_examples:\n"
+        + "\n".join(f"  - {s}" for s in sorted(missing))
+        + "\nAdd pattern_examples to skill_contracts.yaml."
+    )

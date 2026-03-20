@@ -1,4 +1,4 @@
-"""PreToolUse hook scripts for AutoSkillit."""
+"""Hook scripts (PreToolUse and PostToolUse) for AutoSkillit."""
 
 from autoskillit.hook_registry import HOOK_REGISTRY, HookDef, generate_hooks_json
 

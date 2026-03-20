@@ -12,12 +12,13 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled
+from autoskillit.server.helpers import _notify, _require_enabled, track_response_size
 
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
+@track_response_size("clone_repo")
 async def clone_repo(
     source_dir: str,
     run_name: str,
@@ -103,7 +104,8 @@ async def clone_repo(
     return json.dumps(result)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
+@track_response_size("remove_clone")
 async def remove_clone(
     clone_path: str,
     keep: str = "false",
@@ -152,7 +154,8 @@ async def remove_clone(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"automation", "kitchen"})
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@track_response_size("push_to_remote")
 async def push_to_remote(
     clone_path: str,
     branch: str,
@@ -177,7 +180,7 @@ async def push_to_remote(
 
     Args:
         clone_path: Absolute path to the clone directory to push from.
-        branch: Branch name to push (e.g. "main").
+        branch: Branch name to push (e.g. "integration").
         source_dir: Source repo path (read-only URL lookup when remote_url is empty).
         remote_url: Pre-resolved upstream remote URL. When provided, source_dir is skipped.
         step_name: Optional YAML step key for wall-clock timing accumulation.
@@ -216,7 +219,13 @@ async def push_to_remote(
     _start = time.monotonic()
     try:
         result = await asyncio.to_thread(
-            lambda: clone_mgr.push_to_remote(clone_path, source_dir, branch, remote_url=remote_url)
+            lambda: clone_mgr.push_to_remote(
+                clone_path,
+                source_dir,
+                branch,
+                remote_url=remote_url,
+                protected_branches=tool_ctx.config.safety.protected_branches,
+            )
         )
 
         if not result.get("success"):
@@ -232,6 +241,7 @@ async def push_to_remote(
             )
             return json.dumps(
                 {
+                    "success": False,
                     "error": "push failed",
                     "stderr": result.get("stderr", ""),
                     "error_type": result.get("error_type", ""),

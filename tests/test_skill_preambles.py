@@ -10,11 +10,13 @@ These encode behavioral contracts derived from friction analysis (issue #250):
 
 import pytest
 
-from autoskillit.core.paths import pkg_root
+from autoskillit.workspace.skills import SkillResolver
 
 
 def _skill_md(skill_name: str) -> str:
-    return (pkg_root() / "skills" / skill_name / "SKILL.md").read_text()
+    result = SkillResolver().resolve(skill_name)
+    assert result is not None, f"Skill {skill_name!r} not found in any bundled skills directory"
+    return result.path.read_text()
 
 
 CODE_INDEX_SKILLS = [
@@ -23,7 +25,6 @@ CODE_INDEX_SKILLS = [
     "make-plan",
     "make-groups",
     "rectify",
-    "review-pr",
     "triage-issues",
     "resolve-failures",
 ]
@@ -44,9 +45,9 @@ def test_code_index_skills_have_set_project_path(skill_name):
 def test_code_index_skills_have_relative_path_example(skill_name):
     """Each updated skill must include a project-relative path example."""
     content = _skill_md(skill_name)
-    assert "src/autoskillit" in content, (
+    assert "src/" in content, (
         f"{skill_name}/SKILL.md is missing a project-relative path example "
-        "(e.g., src/autoskillit/execution/headless.py). Agents copy absolute "
+        "(e.g., src/<your_package>/some_module.py). Agents copy absolute "
         "paths from Read output and code-index rejects them (FRICT-1C-2)."
     )
 

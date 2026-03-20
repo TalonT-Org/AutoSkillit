@@ -183,6 +183,7 @@ class TestCLIDoctor:
             "hook_health",
             "hook_registration",
             "script_version_health",
+            "gitignore_completeness",
         }
         assert expected <= check_names
 
@@ -661,3 +662,39 @@ def test_doctor_detects_plugin_registration(monkeypatch: pytest.MonkeyPatch) -> 
         )
     finally:
         tmpf.unlink(missing_ok=True)
+
+
+def test_doctor_warns_on_missing_gitignore_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Doctor must WARN when .autoskillit/.gitignore is missing entries."""
+    autoskillit_dir = tmp_path / ".autoskillit"
+    autoskillit_dir.mkdir()
+    (autoskillit_dir / ".gitignore").write_text("temp/\n")
+    (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
+
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.cli._doctor import _check_gitignore_completeness
+    from autoskillit.core import Severity
+
+    result = _check_gitignore_completeness(tmp_path)
+    assert result.severity == Severity.WARNING
+    assert ".secrets.yaml" in result.message
+
+
+def test_doctor_gitignore_ok_when_all_covered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Doctor must report OK when all .autoskillit/ files are covered."""
+    autoskillit_dir = tmp_path / ".autoskillit"
+    autoskillit_dir.mkdir()
+    (autoskillit_dir / ".gitignore").write_text("temp/\n.secrets.yaml\nsync_manifest.json\n")
+    (autoskillit_dir / "temp").mkdir()
+    (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
+
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.cli._doctor import _check_gitignore_completeness
+    from autoskillit.core import Severity
+
+    result = _check_gitignore_completeness(tmp_path)
+    assert result.severity == Severity.OK

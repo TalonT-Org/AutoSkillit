@@ -4,7 +4,7 @@
 
 Give it a task, get back a tested PR.
 
-<!-- demo recording here (owner will add) -->
+https://github.com/user-attachments/assets/REPLACE_WITH_VIDEO_UUID
 
 ## Prerequisites
 

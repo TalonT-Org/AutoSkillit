@@ -1398,9 +1398,9 @@ def test_initialize_applies_subset_disables(monkeypatch):
 
             _initialize(ctx)
 
-    disable_calls = [str(c) for c in mock_mcp.disable.call_args_list]
-    assert any("github" in c for c in disable_calls)
-    assert any("ci" in c for c in disable_calls)
+    disabled_tag_sets = [c.kwargs.get("tags", set()) for c in mock_mcp.disable.call_args_list]
+    assert any("github" in tags for tags in disabled_tag_sets)
+    assert any("ci" in tags for tags in disabled_tag_sets)
 
 
 # T-VIS-002

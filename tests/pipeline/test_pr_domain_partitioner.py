@@ -12,11 +12,13 @@ def test_server_files_assigned_to_server_domain():
 def test_execution_file_assigned_to_pipeline_execution_domain():
     result = partition_files_by_domain(["src/autoskillit/execution/headless.py"])
     assert "Pipeline/Execution" in result
+    assert "src/autoskillit/execution/headless.py" in result["Pipeline/Execution"]
 
 
 def test_pipeline_file_assigned_to_pipeline_execution_domain():
     result = partition_files_by_domain(["src/autoskillit/pipeline/pr_gates.py"])
     assert "Pipeline/Execution" in result
+    assert "src/autoskillit/pipeline/pr_gates.py" in result["Pipeline/Execution"]
 
 
 def test_recipe_file_assigned_to_recipe_domain():

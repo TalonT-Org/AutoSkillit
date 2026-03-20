@@ -562,20 +562,18 @@ def test_all_tools_importable_from_split_modules() -> None:
     )
     from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
 
-    assert all(
-        callable(f)
-        for f in [
-            fetch_github_issue,
-            get_issue_title,
-            report_bug,
-            prepare_issue,
-            enrich_issues,
-            claim_issue,
-            release_issue,
-            get_pr_reviews,
-            bulk_close_issues,
-        ]
-    )
+    for name, fn in [
+        ("fetch_github_issue", fetch_github_issue),
+        ("get_issue_title", get_issue_title),
+        ("report_bug", report_bug),
+        ("prepare_issue", prepare_issue),
+        ("enrich_issues", enrich_issues),
+        ("claim_issue", claim_issue),
+        ("release_issue", release_issue),
+        ("get_pr_reviews", get_pr_reviews),
+        ("bulk_close_issues", bulk_close_issues),
+    ]:
+        assert callable(fn), f"{name} is not callable"
 
 
 def test_git_operations_moved_to_server_package() -> None:

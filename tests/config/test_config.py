@@ -731,10 +731,13 @@ class TestSkillsConfig:
         assert "open-pr" in cfg.skills.tier3
 
     def test_skills_config_exported_from_config_package(self) -> None:
-        """SkillsConfig is importable from autoskillit.config."""
+        """SkillsConfig is importable from autoskillit.config and has expected fields."""
         from autoskillit.config import SkillsConfig
 
-        assert SkillsConfig is not None
+        cfg = SkillsConfig()
+        assert hasattr(cfg, "tier1")
+        assert hasattr(cfg, "tier2")
+        assert hasattr(cfg, "tier3")
 
 
 class TestSubsetsConfig:
@@ -852,4 +855,6 @@ class TestSubsetsConfig:
     def test_subsets_config_importable_from_config_package(self) -> None:
         from autoskillit.config import SubsetsConfig
 
-        assert SubsetsConfig is not None
+        cfg = SubsetsConfig()
+        assert hasattr(cfg, "disabled")
+        assert hasattr(cfg, "custom_tags")

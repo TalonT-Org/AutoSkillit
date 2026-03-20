@@ -217,7 +217,7 @@ src/autoskillit/
 │   ├── __init__.py          #   Re-exports main entry point
 │   ├── _ansi.py             #   Terminal color utilities (supports_color, NO_COLOR/TERM=dumb)
 │   ├── _cook.py             #   cook command: ephemeral skill session launcher (claude --add-dir)
-│   ├── _doctor.py           #   Doctor command -- 8 project setup checks
+│   ├── _doctor.py           #   Doctor command -- 9 project setup checks
 │   ├── _hooks.py            #   Unified PreToolUse hook registration helpers
 │   ├── _init_helpers.py     #   Init command helpers: interactive prompts and workspace marker
 │   ├── _marketplace.py      #   Plugin install/upgrade marketplace operations

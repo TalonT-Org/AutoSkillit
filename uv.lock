@@ -114,7 +114,7 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.5.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.0" },
-    { name = "structlog", specifier = ">=25.0" },
+    { name = "structlog", specifier = ">=25.0,<26.0" },
 ]
 provides-extras = ["dev"]
 

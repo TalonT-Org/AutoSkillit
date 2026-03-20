@@ -43,6 +43,24 @@ class TestGetLogger:
             f"Calling .bind() on the proxy eagerly resolves it — use _initial_values instead."
         )
 
+    def test_structlog_initial_values_attribute_exists(self):
+        """BoundLoggerLazyProxy must expose _initial_values dict.
+
+        get_logger() mutates proxy._initial_values to inject the logger name
+        without calling .bind() (which resolves the proxy and corrupts MCP
+        stdout). If structlog renames this attribute, the assignment silently
+        creates a disconnected attribute and log records lose the logger field.
+        """
+        from structlog._config import BoundLoggerLazyProxy
+
+        proxy = BoundLoggerLazyProxy(None)
+        assert hasattr(proxy, "_initial_values"), (
+            "structlog.BoundLoggerLazyProxy no longer has _initial_values — "
+            "update get_logger() in core/logging.py"
+        )
+        proxy._initial_values["test_key"] = "test_val"
+        assert proxy._initial_values["test_key"] == "test_val"
+
     def test_get_logger_with_name_preserves_logger_field(self):
         """get_logger(__name__) must include logger=name in emitted events."""
         from autoskillit.core.logging import get_logger

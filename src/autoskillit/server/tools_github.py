@@ -115,10 +115,6 @@ async def get_issue_title(issue_url: str) -> str:
     Use this tool when you need a descriptive branch prefix from an issue title
     without fetching the full issue content.
 
-    This tool is always available (not gated by open_kitchen).
-    This tool sends no MCP progress notifications by design (ungated tools are
-    notification-free — see CLAUDE.md).
-
     Args:
         issue_url: Full GitHub issue URL (https://github.com/owner/repo/issues/42)
                    or shorthand (owner/repo#42).

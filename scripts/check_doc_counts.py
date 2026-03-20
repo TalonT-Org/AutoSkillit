@@ -44,7 +44,7 @@ def count_tools() -> tuple[int, int]:
     - gated_count = GATED_TOOLS + HEADLESS_TOOLS (all kitchen-tagged tools)
     - ungated_count = FREE_RANGE_TOOLS (always-visible tools)
     """
-    content = TYPES_FILE.read_text()
+    content = TYPES_FILE.read_text(encoding="utf-8")
 
     # Count quoted strings in GATED_TOOLS frozenset (kitchen-only tools)
     gated_match = re.search(
@@ -117,7 +117,7 @@ def scan_docs() -> list[str]:
 
     for doc_file in sorted(doc_files):
         rel = doc_file.relative_to(PROJECT_ROOT)
-        for lineno, line in enumerate(doc_file.read_text().splitlines(), 1):
+        for lineno, line in enumerate(doc_file.read_text(encoding="utf-8").splitlines(), 1):
             # Skip self-correcting references
             if SELF_CORRECTING.search(line):
                 continue

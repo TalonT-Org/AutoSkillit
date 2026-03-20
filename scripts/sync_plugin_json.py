@@ -20,8 +20,8 @@ PLUGIN_JSON = PROJECT_ROOT / "src" / "autoskillit" / ".claude-plugin" / "plugin.
 
 
 def main() -> int:
-    version = tomllib.loads(PYPROJECT.read_text())["project"]["version"]
-    data = json.loads(PLUGIN_JSON.read_text())
+    version = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]["version"]
+    data = json.loads(PLUGIN_JSON.read_text(encoding="utf-8"))
     if data.get("version") == version:
         print(f"plugin.json already at version {version}")
         return 0

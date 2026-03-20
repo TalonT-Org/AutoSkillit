@@ -2,9 +2,9 @@
   <img src="assets/banner.gif" alt="AutoSkillit — Skill-driven automation for agentic workflows" width="830">
 </p>
 
-Give it a task, get back a tested PR.
+Automate your processes with skills, automate your skills with Autoskillit.
 
-<!-- demo recording here (owner will add) -->
+https://github.com/user-attachments/assets/d1ca806c-e511-499d-8e5f-25c3891a029d
 
 ## Prerequisites
 

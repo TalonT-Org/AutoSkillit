@@ -267,10 +267,10 @@ class DefaultMergeQueueWatcher:
         if enabled_at_raw:
             try:
                 enabled_at = datetime.fromisoformat(enabled_at_raw.replace("Z", "+00:00"))
-            except ValueError:
+            except ValueError as e:
                 raise RuntimeError(
                     f"Unexpected autoMergeRequest.enabledAt format: {enabled_at_raw!r}"
-                )
+                ) from e
 
         queue_entry = next((n for n in nodes if n["pullRequest"]["number"] == pr_number), None)
         return {
@@ -307,9 +307,9 @@ class DefaultMergeQueueWatcher:
             )
             await self._toggle_auto_merge(state["pr_node_id"])
             return {"success": True, "pr_number": pr_number}
-        except Exception:
+        except Exception as exc:
             _log.warning("toggle_auto_merge failed", exc_info=True)
-            return {"success": False, "error": "toggle failed — see logs"}
+            return {"success": False, "error": f"toggle failed: {exc}"}
 
     async def _toggle_auto_merge(self, pr_node_id: str) -> None:
         """Disable then re-enable auto-merge via GraphQL mutations."""

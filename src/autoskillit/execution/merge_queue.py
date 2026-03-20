@@ -186,7 +186,7 @@ class DefaultMergeQueueWatcher:
             is_stall_candidate = enabled_at is not None and merge_status in {"CLEAN", "HAS_HOOKS"}
 
             if is_stall_candidate:
-                stall_duration = (now - enabled_at).total_seconds()
+                stall_duration = max(0.0, (now - enabled_at).total_seconds())
 
                 if stall_duration < stall_grace_period:
                     # Within grace period — wait without intervening

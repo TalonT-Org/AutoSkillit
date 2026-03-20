@@ -1,7 +1,7 @@
-"""Core skill name resolution helpers.
+"""Core skill name resolution and text-processing helpers.
 
-Zero autoskillit imports outside this sub-package. Provides extract_skill_name
-and resolve_target_skill.
+Zero autoskillit imports outside this sub-package. Provides extract_skill_name,
+resolve_target_skill, and truncate_text.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from ._type_protocols import TargetSkillResolver
 __all__ = [
     "extract_skill_name",
     "resolve_target_skill",
+    "truncate_text",
 ]
 
 _SKILL_CMD_RE = re.compile(r"^/(?:autoskillit:)?([\w-]+)")
@@ -63,3 +64,10 @@ def resolve_target_skill(
         raise RuntimeError(f"regex failed after extract_skill_name succeeded: {stripped!r}")
     remainder = stripped[m.end() :]
     return correct_prefix + remainder, name
+
+
+def truncate_text(text: str, max_len: int = 5000) -> str:
+    """Truncate text to max_len, appending a count of truncated chars."""
+    if len(text) <= max_len:
+        return text
+    return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]

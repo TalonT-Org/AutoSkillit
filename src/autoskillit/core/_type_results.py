@@ -22,7 +22,6 @@ __all__ = [
     "ValidatedAddDir",
     "WriteBehaviorSpec",
     "FailureRecord",
-    "truncate_text",
     "SkillResult",
     "CleanupResult",
     "CIRunScope",
@@ -115,13 +114,6 @@ class FailureRecord:
 
     def to_dict(self) -> dict:  # type: ignore[type-arg]
         return asdict(self)
-
-
-def truncate_text(text: str, max_len: int = 5000) -> str:
-    """Truncate text to max_len, appending a count of truncated chars."""
-    if len(text) <= max_len:
-        return text
-    return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
 
 
 @dataclass

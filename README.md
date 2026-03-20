@@ -4,7 +4,7 @@
 
 Automate your processes with skills, automate your skills with Autoskillit.
 
-https://github.com/user-attachments/assets/d1ca806c-e511-499d-8e5f-25c3891a029d
+https://github.com/user-attachments/assets/6971e35f-4feb-4fad-b0ea-77e98d5949d6
 
 ## Prerequisites
 

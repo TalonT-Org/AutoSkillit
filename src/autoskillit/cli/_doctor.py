@@ -108,7 +108,7 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
 
 def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
     """Check that every file in .autoskillit/ is gitignored or in the committed allowlist."""
-    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES, _COMMITTED_BY_DESIGN
+    from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES, _COMMITTED_BY_DESIGN
 
     autoskillit_dir = project_dir / ".autoskillit"
     gitignore_path = autoskillit_dir / ".gitignore"

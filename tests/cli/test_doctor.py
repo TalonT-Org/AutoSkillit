@@ -80,6 +80,7 @@ class TestCLIDoctor:
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
             "test_check:\n  command: ['pytest']\n"
         )
+        (tmp_path / ".autoskillit" / ".gitignore").write_text("temp/\n.secrets.yaml\n")
         # Register hooks so hook_registration check passes
         # Use explicit path (tmp_path already monkeypatched as Path.home())
         from autoskillit.cli._hooks import (

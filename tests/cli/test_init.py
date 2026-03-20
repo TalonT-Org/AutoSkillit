@@ -262,7 +262,9 @@ class TestEnsureProjectTemp:
 
         ensure_project_temp(tmp_path)
         gitignore = tmp_path / ".autoskillit" / ".gitignore"
-        assert gitignore.read_text() == "temp/\n"
+        content = gitignore.read_text()
+        assert "temp/" in content
+        assert ".secrets.yaml" in content
 
     def test_ensure_project_temp_is_idempotent(self, tmp_path):
         from autoskillit.core.io import ensure_project_temp
@@ -270,6 +272,19 @@ class TestEnsureProjectTemp:
         ensure_project_temp(tmp_path)
         ensure_project_temp(tmp_path)  # second call must not raise
         assert (tmp_path / ".autoskillit" / "temp").is_dir()
+
+    def test_ensure_project_temp_backfills_secrets_into_existing_gitignore(self, tmp_path):
+        from autoskillit.core.io import ensure_project_temp
+
+        # Simulate a pre-fix .gitignore with only temp/
+        autoskillit_dir = tmp_path / ".autoskillit"
+        autoskillit_dir.mkdir()
+        (autoskillit_dir / ".gitignore").write_text("temp/\n")
+
+        ensure_project_temp(tmp_path)
+        content = (autoskillit_dir / ".gitignore").read_text()
+        assert ".secrets.yaml" in content
+        assert "temp/" in content
 
 
 class TestServeStartupLog:

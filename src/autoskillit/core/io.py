@@ -39,6 +39,9 @@ def atomic_write(path: Path, content: str) -> None:
         raise
 
 
+_AUTOSKILLIT_GITIGNORE_ENTRIES = ["temp/", ".secrets.yaml"]
+
+
 def ensure_project_temp(project_dir: Path) -> Path:
     """Create .autoskillit/temp/ with a .gitignore; idempotent. Returns the path."""
     autoskillit_dir = project_dir / ".autoskillit"
@@ -46,7 +49,12 @@ def ensure_project_temp(project_dir: Path) -> Path:
     temp_dir.mkdir(parents=True, exist_ok=True)
     gitignore_path = autoskillit_dir / ".gitignore"
     if not gitignore_path.exists():
-        atomic_write(gitignore_path, "temp/\n")
+        atomic_write(gitignore_path, "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n")
+    else:
+        existing = gitignore_path.read_text(encoding="utf-8")
+        missing = [e for e in _AUTOSKILLIT_GITIGNORE_ENTRIES if e not in existing]
+        if missing:
+            atomic_write(gitignore_path, existing.rstrip("\n") + "\n" + "\n".join(missing) + "\n")
     return temp_dir
 
 

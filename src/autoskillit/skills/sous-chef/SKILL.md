@@ -137,17 +137,21 @@ headless session):
 ```bash
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) &&
 OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
-BRANCH="<base_branch>" &&
+BRANCH="<base_branch>" &&    # substitute the PR's target branch (e.g. "main", "integration")
 gh api graphql -f query="query {
   repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
     mergeQueue(branch:\"$BRANCH\") { id }
   }
-}" | jq -r 'if .data.repository.mergeQueue != null then "true" else "false" end'
+}" | jq -r 'if .data.repository.mergeQueue != null then "true" else "false" end' || echo false
 ```
 
-Capture the result as `queue_available`. Run this **once per orchestration run**, not
-per-PR. The `implementation` recipe performs this detection automatically via the
-`check_merge_queue` step — **do not repeat it manually when following a recipe**.
+Capture the result as `queue_available`. If `gh api graphql` fails (auth error, network
+error), the `|| echo false` fallback ensures `queue_available` defaults to `"false"`,
+routing to the safe sequential (non-queue) path rather than leaving the variable unset.
+
+Run this **once per orchestration run**, not per-PR. The `implementation` recipe performs
+this detection automatically via the `check_merge_queue` step — **do not repeat it
+manually when following a recipe**.
 
 ### 2. Route based on queue availability
 

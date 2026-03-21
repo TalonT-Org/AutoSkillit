@@ -809,6 +809,21 @@ steps:
       (LOW confidence conflicts) or tool failure, routes to release_issue_failure.
       retries: 1 bounds the loop; after 2 total attempts, escalates.
 
+  release_issue_timeout:
+    description: "Release in-progress claim after direct merge timeout without applying staged label"
+    tool: release_issue
+    optional: true
+    skip_when_false: inputs.issue_url
+    with:
+      issue_url: ${{ inputs.issue_url }}
+    on_success: confirm_cleanup
+    on_failure: confirm_cleanup
+    note: >
+      Called when wait_for_direct_merge times out. Releases the in-progress
+      claim without passing target_branch, so the staged label is not applied. The
+      merge is unconfirmed; a human must verify PR state independently.
+      Routes to confirm_cleanup so the pipeline completes cleanly.
+
   release_issue_success:
     description: "Transition issue from in-progress to staged after successful pipeline completion"
     tool: release_issue

@@ -182,6 +182,27 @@ def parse_stdout_json(capsys):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_home(monkeypatch, tmp_path_factory):
+    """Redirect Path.home() to a per-test temp directory.
+
+    Prevents the developer's real ~/.autoskillit/config.yaml from being
+    loaded during tests. Without this, tests that call load_config() without
+    mocking Path.home() would fail if the real user config contains
+    secrets-only keys (e.g. github.token) that are now rejected by strict
+    schema validation.
+
+    Uses tmp_path_factory (not tmp_path) so the isolated home is created
+    outside the test's own tmp_path, avoiding pollution in tests that check
+    tmp_path is empty or operate on its contents directly.
+
+    Tests that need a specific home structure override this by calling:
+        monkeypatch.setattr("pathlib.Path.home", lambda: my_home)
+    """
+    isolated_home = tmp_path_factory.mktemp("isolated-home")
+    monkeypatch.setattr("pathlib.Path.home", lambda: isolated_home)
+
+
+@pytest.fixture(autouse=True)
 def _clear_headless_env(monkeypatch):
     """Ensure AUTOSKILLIT_HEADLESS is unset at the start of every test.
 

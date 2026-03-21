@@ -436,7 +436,7 @@ def validate_layer_keys(
         if top_key not in _CONFIG_SCHEMA:
             known = sorted(_CONFIG_SCHEMA.keys())
             close = difflib.get_close_matches(top_key, known, n=1, cutoff=0.6)
-            hint = f" Did you mean '{close[0]}'?" if close else ""
+            hint = f" did you mean '{close[0]}'?" if close else ""
             raise ConfigSchemaError(
                 f"Invalid configuration in {str(layer_path)!r}: "
                 f"unrecognized key '{top_key}'.{hint}"
@@ -456,7 +456,7 @@ def validate_layer_keys(
                 if sub_key not in _CONFIG_SCHEMA[top_key]:
                     known_sub = sorted(_CONFIG_SCHEMA[top_key])
                     close = difflib.get_close_matches(sub_key, known_sub, n=1, cutoff=0.6)
-                    hint = f" Did you mean '{top_key}.{close[0]}'?" if close else ""
+                    hint = f" did you mean '{top_key}.{close[0]}'?" if close else ""
                     raise ConfigSchemaError(
                         f"Invalid configuration in {str(layer_path)!r}: "
                         f"unrecognized key '{dotted}' in section '{top_key}'.{hint}"

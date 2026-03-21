@@ -303,14 +303,6 @@ class TestSyncConfigRemoval:
 
         assert not hasattr(cfg_mod, "SyncConfig")
 
-    def test_stale_sync_yaml_key_silently_ignored(self, tmp_path):
-        """REQ-SYNC-003: A config.yaml with a 'sync:' key does not raise."""
-        config_file = tmp_path / ".autoskillit" / "config.yaml"
-        config_file.parent.mkdir(parents=True)
-        config_file.write_text("sync:\n  excluded_recipes:\n    - some-recipe\n")
-        cfg = load_config(tmp_path)
-        assert isinstance(cfg, AutomationConfig)
-
 
 class TestRunSkillRetryConfigFields:
     def test_run_skill_retry_config_removed(self):

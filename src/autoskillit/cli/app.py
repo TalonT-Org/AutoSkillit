@@ -154,6 +154,8 @@ def init(
 
         atomic_write(config_path, _generate_config_yaml(cmd_parts))
         _wrote_config = True
+        onboarded_marker = config_dir / ".onboarded"
+        onboarded_marker.unlink(missing_ok=True)
 
     if not _check_secret_scanning(project_dir):
         if _wrote_config:

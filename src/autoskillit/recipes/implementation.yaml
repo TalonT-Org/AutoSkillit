@@ -698,6 +698,8 @@ steps:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "direct_merge_conflict_fix"
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
       - when: "${{ result.escalation_required }} == true"
         route: release_issue_failure

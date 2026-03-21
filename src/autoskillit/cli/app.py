@@ -142,6 +142,9 @@ def init(
     config_dir.mkdir(exist_ok=True)
     config_path = config_dir / "config.yaml"
 
+    if not _check_secret_scanning(project_dir):
+        raise SystemExit(1)
+
     if config_path.exists() and not force:
         print(f"  Config already exists: {config_path}")
         print("  Use --force to overwrite.")
@@ -152,9 +155,6 @@ def init(
             cmd_parts = _prompt_test_command()
 
         atomic_write(config_path, _generate_config_yaml(cmd_parts))
-
-    if not _check_secret_scanning(project_dir):
-        raise SystemExit(1)
 
     _register_all(scope, project_dir)
 

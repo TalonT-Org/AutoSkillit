@@ -401,14 +401,18 @@ def _build_config_schema() -> dict[str, frozenset[str]]:
     """Derive a two-level schema map {section: {valid_field_names}} from AutomationConfig."""
     schema: dict[str, frozenset[str]] = {}
     for f in dataclasses.fields(AutomationConfig):
+        sub_type: type | None = None
         if f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-            sub = f.default_factory()  # type: ignore[call-arg]
-            if dataclasses.is_dataclass(sub):
-                schema[f.name] = frozenset(sf.name for sf in dataclasses.fields(sub))
-            else:
-                schema[f.name] = frozenset()
-        else:
-            schema[f.name] = frozenset()
+            factory = f.default_factory  # type: ignore[assignment]
+            if dataclasses.is_dataclass(factory):
+                sub_type = factory
+        elif f.default is not dataclasses.MISSING and dataclasses.is_dataclass(f.default):
+            sub_type = type(f.default)
+        schema[f.name] = (
+            frozenset(sf.name for sf in dataclasses.fields(sub_type))
+            if sub_type is not None
+            else frozenset()
+        )
     return schema
 
 

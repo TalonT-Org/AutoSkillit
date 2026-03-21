@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
+from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
 from autoskillit.core import Severity
 from autoskillit.hook_registry import HOOK_REGISTRY
 
@@ -144,6 +145,30 @@ def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
             "Add to _AUTOSKILLIT_GITIGNORE_ENTRIES or _COMMITTED_BY_DESIGN.",
         )
     return DoctorResult(Severity.OK, "gitignore_completeness", "All .autoskillit/ files covered.")
+
+
+def _check_secret_scanning_hook(project_dir: Path) -> DoctorResult:
+    """Check that .pre-commit-config.yaml includes a known secret scanning hook."""
+    if _detect_secret_scanner(project_dir):
+        return DoctorResult(
+            Severity.OK,
+            "secret_scanning_hook",
+            "Secret scanning hook detected in .pre-commit-config.yaml.",
+        )
+    pre_commit_path = project_dir / ".pre-commit-config.yaml"
+    if not pre_commit_path.exists():
+        msg = (
+            "No .pre-commit-config.yaml found. AutoSkillit commits code automatically — "
+            "add a secret scanner (gitleaks, detect-secrets, trufflehog, or git-secrets) "
+            "to prevent credential leaks."
+        )
+    else:
+        scanners = ", ".join(sorted(_KNOWN_SCANNERS))
+        msg = (
+            f".pre-commit-config.yaml exists but contains no known secret scanner "
+            f"({scanners}). Add one to prevent credential leaks."
+        )
+    return DoctorResult(Severity.ERROR, "secret_scanning_hook", msg)
 
 
 def run_doctor(*, output_json: bool = False) -> None:
@@ -343,6 +368,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 9: gitignore completeness
     results.append(_check_gitignore_completeness(Path.cwd()))
+
+    # Check 10: Secret scanning hook
+    results.append(_check_secret_scanning_hook(Path.cwd()))
 
     # Output
     if output_json:

@@ -85,6 +85,9 @@ class TestCLIDoctor:
         (tmp_path / ".autoskillit" / ".gitignore").write_text(
             "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n"
         )
+        (tmp_path / ".pre-commit-config.yaml").write_text(
+            "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+        )
         # Register hooks so hook_registration check passes
         # Use explicit path (tmp_path already monkeypatched as Path.home())
         from autoskillit.cli._hooks import (
@@ -189,6 +192,7 @@ class TestCLIDoctor:
             "hook_registration",
             "script_version_health",
             "gitignore_completeness",
+            "secret_scanning_hook",
         }
         assert expected <= check_names
 
@@ -703,3 +707,72 @@ def test_doctor_gitignore_ok_when_all_covered(
 
     result = _check_gitignore_completeness(tmp_path)
     assert result.severity == Severity.OK
+
+
+# SS-DOC-1
+def test_doctor_includes_secret_scanning_hook_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """doctor output includes the secret_scanning_hook check."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cli.doctor(output_json=True)
+    data = json.loads(capsys.readouterr().out)
+    check_names = {r["check"] for r in data["results"]}
+    assert "secret_scanning_hook" in check_names
+
+
+# SS-DOC-2
+def test_doctor_error_when_no_scanner_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """doctor reports ERROR severity for secret_scanning_hook when no scanner found."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    # No .pre-commit-config.yaml
+    cli.doctor(output_json=True)
+    data = json.loads(capsys.readouterr().out)
+    checks = [r for r in data["results"] if r["check"] == "secret_scanning_hook"]
+    assert len(checks) == 1
+    assert checks[0]["severity"] == "error"
+
+
+# SS-DOC-3
+def test_doctor_ok_when_scanner_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """doctor reports OK for secret_scanning_hook when a known scanner is configured."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n  - repo: https://github.com/gitleaks/gitleaks\n"
+        "    hooks:\n      - id: gitleaks\n"
+    )
+    cli.doctor(output_json=True)
+    data = json.loads(capsys.readouterr().out)
+    checks = [r for r in data["results"] if r["check"] == "secret_scanning_hook"]
+    assert len(checks) == 1
+    assert checks[0]["severity"] == "ok"
+
+
+# SS-DOC-4 (unit test for check function directly)
+def test_check_secret_scanning_hook_ok_with_gitleaks(tmp_path: Path) -> None:
+    """_check_secret_scanning_hook returns OK when gitleaks hook is present."""
+    from autoskillit.cli._doctor import _check_secret_scanning_hook
+    from autoskillit.core import Severity
+
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+    )
+    result = _check_secret_scanning_hook(tmp_path)
+    assert result.severity == Severity.OK
+
+
+# SS-DOC-5 (unit test for check function directly)
+def test_check_secret_scanning_hook_error_without_scanner(tmp_path: Path) -> None:
+    """_check_secret_scanning_hook returns ERROR when no .pre-commit-config.yaml."""
+    from autoskillit.cli._doctor import _check_secret_scanning_hook
+    from autoskillit.core import Severity
+
+    result = _check_secret_scanning_hook(tmp_path)
+    assert result.severity == Severity.ERROR

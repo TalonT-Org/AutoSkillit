@@ -142,28 +142,20 @@ class TestLoadConfig:
         cfg = load_config(tmp_path)
         assert cfg.test_check.command == ["task", "test-check"]
 
-    def test_config_yaml_rejects_unrecognized_top_level_key(self, tmp_path):
-        """SCH-1: Unrecognized top-level key in config.yaml raises ConfigSchemaError."""
+    @pytest.mark.parametrize(
+        "yaml_content,match",
+        [
+            ("completely_unknown_section:\n  foo: bar\n", "unrecognized key"),  # SCH-1
+            ("github:\n  invented_field: whatever\n", "unrecognized key"),  # SCH-2
+            ("github:\n  tokn: ghp_abc\n", "did you mean"),  # SCH-3
+        ],
+    )
+    def test_config_yaml_rejects_invalid_keys(self, tmp_path, yaml_content, match):
+        """SCH-1/2/3: Unrecognized or near-miss keys in config.yaml raise ConfigSchemaError."""
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("completely_unknown_section:\n  foo: bar\n")
-        with pytest.raises(ConfigSchemaError, match="unrecognized key"):
-            load_config(tmp_path)
-
-    def test_config_yaml_rejects_unrecognized_sub_key(self, tmp_path):
-        """SCH-2: Unrecognized sub-key in a known section raises ConfigSchemaError."""
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("github:\n  invented_field: whatever\n")
-        with pytest.raises(ConfigSchemaError, match="unrecognized key"):
-            load_config(tmp_path)
-
-    def test_typo_in_config_key_raises_with_hint(self, tmp_path):
-        """SCH-3: A near-miss key like 'github.tokn' raises with a 'did you mean' hint."""
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("github:\n  tokn: ghp_abc\n")
-        with pytest.raises(ConfigSchemaError, match="did you mean"):
+        (config_dir / "config.yaml").write_text(yaml_content)
+        with pytest.raises(ConfigSchemaError, match=match):
             load_config(tmp_path)
 
     def test_user_config_yaml_rejects_unrecognized_key(self, tmp_path, monkeypatch):

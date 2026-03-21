@@ -445,8 +445,8 @@ def validate_layer_keys(
                 f"Invalid configuration in {str(layer_path)!r}: "
                 f"unrecognized key '{top_key}'.{hint}"
             )
-        # Validate sub-keys only when the value is a dict and the section has known fields
-        if isinstance(value, dict) and _CONFIG_SCHEMA[top_key]:
+        # Validate sub-keys for all dict-valued sections; empty frozenset means no valid sub-keys
+        if isinstance(value, dict):
             for sub_key in value:
                 dotted = f"{top_key}.{sub_key}"
                 if dotted in _SECRETS_ONLY_KEYS:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -14,9 +14,7 @@ class SkillInfo:
     name: str
     source: SkillSource
     path: Path
-    categories: frozenset[str] = field(default_factory=frozenset)
-    tailorable: bool = False
-    tailoring_hints: str = ""
+    categories: frozenset[str] = frozenset()
 
 
 def _read_skill_frontmatter(path: Path) -> dict[str, Any]:
@@ -83,15 +81,11 @@ def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Pat
         if isinstance(categories_raw, list)
         else frozenset()
     )
-    tailorable = bool(data.get("tailorable", False))
-    tailoring_hints = str(data.get("tailoring_hints", ""))
     return SkillInfo(
         name=name,
         source=source,
         path=skill_path,
         categories=categories,
-        tailorable=tailorable,
-        tailoring_hints=tailoring_hints,
     )
 
 

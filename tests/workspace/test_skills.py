@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
 import yaml
 
 from autoskillit.core.types import SkillSource
@@ -531,71 +530,3 @@ class TestSkillCategories:
         info = SkillResolver().resolve("investigate")
         assert info is not None
         assert info.categories == frozenset()
-
-
-class TestSkillInfoTailorable:
-    # SK-T1
-    def test_skill_info_tailorable_field_defaults_false(self) -> None:
-        """SkillInfo(name="x", source=..., path=Path("/p")) has tailorable == False."""
-        from autoskillit.workspace.skills import SkillInfo
-
-        info = SkillInfo(name="x", source=SkillSource.BUNDLED, path=Path("/p"))
-        assert info.tailorable is False
-
-    # SK-T2
-    def test_skill_info_tailoring_hints_field_defaults_empty(self) -> None:
-        """SkillInfo(name="x", source=..., path=Path("/p")) has tailoring_hints == ''."""
-        from autoskillit.workspace.skills import SkillInfo
-
-        info = SkillInfo(name="x", source=SkillSource.BUNDLED, path=Path("/p"))
-        assert info.tailoring_hints == ""
-
-    # SK-T3
-    def test_read_skill_frontmatter_tailorable_true(self, tmp_path: Path) -> None:
-        """SKILL.md with tailorable: true in frontmatter → SkillInfo.tailorable == True."""
-        skill_dir = tmp_path / "my-skill"
-        skill_dir.mkdir()
-        skill_md = skill_dir / "SKILL.md"
-        skill_md.write_text("---\ntailorable: true\n---\n# My Skill\n")
-
-        resolver = SkillResolver.__new__(SkillResolver)
-        resolver._dir = tmp_path
-        resolver._extended_dir = Path("/nonexistent")
-        info = resolver.resolve("my-skill")
-        assert info is not None
-        assert info.tailorable is True
-
-    # SK-T4
-    def test_read_skill_frontmatter_tailoring_hints(self, tmp_path: Path) -> None:
-        """SKILL.md with tailoring_hints: 'custom hints' → tailoring_hints == 'custom hints'."""
-        skill_dir = tmp_path / "my-skill"
-        skill_dir.mkdir()
-        skill_md = skill_dir / "SKILL.md"
-        skill_md.write_text("---\ntailoring_hints: 'custom hints'\n---\n# My Skill\n")
-
-        resolver = SkillResolver.__new__(SkillResolver)
-        resolver._dir = tmp_path
-        resolver._extended_dir = Path("/nonexistent")
-        info = resolver.resolve("my-skill")
-        assert info is not None
-        assert info.tailoring_hints == "custom hints"
-
-    # SK-T5
-    def test_scan_directory_populates_tailorable_from_frontmatter(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Temp skill dir with tailorable: true → SkillInfo.tailorable == True via resolver."""
-        skill_dir = tmp_path / "tailorable-skill"
-        skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text("---\ntailorable: true\n---\n# Tailorable\n")
-
-        monkeypatch.setattr("autoskillit.workspace.bundled_skills_dir", lambda: tmp_path)
-        monkeypatch.setattr(
-            "autoskillit.workspace.bundled_skills_extended_dir",
-            lambda: Path("/nonexistent"),
-        )
-
-        resolver = SkillResolver()
-        info = resolver.resolve("tailorable-skill")
-        assert info is not None
-        assert info.tailorable is True

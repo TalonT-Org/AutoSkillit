@@ -497,6 +497,13 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                     "skill_command", ""
                 ):
                     continue
+                # Exempt pipeline-summary summary_path captures: pipeline-summary is a
+                # terminal reporting skill that writes to disk for human use; summary_path
+                # is captured for observability only — no downstream step consumes it.
+                if cap_key == "summary_path" and "pipeline-summary" in step.with_args.get(
+                    "skill_command", ""
+                ):
+                    continue
                 warnings.append(
                     DataFlowWarning(
                         code="DEAD_OUTPUT",

@@ -221,6 +221,7 @@ src/autoskillit/
 │   ├── _hooks.py            #   Unified PreToolUse hook registration helpers
 │   ├── _init_helpers.py     #   Init command helpers: interactive prompts and workspace marker
 │   ├── _marketplace.py      #   Plugin install/upgrade marketplace operations
+│   ├── _onboarding.py       #   First-run detection and guided onboarding menu (is_first_run, run_onboarding_menu)
 │   ├── _prompts.py          #   Orchestrator prompt builder for recipe execution
 │   ├── _workspace.py        #   Workspace clean helpers: age partitioning, display, and confirmation
 │   └── app.py               #   CLI: serve, init, config show, skills, recipes, workspace, doctor

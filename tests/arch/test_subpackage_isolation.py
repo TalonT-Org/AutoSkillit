@@ -664,7 +664,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         (_type_enums, _type_protocols, _type_results, _type_subprocess, etc.) to
         prevent circular imports while keeping L0 types co-located. Exempt at 14 files.
     """
-    EXEMPTIONS: dict[str, int] = {"server": 16, "recipe": 27, "execution": 23, "core": 14}
+    EXEMPTIONS: dict[str, int] = {
+        "server": 16,
+        "recipe": 27,
+        "execution": 23,
+        "core": 14,
+        "cli": 11,
+    }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":

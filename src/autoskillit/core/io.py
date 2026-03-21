@@ -39,7 +39,7 @@ def atomic_write(path: Path, content: str) -> None:
         raise
 
 
-_AUTOSKILLIT_GITIGNORE_ENTRIES = ["temp/", ".secrets.yaml"]
+_AUTOSKILLIT_GITIGNORE_ENTRIES = ["temp/", ".secrets.yaml", ".onboarded"]
 
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(
     {

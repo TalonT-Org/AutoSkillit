@@ -70,7 +70,9 @@ class AuditStore(Protocol):
 
     def record_success(self, skill_command: str) -> None: ...
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
+    def load_from_log_dir(
+        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+    ) -> int: ...
 
 
 @runtime_checkable
@@ -93,7 +95,9 @@ class TokenStore(Protocol):
 
     def clear(self) -> None: ...
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
+    def load_from_log_dir(
+        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+    ) -> int: ...
 
 
 @runtime_checkable
@@ -108,7 +112,9 @@ class TimingStore(Protocol):
 
     def clear(self) -> None: ...
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
+    def load_from_log_dir(
+        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+    ) -> int: ...
 
 
 @runtime_checkable

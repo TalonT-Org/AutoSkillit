@@ -554,3 +554,54 @@ def test_check_secret_scanning_detects_known_scanners(tmp_path: Path) -> None:
         (repo_dir / ".autoskillit" / "config.yaml").write_text("")
         result = _check_secret_scanning(repo_dir)
         assert result is True, f"expected True for hook_id={hook_id!r}"
+
+
+# ON-INIT-1
+def test_gitignore_entries_includes_onboarded() -> None:
+    """_AUTOSKILLIT_GITIGNORE_ENTRIES must contain '.onboarded'."""
+    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES
+
+    assert ".onboarded" in _AUTOSKILLIT_GITIGNORE_ENTRIES
+
+
+# ON-INIT-2
+def test_init_force_resets_onboarded_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Given .autoskillit/.onboarded exists, running init(force=True) deletes the marker."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+    )
+    config_dir = tmp_path / ".autoskillit"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text("test_check:\n  command: [task, test-check]\n")
+    marker = config_dir / ".onboarded"
+    marker.write_text("")
+    assert marker.exists()
+
+    cli.init(test_command="pytest -v", force=True)
+
+    assert not marker.exists()
+
+
+# ON-INIT-3
+def test_init_no_force_preserves_onboarded_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Given .autoskillit/.onboarded exists and config.yaml exists, init(force=False) keeps it."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+    )
+    config_dir = tmp_path / ".autoskillit"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text("test_check:\n  command: [task, test-check]\n")
+    marker = config_dir / ".onboarded"
+    marker.write_text("")
+
+    cli.init(force=False)
+
+    assert marker.exists()

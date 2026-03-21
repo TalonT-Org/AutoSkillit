@@ -79,6 +79,42 @@ def _check_retries_on_worktree_creating_skill(ctx: ValidationContext) -> list[Ru
 
 
 @semantic_rule(
+    name="missing-context-limit-on-worktree",
+    description=(
+        "A step invoking a worktree-creating skill with retries:0 has no on_context_limit "
+        "route. If the session hits a context limit, the worktree partial progress is "
+        "unreachable: the step falls through to on_failure instead of routing to retry_worktree. "
+        "Add on_context_limit pointing to a retry_worktree step to preserve partial progress."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_missing_context_limit_on_worktree(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill = resolve_skill_name(skill_cmd)
+        if not skill or skill not in _WORKTREE_CREATING_SKILLS:
+            continue
+        if step.retries <= 0 and step.on_context_limit is None:
+            findings.append(
+                RuleFinding(
+                    rule="missing-context-limit-on-worktree",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' invokes '{skill}' with retries:0 "
+                        f"but has no on_context_limit route. Partial worktree progress "
+                        f"is unreachable if the session hits a context limit."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
     name="retry-worktree-cwd",
     description="retry-worktree cwd must use a context variable so git runs inside the worktree.",
     severity=Severity.ERROR,

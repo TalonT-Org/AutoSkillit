@@ -31,10 +31,20 @@ responsible for enforcing this regardless of what the plan says.
 
 When `run_skill` returns `needs_retry=true` for **any step**:
 
-- **If the step defines `on_context_limit`** → follow `on_context_limit`.
+- **If `retry_reason: resume` AND the step defines `on_context_limit`** → follow `on_context_limit`.
   The worktree or partial state is on disk; route to the designated recovery step
   (typically `test` or `retry_worktree`) to check whether partial work was sufficient.
-- **If the step has no `on_context_limit`** → fall through to `on_failure` as usual.
+- **If `retry_reason: resume` AND the step has no `on_context_limit`** → fall through to `on_failure`.
+- **If `retry_reason: drain_race` AND the step defines `on_context_limit`** → follow `on_context_limit`.
+  The channel signal confirmed session completion; stdout was not fully flushed before kill.
+  Partial progress is confirmed — treat identically to `resume` for routing purposes.
+- **If `retry_reason: drain_race` AND the step has no `on_context_limit`** → fall through to `on_failure`.
+- **If `retry_reason: empty_output`** → fall through to `on_failure`. The session produced no
+  output; there is no partial state on disk. Do NOT route to `on_context_limit` even if defined.
+- **If `retry_reason: path_contamination`** → fall through to `on_failure`. The session wrote
+  files outside its working directory. This is a CWD boundary violation, not a context limit.
+  Do NOT route to `on_context_limit` even if defined.
+- **If `retry_reason: early_stop` or `zero_writes`** → fall through to `on_failure`.
 
 **For `implement-worktree-no-merge` specifically:**
 - `on_context_limit` routes to `retry_worktree` in standard recipes.
@@ -47,8 +57,9 @@ When a completed worktree implementation needs to be redone (e.g., after a plan 
 - Call `implement-worktree-no-merge` on the revised plan (creates a fresh worktree).
 - Clean up the old worktree explicitly if needed.
 
-Summary: `needs_retry=true` + step has `on_context_limit` → follow `on_context_limit`.
-         `needs_retry=true` + no `on_context_limit` → `on_failure`.
+Summary: `needs_retry=true` + `retry_reason=resume` or `drain_race` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=resume` or `drain_race` + no `on_context_limit` → `on_failure`.
+         `needs_retry=true` + any other `retry_reason` → `on_failure` (no partial progress).
 
 ---
 

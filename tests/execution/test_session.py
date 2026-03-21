@@ -186,7 +186,17 @@ class TestClaudeSessionResult:
                 )
 
     def test_all_retriable_cases_produce_same_retry_reason(self):
-        """Every condition that triggers needs_retry must produce the same retry_reason."""
+        """Phase 1 (ClaudeSessionResult.retry_reason property) always returns RESUME
+        when needs_retry is True.
+
+        This property is only triggered by context/turn limit signals (error_max_turns
+        and context_exhaustion). Both conditions always have partial progress on disk
+        and always return RESUME.
+
+        Note: _compute_retry() can return RetryReason.EMPTY_OUTPUT for NATURAL_EXIT +
+        kill_anomaly cases with no context exhaustion. That is Phase 2 behavior and is
+        not tested here.
+        """
         max_turns_case = ClaudeSessionResult(
             subtype="error_max_turns",
             is_error=False,

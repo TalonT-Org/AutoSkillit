@@ -511,7 +511,7 @@ class TestRunSkillFailurePaths:
         assert result["subtype"] == "empty_output"
         assert result["success"] is False
         assert result["needs_retry"] is True
-        assert result["retry_reason"] == RetryReason.RESUME
+        assert result["retry_reason"] == RetryReason.EMPTY_OUTPUT
         assert result["stderr"] == "session dropped"
 
 

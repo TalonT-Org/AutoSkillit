@@ -255,7 +255,13 @@ class TestComputeRetry:
         assert reason == RetryReason.RESUME
 
     def test_empty_output_exit_zero_is_retriable(self):
-        """Infrastructure failure: session never ran, CLI exited cleanly."""
+        """Infrastructure failure: session never ran, CLI exited cleanly.
+
+        NATURAL_EXIT + rc=0 + empty_output subtype means the session process
+        exited before writing any output — NOT a context exhaustion. The retry
+        reason must be EMPTY_OUTPUT, not RESUME, because no partial progress
+        exists on disk. RESUME is reserved for context/turn limit cases.
+        """
         session = ClaudeSessionResult(
             subtype="empty_output", is_error=True, result="", session_id=""
         )
@@ -263,7 +269,7 @@ class TestComputeRetry:
             session, returncode=0, termination=TerminationReason.NATURAL_EXIT
         )
         assert needs is True
-        assert reason == RetryReason.RESUME
+        assert reason == RetryReason.EMPTY_OUTPUT
 
     def test_empty_output_exit_one_not_retriable(self):
         """Real failure: CLI crashed with empty output."""
@@ -474,12 +480,13 @@ class TestComputeRetrySuccessEmptyResult:
         assert retriable is False
 
     def test_success_empty_result_natural_exit_zero_rc_is_retriable(self) -> None:
-        """success + "" + NATURAL_EXIT + rc=0 must be retriable (stop-delay race).
+        """Transient empty result: session exited cleanly but result field is empty.
 
-        CLAUDE_CODE_EXIT_AFTER_STOP_DELAY causes a timer-based self-exit that produces
-        NATURAL_EXIT with subtype='success' and an empty result field. The CLI writes a
-        valid result envelope header before the timer fires, leaving result=''. This
-        is a kill-race artifact and must retry, not silently succeed-as-failure.
+        NATURAL_EXIT + rc=0 + SUCCESS subtype + empty result covers any case where
+        the Claude process self-exited cleanly without writing output — including
+        CLAUDE_CODE_EXIT_AFTER_STOP_DELAY timer-based exits AND transient API failures.
+        This is NOT a context exhaustion (no jsonl marker, no error markers). The retry
+        reason must be EMPTY_OUTPUT, not RESUME: no partial progress on disk.
         """
         session = ClaudeSessionResult(
             subtype="success",
@@ -493,7 +500,7 @@ class TestComputeRetrySuccessEmptyResult:
             session, returncode=0, termination=TerminationReason.NATURAL_EXIT
         )
         assert retriable is True
-        assert reason == RetryReason.RESUME
+        assert reason == RetryReason.EMPTY_OUTPUT
 
     def test_empty_output_completed_negative_rc_is_retriable(self) -> None:
         """empty_output + COMPLETED + rc=-15 must be retriable.
@@ -513,6 +520,43 @@ class TestComputeRetrySuccessEmptyResult:
         )
         assert retriable is True
         assert reason == RetryReason.RESUME
+
+    def test_context_exhausted_natural_exit_zero_rc_emits_resume(self) -> None:
+        """Context exhaustion on NATURAL_EXIT still emits RESUME.
+
+        When _is_context_exhausted() returns True (jsonl_context_exhausted=True),
+        NATURAL_EXIT + kill_anomaly must still emit RESUME — partial context
+        progress exists on disk and is safe to resume.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="",
+            session_id="",
+            jsonl_context_exhausted=True,
+        )
+        needs, reason = _compute_retry(
+            session, returncode=0, termination=TerminationReason.NATURAL_EXIT
+        )
+        assert needs is True
+        assert reason == RetryReason.RESUME  # context exhausted = partial progress exists
+
+    def test_completed_kill_anomaly_still_emits_resume(self) -> None:
+        """Infrastructure kill (COMPLETED) + kill anomaly → RESUME unchanged.
+
+        COMPLETED termination means infrastructure killed the process after channel
+        confirmation — the session made progress, partial results exist. RESUME
+        is correct here regardless of _is_context_exhausted().
+        """
+        session = ClaudeSessionResult(subtype="success", is_error=False, result="", session_id="")
+        needs, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        assert needs is True
+        assert reason == RetryReason.RESUME  # infrastructure kill — progress existed
 
 
 class TestComputeSuccessCompletionMarker:
@@ -1017,9 +1061,10 @@ class TestEarlyStop:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
             completion_marker="%%ORDER_UP%%",
         )
-        # Empty result triggers kill_anomaly path (RESUME), not EARLY_STOP
+        # Empty result triggers kill_anomaly path (EMPTY_OUTPUT), not EARLY_STOP.
+        # No context exhaustion detected → EMPTY_OUTPUT, not RESUME.
         assert needs_retry is True
-        assert reason == RetryReason.RESUME
+        assert reason == RetryReason.EMPTY_OUTPUT
 
 
 class TestArtifactValidation:
@@ -1367,7 +1412,7 @@ class TestDeadEndGuardContentState:
         assert outcome == SessionOutcome.RETRIABLE, (
             "Empty result with channel confirmation must remain RETRIABLE (drain-race rescue)."
         )
-        assert retry_reason == RetryReason.RESUME
+        assert retry_reason == RetryReason.DRAIN_RACE
 
     def test_compute_outcome_channel_b_missing_marker_is_still_retriable(
         self,
@@ -1391,4 +1436,31 @@ class TestDeadEndGuardContentState:
         assert outcome == SessionOutcome.RETRIABLE, (
             "Missing completion marker with channel confirmation must remain RETRIABLE."
         )
-        assert retry_reason == RetryReason.RESUME
+        assert retry_reason == RetryReason.DRAIN_RACE
+
+    def test_dead_end_guard_channel_confirmed_absent_emits_drain_race(
+        self,
+        make_session: Callable[..., ClaudeSessionResult],
+    ) -> None:
+        """Channel confirmed + content ABSENT → DRAIN_RACE, not RESUME.
+
+        DRAIN_RACE distinguishes "infrastructure confirmed completion, stdout not
+        fully flushed" from "session hit context limit." Both route to on_context_limit
+        because progress was confirmed, but the provenance is now explicit.
+        """
+        session = make_session(
+            subtype="success",
+            is_error=False,
+            result="",  # empty — drain race candidate
+            assistant_messages=[],
+        )
+        outcome, reason = _compute_outcome(
+            session=session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            expected_output_patterns=(),
+        )
+        assert outcome == SessionOutcome.RETRIABLE
+        assert reason == RetryReason.DRAIN_RACE  # not RESUME

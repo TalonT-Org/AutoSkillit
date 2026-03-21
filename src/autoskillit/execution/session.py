@@ -689,14 +689,20 @@ def _compute_retry(
                 )
                 return False, RetryReason.NONE
             if returncode == 0 and _is_kill_anomaly(session):
+                reason = (
+                    RetryReason.RESUME
+                    if session._is_context_exhausted()
+                    else RetryReason.EMPTY_OUTPUT
+                )
                 logger.debug(
                     "compute_retry_result",
                     termination="NATURAL_EXIT",
                     channel=str(channel_confirmation),
                     needs_retry=True,
                     kill_anomaly=True,
+                    context_exhausted=reason == RetryReason.RESUME,
                 )
-                return True, RetryReason.RESUME
+                return True, reason
             # EARLY_STOP: model produced substantive output but stopped before
             # emitting the completion marker (text-then-tool boundary).
             if (
@@ -896,7 +902,7 @@ def _compute_outcome(
                 )
                 if content_state == ContentState.ABSENT:
                     needs_retry = True
-                    retry_reason = RetryReason.RESUME
+                    retry_reason = RetryReason.DRAIN_RACE
                     logger.debug(
                         "dead_end_guard",
                         action="promoted_to_retriable",

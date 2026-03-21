@@ -219,3 +219,54 @@ def test_orchestrator_prompt_multi_issue_ask_only_two_options():
     assert "sequentially (one at a time) or in parallel" in prompt.lower(), (
         "Prompt must instruct orchestrator to ask 'sequential or parallel?'"
     )
+
+
+def test_orchestrator_prompt_gates_context_limit_on_retry_reason_resume():
+    """The orchestrator prompt must gate on_context_limit routing on retry_reason=resume.
+
+    This prevents empty_output, early_stop, and zero_writes retry reasons from
+    being incorrectly routed to on_context_limit.
+    """
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    # Must require retry_reason=resume to route to on_context_limit
+    assert "retry_reason: resume" in prompt, (
+        "Prompt must gate on_context_limit routing on retry_reason: resume"
+    )
+
+
+def test_orchestrator_prompt_empty_output_falls_to_on_failure():
+    """The orchestrator prompt must explicitly route empty_output to on_failure."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    assert "empty_output" in prompt, "Prompt must mention empty_output retry_reason"
+    # empty_output must be described as falling through to on_failure — not on_context_limit
+    empty_output_idx = prompt.index("empty_output")
+    segment = prompt[empty_output_idx : empty_output_idx + 400]
+    assert "on_failure" in segment, (
+        "Prompt must route empty_output to on_failure near the empty_output mention"
+    )
+
+
+def test_orchestrator_prompt_drain_race_routes_to_on_context_limit():
+    """drain_race must be listed alongside resume as an on_context_limit trigger."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    assert "drain_race" in prompt, "Prompt must mention drain_race retry_reason"
+    # drain_race must be associated with on_context_limit routing — not standalone
+    drain_race_idx = prompt.index("drain_race")
+    segment = prompt[drain_race_idx : drain_race_idx + 400]
+    assert "on_context_limit" in segment, (
+        "Prompt must route drain_race to on_context_limit near the drain_race mention"
+    )
+
+
+def test_orchestrator_prompt_path_contamination_falls_to_on_failure():
+    """path_contamination must fall through to on_failure, not on_context_limit."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    assert "path_contamination" in prompt, "Prompt must mention path_contamination retry_reason"

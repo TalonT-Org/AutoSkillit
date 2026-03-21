@@ -846,7 +846,9 @@ class TestGetLogRoot:
 
 
 @pytest.mark.anyio
-async def test_get_token_summary_not_contaminated_by_prior_pipeline(tmp_path, tool_ctx):
+async def test_get_token_summary_not_contaminated_by_prior_pipeline(
+    tmp_path, tool_ctx, monkeypatch
+):
     """
     get_token_summary() must return only the current pipeline's data.
     Entries written by a prior pipeline run must not appear in the summary,
@@ -854,6 +856,7 @@ async def test_get_token_summary_not_contaminated_by_prior_pipeline(tmp_path, to
     """
     from unittest.mock import patch
 
+    from autoskillit.server import _state
     from autoskillit.server._state import _initialize
 
     # tool_ctx fixture sets log_dir to tmp_path/"session_logs" — write sessions there
@@ -888,6 +891,9 @@ async def test_get_token_summary_not_contaminated_by_prior_pipeline(tmp_path, to
     # Simulate server startup with cross-pipeline sessions in the log dir
     with patch("autoskillit.execution.recover_crashed_sessions", return_value=0):
         _initialize(tool_ctx)
+    # Register the _ctx mutation via monkeypatch so teardown is deterministic
+    # rather than relying on coincidental identity with the tool_ctx fixture's patch.
+    monkeypatch.setattr(_state, "_ctx", tool_ctx)
 
     # Now simulate the CURRENT pipeline recording its own step
     tool_ctx.token_log.record(

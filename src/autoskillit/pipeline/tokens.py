@@ -31,6 +31,13 @@ def canonical_step_name(step_name: str) -> str:
 
     Only a trailing hyphen followed by one or more digits is stripped.
     'open-pr' (ends in non-digit) is preserved unchanged.
+
+    Assumption: YAML step keys never end with a hyphen-digit pattern (e.g.
+    'phase-2', 'retry-3'). This contract is enforced by the load_recipe
+    docstring, which prohibits orchestrators from appending disambiguation
+    suffixes to step_name. A step key that coincidentally ends with -N is
+    indistinguishable from an orchestrator-appended suffix and will be
+    collapsed to the base name.
     """
     return re.sub(r"-\d+$", "", step_name) if step_name else step_name
 

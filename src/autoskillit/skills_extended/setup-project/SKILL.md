@@ -260,6 +260,11 @@ Artifacts created:
 After the summary confirmation gate completes (Step 7), emit the following structured
 output tokens as the very last lines of your text output:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 analysis_path = {absolute_path_to_analysis_file}
 config_path = {absolute_path_to_config_file}

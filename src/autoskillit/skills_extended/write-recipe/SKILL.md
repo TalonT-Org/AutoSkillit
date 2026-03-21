@@ -502,6 +502,11 @@ When called directly as `/autoskillit:write-recipe`:
 After telling the user, emit the structured output token as the very last line of your
 text output:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 recipe_path = {absolute_path_to_saved_recipe_file}
 ```

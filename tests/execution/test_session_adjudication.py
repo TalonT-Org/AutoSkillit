@@ -1255,6 +1255,42 @@ class TestCheckExpectedPatterns:
     def test_check_expected_patterns_empty_patterns_always_true(self) -> None:
         assert _check_expected_patterns(result="anything", patterns=[]) is True
 
+    def test_check_expected_patterns_bold_wrapped_token_matches(self) -> None:
+        """Bold-wrapped token name must match after normalization."""
+        result = "**plan_path** = /abs/path/plan.md\n%%ORDER_UP%%"
+        assert _check_expected_patterns(result, ["plan_path\\s*=\\s*/.+"]) is True
+
+    def test_check_expected_patterns_italic_wrapped_token_matches(self) -> None:
+        """Italic-wrapped token name must match after normalization."""
+        result = "*plan_path* = /abs/path/plan.md\n%%ORDER_UP%%"
+        assert _check_expected_patterns(result, ["plan_path\\s*=\\s*/.+"]) is True
+
+    def test_check_expected_patterns_bold_verdict_matches(self) -> None:
+        """Bold-wrapped verdict token must match after normalization."""
+        result = "**verdict** = GO\n%%ORDER_UP%%"
+        assert _check_expected_patterns(result, ["verdict\\s*=\\s*(GO|NO GO)"]) is True
+
+    def test_check_expected_patterns_multiple_bold_tokens_all_match(self) -> None:
+        """Multiple bold-wrapped tokens must all match (AND semantics preserved)."""
+        result = (
+            "**plan_path** = /abs/path/plan.md\n**plan_parts** = /abs/path/plan.md\n%%ORDER_UP%%"
+        )
+        assert (
+            _check_expected_patterns(result, ["plan_path\\s*=\\s*/.+", "plan_parts\\s*=\\s*/.+"])
+            is True
+        )
+
+    def test_check_expected_patterns_bold_relative_path_still_fails(self) -> None:
+        """Bold wrapping on a relative path must still fail — normalization must not
+        mask a genuine contract violation (wrong value type)."""
+        result = "**worktree_path** = ../worktrees/impl\n%%ORDER_UP%%"
+        assert _check_expected_patterns(result, ["worktree_path\\s*=\\s*/.+"]) is False
+
+    def test_check_expected_patterns_bold_absent_value_still_fails(self) -> None:
+        """Bold key with no value must still fail — semantic content must be present."""
+        result = "**plan_path** =\n%%ORDER_UP%%"
+        assert _check_expected_patterns(result, ["plan_path\\s*=\\s*/.+"]) is False
+
 
 class TestComputeSuccessChannelBPatterns:
     """Channel B bypass must not skip expected_output_patterns validation."""
@@ -1464,3 +1500,21 @@ class TestDeadEndGuardContentState:
         )
         assert outcome == SessionOutcome.RETRIABLE
         assert reason == RetryReason.DRAIN_RACE  # not RESUME
+
+    def test_compute_outcome_bold_wrapped_token_is_success_not_violation(
+        self,
+        make_session: Callable[..., ClaudeSessionResult],
+    ) -> None:
+        """A session with bold-wrapped structured output tokens must succeed,
+        not be classified as CONTRACT_VIOLATION and returned as adjudicated_failure."""
+        session = make_session(result="**plan_path** = /abs/path/plan.md\n%%ORDER_UP%%")
+        outcome, reason = _compute_outcome(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            expected_output_patterns=["plan_path\\s*=\\s*/.+"],
+        )
+        assert outcome == SessionOutcome.SUCCEEDED
+        assert reason == RetryReason.NONE

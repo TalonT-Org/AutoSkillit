@@ -34,6 +34,8 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     claude_code_project_dir,
     get_logger,
+    load_yaml,
+    pkg_root,
 )
 from autoskillit.execution.commands import build_full_headless_cmd
 from autoskillit.execution.process import _marker_is_standalone
@@ -175,33 +177,67 @@ def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
     return last
 
 
-_OUTPUT_PATH_TOKENS: frozenset[str] = frozenset(
+# Intentionally excluded: these tokens are handled by dedicated extractors
+# (_WORKTREE_PATH_PATTERN for worktree_path; branch_name is used as a string,
+# not for path-contamination checks).
+_INTENTIONALLY_EXCLUDED_PATH_TOKENS: frozenset[str] = frozenset(
     {
-        "plan_path",
-        "plan_parts",
-        "investigation_path",
-        "diagnosis_path",
-        "report_path",
-        "review_path",
-        "groups_path",
-        "manifest_path",
-        "summary_path",
-        "analysis_path",
-        "remediation_path",
-        "diagram_path",
-        "triage_report",
-        "triage_manifest",
-        "pr_order_file",
-        "analysis_file",
-        "conflict_report_path",
-        "config_path",
-        "recipe_path",
+        "worktree_path",
+        "branch_name",
     }
 )
 
-_OUTPUT_PATH_PATTERN: re.Pattern[str] = re.compile(
-    r"^(" + "|".join(re.escape(t) for t in sorted(_OUTPUT_PATH_TOKENS)) + r")\s*=\s*(.+)$",
-    re.MULTILINE,
+
+def _build_path_token_set() -> frozenset[str]:
+    """Derive the set of file-path output token names from skill_contracts.yaml.
+
+    This replaces the manually-maintained frozenset and ensures new skills added
+    to the contracts file are automatically included in path-contamination checks.
+    Falls back to an empty frozenset if the manifest is unavailable (e.g., in
+    test environments where the package is not installed).
+
+    Filters outputs where type starts with "file_path" (covers both "file_path"
+    and "file_path_list"). The outputs section in skill_contracts.yaml is a list
+    of dicts with "name" and "type" keys — not a mapping.
+
+    Loads the YAML directly via L0 core utilities to avoid an upward L1→L2 import.
+    """
+    try:
+        manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"
+        manifest = load_yaml(manifest_path)
+        if not isinstance(manifest, dict):
+            logger.debug(
+                "skill_contracts.yaml is empty or non-dict; _OUTPUT_PATH_TOKENS will be empty"
+            )
+            return frozenset()
+        result = (
+            frozenset(
+                out["name"]
+                for skill_data in manifest.get("skills", {}).values()
+                for out in skill_data.get("outputs", [])
+                if isinstance(out, dict) and out.get("type", "").startswith("file_path")
+            )
+            - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+        )
+        logger.debug("_OUTPUT_PATH_TOKENS derived from contracts", count=len(result))
+        return result
+    except FileNotFoundError:
+        logger.debug("skill_contracts.yaml not found; _OUTPUT_PATH_TOKENS will be empty")
+        return frozenset()
+    except Exception:
+        logger.warning("Failed to derive _OUTPUT_PATH_TOKENS from contracts YAML", exc_info=True)
+        return frozenset()
+
+
+_OUTPUT_PATH_TOKENS: frozenset[str] = _build_path_token_set()
+
+_OUTPUT_PATH_PATTERN: re.Pattern[str] = (
+    re.compile(
+        r"^(" + "|".join(re.escape(t) for t in sorted(_OUTPUT_PATH_TOKENS)) + r")\s*=\s*(.+)$",
+        re.MULTILINE,
+    )
+    if _OUTPUT_PATH_TOKENS
+    else re.compile(r"(?!)")  # never-matches sentinel when token set is empty
 )
 
 

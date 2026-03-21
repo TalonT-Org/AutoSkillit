@@ -386,6 +386,11 @@ temp/merge-prs/
 After writing all output files and printing the terminal report, emit the following
 structured output tokens as the very last lines of your text output:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 pr_order_file = {absolute_path_to_pr_order_json}
 analysis_file = {absolute_path_to_pr_analysis_plan_md}

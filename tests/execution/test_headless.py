@@ -2135,13 +2135,13 @@ class TestExtractOutputPaths:
 
         msg = (
             "plan_path = /clone/temp/make-plan/plan.md\n"
-            "report_path = /clone/temp/report/report.md\n"
+            "summary_path = /clone/temp/report/summary.md\n"
             "investigation_path = /clone/temp/investigate/inv.md"
         )
         result = _extract_output_paths([msg])
         assert result == {
             "plan_path": "/clone/temp/make-plan/plan.md",
-            "report_path": "/clone/temp/report/report.md",
+            "summary_path": "/clone/temp/report/summary.md",
             "investigation_path": "/clone/temp/investigate/inv.md",
         }
 
@@ -2162,12 +2162,12 @@ class TestExtractOutputPaths:
 
         msgs = [
             "plan_path = /first/path",
-            "report_path = /second/path",
+            "investigation_path = /second/path",
         ]
         result = _extract_output_paths(msgs)
         assert result == {
             "plan_path": "/first/path",
-            "report_path": "/second/path",
+            "investigation_path": "/second/path",
         }
 
     def test_last_occurrence_wins(self):
@@ -2634,6 +2634,76 @@ class TestBuildSkillResultChannelAPatternRecovery:
         assert sr.needs_retry is False
         assert sr.subtype == "adjudicated_failure"
 
+    def test_bold_wrapped_plan_path_returns_success_not_adjudicated_failure(
+        self,
+    ) -> None:
+        """Regression test for issue #462: model emitting **plan_path** = /abs/path
+        must produce success=True, not adjudicated_failure."""
+        result_text = (
+            "The implementation plan has been written.\n\n"
+            "**plan_path** = /abs/path/plan.md\n"
+            "**plan_parts** = /abs/path/plan.md\n"
+            "%%ORDER_UP%%"
+        )
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=_success_session_json(result_text),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["plan_path\\s*=\\s*/.+"],
+        )
+        assert sr.success is True
+        assert sr.subtype != "adjudicated_failure"
+        assert sr.needs_retry is False
+
+    def test_bold_wrapped_tokens_in_assistant_messages_recovery_succeeds(
+        self,
+    ) -> None:
+        """Recovery path: bold-wrapped tokens in assistant_messages must also be found.
+        The pattern_recovery block in _build_skill_result requires channel_confirmation
+        != UNMONITORED to trigger; use CHANNEL_A to activate the recovery path."""
+        token_block = "**plan_path** = /abs/path/plan.md\n**plan_parts** = /abs/path/plan.md"
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": token_block}],
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "The plan is complete. %%ORDER_UP%%",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["plan_path\\s*=\\s*/.+"],
+        )
+        assert sr.success is True
+        assert sr.subtype != "adjudicated_failure"
+        assert sr.needs_retry is False
+
 
 class TestTimedOutSessionPreservesState:
     """TIMED_OUT branch must parse stdout to preserve tool_uses and assistant_messages."""
@@ -2705,3 +2775,74 @@ class TestTimedOutSessionPreservesState:
         sr = _build_skill_result(sub_result)
         assert sr.cli_subtype == "timeout"
         assert sr.write_call_count == 1
+
+
+class TestOutputPathTokensDerivedFromContracts:
+    # Hardcoded fixture — update when skill_contracts.yaml gains new file_path outputs.
+    # Using a fixed set (rather than re-deriving) ensures bugs in the derivation formula
+    # cause test failures rather than silent agreement between production and test code.
+    _EXPECTED_OUTPUT_PATH_TOKENS = frozenset(
+        {
+            "analysis_file",
+            "analysis_path",
+            "config_path",
+            "conflict_report_path",
+            "diagnosis_path",
+            "diagram_path",
+            "group_files",
+            "groups_path",
+            "investigation_path",
+            "manifest_path",
+            "plan_parts",
+            "plan_path",
+            "pr_order_file",
+            "recipe_path",
+            "remediation_path",
+            "review_path",
+            "summary_path",
+            "triage_manifest",
+            "triage_report",
+        }
+    )
+
+    def test_output_path_tokens_contains_all_file_path_contract_outputs(self) -> None:
+        """Every skill output declared with type=file_path or type=file_path_list in
+        skill_contracts.yaml must appear in _OUTPUT_PATH_TOKENS (or be documented as
+        intentionally excluded)."""
+        from autoskillit.execution.headless import (
+            _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
+            _OUTPUT_PATH_TOKENS,
+        )
+        from autoskillit.recipe.contracts import load_bundled_manifest
+
+        manifest = load_bundled_manifest()
+        declared_path_tokens = {
+            out["name"]
+            for skill_data in manifest.get("skills", {}).values()
+            for out in skill_data.get("outputs", [])
+            if isinstance(out, dict) and out.get("type", "").startswith("file_path")
+        }
+        untracked = (
+            declared_path_tokens - _OUTPUT_PATH_TOKENS - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+        )
+        assert not untracked, (
+            f"These path tokens are declared in skill_contracts.yaml but missing from "
+            f"_OUTPUT_PATH_TOKENS or _INTENTIONALLY_EXCLUDED_PATH_TOKENS: {untracked}"
+        )
+
+    def test_output_path_tokens_matches_expected_fixture(self) -> None:
+        """_OUTPUT_PATH_TOKENS must exactly match the known fixture set.
+
+        This guards against bugs in the derivation formula: if _build_path_token_set()
+        is broken, both the production frozenset and a re-derived set would agree, but
+        this hardcoded fixture would not.
+        """
+        from autoskillit.execution.headless import _OUTPUT_PATH_TOKENS
+
+        extra = _OUTPUT_PATH_TOKENS - self._EXPECTED_OUTPUT_PATH_TOKENS
+        missing = self._EXPECTED_OUTPUT_PATH_TOKENS - _OUTPUT_PATH_TOKENS
+        assert _OUTPUT_PATH_TOKENS == self._EXPECTED_OUTPUT_PATH_TOKENS, (
+            f"_OUTPUT_PATH_TOKENS diverged from expected fixture.\n"
+            f"Extra (in production, not in fixture): {extra}\n"
+            f"Missing (in fixture, not in production): {missing}"
+        )

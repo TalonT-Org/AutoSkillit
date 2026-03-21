@@ -421,6 +421,12 @@ After printing the result block, emit the following structured output tokens as 
 very last lines of your text output:
 
 **On successful GitHub auto-merge:**
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 merged = true
 needs_plan = false
@@ -431,6 +437,12 @@ pr_title = {pr_title}
 ```
 
 **On complex / conflict detected:**
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 merged = false
 needs_plan = true
@@ -443,6 +455,12 @@ conflict_report_path = {absolute_path_to_conflict_plan_file}
 ```
 
 **On deletion regression detected:**
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 merged = false
 needs_plan = true
@@ -455,6 +473,12 @@ conflict_report_path = {absolute_path_to_conflict_plan_file}
 ```
 
 **On escalation required:**
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 merged = false
 needs_plan = false

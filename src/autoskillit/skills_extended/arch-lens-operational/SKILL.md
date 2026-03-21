@@ -138,6 +138,11 @@ Write the diagram to: `temp/arch-lens-operational/arch_diag_operational_{YYYY-MM
 
 After writing the diagram file, emit a structured output line:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 diagram_path = {absolute_path_to_diagram_file}
 ```

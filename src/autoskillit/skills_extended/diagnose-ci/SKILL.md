@@ -119,6 +119,11 @@ Save to `temp/diagnose-ci/diagnosis_{timestamp}.md`. (relative to the current wo
 
 Emit these tokens on their own lines at the end of your response:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 diagnosis_path = /absolute/path/to/temp/diagnose-ci/diagnosis_{timestamp}.md
 failure_type = test|lint|build|type_check|env|unknown

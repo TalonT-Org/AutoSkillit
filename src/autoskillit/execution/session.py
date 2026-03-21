@@ -418,6 +418,26 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
     )
 
 
+# Compiled once at module level — no per-call overhead
+_MARKDOWN_TOKEN_RE: re.Pattern[str] = re.compile(r"\*{1,2}(\w[\w_-]*)\*{1,2}(\s*=)", re.MULTILINE)
+
+
+def _strip_markdown_from_tokens(text: str) -> str:
+    """Remove bold/italic markdown decorators from structured output token names.
+
+    Transforms model output like:
+        **plan_path** = /abs/path/plan.md
+    into the canonical form:
+        plan_path = /abs/path/plan.md
+
+    Applied before regex pattern matching to make adjudication tolerant of the
+    model's choice to visually style its output summary. Only `*word*` and
+    `**word**` patterns adjacent to `=` are normalized — decorators elsewhere
+    in the text are left unchanged.
+    """
+    return _MARKDOWN_TOKEN_RE.sub(r"\1\2", text)
+
+
 def _check_expected_patterns(result: str, patterns: Sequence[str]) -> bool:
     """Return True if ALL expected_output_patterns are found in result, or if
     no patterns are configured. This check MUST run on all session outcome paths,
@@ -426,13 +446,17 @@ def _check_expected_patterns(result: str, patterns: Sequence[str]) -> bool:
     AND semantics are intentional: patterns represent content contracts (e.g.,
     block start/end delimiters) that must all be present simultaneously.
 
+    Normalizes bold/italic markdown decorators on token names before matching,
+    so ``**plan_path** = /path`` is treated identically to ``plan_path = /path``.
+
     If any pattern is an invalid regex, returns False rather than raising.
     """
     if not patterns:
         return True
+    normalized = _strip_markdown_from_tokens(result)
     for p in patterns:
         try:
-            if not re.search(p, result):
+            if not re.search(p, normalized):
                 return False
         except re.error:
             logger.warning("invalid_expected_output_pattern", pattern=p)

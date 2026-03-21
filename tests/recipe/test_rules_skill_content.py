@@ -121,3 +121,105 @@ def test_valid_skill_passes_placeholder_rule(tmp_path: Path) -> None:
 
     rule_ids = [f.rule for f in findings]
     assert "undefined-bash-placeholder" not in rule_ids
+
+
+_MOCK_MANIFEST_WITH_PATTERNS = {
+    "skills": {
+        "test-skill": {
+            "expected_output_patterns": ["plan_path\\s*=\\s*/.+"],
+        }
+    }
+}
+
+_RECIPE_CALLING_TEST_SKILL = textwrap.dedent(
+    """\
+    name: test-recipe
+    kitchen_rules:
+      - "Use run_skill only."
+    steps:
+      run_impl:
+        tool: run_skill
+        with:
+          skill_command: "/autoskillit:test-skill"
+        on_success: done
+    """
+)
+
+
+def test_output_section_no_markdown_rule_fires_when_directive_missing(tmp_path: Path) -> None:
+    """Semantic rule must report a finding for a SKILL.md with expected_output_patterns
+    but no no-markdown directive in the output section."""
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # Test Skill
+
+            ## Output
+
+            Save the plan to `temp/`.
+
+            ```
+            plan_path = {absolute_path}
+            ```
+            """
+        )
+    )
+
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_RECIPE_CALLING_TEST_SKILL)
+    recipe = load_recipe(recipe_path)
+
+    with (
+        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+        patch(
+            "autoskillit.recipe.rules_skill_content.load_bundled_manifest",
+            return_value=_MOCK_MANIFEST_WITH_PATTERNS,
+        ),
+    ):
+        findings = run_semantic_rules(recipe)
+
+    rule_ids = [f.rule for f in findings]
+    assert "output-section-no-markdown-directive" in rule_ids
+    matching = [f for f in findings if f.rule == "output-section-no-markdown-directive"]
+    assert len(matching) == 1
+    assert "test-skill" in matching[0].message
+
+
+def test_output_section_no_markdown_rule_passes_when_directive_present(tmp_path: Path) -> None:
+    """No finding when the no-markdown directive is present above the output fence."""
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # Test Skill
+
+            ## Output
+
+            > **IMPORTANT:** Emit the structured output tokens as **literal plain text
+            > with no markdown formatting on the token names**.
+
+            ```
+            plan_path = {absolute_path}
+            ```
+            """
+        )
+    )
+
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_RECIPE_CALLING_TEST_SKILL)
+    recipe = load_recipe(recipe_path)
+
+    with (
+        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+        patch(
+            "autoskillit.recipe.rules_skill_content.load_bundled_manifest",
+            return_value=_MOCK_MANIFEST_WITH_PATTERNS,
+        ),
+    ):
+        findings = run_semantic_rules(recipe)
+
+    rule_ids = [f.rule for f in findings]
+    assert "output-section-no-markdown-directive" not in rule_ids

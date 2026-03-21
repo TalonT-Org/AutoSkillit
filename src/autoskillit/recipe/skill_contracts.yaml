@@ -182,7 +182,9 @@ skills:
     - name: workspace
       type: directory_path
       required: true
-    outputs: []
+    outputs:
+    - name: summary_path
+      type: file_path
   rectify:
     inputs:
     - name: investigation_path

@@ -467,10 +467,11 @@ def test_init_blocks_without_correct_phrase(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    with patch("builtins.input", side_effect=["pytest -v", "nope"]):
+    with patch("builtins.input", side_effect=["nope"]) as mock_input:
         with pytest.raises(SystemExit) as exc_info:
             cli.init()
     assert exc_info.value.code == 1
+    assert mock_input.call_count == 1
 
 
 # SS-INIT-4
@@ -482,9 +483,10 @@ def test_init_proceeds_with_correct_phrase(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     phrase = "I accept the risk of leaking secrets without pre-commit scanning"
-    with patch("builtins.input", side_effect=["pytest -v", phrase, ""]):
+    with patch("builtins.input", side_effect=[phrase, "pytest -v", ""]) as mock_input:
         cli.init()
     assert (tmp_path / ".autoskillit" / "config.yaml").is_file()
+    assert mock_input.call_count == 3
 
 
 # SS-INIT-5
@@ -496,8 +498,9 @@ def test_init_bypass_logged_to_config(tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     phrase = "I accept the risk of leaking secrets without pre-commit scanning"
-    with patch("builtins.input", side_effect=["pytest -v", phrase, ""]):
+    with patch("builtins.input", side_effect=[phrase, "pytest -v", ""]) as mock_input:
         cli.init()
+    assert mock_input.call_count == 3
     config = _yaml.safe_load((tmp_path / ".autoskillit" / "config.yaml").read_text())
     bypass_value = config.get("safety", {}).get("secret_scan_bypass_accepted")
     assert bypass_value is not None, "bypass_accepted timestamp must be persisted"

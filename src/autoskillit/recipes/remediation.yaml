@@ -61,6 +61,9 @@ ingredients:
     description: Enable sprint sub-recipe prefix (triage → sprint selection → per-issue dispatch)
     default: "false"
     hidden: true
+  upfront_claimed:
+    description: "Set to 'true' when process-issues has already claimed this issue upfront. Allows claim_issue defense step to pass through without aborting."
+    default: "false"
 
 steps:
   sprint_entry:
@@ -134,6 +137,7 @@ steps:
     skip_when_false: inputs.issue_url
     with:
       issue_url: ${{ inputs.issue_url }}
+      allow_reentry: ${{ inputs.upfront_claimed }}
     capture:
       claimed: "${{ result.claimed }}"
     on_result:

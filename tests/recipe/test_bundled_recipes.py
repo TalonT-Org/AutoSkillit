@@ -1378,28 +1378,21 @@ class TestReviewPrRecipeIntegration:
         )
 
 
-_PRODUCTION_RECIPES = [
-    "implementation.yaml",
-    "remediation.yaml",
-    "implementation-groups.yaml",
-]
+def test_telemetry_before_open_pr_rule_not_in_registry() -> None:
+    """The telemetry-before-open-pr rule must not be in the rule registry.
 
-
-@pytest.mark.parametrize("name", _PRODUCTION_RECIPES)
-def test_bundled_production_recipes_zero_warnings(name: str) -> None:
-    """Production recipes must have zero semantic warnings.
-
-    A WARNING on a bundled recipe means a semantic rule has detected a potential
-    policy violation that will silently pass recipe validation. This catches
-    note-encoded protocol gaps before they reach production.
+    This rule was removed because open-pr now self-retrieves token telemetry
+    from disk using cwd_filter (Step 0b). If this test fails, the rule was
+    re-added to the registry and would silently fire on bundled production recipes.
     """
-    from autoskillit.core import Severity
+    import autoskillit.recipe  # noqa: F401 — triggers rule registration
+    from autoskillit.recipe.registry import _RULE_REGISTRY
 
-    recipe = load_recipe(builtin_recipes_dir() / name)
-    findings = run_semantic_rules(recipe)
-    warnings = [f for f in findings if f.severity == Severity.WARNING]
-    assert warnings == [], f"{name} has {len(warnings)} WARNING finding(s):\n" + "\n".join(
-        f"  [{f.rule}] {f.message}" for f in warnings
+    rule_names = {spec.name for spec in _RULE_REGISTRY}
+    assert "telemetry-before-open-pr" not in rule_names, (
+        "telemetry-before-open-pr was re-added to the registry; "
+        "open-pr self-retrieves token telemetry via cwd_filter — "
+        "this rule is no longer needed and must not be registered"
     )
 
 

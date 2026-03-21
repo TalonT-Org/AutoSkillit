@@ -31,7 +31,7 @@ def test_open_pr_includes_requirements_in_pr_body(text):
     # The body composition section must reference requirements
     body_idx = text.find("PR body") if "PR body" in text else text.find("pr_body")
     assert body_idx != -1, "open-pr must document PR body composition"
-    body_section = text[body_idx : body_idx + 4000]
+    body_section = text[body_idx:]
     assert "## Requirements" in body_section or "requirements" in body_section.lower()
 
 

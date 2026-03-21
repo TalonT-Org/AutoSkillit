@@ -275,7 +275,7 @@ class TestSTOPDelayPipelineAdjudication:
 
         assert skill_result.success is False
         assert skill_result.needs_retry is True
-        assert skill_result.retry_reason == RetryReason.RESUME
+        assert skill_result.retry_reason == RetryReason.EMPTY_OUTPUT
         assert skill_result.subtype == "empty_result"
         assert skill_result.cli_subtype == "success"
 
@@ -309,7 +309,7 @@ class TestSTOPDelayPipelineAdjudication:
 
         assert skill_result.success is False
         assert skill_result.needs_retry is True
-        assert skill_result.retry_reason == RetryReason.RESUME
+        assert skill_result.retry_reason == RetryReason.EMPTY_OUTPUT
 
     @pytest.mark.anyio
     async def test_natural_exit_truncated_json_produces_retriable_skill_result(self, tmp_path):
@@ -342,7 +342,7 @@ class TestSTOPDelayPipelineAdjudication:
 
         assert skill_result.success is False
         assert skill_result.needs_retry is True
-        assert skill_result.retry_reason == RetryReason.RESUME
+        assert skill_result.retry_reason == RetryReason.EMPTY_OUTPUT
 
 
 class TestStaleRecoveryPipelineAdjudication:

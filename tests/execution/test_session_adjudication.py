@@ -1061,9 +1061,10 @@ class TestEarlyStop:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
             completion_marker="%%ORDER_UP%%",
         )
-        # Empty result triggers kill_anomaly path (RESUME), not EARLY_STOP
+        # Empty result triggers kill_anomaly path (EMPTY_OUTPUT), not EARLY_STOP.
+        # No context exhaustion detected → EMPTY_OUTPUT, not RESUME.
         assert needs_retry is True
-        assert reason == RetryReason.RESUME
+        assert reason == RetryReason.EMPTY_OUTPUT
 
 
 class TestArtifactValidation:

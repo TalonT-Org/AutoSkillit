@@ -364,3 +364,34 @@ class TestClaimReleaseGates:
             assert "issue_url" in step.with_args, (
                 f"{name}: release_issue_failure.with_args missing issue_url"
             )
+
+    def test_claim_issue_step_passes_allow_reentry_from_upfront_claimed(self):
+        """claim_issue with: block includes allow_reentry mapped from inputs.upfront_claimed."""
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            claim_with = data["steps"]["claim_issue"].get("with", {})
+            assert "allow_reentry" in claim_with, f"{name}: claim_issue.with missing allow_reentry"
+            assert "upfront_claimed" in str(claim_with["allow_reentry"]), (
+                f"{name}: allow_reentry must reference inputs.upfront_claimed"
+            )
+
+    def test_upfront_claimed_ingredient_present_with_default_false(self):
+        """Recipes expose upfront_claimed ingredient defaulting to 'false'."""
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            ingredients = data.get("ingredients", {})
+            assert "upfront_claimed" in ingredients, f"{name}: missing upfront_claimed ingredient"
+            assert ingredients["upfront_claimed"].get("default") == "false", (
+                f"{name}: upfront_claimed.default must be 'false'"
+            )
+
+    def test_claim_issue_routes_escalate_stop_when_not_claimed(self):
+        """claim_issue fallthrough routes to escalate_stop (preserves single-issue defense)."""
+        for name in self.RECIPES:
+            data = yaml.safe_load(_recipe_path(name).read_text())
+            on_result = data["steps"]["claim_issue"].get("on_result", [])
+            # The fallthrough route (no 'when' key) must route to escalate_stop
+            fallthrough_routes = [r["route"] for r in on_result if "when" not in r]
+            assert "escalate_stop" in fallthrough_routes, (
+                f"{name}: claim_issue must have escalate_stop as fallthrough on_result route"
+            )

@@ -706,6 +706,57 @@ class TestClaimIssueTool:
             "issue_url": "https://github.com/owner/repo/issues/1",
         }
 
+    @pytest.mark.anyio
+    async def test_claim_issue_allow_reentry_true_returns_claimed_true_when_already_labeled(
+        self, tool_ctx
+    ):
+        """allow_reentry=True with label present: returns claimed=True and reentry=True."""
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {
+            "success": True,
+            "labels": [{"name": "in-progress"}],
+        }
+        tool_ctx.github_client = mock_client
+        result = json.loads(
+            await claim_issue("https://github.com/owner/repo/issues/42", allow_reentry=True)
+        )
+        assert result["success"] is True
+        assert result["claimed"] is True
+        assert result["reentry"] is True
+        mock_client.add_labels.assert_not_called()  # no re-application needed
+
+    @pytest.mark.anyio
+    async def test_claim_issue_allow_reentry_false_returns_claimed_false_when_already_labeled(
+        self, tool_ctx
+    ):
+        """Default allow_reentry=False: claimed=False when label already present."""
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {
+            "success": True,
+            "labels": [{"name": "in-progress"}],
+        }
+        tool_ctx.github_client = mock_client
+        result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+        assert result["success"] is True
+        assert result["claimed"] is False
+        assert result.get("reentry") is not True
+
+    @pytest.mark.anyio
+    async def test_claim_issue_allow_reentry_true_still_claims_when_label_absent(self, tool_ctx):
+        """allow_reentry=True with no pre-existing label performs normal claim."""
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {"success": True, "labels": []}
+        mock_client.ensure_label.return_value = {"success": True, "created": True}
+        mock_client.add_labels.return_value = {"success": True, "labels": ["in-progress"]}
+        tool_ctx.github_client = mock_client
+        result = json.loads(
+            await claim_issue("https://github.com/owner/repo/issues/42", allow_reentry=True)
+        )
+        assert result["success"] is True
+        assert result["claimed"] is True
+        assert result.get("reentry", False) is False
+        mock_client.add_labels.assert_called_once()
+
 
 class TestReleaseIssueTool:
     def test_release_issue_is_gated(self):

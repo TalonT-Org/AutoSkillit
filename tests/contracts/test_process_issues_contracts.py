@@ -46,8 +46,15 @@ def test_process_issues_supports_dry_run(skill_text: str) -> None:
 
 
 def test_process_issues_filters_in_progress(skill_text: str) -> None:
-    """process-issues must skip issues already carrying in-progress label."""
-    assert "in-progress" in skill_text
+    """process-issues must skip issues already claimed by another session.
+
+    The skill now claims all issues upfront (Phase 0.5) and skips dispatch
+    for any issue where claim_issue returns claimed=false.
+    """
+    # The skill tracks pre_claimed_urls and skips non-members at dispatch time.
+    # Either the term "pre_claimed" (tracking list) or "already claimed"
+    # (log message) must appear in the skill documentation.
+    assert "pre_claimed" in skill_text or "already claimed" in skill_text
 
 
 def test_process_issues_documents_pr_title_prefix(skill_text: str) -> None:

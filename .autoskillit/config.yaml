@@ -23,5 +23,8 @@ safety:
 branching:
   default_base_branch: "integration"
 
+ci:
+  workflow: "tests.yml"
+
 github:
   default_repo: "TalonT-Org/AutoSkillit"

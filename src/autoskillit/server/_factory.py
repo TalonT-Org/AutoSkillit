@@ -10,6 +10,7 @@ construction scattered across callers.
 from __future__ import annotations
 
 import os
+import subprocess
 from typing import Any
 
 from autoskillit.config import AutomationConfig
@@ -55,6 +56,27 @@ def _default_plugin_dir() -> str:
     return str(pkg_root())
 
 
+def _gh_cli_token() -> str | None:
+    """Try to obtain a GitHub token from the ``gh`` CLI.
+
+    Returns the token string on success, ``None`` if ``gh`` is not installed,
+    the user is not logged in, or the command fails for any reason.
+    Never raises.
+    """
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    return None
+
+
 def make_context(
     config: AutomationConfig,
     *,
@@ -90,8 +112,8 @@ def make_context(
 
         runner = DefaultSubprocessRunner()
 
-    # Resolve token: config → GITHUB_TOKEN env var → None (unauthenticated)
-    github_token = config.github.token or os.environ.get("GITHUB_TOKEN")
+    # Resolve token: config → GITHUB_TOKEN env var → gh CLI → None (unauthenticated)
+    github_token = config.github.token or os.environ.get("GITHUB_TOKEN") or _gh_cli_token()
 
     resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
     gate = DefaultGateState(enabled=False)

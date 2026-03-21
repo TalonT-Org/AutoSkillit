@@ -124,6 +124,43 @@ When the user provides **more than one issue or task** in a single request:
 
 ---
 
+## PARALLEL STEP SCHEDULING — MANDATORY
+
+This rule applies whenever you are running **multiple pipelines in parallel** (run_mode=parallel
+or user says "parallel"). Within each batched round, pipeline steps have two speeds:
+
+**Fast steps** — MCP tool calls that complete in seconds:
+`run_cmd`, `clone_repo`, `create_unique_branch`, `fetch_github_issue`,
+`claim_issue`, `merge_worktree`, `test_check`, `reset_test_dir`, `classify_fix`
+
+**Slow steps** — headless sessions that take minutes:
+Any `run_skill` invocation (investigate, implement, audit, review, etc.)
+
+### Wavefront Scheduling Rule
+
+1. **Complete all fast steps for ALL pipelines first.** Before launching any slow step,
+   advance every pipeline through its pending fast steps. Continue re-inspecting after
+   each fast-step batch until no pipeline has a fast step pending.
+
+2. **Launch all slow steps together in one parallel batch.** Once all pipelines are aligned
+   at a slow step boundary (every pipeline's next pending step is a `run_skill`), launch
+   all of them simultaneously so they overlap in wall-clock time.
+
+3. **Never launch a slow step for one pipeline while another pipeline still has fast steps
+   pending.** This is the most critical rule: a batched round waits for the slowest step in
+   the batch. A fast step launched alongside a slow step completes instantly but sits idle
+   until the slow step finishes — wasting wall-clock time and blocking re-inspection.
+
+### Rationale
+
+Batched rounds wait for the **slowest step** in the batch. If a slow `run_skill` is launched
+alongside a fast `run_cmd`, the fast step completes instantly but cannot trigger the next
+fast step for its pipeline until the entire batch (including the slow session) finishes.
+Draining all fast steps first ensures every pipeline arrives at the slow-step boundary
+simultaneously, after which all slow steps run in parallel and their wall-clock time overlaps.
+
+---
+
 ## MERGE PHASE — MANDATORY
 
 This rule applies whenever the orchestrator must merge **one or more open PRs**, whether

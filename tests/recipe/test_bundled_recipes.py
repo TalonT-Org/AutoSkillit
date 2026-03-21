@@ -1592,3 +1592,60 @@ def test_bundled_recipes_emit_no_graph_warnings(recipe_path):
         f"build_recipe_graph emitted {len(warning_events)} warnings for "
         f"{recipe_path.name}: {warning_events}"
     )
+
+
+# ---------------------------------------------------------------------------
+# TestRunModeIngredient
+# ---------------------------------------------------------------------------
+
+
+class TestRunModeIngredient:
+    """REQ-INGREDIENT-001 through REQ-INGREDIENT-005: run_mode ingredient in multi-issue recipes."""  # noqa: E501
+
+    @pytest.fixture(scope="class")
+    def impl_recipe(self):
+        return load_recipe(builtin_recipes_dir() / "implementation.yaml")
+
+    @pytest.fixture(scope="class")
+    def remed_recipe(self):
+        return load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+    def test_implementation_has_run_mode_ingredient(self, impl_recipe) -> None:
+        """REQ-INGREDIENT-001: implementation.yaml declares run_mode ingredient."""
+        assert "run_mode" in impl_recipe.ingredients, (
+            "implementation.yaml must declare run_mode ingredient"
+        )
+
+    def test_implementation_run_mode_default_is_sequential(self, impl_recipe) -> None:
+        """REQ-INGREDIENT-002: run_mode defaults to 'sequential'."""
+        ing = impl_recipe.ingredients["run_mode"]
+        assert ing.default == "sequential", (
+            "implementation.yaml run_mode must default to 'sequential'"
+        )
+
+    def test_implementation_run_mode_description_mentions_parallel(self, impl_recipe) -> None:
+        """REQ-INGREDIENT-001: description must document 'parallel' as a valid option."""
+        ing = impl_recipe.ingredients["run_mode"]
+        assert "parallel" in ing.description.lower(), (
+            "run_mode description must mention 'parallel' as an option"
+        )
+
+    def test_remediation_has_run_mode_ingredient(self, remed_recipe) -> None:
+        """REQ-INGREDIENT-001: remediation.yaml declares run_mode ingredient."""
+        assert "run_mode" in remed_recipe.ingredients, (
+            "remediation.yaml must declare run_mode ingredient"
+        )
+
+    def test_remediation_run_mode_default_is_sequential(self, remed_recipe) -> None:
+        """REQ-INGREDIENT-002: run_mode defaults to 'sequential'."""
+        ing = remed_recipe.ingredients["run_mode"]
+        assert ing.default == "sequential", (
+            "remediation.yaml run_mode must default to 'sequential'"
+        )
+
+    def test_remediation_run_mode_description_mentions_parallel(self, remed_recipe) -> None:
+        """REQ-INGREDIENT-001: description must document 'parallel' as a valid option."""
+        ing = remed_recipe.ingredients["run_mode"]
+        assert "parallel" in ing.description.lower(), (
+            "run_mode description must mention 'parallel' as an option"
+        )

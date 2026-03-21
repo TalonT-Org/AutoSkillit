@@ -353,7 +353,8 @@ def test_auto_merge_false_routes_to_confirm_cleanup(any_recipe) -> None:
 def test_route_queue_mode_default_routes_to_direct_merge(any_recipe) -> None:
     """Default (no-queue) condition must route to direct_merge, not release_issue_success."""
     step = any_recipe.steps["route_queue_mode"]
-    default_cond = next(c for c in step.on_result.conditions if c.when is None)
+    default_cond = next((c for c in step.on_result.conditions if c.when is None), None)
+    assert default_cond is not None, "Expected a default (when=None) condition in route_queue_mode"
     assert default_cond.route == "direct_merge"
 
 
@@ -381,13 +382,19 @@ def test_wait_for_direct_merge_step_exists(any_recipe) -> None:
 
 def test_wait_for_direct_merge_merged_routes_to_success(any_recipe) -> None:
     step = any_recipe.steps["wait_for_direct_merge"]
-    merged_cond = next(c for c in step.on_result.conditions if c.when and "merged" in c.when)
+    merged_cond = next(
+        (c for c in step.on_result.conditions if c.when and "merged" in c.when), None
+    )
+    assert merged_cond is not None, "Expected a 'merged' condition in wait_for_direct_merge"
     assert merged_cond.route == "release_issue_success"
 
 
 def test_wait_for_direct_merge_closed_routes_to_conflict_fix(any_recipe) -> None:
     step = any_recipe.steps["wait_for_direct_merge"]
-    closed_cond = next(c for c in step.on_result.conditions if c.when and "closed" in c.when)
+    closed_cond = next(
+        (c for c in step.on_result.conditions if c.when and "closed" in c.when), None
+    )
+    assert closed_cond is not None, "Expected a 'closed' condition in wait_for_direct_merge"
     assert closed_cond.route == "direct_merge_conflict_fix"
 
 
@@ -441,4 +448,9 @@ def test_implementation_recipe_still_valid(impl_recipe) -> None:
 
 def test_remediation_recipe_still_valid(remed_recipe) -> None:
     errors = validate_recipe(remed_recipe)
+    assert errors == [], f"validate_recipe errors: {errors}"
+
+
+def test_impl_groups_recipe_still_valid(impl_groups_recipe) -> None:
+    errors = validate_recipe(impl_groups_recipe)
     assert errors == [], f"validate_recipe errors: {errors}"

@@ -670,14 +670,14 @@ steps:
         route: release_issue_success
       - when: "${{ result.stdout | trim }} == closed"
         route: direct_merge_conflict_fix
-      - route: confirm_cleanup
+      - route: release_issue_timeout
     on_failure: confirm_cleanup
     skip_when_false: "inputs.open_pr"
     note: >
       Polls GitHub PR state every 10 s for up to 15 minutes.
       merged → release_issue_success.
       closed → conflict fix cycle.
-      timeout / failure → confirm_cleanup (pipeline done; human monitors merge).
+      timeout → release_issue_timeout (releases claim; merge unconfirmed).
 
   direct_merge_conflict_fix:
     tool: run_skill

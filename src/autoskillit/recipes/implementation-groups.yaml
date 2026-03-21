@@ -738,15 +738,13 @@ steps:
     with:
       cmd: >
         for i in $(seq 1 90); do
-          STATE=$(gh pr view '${{ context.pr_number }}' --json state --jq '.state') &&
+          STATE=$(gh pr view '${{ context.pr_number }}' --json state --jq '.state');
           if [ "$STATE" = "MERGED" ]; then echo "merged"; exit 0; fi;
           if [ "$STATE" = "CLOSED" ]; then echo "closed"; exit 0; fi;
           sleep 10;
         done; echo "timeout"
       cwd: "${{ context.work_dir }}"
       step_name: "wait_for_direct_merge"
-    capture:
-      direct_merge_state: "${{ result.stdout | trim }}"
     on_result:
       - when: "${{ result.stdout | trim }} == merged"
         route: release_issue_success
@@ -767,8 +765,6 @@ steps:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "direct_merge_conflict_fix"
-    capture:
-      conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
       - when: "${{ result.escalation_required }} == true"
         route: release_issue_failure

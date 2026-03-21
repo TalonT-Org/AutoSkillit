@@ -895,7 +895,7 @@ def test_list_recipes_stable_with_project_recipe_added(tmp_path: Path) -> None:
     after = [r.name for r in list_recipes(tmp_path).items]
 
     # Bundled names must occupy the same leading positions
-    bundled_before = [n for n in before]
+    bundled_before = list(before)
     bundled_after = [n for n in after if n in set(bundled_before)]
     assert bundled_after == bundled_before, (
         "Adding a project recipe must not shift bundled recipe positions"

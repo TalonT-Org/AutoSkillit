@@ -665,7 +665,7 @@ class TestAdjudicationGuards:
             f"Dead end: success={skill_result.success}, needs_retry={skill_result.needs_retry}"
         )
         assert skill_result.needs_retry is True
-        assert skill_result.retry_reason == RetryReason.RESUME
+        assert skill_result.retry_reason == RetryReason.DRAIN_RACE
 
     def test_channel_b_max_turns_no_contradiction(self) -> None:
         """CHANNEL_B + error_max_turns: contradiction guard resolves to retriable."""

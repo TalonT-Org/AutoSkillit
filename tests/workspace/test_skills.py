@@ -589,9 +589,9 @@ class TestSkillInfoTailorable:
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\ntailorable: true\n---\n# Tailorable\n")
 
-        monkeypatch.setattr("autoskillit.workspace.skills.bundled_skills_dir", lambda: tmp_path)
+        monkeypatch.setattr("autoskillit.workspace.bundled_skills_dir", lambda: tmp_path)
         monkeypatch.setattr(
-            "autoskillit.workspace.skills.bundled_skills_extended_dir",
+            "autoskillit.workspace.bundled_skills_extended_dir",
             lambda: Path("/nonexistent"),
         )
 

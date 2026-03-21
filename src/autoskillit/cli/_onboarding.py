@@ -34,7 +34,7 @@ def is_first_run(project_dir: Path) -> bool:
         except OSError:
             pass
     # 4. project already has skill overrides (already customized)
-    from autoskillit.workspace.skills import detect_project_local_overrides
+    from autoskillit.workspace import detect_project_local_overrides
 
     if detect_project_local_overrides(project_dir):
         return False
@@ -43,7 +43,7 @@ def is_first_run(project_dir: Path) -> bool:
 
 def mark_onboarded(project_dir: Path) -> None:
     """Write the .autoskillit/.onboarded marker file (idempotent)."""
-    from autoskillit.core.io import atomic_write
+    from autoskillit.core import atomic_write
 
     marker = project_dir / ".autoskillit" / ".onboarded"
     if not marker.exists():

@@ -22,7 +22,8 @@ class SkillInfo:
 def _read_skill_frontmatter(path: Path) -> dict[str, Any]:
     """Parse SKILL.md YAML frontmatter, returning a dict (empty on any failure)."""
     try:
-        content = path.read_text(encoding="utf-8")
+        with open(path, encoding="utf-8") as fh:
+            content = fh.read()
     except (OSError, UnicodeDecodeError):
         return {}
     if not content.startswith("---"):
@@ -98,8 +99,10 @@ class SkillResolver:
     """List bundled skills from both the skills/ and skills_extended/ directories."""
 
     def __init__(self) -> None:
-        self._dir = bundled_skills_dir()
-        self._extended_dir = bundled_skills_extended_dir()
+        import autoskillit.workspace as _ws
+
+        self._dir = _ws.bundled_skills_dir()
+        self._extended_dir = _ws.bundled_skills_extended_dir()
 
     def resolve(self, name: str) -> SkillInfo | None:
         """Resolve a skill name to its path. Checks skills/ before skills_extended/."""

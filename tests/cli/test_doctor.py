@@ -697,7 +697,9 @@ def test_doctor_gitignore_ok_when_all_covered(
     """Doctor must report OK when all .autoskillit/ files are covered."""
     autoskillit_dir = tmp_path / ".autoskillit"
     autoskillit_dir.mkdir()
-    (autoskillit_dir / ".gitignore").write_text("temp/\n.secrets.yaml\nsync_manifest.json\n")
+    (autoskillit_dir / ".gitignore").write_text(
+        "temp/\n.secrets.yaml\nsync_manifest.json\n.onboarded\n"
+    )
     (autoskillit_dir / "temp").mkdir()
     (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
 

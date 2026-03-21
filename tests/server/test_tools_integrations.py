@@ -739,7 +739,7 @@ class TestClaimIssueTool:
         result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
         assert result["success"] is True
         assert result["claimed"] is False
-        assert result.get("reentry") is not True
+        assert "reentry" not in result
 
     @pytest.mark.anyio
     async def test_claim_issue_allow_reentry_true_still_claims_when_label_absent(self, tool_ctx):

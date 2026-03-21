@@ -46,6 +46,37 @@ body suitable for final review before landing on main.
 
 ## Workflow
 
+### Step 0b: Retrieve Token Summary from Session Logs
+
+Determine the pipeline working directory and self-retrieve token telemetry from disk.
+This aggregates token usage across all constituent PR sessions that ran in this pipeline
+working directory.
+
+```bash
+export PIPELINE_CWD="$(pwd)"
+mkdir -p temp/open-pr-main
+python3 - <<'EOF' > temp/open-pr-main/token_summary.md 2>/dev/null || true
+import sys, os
+from autoskillit.pipeline.tokens import DefaultTokenLog
+from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+from autoskillit.execution.session_log import resolve_log_dir
+
+log_root = resolve_log_dir("")
+tl = DefaultTokenLog()
+n = tl.load_from_log_dir(log_root, cwd_filter=os.environ.get("PIPELINE_CWD", ""))
+if n == 0:
+    sys.exit(0)
+steps = tl.get_report()
+total = tl.compute_total()
+print(TelemetryFormatter.format_token_table(steps, total))
+EOF
+```
+
+- If `temp/open-pr-main/token_summary.md` is non-empty, set `TOKEN_SUMMARY_CONTENT` to its
+  contents and embed it in the PR body under `## Token Usage Summary`.
+- If empty or absent (standalone invocation, no pipeline sessions in this cwd), omit the
+  section — graceful degradation with no error.
+
 ### Step 1: Parse Arguments
 
 Parse optional positional arguments:
@@ -387,6 +418,11 @@ No linked issues found in PR descriptions.
 
 {For each item in closing_refs:}
 {item}
+
+{If TOKEN_SUMMARY_CONTENT is non-empty (set by Step 0b):}
+## Token Usage Summary
+
+{TOKEN_SUMMARY_CONTENT}
 
 ---
 

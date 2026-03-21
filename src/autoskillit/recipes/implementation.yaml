@@ -41,6 +41,12 @@ ingredients:
   upfront_claimed:
     description: "Set to 'true' when process-issues has already claimed this issue upfront. Allows claim_issue defense step to pass through without aborting."
     default: "false"
+  run_mode:
+    description: >-
+      Execution mode when processing multiple issues. Options: sequential (default,
+      one issue at a time) or parallel (all issues simultaneously with wavefront
+      step scheduling — fast steps for all pipelines before any slow step).
+    default: "sequential"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,

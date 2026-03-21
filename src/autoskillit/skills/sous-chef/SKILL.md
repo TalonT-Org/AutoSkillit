@@ -121,3 +121,66 @@ When the user provides **more than one issue or task** in a single request:
 - Suggest picking a subset of the given issues — the user chose the scope.
 - Offer any option other than sequential or parallel when asking.
 - Ask the user to clarify scope, prioritization, or issue ordering.
+
+---
+
+## MERGE PHASE — MANDATORY
+
+This rule applies whenever the orchestrator must merge **one or more open PRs**, whether
+produced by a single pipeline or by N parallel pipelines.
+
+### 1. Detect merge queue availability — once per orchestration session
+
+Before initiating any merge, run the following detection step via `run_cmd` (not a
+headless session):
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) &&
+OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
+BRANCH="<base_branch>" &&
+gh api graphql -f query="query {
+  repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
+    mergeQueue(branch:\"$BRANCH\") { id }
+  }
+}" | jq -r 'if .data.repository.mergeQueue != null then "true" else "false" end'
+```
+
+Capture the result as `queue_available`. Run this **once per orchestration run**, not
+per-PR. The `implementation` recipe performs this detection automatically via the
+`check_merge_queue` step — **do not repeat it manually when following a recipe**.
+
+### 2. Route based on queue availability
+
+**When `queue_available == true`:**
+GitHub's merge queue serializes concurrent merges. Each pipeline's
+`enable_auto_merge → wait_for_queue` sequence is safe to proceed in parallel — the
+queue handles ordering. No additional sequencing is required from the orchestrator.
+
+**When `queue_available == false`:**
+PRs MUST be merged **one at a time**. The orchestrator must wait for each merge
+(the `wait_for_direct_merge` step) to complete before advancing to the next PR.
+
+- If following a recipe: the recipe's sequential-merge loop is authoritative. Do not
+  skip or compress loop iterations.
+- If merging multiple PRs collected from parallel pipelines: route through the
+  `merge-prs` recipe for batch sequential merging.
+- **NEVER** execute two `direct_merge` steps concurrently on a non-queue branch.
+
+### 3. NEVER bypass recipe merge steps
+
+**NEVER use `run_cmd` with `gh pr merge` to merge a PR outside of a named recipe
+step.** All PR merges must flow through the recipe's `merge_pr`, `direct_merge`, or
+`enable_auto_merge` steps. Bypassing these steps skips CI enforcement, conflict
+detection, and conflict routing.
+
+### 4. Merge conflict failure handling
+
+When `wait_for_direct_merge` returns `closed` (PR was closed due to a stale base):
+
+- **Route to `on_failure`** — the recipe's `direct_merge_conflict_fix` step handles
+  rebase-and-retry automatically.
+- **NEVER use `run_cmd` for git investigation** (git rebase, git log, git reset,
+  git merge). The `resolve-merge-conflicts` skill run by `direct_merge_conflict_fix`
+  has full diagnostic access.
+- **NEVER abandon a pipeline** because merge failed — route through the conflict
+  recovery cycle until the PR merges or escalation is required.

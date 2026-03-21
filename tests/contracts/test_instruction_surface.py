@@ -353,6 +353,89 @@ class TestSourceIsolationContract:
         )
 
 
+class TestSousChefMergePhaseContract:
+    """sous-chef/SKILL.md must carry a MERGE PHASE mandatory section."""
+
+    def _sous_chef_text(self) -> str:
+        return (
+            _project_root() / "src" / "autoskillit" / "skills" / "sous-chef" / "SKILL.md"
+        ).read_text()
+
+    def test_sous_chef_has_merge_phase_section(self):
+        text = self._sous_chef_text()
+        assert "MERGE PHASE" in text, (
+            "sous-chef/SKILL.md must contain a 'MERGE PHASE' mandatory section"
+        )
+
+    def test_sous_chef_prohibits_parallel_gh_pr_merge(self):
+        text = self._sous_chef_text()
+        # Must state that parallel gh pr merge is forbidden without merge queue
+        has_prohibition = any(
+            phrase in text
+            for phrase in (
+                "NEVER allow",
+                "NEVER call",
+                "NEVER use",
+                "must not",
+                "prohibited",
+            )
+        )
+        assert has_prohibition, (
+            "sous-chef/SKILL.md must contain a prohibition on parallel gh pr merge calls"
+        )
+        assert "gh pr merge" in text, (
+            "sous-chef/SKILL.md must explicitly name 'gh pr merge' in the prohibition"
+        )
+
+    def test_sous_chef_requires_sequential_merge_without_queue(self):
+        text = self._sous_chef_text()
+        assert "sequential" in text.lower(), (
+            "sous-chef/SKILL.md must require sequential merging when no merge queue exists"
+        )
+
+    def test_sous_chef_names_detection_command(self):
+        text = self._sous_chef_text()
+        # Must reference the GraphQL detection approach
+        assert "mergeQueue" in text or "merge_queue" in text.lower(), (
+            "sous-chef/SKILL.md must specify the merge-queue detection command"
+        )
+
+    def test_sous_chef_routes_conflict_to_on_failure(self):
+        text = self._sous_chef_text()
+        # Must say conflicts route to on_failure, not run_cmd git
+        assert "on_failure" in text, (
+            "sous-chef/SKILL.md must state that merge conflicts route to on_failure"
+        )
+
+
+class TestImplementationRecipeMergeQueueRule:
+    """implementation.yaml kitchen_rules must reference merge queue detection."""
+
+    def _impl_recipe(self):
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+        return load_recipe(builtin_recipes_dir() / "implementation.yaml")
+
+    def test_kitchen_rules_mention_check_merge_queue(self):
+        recipe = self._impl_recipe()
+        all_rules = " ".join(recipe.kitchen_rules)
+        assert "check_merge_queue" in all_rules or "MERGE ROUTING" in all_rules, (
+            "implementation.yaml kitchen_rules must reference check_merge_queue or "
+            "contain a MERGE ROUTING rule"
+        )
+
+    def test_kitchen_rules_prohibit_direct_gh_pr_merge(self):
+        recipe = self._impl_recipe()
+        all_rules = " ".join(recipe.kitchen_rules)
+        has_prohibition = "gh pr merge" in all_rules and any(
+            phrase in all_rules for phrase in ("never", "NEVER", "not", "prohibited")
+        )
+        assert has_prohibition, (
+            "implementation.yaml kitchen_rules must explicitly prohibit calling "
+            "gh pr merge directly outside of recipe steps"
+        )
+
+
 def test_open_pr_skill_does_not_contain_git_push():
     """The open-pr SKILL.md must not contain 'git push -u origin' as a workflow step.
     The recipe manages all push operations via push_to_remote. The skill is a pure

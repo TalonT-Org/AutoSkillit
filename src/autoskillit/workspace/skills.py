@@ -99,10 +99,8 @@ class SkillResolver:
     """List bundled skills from both the skills/ and skills_extended/ directories."""
 
     def __init__(self) -> None:
-        import autoskillit.workspace as _ws
-
-        self._dir = _ws.bundled_skills_dir()
-        self._extended_dir = _ws.bundled_skills_extended_dir()
+        self._dir = bundled_skills_dir()
+        self._extended_dir = bundled_skills_extended_dir()
 
     def resolve(self, name: str) -> SkillInfo | None:
         """Resolve a skill name to its path. Checks skills/ before skills_extended/."""

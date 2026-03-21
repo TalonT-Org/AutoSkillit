@@ -49,25 +49,36 @@ def cook() -> None:
     if confirm in ("n", "no"):
         return
 
+    from autoskillit.cli._onboarding import is_first_run, mark_onboarded, run_onboarding_menu
     from autoskillit.config import load_config
     from autoskillit.core import configure_logging, pkg_root
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
 
+    project_dir = Path.cwd()
+    initial_prompt: str | None = None
+    _first_run = is_first_run(project_dir)
+    if _first_run:
+        initial_prompt = run_onboarding_menu(project_dir, color=color)
+
     session_id = uuid.uuid4().hex[:16]
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
     config = load_config()
     skills_dir = session_mgr.init_session(
-        session_id, cook_session=True, config=config, project_dir=Path.cwd()
+        session_id, cook_session=True, config=config, project_dir=project_dir
     )
 
-    cmd = build_interactive_cmd(plugin_dir=pkg_root(), add_dirs=[skills_dir]).cmd
+    cmd = build_interactive_cmd(
+        plugin_dir=pkg_root(), add_dirs=[skills_dir], initial_prompt=initial_prompt
+    ).cmd
     env = {**os.environ}
     try:
         result = subprocess.run(cmd, env=env)
         if result.returncode != 0:
             raise SystemExit(result.returncode)
     finally:
+        if _first_run and initial_prompt is not None:
+            mark_onboarded(project_dir)
         shutil.rmtree(skills_dir, ignore_errors=True)

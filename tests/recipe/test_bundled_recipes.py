@@ -1398,9 +1398,8 @@ def test_bundled_production_recipes_zero_warnings(name: str) -> None:
     recipe = load_recipe(builtin_recipes_dir() / name)
     findings = run_semantic_rules(recipe)
     warnings = [f for f in findings if f.severity == Severity.WARNING]
-    assert warnings == [], (
-        f"{name} has {len(warnings)} WARNING finding(s):\n"
-        + "\n".join(f"  [{f.rule}] {f.message}" for f in warnings)
+    assert warnings == [], f"{name} has {len(warnings)} WARNING finding(s):\n" + "\n".join(
+        f"  [{f.rule}] {f.message}" for f in warnings
     )
 
 

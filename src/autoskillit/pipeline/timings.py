@@ -68,9 +68,7 @@ class DefaultTimingLog:
         """Reset the store."""
         self._entries = {}
 
-    def load_from_log_dir(
-        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
-    ) -> int:
+    def load_from_log_dir(self, log_root: Path, *, since: str = "", cwd_filter: str = "") -> int:
         """Reconstruct timing entries from persisted session logs.
 
         Reads the sessions.jsonl index at log_root, filters entries by since
@@ -82,9 +80,7 @@ class DefaultTimingLog:
         Returns the count of session directories successfully loaded.
         """
         count = 0
-        for st_path in _iter_session_log_entries(
-            log_root, since, "step_timing.json", cwd_filter
-        ):
+        for st_path in _iter_session_log_entries(log_root, since, "step_timing.json", cwd_filter):
             try:
                 data = json.loads(st_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):

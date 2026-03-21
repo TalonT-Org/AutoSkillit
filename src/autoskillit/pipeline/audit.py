@@ -177,9 +177,7 @@ class DefaultAuditLog:
             )
         )
 
-    def load_from_log_dir(
-        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
-    ) -> int:
+    def load_from_log_dir(self, log_root: Path, *, since: str = "", cwd_filter: str = "") -> int:
         """Reconstruct failure records from persisted session logs.
 
         Reads the sessions.jsonl index at log_root, filters entries by since
@@ -191,9 +189,7 @@ class DefaultAuditLog:
         Returns the count of session directories successfully loaded.
         """
         count = 0
-        for al_path in _iter_session_log_entries(
-            log_root, since, "audit_log.json", cwd_filter
-        ):
+        for al_path in _iter_session_log_entries(log_root, since, "audit_log.json", cwd_filter):
             try:
                 data = json.loads(al_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):

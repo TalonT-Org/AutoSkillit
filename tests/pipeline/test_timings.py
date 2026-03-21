@@ -296,8 +296,7 @@ class TestTimingLogStepNameNormalization:
         assert report[0]["total_seconds"] == pytest.approx(115.0)
 
     def test_load_normalizes_suffixed_names(self, tmp_path):
-        """Write session files directly — flush_session_log requires 10+ required params
-        and is not used in this test file. Use the established helper pattern instead."""
+        """Suffixed step names loaded from session files collapse to canonical YAML key."""
         import json
 
         from autoskillit.pipeline.timings import DefaultTimingLog

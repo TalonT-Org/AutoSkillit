@@ -138,11 +138,6 @@ def gather_intel(project_dir: Path) -> OnboardingIntel:
     return OnboardingIntel(scanner_found=scanner, build_tools=tools, github_issues=issues)
 
 
-def _suggest_demo_target(project_dir: Path, intel: OnboardingIntel | None) -> str:
-    """Return a suggested project_dir string for the demo run, or empty string."""
-    return str(project_dir)
-
-
 def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
     """Display the guided onboarding menu.
 
@@ -157,7 +152,10 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
     _R = "\x1b[0m" if color else ""
 
     print(f"\n{_B}It looks like this is your first time using AutoSkillit in this project.{_R}")
-    ans = input("Would you like help getting started? [Y/n]: ").strip().lower()
+    try:
+        ans = input("Would you like help getting started? [Y/n]: ").strip().lower()
+    except EOFError:
+        ans = ""
     if ans in ("n", "no"):
         mark_onboarded(project_dir)
         return None
@@ -176,31 +174,33 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
     print(f"  {_Y}D{_R} — {_C}Write a custom recipe{_R}        (runs /autoskillit:write-recipe)")
     print(f"  {_Y}E{_R} — {_C}Skip{_R}                         (start a normal session)")
 
-    choice = input(f"\n{_B}[A/B/C/D/E]: {_R}").strip().upper()
-
-    # Collect intel (likely already done)
     try:
-        intel: OnboardingIntel | None = intel_future.result(timeout=5.0)
+        choice = input(f"\n{_B}[A/B/C/D/E]: {_R}").strip().upper()
+    except EOFError:
+        choice = ""
+
+    # Wait up to 5s for gather_intel to complete, then shut down cleanly
+    try:
+        intel_future.result(timeout=5.0)
     except Exception:
-        intel = None
+        pass
     finally:
-        executor.shutdown(wait=False)
+        executor.shutdown(wait=True, cancel_futures=True)
 
     if choice == "A":
         return "/autoskillit:setup-project"
 
     if choice == "B":
-        ref = input("Issue URL or number: ").strip()
+        try:
+            ref = input("Issue URL or number: ").strip()
+        except EOFError:
+            ref = ""
         if ref:
             return f"/autoskillit:prepare-issue {ref}"
         return "/autoskillit:setup-project"
 
     if choice == "C":
-        target = _suggest_demo_target(project_dir, intel)
-        prompt = "/autoskillit:setup-project"
-        if target:
-            prompt += f" {target}"
-        return prompt
+        return f"/autoskillit:setup-project {project_dir}"
 
     if choice == "D":
         return "/autoskillit:write-recipe"

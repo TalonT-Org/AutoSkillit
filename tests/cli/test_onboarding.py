@@ -171,16 +171,19 @@ def test_run_onboarding_menu_option_c_returns_setup_project_prompt(
 
 
 # ON-14
-def test_gather_intel_returns_onboarding_intel_dataclass(tmp_path: Path) -> None:
-    """gather_intel(project_dir) returns OnboardingIntel with correct fields.
-
-    Degrades gracefully: if gh is not available, github_issues == [].
-    """
+def test_gather_intel_returns_onboarding_intel_dataclass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gather_intel(project_dir) returns OnboardingIntel with correct fields."""
+    monkeypatch.setattr(
+        "autoskillit.cli._onboarding._fetch_good_first_issues",
+        lambda _p: ["#1: some issue"],
+    )
     intel = gather_intel(tmp_path)
     assert isinstance(intel, OnboardingIntel)
     assert isinstance(intel.scanner_found, (str, type(None)))
     assert isinstance(intel.build_tools, list)
-    assert isinstance(intel.github_issues, list)
+    assert intel.github_issues == ["#1: some issue"]
 
 
 # ON-15

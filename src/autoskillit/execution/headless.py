@@ -34,6 +34,8 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     claude_code_project_dir,
     get_logger,
+    load_yaml,
+    pkg_root,
 )
 from autoskillit.execution.commands import build_full_headless_cmd
 from autoskillit.execution.process import _marker_is_standalone
@@ -197,11 +199,12 @@ def _build_path_token_set() -> frozenset[str]:
     Filters outputs where type starts with "file_path" (covers both "file_path"
     and "file_path_list"). The outputs section in skill_contracts.yaml is a list
     of dicts with "name" and "type" keys — not a mapping.
+
+    Loads the YAML directly via L0 core utilities to avoid an upward L1→L2 import.
     """
     try:
-        from autoskillit.recipe.contracts import load_bundled_manifest  # noqa: PLC0415
-
-        manifest = load_bundled_manifest()
+        manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"
+        manifest = load_yaml(manifest_path)
         return (
             frozenset(
                 out["name"]

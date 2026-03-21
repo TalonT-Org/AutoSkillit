@@ -198,6 +198,12 @@ Interactive config suggestion flow:
 
 If no config exists, present the suggested config in full. If config exists, only highlight missing or suboptimal settings.
 
+> **NEVER include `github.token`, API keys, credentials, secrets, or any
+> secret-like values in `config.yaml`.** Tokens belong exclusively in
+> `.autoskillit/.secrets.yaml`, which is gitignored. Only include fields
+> documented in the config schema — do not invent new fields or extrapolate
+> from existing ones.
+
 Suggested config template:
 ```yaml
 test_check:

@@ -138,6 +138,19 @@ class TestCLIInit:
         assert parsed["test_check"]["command"] == ["task", "test-all"]
         assert parsed["safety"]["reset_guard_marker"] == ".autoskillit-workspace"
 
+    def test_generate_config_yaml_forbids_secret_fields(self) -> None:
+        """SEC-6: _generate_config_yaml() output contains no token, secret, or password keys."""
+        from autoskillit.cli import _generate_config_yaml
+
+        yaml_str = _generate_config_yaml(["task", "test-check"])
+        # Strip comments so only active YAML is checked
+        active_lines = [ln for ln in yaml_str.splitlines() if not ln.lstrip().startswith("#")]
+        active_yaml = "\n".join(active_lines)
+        for forbidden in ("token", "secret", "password", "credential"):
+            assert forbidden not in active_yaml.lower(), (
+                f"_generate_config_yaml() must not emit '{forbidden}' in active YAML"
+            )
+
     def test_init_writes_template_with_comments(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

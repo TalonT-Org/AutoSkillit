@@ -11,6 +11,7 @@ from autoskillit.config.settings import (
     BranchingConfig,
     CIConfig,
     ClassifyFixConfig,
+    ConfigSchemaError,
     GitHubConfig,
     ImplementGateConfig,
     LinuxTracingConfig,
@@ -35,6 +36,7 @@ from autoskillit.config.settings import (
 __all__ = [
     "AutomationConfig",
     "BranchingConfig",
+    "ConfigSchemaError",
     "CIConfig",
     "ClassifyFixConfig",
     "GitHubConfig",

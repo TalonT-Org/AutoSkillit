@@ -1272,11 +1272,11 @@ class TestCheckExpectedPatterns:
 
     def test_check_expected_patterns_multiple_bold_tokens_all_match(self) -> None:
         """Multiple bold-wrapped tokens must all match (AND semantics preserved)."""
-        result = "**plan_path** = /abs/path/plan.md\n**plan_parts** = /abs/path/plan.md\n%%ORDER_UP%%"
+        result = (
+            "**plan_path** = /abs/path/plan.md\n**plan_parts** = /abs/path/plan.md\n%%ORDER_UP%%"
+        )
         assert (
-            _check_expected_patterns(
-                result, ["plan_path\\s*=\\s*/.+", "plan_parts\\s*=\\s*/.+"]
-            )
+            _check_expected_patterns(result, ["plan_path\\s*=\\s*/.+", "plan_parts\\s*=\\s*/.+"])
             is True
         )
 
@@ -1507,9 +1507,7 @@ class TestDeadEndGuardContentState:
     ) -> None:
         """A session with bold-wrapped structured output tokens must succeed,
         not be classified as CONTRACT_VIOLATION and returned as adjudicated_failure."""
-        session = make_session(
-            result="**plan_path** = /abs/path/plan.md\n%%ORDER_UP%%"
-        )
+        session = make_session(result="**plan_path** = /abs/path/plan.md\n%%ORDER_UP%%")
         outcome, reason = _compute_outcome(
             session,
             returncode=0,

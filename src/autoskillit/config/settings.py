@@ -35,7 +35,7 @@ class ConfigSchemaError(ValueError):
     """Raised when a config YAML layer contains unrecognized or misplaced keys."""
 
 
-SECRETS_ONLY_KEYS: frozenset[str] = frozenset({"github.token"})
+_SECRETS_ONLY_KEYS: frozenset[str] = frozenset({"github.token"})
 _METADATA_KEYS: frozenset[str] = frozenset({"version"})
 
 
@@ -426,7 +426,7 @@ def validate_layer_keys(
     Raises ConfigSchemaError for:
     - Unrecognized top-level section name
     - Unrecognized field name within a known section
-    - A SECRETS_ONLY_KEYS path appearing in a non-secrets layer
+    - A _SECRETS_ONLY_KEYS path appearing in a non-secrets layer
     """
     import difflib  # stdlib — safe to import here
 
@@ -445,7 +445,7 @@ def validate_layer_keys(
         if isinstance(value, dict) and _CONFIG_SCHEMA[top_key]:
             for sub_key in value:
                 dotted = f"{top_key}.{sub_key}"
-                if dotted in SECRETS_ONLY_KEYS:
+                if dotted in _SECRETS_ONLY_KEYS:
                     if not is_secrets_layer:
                         raise ConfigSchemaError(
                             f"Invalid configuration in {str(layer_path)!r}: "

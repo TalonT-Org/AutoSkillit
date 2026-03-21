@@ -200,6 +200,12 @@ Save the plan to: `temp/rectify/rectify_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relativ
 **Structured output:** After saving the file(s), emit the following lines so pipeline orchestrators can capture both fields:
 
 For a single-part plan:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 plan_path = {absolute_path}
 plan_parts = {absolute_path}

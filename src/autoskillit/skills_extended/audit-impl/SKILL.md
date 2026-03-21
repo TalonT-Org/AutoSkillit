@@ -266,6 +266,11 @@ Exit 0. The pipeline may proceed to merge.
 After printing the GO result, emit the following structured output token as the very
 last line of your text output:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 verdict = GO
 ```
@@ -335,6 +340,11 @@ Exit 1.
 
 After printing the NO GO result, emit the following structured output tokens as the very
 last lines of your text output:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 verdict = NO GO

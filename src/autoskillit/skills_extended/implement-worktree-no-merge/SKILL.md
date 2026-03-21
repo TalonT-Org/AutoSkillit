@@ -117,6 +117,11 @@ Immediately after the worktree is created, output these tokens on their own
 lines so the execution layer can capture them from `assistant_messages` even
 if context is exhausted before Step 6:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${WORKTREE_NAME}
@@ -217,6 +222,11 @@ Output to terminal:
 Explicitly state: "Worktree left intact for orchestrator to test and merge."
 
 Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 worktree_path = ${WORKTREE_PATH}

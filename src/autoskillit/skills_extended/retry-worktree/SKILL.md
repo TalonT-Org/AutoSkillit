@@ -183,6 +183,11 @@ Do not merge until user confirms first!
 
 Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${CURRENT_BRANCH}

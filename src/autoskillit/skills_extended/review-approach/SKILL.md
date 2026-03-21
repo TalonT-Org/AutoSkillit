@@ -97,6 +97,11 @@ Save to: `temp/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md` (
 After saving the review file, emit the structured output token as the very last line
 of your text output:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 review_path = {absolute_path_to_review_file}
 ```

@@ -452,6 +452,11 @@ Save findings summary to `temp/review-pr/summary_{pr_number}_{timestamp}.md`. (r
 
 Output the verdict as the final line:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 verdict = {approved|changes_requested|needs_human}
 ```

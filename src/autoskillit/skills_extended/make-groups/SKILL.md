@@ -244,6 +244,11 @@ Report to terminal: index file path, manifest file path, per-group file count, a
 After all group files are written and the prose report is printed, emit the following
 structured output tokens as the very last lines of your text output:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 groups_path = {absolute_path_to_index_file}
 manifest_path = {absolute_path_to_manifest_file}

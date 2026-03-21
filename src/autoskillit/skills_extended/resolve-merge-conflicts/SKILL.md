@@ -281,6 +281,11 @@ Skip this step — emit `worktree_path=` and `branch_name=` only (no `conflict_r
 
 ### Step 7 — Emit output tokens
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 worktree_path = {worktree_path}
 branch_name = {current_branch}

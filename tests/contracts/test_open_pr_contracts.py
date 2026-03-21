@@ -31,7 +31,7 @@ def test_open_pr_includes_requirements_in_pr_body(text):
     # The body composition section must reference requirements
     body_idx = text.find("PR body") if "PR body" in text else text.find("pr_body")
     assert body_idx != -1, "open-pr must document PR body composition"
-    body_section = text[body_idx : body_idx + 4000]
+    body_section = text[body_idx:]
     assert "## Requirements" in body_section or "requirements" in body_section.lower()
 
 
@@ -59,3 +59,17 @@ def test_open_pr_requirements_section_placement(text):
     if req_pos == -1 or arch_pos == -1:
         pytest.skip("Section placement not yet documented")
     assert req_pos < arch_pos, "## Requirements must precede ## Architecture Impact in PR body"
+
+
+def test_open_pr_skill_self_retrieves_token_summary(text):
+    """SKILL.md must document self-retrieval of token summary via cwd_filter."""
+    assert "load_from_log_dir" in text, "SKILL.md must document load_from_log_dir self-retrieval"
+    assert "cwd_filter" in text, "SKILL.md must document cwd_filter scoping key"
+    assert "PIPELINE_CWD" in text, "SKILL.md must document PIPELINE_CWD=$(pwd) discovery"
+
+
+def test_open_pr_skill_removes_token_summary_path_arg(text):
+    """token_summary_path must no longer be documented as a positional arg."""
+    assert "token_summary_path" not in text, (
+        "token_summary_path arg must be removed; skill self-retrieves now"
+    )

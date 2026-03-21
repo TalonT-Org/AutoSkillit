@@ -422,3 +422,91 @@ class TestLoadFromLogDirDesignDocumentation:
             or "one invocation" in src.lower()
             or "per file" in src.lower()
         )
+
+
+# ---------------------------------------------------------------------------
+# cwd_filter tests
+# ---------------------------------------------------------------------------
+
+
+def _write_session_cwd(
+    log_root: Path,
+    dir_name: str,
+    tu_data: dict,
+    cwd: str,
+    timestamp: str = "2026-03-07T00:00:00+00:00",
+) -> None:
+    """Write a session with a cwd field in the sessions.jsonl index."""
+    session_dir = log_root / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
+    index_entry = {
+        "dir_name": dir_name,
+        "timestamp": timestamp,
+        "session_id": dir_name,
+        "cwd": cwd,
+    }
+    with (log_root / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
+class TestLoadFromLogDirCwdFilter:
+    """Tests for cwd_filter parameter on DefaultTokenLog.load_from_log_dir."""
+
+    _PLAN_DATA = {
+        "step_name": "plan",
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "timing_seconds": 10.0,
+    }
+    _IMPL_DATA = {
+        "step_name": "implement",
+        "input_tokens": 200,
+        "output_tokens": 80,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "timing_seconds": 20.0,
+    }
+
+    def test_cwd_filter_isolates_to_matching_cwd(self, tmp_path):
+        """cwd_filter loads only sessions whose cwd matches the given path."""
+        _write_session_cwd(tmp_path, "sess-A", self._PLAN_DATA, "/runs/pipeline-A")
+        _write_session_cwd(tmp_path, "sess-B", self._IMPL_DATA, "/runs/pipeline-B")
+
+        log = DefaultTokenLog()
+        count = log.load_from_log_dir(tmp_path, cwd_filter="/runs/pipeline-A")
+        assert count == 1, "Should only load the session whose cwd matches"
+        steps = log.get_report()
+        assert len(steps) == 1
+        assert steps[0]["step_name"] == "plan"
+        assert steps[0]["input_tokens"] == 100
+
+    def test_cwd_filter_empty_loads_all(self, tmp_path):
+        """Empty cwd_filter loads all sessions (backward compatibility)."""
+        _write_session_cwd(tmp_path, "sess-A", self._PLAN_DATA, "/runs/pipeline-A")
+        _write_session_cwd(tmp_path, "sess-B", self._IMPL_DATA, "/runs/pipeline-B")
+
+        log = DefaultTokenLog()
+        count = log.load_from_log_dir(tmp_path, cwd_filter="")
+        assert count == 2
+
+    def test_cwd_filter_no_matches_returns_zero(self, tmp_path):
+        """cwd_filter that matches nothing returns 0 and leaves the log empty."""
+        _write_session_cwd(tmp_path, "sess-A", self._PLAN_DATA, "/runs/pipeline-A")
+        _write_session_cwd(tmp_path, "sess-B", self._IMPL_DATA, "/runs/pipeline-B")
+
+        log = DefaultTokenLog()
+        count = log.load_from_log_dir(tmp_path, cwd_filter="/runs/nonexistent")
+        assert count == 0
+        assert log.get_report() == []
+
+    def test_cwd_filter_default_loads_all(self, tmp_path):
+        """Calling load_from_log_dir without cwd_filter loads all sessions."""
+        _write_session_cwd(tmp_path, "sess-A", self._PLAN_DATA, "/runs/pipeline-A")
+        _write_session_cwd(tmp_path, "sess-B", self._IMPL_DATA, "/runs/pipeline-B")
+
+        log = DefaultTokenLog()
+        count = log.load_from_log_dir(tmp_path)
+        assert count == 2

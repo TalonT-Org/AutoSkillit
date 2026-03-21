@@ -1378,6 +1378,24 @@ class TestReviewPrRecipeIntegration:
         )
 
 
+def test_telemetry_before_open_pr_rule_not_in_registry() -> None:
+    """The telemetry-before-open-pr rule must not be in the rule registry.
+
+    This rule was removed because open-pr now self-retrieves token telemetry
+    from disk using cwd_filter (Step 0b). If this test fails, the rule was
+    re-added to the registry and would silently fire on bundled production recipes.
+    """
+    import autoskillit.recipe  # noqa: F401 — triggers rule registration
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    rule_names = {spec.name for spec in _RULE_REGISTRY}
+    assert "telemetry-before-open-pr" not in rule_names, (
+        "telemetry-before-open-pr was re-added to the registry; "
+        "open-pr self-retrieves token telemetry via cwd_filter — "
+        "this rule is no longer needed and must not be registered"
+    )
+
+
 def test_bundled_recipes_pass_unrouted_verdict_value_rule() -> None:
     """All bundled recipes must pass the unrouted-verdict-value semantic rule."""
     for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):

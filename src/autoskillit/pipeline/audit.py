@@ -29,19 +29,23 @@ def _iter_session_log_entries(
     log_root: Path,
     since: str,
     filename: str,
+    cwd_filter: str = "",
 ) -> Iterator[Path]:
-    """Yield per-session file paths from sessions.jsonl that pass the since filter.
+    """Yield per-session file paths from sessions.jsonl that pass the filters.
 
-    Handles: JSONL parsing, since_dt filtering (ISO timestamp), dir_name extraction,
-    and per-session file existence check. Each caller is responsible only for
-    reading and accumulating the yielded file's JSON content.
+    Handles: JSONL parsing, since_dt filtering (ISO timestamp), cwd filtering,
+    dir_name extraction, and per-session file existence check. Each caller is
+    responsible only for reading and accumulating the yielded file's JSON content.
 
     Args:
-        log_root: Root of the session log directory (contains sessions.jsonl).
-        since:    ISO timestamp string; sessions before this are skipped.
-                  Empty string disables time filtering.
-        filename: Name of the per-session file to look for
-                  (e.g. "audit_log.json", "token_usage.json", "step_timing.json").
+        log_root:   Root of the session log directory (contains sessions.jsonl).
+        since:      ISO timestamp string; sessions before this are skipped.
+                    Empty string disables time filtering.
+        filename:   Name of the per-session file to look for
+                    (e.g. "audit_log.json", "token_usage.json", "step_timing.json").
+        cwd_filter: If non-empty, only yield sessions whose ``cwd`` field matches
+                    this string exactly. Empty string disables cwd filtering and
+                    yields all sessions regardless of cwd (backward-compatible default).
 
     Yields:
         Path to each matching per-session file that exists.
@@ -77,6 +81,9 @@ def _iter_session_log_entries(
                     continue
             except (ValueError, TypeError):
                 continue
+
+        if cwd_filter and idx.get("cwd") != cwd_filter:
+            continue
 
         dir_name = idx.get("dir_name", "")
         if not dir_name:
@@ -170,17 +177,19 @@ class DefaultAuditLog:
             )
         )
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int:
+    def load_from_log_dir(self, log_root: Path, *, since: str = "", cwd_filter: str = "") -> int:
         """Reconstruct failure records from persisted session logs.
 
         Reads the sessions.jsonl index at log_root, filters entries by since
         (ISO timestamp), reads audit_log.json from each matching session
         directory, and appends FailureRecord instances to self._records.
 
+        cwd_filter: if non-empty, only sessions whose cwd matches are loaded.
+
         Returns the count of session directories successfully loaded.
         """
         count = 0
-        for al_path in _iter_session_log_entries(log_root, since, "audit_log.json"):
+        for al_path in _iter_session_log_entries(log_root, since, "audit_log.json", cwd_filter):
             try:
                 data = json.loads(al_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):

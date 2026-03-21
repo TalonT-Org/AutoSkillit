@@ -527,7 +527,7 @@ class TestCanonicalStepName:
             ("plan-30", "plan"),
             ("implement-31", "implement"),
             ("open_pr-28", "open_pr"),
-            ("retry_worktree", "retry_worktree"),  # hyphen mid-word, not suffix
+            ("retry_worktree", "retry_worktree"),  # underscore-separated, no hyphen to strip
             ("audit_impl", "audit_impl"),  # underscore, no hyphen
             ("open-pr", "open-pr"),  # hyphen + non-numeric — not stripped
             ("step-2", "step"),  # two-char suffix stripped

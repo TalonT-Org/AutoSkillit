@@ -22,9 +22,7 @@ def test_open_pr_main_self_retrieves_token_summary(text):
     assert "load_from_log_dir" in text, (
         "open-pr-main/SKILL.md must document load_from_log_dir self-retrieval"
     )
-    assert "cwd_filter" in text, (
-        "open-pr-main/SKILL.md must document cwd_filter scoping key"
-    )
+    assert "cwd_filter" in text, "open-pr-main/SKILL.md must document cwd_filter scoping key"
     assert "PIPELINE_CWD" in text, (
         "open-pr-main/SKILL.md must document PIPELINE_CWD=$(pwd) discovery"
     )
@@ -43,16 +41,13 @@ def test_open_pr_main_token_summary_in_pr_body(text):
 
 def test_open_pr_main_token_summary_conditional(text):
     """Token summary section must be conditional on non-empty TOKEN_SUMMARY_CONTENT."""
-    assert "TOKEN_SUMMARY_CONTENT" in text, (
-        "open-pr-main must use TOKEN_SUMMARY_CONTENT variable"
-    )
+    assert "TOKEN_SUMMARY_CONTENT" in text, "open-pr-main must use TOKEN_SUMMARY_CONTENT variable"
     # The section must be gated — look for conditional language near the variable
     lower = text.lower()
     is_conditional = (
         "non-empty" in lower
         or "if token_summary_content" in lower
         or "token_summary_content is non-empty" in lower
-        or ("token_summary_content" in lower and ("if" in lower or "conditional" in lower))
     )
     assert is_conditional, (
         "## Token Usage Summary must be conditional on non-empty TOKEN_SUMMARY_CONTENT"

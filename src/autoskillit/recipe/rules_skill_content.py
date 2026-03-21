@@ -7,6 +7,7 @@ Validates that every {placeholder} in a SKILL.md bash block is either:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from autoskillit.core import Severity
@@ -17,7 +18,7 @@ from autoskillit.recipe._skill_placeholder_parser import (
     extract_declared_ingredients,
     shell_vars_assigned,
 )
-from autoskillit.recipe.contracts import resolve_skill_name
+from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 # Search directories for SKILL.md resolution (patchable in tests via patch.object).
@@ -106,6 +107,79 @@ def _check_undefined_bash_placeholder(ctx: ValidationContext) -> list[RuleFindin
                         f"Skill '{skill_name}' bash block uses undefined {{placeholder}}: "
                         f"{sorted(undefined)}. Declare as ingredient in ## Arguments, or capture "
                         f"at runtime as VARNAME=$(command)."
+                    ),
+                )
+            )
+    return findings
+
+
+_NO_MARKDOWN_DIRECTIVE_PATTERN: re.Pattern[str] = re.compile(
+    r"no\s+markdown\s+format|plain\s+text.*token|literal\s+plain\s+text",
+    re.IGNORECASE,
+)
+
+
+@semantic_rule(
+    name="output-section-no-markdown-directive",
+    description=(
+        "A SKILL.md output section is missing the no-markdown directive. "
+        "Skills with expected_output_patterns depend on plain-text token emission; "
+        "the model may emit **token_name** = value if not explicitly instructed otherwise."
+    ),
+)
+def _check_output_section_no_markdown_directive(ctx: ValidationContext) -> list[RuleFinding]:
+    """Verify that SKILL.md output sections contain an explicit no-markdown directive.
+
+    Skills with expected_output_patterns depend on the model emitting plain-text
+    token names. If the SKILL.md does not explicitly prohibit markdown formatting,
+    the model may emit **token_name** = value, causing adjudicated_failure.
+    """
+    manifest = load_bundled_manifest()
+    findings: list[RuleFinding] = []
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+
+        skill_data = manifest.get("skills", {}).get(skill_name)
+        if not skill_data or not skill_data.get("expected_output_patterns"):
+            continue  # Only check skills that have contracts with patterns
+
+        skill_md_path = _resolve_skill_md(skill_name)
+        if skill_md_path is None:
+            continue  # unknown-skill-command rule handles missing skills
+
+        try:
+            skill_md = skill_md_path.read_text(encoding="utf-8")
+        except OSError:
+            continue  # file deleted or unreadable between resolution and read
+
+        output_section_match = re.search(
+            r"##\s+Output\b(.+?)(?:^##|\Z)", skill_md, re.DOTALL | re.MULTILINE
+        )
+        if not output_section_match:
+            continue  # No output section — other rules handle this
+
+        output_section = output_section_match.group(1)
+
+        if not _NO_MARKDOWN_DIRECTIVE_PATTERN.search(output_section):
+            findings.append(
+                RuleFinding(
+                    rule="output-section-no-markdown-directive",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"SKILL.md for '{skill_name}' has expected_output_patterns but its "
+                        f"## Output section does not contain an explicit no-markdown directive. "
+                        f"Add: 'Emit the structured output tokens as literal plain text with no "
+                        f"markdown formatting on the token names.'"
                     ),
                 )
             )

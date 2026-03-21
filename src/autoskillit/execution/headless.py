@@ -175,29 +175,47 @@ def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
     return last
 
 
-_OUTPUT_PATH_TOKENS: frozenset[str] = frozenset(
+# Intentionally excluded: these tokens are handled by dedicated extractors
+# (_WORKTREE_PATH_PATTERN for worktree_path; branch_name is used as a string,
+# not for path-contamination checks).
+_INTENTIONALLY_EXCLUDED_PATH_TOKENS: frozenset[str] = frozenset(
     {
-        "plan_path",
-        "plan_parts",
-        "investigation_path",
-        "diagnosis_path",
-        "report_path",
-        "review_path",
-        "groups_path",
-        "manifest_path",
-        "summary_path",
-        "analysis_path",
-        "remediation_path",
-        "diagram_path",
-        "triage_report",
-        "triage_manifest",
-        "pr_order_file",
-        "analysis_file",
-        "conflict_report_path",
-        "config_path",
-        "recipe_path",
+        "worktree_path",
+        "branch_name",
     }
 )
+
+
+def _build_path_token_set() -> frozenset[str]:
+    """Derive the set of file-path output token names from skill_contracts.yaml.
+
+    This replaces the manually-maintained frozenset and ensures new skills added
+    to the contracts file are automatically included in path-contamination checks.
+    Falls back to an empty frozenset if the manifest is unavailable (e.g., in
+    test environments where the package is not installed).
+
+    Filters outputs where type starts with "file_path" (covers both "file_path"
+    and "file_path_list"). The outputs section in skill_contracts.yaml is a list
+    of dicts with "name" and "type" keys — not a mapping.
+    """
+    try:
+        from autoskillit.recipe.contracts import load_bundled_manifest  # noqa: PLC0415
+
+        manifest = load_bundled_manifest()
+        return (
+            frozenset(
+                out["name"]
+                for skill_data in manifest.get("skills", {}).values()
+                for out in skill_data.get("outputs", [])
+                if isinstance(out, dict) and out.get("type", "").startswith("file_path")
+            )
+            - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+        )
+    except Exception:
+        return frozenset()
+
+
+_OUTPUT_PATH_TOKENS: frozenset[str] = _build_path_token_set()
 
 _OUTPUT_PATH_PATTERN: re.Pattern[str] = re.compile(
     r"^(" + "|".join(re.escape(t) for t in sorted(_OUTPUT_PATH_TOKENS)) + r")\s*=\s*(.+)$",

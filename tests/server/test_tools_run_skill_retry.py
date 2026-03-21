@@ -7,7 +7,7 @@ import json
 import pytest
 
 from autoskillit.core import SkillResult
-from autoskillit.core.types import RetryReason
+from autoskillit.core.types import RetryReason, TerminationReason
 from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
 
@@ -219,3 +219,30 @@ class TestRunSkillFields:
         assert result["needs_retry"] is True
         assert result["retry_reason"] == RetryReason.RESUME
         assert "prompt is too long" not in result["result"].lower()
+
+    @pytest.mark.anyio
+    async def test_includes_empty_output_reason_on_empty_natural_exit_session(self, tool_ctx):
+        """run_skill returns retry_reason=empty_output for empty natural-exit sessions.
+
+        NATURAL_EXIT + rc=0 + empty_output subtype: the session exited cleanly but
+        produced no output. No partial progress exists on disk. The retry_reason
+        must be EMPTY_OUTPUT so the orchestrator falls through to on_failure rather
+        than incorrectly routing to on_context_limit.
+        """
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "empty_output",
+                "is_error": True,
+                "result": "",
+                "session_id": "",
+            }
+        )
+        tool_ctx.runner.push(
+            _make_result(0, stdout, "", termination_reason=TerminationReason.NATURAL_EXIT)
+        )
+        result = json.loads(await run_skill("/investigate error", "/tmp"))
+        assert result["needs_retry"] is True
+        assert result["retry_reason"] == RetryReason.EMPTY_OUTPUT
+        # Verify the JSON payload contains the exact string "empty_output"
+        assert '"retry_reason": "empty_output"' in json.dumps(result)

@@ -155,8 +155,12 @@ async def run_skill(
     """Run a Claude Code headless session with a skill command.
 
     Returns JSON with: success, result, session_id, subtype, is_error, exit_code,
-    needs_retry, retry_reason. When needs_retry is true, retry_reason is
-    "resume" — the session should be retried to continue from where it left off.
+    needs_retry, retry_reason. When needs_retry is true, retry_reason is:
+    - "resume": context/turn limit hit — partial progress on disk, route to on_context_limit.
+    - "empty_output": session exited cleanly but produced no output — no partial progress,
+      route to on_failure.
+    - "early_stop": model stopped before completion marker — route to on_failure.
+    - "zero_writes": skill made no writes despite write expectation — route to on_failure.
 
     This is the correct MCP tool to delegate work to a headless session during
     pipeline execution. NEVER use native tools (Read, Grep, Glob, Edit, Write,

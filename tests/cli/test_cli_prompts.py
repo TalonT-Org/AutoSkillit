@@ -219,3 +219,33 @@ def test_orchestrator_prompt_multi_issue_ask_only_two_options():
     assert "sequentially (one at a time) or in parallel" in prompt.lower(), (
         "Prompt must instruct orchestrator to ask 'sequential or parallel?'"
     )
+
+
+def test_orchestrator_prompt_gates_context_limit_on_retry_reason_resume():
+    """The orchestrator prompt must gate on_context_limit routing on retry_reason=resume.
+
+    This prevents empty_output, early_stop, and zero_writes retry reasons from
+    being incorrectly routed to on_context_limit.
+    """
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    # Must require retry_reason=resume to route to on_context_limit
+    assert "retry_reason: resume" in prompt, (
+        "Prompt must gate on_context_limit routing on retry_reason: resume"
+    )
+    # Must NOT say bare needs_retry: true alone triggers on_context_limit
+    # The old pattern gated only on needs_retry: true — it must now require retry_reason
+    assert "needs_retry: true" not in prompt or "retry_reason: resume" in prompt, (
+        "Prompt must not route on needs_retry alone — retry_reason: resume is required"
+    )
+
+
+def test_orchestrator_prompt_empty_output_falls_to_on_failure():
+    """The orchestrator prompt must explicitly route empty_output to on_failure."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    assert "empty_output" in prompt, "Prompt must mention empty_output retry_reason"
+    # empty_output must be described as a fall-through-to-on-failure case
+    assert "on_failure" in prompt, "Prompt must reference on_failure routing"

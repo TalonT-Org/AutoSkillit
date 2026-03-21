@@ -31,6 +31,7 @@ class RetryReason(StrEnum):
     BUDGET_EXHAUSTED = "budget_exhausted"
     EARLY_STOP = "early_stop"
     ZERO_WRITES = "zero_writes"
+    EMPTY_OUTPUT = "empty_output"  # NATURAL_EXIT + rc=0 + no output, no partial progress
 
 
 class MergeFailedStep(StrEnum):

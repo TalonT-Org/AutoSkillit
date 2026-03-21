@@ -258,6 +258,38 @@ class TestRecipeTools:
         assert "content" in result
         assert len(result["content"]) > 0
 
+    # SS10
+    @pytest.mark.anyio
+    @patch("autoskillit.recipe._api.list_recipes")
+    async def test_list_recipes_response_includes_source_field(self, mock_list):
+        """list_recipes MCP response must include source field for each recipe entry."""
+        from autoskillit.core.types import LoadResult, RecipeSource
+        from autoskillit.recipe.schema import RecipeInfo
+
+        mock_list.return_value = LoadResult(
+            items=[
+                RecipeInfo(
+                    name="impl",
+                    description="Implement",
+                    source=RecipeSource.BUILTIN,
+                    path=Path("/recipes/impl.yaml"),
+                ),
+                RecipeInfo(
+                    name="my-recipe",
+                    description="Custom",
+                    source=RecipeSource.PROJECT,
+                    path=Path("/project/my-recipe.yaml"),
+                ),
+            ],
+            errors=[],
+        )
+        result = json.loads(await list_recipes())
+        assert "source" in result["recipes"][0], (
+            "MCP list_recipes response must include 'source' field"
+        )
+        assert result["recipes"][0]["source"] == "builtin"
+        assert result["recipes"][1]["source"] == "project"
+
     @pytest.mark.anyio
     async def test_load_recipe_parse_failure_is_logged_and_surfaced(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

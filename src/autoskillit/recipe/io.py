@@ -40,7 +40,10 @@ def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
     builtin_dir = pkg_root() / "recipes"
     _collect_recipes(RecipeSource.BUILTIN, builtin_dir, seen, items, errors)
 
-    return LoadResult(items=sorted(items, key=lambda r: r.name), errors=errors)
+    return LoadResult(
+        items=sorted(items, key=lambda r: (r.source != RecipeSource.BUILTIN, r.name)),
+        errors=errors,
+    )
 
 
 def builtin_recipes_dir() -> Path:

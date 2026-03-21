@@ -142,6 +142,7 @@ class RecipeListItem(TypedDict):
     name: str
     description: str
     summary: str
+    source: str
 
 
 class ListRecipesResult(TypedDict, total=False):
@@ -211,7 +212,13 @@ _LOAD_CACHE_LOCK = threading.Lock()
 def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, object]:
     """Build the MCP response dict for the list_recipes tool."""
     items: list[RecipeListItem] = [
-        {"name": r.name, "description": r.description, "summary": r.summary} for r in result.items
+        {
+            "name": r.name,
+            "description": r.description,
+            "summary": r.summary,
+            "source": r.source.value,
+        }
+        for r in result.items
     ]
     response: dict[str, object] = {
         "recipes": items,

@@ -369,8 +369,13 @@ class TestSousChefMergePhaseContract:
 
     def test_sous_chef_prohibits_parallel_gh_pr_merge(self):
         text = self._sous_chef_text()
+        merge_ref_idx = text.find("gh pr merge")
+        assert merge_ref_idx != -1, (
+            "sous-chef/SKILL.md must explicitly name 'gh pr merge' in the prohibition"
+        )
+        context = text[max(0, merge_ref_idx - 300) : merge_ref_idx + 300]
         has_prohibition = any(
-            phrase in text
+            phrase in context
             for phrase in (
                 "NEVER allow",
                 "NEVER call",
@@ -380,10 +385,8 @@ class TestSousChefMergePhaseContract:
             )
         )
         assert has_prohibition, (
-            "sous-chef/SKILL.md must contain a prohibition on parallel gh pr merge calls"
-        )
-        assert "gh pr merge" in text, (
-            "sous-chef/SKILL.md must explicitly name 'gh pr merge' in the prohibition"
+            "sous-chef/SKILL.md must contain a prohibition on parallel gh pr merge calls "
+            "with the prohibition phrase within 300 chars of 'gh pr merge'"
         )
 
     def test_sous_chef_requires_sequential_merge_without_queue(self):

@@ -2634,6 +2634,74 @@ class TestBuildSkillResultChannelAPatternRecovery:
         assert sr.needs_retry is False
         assert sr.subtype == "adjudicated_failure"
 
+    def test_bold_wrapped_plan_path_returns_success_not_adjudicated_failure(
+        self,
+    ) -> None:
+        """Regression test for issue #462: model emitting **plan_path** = /abs/path
+        must produce success=True, not adjudicated_failure."""
+        result_text = (
+            "The implementation plan has been written.\n\n"
+            "**plan_path** = /abs/path/plan.md\n"
+            "**plan_parts** = /abs/path/plan.md\n"
+            "%%ORDER_UP%%"
+        )
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=_success_session_json(result_text),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["plan_path\\s*=\\s*/.+"],
+        )
+        assert sr.success is True
+        assert sr.subtype != "adjudicated_failure"
+        assert sr.needs_retry is False
+
+    def test_bold_wrapped_tokens_in_assistant_messages_recovery_succeeds(
+        self,
+    ) -> None:
+        """Recovery path: bold-wrapped tokens in assistant_messages must also be found.
+        The pattern_recovery block in _build_skill_result requires channel_confirmation
+        != UNMONITORED to trigger; use CHANNEL_A to activate the recovery path."""
+        token_block = "**plan_path** = /abs/path/plan.md\n**plan_parts** = /abs/path/plan.md"
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": token_block}],
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "The plan is complete. %%ORDER_UP%%",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=["plan_path\\s*=\\s*/.+"],
+        )
+        assert sr.success is True
+
 
 class TestTimedOutSessionPreservesState:
     """TIMED_OUT branch must parse stdout to preserve tool_uses and assistant_messages."""

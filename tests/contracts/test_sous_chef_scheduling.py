@@ -10,7 +10,11 @@ import pytest
 def _sous_chef_text() -> str:
     skill_md = (
         Path(__file__).resolve().parent.parent.parent
-        / "src" / "autoskillit" / "skills" / "sous-chef" / "SKILL.md"
+        / "src"
+        / "autoskillit"
+        / "skills"
+        / "sous-chef"
+        / "SKILL.md"
     )
     return skill_md.read_text()
 
@@ -34,9 +38,12 @@ def test_sous_chef_has_parallel_scheduling_section() -> None:
     assert "PARALLEL STEP SCHEDULING" in text, (
         "sous-chef SKILL.md must contain a PARALLEL STEP SCHEDULING section"
     )
-    assert "MANDATORY" in text[text.index("PARALLEL STEP SCHEDULING"):text.index("PARALLEL STEP SCHEDULING") + 60], (
-        "PARALLEL STEP SCHEDULING section must be marked MANDATORY"
-    )
+    assert (
+        "MANDATORY"
+        in text[
+            text.index("PARALLEL STEP SCHEDULING") : text.index("PARALLEL STEP SCHEDULING") + 60
+        ]
+    ), "PARALLEL STEP SCHEDULING section must be marked MANDATORY"
 
 
 @pytest.mark.parametrize("tool", REQUIRED_FAST_STEPS)
@@ -91,9 +98,9 @@ def test_sous_chef_parallel_scheduling_batches_slow_steps() -> None:
     next_section = text.find("\n## ", section_start + 1)
     section_text = text[section_start:next_section] if next_section != -1 else text[section_start:]
     lower = section_text.lower()
-    assert "together" in lower or "parallel batch" in lower or "all slow" in lower or "batch" in lower, (
-        "PARALLEL STEP SCHEDULING section must instruct launching all slow steps together"
-    )
+    assert (
+        "together" in lower or "parallel batch" in lower or "all slow" in lower or "batch" in lower
+    ), "PARALLEL STEP SCHEDULING section must instruct launching all slow steps together"
 
 
 def test_sous_chef_parallel_scheduling_explains_wall_clock_rationale() -> None:
@@ -104,7 +111,9 @@ def test_sous_chef_parallel_scheduling_explains_wall_clock_rationale() -> None:
     next_section = text.find("\n## ", section_start + 1)
     section_text = text[section_start:next_section] if next_section != -1 else text[section_start:]
     lower = section_text.lower()
-    assert "wall-clock" in lower or "wall clock" in lower or "idle" in lower or "slowest" in lower, (
+    assert (
+        "wall-clock" in lower or "wall clock" in lower or "idle" in lower or "slowest" in lower
+    ), (
         "PARALLEL STEP SCHEDULING section must explain wall-clock rationale (idle time, slowest step)"
     )
 

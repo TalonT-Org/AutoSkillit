@@ -153,6 +153,22 @@ def _write_timing_session(
         f.write(json.dumps(index_entry) + "\n")
 
 
+def _write_timing_session_cwd(
+    log_root: Path,
+    dir_name: str,
+    st_data: dict,
+    cwd: str,
+    timestamp: str = "2026-03-07T00:00:00+00:00",
+) -> None:
+    """Write a step_timing.json session with cwd in the sessions.jsonl index."""
+    session_dir = log_root / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "step_timing.json").write_text(json.dumps(st_data))
+    index_entry = {"dir_name": dir_name, "timestamp": timestamp, "cwd": cwd}
+    with (log_root / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
 class TestDefaultTimingLogLoadFromLogDir:
     def test_restores_timing_entries(self, tmp_path):
         """step_timing.json files in session dirs restore TimingEntry records."""
@@ -193,3 +209,69 @@ class TestDefaultTimingLogLoadFromLogDir:
         log = DefaultTimingLog()
         n = log.load_from_log_dir(tmp_path)
         assert n == 2
+
+
+class TestLoadFromLogDirCwdFilterTiming:
+    """
+    DefaultTimingLog.load_from_log_dir() must respect cwd_filter,
+    matching the contract already tested for DefaultTokenLog.
+    """
+
+    def test_cwd_filter_isolates_to_matching_cwd(self, tmp_path):
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        cwd_a = str(tmp_path / "pipeline-a")
+        cwd_b = str(tmp_path / "pipeline-b")
+
+        _write_timing_session_cwd(
+            log_dir, "s-a", {"step_name": "plan", "total_seconds": 10.0}, cwd_a
+        )
+        _write_timing_session_cwd(
+            log_dir, "s-b", {"step_name": "implement", "total_seconds": 20.0}, cwd_b
+        )
+
+        log = DefaultTimingLog()
+        n = log.load_from_log_dir(log_dir, cwd_filter=cwd_a)
+
+        assert n == 1
+        report = log.get_report()
+        step_names = [e["step_name"] for e in report]
+        assert "plan" in step_names
+        assert "implement" not in step_names
+
+    def test_cwd_filter_empty_loads_all(self, tmp_path):
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        for i, cwd in enumerate(["cwd-a", "cwd-b"]):
+            _write_timing_session_cwd(
+                log_dir,
+                f"s-{i}",
+                {"step_name": f"step-{i}", "total_seconds": float(i + 1)},
+                str(tmp_path / cwd),
+            )
+
+        log = DefaultTimingLog()
+        n = log.load_from_log_dir(log_dir, cwd_filter="")
+        assert n == 2
+
+    def test_cwd_filter_no_matches_returns_zero(self, tmp_path):
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        _write_timing_session_cwd(
+            log_dir,
+            "s-x",
+            {"step_name": "plan", "total_seconds": 5.0},
+            str(tmp_path / "some-cwd"),
+        )
+
+        log = DefaultTimingLog()
+        n = log.load_from_log_dir(log_dir, cwd_filter="/nonexistent/pipeline/cwd")
+        assert n == 0
+        assert log.get_report() == []

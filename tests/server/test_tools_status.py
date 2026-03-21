@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import anyio
@@ -808,3 +809,71 @@ class TestGetLogRoot:
 
         monkeypatch.setattr(tool_ctx.config.linux_tracing, "log_dir", str(tmp_path))
         assert isinstance(_get_log_root(), Path)
+
+
+@pytest.mark.anyio
+async def test_get_token_summary_not_contaminated_by_prior_pipeline(tmp_path, tool_ctx):
+    """
+    get_token_summary() must return only the current pipeline's data.
+    Entries written by a prior pipeline run must not appear in the summary,
+    even if the server was restarted with those sessions present in the log dir.
+    """
+    from unittest.mock import patch
+
+    from autoskillit.server._state import _initialize
+
+    # tool_ctx fixture sets log_dir to tmp_path/"session_logs" — write sessions there
+    # so _initialize reads from the same directory it is configured to use.
+    log_dir = Path(tool_ctx.config.linux_tracing.log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    prior_cwd = str(tmp_path / "prior-pipeline-clone")
+    # Use a current timestamp so it falls within _initialize's 24-hour recovery window
+    now_ts = datetime.now(UTC).isoformat()
+
+    # Write sessions from a PRIOR pipeline (different cwd) using direct file writes
+    session_dir = log_dir / "sessions" / "sess-prior"
+    session_dir.mkdir(parents=True)
+    (session_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "step_name": "implement",
+                "input_tokens": 9999,
+                "output_tokens": 4444,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 120.0,
+            }
+        )
+    )
+    with (log_dir / "sessions.jsonl").open("a") as f:
+        f.write(
+            json.dumps({"dir_name": "sess-prior", "timestamp": now_ts, "cwd": prior_cwd}) + "\n"
+        )
+
+    # Simulate server startup with cross-pipeline sessions in the log dir
+    with patch("autoskillit.execution.recover_crashed_sessions", return_value=0):
+        _initialize(tool_ctx)
+
+    # Now simulate the CURRENT pipeline recording its own step
+    tool_ctx.token_log.record(
+        "rectify",
+        {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+    )
+
+    # get_token_summary uses _get_ctx() internally — tool_ctx fixture wires _ctx correctly
+    result_json = await get_token_summary(clear=False, format="json")
+    result = json.loads(result_json)
+    step_names = [s["step_name"] for s in result["steps"]]
+
+    assert "implement" not in step_names, (
+        "Prior pipeline step 'implement' must not appear in current pipeline summary; "
+        "cross-pipeline contamination detected"
+    )
+    assert "rectify" in step_names, "Current pipeline step must appear"
+    assert len(step_names) == 1, f"Expected only current pipeline steps, got: {step_names}"

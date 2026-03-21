@@ -21,6 +21,7 @@ from cyclopts import App, Parameter
 from autoskillit.cli._cook import cook as cook_interactive
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
+    _check_secret_scanning,
     _generate_config_yaml,
     _prompt_test_command,
     _register_all,
@@ -151,6 +152,9 @@ def init(
             cmd_parts = _prompt_test_command()
 
         atomic_write(config_path, _generate_config_yaml(cmd_parts))
+
+    if not _check_secret_scanning(project_dir):
+        raise SystemExit(1)
 
     _register_all(scope, project_dir)
 

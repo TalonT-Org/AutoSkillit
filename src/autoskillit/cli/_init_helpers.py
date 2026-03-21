@@ -26,6 +26,13 @@ def _colors() -> tuple[str, str, str, str, str, str]:
     )
 
 
+_KNOWN_SCANNERS: frozenset[str] = frozenset(
+    {"gitleaks", "detect-secrets", "trufflehog", "git-secrets"}
+)
+
+_SECRET_SCAN_BYPASS_PHRASE = "I accept the risk of leaking secrets without pre-commit scanning"
+
+
 _MARKER_CONTENT = """\
 # autoskillit workspace - do not delete
 # This file authorizes reset_test_dir and reset_workspace to clear this directory.
@@ -132,6 +139,86 @@ def _create_secrets_template(project_dir: Path) -> None:
         "github:\n"
         "  token: ''  # Optional — only needed if gh auth is unavailable\n",
     )
+
+
+def _detect_secret_scanner(project_dir: Path) -> bool:
+    """Return True if .pre-commit-config.yaml references a known secret scanner."""
+    config_path = project_dir / ".pre-commit-config.yaml"
+    if not config_path.is_file():
+        return False
+    try:
+        data = load_yaml(config_path) or {}
+    except YAMLError:
+        return False
+    for repo in data.get("repos", []):
+        for hook in repo.get("hooks", []):
+            if hook.get("id") in _KNOWN_SCANNERS:
+                return True
+    return False
+
+
+def _log_secret_scan_bypass(project_dir: Path) -> None:
+    """Persist bypass acceptance timestamp to .autoskillit/config.yaml."""
+    from datetime import UTC, datetime
+
+    config_path = project_dir / ".autoskillit" / "config.yaml"
+    try:
+        data: dict = (load_yaml(config_path) or {}) if config_path.is_file() else {}
+    except YAMLError:
+        data = {}
+    data.setdefault("safety", {})["secret_scan_bypass_accepted"] = datetime.now(UTC).isoformat()
+    config_path.parent.mkdir(exist_ok=True)
+    atomic_write(config_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
+
+
+def _check_secret_scanning(project_dir: Path) -> bool:
+    """Gate: require secret scanning hook or explicit typed consent.
+
+    Returns True if it is safe to proceed (scanner found or bypass accepted).
+    Returns False if the check fails and init should abort (caller raises SystemExit(1)).
+    """
+    import sys
+
+    _B, _C, _D, _G, _Y, _R = _colors()
+
+    if _detect_secret_scanner(project_dir):
+        print(f"  {_Y}{'secret scanning':>12}{_R}  {_G}✓ hook detected{_R}")
+        return True
+
+    # No scanner found — require explicit opt-in
+    if not sys.stdin.isatty():
+        print(
+            f"\n  {_B}ERROR:{_R} No secret scanning hook found in .pre-commit-config.yaml.\n"
+            f"  AutoSkillit commits code automatically. Without a secret scanner,\n"
+            f"  leaked credentials are inevitable.\n\n"
+            f"  Add gitleaks, detect-secrets, trufflehog, or git-secrets to\n"
+            f"  .pre-commit-config.yaml before running 'autoskillit init'.\n"
+            f"  Non-interactive mode cannot bypass this check.\n"
+        )
+        return False
+
+    # Interactive: show warning and require consent phrase
+    border = "━" * 62
+    print(f"\n  {_Y}{border}{_R}")
+    print(f"  {_Y}  WARNING: No secret scanning hook detected{_R}")
+    print(f"  {_Y}{border}{_R}")
+    print(
+        "  AutoSkillit automates code commits at scale. Without a\n"
+        "  secret scanner in your pre-commit pipeline, leaked API\n"
+        "  keys and credentials are not a matter of if, but when.\n\n"
+        "  Recommended: add gitleaks to .pre-commit-config.yaml\n"
+        "  before proceeding.\n"
+    )
+    print("  To bypass, type exactly:\n")
+    print(f"  {_D}{_SECRET_SCAN_BYPASS_PHRASE}{_R}\n")
+    response = input("  > ").strip()
+    if response != _SECRET_SCAN_BYPASS_PHRASE:
+        print(f"\n  {_B}Aborted.{_R} Phrase did not match.")
+        return False
+
+    _log_secret_scan_bypass(project_dir)
+    print(f"  {_Y}{'bypass':>12}{_R}  {_D}accepted — logged to config.yaml{_R}")
+    return True
 
 
 def _is_plugin_installed() -> bool:

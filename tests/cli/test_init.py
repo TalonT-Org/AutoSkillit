@@ -13,6 +13,13 @@ from autoskillit import cli
 
 
 class TestCLIInit:
+    @pytest.fixture(autouse=True)
+    def _pre_commit_with_scanner(self, tmp_path: Path) -> None:
+        """Ensure every TestCLIInit test has a scanner-present pre-commit config."""
+        (tmp_path / ".pre-commit-config.yaml").write_text(
+            "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+        )
+
     # CL1
     def test_serve_calls_mcp_run(self) -> None:
         mock_mcp = MagicMock()
@@ -420,3 +427,107 @@ def test_gitignore_entries_includes_temp() -> None:
     from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES
 
     assert "temp/" in _AUTOSKILLIT_GITIGNORE_ENTRIES
+
+
+# SS-INIT-1
+def test_init_aborts_in_noninteractive_mode_without_scanner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """init raises SystemExit(1) when no scanner found and stdin is not a tty."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    # No .pre-commit-config.yaml created
+    with pytest.raises(SystemExit) as exc_info:
+        cli.init(test_command="pytest -v")
+    assert exc_info.value.code == 1
+
+
+# SS-INIT-2
+def test_init_proceeds_when_scanner_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """init proceeds normally when .pre-commit-config.yaml contains a known scanner."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n  - repo: https://github.com/gitleaks/gitleaks\n"
+        "    hooks:\n      - id: gitleaks\n"
+    )
+    cli.init(test_command="pytest -v")
+    assert (tmp_path / ".autoskillit" / "config.yaml").is_file()
+
+
+# SS-INIT-3
+def test_init_blocks_without_correct_phrase(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """init raises SystemExit(1) when user types wrong phrase in interactive mode."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    with patch("builtins.input", side_effect=["pytest -v", "nope"]):
+        with pytest.raises(SystemExit) as exc_info:
+            cli.init()
+    assert exc_info.value.code == 1
+
+
+# SS-INIT-4
+def test_init_proceeds_with_correct_phrase(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """init completes when user types the exact consent phrase."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    phrase = "I accept the risk of leaking secrets without pre-commit scanning"
+    with patch("builtins.input", side_effect=["pytest -v", phrase, ""]):
+        cli.init()
+    assert (tmp_path / ".autoskillit" / "config.yaml").is_file()
+
+
+# SS-INIT-5
+def test_init_bypass_logged_to_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """When bypass is accepted, config.yaml records the bypass with a timestamp."""
+    import yaml as _yaml
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    phrase = "I accept the risk of leaking secrets without pre-commit scanning"
+    with patch("builtins.input", side_effect=["pytest -v", phrase, ""]):
+        cli.init()
+    config = _yaml.safe_load((tmp_path / ".autoskillit" / "config.yaml").read_text())
+    bypass_value = config.get("safety", {}).get("secret_scan_bypass_accepted")
+    assert bypass_value is not None, "bypass_accepted timestamp must be persisted"
+
+
+# SS-INIT-6
+def test_init_force_does_not_bypass_secret_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--force must NOT bypass the secret scanning check."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    # Pre-existing config — so --force is relevant
+    (tmp_path / ".autoskillit").mkdir()
+    (tmp_path / ".autoskillit" / "config.yaml").write_text("old: true\n")
+    with pytest.raises(SystemExit) as exc_info:
+        cli.init(test_command="pytest -v", force=True)
+    assert exc_info.value.code == 1
+
+
+# SS-INIT-7 (unit test for the helper directly)
+def test_check_secret_scanning_detects_known_scanners(tmp_path: Path) -> None:
+    """_check_secret_scanning returns True without prompt when scanner is present."""
+    from autoskillit.cli._init_helpers import _check_secret_scanning
+
+    for hook_id in ("gitleaks", "detect-secrets", "trufflehog", "git-secrets"):
+        repo_dir = tmp_path / hook_id
+        repo_dir.mkdir()
+        (repo_dir / ".pre-commit-config.yaml").write_text(
+            f"repos:\n  - repo: dummy\n    hooks:\n      - id: {hook_id}\n"
+        )
+        (repo_dir / ".autoskillit").mkdir()
+        (repo_dir / ".autoskillit" / "config.yaml").write_text("")
+        result = _check_secret_scanning(repo_dir)
+        assert result is True, f"expected True for hook_id={hook_id!r}"

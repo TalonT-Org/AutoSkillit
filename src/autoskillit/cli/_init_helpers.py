@@ -150,7 +150,12 @@ def _detect_secret_scanner(project_dir: Path) -> bool:
         data = load_yaml(config_path) or {}
     except YAMLError:
         return False
-    for repo in data.get("repos", []):
+    if not isinstance(data, dict):
+        return False
+    repos = data.get("repos", [])
+    if not isinstance(repos, list):
+        return False
+    for repo in repos:
         for hook in repo.get("hooks", []):
             if hook.get("id") in _KNOWN_SCANNERS:
                 return True
@@ -163,7 +168,8 @@ def _log_secret_scan_bypass(project_dir: Path) -> None:
 
     config_path = project_dir / ".autoskillit" / "config.yaml"
     try:
-        data: dict = (load_yaml(config_path) or {}) if config_path.is_file() else {}
+        raw = (load_yaml(config_path) or {}) if config_path.is_file() else {}
+        data: dict = raw if isinstance(raw, dict) else {}
     except YAMLError:
         data = {}
     data.setdefault("safety", {})["secret_scan_bypass_accepted"] = datetime.now(UTC).isoformat()

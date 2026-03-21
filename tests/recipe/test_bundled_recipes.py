@@ -1378,6 +1378,32 @@ class TestReviewPrRecipeIntegration:
         )
 
 
+_PRODUCTION_RECIPES = [
+    "implementation.yaml",
+    "remediation.yaml",
+    "implementation-groups.yaml",
+]
+
+
+@pytest.mark.parametrize("name", _PRODUCTION_RECIPES)
+def test_bundled_production_recipes_zero_warnings(name: str) -> None:
+    """Production recipes must have zero semantic warnings.
+
+    A WARNING on a bundled recipe means a semantic rule has detected a potential
+    policy violation that will silently pass recipe validation. This catches
+    note-encoded protocol gaps before they reach production.
+    """
+    from autoskillit.core import Severity
+
+    recipe = load_recipe(builtin_recipes_dir() / name)
+    findings = run_semantic_rules(recipe)
+    warnings = [f for f in findings if f.severity == Severity.WARNING]
+    assert warnings == [], (
+        f"{name} has {len(warnings)} WARNING finding(s):\n"
+        + "\n".join(f"  [{f.rule}] {f.message}" for f in warnings)
+    )
+
+
 def test_bundled_recipes_pass_unrouted_verdict_value_rule() -> None:
     """All bundled recipes must pass the unrouted-verdict-value semantic rule."""
     for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):

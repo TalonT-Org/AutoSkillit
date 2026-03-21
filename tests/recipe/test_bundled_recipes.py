@@ -1541,6 +1541,36 @@ class TestBaseBranchDefaults:
 
 
 # ---------------------------------------------------------------------------
+# TestImplementationRecipeMergeQueueRule
+# ---------------------------------------------------------------------------
+
+
+class TestImplementationRecipeMergeQueueRule:
+    """implementation.yaml kitchen_rules must reference merge queue detection."""
+
+    @pytest.fixture(scope="class")
+    def recipe(self):
+        return load_recipe(builtin_recipes_dir() / "implementation.yaml")
+
+    def test_kitchen_rules_mention_check_merge_queue(self, recipe) -> None:
+        all_rules = " ".join(recipe.kitchen_rules)
+        assert "check_merge_queue" in all_rules and "MERGE ROUTING" in all_rules, (
+            "implementation.yaml kitchen_rules must reference both check_merge_queue "
+            "and contain a MERGE ROUTING rule"
+        )
+
+    def test_kitchen_rules_prohibit_direct_gh_pr_merge(self, recipe) -> None:
+        all_rules = " ".join(recipe.kitchen_rules)
+        has_prohibition = "gh pr merge" in all_rules and any(
+            phrase in all_rules for phrase in ("never", "NEVER", "not", "prohibited")
+        )
+        assert has_prohibition, (
+            "implementation.yaml kitchen_rules must explicitly prohibit calling "
+            "gh pr merge directly outside of recipe steps"
+        )
+
+
+# ---------------------------------------------------------------------------
 # WF7: build_recipe_graph emits zero warnings for all bundled recipes
 # ---------------------------------------------------------------------------
 

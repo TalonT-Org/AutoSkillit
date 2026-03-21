@@ -61,6 +61,12 @@ kitchen_rules:
     All work — skill invocations, git operations, file reads — happens
     exclusively in the clone (work_dir). source_dir is used ONLY to read
     the remote URL inside push_to_remote."
+  - "MERGE ROUTING: check_merge_queue detects whether the target branch has an active
+    merge queue (GraphQL, run_cmd, once per pipeline). route_queue_mode then routes to
+    enable_auto_merge → wait_for_queue (queue path) or direct_merge →
+    wait_for_direct_merge (non-queue path). Never call gh pr merge directly via run_cmd —
+    all merges go through these named recipe steps so CI enforcement and conflict routing
+    are preserved."
 
 steps:
   sprint_entry:

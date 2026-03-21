@@ -205,7 +205,12 @@ def _build_path_token_set() -> frozenset[str]:
     try:
         manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"
         manifest = load_yaml(manifest_path)
-        return (
+        if not isinstance(manifest, dict):
+            logger.debug(
+                "skill_contracts.yaml is empty or non-dict; _OUTPUT_PATH_TOKENS will be empty"
+            )
+            return frozenset()
+        result = (
             frozenset(
                 out["name"]
                 for skill_data in manifest.get("skills", {}).values()
@@ -214,6 +219,11 @@ def _build_path_token_set() -> frozenset[str]:
             )
             - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
         )
+        logger.debug("_OUTPUT_PATH_TOKENS derived from contracts", count=len(result))
+        return result
+    except FileNotFoundError:
+        logger.debug("skill_contracts.yaml not found; _OUTPUT_PATH_TOKENS will be empty")
+        return frozenset()
     except Exception:
         logger.warning("Failed to derive _OUTPUT_PATH_TOKENS from contracts YAML", exc_info=True)
         return frozenset()
@@ -221,9 +231,13 @@ def _build_path_token_set() -> frozenset[str]:
 
 _OUTPUT_PATH_TOKENS: frozenset[str] = _build_path_token_set()
 
-_OUTPUT_PATH_PATTERN: re.Pattern[str] = re.compile(
-    r"^(" + "|".join(re.escape(t) for t in sorted(_OUTPUT_PATH_TOKENS)) + r")\s*=\s*(.+)$",
-    re.MULTILINE,
+_OUTPUT_PATH_PATTERN: re.Pattern[str] = (
+    re.compile(
+        r"^(" + "|".join(re.escape(t) for t in sorted(_OUTPUT_PATH_TOKENS)) + r")\s*=\s*(.+)$",
+        re.MULTILINE,
+    )
+    if _OUTPUT_PATH_TOKENS
+    else re.compile(r"(?!)")  # never-matches sentinel when token set is empty
 )
 
 

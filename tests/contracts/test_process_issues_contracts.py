@@ -54,7 +54,7 @@ def test_process_issues_filters_in_progress(skill_text: str) -> None:
     # The skill tracks pre_claimed_urls and skips non-members at dispatch time.
     # Either the term "pre_claimed" (tracking list) or "already claimed"
     # (log message) must appear in the skill documentation.
-    assert "pre_claimed" in skill_text or "already claimed" in skill_text
+    assert "pre_claimed" in skill_text
 
 
 def test_process_issues_documents_pr_title_prefix(skill_text: str) -> None:

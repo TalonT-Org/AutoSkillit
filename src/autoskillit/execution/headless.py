@@ -215,6 +215,7 @@ def _build_path_token_set() -> frozenset[str]:
             - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
         )
     except Exception:
+        logger.warning("Failed to derive _OUTPUT_PATH_TOKENS from contracts YAML", exc_info=True)
         return frozenset()
 
 

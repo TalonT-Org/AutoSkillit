@@ -2135,13 +2135,13 @@ class TestExtractOutputPaths:
 
         msg = (
             "plan_path = /clone/temp/make-plan/plan.md\n"
-            "report_path = /clone/temp/report/report.md\n"
+            "summary_path = /clone/temp/report/summary.md\n"
             "investigation_path = /clone/temp/investigate/inv.md"
         )
         result = _extract_output_paths([msg])
         assert result == {
             "plan_path": "/clone/temp/make-plan/plan.md",
-            "report_path": "/clone/temp/report/report.md",
+            "summary_path": "/clone/temp/report/summary.md",
             "investigation_path": "/clone/temp/investigate/inv.md",
         }
 
@@ -2162,12 +2162,12 @@ class TestExtractOutputPaths:
 
         msgs = [
             "plan_path = /first/path",
-            "report_path = /second/path",
+            "investigation_path = /second/path",
         ]
         result = _extract_output_paths(msgs)
         assert result == {
             "plan_path": "/first/path",
-            "report_path": "/second/path",
+            "investigation_path": "/second/path",
         }
 
     def test_last_occurrence_wins(self):

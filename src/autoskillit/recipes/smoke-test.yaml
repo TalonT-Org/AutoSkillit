@@ -231,6 +231,8 @@ steps:
     with:
       skill_command: "/autoskillit:pipeline-summary ${{ inputs.workspace }}/bug_report.json ${{ context.feature_branch }} ${{ inputs.original_base_branch }} ${{ inputs.workspace }}"
       cwd: "${{ inputs.workspace }}"
+    capture:
+      summary_path: "${{ result.summary_path }}"
     on_success: done
     on_failure: escalate
     optional: true

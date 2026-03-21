@@ -112,7 +112,7 @@ def _fetch_good_first_issues(project_dir: Path) -> list[str]:  # noqa: ARG001
         if result.returncode != 0:
             return []
         items: Any = json.loads(result.stdout or "[]")
-        return [f"#{i['number']}: {i['title']}" for i in items if "number" in i]
+        return [f"#{i['number']}: {i['title']}" for i in items if "number" in i and "title" in i]
     except Exception:
         return []
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
+from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
 from autoskillit.core import Severity
 from autoskillit.hook_registry import HOOK_REGISTRY
 
@@ -148,8 +149,6 @@ def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
 
 def _check_secret_scanning_hook(project_dir: Path) -> DoctorResult:
     """Check that .pre-commit-config.yaml includes a known secret scanning hook."""
-    from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
-
     if _detect_secret_scanner(project_dir):
         return DoctorResult(
             Severity.OK,

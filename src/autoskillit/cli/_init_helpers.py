@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
@@ -164,8 +165,6 @@ def _detect_secret_scanner(project_dir: Path) -> bool:
 
 def _log_secret_scan_bypass(project_dir: Path) -> None:
     """Persist bypass acceptance timestamp to .autoskillit/config.yaml."""
-    from datetime import UTC, datetime
-
     config_path = project_dir / ".autoskillit" / "config.yaml"
     try:
         raw = (load_yaml(config_path) or {}) if config_path.is_file() else {}
@@ -183,8 +182,6 @@ def _check_secret_scanning(project_dir: Path) -> bool:
     Returns True if it is safe to proceed (scanner found or bypass accepted).
     Returns False if the check fails and init should abort (caller raises SystemExit(1)).
     """
-    import sys
-
     _B, _C, _D, _G, _Y, _R = _colors()
 
     if _detect_secret_scanner(project_dir):

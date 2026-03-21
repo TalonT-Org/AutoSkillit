@@ -74,6 +74,7 @@ _PRINT_EXEMPT = frozenset(
 )
 
 # Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON
+# _onboarding.py: CLI helper with user-facing graceful degradation (fail-open UX, not a hook)
 _BROAD_EXCEPT_EXEMPT = frozenset(
     {
         "_onboarding.py",

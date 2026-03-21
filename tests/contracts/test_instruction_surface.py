@@ -369,7 +369,6 @@ class TestSousChefMergePhaseContract:
 
     def test_sous_chef_prohibits_parallel_gh_pr_merge(self):
         text = self._sous_chef_text()
-        # Must state that parallel gh pr merge is forbidden without merge queue
         has_prohibition = any(
             phrase in text
             for phrase in (

@@ -249,3 +249,21 @@ def test_orchestrator_prompt_empty_output_falls_to_on_failure():
     assert "empty_output" in prompt, "Prompt must mention empty_output retry_reason"
     # empty_output must be described as a fall-through-to-on-failure case
     assert "on_failure" in prompt, "Prompt must reference on_failure routing"
+
+
+def test_orchestrator_prompt_drain_race_routes_to_on_context_limit():
+    """drain_race must be listed alongside resume as an on_context_limit trigger."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    assert "drain_race" in prompt, "Prompt must mention drain_race retry_reason"
+    # drain_race should appear near on_context_limit routing, not only on_failure
+    assert "on_context_limit" in prompt, "Prompt must reference on_context_limit routing"
+
+
+def test_orchestrator_prompt_path_contamination_falls_to_on_failure():
+    """path_contamination must fall through to on_failure, not on_context_limit."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    assert "path_contamination" in prompt, "Prompt must mention path_contamination retry_reason"

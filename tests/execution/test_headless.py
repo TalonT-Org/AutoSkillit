@@ -2264,7 +2264,26 @@ class TestBuildSkillResultPathContamination:
         assert sr.success is False
         assert sr.subtype == "path_contamination"
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
+
+    def test_path_contamination_emits_path_contamination_reason(self):
+        """Path contamination must emit PATH_CONTAMINATION, not RESUME.
+
+        PATH_CONTAMINATION is not a context limit — it is a CWD boundary violation.
+        The orchestrator must route to on_failure, not on_context_limit.
+        """
+        path = "/wrong/source/repo/temp/make-plan/bar.md"
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {path}")
+            + "\n"
+            + _success_session_json("Plan created.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, cwd="/correct/clone")
+        assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
+        assert sr.needs_retry is True
+        # Confirm it is NOT RESUME — routing must not go to on_context_limit
+        assert sr.retry_reason != RetryReason.RESUME
 
     def test_no_contamination_when_paths_under_cwd(self):
         """All output paths under cwd yields normal result."""

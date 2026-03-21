@@ -902,7 +902,7 @@ def _compute_outcome(
                 )
                 if content_state == ContentState.ABSENT:
                     needs_retry = True
-                    retry_reason = RetryReason.RESUME
+                    retry_reason = RetryReason.DRAIN_RACE
                     logger.debug(
                         "dead_end_guard",
                         action="promoted_to_retriable",

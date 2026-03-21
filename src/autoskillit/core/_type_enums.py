@@ -32,6 +32,8 @@ class RetryReason(StrEnum):
     EARLY_STOP = "early_stop"
     ZERO_WRITES = "zero_writes"
     EMPTY_OUTPUT = "empty_output"  # NATURAL_EXIT + rc=0 + no output, no partial progress
+    DRAIN_RACE = "drain_race"  # channel-confirmed completion, stdout not fully flushed before kill
+    PATH_CONTAMINATION = "path_contamination"  # CWD boundary violation, not a context limit
 
 
 class MergeFailedStep(StrEnum):

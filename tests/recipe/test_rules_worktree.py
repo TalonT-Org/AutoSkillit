@@ -222,6 +222,76 @@ def test_on_context_limit_on_worktree_skill_is_clean() -> None:
 
 
 # ---------------------------------------------------------------------------
+# missing-context-limit-on-worktree tests
+# ---------------------------------------------------------------------------
+
+
+def test_missing_context_limit_on_worktree_step_warns() -> None:
+    """Recipe with implement-worktree-no-merge step and no on_context_limit
+    should emit a WARNING-level finding."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "implement": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": (
+                        "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+                    )
+                },
+                on_failure="done",
+                retries=0,
+                # on_context_limit deliberately absent
+            ),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+        kitchen_rules=[],
+    )
+    findings = run_semantic_rules(wf)
+    warning_rules = [f.rule for f in findings if f.severity == Severity.WARNING]
+    assert "missing-context-limit-on-worktree" in warning_rules
+
+
+def test_worktree_step_with_context_limit_no_warning() -> None:
+    """Recipe with implement-worktree-no-merge + on_context_limit should be clean."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "implement": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": (
+                        "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
+                    )
+                },
+                on_failure="done",
+                on_context_limit="retry_worktree",
+                retries=0,
+            ),
+            "retry_worktree": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": (
+                        "/autoskillit:retry-worktree "
+                        "${{ context.plan_path }} ${{ context.worktree_path }}"
+                    ),
+                    "cwd": "${{ context.worktree_path }}",
+                },
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Done."),
+        },
+        kitchen_rules=[],
+    )
+    findings = run_semantic_rules(wf)
+    warning_rules = [f.rule for f in findings if f.severity == Severity.WARNING]
+    assert "missing-context-limit-on-worktree" not in warning_rules
+
+
+# ---------------------------------------------------------------------------
 # TestCloneRootAsWorktreeRule
 # ---------------------------------------------------------------------------
 

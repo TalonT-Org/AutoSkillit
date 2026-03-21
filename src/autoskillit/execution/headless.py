@@ -529,7 +529,7 @@ def _build_skill_result(
             is_error=session.is_error,
             exit_code=returncode,
             needs_retry=True,
-            retry_reason=RetryReason.RESUME,
+            retry_reason=RetryReason.PATH_CONTAMINATION,
             stderr=_truncate(result.stderr),
             token_usage=session.token_usage,
             worktree_path=extracted_worktree_path,

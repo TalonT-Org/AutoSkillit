@@ -1412,7 +1412,7 @@ class TestDeadEndGuardContentState:
         assert outcome == SessionOutcome.RETRIABLE, (
             "Empty result with channel confirmation must remain RETRIABLE (drain-race rescue)."
         )
-        assert retry_reason == RetryReason.RESUME
+        assert retry_reason == RetryReason.DRAIN_RACE
 
     def test_compute_outcome_channel_b_missing_marker_is_still_retriable(
         self,
@@ -1436,4 +1436,31 @@ class TestDeadEndGuardContentState:
         assert outcome == SessionOutcome.RETRIABLE, (
             "Missing completion marker with channel confirmation must remain RETRIABLE."
         )
-        assert retry_reason == RetryReason.RESUME
+        assert retry_reason == RetryReason.DRAIN_RACE
+
+    def test_dead_end_guard_channel_confirmed_absent_emits_drain_race(
+        self,
+        make_session: Callable[..., ClaudeSessionResult],
+    ) -> None:
+        """Channel confirmed + content ABSENT → DRAIN_RACE, not RESUME.
+
+        DRAIN_RACE distinguishes "infrastructure confirmed completion, stdout not
+        fully flushed" from "session hit context limit." Both route to on_context_limit
+        because progress was confirmed, but the provenance is now explicit.
+        """
+        session = make_session(
+            subtype="success",
+            is_error=False,
+            result="",  # empty — drain race candidate
+            assistant_messages=[],
+        )
+        outcome, reason = _compute_outcome(
+            session=session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            expected_output_patterns=(),
+        )
+        assert outcome == SessionOutcome.RETRIABLE
+        assert reason == RetryReason.DRAIN_RACE  # not RESUME

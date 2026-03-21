@@ -156,9 +156,7 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
     _Y = "\x1b[33m" if color else ""
     _R = "\x1b[0m" if color else ""
 
-    print(
-        f"\n{_B}It looks like this is your first time using AutoSkillit in this project.{_R}"
-    )
+    print(f"\n{_B}It looks like this is your first time using AutoSkillit in this project.{_R}")
     ans = input("Would you like help getting started? [Y/n]: ").strip().lower()
     if ans in ("n", "no"):
         mark_onboarded(project_dir)
@@ -169,7 +167,10 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
     intel_future = executor.submit(gather_intel, project_dir)
 
     print(f"\n{_B}What would you like to do?{_R}")
-    print(f"  {_Y}A{_R} — {_C}Analyze this repo{_R}          (runs /autoskillit:setup-project wizard)")
+    print(
+        f"  {_Y}A{_R} — {_C}Analyze this repo{_R}          "
+        f"(runs /autoskillit:setup-project wizard)"
+    )
     print(f"  {_Y}B{_R} — {_C}I have a GitHub issue{_R}       (routes to prepare-issue)")
     print(f"  {_Y}C{_R} — {_C}Show me a demo run{_R}          (auto-detects a safe target)")
     print(f"  {_Y}D{_R} — {_C}Write a custom recipe{_R}        (runs /autoskillit:write-recipe)")

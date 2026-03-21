@@ -567,7 +567,7 @@ class TestSkillInfoTailorable:
 
     # SK-T4
     def test_read_skill_frontmatter_tailoring_hints(self, tmp_path: Path) -> None:
-        """SKILL.md with tailoring_hints: 'custom hints' → SkillInfo.tailoring_hints == 'custom hints'."""
+        """SKILL.md with tailoring_hints: 'custom hints' → tailoring_hints == 'custom hints'."""
         skill_dir = tmp_path / "my-skill"
         skill_dir.mkdir()
         skill_md = skill_dir / "SKILL.md"
@@ -584,14 +584,12 @@ class TestSkillInfoTailorable:
     def test_scan_directory_populates_tailorable_from_frontmatter(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Temp skill dir with tailorable: true → SkillInfo.tailorable == True via SkillResolver."""
+        """Temp skill dir with tailorable: true → SkillInfo.tailorable == True via resolver."""
         skill_dir = tmp_path / "tailorable-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\ntailorable: true\n---\n# Tailorable\n")
 
-        monkeypatch.setattr(
-            "autoskillit.workspace.skills.bundled_skills_dir", lambda: tmp_path
-        )
+        monkeypatch.setattr("autoskillit.workspace.skills.bundled_skills_dir", lambda: tmp_path)
         monkeypatch.setattr(
             "autoskillit.workspace.skills.bundled_skills_extended_dir",
             lambda: Path("/nonexistent"),

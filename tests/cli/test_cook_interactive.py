@@ -253,7 +253,7 @@ class TestCookInteractive:
     def test_cook_marks_onboarded_in_finally_when_prompt_set(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """When run_onboarding_menu returns non-None and session completes, mark_onboarded called."""
+        """When run_onboarding_menu returns non-None and session completes, mark called."""
         from unittest.mock import MagicMock, patch
 
         fake_skills_dir = tmp_path / "skills"

@@ -73,9 +73,7 @@ def detect_project_local_overrides(project_dir: Path) -> frozenset[str]:
     return frozenset(overrides)
 
 
-def _skill_info_from_frontmatter(
-    name: str, source: SkillSource, skill_path: Path
-) -> SkillInfo:
+def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Path) -> SkillInfo:
     """Build a SkillInfo by reading all frontmatter fields in a single parse."""
     data = _read_skill_frontmatter(skill_path)
     categories_raw = data.get("categories", [])

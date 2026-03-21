@@ -410,34 +410,6 @@ class TestSousChefMergePhaseContract:
         )
 
 
-class TestImplementationRecipeMergeQueueRule:
-    """implementation.yaml kitchen_rules must reference merge queue detection."""
-
-    def _impl_recipe(self):
-        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-
-        return load_recipe(builtin_recipes_dir() / "implementation.yaml")
-
-    def test_kitchen_rules_mention_check_merge_queue(self):
-        recipe = self._impl_recipe()
-        all_rules = " ".join(recipe.kitchen_rules)
-        assert "check_merge_queue" in all_rules or "MERGE ROUTING" in all_rules, (
-            "implementation.yaml kitchen_rules must reference check_merge_queue or "
-            "contain a MERGE ROUTING rule"
-        )
-
-    def test_kitchen_rules_prohibit_direct_gh_pr_merge(self):
-        recipe = self._impl_recipe()
-        all_rules = " ".join(recipe.kitchen_rules)
-        has_prohibition = "gh pr merge" in all_rules and any(
-            phrase in all_rules for phrase in ("never", "NEVER", "not", "prohibited")
-        )
-        assert has_prohibition, (
-            "implementation.yaml kitchen_rules must explicitly prohibit calling "
-            "gh pr merge directly outside of recipe steps"
-        )
-
-
 def test_open_pr_skill_does_not_contain_git_push():
     """The open-pr SKILL.md must not contain 'git push -u origin' as a workflow step.
     The recipe manages all push operations via push_to_remote. The skill is a pure

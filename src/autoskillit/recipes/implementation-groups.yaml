@@ -27,7 +27,9 @@ ingredients:
     description: PR instead of direct merge
     default: "true"
   auto_merge:
-    description: Enroll the PR in the merge queue automatically after checks pass
+    description: >-
+      Automatically merge the PR after required checks pass —
+      via merge queue when available, direct merge otherwise
     default: "true"
   issue_url:
     description: GitHub issue to close on merge
@@ -617,7 +619,7 @@ steps:
         route: confirm_cleanup
       - when: "${{ context.queue_available }} == 'true'"
         route: enable_auto_merge
-      - route: release_issue_success
+      - route: direct_merge
     skip_when_false: "inputs.open_pr"
 
   enable_auto_merge:
@@ -716,6 +718,92 @@ steps:
     note: >
       Re-submits the PR after conflict resolution. Routes back to wait_for_queue.
       If re-entry fails, release_issue_failure preserves the clone for debugging.
+
+  direct_merge:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "direct_merge"
+    on_success: wait_for_direct_merge
+    on_failure: confirm_cleanup
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Enables GitHub native auto-merge for direct merge (no merge queue). GitHub
+      merges automatically once all required checks pass. On failure (PR already
+      merged, not mergeable), degrades gracefully to confirm_cleanup.
+
+  wait_for_direct_merge:
+    tool: run_cmd
+    with:
+      cmd: >
+        for i in $(seq 1 90); do
+          STATE=$(gh pr view '${{ context.pr_number }}' --json state --jq '.state') &&
+          if [ "$STATE" = "MERGED" ]; then echo "merged"; exit 0; fi;
+          if [ "$STATE" = "CLOSED" ]; then echo "closed"; exit 0; fi;
+          sleep 10;
+        done; echo "timeout"
+      cwd: "${{ context.work_dir }}"
+      step_name: "wait_for_direct_merge"
+    capture:
+      direct_merge_state: "${{ result.stdout | trim }}"
+    on_result:
+      - when: "${{ result.stdout | trim }} == merged"
+        route: release_issue_success
+      - when: "${{ result.stdout | trim }} == closed"
+        route: direct_merge_conflict_fix
+      - route: release_issue_timeout
+    on_failure: release_issue_timeout
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Polls GitHub PR state every 10 s for up to 15 minutes (90 iterations).
+      merged → release_issue_success (issue labelled, cleanup runs).
+      closed → PR was closed (likely conflict) — route to conflict fix.
+      timeout / unexpected → release_issue_timeout.
+
+  direct_merge_conflict_fix:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "direct_merge_conflict_fix"
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: release_issue_failure
+      - route: re_push_direct_fix
+    on_failure: release_issue_failure
+    retries: 1
+    on_exhausted: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Resolves rebase conflicts on the feature branch after direct-merge rejection.
+      escalation_required=true → release_issue_failure for human review.
+
+  re_push_direct_fix:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.merge_target }}"
+    on_success: redirect_merge
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+
+  redirect_merge:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "redirect_merge"
+    on_success: wait_for_direct_merge
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Re-enables auto-merge after conflict resolution and re-push.
+      Routes back to wait_for_direct_merge to poll for completion.
+      On failure, release_issue_failure preserves the clone for debugging.
 
   release_issue_timeout:
     description: "Release in-progress claim after queue timeout without applying staged label"

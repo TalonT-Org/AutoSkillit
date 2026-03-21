@@ -269,7 +269,7 @@ class TestComputeRetry:
             session, returncode=0, termination=TerminationReason.NATURAL_EXIT
         )
         assert needs is True
-        assert reason == RetryReason.EMPTY_OUTPUT  # NOT RESUME
+        assert reason == RetryReason.EMPTY_OUTPUT
 
     def test_empty_output_exit_one_not_retriable(self):
         """Real failure: CLI crashed with empty output."""
@@ -500,7 +500,7 @@ class TestComputeRetrySuccessEmptyResult:
             session, returncode=0, termination=TerminationReason.NATURAL_EXIT
         )
         assert retriable is True
-        assert reason == RetryReason.EMPTY_OUTPUT  # NOT RESUME
+        assert reason == RetryReason.EMPTY_OUTPUT
 
     def test_empty_output_completed_negative_rc_is_retriable(self) -> None:
         """empty_output + COMPLETED + rc=-15 must be retriable.

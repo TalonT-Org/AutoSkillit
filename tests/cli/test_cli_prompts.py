@@ -234,11 +234,6 @@ def test_orchestrator_prompt_gates_context_limit_on_retry_reason_resume():
     assert "retry_reason: resume" in prompt, (
         "Prompt must gate on_context_limit routing on retry_reason: resume"
     )
-    # Must NOT say bare needs_retry: true alone triggers on_context_limit
-    # The old pattern gated only on needs_retry: true — it must now require retry_reason
-    assert "needs_retry: true" not in prompt or "retry_reason: resume" in prompt, (
-        "Prompt must not route on needs_retry alone — retry_reason: resume is required"
-    )
 
 
 def test_orchestrator_prompt_empty_output_falls_to_on_failure():
@@ -247,8 +242,12 @@ def test_orchestrator_prompt_empty_output_falls_to_on_failure():
 
     prompt = _build_orchestrator_prompt("implementation")
     assert "empty_output" in prompt, "Prompt must mention empty_output retry_reason"
-    # empty_output must be described as a fall-through-to-on-failure case
-    assert "on_failure" in prompt, "Prompt must reference on_failure routing"
+    # empty_output must be described as falling through to on_failure — not on_context_limit
+    empty_output_idx = prompt.index("empty_output")
+    segment = prompt[empty_output_idx : empty_output_idx + 400]
+    assert "on_failure" in segment, (
+        "Prompt must route empty_output to on_failure near the empty_output mention"
+    )
 
 
 def test_orchestrator_prompt_drain_race_routes_to_on_context_limit():
@@ -257,8 +256,12 @@ def test_orchestrator_prompt_drain_race_routes_to_on_context_limit():
 
     prompt = _build_orchestrator_prompt("implementation")
     assert "drain_race" in prompt, "Prompt must mention drain_race retry_reason"
-    # drain_race should appear near on_context_limit routing, not only on_failure
-    assert "on_context_limit" in prompt, "Prompt must reference on_context_limit routing"
+    # drain_race must be associated with on_context_limit routing — not standalone
+    drain_race_idx = prompt.index("drain_race")
+    segment = prompt[drain_race_idx : drain_race_idx + 400]
+    assert "on_context_limit" in segment, (
+        "Prompt must route drain_race to on_context_limit near the drain_race mention"
+    )
 
 
 def test_orchestrator_prompt_path_contamination_falls_to_on_failure():

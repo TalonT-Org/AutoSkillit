@@ -2283,7 +2283,6 @@ class TestBuildSkillResultPathContamination:
         assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
         assert sr.needs_retry is True
         # Confirm it is NOT RESUME — routing must not go to on_context_limit
-        assert sr.retry_reason != RetryReason.RESUME
 
     def test_no_contamination_when_paths_under_cwd(self):
         """All output paths under cwd yields normal result."""

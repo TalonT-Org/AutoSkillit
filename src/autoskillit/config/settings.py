@@ -563,6 +563,12 @@ def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
                 if should_validate:
                     validate_layer_keys(data, path, is_secrets_layer=is_secrets)
                 _apply_layer(merged, data)
+            elif data is not None:
+                raise ConfigSchemaError(
+                    f"Invalid configuration in {str(path)!r}: "
+                    f"expected a YAML mapping at the top level, "
+                    f"got {type(data).__name__!r}."
+                )
 
     # Write to a temp file so Dynaconf can load it and apply env var overrides.
     # Dynaconf reads files lazily; we trigger eager loading before the file is

@@ -758,6 +758,40 @@ class TestTokenSummaryWallClock:
         # No timing_log entry → falls back to elapsed_seconds
         assert step["wall_clock_seconds"] == pytest.approx(5.0)
 
+    @pytest.mark.anyio
+    async def test_merge_wall_clock_after_normalization(self, tool_ctx):
+        """
+        When token entries and timing entries are both normalized to canonical names,
+        _merge_wall_clock_seconds must match them correctly.
+        """
+        from autoskillit.pipeline.timings import DefaultTimingLog
+        from autoskillit.pipeline.tokens import DefaultTokenLog
+
+        tool_ctx.token_log = DefaultTokenLog()
+        tool_ctx.timing_log = DefaultTimingLog()
+
+        # Record via suffixed names — both should normalize to "implement"
+        usage = {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
+        tool_ctx.token_log.record("implement-30", usage)
+        tool_ctx.token_log.record("implement-31", usage)
+        tool_ctx.timing_log.record("implement-30", 60.0)
+        tool_ctx.timing_log.record("implement-31", 55.0)
+
+        result = json.loads(await get_token_summary(clear=False, format="json"))
+
+        assert len(result["steps"]) == 1
+        step = result["steps"][0]
+        assert step["step_name"] == "implement"
+        assert step["input_tokens"] == 200
+        # wall_clock_seconds from timing log should be present
+        assert "wall_clock_seconds" in step
+        assert step["wall_clock_seconds"] == pytest.approx(115.0)
+
 
 class TestClearMarkerWritten:
     @pytest.mark.anyio

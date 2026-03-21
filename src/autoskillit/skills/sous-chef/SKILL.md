@@ -161,6 +161,32 @@ simultaneously, after which all slow steps run in parallel and their wall-clock 
 
 ---
 
+## STEP NAME IMMUTABILITY — MANDATORY
+
+The `step_name` passed to `run_skill` (and all other recipe-step tools that accept
+`step_name`) must be the **exact value from the recipe YAML `with:` block**.
+
+**NEVER** append clone numbers, instance indices, retry counts, or any other
+disambiguation strings. The telemetry layer aggregates all invocations of the same
+logical step automatically — suffixing produces garbage rows in token and timing tables.
+
+Correct:
+```yaml
+with:
+  step_name: implement
+```
+
+Wrong (produces garbage):
+```yaml
+with:
+  step_name: implement-30   # ← NEVER DO THIS
+```
+
+This rule applies whether running sequential or parallel pipelines. Each clone or
+parallel run of the same step reports under the same canonical step name.
+
+---
+
 ## MERGE PHASE — MANDATORY
 
 This rule applies whenever the orchestrator must merge **one or more open PRs**, whether

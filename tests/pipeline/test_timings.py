@@ -275,3 +275,55 @@ class TestLoadFromLogDirCwdFilterTiming:
         n = log.load_from_log_dir(log_dir, cwd_filter="/nonexistent/pipeline/cwd")
         assert n == 0
         assert log.get_report() == []
+
+
+# ---------------------------------------------------------------------------
+# Step name normalization tests
+# ---------------------------------------------------------------------------
+
+
+class TestTimingLogStepNameNormalization:
+    def test_suffixed_step_names_aggregate_to_canonical(self):
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        log = DefaultTimingLog()
+        log.record("implement-31", 60.0)
+        log.record("implement-32", 55.0)
+
+        report = log.get_report()
+        assert len(report) == 1
+        assert report[0]["step_name"] == "implement"
+        assert report[0]["total_seconds"] == pytest.approx(115.0)
+
+    def test_load_normalizes_suffixed_names(self, tmp_path):
+        """Write session files directly — flush_session_log requires 10+ required params
+        and is not used in this test file. Use the established helper pattern instead."""
+        import json
+
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        log_dir = tmp_path / "logs"
+        sessions_dir = log_dir / "sessions"
+        cwd = str(tmp_path / "pipeline")
+        timestamp = "2026-03-21T00:00:00+00:00"
+
+        for step_name, dir_name, secs in [
+            ("implement-30", "t-30", 60.0),
+            ("implement-31", "t-31", 55.0),
+        ]:
+            session_dir = sessions_dir / dir_name
+            session_dir.mkdir(parents=True, exist_ok=True)
+            (session_dir / "step_timing.json").write_text(
+                json.dumps({"step_name": step_name, "total_seconds": secs})
+            )
+            index_entry = {"dir_name": dir_name, "timestamp": timestamp, "cwd": cwd}
+            with (log_dir / "sessions.jsonl").open("a") as f:
+                f.write(json.dumps(index_entry) + "\n")
+
+        log = DefaultTimingLog()
+        log.load_from_log_dir(str(log_dir), cwd_filter=cwd)
+
+        report = log.get_report()
+        assert len(report) == 1
+        assert report[0]["step_name"] == "implement"
+        assert report[0]["total_seconds"] == pytest.approx(115.0)

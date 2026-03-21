@@ -73,7 +73,7 @@ def test_sous_chef_parallel_scheduling_defines_slow_steps_as_run_skill() -> None
 
 
 def test_sous_chef_parallel_scheduling_prohibits_slow_before_all_fast_done() -> None:
-    """REQ-PROMPT-004 + REQ-PROMPT-006: Section prohibits launching slow step while fast steps pending."""
+    """REQ-PROMPT-004 + REQ-PROMPT-006: Section prohibits slow step while fast steps pending."""
     text = _sous_chef_text()
     section_start = text.find("PARALLEL STEP SCHEDULING")
     assert section_start != -1
@@ -91,7 +91,7 @@ def test_sous_chef_parallel_scheduling_prohibits_slow_before_all_fast_done() -> 
 
 
 def test_sous_chef_parallel_scheduling_batches_slow_steps() -> None:
-    """REQ-PROMPT-005: Section must instruct launching all slow steps together in one parallel batch."""
+    """REQ-PROMPT-005: Section must instruct launching all slow steps together in a batch."""
     text = _sous_chef_text()
     section_start = text.find("PARALLEL STEP SCHEDULING")
     assert section_start != -1
@@ -114,7 +114,8 @@ def test_sous_chef_parallel_scheduling_explains_wall_clock_rationale() -> None:
     assert (
         "wall-clock" in lower or "wall clock" in lower or "idle" in lower or "slowest" in lower
     ), (
-        "PARALLEL STEP SCHEDULING section must explain wall-clock rationale (idle time, slowest step)"
+        "PARALLEL STEP SCHEDULING section must explain wall-clock rationale "
+        "(idle time, slowest step)"
     )
 
 

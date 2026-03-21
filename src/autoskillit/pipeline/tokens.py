@@ -10,6 +10,7 @@ with a defensive copy getter.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,19 @@ from autoskillit.core import get_logger
 from autoskillit.pipeline.audit import _iter_session_log_entries
 
 logger = get_logger(__name__)
+
+
+def canonical_step_name(step_name: str) -> str:
+    """Strip trailing '-N' numeric disambiguation suffixes from step names.
+
+    Orchestrators may append clone instance numbers (e.g. 'plan-30') to
+    disambiguate parallel runs. For telemetry aggregation, these must collapse
+    to the canonical YAML step key ('plan').
+
+    Only a trailing hyphen followed by one or more digits is stripped.
+    'open-pr' (ends in non-digit) is preserved unchanged.
+    """
+    return re.sub(r"-\d+$", "", step_name) if step_name else step_name
 
 
 @dataclass
@@ -37,7 +51,7 @@ class TokenEntry:
         return asdict(self)
 
 
-__all__ = ["TokenEntry", "DefaultTokenLog"]
+__all__ = ["TokenEntry", "DefaultTokenLog", "canonical_step_name"]
 
 
 class DefaultTokenLog:
@@ -65,9 +79,10 @@ class DefaultTokenLog:
         """
         if not step_name or not token_usage:
             return
-        if step_name not in self._entries:
-            self._entries[step_name] = TokenEntry(step_name=step_name)
-        e = self._entries[step_name]
+        key = canonical_step_name(step_name)
+        if key not in self._entries:
+            self._entries[key] = TokenEntry(step_name=key)
+        e = self._entries[key]
         e.input_tokens += token_usage.get("input_tokens", 0)
         e.output_tokens += token_usage.get("output_tokens", 0)
         e.cache_creation_input_tokens += token_usage.get("cache_creation_input_tokens", 0)
@@ -85,7 +100,7 @@ class DefaultTokenLog:
                 pass
         logger.debug(
             "token_usage_recorded",
-            step_name=step_name,
+            step_name=key,
             invocation_count=e.invocation_count,
         )
 
@@ -135,10 +150,11 @@ class DefaultTokenLog:
             except (json.JSONDecodeError, OSError):
                 continue
 
-            step_name = data.get("step_name", "")
-            if not step_name:
+            raw_step = data.get("step_name", "")
+            if not raw_step:
                 continue
 
+            step_name = canonical_step_name(raw_step)
             if step_name not in self._entries:
                 self._entries[step_name] = TokenEntry(step_name=step_name)
             e = self._entries[step_name]

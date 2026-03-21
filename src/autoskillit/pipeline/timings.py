@@ -13,6 +13,7 @@ from typing import Any
 
 from autoskillit.core import get_logger
 from autoskillit.pipeline.audit import _iter_session_log_entries
+from autoskillit.pipeline.tokens import canonical_step_name
 
 logger = get_logger(__name__)
 
@@ -45,14 +46,15 @@ class DefaultTimingLog:
     def record(self, step_name: str, duration_seconds: float) -> None:
         if not step_name:
             return
-        if step_name not in self._entries:
-            self._entries[step_name] = TimingEntry(step_name=step_name)
-        e = self._entries[step_name]
+        key = canonical_step_name(step_name)
+        if key not in self._entries:
+            self._entries[key] = TimingEntry(step_name=key)
+        e = self._entries[key]
         e.total_seconds += max(0.0, duration_seconds)
         e.invocation_count += 1
         logger.debug(
             "timing_recorded",
-            step_name=step_name,
+            step_name=key,
             invocation_count=e.invocation_count,
         )
 
@@ -86,10 +88,11 @@ class DefaultTimingLog:
             except (json.JSONDecodeError, OSError):
                 continue
 
-            step_name = data.get("step_name", "")
-            if not step_name:
+            raw_step = data.get("step_name", "")
+            if not raw_step:
                 continue
 
+            step_name = canonical_step_name(raw_step)
             if step_name not in self._entries:
                 self._entries[step_name] = TimingEntry(step_name=step_name)
             e = self._entries[step_name]

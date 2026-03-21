@@ -3,6 +3,22 @@
 from __future__ import annotations
 
 
+def test_load_recipe_instructs_step_name_exact_yaml_key():
+    """
+    The load_recipe docstring must explicitly instruct that step_name
+    must match the YAML step key exactly, with no disambiguation suffixes.
+    """
+    import inspect
+
+    from autoskillit.server.tools_recipe import load_recipe
+
+    doc = inspect.getdoc(load_recipe) or ""
+    assert "suffix" in doc.lower() or "exact" in doc.lower(), (
+        "tools_recipe.load_recipe must instruct orchestrators that step_name "
+        "must be the exact YAML key with no disambiguation suffixes appended"
+    )
+
+
 def test_load_recipe_does_not_instruct_get_token_summary_pre_staging():
     """
     The load_recipe docstring must not instruct the orchestrator to call

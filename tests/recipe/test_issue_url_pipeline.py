@@ -371,8 +371,8 @@ class TestClaimReleaseGates:
             data = yaml.safe_load(_recipe_path(name).read_text())
             claim_with = data["steps"]["claim_issue"].get("with", {})
             assert "allow_reentry" in claim_with, f"{name}: claim_issue.with missing allow_reentry"
-            assert "upfront_claimed" in str(claim_with["allow_reentry"]), (
-                f"{name}: allow_reentry must reference inputs.upfront_claimed"
+            assert claim_with["allow_reentry"] == "${{ inputs.upfront_claimed }}", (
+                f"{name}: allow_reentry must be exactly '${{{{ inputs.upfront_claimed }}}}'"
             )
 
     def test_upfront_claimed_ingredient_present_with_default_false(self):

@@ -14,8 +14,8 @@ hooks:
 
 Execute the appropriate implementation recipe for each triaged GitHub issue, respecting the
 batch order defined by the `triage-issues` manifest. This skill is the execution counterpart
-to `triage-issues` — it consumes the manifest and orchestrates the full lifecycle: load recipe,
-execute session, collect result, report.
+to `triage-issues` — it consumes the manifest and orchestrates the full lifecycle: claim all
+issues upfront, load recipe, execute session, collect result, report.
 
 ## When to Use
 
@@ -32,7 +32,6 @@ execute session, collect result, report.
 - Modify any source code files
 - Reimplement recipe steps inline — always use `load_recipe` to load the recipe YAML and
   follow it as an orchestrator
-- Process issues that already carry the `in-progress` label — skip them with a warning
 
 **ALWAYS:**
 - Process batches in ascending order: batch 1 before batch 2 before batch 3
@@ -129,11 +128,35 @@ Processing mode: sequential within each batch (batches processed in order)
 Proceed? [Y/n]
 ```
 
-- **Y (or Enter):** Proceed to Step 3.
+- **Y (or Enter):** Proceed to Step 2b.
 - **n:** Abort. Emit `process-issues-result` with `"aborted": true` and exit cleanly.
 
 Skip this step when `--dry-run` is active (Step 2 already prints the plan and exits) or when
 `--batch N` limits scope to a single batch (show only that batch's issues).
+
+### Step 2b: Upfront Claiming (Phase 0.5)
+
+Before dispatching any recipe, claim all candidate issues atomically.
+
+Initialize two tracking lists:
+```
+pre_claimed_urls = []   # issues we successfully claimed
+completed_urls   = []   # issues whose recipe fully returned
+```
+
+Collect all issues from all batches that will be processed (respecting `--batch N` filtering).
+
+For each issue in the collected list:
+1. Call `claim_issue(issue_url=<url>)` — **no** `allow_reentry` (default `False`)
+2. If `result.claimed == true`:
+   - append `issue_url` to `pre_claimed_urls`
+3. If `result.claimed == false`:
+   - log: `"Issue #{number} skipped — already claimed by another session"`
+   - the issue will be excluded from dispatch entirely
+
+After this phase:
+- `pre_claimed_urls` contains every issue for which this session holds the claim
+- Issues absent from `pre_claimed_urls` are excluded from dispatch
 
 ### Step 3: Process Batches
 
@@ -147,7 +170,7 @@ immediately begin the batch header (3a) for the next batch.
 
 **3a. Log batch header:**
 ```
-━━━ Batch N/M ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━ Batch N/M ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Processing X issues:
   #42 — implementation: Add user authentication
   #43 — remediation: Fix login redirect bug
@@ -156,31 +179,20 @@ Processing X issues:
 **3b. For each issue in the batch (process sequentially):**
 
 **CRITICAL:** Do NOT output any prose status text between issues. After
-completing one issue's processing (step 9), immediately begin step 1
-(Construct the issue URL) for the next issue. Inter-issue announcements
+completing one issue's processing (step 6), immediately begin step 1
+(check pre_claimed_urls) for the next issue. Inter-issue announcements
 create end_turn windows that cause stochastic session termination.
 
-1. **Construct the issue URL** (from Step 1 derivation).
+1. **Check pre_claimed_urls:** If `issue_url` is NOT in `pre_claimed_urls` → skip
+   (excluded by upfront claim phase — another session holds it).
 
-2. **Fetch issue content:**
-   ```
-   fetch_github_issue(issue_url, include_comments=true)
-   ```
-   On failure: log a warning, record `status: failure`, and advance to the next issue.
-
-3. **Check for `in-progress` label:**
-   Inspect the fetched issue's `labels` list. If `in-progress` is present:
-   - Log: `"Skipping #N — already claimed (in-progress label present)"`
-   - Record `status: skipped`
-   - Advance to next issue.
-
-4. **Optionally post pickup comment** (if `--comment` is active):
+2. **Optionally post pickup comment** (if `--comment` is active):
    ```bash
    gh issue comment {number} \
      --body "Processing in batch {N} — recipe: \`{recipe}\`"
    ```
 
-5. **Determine recipe name and `run_name`:**
+3. **Determine recipe name and `run_name`:**
 
    | `recipe` field | Recipe to load | `run_name` | PR Title Prefix |
    |---------------|----------------|------------|-----------------|
@@ -193,7 +205,7 @@ create end_turn windows that cause stochastic session termination.
    The `run_name` encodes recipe origin for the `open-pr` skill, which derives
    the PR title prefix from it by convention (see `open-pr` SKILL.md).
 
-6. **Load the recipe:**
+4. **Load the recipe:**
    ```
    load_recipe("{recipe_name}")
    ```
@@ -201,7 +213,7 @@ create end_turn windows that cause stochastic session termination.
    follow each step in the recipe, calling the specified MCP tool with the
    specified `with:` arguments.
 
-7. **Execute the recipe** with these ingredient values:
+5. **Execute the recipe** with these ingredient values:
    - `task`: the issue title (the recipe's `make-plan` step detects `issue_url`
      and fetches full content internally)
    - `issue_url`: the constructed issue URL
@@ -210,23 +222,32 @@ create end_turn windows that cause stochastic session termination.
    - `open_pr`: `"true"`
    - `audit`: `"true"`
    - `review_approach`: `"false"`
+   - `upfront_claimed`: `"true"`        ← always set for upfront-claimed issues
 
-   The recipe handles claim/release internally: both `implementation.yaml` and
-   `remediation.yaml` call `claim_issue` early in their step graph and
-   `release_issue` on both success and failure paths. There is no need to
-   call `claim_issue` or `release_issue` from this skill directly.
+   The recipe's `claim_issue` step will receive `allow_reentry=true` (via the
+   `upfront_claimed` ingredient) and recognize the pre-existing label as a
+   valid reentry, returning `claimed=true` to proceed normally.
 
-   If the recipe's `claim_issue` step returns `claimed: false` (issue already
-   claimed by another session), the recipe routes to `escalate_stop`. Record
-   the outcome and advance to the next issue.
-
-8. **After recipe completes**, record the result:
+6. **After recipe returns** (any outcome), append to completed_urls:
+   ```
+   completed_urls.append(issue_url)
+   ```
+   Then record the result:
    - On success path (`done` step reached): `{issue_number, recipe, status: success, pr_url}`
    - On failure path (`escalate_stop` reached): `{issue_number, recipe, status: failure, error}`
 
-9. **Optionally post completion comment** (if `--comment` is active):
+7. **Optionally post completion comment** (if `--comment` is active):
    - Success: `"✅ Processing complete — PR: {pr_url}"`
    - Failure: `"❌ Processing failed — manual intervention required"`
+
+**Fatal failure cleanup** — if any unrecoverable error occurs during recipe dispatch:
+```
+uncompleted = [url for url in pre_claimed_urls if url not in completed_urls]
+For each url in uncompleted:
+    Call release_issue(issue_url=url)
+Log: "Released N upfront-claimed issues due to fatal failure"
+Propagate the error
+```
 
 **3c. After all issues in batch complete** (if `--merge-batch` is active):
 
@@ -265,7 +286,7 @@ Write `temp/process-issues/process_report_{ts}.md`:
 | Total issues | N |
 | Successes | X |
 | Failures | Y |
-| Skipped (in-progress) | Z |
+| Skipped (foreign claim) | Z |
 | Batches processed | M |
 
 ## Results by Batch
@@ -299,7 +320,9 @@ Print the structured result for pipeline capture:
     "skipped": Z,
     "batch_count": M,
     "dry_run": false,
-    "pr_urls": ["https://github.com/.../pull/101", ...]
+    "pr_urls": ["https://github.com/.../pull/101", ...],
+    "pre_claimed": <count of pre_claimed_urls>,
+    "skipped_foreign_claim": <count of issues skipped because another session owned them>
 }
 ---end-process-issues-result---
 ```

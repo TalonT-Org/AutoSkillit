@@ -419,9 +419,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
 
 
 # Compiled once at module level — no per-call overhead
-_MARKDOWN_TOKEN_RE: re.Pattern[str] = re.compile(
-    r"\*{1,2}(\w[\w_-]*)\*{1,2}(\s*=)", re.MULTILINE
-)
+_MARKDOWN_TOKEN_RE: re.Pattern[str] = re.compile(r"\*{1,2}(\w[\w_-]*)\*{1,2}(\s*=)", re.MULTILINE)
 
 
 def _strip_markdown_from_tokens(text: str) -> str:

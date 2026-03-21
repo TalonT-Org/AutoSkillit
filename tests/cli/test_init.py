@@ -243,6 +243,9 @@ class TestCLIInit:
         """init without --scope defaults to user scope (writes to ~/.claude.json)."""
         project_dir = tmp_path / "project"
         project_dir.mkdir()
+        (project_dir / ".pre-commit-config.yaml").write_text(
+            "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+        )
         monkeypatch.chdir(project_dir)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)

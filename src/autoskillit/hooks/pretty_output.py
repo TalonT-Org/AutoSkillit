@@ -423,6 +423,7 @@ _FMT_RECIPE_LIST_ITEM_RENDERED: frozenset[str] = frozenset(
         "name",
         "description",
         "summary",
+        "source",
     }
 )
 _FMT_RECIPE_LIST_ITEM_SUPPRESSED: frozenset[str] = frozenset()
@@ -462,7 +463,9 @@ def _fmt_list_recipes(data: ListRecipesResult, pipeline: bool) -> str:
             name = recipe.get("name", "?")
             desc = recipe.get("description", "")
             summary = recipe.get("summary", "")
-            lines.append(f"  - {name}: {desc}" if desc else f"  - {name}")
+            source = recipe.get("source", "")
+            source_tag = f" [{source}]" if source else ""
+            lines.append(f"  - {name}{source_tag}: {desc}" if desc else f"  - {name}{source_tag}")
             if summary:
                 lines.append(f"    {summary}")
         else:

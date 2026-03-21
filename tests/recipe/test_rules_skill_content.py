@@ -223,21 +223,3 @@ def test_output_section_no_markdown_rule_passes_when_directive_present(tmp_path:
 
     rule_ids = [f.rule for f in findings]
     assert "output-section-no-markdown-directive" not in rule_ids
-
-
-def test_output_path_tokens_derived_from_contracts() -> None:
-    """_OUTPUT_PATH_TOKENS must be derivable from skill_contracts.yaml using the
-    existing `type` field — not manually maintained."""
-    from autoskillit.execution.headless import _OUTPUT_PATH_TOKENS
-    from autoskillit.recipe.contracts import load_bundled_manifest
-
-    manifest = load_bundled_manifest()
-    derived = {
-        out["name"]
-        for skill_data in manifest.get("skills", {}).values()
-        for out in skill_data.get("outputs", [])
-        if isinstance(out, dict) and out.get("type", "").startswith("file_path")
-    }
-    # After Part B, _OUTPUT_PATH_TOKENS must equal the derived set
-    # (accounting for intentionally excluded tokens: worktree_path, branch_name)
-    assert derived - {"worktree_path", "branch_name"} == _OUTPUT_PATH_TOKENS

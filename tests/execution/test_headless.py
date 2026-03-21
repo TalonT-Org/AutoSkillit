@@ -2701,6 +2701,8 @@ class TestBuildSkillResultChannelAPatternRecovery:
             expected_output_patterns=["plan_path\\s*=\\s*/.+"],
         )
         assert sr.success is True
+        assert sr.subtype != "adjudicated_failure"
+        assert sr.needs_retry is False
 
 
 class TestTimedOutSessionPreservesState:
@@ -2776,6 +2778,33 @@ class TestTimedOutSessionPreservesState:
 
 
 class TestOutputPathTokensDerivedFromContracts:
+    # Hardcoded fixture — update when skill_contracts.yaml gains new file_path outputs.
+    # Using a fixed set (rather than re-deriving) ensures bugs in the derivation formula
+    # cause test failures rather than silent agreement between production and test code.
+    _EXPECTED_OUTPUT_PATH_TOKENS = frozenset(
+        {
+            "analysis_file",
+            "analysis_path",
+            "config_path",
+            "conflict_report_path",
+            "diagnosis_path",
+            "diagram_path",
+            "group_files",
+            "groups_path",
+            "investigation_path",
+            "manifest_path",
+            "plan_parts",
+            "plan_path",
+            "pr_order_file",
+            "recipe_path",
+            "remediation_path",
+            "review_path",
+            "summary_path",
+            "triage_manifest",
+            "triage_report",
+        }
+    )
+
     def test_output_path_tokens_contains_all_file_path_contract_outputs(self) -> None:
         """Every skill output declared with type=file_path or type=file_path_list in
         skill_contracts.yaml must appear in _OUTPUT_PATH_TOKENS (or be documented as
@@ -2799,4 +2828,21 @@ class TestOutputPathTokensDerivedFromContracts:
         assert not untracked, (
             f"These path tokens are declared in skill_contracts.yaml but missing from "
             f"_OUTPUT_PATH_TOKENS or _INTENTIONALLY_EXCLUDED_PATH_TOKENS: {untracked}"
+        )
+
+    def test_output_path_tokens_matches_expected_fixture(self) -> None:
+        """_OUTPUT_PATH_TOKENS must exactly match the known fixture set.
+
+        This guards against bugs in the derivation formula: if _build_path_token_set()
+        is broken, both the production frozenset and a re-derived set would agree, but
+        this hardcoded fixture would not.
+        """
+        from autoskillit.execution.headless import _OUTPUT_PATH_TOKENS
+
+        extra = _OUTPUT_PATH_TOKENS - self._EXPECTED_OUTPUT_PATH_TOKENS
+        missing = self._EXPECTED_OUTPUT_PATH_TOKENS - _OUTPUT_PATH_TOKENS
+        assert _OUTPUT_PATH_TOKENS == self._EXPECTED_OUTPUT_PATH_TOKENS, (
+            f"_OUTPUT_PATH_TOKENS diverged from expected fixture.\n"
+            f"Extra (in production, not in fixture): {extra}\n"
+            f"Missing (in fixture, not in production): {missing}"
         )

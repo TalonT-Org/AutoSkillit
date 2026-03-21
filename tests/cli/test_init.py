@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 from autoskillit import cli
+from autoskillit.cli import _generate_config_yaml
 
 
 class TestCLIInit:
@@ -115,15 +116,11 @@ class TestCLIInit:
 
     def test_generate_config_yaml_contains_test_command(self) -> None:
         """_generate_config_yaml embeds the test command in active YAML."""
-        from autoskillit.cli import _generate_config_yaml
-
         yaml_str = _generate_config_yaml(["pytest", "-v"])
         assert 'command: ["pytest", "-v"]' in yaml_str
 
     def test_generate_config_yaml_has_commented_advanced_sections(self) -> None:
         """Generated YAML includes commented-out advanced config sections."""
-        from autoskillit.cli import _generate_config_yaml
-
         yaml_str = _generate_config_yaml(["pytest", "-v"])
         assert "# classify_fix:" in yaml_str
         assert "# reset_workspace:" in yaml_str
@@ -131,12 +128,32 @@ class TestCLIInit:
 
     def test_generate_config_yaml_uncommented_parts_are_valid(self) -> None:
         """The uncommented portion of generated YAML parses as valid config."""
-        from autoskillit.cli import _generate_config_yaml
-
         yaml_str = _generate_config_yaml(["task", "test-all"])
         parsed = yaml.safe_load(yaml_str)
         assert parsed["test_check"]["command"] == ["task", "test-all"]
         assert parsed["safety"]["reset_guard_marker"] == ".autoskillit-workspace"
+
+    def test_generate_config_yaml_forbids_secret_fields(self) -> None:
+        """SEC-6: _generate_config_yaml() output contains no token, secret, or password keys."""
+        yaml_str = _generate_config_yaml(["task", "test-check"])
+        # Strip comment lines, then parse with YAML to inspect keys and values only
+        active_lines = [ln for ln in yaml_str.splitlines() if not ln.lstrip().startswith("#")]
+        parsed = yaml.safe_load("\n".join(active_lines)) or {}
+
+        def _collect_strings(obj: object) -> list[str]:
+            if isinstance(obj, dict):
+                return [str(k) for k in obj] + [
+                    s for v in obj.values() for s in _collect_strings(v)
+                ]
+            if isinstance(obj, list):
+                return [s for item in obj for s in _collect_strings(item)]
+            return [str(obj)]
+
+        all_strings = " ".join(_collect_strings(parsed)).lower()
+        for forbidden in ("token", "secret", "password", "credential"):
+            assert forbidden not in all_strings, (
+                f"_generate_config_yaml() must not emit '{forbidden}' in active YAML keys/values"
+            )
 
     def test_init_writes_template_with_comments(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

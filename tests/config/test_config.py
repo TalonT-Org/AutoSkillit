@@ -2,9 +2,10 @@
 
 from dataclasses import fields as dc_fields
 
+import pytest
 import yaml
 
-from autoskillit.config import AutomationConfig, RunSkillConfig, load_config
+from autoskillit.config import AutomationConfig, ConfigSchemaError, RunSkillConfig, load_config
 
 
 class TestDefaultConfig:
@@ -49,7 +50,6 @@ class TestLoadConfig:
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         config_data = {
-            "version": 1,
             "test_check": {"command": ["pytest", "-v"], "timeout": 300},
             "classify_fix": {"path_prefixes": ["src/core/", "tests/core/"]},
             "reset_workspace": {
@@ -142,17 +142,31 @@ class TestLoadConfig:
         cfg = load_config(tmp_path)
         assert cfg.test_check.command == ["task", "test-check"]
 
-    def test_unknown_keys_ignored(self, tmp_path):
-        """C8: Extra keys in YAML -> no crash, known keys loaded."""
+    @pytest.mark.parametrize(
+        "yaml_content,match",
+        [
+            ("completely_unknown_section:\n  foo: bar\n", "unrecognized key"),  # SCH-1
+            ("github:\n  invented_field: whatever\n", "unrecognized key"),  # SCH-2
+            ("github:\n  tokn: ghp_abc\n", "did you mean"),  # SCH-3
+        ],
+    )
+    def test_config_yaml_rejects_invalid_keys(self, tmp_path, yaml_content, match):
+        """SCH-1/2/3: Unrecognized or near-miss keys in config.yaml raise ConfigSchemaError."""
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
-        config_data = {
-            "test_check": {"command": ["pytest"], "unknown_field": "ignored"},
-            "completely_unknown_section": {"foo": "bar"},
-        }
-        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
-        cfg = load_config(tmp_path)
-        assert cfg.test_check.command == ["pytest"]
+        (config_dir / "config.yaml").write_text(yaml_content)
+        with pytest.raises(ConfigSchemaError, match=match):
+            load_config(tmp_path)
+
+    def test_user_config_yaml_rejects_unrecognized_key(self, tmp_path, monkeypatch):
+        """SCH-4: User-level config.yaml is also validated."""
+        user_home = tmp_path / "home"
+        user_config_dir = user_home / ".autoskillit"
+        user_config_dir.mkdir(parents=True)
+        (user_config_dir / "config.yaml").write_text("bogus_section:\n  k: v\n")
+        monkeypatch.setattr("pathlib.Path.home", lambda: user_home)
+        with pytest.raises(ConfigSchemaError, match="unrecognized key"):
+            load_config(tmp_path)
 
     def test_set_fields_roundtrip(self, tmp_path):
         """C9: preserve_dirs loaded from YAML list -> becomes set[str]."""
@@ -280,14 +294,6 @@ class TestSyncConfigRemoval:
         import autoskillit.config as cfg_mod
 
         assert not hasattr(cfg_mod, "SyncConfig")
-
-    def test_stale_sync_yaml_key_silently_ignored(self, tmp_path):
-        """REQ-SYNC-003: A config.yaml with a 'sync:' key does not raise."""
-        config_file = tmp_path / ".autoskillit" / "config.yaml"
-        config_file.parent.mkdir(parents=True)
-        config_file.write_text("sync:\n  excluded_recipes:\n    - some-recipe\n")
-        cfg = load_config(tmp_path)
-        assert isinstance(cfg, AutomationConfig)
 
 
 class TestRunSkillRetryConfigFields:
@@ -496,34 +502,67 @@ class TestDynaconfIntegration:
         assert cfg.github.token == "secret_ghp_xxx"
 
     def test_secrets_file_overrides_config_yaml(self, tmp_path, monkeypatch):
-        """SEC-2: .secrets.yaml wins over config.yaml for the same key."""
+        """SEC-2: .secrets.yaml wins over config.yaml for a shared key."""
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
-        (config_dir / "config.yaml").write_text(yaml.dump({"github": {"token": "from_config"}}))
-        (config_dir / ".secrets.yaml").write_text(yaml.dump({"github": {"token": "from_secrets"}}))
+        (config_dir / "config.yaml").write_text(
+            yaml.dump({"github": {"in_progress_label": "test-label"}})
+        )
+        (config_dir / ".secrets.yaml").write_text(
+            yaml.dump({"github": {"in_progress_label": "secrets-label"}})
+        )
         cfg = load_config(tmp_path)
-        assert cfg.github.token == "from_secrets"
+        assert cfg.github.in_progress_label == "secrets-label"
 
     def test_partial_section_deep_merges_across_layers(self, tmp_path, monkeypatch):
         """MERGE-1: A project config with a partial nested section does not wipe sibling
         keys from the user config.
 
-        Without merge_enabled=True, a project-level github.default_repo would wipe
-        the user-level github.token.
+        Without deep-merge semantics, a project-level github.default_repo would wipe
+        the user-level github.in_progress_label.
         """
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
         user_dir = tmp_path / "home" / ".autoskillit"
         user_dir.mkdir(parents=True)
-        (user_dir / "config.yaml").write_text(yaml.dump({"github": {"token": "ghp_user_token"}}))
+        (user_dir / "config.yaml").write_text(
+            yaml.dump({"github": {"in_progress_label": "user-label"}})
+        )
         project_dir = tmp_path / ".autoskillit"
         project_dir.mkdir()
         (project_dir / "config.yaml").write_text(
             yaml.dump({"github": {"default_repo": "owner/repo"}})
         )
         cfg = load_config(tmp_path)
-        assert cfg.github.token == "ghp_user_token"
+        assert cfg.github.in_progress_label == "user-label"
         assert cfg.github.default_repo == "owner/repo"
+
+    def test_config_yaml_rejects_secrets_only_key(self, tmp_path, monkeypatch):
+        """SEC-3: github.token in config.yaml raises ConfigSchemaError with .secrets.yaml hint."""
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(yaml.dump({"github": {"token": "ghp_leaked"}}))
+        with pytest.raises(ConfigSchemaError, match=r"\.secrets\.yaml"):
+            load_config(tmp_path)
+
+    def test_secrets_yaml_accepts_token(self, tmp_path, monkeypatch):
+        """SEC-4: github.token in .secrets.yaml loads without error."""
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / ".secrets.yaml").write_text(yaml.dump({"github": {"token": "ghp_ok"}}))
+        cfg = load_config(tmp_path)
+        assert cfg.github.token == "ghp_ok"
+
+    def test_secrets_yaml_rejects_unrecognized_keys(self, tmp_path, monkeypatch):
+        """SEC-5: Unrecognized key in .secrets.yaml raises ConfigSchemaError."""
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / ".secrets.yaml").write_text("bogus_secret_section:\n  key: val\n")
+        with pytest.raises(ConfigSchemaError, match="unrecognized key"):
+            load_config(tmp_path)
 
     def test_bundled_defaults_yaml_exists(self):
         """DFLT-1: The bundled defaults.yaml file is present in the package."""

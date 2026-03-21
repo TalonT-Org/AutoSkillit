@@ -73,6 +73,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "app",  # cli/app.py: app = App(...), config_app = App(...), etc.
         "store",  # migration/store.py: defensive exemption for future module-level construction
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
+        "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(

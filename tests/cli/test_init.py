@@ -362,3 +362,61 @@ def test_init_creates_secrets_template(tmp_path: Path, monkeypatch: pytest.Monke
     assert secrets_path.exists(), ".secrets.yaml template not created"
     content = secrets_path.read_text()
     assert "github" in content.lower() and "token" in content.lower()
+
+
+def test_init_all_created_files_covered_by_gitignore(tmp_path: Path) -> None:
+    """Every file in .autoskillit/ after init must be gitignored or in the committed allowlist."""
+    from autoskillit.cli._init_helpers import _create_secrets_template
+    from autoskillit.core.io import _COMMITTED_BY_DESIGN, ensure_project_temp
+
+    ensure_project_temp(tmp_path)
+    _create_secrets_template(tmp_path)
+
+    autoskillit_dir = tmp_path / ".autoskillit"
+    gitignore_content = (autoskillit_dir / ".gitignore").read_text()
+
+    for item in autoskillit_dir.iterdir():
+        if item.name == ".gitignore":
+            continue
+        if item.name in _COMMITTED_BY_DESIGN:
+            continue
+        check_name = item.name + "/" if item.is_dir() else item.name
+        assert check_name in gitignore_content, (
+            f"{item.name} was created in .autoskillit/ but is not in .gitignore "
+            f"and not in _COMMITTED_BY_DESIGN allowlist. "
+            f"Add it to _AUTOSKILLIT_GITIGNORE_ENTRIES in core/io.py "
+            f"or to _COMMITTED_BY_DESIGN if it should be committed."
+        )
+
+
+def test_secrets_template_gitignore_comment_is_true(tmp_path: Path) -> None:
+    """The comment in .secrets.yaml claiming it is gitignored must be actually true."""
+    from autoskillit.cli._init_helpers import _create_secrets_template
+    from autoskillit.core.io import ensure_project_temp
+
+    ensure_project_temp(tmp_path)
+    _create_secrets_template(tmp_path)
+
+    autoskillit_dir = tmp_path / ".autoskillit"
+    secrets_content = (autoskillit_dir / ".secrets.yaml").read_text()
+    gitignore_content = (autoskillit_dir / ".gitignore").read_text()
+
+    if "already listed in .gitignore" in secrets_content:
+        assert ".secrets.yaml" in gitignore_content, (
+            ".secrets.yaml comment claims 'already listed in .gitignore' "
+            "but .secrets.yaml is not in .autoskillit/.gitignore"
+        )
+
+
+def test_gitignore_entries_includes_secrets_yaml() -> None:
+    """_AUTOSKILLIT_GITIGNORE_ENTRIES must include .secrets.yaml — regression guard."""
+    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES
+
+    assert ".secrets.yaml" in _AUTOSKILLIT_GITIGNORE_ENTRIES
+
+
+def test_gitignore_entries_includes_temp() -> None:
+    """_AUTOSKILLIT_GITIGNORE_ENTRIES must include temp/ — regression guard."""
+    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES
+
+    assert "temp/" in _AUTOSKILLIT_GITIGNORE_ENTRIES

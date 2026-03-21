@@ -41,6 +41,13 @@ def atomic_write(path: Path, content: str) -> None:
 
 _AUTOSKILLIT_GITIGNORE_ENTRIES = ["temp/", ".secrets.yaml"]
 
+_COMMITTED_BY_DESIGN: frozenset[str] = frozenset(
+    {
+        "config.yaml",
+        "recipes",
+    }
+)
+
 
 def ensure_project_temp(project_dir: Path) -> Path:
     """Create .autoskillit/temp/ with a .gitignore; idempotent. Returns the path."""

@@ -106,6 +106,46 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     )
 
 
+def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
+    """Check that every file in .autoskillit/ is gitignored or in the committed allowlist."""
+    from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES, _COMMITTED_BY_DESIGN
+
+    autoskillit_dir = project_dir / ".autoskillit"
+    gitignore_path = autoskillit_dir / ".gitignore"
+    if not autoskillit_dir.is_dir():
+        return DoctorResult(Severity.OK, "gitignore_completeness", "No .autoskillit/ directory.")
+    if not gitignore_path.exists():
+        return DoctorResult(
+            Severity.WARNING,
+            "gitignore_completeness",
+            ".autoskillit/.gitignore missing. Run 'autoskillit init'.",
+        )
+    gitignore_content = gitignore_path.read_text(encoding="utf-8")
+    uncovered: list[str] = []
+    for item in sorted(autoskillit_dir.iterdir()):
+        if item.name == ".gitignore":
+            continue
+        if item.name in _COMMITTED_BY_DESIGN:
+            continue
+        check_name = item.name + "/" if item.is_dir() else item.name
+        if check_name not in gitignore_content:
+            uncovered.append(item.name)
+    # Also check that every entry in the canonical list is present
+    for entry in _AUTOSKILLIT_GITIGNORE_ENTRIES:
+        if entry not in gitignore_content:
+            entry_name = entry.rstrip("/")
+            if entry_name not in uncovered:
+                uncovered.append(entry_name)
+    if uncovered:
+        return DoctorResult(
+            Severity.WARNING,
+            "gitignore_completeness",
+            f"Files in .autoskillit/ not covered by .gitignore: {', '.join(uncovered)}. "
+            "Add to _AUTOSKILLIT_GITIGNORE_ENTRIES or _COMMITTED_BY_DESIGN.",
+        )
+    return DoctorResult(Severity.OK, "gitignore_completeness", "All .autoskillit/ files covered.")
+
+
 def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
     from autoskillit.cli._marketplace import _clear_plugin_cache
@@ -300,6 +340,9 @@ def run_doctor(*, output_json: bool = False) -> None:
                     "All recipes up to date",
                 )
             )
+
+    # Check 9: gitignore completeness
+    results.append(_check_gitignore_completeness(Path.cwd()))
 
     # Output
     if output_json:

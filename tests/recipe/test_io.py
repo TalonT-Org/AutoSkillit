@@ -479,6 +479,48 @@ class TestListRecipes:
         assert len(recipes) > 0
         assert all(r.source.value in ("project", "builtin") for r in recipes)
 
+    def test_list_recipes_bundled_appear_before_project(self, tmp_path: Path) -> None:
+        """Bundled recipes must appear before project recipes in list_recipes() output."""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        # Write a project recipe whose name would sort before bundled "implementation"
+        (recipes_dir / "aardvark.yaml").write_text(
+            "name: aardvark\ndescription: test\nsteps: {}\n"
+        )
+        result = list_recipes(tmp_path)
+        sources = [r.source for r in result.items]
+        # All BUILTIN items must precede all PROJECT items
+        seen_project = False
+        for source in sources:
+            if source == RecipeSource.PROJECT:
+                seen_project = True
+            elif source == RecipeSource.BUILTIN:
+                assert not seen_project, (
+                    "A BUILTIN recipe appeared after a PROJECT recipe — ordering is broken"
+                )
+
+    def test_list_recipes_alphabetical_within_bundled_tier(self, tmp_path: Path) -> None:
+        """Bundled recipes must be sorted alphabetically by name within their tier."""
+        result = list_recipes(tmp_path)
+        builtin_names = [r.name for r in result.items if r.source == RecipeSource.BUILTIN]
+        assert builtin_names == sorted(builtin_names), (
+            f"Bundled recipes not in alphabetical order: {builtin_names}"
+        )
+
+    def test_list_recipes_alphabetical_within_project_tier(self, tmp_path: Path) -> None:
+        """Project recipes must be sorted alphabetically by name within their tier."""
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        for name in ("zebra", "apple", "mango"):
+            (recipes_dir / f"{name}.yaml").write_text(
+                f"name: {name}\ndescription: test\nsteps: {{}}\n"
+            )
+        result = list_recipes(tmp_path)
+        project_names = [r.name for r in result.items if r.source == RecipeSource.PROJECT]
+        assert project_names == sorted(project_names), (
+            f"Project recipes not in alphabetical order: {project_names}"
+        )
+
 
 class TestBuiltinRecipesDir:
     """Tests for builtin_recipes_dir() function."""
@@ -832,3 +874,29 @@ def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
     assert hasattr(api, "_path_mtime_ns"), "_path_mtime_ns must exist"
     assert not hasattr(api, "_file_mtime_ns"), "_file_mtime_ns must be removed"
     assert not hasattr(api, "_dir_mtime_ns"), "_dir_mtime_ns must be removed"
+
+
+# ---------------------------------------------------------------------------
+# REQ-ORD-003: Stable positions when project recipe added
+# ---------------------------------------------------------------------------
+
+
+def test_list_recipes_stable_with_project_recipe_added(tmp_path: Path) -> None:
+    """Adding a project recipe must not shift the positions of bundled recipes."""
+    # Collect bundled positions without any project recipes
+    before = [r.name for r in list_recipes(tmp_path).items]
+
+    # Add a project recipe whose name sorts before all bundled recipes
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "aaa-custom.yaml").write_text(
+        "name: aaa-custom\ndescription: test\nsteps: {}\n"
+    )
+    after = [r.name for r in list_recipes(tmp_path).items]
+
+    # Bundled names must occupy the same leading positions
+    bundled_before = [n for n in before]
+    bundled_after = [n for n in after if n in set(bundled_before)]
+    assert bundled_after == bundled_before, (
+        "Adding a project recipe must not shift bundled recipe positions"
+    )

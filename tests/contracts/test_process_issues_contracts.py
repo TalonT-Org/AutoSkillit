@@ -64,8 +64,8 @@ def test_process_issues_documents_pr_title_prefix(skill_text: str) -> None:
 
 
 def test_process_issues_writes_to_temp_dir(skill_text: str) -> None:
-    """process-issues must document output to temp/process-issues/."""
-    assert "temp/process-issues/" in skill_text
+    """process-issues must document output to .autoskillit/temp/process-issues/."""
+    assert ".autoskillit/temp/process-issues/" in skill_text
 
 
 def test_process_issues_supports_merge_batch_flag(skill_text: str) -> None:

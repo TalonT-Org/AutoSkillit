@@ -115,6 +115,42 @@ def _check_missing_context_limit_on_worktree(ctx: ValidationContext) -> list[Rul
 
 
 @semantic_rule(
+    name="advisory-step-missing-context-limit",
+    description=(
+        "A run_skill step with skip_when_false declared (advisory/optional) must define "
+        "on_context_limit. The toggle skip_when_false says the step may be skipped by config; "
+        "the absence of on_context_limit means it cannot be skipped on context exhaustion — "
+        "an inconsistency in the skippability contract."
+    ),
+    severity=Severity.WARNING,
+)
+def _advisory_step_missing_context_limit(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        if step.skip_when_false is None:
+            continue
+        if step.on_context_limit is not None:
+            continue
+        findings.append(
+            RuleFinding(
+                rule="advisory-step-missing-context-limit",
+                severity=Severity.WARNING,
+                step_name=step_name,
+                message=(
+                    f"Step '{step_name}' is advisory (skip_when_false={step.skip_when_false!r}) "
+                    f"but declares no on_context_limit. A step that can be skipped by "
+                    f"configuration must also handle context exhaustion gracefully. "
+                    f"Set on_context_limit to the same target as on_success to skip the "
+                    f"advisory step on context limit."
+                ),
+            )
+        )
+    return findings
+
+
+@semantic_rule(
     name="retry-worktree-cwd",
     description="retry-worktree cwd must use a context variable so git runs inside the worktree.",
     severity=Severity.ERROR,

@@ -263,8 +263,10 @@ steps:
       step_name: "review"
     capture:
       review_path: "${{ result.review_path }}"
+    retries: 1
     on_success: verify
     on_failure: release_issue_failure
+    on_context_limit: verify
     skip_when_false: "inputs.review_approach"
     note: "Only execute this step if review_approach input is 'true'. Otherwise skip directly to verify."
 

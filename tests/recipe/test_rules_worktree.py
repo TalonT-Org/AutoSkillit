@@ -317,9 +317,9 @@ def test_advisory_step_missing_context_limit_fires_warning() -> None:
     )
     findings = run_semantic_rules(wf)
     warning_findings = [f for f in findings if f.severity == Severity.WARNING]
-    assert any(
-        f.rule == "advisory-step-missing-context-limit" for f in warning_findings
-    ), f"Expected advisory-step-missing-context-limit WARNING, got: {findings}"
+    assert any(f.rule == "advisory-step-missing-context-limit" for f in warning_findings), (
+        f"Expected advisory-step-missing-context-limit WARNING, got: {findings}"
+    )
 
 
 def test_advisory_step_with_context_limit_no_warning() -> None:

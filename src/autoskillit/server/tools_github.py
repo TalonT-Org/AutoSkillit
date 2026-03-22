@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 from datetime import UTC, datetime
@@ -34,9 +33,6 @@ _SAFE_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$")
 # Fingerprint block delimiters written by the report-bug skill in its response.
 _FINGERPRINT_START = "---bug-fingerprint---"
 _FINGERPRINT_END = "---/bug-fingerprint---"
-
-# Strong references to in-flight non-blocking report tasks (prevents GC).
-_pending_report_tasks: set[asyncio.Task[Any]] = set()
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -254,8 +250,16 @@ async def report_bug(
                 )
             return json.dumps(result)
 
-        # Non-blocking: fire and forget, return immediately.
-        task = asyncio.create_task(
+        # Non-blocking: supervised background dispatch, return immediately.
+        status_path = report_path.with_suffix(".status.json")
+        atomic_write(
+            status_path,
+            json.dumps(
+                {"status": "pending", "dispatched_at": datetime.now(UTC).isoformat()},
+                indent=2,
+            ),
+        )
+        tool_ctx.background.submit(
             _run_report_session(
                 skill_command,
                 cwd,
@@ -269,12 +273,17 @@ async def report_bug(
                 log_dir=log_dir,
                 expected_output_patterns=expected_output_patterns,
                 write_behavior=write_spec,
-            )
+                status_path=status_path,
+            ),
+            label=step_name or "report_bug",
         )
-        _pending_report_tasks.add(task)
-        task.add_done_callback(_pending_report_tasks.discard)
         return json.dumps(
-            {"success": True, "status": "dispatched", "report_path": str(report_path)}
+            {
+                "success": True,
+                "status": "dispatched",
+                "report_path": str(report_path),
+                "status_path": str(status_path),
+            }
         )
 
 
@@ -522,55 +531,89 @@ async def _run_report_session(
     log_dir: str,
     expected_output_patterns: list[str] | None = None,
     write_behavior: Any = None,
+    status_path: Path | None = None,
 ) -> dict[str, Any]:
     """Run the headless session, write the report, and handle GitHub filing.
 
     Returns a result dict suitable for JSON serialisation. Never raises.
+    Writes status_path (if provided) with "complete" or "failed" based on outcome.
     """
-    cfg = config.report_bug
-    skill_result = await executor.run(
-        skill_command,
-        cwd,
-        model=model,
-        step_name=step_name,
-        timeout=float(cfg.timeout),
-        expected_output_patterns=expected_output_patterns or [],
-        write_behavior=write_behavior,
-    )
-
-    report_text = skill_result.result or skill_result.stderr or "No report generated."
     try:
-        atomic_write(report_path, report_text)
-    except OSError as exc:
-        logger.warning("report_bug write failed", path=str(report_path), error=str(exc))
+        cfg = config.report_bug
+        skill_result = await executor.run(
+            skill_command,
+            cwd,
+            model=model,
+            step_name=step_name,
+            timeout=float(cfg.timeout),
+            expected_output_patterns=expected_output_patterns or [],
+            write_behavior=write_behavior,
+        )
 
-    if not skill_result.success:
+        report_text = skill_result.result or skill_result.stderr or "No report generated."
+        try:
+            atomic_write(report_path, report_text)
+        except OSError as exc:
+            logger.warning("report_bug write failed", path=str(report_path), error=str(exc))
+
+        if not skill_result.success:
+            _write_report_status(
+                status_path,
+                "failed",
+                error=(skill_result.stderr or skill_result.subtype or "session failed")[:500],
+            )
+            return {
+                "success": False,
+                "status": "failed",
+                "report": report_text,
+                "report_path": str(report_path),
+                "session_id": skill_result.session_id,
+                "stderr": skill_result.stderr,
+                "subtype": skill_result.subtype,
+                "exit_code": skill_result.exit_code,
+            }
+
+        diag = _read_session_diagnostics(skill_result.session_id, log_dir)
+
+        github: dict[str, Any] = {}
+        if cfg.github_filing and github_client is not None and github_client.has_token:
+            fingerprint = _parse_fingerprint(report_text) or error_context.splitlines()[0][:80]
+            github = await _file_or_update_github_issue(
+                fingerprint, error_context, report_text, report_path, github_client, config, diag
+            )
+        elif cfg.github_filing:
+            github = {"skipped": True, "reason": "no_token"}
+
+        _write_report_status(status_path, "complete")
+        return {
+            "success": True,
+            "status": "complete",
+            "report": report_text,
+            "report_path": str(report_path),
+            "github": github,
+        }
+    except Exception as exc:
+        logger.error("_run_report_session unhandled exception", exc_info=exc)
+        _write_report_status(status_path, "failed", error=str(exc))
         return {
             "success": False,
             "status": "failed",
-            "report": report_text,
+            "error": str(exc),
             "report_path": str(report_path),
-            "session_id": skill_result.session_id,
-            "stderr": skill_result.stderr,
-            "subtype": skill_result.subtype,
-            "exit_code": skill_result.exit_code,
         }
 
-    diag = _read_session_diagnostics(skill_result.session_id, log_dir)
 
-    github: dict[str, Any] = {}
-    if cfg.github_filing and github_client is not None and github_client.has_token:
-        fingerprint = _parse_fingerprint(report_text) or error_context.splitlines()[0][:80]
-        github = await _file_or_update_github_issue(
-            fingerprint, error_context, report_text, report_path, github_client, config, diag
-        )
-    elif cfg.github_filing:
-        github = {"skipped": True, "reason": "no_token"}
-
-    return {
-        "success": True,
-        "status": "complete",
-        "report": report_text,
-        "report_path": str(report_path),
-        "github": github,
-    }
+def _write_report_status(path: Path | None, status: str, *, error: str | None = None) -> None:
+    """Write a report status file atomically. Never raises."""
+    if path is None:
+        return
+    try:
+        payload: dict[str, Any] = {
+            "status": status,
+            "completed_at": datetime.now(UTC).isoformat(),
+        }
+        if error is not None:
+            payload["error"] = error
+        atomic_write(path, json.dumps(payload, indent=2))
+    except Exception:
+        logger.debug("_write_report_status failed", path=str(path), exc_info=True)

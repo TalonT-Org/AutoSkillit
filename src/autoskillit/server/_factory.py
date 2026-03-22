@@ -25,6 +25,7 @@ from autoskillit.execution import (
 )
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import (
+    BackgroundTaskSupervisor,
     DefaultAuditLog,
     DefaultGateState,
     DefaultTimingLog,
@@ -122,9 +123,11 @@ def make_context(
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root)
 
+    audit = DefaultAuditLog()
     ctx = ToolContext(
         config=config,
-        audit=DefaultAuditLog(),
+        audit=audit,
+        background=BackgroundTaskSupervisor(audit=audit),
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=gate,

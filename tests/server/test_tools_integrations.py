@@ -308,6 +308,138 @@ async def test_report_bug_non_blocking_default_severity(tool_ctx, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Non-blocking outcome tests (supervised background task)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_report_bug_non_blocking_outcome_writes_report_file(tool_ctx, tmp_path):
+    """After the background task completes, report_path must exist with content."""
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok("# Bug Report\nroot cause: missing guard")
+    tool_ctx.executor = mock_executor
+
+    result = json.loads(
+        await report_bug("KeyError in foo", str(tmp_path), severity="non_blocking")
+    )
+    assert result["status"] == "dispatched"
+
+    report_path = Path(result["report_path"])
+    # Drain the event loop until the background task completes and writes the file.
+    for _ in range(20):
+        await anyio.sleep(0)
+        if report_path.exists():
+            break
+
+    assert report_path.exists(), "report_path must exist after background task completes"
+    assert "Bug Report" in report_path.read_text()
+
+
+@pytest.mark.anyio
+async def test_report_bug_non_blocking_writes_status_file_on_success(tool_ctx, tmp_path):
+    """A status.json file must be written with status='complete' after successful dispatch."""
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok("# Report\nfoo")
+    tool_ctx.executor = mock_executor
+
+    result = json.loads(await report_bug("err", str(tmp_path), severity="non_blocking"))
+    report_path = Path(result["report_path"])
+
+    # Before task runs: pending status file should exist
+    status_path = report_path.with_suffix(".status.json")
+    assert status_path.exists(), "status file must be written synchronously on dispatch"
+    pending = json.loads(status_path.read_text())
+    assert pending["status"] == "pending"
+
+    # After task completes: status should update to complete
+    for _ in range(20):
+        await anyio.sleep(0)
+        data = json.loads(status_path.read_text())
+        if data["status"] == "complete":
+            break
+
+    data = json.loads(status_path.read_text())
+    assert data["status"] == "complete"
+    assert "completed_at" in data
+
+
+@pytest.mark.anyio
+async def test_report_bug_non_blocking_writes_status_file_on_failure(tool_ctx, tmp_path):
+    """When the headless session fails, status.json must reflect the failure."""
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_fail()
+    tool_ctx.executor = mock_executor
+
+    result = json.loads(await report_bug("crash here", str(tmp_path), severity="non_blocking"))
+    status_path = Path(result["report_path"]).with_suffix(".status.json")
+
+    for _ in range(20):
+        await anyio.sleep(0)
+        data = json.loads(status_path.read_text())
+        if data["status"] == "failed":
+            break
+
+    data = json.loads(status_path.read_text())
+    assert data["status"] == "failed"
+    assert "completed_at" in data
+
+
+@pytest.mark.anyio
+async def test_report_bug_non_blocking_executor_raises_is_observed(tool_ctx, tmp_path, caplog):
+    """If executor.run() raises, the exception must be logged — not silently dropped."""
+
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    mock_executor = AsyncMock()
+    mock_executor.run.side_effect = RuntimeError("executor exploded")
+    tool_ctx.executor = mock_executor
+
+    result = json.loads(await report_bug("error ctx", str(tmp_path), severity="non_blocking"))
+    assert result["status"] == "dispatched"
+
+    # Drain until the task has run
+    for _ in range(20):
+        await anyio.sleep(0)
+
+    # The exception must be captured and logged — not silently dropped
+    status_path = Path(result["report_path"]).with_suffix(".status.json")
+    assert status_path.exists(), "status file must exist even when executor raises"
+    data = json.loads(status_path.read_text())
+    assert data["status"] == "failed"
+    assert "executor exploded" in data.get("error", "")
+
+
+@pytest.mark.anyio
+async def test_report_bug_no_pending_tasks_after_completion(tool_ctx, tmp_path):
+    """After background task completes, no tasks remain in the supervisor's pending set."""
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok()
+    tool_ctx.executor = mock_executor
+
+    await report_bug("err", str(tmp_path), severity="non_blocking")
+
+    for _ in range(20):
+        await anyio.sleep(0)
+        if tool_ctx.background.pending_count == 0:
+            break
+
+    assert tool_ctx.background.pending_count == 0
+
+
+# ---------------------------------------------------------------------------
 # GitHub filing — blocking mode (easier to assert synchronously)
 # ---------------------------------------------------------------------------
 

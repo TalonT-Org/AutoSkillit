@@ -2,9 +2,8 @@
 Structural enforcement of 'Never raises' docstring contracts in server/.
 
 Any async function in server/ that claims 'Never raises' in its docstring
-must have a top-level 'try:' block as the first statement (after docstring
-and variable assignments), with 'except Exception' or 'except BaseException'
-covering the entire body.
+must have a top-level 'try:' block as the first statement (after docstring),
+with 'except Exception' or 'except BaseException' covering the entire body.
 
 This test catches the class of bug where a docstring makes a promise that
 the code does not structurally honor.

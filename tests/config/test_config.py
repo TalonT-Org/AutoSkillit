@@ -569,7 +569,7 @@ class TestDynaconfIntegration:
         # Must include the exact YAML to add (so user can copy-paste)
         assert "token:" in msg
         # Must include removal instruction
-        assert "remove" in msg.lower() or "delete" in msg.lower() or "config.yaml" in msg
+        assert "remove" in msg.lower() or "delete" in msg.lower()
 
     def test_user_level_config_yaml_rejects_secrets_only_key(self, tmp_path, monkeypatch) -> None:
         """SEC-3c: github.token in user-level ~/.autoskillit/config.yaml raises ConfigSchemaError.

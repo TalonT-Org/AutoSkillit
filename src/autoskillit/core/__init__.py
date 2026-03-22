@@ -12,7 +12,11 @@ from .github_url import normalize_owner_repo as normalize_owner_repo
 from .github_url import parse_github_repo as parse_github_repo
 from .io import (
     _AUTOSKILLIT_GITIGNORE_ENTRIES as _AUTOSKILLIT_GITIGNORE_ENTRIES,
+)
+from .io import (
     _COMMITTED_BY_DESIGN as _COMMITTED_BY_DESIGN,
+)
+from .io import (
     _ROOT_GITIGNORE_ENTRIES as _ROOT_GITIGNORE_ENTRIES,
 )
 from .io import (

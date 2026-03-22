@@ -35,7 +35,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
 
 ### **3.2. File System**
 
-  * **Temporary Files:** All temp files must go in the project's `temp/` directory.
+  * **Temporary Files:** All temp files must go in the project's `.autoskillit/temp/` directory.
   * **Do Not Add Root Files**: Never create new root files unless explicitly required.
   * **Never commit unless told to do so**
 

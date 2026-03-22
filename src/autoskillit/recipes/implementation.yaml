@@ -246,7 +246,7 @@ steps:
     on_success: review
     on_failure: release_issue_failure
     note: >
-      Produces plan in temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
+      Produces plan in .autoskillit/temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
       plan_parts context key contains the full ordered list of part files (sorted alphabetically).
       For a single-part plan, plan_parts has one entry equal to plan_path.
       REMEDIATION MODE: context.remediation_path is available when the orchestrator
@@ -883,7 +883,7 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes
-      a structured diagnosis to temp/diagnose-ci/. Routes to resolve_ci on success
+      a structured diagnosis to .autoskillit/temp/diagnose-ci/. Routes to resolve_ci on success
       OR failure (best-effort: resolve-failures proceeds even without a diagnosis).
       diagnosis_path is passed to resolve_ci for targeted remediation context.
 

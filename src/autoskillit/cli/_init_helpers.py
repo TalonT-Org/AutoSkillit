@@ -252,7 +252,7 @@ def _check_secret_scanning(project_dir: Path) -> _ScanResult:
         print(f"\n  {_B}Aborted.{_R} Phrase did not match.")
         return _ScanResult(False)
 
-    # Bypass accepted — caller logs after config is written
+    # Bypass accepted — caller logs regardless of whether a new config was written
     print(f"  {_Y}{'bypass':>12}{_R}  {_D}accepted — logged to config.yaml{_R}")
     return _ScanResult(True, bypass_accepted=True)
 

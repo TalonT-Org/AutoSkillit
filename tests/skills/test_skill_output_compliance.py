@@ -41,7 +41,7 @@ DATE_ONLY_PATTERN = re.compile(
 
 # Lines that contain output file path instructions (write/save directives).
 OUTPUT_PATH_LINE = re.compile(
-    r"(?:write|save|output)\s+.*?(?:to|path|file)\s*[:=]?\s*`?\.autoskillit/temp/",
+    r"(?:write|save|output)\s+.*?(?:to|path|file)\s*[:=]?\s*`?(?:\.autoskillit/)?temp/",
     re.IGNORECASE,
 )
 
@@ -119,7 +119,8 @@ def test_skill_output_uses_hhmmss_timestamp(skill_name: str) -> None:
     output_lines = [
         line
         for line in content.splitlines()
-        if re.search(r"\.autoskillit/temp/.*\{.*\}", line) and not line.strip().startswith("#")
+        if re.search(r"(?:\.autoskillit/)?temp/.*\{.*\}", line)
+        and not line.strip().startswith("#")
     ]
 
     for line in output_lines:

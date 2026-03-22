@@ -97,6 +97,11 @@ class TestCLIOrder:
             lambda *a, **kw: None,
         )
 
+    @pytest.fixture(autouse=True)
+    def _interactive_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Most order() paths require an interactive TTY — default to True for this class."""
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
     # --- workspace init ---
 
     def test_prep_station_init_creates_dir_with_marker(
@@ -843,6 +848,7 @@ class TestOrderDisplayOwnership:
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         return scripts_dir
 
     @patch("autoskillit.cli.subprocess.run")

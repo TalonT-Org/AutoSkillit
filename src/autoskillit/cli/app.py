@@ -581,10 +581,10 @@ def order(recipe: str | None = None):
         if _needed:
             from autoskillit.cli._init_helpers import _require_interactive_stdin
 
+            subset_list = ", ".join(sorted(_needed))
+            print(f"\nThis recipe requires subset(s): {subset_list}")
             _require_interactive_stdin("autoskillit order")
             # Interactive prompt
-            subset_list = ", ".join(sorted(_needed))
-            print(f"\nThis recipe requires the following disabled subset(s): {subset_list}")
             print("  1. Enable temporarily (for this run only)")
             print("  2. Enable permanently (update .autoskillit/config.yaml)")
             print("  3. Cancel")

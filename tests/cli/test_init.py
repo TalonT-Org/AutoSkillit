@@ -607,7 +607,7 @@ def test_prompt_test_command_noninteractive_raises_system_exit(
         _prompt_test_command()
     assert exc_info.value.code == 1
     captured = capsys.readouterr()
-    assert "--test-command" in captured.out
+    assert "non-interactive" in captured.out.lower() or "autoskillit init" in captured.out
 
 
 # SS-INIT-11

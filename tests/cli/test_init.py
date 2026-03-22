@@ -284,11 +284,15 @@ class TestCLIInit:
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         # The gateway should reject writing a merge of this invalid content
+        config_file = config_dir / "config.yaml"
         with pytest.raises(ConfigSchemaError):
             write_config_layer(
-                config_dir / "config.yaml",
+                config_file,
                 {"github": {"token": "ghp_should_not_be_here", "default_repo": "owner/repo"}},
             )
+        assert not config_file.exists(), (
+            "write_config_layer must not create the file when validation fails"
+        )
 
 
 class TestEnsureProjectTemp:

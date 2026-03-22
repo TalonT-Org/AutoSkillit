@@ -186,7 +186,7 @@ def _check_config_layers_for_secrets(
     Scans the user-level and project-level config.yaml files for any keys
     that belong only in .secrets.yaml. Reports ERROR with exact fix guidance.
     """
-    from autoskillit.config.settings import _SECRETS_ONLY_KEYS
+    from autoskillit.config import _SECRETS_ONLY_KEYS
     from autoskillit.core import YAMLError, load_yaml
 
     root = project_dir or Path.cwd()

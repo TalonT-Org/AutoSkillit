@@ -571,7 +571,7 @@ def test_init_proceeds_with_correct_phrase(
 
 # SS-INIT-5
 def test_init_bypass_logged_to_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """When bypass is accepted, config.yaml records the bypass with a timestamp."""
+    """When bypass is accepted, .state.yaml records the bypass with a timestamp."""
     import yaml as _yaml
 
     monkeypatch.chdir(tmp_path)
@@ -581,9 +581,61 @@ def test_init_bypass_logged_to_config(tmp_path: Path, monkeypatch: pytest.Monkey
     with patch("builtins.input", side_effect=[phrase, "pytest -v", ""]) as mock_input:
         cli.init()
     assert mock_input.call_count == 3
-    config = _yaml.safe_load((tmp_path / ".autoskillit" / "config.yaml").read_text())
-    bypass_value = config.get("safety", {}).get("secret_scan_bypass_accepted")
-    assert bypass_value is not None, "bypass_accepted timestamp must be persisted"
+    state = _yaml.safe_load((tmp_path / ".autoskillit" / ".state.yaml").read_text())
+    bypass_value = state.get("safety", {}).get("secret_scan_bypass_accepted")
+    assert bypass_value is not None, "bypass_accepted timestamp must be persisted in .state.yaml"
+
+
+# SS-INIT-ROUNDTRIP
+def test_bypass_accepted_init_load_config_round_trip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After bypass-accepted init, load_config must NOT raise ConfigSchemaError.
+
+    Regression guard for _log_secret_scan_bypass writing safety.secret_scan_bypass_accepted
+    to config.yaml — a key not present in SafetyConfig. This test catches the self-inflicted
+    schema violation that was previously undetected because SS-INIT-5 never called load_config.
+    """
+    from autoskillit.config import load_config
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    phrase = "I accept the risk of leaking secrets without pre-commit scanning"
+    with patch("builtins.input", side_effect=[phrase, "pytest -v", ""]):
+        cli.init()
+    # This must not raise ConfigSchemaError
+    cfg = load_config(tmp_path)
+    assert cfg.test_check.command == ["pytest", "-v"]
+
+
+# SS-INIT-STATE-FILE
+def test_bypass_log_writes_to_state_file_not_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_log_secret_scan_bypass must write the timestamp to .state.yaml, not config.yaml.
+
+    config.yaml is schema-validated; .state.yaml holds internal operational state only.
+    """
+    import yaml as _yaml
+
+    from autoskillit.cli._init_helpers import _log_secret_scan_bypass
+
+    _log_secret_scan_bypass(tmp_path)
+
+    state_path = tmp_path / ".autoskillit" / ".state.yaml"
+    config_path = tmp_path / ".autoskillit" / "config.yaml"
+
+    assert state_path.is_file(), ".state.yaml must be created by _log_secret_scan_bypass"
+    state_data = _yaml.safe_load(state_path.read_text())
+    assert state_data.get("safety", {}).get("secret_scan_bypass_accepted") is not None
+
+    # config.yaml must NOT have the bypass key (either no file or no key)
+    if config_path.is_file():
+        config_data = _yaml.safe_load(config_path.read_text()) or {}
+        assert "secret_scan_bypass_accepted" not in config_data.get("safety", {}), (
+            "config.yaml must not contain secret_scan_bypass_accepted"
+        )
 
 
 # SS-INIT-6

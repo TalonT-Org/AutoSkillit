@@ -186,7 +186,7 @@ def _check_config_layers_for_secrets(
     Scans the user-level and project-level config.yaml files for any keys
     that belong only in .secrets.yaml. Reports ERROR with exact fix guidance.
     """
-    from autoskillit.config import _SECRETS_ONLY_KEYS
+    from autoskillit.config.settings import ConfigSchemaError, validate_layer_keys
     from autoskillit.core import YAMLError, load_yaml
 
     root = project_dir or Path.cwd()
@@ -199,31 +199,22 @@ def _check_config_layers_for_secrets(
             continue
         try:
             data = load_yaml(config_path) or {}
-        except YAMLError:
-            continue
+        except YAMLError as exc:
+            return DoctorResult(
+                severity=Severity.WARNING,
+                check="config_secrets_placement",
+                message=f"Could not parse {str(config_path)!r} as YAML: {exc}",
+            )
         if not isinstance(data, dict):
             continue
-        for top_key, value in data.items():
-            if not isinstance(value, dict):
-                continue
-            for sub_key in value:
-                dotted = f"{top_key}.{sub_key}"
-                if dotted in _SECRETS_ONLY_KEYS:
-                    secrets_path = config_path.parent / ".secrets.yaml"
-                    top, sub = dotted.split(".", 1)
-                    return DoctorResult(
-                        severity=Severity.ERROR,
-                        check="config_secrets_placement",
-                        message=(
-                            f"'{dotted}' found in {str(config_path)!r} — this is a secret "
-                            f"key that must only appear in .secrets.yaml.\n"
-                            f"To fix:\n"
-                            f"  1. Add to {str(secrets_path)!r}:\n"
-                            f"       {top}:\n"
-                            f"         {sub}: <your_value>\n"
-                            f"  2. Remove '{dotted}' from {str(config_path)!r}."
-                        ),
-                    )
+        try:
+            validate_layer_keys(data, config_path, is_secrets_layer=False)
+        except ConfigSchemaError as exc:
+            return DoctorResult(
+                severity=Severity.ERROR,
+                check="config_secrets_placement",
+                message=str(exc),
+            )
     return DoctorResult(
         severity=Severity.OK,
         check="config_secrets_placement",

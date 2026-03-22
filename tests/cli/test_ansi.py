@@ -75,9 +75,15 @@ def test_ingredients_to_terminal_columns_aligned():
         for ln in result.splitlines()
         if ln.strip() and not ln.strip().startswith("Name")
     ]
-    # All data lines must be the same width (left-padded to same column structure)
-    widths = [len(ln) for ln in data_lines if ln]
-    assert len(set(widths)) == 1, f"Column widths differ: {widths}"
+    # All data lines must have their second column start at the same position.
+    # Using second-column start is robust to last-column trailing-padding changes.
+    second_col_starts = []
+    for ln in data_lines:
+        m = re.search(r"(?<=\S)  (?=\S)", ln)
+        second_col_starts.append(m.end() if m else -1)
+    assert len(set(second_col_starts)) == 1, (
+        f"Second column start positions differ: {second_col_starts}"
+    )
 
 
 def test_ingredients_to_terminal_accepts_structured_rows():

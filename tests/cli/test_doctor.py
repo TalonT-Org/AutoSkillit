@@ -858,9 +858,7 @@ def test_doctor_reports_ok_when_no_misplaced_secrets(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     config_dir = tmp_path / ".autoskillit"
     config_dir.mkdir()
-    (config_dir / "config.yaml").write_text(
-        "github:\n  default_repo: owner/repo\n"
-    )
+    (config_dir / "config.yaml").write_text("github:\n  default_repo: owner/repo\n")
 
     result = _check_config_layers_for_secrets(project_dir=tmp_path)
     assert result.severity == Severity.OK

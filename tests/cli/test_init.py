@@ -484,11 +484,11 @@ def test_init_blocks_without_correct_phrase(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    with patch("builtins.input", side_effect=["pytest -v", "nope"]) as mock_input:
+    with patch("builtins.input", side_effect=["nope"]) as mock_input:
         with pytest.raises(SystemExit) as exc_info:
             cli.init()
     assert exc_info.value.code == 1
-    assert mock_input.call_count == 2
+    assert mock_input.call_count == 1
 
 
 # SS-INIT-4
@@ -500,7 +500,7 @@ def test_init_proceeds_with_correct_phrase(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     phrase = "I accept the risk of leaking secrets without pre-commit scanning"
-    with patch("builtins.input", side_effect=["pytest -v", phrase, ""]) as mock_input:
+    with patch("builtins.input", side_effect=[phrase, "pytest -v", ""]) as mock_input:
         cli.init()
     assert (tmp_path / ".autoskillit" / "config.yaml").is_file()
     assert mock_input.call_count == 3
@@ -515,7 +515,7 @@ def test_init_bypass_logged_to_config(tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     phrase = "I accept the risk of leaking secrets without pre-commit scanning"
-    with patch("builtins.input", side_effect=["pytest -v", phrase, ""]) as mock_input:
+    with patch("builtins.input", side_effect=[phrase, "pytest -v", ""]) as mock_input:
         cli.init()
     assert mock_input.call_count == 3
     config = _yaml.safe_load((tmp_path / ".autoskillit" / "config.yaml").read_text())
@@ -553,7 +553,77 @@ def test_check_secret_scanning_detects_known_scanners(tmp_path: Path) -> None:
         (repo_dir / ".autoskillit").mkdir()
         (repo_dir / ".autoskillit" / "config.yaml").write_text("")
         result = _check_secret_scanning(repo_dir)
-        assert result is True, f"expected True for hook_id={hook_id!r}"
+        assert result.passed, f"expected passed=True for hook_id={hook_id!r}"
+
+
+# SS-INIT-8
+def test_init_noninteractive_without_test_command_triggers_gate_not_eoferror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """init without --test-command in non-interactive mode must fire the security gate
+    and raise SystemExit(1), not crash with EOFError before the gate is reached.
+    Regression guard for: secret scanning gate silently skipped during init (issue #470).
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    # No .pre-commit-config.yaml — gate should block
+    # No test_command= — would have triggered EOFError in buggy code
+    with pytest.raises(SystemExit) as exc_info:
+        cli.init()  # no test_command argument
+    assert exc_info.value.code == 1
+    # Config must NOT have been written — gate fired before any write
+    assert not (tmp_path / ".autoskillit" / "config.yaml").exists()
+
+
+# SS-INIT-9
+def test_init_noninteractive_without_test_command_clean_exit_when_scanner_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """init without --test-command in non-interactive mode raises SystemExit(1) with a
+    clear message, even when the secret scanning gate passes. --test-command is required
+    for non-interactive init regardless of scanner presence."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        cli.init()  # no test_command
+    assert exc_info.value.code == 1
+
+
+# SS-INIT-10
+def test_prompt_test_command_noninteractive_raises_system_exit(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """_prompt_test_command() in non-interactive mode must raise SystemExit(1) with
+    a clear message pointing to --test-command, rather than raising bare EOFError."""
+    from autoskillit.cli._init_helpers import _prompt_test_command
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    with pytest.raises(SystemExit) as exc_info:
+        _prompt_test_command()
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "non-interactive" in captured.out.lower() and "autoskillit init" in captured.out
+
+
+# SS-INIT-11
+def test_init_gate_fires_before_config_is_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_check_secret_scanning must be called before atomic_write.
+    Verifies ordering invariant: on gate failure, no config.yaml should exist.
+    This test uses the gate-fail path (non-interactive, no scanner)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    # Gate will fail (no scanner). Config must not be written.
+    with pytest.raises(SystemExit):
+        cli.init(test_command="pytest -v")
+    assert not (tmp_path / ".autoskillit" / "config.yaml").exists()
 
 
 # ON-INIT-1

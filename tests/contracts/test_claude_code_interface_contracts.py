@@ -238,6 +238,7 @@ class TestCookAddDirStructure:
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
         # cook() calls input() to confirm launch — mock it to auto-confirm.
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
         from autoskillit.cli._cook import cook
 

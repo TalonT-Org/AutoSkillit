@@ -56,6 +56,9 @@ def run_workspace_clean(*, dir: str | None = None, force: bool = False) -> None:
     print()
 
     if not force:
+        from autoskillit.cli._init_helpers import _require_interactive_stdin
+
+        _require_interactive_stdin("autoskillit workspace clean")
         suffix = "ies" if len(stale) != 1 else "y"
         answer = input(f"Remove {len(stale)} director{suffix}? [y/N]: ")
         if answer.strip().lower() != "y":

@@ -16,6 +16,7 @@ class TestCookInteractive:
     @pytest.fixture(autouse=True)
     def _no_first_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
     # CH-1
     def test_cook_init_session_cook(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

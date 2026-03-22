@@ -43,8 +43,10 @@ def cook() -> None:
     print()
 
     from autoskillit.cli._ansi import permissions_warning
+    from autoskillit.cli._init_helpers import _require_interactive_stdin
 
     print(permissions_warning())
+    _require_interactive_stdin("autoskillit cook")
     confirm = input("\nLaunch session? [Enter/n]: ").strip().lower()
     if confirm in ("n", "no"):
         return

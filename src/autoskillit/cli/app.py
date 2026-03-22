@@ -507,12 +507,14 @@ def order(recipe: str | None = None):
         sys.exit(1)
 
     if recipe is None:
+        from autoskillit.cli._init_helpers import _require_interactive_stdin
         from autoskillit.cli._prompts import (
             _OPEN_KITCHEN_CHOICE,
             _build_open_kitchen_prompt,
             _resolve_recipe_input,
         )
 
+        _require_interactive_stdin("autoskillit order")
         available = list_recipes(Path.cwd()).items
         if not available:
             print("No recipes found. Run 'autoskillit recipes list' to check.")
@@ -577,13 +579,9 @@ def order(recipe: str | None = None):
     if _disabled:
         _needed = _get_subsets_needed(parsed, _disabled)
         if _needed:
-            if not sys.stdin.isatty():
-                print(
-                    f"ERROR: Recipe '{recipe}' requires subset(s) "
-                    f"{sorted(_needed)} which are currently disabled."
-                )
-                print("Enable the subset(s) in .autoskillit/config.yaml or run interactively.")
-                sys.exit(1)
+            from autoskillit.cli._init_helpers import _require_interactive_stdin
+
+            _require_interactive_stdin("autoskillit order")
             # Interactive prompt
             subset_list = ", ".join(sorted(_needed))
             print(f"\nThis recipe requires the following disabled subset(s): {subset_list}")
@@ -603,8 +601,10 @@ def order(recipe: str | None = None):
     show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
 
     from autoskillit.cli._ansi import permissions_warning
+    from autoskillit.cli._init_helpers import _require_interactive_stdin
 
     print(permissions_warning())
+    _require_interactive_stdin("autoskillit order")
     confirm = input("Launch session? [Enter/n]: ").strip().lower()
     if confirm in ("n", "no"):
         return

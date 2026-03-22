@@ -48,7 +48,31 @@ _MARKER_CONTENT = """\
 """
 
 
+def _require_interactive_stdin(command_name: str) -> None:
+    """Pre-condition guard for any function that calls input().
+
+    Raises SystemExit(1) with a clear message if stdin is not a TTY. Every
+    prompt function in the CLI must call this before any input() invocation to
+    prevent silent EOFError crashes in non-interactive environments (CI, scripts,
+    piped invocations).
+
+    Parameters
+    ----------
+    command_name
+        Human-readable name of the command requiring interactivity, e.g.
+        "autoskillit init" or "autoskillit order". Included in the error message.
+    """
+    if not sys.stdin.isatty():
+        print(
+            f"\n  ERROR: '{command_name}' requires an interactive terminal.\n"
+            f"  Run with the appropriate flag to provide this value non-interactively,\n"
+            f"  or run in an interactive shell.\n"
+        )
+        raise SystemExit(1)
+
+
 def _prompt_recipe_choice() -> str:
+    _require_interactive_stdin("autoskillit order")
     available = list_recipes(Path.cwd()).items
     if not available:
         print("No recipes found. Run 'autoskillit recipes list' to check.")
@@ -60,9 +84,7 @@ def _prompt_recipe_choice() -> str:
 
 
 def _prompt_test_command() -> list[str]:
-    if not sys.stdin.isatty():
-        print("  ERROR: Non-interactive mode requires --test-command.")
-        raise SystemExit(1)
+    _require_interactive_stdin("autoskillit init")
     default = "task test-all"
     answer = input(f"Test command [{default}]: ").strip()
     return (answer if answer else default).split()

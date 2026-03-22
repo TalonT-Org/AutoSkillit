@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Sequence
-from typing import NamedTuple
+
+from autoskillit.core._terminal_table import TerminalColumn
 
 
 def supports_color() -> bool:
@@ -18,19 +19,6 @@ def supports_color() -> bool:
     if os.environ.get("TERM") == "dumb":
         return False
     return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
-
-
-class TerminalColumn(NamedTuple):
-    """Column specification for terminal table rendering.
-
-    max_width caps the column content. Any cell value exceeding max_width is
-    truncated and a single '…' character is appended. Setting max_width=None
-    means unbounded (use only for the final/rightmost column that cannot wrap).
-    """
-
-    label: str
-    max_width: int | None
-    align: str  # "<" (left) or ">" (right)
 
 
 def _render_terminal_table(

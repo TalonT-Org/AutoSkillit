@@ -37,6 +37,14 @@ hooks:
 - Document retry limits and circuit breakers
 - Include exception hierarchy if present
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
+- After writing the diagram file, emit the **absolute path** as a structured output
+  token immediately before `%%ORDER_UP%%`. Resolve the relative `temp/arch-lens-error-resilience/...`
+  save path to absolute by prepending the full CWD:
+  ```
+  diagram_path = /absolute/cwd/temp/arch-lens-error-resilience/{filename}.md
+  %%ORDER_UP%%
+  ```
+  This token is MANDATORY — the pipeline cannot proceed without it.
 
 ---
 

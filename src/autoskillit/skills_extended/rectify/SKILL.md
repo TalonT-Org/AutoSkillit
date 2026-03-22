@@ -45,6 +45,15 @@ Do not change any code.
 - Identify how tests missed the issue and similar/related bugs
 - Map the components and their connections thoroughly
 - Write the plan as markdown to `.autoskillit/temp/rectify/` directory (relative to the current working directory)
+- After writing the plan file, emit the **absolute path** as a structured output token
+  immediately before `%%ORDER_UP%%`. The save path is relative (`.autoskillit/temp/rectify/...`) but
+  the token **must** use the absolute path (prepend the full CWD):
+  ```
+  plan_path = /absolute/cwd/.autoskillit/temp/rectify/{filename}.md
+  plan_parts = /absolute/cwd/.autoskillit/temp/rectify/{filename}.md
+  %%ORDER_UP%%
+  ```
+  This token is MANDATORY — the pipeline cannot capture the output without it.
 - The solution must solve more than just the immediate issue
 
 ## Rectify Workflow

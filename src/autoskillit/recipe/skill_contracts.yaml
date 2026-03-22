@@ -230,20 +230,6 @@ skills:
     - "review_path\\s*=\\s*/.+"
     pattern_examples:
     - "review_path = /tmp/review.md\n%%ORDER_UP%%"
-  setup-project:
-    inputs:
-    - name: project_dir
-      type: directory_path
-      required: true
-    outputs:
-    - name: analysis_path
-      type: file_path
-    - name: config_path
-      type: file_path
-    expected_output_patterns:
-    - "analysis_path\\s*=\\s*/.+"
-    pattern_examples:
-    - "analysis_path = /tmp/analysis.md\n%%ORDER_UP%%"
   audit-friction:
     inputs: []
     outputs: []

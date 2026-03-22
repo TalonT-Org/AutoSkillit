@@ -94,7 +94,10 @@ class BackgroundTaskSupervisor:
                     )
                 )
             if on_exception is not None:
-                on_exception(exc)
+                try:
+                    on_exception(exc)
+                except Exception:
+                    self._log.debug("on_exception callback raised", exc_info=True)
 
     async def drain(self) -> None:
         """Await all pending tasks to completion (for shutdown and tests)."""

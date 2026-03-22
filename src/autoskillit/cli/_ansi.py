@@ -6,7 +6,7 @@ import os
 import sys
 from collections.abc import Sequence
 
-from autoskillit.core._terminal_table import TerminalColumn
+from autoskillit.core import TerminalColumn
 
 
 def supports_color() -> bool:

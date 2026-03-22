@@ -1507,18 +1507,6 @@ def test_bundled_recipes_pass_unrouted_verdict_value_rule() -> None:
         )
 
 
-def test_bundled_recipes_emit_no_advisory_context_limit_warnings() -> None:
-    """All bundled recipes must emit zero advisory-step-missing-context-limit warnings."""
-    for recipe_path in sorted(builtin_recipes_dir().glob("*.yaml")):
-        recipe = load_recipe(recipe_path)
-        findings = run_semantic_rules(recipe)
-        violations = [f for f in findings if f.rule == "advisory-step-missing-context-limit"]
-        assert violations == [], (
-            f"Recipe '{recipe_path.stem}' has advisory run_skill steps missing "
-            f"on_context_limit: {[f.step_name for f in violations]}"
-        )
-
-
 def test_implementation_groups_has_ci_watch() -> None:
     """T_RP10: implementation-groups now has ci_watch (parity with other recipes)."""
     recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")

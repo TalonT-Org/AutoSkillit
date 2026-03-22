@@ -1,6 +1,7 @@
 """Tests for configuration loading and resolution."""
 
 from dataclasses import fields as dc_fields
+from pathlib import Path
 
 import pytest
 import yaml
@@ -546,6 +547,45 @@ class TestDynaconfIntegration:
         with pytest.raises(ConfigSchemaError, match=r"\.secrets\.yaml"):
             load_config(tmp_path)
 
+    def test_config_yaml_misplaced_secret_error_is_actionable(self, tmp_path, monkeypatch) -> None:
+        """SEC-3b: ConfigSchemaError for misplaced github.token includes exact fix guidance.
+
+        The error must tell the user not just WHAT is wrong (move it to .secrets.yaml)
+        but HOW: the exact YAML block to add and confirmation of the key to remove.
+        """
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("github:\n  token: ghp_actionability_test\n")
+
+        with pytest.raises(ConfigSchemaError) as exc_info:
+            load_config(tmp_path)
+
+        msg = str(exc_info.value)
+        # Must include the dotted key path
+        assert "github.token" in msg
+        # Must reference the target file with exact path component
+        assert ".secrets.yaml" in msg
+        # Must include the exact YAML to add (so user can copy-paste)
+        assert "token:" in msg
+        # Must include removal instruction
+        assert "remove" in msg.lower() or "delete" in msg.lower()
+
+    def test_user_level_config_yaml_rejects_secrets_only_key(self, tmp_path, monkeypatch) -> None:
+        """SEC-3c: github.token in user-level ~/.autoskillit/config.yaml raises ConfigSchemaError.
+
+        SEC-3 only tests the project-level layer. This test covers the user-level layer,
+        which is equally validated (should_validate=True in _make_dynaconf).
+        """
+        user_home = tmp_path / "home"
+        user_home.mkdir()
+        monkeypatch.setattr("pathlib.Path.home", lambda: user_home)
+        user_config_dir = user_home / ".autoskillit"
+        user_config_dir.mkdir()
+        (user_config_dir / "config.yaml").write_text("github:\n  token: ghp_user_level_leak\n")
+        with pytest.raises(ConfigSchemaError, match=r"\.secrets\.yaml"):
+            load_config(tmp_path)
+
     def test_secrets_yaml_accepts_token(self, tmp_path, monkeypatch):
         """SEC-4: github.token in .secrets.yaml loads without error."""
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
@@ -577,6 +617,29 @@ class TestDynaconfIntegration:
 
         cfg = GitHubConfig()
         assert cfg.in_progress_label == "in-progress"
+
+
+def test_secrets_only_keys_covers_all_github_secret_fields() -> None:
+    """_SECRETS_ONLY_KEYS must include every field in GitHubConfig that holds a secret.
+
+    This test prevents the pattern: developer adds GitHubConfig.api_key without updating
+    _SECRETS_ONLY_KEYS, silently bypassing the misplaced-secrets guard.
+
+    A field is considered a secret if its name contains any of: token, key, secret, password.
+    """
+    import dataclasses
+
+    from autoskillit.config.settings import _SECRETS_ONLY_KEYS, GitHubConfig
+
+    secret_indicators = frozenset({"token", "key", "secret", "password"})
+    for f in dataclasses.fields(GitHubConfig):
+        field_name_lower = f.name.lower()
+        if any(ind in field_name_lower for ind in secret_indicators):
+            dotted = f"github.{f.name}"
+            assert dotted in _SECRETS_ONLY_KEYS, (
+                f"GitHubConfig.{f.name} looks like a secret field but is missing from "
+                f"_SECRETS_ONLY_KEYS. Add 'github.{f.name}' to the frozenset in settings.py."
+            )
 
 
 class TestReleaseReadinessConfig:
@@ -897,3 +960,36 @@ class TestSubsetsConfig:
         cfg = SubsetsConfig()
         assert hasattr(cfg, "disabled")
         assert hasattr(cfg, "custom_tags")
+
+
+class TestWriteConfigLayer:
+    def test_write_config_layer_rejects_secret_key(self, tmp_path: Path) -> None:
+        """write_config_layer raises ConfigSchemaError before touching the file."""
+
+        from autoskillit.config.settings import ConfigSchemaError, write_config_layer
+
+        config_path = tmp_path / "config.yaml"
+        with pytest.raises(ConfigSchemaError, match="github.token"):
+            write_config_layer(config_path, {"github": {"token": "ghp_test"}})
+        assert not config_path.exists(), "config.yaml must not be written on schema error"
+
+    def test_write_config_layer_rejects_unknown_key(self, tmp_path: Path) -> None:
+        """write_config_layer raises ConfigSchemaError for unknown section."""
+        from autoskillit.config.settings import ConfigSchemaError, write_config_layer
+
+        config_path = tmp_path / "config.yaml"
+        with pytest.raises(ConfigSchemaError, match="unrecognized key"):
+            write_config_layer(config_path, {"invented_section": {"foo": "bar"}})
+        assert not config_path.exists()
+
+    def test_write_config_layer_writes_valid_content(self, tmp_path: Path) -> None:
+        """write_config_layer writes valid schema content atomically."""
+        import yaml as _yaml
+
+        from autoskillit.config.settings import write_config_layer
+
+        config_path = tmp_path / "config.yaml"
+        write_config_layer(config_path, {"github": {"default_repo": "owner/repo"}})
+        assert config_path.is_file()
+        data = _yaml.safe_load(config_path.read_text())
+        assert data["github"]["default_repo"] == "owner/repo"

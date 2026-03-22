@@ -7,6 +7,9 @@ either `from autoskillit.config import AutomationConfig` or the explicit
 
 from autoskillit.config.ingredient_defaults import resolve_ingredient_defaults
 from autoskillit.config.settings import (
+    _SECRETS_ONLY_KEYS as _SECRETS_ONLY_KEYS,
+)
+from autoskillit.config.settings import (
     AutomationConfig,
     BranchingConfig,
     CIConfig,
@@ -31,6 +34,8 @@ from autoskillit.config.settings import (
     TokenUsageConfig,
     WorktreeSetupConfig,
     load_config,
+    validate_layer_keys,
+    write_config_layer,
 )
 
 __all__ = [
@@ -59,4 +64,6 @@ __all__ = [
     "WorktreeSetupConfig",
     "load_config",
     "resolve_ingredient_defaults",
+    "validate_layer_keys",
+    "write_config_layer",
 ]

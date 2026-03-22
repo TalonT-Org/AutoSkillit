@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     CATEGORY_TAGS,
     OutputFormat,
+    atomic_write,
     dump_yaml_str,
     load_yaml,
     pkg_root,
@@ -451,10 +452,15 @@ def validate_layer_keys(
                 dotted = f"{top_key}.{sub_key}"
                 if dotted in _SECRETS_ONLY_KEYS:
                     if not is_secrets_layer:
+                        secrets_hint_path = layer_path.parent / ".secrets.yaml"
+                        top, sub = dotted.split(".", 1)
                         raise ConfigSchemaError(
                             f"Invalid configuration in {str(layer_path)!r}: "
-                            f"'{dotted}' must not appear in config.yaml — "
-                            f"configure it in '.autoskillit/.secrets.yaml' instead."
+                            f"'{dotted}' is a secret key that must not appear in config.yaml.\n\n"
+                            f"To fix, add the following to {str(secrets_hint_path)!r}:\n\n"
+                            f"  {top}:\n"
+                            f"    {sub}: <your_token_value>\n\n"
+                            f"Then remove the '{dotted}' key from {str(layer_path)!r}."
                         )
                     continue  # secrets-only keys are valid in .secrets.yaml
                 if sub_key not in _CONFIG_SCHEMA[top_key]:
@@ -465,6 +471,26 @@ def validate_layer_keys(
                         f"Invalid configuration in {str(layer_path)!r}: "
                         f"unrecognized key '{dotted}' in section '{top_key}'.{hint}"
                     )
+
+
+def write_config_layer(path: Path, data: dict[str, Any]) -> None:
+    """Validate config data against the schema, then atomically write it to path.
+
+    Raises ConfigSchemaError before touching the file if the data contains
+    unrecognized keys, unknown sub-keys, or any _SECRETS_ONLY_KEYS entries.
+    This is the canonical write gateway for all config.yaml write sites.
+
+    Parameters
+    ----------
+    path:
+        Destination file path. Must be a non-secrets config.yaml path — never
+        .secrets.yaml (which allows different keys).
+    data:
+        YAML-serializable dict to validate and write.
+    """
+    validate_layer_keys(data, path, is_secrets_layer=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
 
 
 def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:

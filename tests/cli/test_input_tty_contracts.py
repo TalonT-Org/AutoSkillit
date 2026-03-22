@@ -19,8 +19,8 @@ import pytest
 _TTY_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
     {
         "_prompt_github_repo",  # call-site-guarded: only caller (_register_all) wraps in isatty()
-        "_check_secret_scanning",  # custom-handled: returns _ScanResult(False) in non-interactive mode
-        "run_onboarding_menu",  # custom-handled: catches EOFError on each input(), returns None in non-interactive mode
+        "_check_secret_scanning",  # custom-handled: returns _ScanResult(False) non-interactively
+        "run_onboarding_menu",  # custom-handled: catches EOFError on each input()
     }
 )
 
@@ -95,7 +95,7 @@ def test_require_interactive_stdin_raises_system_exit_when_not_tty(
         _require_interactive_stdin("autoskillit init")
     assert exc_info.value.code == 1
     captured = capsys.readouterr()
-    assert "non-interactive" in captured.out.lower() or "autoskillit init" in captured.out
+    assert "non-interactive" in captured.out.lower() and "autoskillit init" in captured.out
 
 
 def test_require_interactive_stdin_is_noop_when_tty(

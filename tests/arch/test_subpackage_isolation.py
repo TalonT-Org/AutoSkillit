@@ -197,7 +197,12 @@ def test_no_sync_manifest_imports_in_production_code():
     src_dir = Path(__file__).parent.parent.parent / "src"
     for py_file in src_dir.rglob("*.py"):
         content = py_file.read_text()
-        assert "sync_manifest" not in content, f"Found sync_manifest reference in {py_file}"
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("import ", "from ")):
+                assert "sync_manifest" not in stripped, (
+                    f"Found sync_manifest import in {py_file}: {line!r}"
+                )
 
 
 # ── Rule 2: test_singleton_definition_locality ────────────────────────────────

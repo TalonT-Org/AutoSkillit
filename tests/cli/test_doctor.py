@@ -80,11 +80,12 @@ class TestCLIDoctor:
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
             "test_check:\n  command: ['pytest']\n"
         )
-        from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES
+        from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES, _ROOT_GITIGNORE_ENTRIES
 
         (tmp_path / ".autoskillit" / ".gitignore").write_text(
             "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n"
         )
+        (tmp_path / ".gitignore").write_text("\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
         (tmp_path / ".pre-commit-config.yaml").write_text(
             "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
         )

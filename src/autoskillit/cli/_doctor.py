@@ -137,7 +137,7 @@ def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
             entry_name = entry.rstrip("/")
             if entry_name not in uncovered:
                 uncovered.append(entry_name)
-    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES
+    from autoskillit.core import _ROOT_GITIGNORE_ENTRIES
 
     root_gitignore = project_dir / ".gitignore"
     root_content = root_gitignore.read_text(encoding="utf-8") if root_gitignore.exists() else ""

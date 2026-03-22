@@ -235,6 +235,7 @@ steps:
       summary_path: "${{ result.summary_path }}"
     on_success: done
     on_failure: escalate
+    on_context_limit: done
     optional: true
     skip_when_false: "inputs.collect_on_branch"
     note: >

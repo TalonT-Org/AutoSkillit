@@ -401,6 +401,7 @@ steps:
         route: escalate_stop
       - route: remediate
     on_failure: escalate_stop
+    on_context_limit: escalate_stop
     optional: true
     skip_when_false: "inputs.audit"
     note: >
@@ -428,6 +429,7 @@ steps:
       issue_number: "${{ context.issue_number }}"
     on_success: extract_pr_number
     on_failure: release_issue_failure
+    on_context_limit: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -969,6 +971,7 @@ steps:
         route: release_issue_failure
       - route: re_push
     on_failure: release_issue_failure
+    on_context_limit: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
     skip_when_false: "inputs.open_pr"

@@ -34,6 +34,7 @@ from autoskillit.config.settings import (
     TokenUsageConfig,
     WorktreeSetupConfig,
     load_config,
+    validate_layer_keys,
     write_config_layer,
 )
 
@@ -63,5 +64,6 @@ __all__ = [
     "WorktreeSetupConfig",
     "load_config",
     "resolve_ingredient_defaults",
+    "validate_layer_keys",
     "write_config_layer",
 ]

@@ -88,7 +88,7 @@ def ingredients_to_terminal(
 
     Args:
         rows: Sequence of (name, description, default) tuples as produced
-              by ``recipe._api._build_ingredient_rows``.
+              by ``recipe.build_ingredient_rows``.
 
     Returns:
         Multi-line string ready for print(). Description column is capped at

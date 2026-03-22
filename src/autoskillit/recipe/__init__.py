@@ -25,7 +25,7 @@ from autoskillit.recipe._api import (  # noqa: E402
     ListRecipesResult,
     LoadRecipeResult,
     RecipeListItem,
-    _build_ingredient_rows,  # noqa: F401
+    build_ingredient_rows,
     format_ingredients_table,
     format_recipe_list_response,
     list_all,
@@ -85,6 +85,7 @@ __all__ = [
     "ListRecipesResult",
     "LoadRecipeResult",
     "RecipeListItem",
+    "build_ingredient_rows",
     "Recipe",
     "RecipeInfo",
     "RecipeIngredient",

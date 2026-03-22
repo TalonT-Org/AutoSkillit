@@ -394,18 +394,18 @@ class TestIngredientSortOrder:
 
 
 def test_build_ingredient_rows_returns_tuples():
-    """_build_ingredient_rows must return a list of (name, description, default) tuples
+    """build_ingredient_rows must return a list of (name, description, default) tuples
     with full (uncapped) description strings — the terminal renderer, not this function,
     is responsible for truncation."""
     from autoskillit.core import pkg_root
-    from autoskillit.recipe._api import _build_ingredient_rows
+    from autoskillit.recipe._api import build_ingredient_rows
     from autoskillit.recipe.io import find_recipe_by_name, load_recipe
 
     recipes_dir = pkg_root() / "recipes"
     recipe_info = find_recipe_by_name("implementation", recipes_dir)
     assert recipe_info is not None
     recipe = load_recipe(recipe_info.path)
-    rows = _build_ingredient_rows(recipe, resolved_defaults={})
+    rows = build_ingredient_rows(recipe, resolved_defaults={})
     assert all(isinstance(r, tuple) and len(r) == 3 for r in rows)
     # Full descriptions must be present (not truncated at this layer)
     all_descs = [r[1] for r in rows]

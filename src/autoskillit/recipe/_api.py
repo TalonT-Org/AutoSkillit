@@ -67,7 +67,7 @@ def _ingredient_sort_key(name: str, required: bool, default: object) -> tuple[in
     return (4, name)  # has a non-empty default (constants, rarely changed)
 
 
-def _build_ingredient_rows(
+def build_ingredient_rows(
     recipe: Any,
     resolved_defaults: dict[str, str] | None = None,
 ) -> list[tuple[str, str, str]]:
@@ -120,7 +120,7 @@ def format_ingredients_table(
     if not ingredients:
         return None
 
-    rows = _build_ingredient_rows(recipe, resolved_defaults)
+    rows = build_ingredient_rows(recipe, resolved_defaults)
 
     if not rows:
         return None

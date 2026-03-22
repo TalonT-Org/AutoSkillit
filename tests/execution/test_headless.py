@@ -2888,7 +2888,9 @@ class TestSynthesizeFromWriteArtifacts:
 
         session = make_session(
             result="plan summary\n%%ORDER_UP%%",
-            tool_uses=[{"name": "Write", "id": "t1", "file_path": "/abs/temp/make-plan/my_plan.md"}],
+            tool_uses=[
+                {"name": "Write", "id": "t1", "file_path": "/abs/temp/make-plan/my_plan.md"}
+            ],
         )
         patterns = [r"plan_path\s*=\s*/.+"]
         result = _synthesize_from_write_artifacts(session, patterns, write_call_count=1)
@@ -2900,7 +2902,9 @@ class TestSynthesizeFromWriteArtifacts:
         from autoskillit.execution.headless import _synthesize_from_write_artifacts
 
         session = make_session(result="plan summary\n%%ORDER_UP%%", tool_uses=[])
-        result = _synthesize_from_write_artifacts(session, [r"plan_path\s*=\s*/.+"], write_call_count=0)
+        result = _synthesize_from_write_artifacts(
+            session, [r"plan_path\s*=\s*/.+"], write_call_count=0
+        )
         assert result is None
 
     def test_returns_none_when_no_absolute_file_path(self, make_session):
@@ -2911,7 +2915,9 @@ class TestSynthesizeFromWriteArtifacts:
             result="plan summary\n%%ORDER_UP%%",
             tool_uses=[{"name": "Write", "id": "t1", "file_path": "temp/make-plan/plan.md"}],
         )
-        result = _synthesize_from_write_artifacts(session, [r"plan_path\s*=\s*/.+"], write_call_count=1)
+        result = _synthesize_from_write_artifacts(
+            session, [r"plan_path\s*=\s*/.+"], write_call_count=1
+        )
         assert result is None
 
     def test_returns_none_when_pattern_already_satisfied(self, make_session):
@@ -2922,7 +2928,9 @@ class TestSynthesizeFromWriteArtifacts:
             result="plan_path = /abs/plan.md\n%%ORDER_UP%%",
             tool_uses=[{"name": "Write", "id": "t1", "file_path": "/abs/plan.md"}],
         )
-        result = _synthesize_from_write_artifacts(session, [r"plan_path\s*=\s*/.+"], write_call_count=1)
+        result = _synthesize_from_write_artifacts(
+            session, [r"plan_path\s*=\s*/.+"], write_call_count=1
+        )
         assert result is None
 
     def test_returns_none_when_no_path_capture_patterns(self, make_session):
@@ -2933,7 +2941,9 @@ class TestSynthesizeFromWriteArtifacts:
             result="%%ORDER_UP%%",
             tool_uses=[{"name": "Write", "id": "t1", "file_path": "/abs/plan.md"}],
         )
-        result = _synthesize_from_write_artifacts(session, [r"verdict\s*=\s*(GO|NO GO)"], write_call_count=1)
+        result = _synthesize_from_write_artifacts(
+            session, [r"verdict\s*=\s*(GO|NO GO)"], write_call_count=1
+        )
         assert result is None
 
 
@@ -3082,9 +3092,7 @@ class TestContractRecoveryGate:
         assert sr.success is True
         assert "plan_path = /abs/temp/make-plan/my_plan.md" in sr.result
 
-    def test_contract_recovery_respects_budget_guard(
-        self, make_build_skill_result_kwargs
-    ):
+    def test_contract_recovery_respects_budget_guard(self, make_build_skill_result_kwargs):
         """
         When budget is exhausted, budget guard must override CONTRACT_RECOVERY.
         Write call with no file_path → synthesis fails → CONTRACT_RECOVERY promotes

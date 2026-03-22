@@ -34,7 +34,9 @@ class RetryReason(StrEnum):
     EMPTY_OUTPUT = "empty_output"  # NATURAL_EXIT + rc=0 + no output, no partial progress
     DRAIN_RACE = "drain_race"  # channel-confirmed completion, stdout not fully flushed before kill
     PATH_CONTAMINATION = "path_contamination"  # CWD boundary violation, not a context limit
-    CONTRACT_RECOVERY = "contract_recovery"  # marker present + write evidence — omission not structural
+    CONTRACT_RECOVERY = (
+        "contract_recovery"  # marker present + write evidence — omission not structural
+    )
 
 
 class MergeFailedStep(StrEnum):

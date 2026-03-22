@@ -1587,9 +1587,7 @@ def test_parse_session_result_preserves_edit_file_path(make_ndjson):
 
 def test_parse_session_result_non_write_tools_no_file_path(make_ndjson):
     """Non-Write/Edit tool_uses must not gain a file_path key."""
-    ndjson = make_ndjson(
-        tool_uses=[{"name": "Bash", "id": "tu3", "input": {"command": "ls"}}]
-    )
+    ndjson = make_ndjson(tool_uses=[{"name": "Bash", "id": "tu3", "input": {"command": "ls"}}])
     session = parse_session_result(ndjson)
     assert session.tool_uses == [{"name": "Bash", "id": "tu3"}]
     assert "file_path" not in session.tool_uses[0]

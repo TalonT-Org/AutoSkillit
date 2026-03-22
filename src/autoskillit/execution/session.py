@@ -348,7 +348,9 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                             if isinstance(block, dict) and block.get("type") == "tool_use":
                                 name = block.get("name", "")
                                 entry: dict[str, str] = {"name": name, "id": block.get("id", "")}
-                                if name in {"Write", "Edit"} and isinstance(block.get("input"), dict):
+                                if name in {"Write", "Edit"} and isinstance(
+                                    block.get("input"), dict
+                                ):
                                     fp = block["input"].get("file_path", "")
                                     if fp:
                                         entry["file_path"] = fp

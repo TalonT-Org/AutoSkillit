@@ -66,8 +66,7 @@ class BackgroundTaskSupervisor:
         try:
             return await coro
         except asyncio.CancelledError:
-            if status_path is not None:
-                _write_status(status_path, "cancelled")
+            write_status(status_path, "cancelled")
             raise
         except Exception as exc:
             self._log.error(
@@ -76,8 +75,7 @@ class BackgroundTaskSupervisor:
                 error=str(exc),
                 exc_info=exc,
             )
-            if status_path is not None:
-                _write_status(status_path, "failed", error=str(exc))
+            write_status(status_path, "failed", error=str(exc))
             if self._audit is not None:
                 try:
                     from autoskillit.core import FailureRecord, RetryReason
@@ -107,9 +105,11 @@ class BackgroundTaskSupervisor:
             await asyncio.gather(*self._tasks, return_exceptions=True)
 
 
-def _write_status(path: Path, status: str, *, error: str | None = None) -> None:
+def write_status(path: Path | None, status: str, *, error: str | None = None) -> None:
     """Write a status.json file atomically. Never raises."""
     try:
+        if path is None:
+            return
         payload: dict[str, Any] = {
             "status": status,
             "completed_at": datetime.now(UTC).isoformat(),
@@ -118,4 +118,4 @@ def _write_status(path: Path, status: str, *, error: str | None = None) -> None:
             payload["error"] = error
         atomic_write(path, json.dumps(payload, indent=2))
     except Exception:
-        logger.debug("_write_status failed", path=str(path), exc_info=True)
+        logger.debug("write_status failed", path=str(path), exc_info=True)

@@ -13,6 +13,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import atomic_write, get_logger
+from autoskillit.pipeline import write_status
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _extract_block,
@@ -569,7 +570,7 @@ async def _run_report_session(
             logger.warning("report_bug write failed", path=str(report_path), error=str(exc))
 
         if not skill_result.success:
-            _write_report_status(
+            write_status(
                 status_path,
                 "failed",
                 error=(skill_result.stderr or skill_result.subtype or "session failed")[:500],
@@ -596,7 +597,7 @@ async def _run_report_session(
         elif cfg.github_filing:
             github = {"skipped": True, "reason": "no_token"}
 
-        _write_report_status(status_path, "complete")
+        write_status(status_path, "complete")
         return {
             "success": True,
             "status": "complete",
@@ -606,26 +607,10 @@ async def _run_report_session(
         }
     except Exception as exc:
         logger.error("_run_report_session unhandled exception", exc_info=exc)
-        _write_report_status(status_path, "failed", error=str(exc))
+        write_status(status_path, "failed", error=str(exc))
         return {
             "success": False,
             "status": "failed",
             "error": str(exc),
             "report_path": str(report_path),
         }
-
-
-def _write_report_status(path: Path | None, status: str, *, error: str | None = None) -> None:
-    """Write a report status file atomically. Never raises."""
-    try:
-        if path is None:
-            return
-        payload: dict[str, Any] = {
-            "status": status,
-            "completed_at": datetime.now(UTC).isoformat(),
-        }
-        if error is not None:
-            payload["error"] = error
-        atomic_write(path, json.dumps(payload, indent=2))
-    except Exception:
-        logger.debug("_write_report_status failed", path=str(path), exc_info=True)

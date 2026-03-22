@@ -212,9 +212,23 @@ Capture the result as `queue_available`. If `gh api graphql` fails (auth error, 
 error), the `|| echo false` fallback ensures `queue_available` defaults to `"false"`,
 routing to the safe sequential (non-queue) path rather than leaving the variable unset.
 
-Run this **once per orchestration run**, not per-PR. The `implementation` recipe performs
-this detection automatically via the `check_merge_queue` step — **do not repeat it
-manually when following a recipe**.
+Run this **once per orchestration run**, not per-PR.
+
+After detecting queue availability, also detect auto-merge availability:
+
+```bash
+gh api graphql -f query="query {
+  repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
+    autoMergeAllowed
+  }
+}" | jq -r '.data.repository.autoMergeAllowed // false' || echo false
+```
+
+Capture the result as `auto_merge_available`. If detection fails, default to `"false"`.
+
+**Note:** All three recipes (`implementation`, `implementation-groups`, `remediation`)
+perform both detections automatically via `check_merge_queue` + `check_auto_merge` —
+**do not repeat them manually when following a recipe**.
 
 ### 2. Route based on queue availability
 
@@ -223,31 +237,42 @@ GitHub's merge queue serializes concurrent merges. Each pipeline's
 `enable_auto_merge → wait_for_queue` sequence is safe to proceed in parallel — the
 queue handles ordering. No additional sequencing is required from the orchestrator.
 
-**When `queue_available == false`:**
-PRs MUST be merged **one at a time**. The orchestrator must wait for each merge
-(the `wait_for_direct_merge` step) to complete before advancing to the next PR.
+**When `queue_available == false` and `auto_merge_available == true`:**
+Use `gh pr merge --squash --auto` (direct_merge path). GitHub merges the PR once
+all required status checks pass. PRs must not be merged concurrently — never execute
+two `direct_merge` steps concurrently on a non-queue branch.
 
-- If following a recipe: the recipe's sequential-merge loop is authoritative. Do not
-  skip or compress loop iterations.
+**When `queue_available == false` and `auto_merge_available == false`:**
+Use `gh pr merge --squash` (immediate_merge path — no `--auto` flag). GitHub
+executes the merge synchronously without waiting for status checks (there are none
+to wait for when `autoMergeAllowed=false`). PRs MUST still be merged one at a time.
+
+- If following a recipe: the recipe's `route_queue_mode` step routes to the correct
+  path automatically based on `context.auto_merge_available`.
+- **NEVER** use `gh pr merge --squash --auto` when `auto_merge_available == false` —
+  this command fails with "auto-merge is not allowed for this repository"; in recipe
+  context it silently routes to `confirm_cleanup`, leaving the PR unmerged.
+
+For ad-hoc (off-recipe) merges:
 - If merging multiple PRs collected from parallel pipelines: route through the
   `merge-prs` recipe for batch sequential merging.
-- **NEVER** execute two `direct_merge` steps concurrently on a non-queue branch.
 
 ### 3. NEVER bypass recipe merge steps
 
 **NEVER use `run_cmd` with `gh pr merge` to merge a PR outside of a named recipe
-step.** All PR merges must flow through the recipe's `merge_pr`, `direct_merge`, or
-`enable_auto_merge` steps. Bypassing these steps skips CI enforcement, conflict
-detection, and conflict routing.
+step.** All PR merges must flow through the recipe's `merge_pr`, `direct_merge`,
+`immediate_merge`, or `enable_auto_merge` steps. Bypassing these steps skips CI
+enforcement, conflict detection, and conflict routing.
 
 ### 4. Merge conflict failure handling
 
-When `wait_for_direct_merge` returns `closed` (PR was closed due to a stale base):
+When `wait_for_direct_merge` or `wait_for_immediate_merge` returns `closed` (PR was
+closed due to a stale base):
 
-- **Route to `on_failure`** — the recipe's `direct_merge_conflict_fix` step handles
-  rebase-and-retry automatically.
+- **Route to the appropriate conflict fix** — `direct_merge_conflict_fix` or
+  `immediate_merge_conflict_fix` handles rebase-and-retry automatically.
 - **NEVER use `run_cmd` for git investigation** (git rebase, git log, git reset,
   git merge). The `resolve-merge-conflicts` skill run by `direct_merge_conflict_fix`
-  has full diagnostic access.
+  and `immediate_merge_conflict_fix` has full diagnostic access.
 - **NEVER abandon a pipeline** because merge failed — route through the conflict
   recovery cycle until the PR merges or escalation is required.

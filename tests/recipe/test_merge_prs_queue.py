@@ -350,12 +350,12 @@ def test_auto_merge_false_routes_to_confirm_cleanup(any_recipe) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_route_queue_mode_default_routes_to_direct_merge(any_recipe) -> None:
-    """Default (no-queue) condition must route to direct_merge, not release_issue_success."""
+def test_route_queue_mode_default_routes_to_immediate_merge(any_recipe) -> None:
+    """Default (fallthrough) condition must route to immediate_merge, not direct_merge."""
     step = any_recipe.steps["route_queue_mode"]
     default_cond = next((c for c in step.on_result.conditions if c.when is None), None)
     assert default_cond is not None, "Expected a default (when=None) condition in route_queue_mode"
-    assert default_cond.route == "direct_merge"
+    assert default_cond.route == "immediate_merge"
 
 
 def test_direct_merge_step_exists(any_recipe) -> None:
@@ -427,6 +427,172 @@ def test_direct_merge_steps_have_skip_when_false(any_recipe) -> None:
         "redirect_merge",
     ]
     for step_name in new_steps:
+        assert step_name in any_recipe.steps, f"Missing step: {step_name}"
+        step = any_recipe.steps[step_name]
+        assert step.skip_when_false == "inputs.open_pr", (
+            f"{step_name}.skip_when_false must be 'inputs.open_pr'"
+        )
+
+
+# ---------------------------------------------------------------------------
+# check_auto_merge detection step
+# ---------------------------------------------------------------------------
+
+
+def test_check_auto_merge_step_exists(any_recipe) -> None:
+    """check_auto_merge step must exist in all three recipes."""
+    assert "check_auto_merge" in any_recipe.steps
+
+
+def test_check_auto_merge_is_run_cmd(any_recipe) -> None:
+    step = any_recipe.steps["check_auto_merge"]
+    assert step.tool == "run_cmd"
+
+
+def test_check_auto_merge_captures_auto_merge_available(any_recipe) -> None:
+    step = any_recipe.steps["check_auto_merge"]
+    assert "auto_merge_available" in (step.capture or {})
+
+
+def test_check_auto_merge_routes_to_route_queue_mode_on_success(any_recipe) -> None:
+    step = any_recipe.steps["check_auto_merge"]
+    assert step.on_success == "route_queue_mode"
+
+
+def test_check_auto_merge_routes_to_route_queue_mode_on_failure(any_recipe) -> None:
+    """On failure, auto_merge_available is unset; route_queue_mode defaults to immediate_merge."""
+    step = any_recipe.steps["check_auto_merge"]
+    assert step.on_failure == "route_queue_mode"
+
+
+def test_check_auto_merge_has_skip_when_false(any_recipe) -> None:
+    step = any_recipe.steps["check_auto_merge"]
+    assert step.skip_when_false == "inputs.open_pr"
+
+
+def test_check_merge_queue_routes_to_check_auto_merge_on_success(any_recipe) -> None:
+    """check_merge_queue.on_success must route to check_auto_merge, not route_queue_mode."""
+    step = any_recipe.steps["check_merge_queue"]
+    assert step.on_success == "check_auto_merge"
+
+
+def test_route_queue_mode_has_auto_merge_available_condition(any_recipe) -> None:
+    """route_queue_mode must have an explicit condition for auto_merge_available == true."""
+    step = any_recipe.steps["route_queue_mode"]
+    conds = step.on_result.conditions
+    assert any(c.when and "auto_merge_available" in c.when for c in conds)
+
+
+def test_route_queue_mode_auto_merge_available_routes_to_direct_merge(any_recipe) -> None:
+    step = any_recipe.steps["route_queue_mode"]
+    cond = next(
+        c for c in step.on_result.conditions if c.when and "auto_merge_available" in c.when
+    )
+    assert cond.when == "${{ context.auto_merge_available }} == true"
+    assert cond.route == "direct_merge"
+
+
+# ---------------------------------------------------------------------------
+# Immediate merge path — new for autoMergeAllowed=false repos
+# ---------------------------------------------------------------------------
+
+
+def test_immediate_merge_step_exists(any_recipe) -> None:
+    assert "immediate_merge" in any_recipe.steps
+    step = any_recipe.steps["immediate_merge"]
+    assert step.tool == "run_cmd"
+
+
+def test_immediate_merge_uses_squash_without_auto(any_recipe) -> None:
+    """immediate_merge must use --squash without --auto."""
+    step = any_recipe.steps["immediate_merge"]
+    cmd = step.with_args.get("cmd", "")
+    assert "--squash" in cmd
+    assert "--auto" not in cmd
+
+
+def test_immediate_merge_routes_to_wait_for_immediate_merge(any_recipe) -> None:
+    step = any_recipe.steps["immediate_merge"]
+    assert step.on_success == "wait_for_immediate_merge"
+
+
+def test_immediate_merge_failure_routes_to_confirm_cleanup(any_recipe) -> None:
+    step = any_recipe.steps["immediate_merge"]
+    assert step.on_failure == "confirm_cleanup"
+
+
+def test_wait_for_immediate_merge_step_exists(any_recipe) -> None:
+    assert "wait_for_immediate_merge" in any_recipe.steps
+    step = any_recipe.steps["wait_for_immediate_merge"]
+    assert step.tool == "run_cmd"
+
+
+def test_wait_for_immediate_merge_merged_routes_to_success(any_recipe) -> None:
+    step = any_recipe.steps["wait_for_immediate_merge"]
+    merged_cond = next(
+        (
+            c
+            for c in step.on_result.conditions
+            if c.when == "${{ result.stdout | trim }} == merged"
+        ),
+        None,
+    )
+    assert merged_cond is not None
+    assert merged_cond.route == "release_issue_success"
+
+
+def test_wait_for_immediate_merge_closed_routes_to_conflict_fix(any_recipe) -> None:
+    step = any_recipe.steps["wait_for_immediate_merge"]
+    closed_cond = next(
+        (
+            c
+            for c in step.on_result.conditions
+            if c.when == "${{ result.stdout | trim }} == closed"
+        ),
+        None,
+    )
+    assert closed_cond is not None
+    assert closed_cond.route == "immediate_merge_conflict_fix"
+
+
+def test_immediate_merge_conflict_fix_exists(any_recipe) -> None:
+    assert "immediate_merge_conflict_fix" in any_recipe.steps
+    step = any_recipe.steps["immediate_merge_conflict_fix"]
+    assert step.tool == "run_skill"
+
+
+def test_re_push_immediate_fix_exists(any_recipe) -> None:
+    assert "re_push_immediate_fix" in any_recipe.steps
+    step = any_recipe.steps["re_push_immediate_fix"]
+    assert step.tool == "push_to_remote"
+    assert step.on_success == "remerge_immediate"
+
+
+def test_remerge_immediate_exists(any_recipe) -> None:
+    assert "remerge_immediate" in any_recipe.steps
+    step = any_recipe.steps["remerge_immediate"]
+    assert step.tool == "run_cmd"
+    assert step.on_success == "wait_for_immediate_merge"
+
+
+def test_remerge_immediate_uses_squash_without_auto(any_recipe) -> None:
+    """remerge_immediate must also use --squash without --auto."""
+    step = any_recipe.steps["remerge_immediate"]
+    cmd = step.with_args.get("cmd", "")
+    assert "--squash" in cmd
+    assert "--auto" not in cmd
+
+
+def test_all_immediate_merge_steps_have_skip_when_false(any_recipe) -> None:
+    immediate_steps = [
+        "check_auto_merge",
+        "immediate_merge",
+        "wait_for_immediate_merge",
+        "immediate_merge_conflict_fix",
+        "re_push_immediate_fix",
+        "remerge_immediate",
+    ]
+    for step_name in immediate_steps:
         assert step_name in any_recipe.steps, f"Missing step: {step_name}"
         step = any_recipe.steps[step_name]
         assert step.skip_when_false == "inputs.open_pr", (

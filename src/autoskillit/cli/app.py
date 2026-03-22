@@ -21,7 +21,6 @@ from cyclopts import App, Parameter
 from autoskillit.cli._cook import cook as cook_interactive
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
-    _ScanResult,
     _check_secret_scanning,
     _generate_config_yaml,
     _log_secret_scan_bypass,
@@ -144,10 +143,15 @@ def init(
     config_dir.mkdir(exist_ok=True)
     config_path = config_dir / "config.yaml"
 
-    _wrote_config = False
+    gate = _check_secret_scanning(project_dir)
+    if not gate.passed:
+        raise SystemExit(1)
+
     if config_path.exists() and not force:
         print(f"  Config already exists: {config_path}")
         print("  Use --force to overwrite.")
+        if gate.bypass_accepted:
+            _log_secret_scan_bypass(project_dir)
     else:
         if test_command is not None:
             cmd_parts = test_command.split()
@@ -155,14 +159,10 @@ def init(
             cmd_parts = _prompt_test_command()
 
         atomic_write(config_path, _generate_config_yaml(cmd_parts))
-        _wrote_config = True
+        if gate.bypass_accepted:
+            _log_secret_scan_bypass(project_dir)
         onboarded_marker = config_dir / ".onboarded"
         onboarded_marker.unlink(missing_ok=True)
-
-    if not _check_secret_scanning(project_dir):
-        if _wrote_config:
-            config_path.unlink(missing_ok=True)
-        raise SystemExit(1)
 
     _register_all(scope, project_dir)
 

@@ -5,6 +5,8 @@ so callers can do either `from autoskillit.core import get_logger` or the
 explicit `from autoskillit.core.logging import get_logger`.
 """
 
+from ._terminal_table import TerminalColumn as TerminalColumn
+from ._terminal_table import _render_terminal_table as _render_terminal_table
 from .branch_guard import is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions, LayoutError, validate_add_dir
 from .github_url import _parse_issue_ref as _parse_issue_ref
@@ -102,6 +104,9 @@ from .types import (
 )
 
 __all__ = [
+    # _terminal_table
+    "TerminalColumn",
+    "_render_terminal_table",
     # branch_guard
     "is_protected_branch",
     # claude_conventions

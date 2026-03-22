@@ -270,3 +270,24 @@ def test_orchestrator_prompt_path_contamination_falls_to_on_failure():
 
     prompt = _build_orchestrator_prompt("implementation")
     assert "path_contamination" in prompt, "Prompt must mention path_contamination retry_reason"
+
+
+def test_show_cook_preview_line_width_bounded_with_implementation_recipe(tmp_path, capsys):
+    """show_cook_preview must not produce lines wider than 120 chars even for
+    the real implementation.yaml with its 220-char run_mode description."""
+    import re
+
+    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.core import pkg_root
+    from autoskillit.recipe.io import find_recipe_by_name, load_recipe
+
+    recipes_dir = pkg_root() / "recipes"
+    recipe_info = find_recipe_by_name("implementation", recipes_dir)
+    assert recipe_info is not None
+    parsed = load_recipe(recipe_info.path)
+
+    show_cook_preview("implementation", parsed, recipes_dir, tmp_path)
+    captured = capsys.readouterr()
+    for line in captured.out.splitlines():
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", line)
+        assert len(plain) <= 120, f"Line too wide ({len(plain)} chars): {plain!r}"

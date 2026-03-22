@@ -109,6 +109,7 @@ src/autoskillit/
 │   ├── _type_results.py     #   LoadResult, LoadReport, SkillResult, FailureRecord, CleanupResult, CIRunScope, etc.
 │   ├── _type_protocols.py   #   19 Protocols: GatePolicy, HeadlessExecutor, GitHubFetcher, CIWatcher, etc.
 │   ├── _type_helpers.py     #   extract_skill_name, resolve_target_skill, truncate_text
+│   ├── _terminal_table.py   #   TerminalColumn, _render_terminal_table — L0 color-agnostic terminal table primitive (pipeline/ and cli/ safe)
 │   ├── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
 │   ├── claude_conventions.py #  ClaudeDirectoryConventions — canonical skill discovery directory layout constants; LayoutError, validate_add_dir()
 │   └── github_url.py        #   parse_github_repo — canonical GitHub URL parser (str → owner/repo | None)
@@ -216,6 +217,7 @@ src/autoskillit/
 ├── cli/                     # L3 CLI sub-package
 │   ├── __init__.py          #   Re-exports main entry point
 │   ├── _ansi.py             #   Terminal color utilities (supports_color, NO_COLOR/TERM=dumb)
+│   ├── _terminal_table.py   #   Re-export shim: TerminalColumn, _render_terminal_table from core/_terminal_table (L0)
 │   ├── _cook.py             #   cook command: ephemeral skill session launcher (claude --add-dir)
 │   ├── _doctor.py           #   Doctor command -- 9 project setup checks
 │   ├── _hooks.py            #   Unified PreToolUse hook registration helpers

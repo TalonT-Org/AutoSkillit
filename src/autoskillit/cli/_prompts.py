@@ -206,7 +206,7 @@ def show_cook_preview(
     """
     from autoskillit.cli._ansi import diagram_to_terminal, ingredients_to_terminal
     from autoskillit.config import resolve_ingredient_defaults
-    from autoskillit.recipe import format_ingredients_table, load_recipe_diagram
+    from autoskillit.recipe import build_ingredient_rows, load_recipe_diagram
 
     diagram = load_recipe_diagram(recipe_name, recipes_dir)
     if diagram:
@@ -214,6 +214,6 @@ def show_cook_preview(
         print()  # blank line between diagram and table
 
     resolved = resolve_ingredient_defaults(project_dir)
-    table = format_ingredients_table(parsed_recipe, resolved_defaults=resolved)
-    if table:
-        print(ingredients_to_terminal(table))
+    rows = build_ingredient_rows(parsed_recipe, resolved_defaults=resolved)
+    if rows:
+        print(ingredients_to_terminal(rows))

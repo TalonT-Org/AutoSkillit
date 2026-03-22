@@ -67,6 +67,47 @@ def _ingredient_sort_key(name: str, required: bool, default: object) -> tuple[in
     return (4, name)  # has a non-empty default (constants, rarely changed)
 
 
+def _build_ingredient_rows(
+    recipe: Any,
+    resolved_defaults: dict[str, str] | None = None,
+) -> list[tuple[str, str, str]]:
+    """Build (name, description, default) rows for a recipe's ingredients.
+
+    This is the shared source of truth for ingredient row data, consumed by
+    both the GFM table formatter (LLM path) and the terminal renderer
+    (terminal path). Descriptions are full-length here — truncation is the
+    terminal renderer's responsibility.
+
+    Returns rows sorted by ingredient priority (required first, then alphabetical).
+    """
+    resolved = resolved_defaults or {}
+    raw: list[tuple[str, str, str, tuple[int, str]]] = []
+    for name, ing in (getattr(recipe, "ingredients", None) or {}).items():
+        if getattr(ing, "hidden", False):
+            continue
+        desc = getattr(ing, "description", "")
+        required = getattr(ing, "required", False)
+        default = getattr(ing, "default", None)
+        sort_key = _ingredient_sort_key(name, required, default)
+        if default is None and required:
+            default_str, name_str = "(required)", f"{name} *"
+        elif default == "":
+            res = resolved.get(name)
+            default_str = res if res else "auto-detect"
+            name_str = name
+        elif default == "true":
+            default_str, name_str = "on", name
+        elif default == "false":
+            default_str, name_str = "off", name
+        elif default is None:
+            default_str, name_str = "--", name
+        else:
+            default_str, name_str = str(default), name
+        raw.append((name_str, desc, default_str, sort_key))
+    raw.sort(key=lambda r: r[3])
+    return [(r[0], r[1], r[2]) for r in raw]
+
+
 def format_ingredients_table(
     recipe: Any, resolved_defaults: dict[str, str] | None = None
 ) -> str | None:
@@ -79,35 +120,10 @@ def format_ingredients_table(
     if not ingredients:
         return None
 
-    raw: list[tuple[str, str, str, tuple[int, str]]] = []
-    for name, ing in ingredients.items():
-        if getattr(ing, "hidden", False):
-            continue  # skip hidden ingredients (not shown to agent)
-        desc = getattr(ing, "description", "")
-        required = getattr(ing, "required", False)
-        default = getattr(ing, "default", None)
-        sort_key = _ingredient_sort_key(name, required, default)
-        if default is None and required:
-            default_str, name_str = "(required)", f"{name} *"
-        elif default == "":
-            resolved = (resolved_defaults or {}).get(name)
-            default_str = resolved if resolved else "auto-detect"
-            name_str = name
-        elif default == "true":
-            default_str, name_str = "on", name
-        elif default == "false":
-            default_str, name_str = "off", name
-        elif default is None:
-            default_str, name_str = "--", name
-        else:
-            default_str, name_str = str(default), name
-        raw.append((name_str, desc, default_str, sort_key))
+    rows = _build_ingredient_rows(recipe, resolved_defaults)
 
-    if not raw:
+    if not rows:
         return None
-
-    raw.sort(key=lambda r: r[3])
-    rows = [(r[0], r[1], r[2]) for r in raw]
 
     nw = max(len(r[0]) for r in rows)
     dw = max(len(r[1]) for r in rows)

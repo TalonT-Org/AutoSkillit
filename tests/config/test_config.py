@@ -1,6 +1,7 @@
 """Tests for configuration loading and resolution."""
 
 from dataclasses import fields as dc_fields
+from pathlib import Path
 
 import pytest
 import yaml
@@ -964,7 +965,6 @@ class TestSubsetsConfig:
 class TestWriteConfigLayer:
     def test_write_config_layer_rejects_secret_key(self, tmp_path: Path) -> None:
         """write_config_layer raises ConfigSchemaError before touching the file."""
-        from pathlib import Path as _Path
 
         from autoskillit.config.settings import ConfigSchemaError, write_config_layer
 

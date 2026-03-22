@@ -195,16 +195,21 @@ def _detect_secret_scanner(project_dir: Path) -> bool:
 
 
 def _log_secret_scan_bypass(project_dir: Path) -> None:
-    """Persist bypass acceptance timestamp to .autoskillit/config.yaml."""
-    config_path = project_dir / ".autoskillit" / "config.yaml"
+    """Persist bypass acceptance timestamp to .autoskillit/.state.yaml.
+
+    .state.yaml holds internal operational state and is never schema-validated.
+    Writing to config.yaml would inject an unknown key into the schema-validated
+    layer, causing ConfigSchemaError on every subsequent load_config call.
+    """
+    state_path = project_dir / ".autoskillit" / ".state.yaml"
     try:
-        raw = (load_yaml(config_path) or {}) if config_path.is_file() else {}
+        raw = (load_yaml(state_path) or {}) if state_path.is_file() else {}
         data: dict = raw if isinstance(raw, dict) else {}
     except YAMLError:
         data = {}
     data.setdefault("safety", {})["secret_scan_bypass_accepted"] = datetime.now(UTC).isoformat()
-    config_path.parent.mkdir(exist_ok=True)
-    atomic_write(config_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
+    state_path.parent.mkdir(exist_ok=True)
+    atomic_write(state_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
 
 
 def _check_secret_scanning(project_dir: Path) -> _ScanResult:

@@ -451,10 +451,15 @@ def validate_layer_keys(
                 dotted = f"{top_key}.{sub_key}"
                 if dotted in _SECRETS_ONLY_KEYS:
                     if not is_secrets_layer:
+                        secrets_hint_path = layer_path.parent / ".secrets.yaml"
+                        top, sub = dotted.split(".", 1)
                         raise ConfigSchemaError(
                             f"Invalid configuration in {str(layer_path)!r}: "
-                            f"'{dotted}' must not appear in config.yaml — "
-                            f"configure it in '.autoskillit/.secrets.yaml' instead."
+                            f"'{dotted}' is a secret key that must not appear in config.yaml.\n\n"
+                            f"To fix, add the following to {str(secrets_hint_path)!r}:\n\n"
+                            f"  {top}:\n"
+                            f"    {sub}: <your_token_value>\n\n"
+                            f"Then remove the '{dotted}' key from {str(layer_path)!r}."
                         )
                     continue  # secrets-only keys are valid in .secrets.yaml
                 if sub_key not in _CONFIG_SCHEMA[top_key]:

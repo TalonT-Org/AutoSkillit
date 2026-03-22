@@ -80,11 +80,12 @@ class TestCLIDoctor:
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
             "test_check:\n  command: ['pytest']\n"
         )
-        from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES
+        from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES, _ROOT_GITIGNORE_ENTRIES
 
         (tmp_path / ".autoskillit" / ".gitignore").write_text(
             "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n"
         )
+        (tmp_path / ".gitignore").write_text("\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
         (tmp_path / ".pre-commit-config.yaml").write_text(
             "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
         )
@@ -695,6 +696,8 @@ def test_doctor_gitignore_ok_when_all_covered(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Doctor must report OK when all .autoskillit/ files are covered."""
+    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES
+
     autoskillit_dir = tmp_path / ".autoskillit"
     autoskillit_dir.mkdir()
     (autoskillit_dir / ".gitignore").write_text(
@@ -702,6 +705,51 @@ def test_doctor_gitignore_ok_when_all_covered(
     )
     (autoskillit_dir / "temp").mkdir()
     (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
+    (tmp_path / ".gitignore").write_text("\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
+
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.cli._doctor import _check_gitignore_completeness
+    from autoskillit.core import Severity
+
+    result = _check_gitignore_completeness(tmp_path)
+    assert result.severity == Severity.OK
+
+
+# RG-DROOT-1
+def test_doctor_warns_when_root_gitignore_missing_secrets_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Doctor must WARN when root .gitignore lacks .autoskillit/.secrets.yaml."""
+    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES
+
+    autoskillit_dir = tmp_path / ".autoskillit"
+    autoskillit_dir.mkdir()
+    # .autoskillit/.gitignore is complete — only root is missing
+    (autoskillit_dir / ".gitignore").write_text("\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n")
+    (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
+    # No root .gitignore
+
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.cli._doctor import _check_gitignore_completeness
+    from autoskillit.core import Severity
+
+    result = _check_gitignore_completeness(tmp_path)
+    assert result.severity == Severity.WARNING
+    assert ".autoskillit/.secrets.yaml" in result.message
+
+
+# RG-DROOT-2
+def test_doctor_ok_when_root_gitignore_has_all_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Doctor must report OK when both .autoskillit/.gitignore and root .gitignore are complete."""
+    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES, _ROOT_GITIGNORE_ENTRIES
+
+    autoskillit_dir = tmp_path / ".autoskillit"
+    autoskillit_dir.mkdir()
+    (autoskillit_dir / ".gitignore").write_text("\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n")
+    (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
+    (tmp_path / ".gitignore").write_text("\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
 
     monkeypatch.chdir(tmp_path)
     from autoskillit.cli._doctor import _check_gitignore_completeness

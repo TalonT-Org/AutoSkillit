@@ -9,7 +9,7 @@ from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
 from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
-from autoskillit.core import Severity
+from autoskillit.core import _ROOT_GITIGNORE_ENTRIES, Severity
 from autoskillit.hook_registry import HOOK_REGISTRY
 
 
@@ -134,6 +134,13 @@ def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
     # Also check that every entry in the canonical list is present
     for entry in _AUTOSKILLIT_GITIGNORE_ENTRIES:
         if entry not in gitignore_content:
+            entry_name = entry.rstrip("/")
+            if entry_name not in uncovered:
+                uncovered.append(entry_name)
+    root_gitignore = project_dir / ".gitignore"
+    root_content = root_gitignore.read_text(encoding="utf-8") if root_gitignore.exists() else ""
+    for entry in _ROOT_GITIGNORE_ENTRIES:
+        if entry not in root_content:
             entry_name = entry.rstrip("/")
             if entry_name not in uncovered:
                 uncovered.append(entry_name)

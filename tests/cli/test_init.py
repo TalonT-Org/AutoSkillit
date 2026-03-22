@@ -449,6 +449,69 @@ def test_gitignore_entries_includes_temp() -> None:
     assert "temp/" in _AUTOSKILLIT_GITIGNORE_ENTRIES
 
 
+# RG-ROOT-2
+def test_root_gitignore_entries_covers_secrets_yaml() -> None:
+    """_ROOT_GITIGNORE_ENTRIES must include the root-scope secrets entry — regression guard."""
+    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES
+
+    assert ".autoskillit/.secrets.yaml" in _ROOT_GITIGNORE_ENTRIES
+
+
+# RG-ROOT-3
+def test_ensure_project_temp_writes_root_gitignore(tmp_path: Path) -> None:
+    """ensure_project_temp() must write all _ROOT_GITIGNORE_ENTRIES to the root .gitignore.
+
+    This is the structural invariant test. Its failure signals that a new sensitive
+    root-scope entry was added without updating _ROOT_GITIGNORE_ENTRIES in core/io.py.
+    """
+    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES, ensure_project_temp
+
+    assert not (tmp_path / ".gitignore").exists(), "precondition: no root .gitignore"
+
+    ensure_project_temp(tmp_path)
+
+    root_gitignore = tmp_path / ".gitignore"
+    assert root_gitignore.exists(), "ensure_project_temp must create root .gitignore"
+    content = root_gitignore.read_text()
+    for entry in _ROOT_GITIGNORE_ENTRIES:
+        assert entry in content, (
+            f"Root .gitignore is missing {entry!r}. "
+            "Add it to _ROOT_GITIGNORE_ENTRIES in core/io.py."
+        )
+
+
+# RG-ROOT-4
+def test_ensure_project_temp_appends_to_existing_root_gitignore(tmp_path: Path) -> None:
+    """ensure_project_temp() must append to an existing root .gitignore without overwriting."""
+    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES, ensure_project_temp
+
+    existing_content = "*.pyc\n__pycache__/\n.env\n"
+    (tmp_path / ".gitignore").write_text(existing_content)
+
+    ensure_project_temp(tmp_path)
+
+    content = (tmp_path / ".gitignore").read_text()
+    assert "*.pyc" in content, "existing root .gitignore content must be preserved"
+    assert "__pycache__/" in content, "existing root .gitignore content must be preserved"
+    for entry in _ROOT_GITIGNORE_ENTRIES:
+        assert entry in content, f"Missing entry {entry!r} after append"
+
+
+# RG-ROOT-5
+def test_ensure_project_temp_root_gitignore_idempotent(tmp_path: Path) -> None:
+    """Running ensure_project_temp() twice must not duplicate root .gitignore entries."""
+    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES, ensure_project_temp
+
+    ensure_project_temp(tmp_path)
+    ensure_project_temp(tmp_path)
+
+    content = (tmp_path / ".gitignore").read_text()
+    for entry in _ROOT_GITIGNORE_ENTRIES:
+        assert content.count(entry) == 1, (
+            f"Root .gitignore has duplicate entry for {entry!r} after two init calls"
+        )
+
+
 # SS-INIT-1
 def test_init_aborts_in_noninteractive_mode_without_scanner(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

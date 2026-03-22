@@ -560,7 +560,10 @@ steps:
       Captures "true" or "false" into context.auto_merge_available.
       On failure (gh error, network error), falls through to route_queue_mode with
       auto_merge_available unset — route_queue_mode defaults to immediate_merge (safe
-      non-auto path). Skipped when open_pr=false — no PR was opened.
+      non-auto path). GraphQL-level errors (rate-limit, missing auth scope) also return
+      exit 0 with an errors array and no .data field; the jq // false fallback outputs
+      false safely, so auto_merge_available defaults to false on any error path.
+      Skipped when open_pr=false — no PR was opened.
 
   route_queue_mode:
     action: route

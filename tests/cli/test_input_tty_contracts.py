@@ -3,13 +3,13 @@ Structural enforcement: every input() call in src/autoskillit/cli/ must be
 preceded by _require_interactive_stdin(), or the function must be in the
 allowlist (_TTY_EXEMPT_FUNCTIONS).
 """
+
 from __future__ import annotations
 
 import ast
 from pathlib import Path
 
 import pytest
-
 
 # Functions exempt from the _require_interactive_stdin() contract.
 # Two allowlist categories:
@@ -18,9 +18,9 @@ import pytest
 #   not SystemExit) — cannot use _require_interactive_stdin by design
 _TTY_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
     {
-        "_prompt_github_repo",    # call-site-guarded: only caller (_register_all) wraps in isatty()
-        "_check_secret_scanning", # custom-handled: returns _ScanResult(False) in non-interactive mode
-        "run_onboarding_menu",    # custom-handled: catches EOFError on each input(), returns None in non-interactive mode
+        "_prompt_github_repo",  # call-site-guarded: only caller (_register_all) wraps in isatty()
+        "_check_secret_scanning",  # custom-handled: returns _ScanResult(False) in non-interactive mode
+        "run_onboarding_menu",  # custom-handled: catches EOFError on each input(), returns None in non-interactive mode
     }
 )
 
@@ -62,9 +62,7 @@ def test_all_input_calls_in_cli_are_tty_guarded() -> None:
                 continue
             # Check if this function contains any input() call
             has_input = any(
-                isinstance(n, ast.Call)
-                and isinstance(n.func, ast.Name)
-                and n.func.id == "input"
+                isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "input"
                 for n in ast.walk(ast.Module(body=node.body, type_ignores=[]))
             )
             if not has_input:
@@ -123,9 +121,7 @@ def test_prompt_recipe_choice_noninteractive_exits(
     assert exc_info.value.code == 1
 
 
-def test_cook_noninteractive_exits(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cook_noninteractive_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """cook() launch-confirm prompt must raise SystemExit(1) when not interactive."""
     from autoskillit.cli._cook import cook
 

@@ -530,7 +530,12 @@ def test_wait_for_immediate_merge_step_exists(any_recipe) -> None:
 def test_wait_for_immediate_merge_merged_routes_to_success(any_recipe) -> None:
     step = any_recipe.steps["wait_for_immediate_merge"]
     merged_cond = next(
-        (c for c in step.on_result.conditions if c.when and "merged" in c.when), None
+        (
+            c
+            for c in step.on_result.conditions
+            if c.when == "${{ result.stdout | trim }} == merged"
+        ),
+        None,
     )
     assert merged_cond is not None
     assert merged_cond.route == "release_issue_success"
@@ -539,7 +544,12 @@ def test_wait_for_immediate_merge_merged_routes_to_success(any_recipe) -> None:
 def test_wait_for_immediate_merge_closed_routes_to_conflict_fix(any_recipe) -> None:
     step = any_recipe.steps["wait_for_immediate_merge"]
     closed_cond = next(
-        (c for c in step.on_result.conditions if c.when and "closed" in c.when), None
+        (
+            c
+            for c in step.on_result.conditions
+            if c.when == "${{ result.stdout | trim }} == closed"
+        ),
+        None,
     )
     assert closed_cond is not None
     assert closed_cond.route == "immediate_merge_conflict_fix"

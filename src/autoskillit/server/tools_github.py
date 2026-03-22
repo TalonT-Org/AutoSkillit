@@ -63,40 +63,44 @@ async def fetch_github_issue(
 
     This tool requires the kitchen to be open (gated by open_kitchen).
     """
-    if (gate := _require_enabled()) is not None:
-        return gate
-    from autoskillit.server import _get_config, _get_ctx
+    try:
+        if (gate := _require_enabled()) is not None:
+            return gate
+        from autoskillit.server import _get_config, _get_ctx
 
-    # Read-only query: structlog context binding is intentionally omitted.
-    logger.info("fetch_github_issue", issue_url=issue_url, include_comments=include_comments)
+        # Read-only query: structlog context binding is intentionally omitted.
+        logger.info("fetch_github_issue", issue_url=issue_url, include_comments=include_comments)
 
-    tool_ctx = _get_ctx()
-    if tool_ctx.github_client is None:
-        return json.dumps({"success": False, "error": "GitHub client not configured"})
+        tool_ctx = _get_ctx()
+        if tool_ctx.github_client is None:
+            return json.dumps({"success": False, "error": "GitHub client not configured"})
 
-    config = _get_config()
+        config = _get_config()
 
-    # Resolve bare issue numbers using default_repo from config
-    resolved_ref = issue_url
-    if issue_url.strip().isdigit():
-        if not config.github.default_repo:
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": (
-                        f"Cannot resolve bare issue number {issue_url!r}: "
-                        "github.default_repo is not set in .autoskillit/config.yaml"
-                    ),
-                }
-            )
-        resolved_ref = f"{config.github.default_repo}#{issue_url.strip()}"
-        logger.info("resolved bare number", resolved_ref=resolved_ref)
+        # Resolve bare issue numbers using default_repo from config
+        resolved_ref = issue_url
+        if issue_url.strip().isdigit():
+            if not config.github.default_repo:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": (
+                            f"Cannot resolve bare issue number {issue_url!r}: "
+                            "github.default_repo is not set in .autoskillit/config.yaml"
+                        ),
+                    }
+                )
+            resolved_ref = f"{config.github.default_repo}#{issue_url.strip()}"
+            logger.info("resolved bare number", resolved_ref=resolved_ref)
 
-    result = await tool_ctx.github_client.fetch_issue(
-        resolved_ref,
-        include_comments=include_comments,
-    )
-    return json.dumps(result)
+        result = await tool_ctx.github_client.fetch_issue(
+            resolved_ref,
+            include_comments=include_comments,
+        )
+        return json.dumps(result)
+    except Exception as exc:
+        logger.error("fetch_github_issue unhandled exception", exc_info=exc)
+        return json.dumps({"success": False, "error": str(exc)})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -312,13 +316,13 @@ def _read_session_diagnostics(session_id: str, log_dir_override: str) -> dict[st
 
     Never raises.
     """
-    if not session_id or session_id.startswith(("no_session_", "crashed_")):
-        return None
-
-    if not _SAFE_SESSION_ID_RE.match(session_id):
-        return None
-
     try:
+        if not session_id or session_id.startswith(("no_session_", "crashed_")):
+            return None
+
+        if not _SAFE_SESSION_ID_RE.match(session_id):
+            return None
+
         log_root = resolve_log_dir(log_dir_override)
         session_dir = log_root / "sessions" / session_id
         if not session_dir.is_dir():
@@ -349,7 +353,7 @@ def _read_session_diagnostics(session_id: str, log_dir_override: str) -> dict[st
             "anomalies": anomalies,
             "proc_trace_tail": proc_trace_tail,
         }
-    except (OSError, json.JSONDecodeError, ValueError):
+    except Exception:
         logger.warning("report_bug diagnostics read failed", session_id=session_id, exc_info=True)
         return None
 
@@ -450,72 +454,80 @@ async def _file_or_update_github_issue(
 
     Never raises — all errors captured in the returned dict.
     """
-    default_repo = config.github.default_repo
-    if not default_repo or "/" not in default_repo:
-        return {"skipped": True, "reason": "github.default_repo not configured"}
+    try:
+        default_repo = config.github.default_repo
+        if not default_repo or "/" not in default_repo:
+            return {"skipped": True, "reason": "github.default_repo not configured"}
 
-    owner, repo = default_repo.split("/", 1)
-    labels = config.report_bug.github_labels
+        owner, repo = default_repo.split("/", 1)
+        labels = config.report_bug.github_labels
 
-    search_result = await github_client.search_issues(fingerprint, owner, repo)
-    if not search_result.get("success"):
-        return {"skipped": True, "reason": f"search failed: {search_result.get('error', '?')}"}
+        search_result = await github_client.search_issues(fingerprint, owner, repo)
+        if not search_result.get("success"):
+            return {"skipped": True, "reason": f"search failed: {search_result.get('error', '?')}"}
 
-    if search_result.get("total_count", 0) > 0:
-        existing = search_result["items"][0]
-        issue_number: int = existing["number"]
-        issue_url: str = existing["html_url"]
-        existing_body: str = existing.get("body", "") or ""
+        if search_result.get("total_count", 0) > 0:
+            existing = search_result["items"][0]
+            issue_number: int = existing["number"]
+            issue_url: str = existing["html_url"]
+            existing_body: str = existing.get("body", "") or ""
 
-        # Skip comment if the exact error_context is already in the issue body.
-        if error_context.strip() in existing_body:
-            logger.info(
-                "report_bug duplicate skipped comment",
-                issue=issue_number,
-                reason="error_context already present",
+            # Skip comment if the exact error_context is already in the issue body.
+            if error_context.strip() in existing_body:
+                logger.info(
+                    "report_bug duplicate skipped comment",
+                    issue=issue_number,
+                    reason="error_context already present",
+                )
+                return {"duplicate": True, "issue_url": issue_url, "comment_added": False}
+
+            date_str = datetime.now(UTC).date().isoformat()
+            diag_section = (
+                "\n\n" + _format_diagnostics_section(diag, condensed=True)
+                if diag is not None
+                else ""
             )
-            return {"duplicate": True, "issue_url": issue_url, "comment_added": False}
+            comment_body = (
+                f"**New occurrence auto-reported on {date_str}**\n\n"
+                f"**Error context:**\n```\n{error_context}\n```\n\n"
+                f"**Local report:** `{report_path}`"
+                f"{diag_section}"
+            )
+            comment_result = await github_client.add_comment(
+                owner, repo, issue_number, comment_body
+            )
+            logger.info(
+                "report_bug commented on duplicate",
+                issue=issue_number,
+                comment_success=comment_result.get("success"),
+            )
+            return {
+                "duplicate": True,
+                "issue_url": issue_url,
+                "comment_added": comment_result.get("success", False),
+            }
 
-        date_str = datetime.now(UTC).date().isoformat()
+        # No duplicate — create a new issue.
         diag_section = (
-            "\n\n" + _format_diagnostics_section(diag, condensed=True) if diag is not None else ""
+            "\n\n" + _format_diagnostics_section(diag, condensed=False) if diag is not None else ""
         )
-        comment_body = (
-            f"**New occurrence auto-reported on {date_str}**\n\n"
-            f"**Error context:**\n```\n{error_context}\n```\n\n"
-            f"**Local report:** `{report_path}`"
-            f"{diag_section}"
+        issue_body = report_text + diag_section
+        create_result = await github_client.create_issue(
+            owner,
+            repo,
+            fingerprint or error_context.splitlines()[0][:80],
+            issue_body,
+            labels=labels,
         )
-        comment_result = await github_client.add_comment(owner, repo, issue_number, comment_body)
-        logger.info(
-            "report_bug commented on duplicate",
-            issue=issue_number,
-            comment_success=comment_result.get("success"),
-        )
+        logger.info("report_bug created issue", success=create_result.get("success"))
         return {
-            "duplicate": True,
-            "issue_url": issue_url,
-            "comment_added": comment_result.get("success", False),
+            "duplicate": False,
+            "issue_created": create_result.get("success", False),
+            "issue_url": create_result.get("url", ""),
         }
-
-    # No duplicate — create a new issue.
-    diag_section = (
-        "\n\n" + _format_diagnostics_section(diag, condensed=False) if diag is not None else ""
-    )
-    issue_body = report_text + diag_section
-    create_result = await github_client.create_issue(
-        owner,
-        repo,
-        fingerprint or error_context.splitlines()[0][:80],
-        issue_body,
-        labels=labels,
-    )
-    logger.info("report_bug created issue", success=create_result.get("success"))
-    return {
-        "duplicate": False,
-        "issue_created": create_result.get("success", False),
-        "issue_url": create_result.get("url", ""),
-    }
+    except Exception as exc:
+        logger.error("_file_or_update_github_issue unhandled exception", exc_info=exc)
+        return {"skipped": True, "reason": f"unexpected error: {exc}"}
 
 
 async def _run_report_session(
@@ -605,9 +617,9 @@ async def _run_report_session(
 
 def _write_report_status(path: Path | None, status: str, *, error: str | None = None) -> None:
     """Write a report status file atomically. Never raises."""
-    if path is None:
-        return
     try:
+        if path is None:
+            return
         payload: dict[str, Any] = {
             "status": status,
             "completed_at": datetime.now(UTC).isoformat(),

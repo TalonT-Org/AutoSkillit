@@ -126,32 +126,36 @@ async def remove_clone(
         keep: Pass "true" to preserve the directory (debugging). Default "false".
         step_name: Optional YAML step key for wall-clock timing accumulation.
     """
-    if (gate := _require_enabled()) is not None:
-        return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="remove_clone", clone_path=clone_path)
-    logger.info("remove_clone", clone_path=clone_path, keep=keep)
-    await _notify(
-        ctx,
-        "info",
-        f"remove_clone: {clone_path!r} keep={keep}",
-        "autoskillit.remove_clone",
-        extra={"clone_path": clone_path, "keep": keep},
-    )
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.clone_mgr is None:
-        return json.dumps({"removed": "false", "reason": "Clone manager not configured"})
-
-    _start = time.monotonic()
     try:
-        result = await asyncio.to_thread(tool_ctx.clone_mgr.remove_clone, clone_path, keep)
-        return json.dumps(result)
-    finally:
-        if step_name:
-            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+        if (gate := _require_enabled()) is not None:
+            return gate
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="remove_clone", clone_path=clone_path)
+        logger.info("remove_clone", clone_path=clone_path, keep=keep)
+        await _notify(
+            ctx,
+            "info",
+            f"remove_clone: {clone_path!r} keep={keep}",
+            "autoskillit.remove_clone",
+            extra={"clone_path": clone_path, "keep": keep},
+        )
+
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.clone_mgr is None:
+            return json.dumps({"removed": "false", "reason": "Clone manager not configured"})
+
+        _start = time.monotonic()
+        try:
+            result = await asyncio.to_thread(tool_ctx.clone_mgr.remove_clone, clone_path, keep)
+            return json.dumps(result)
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+    except Exception as exc:
+        logger.error("remove_clone unhandled exception", exc_info=exc)
+        return json.dumps({"removed": "false", "reason": f"unexpected error: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})

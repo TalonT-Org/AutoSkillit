@@ -73,7 +73,7 @@ def _gh_cli_token() -> str | None:
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+    except Exception:
         pass
     return None
 

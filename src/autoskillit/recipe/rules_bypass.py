@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from autoskillit.core import Severity
+from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
@@ -76,4 +76,40 @@ def _check_skip_when_false_undeclared(ctx: ValidationContext) -> list[RuleFindin
                     ),
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name="advisory-step-missing-context-limit",
+    description=(
+        "A run_skill step with skip_when_false declared (advisory/optional) must define "
+        "on_context_limit. The toggle skip_when_false says the step may be skipped by config; "
+        "the absence of on_context_limit means it cannot be skipped on context exhaustion — "
+        "an inconsistency in the skippability contract."
+    ),
+    severity=Severity.WARNING,
+)
+def _advisory_step_missing_context_limit(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        if step.skip_when_false is None:
+            continue
+        if step.on_context_limit is not None:
+            continue
+        findings.append(
+            RuleFinding(
+                rule="advisory-step-missing-context-limit",
+                severity=Severity.WARNING,
+                step_name=step_name,
+                message=(
+                    f"Step '{step_name}' is advisory (skip_when_false={step.skip_when_false!r}) "
+                    f"but declares no on_context_limit. A step that can be skipped by "
+                    f"configuration must also handle context exhaustion gracefully. "
+                    f"Set on_context_limit to the same target as on_success to skip the "
+                    f"advisory step on context limit."
+                ),
+            )
+        )
     return findings

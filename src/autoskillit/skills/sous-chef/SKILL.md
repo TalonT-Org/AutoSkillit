@@ -241,7 +241,7 @@ queue handles ordering. No additional sequencing is required from the orchestrat
 
 **When `queue_available == false` and `auto_merge_available == true`:**
 Use `gh pr merge --squash --auto` (direct_merge path). GitHub merges the PR once
-all required status checks pass. PRs MUST be merged one at a time — never execute
+all required status checks pass. PRs must not be merged concurrently — never execute
 two `direct_merge` steps concurrently on a non-queue branch.
 
 **When `queue_available == false` and `auto_merge_available == false`:**

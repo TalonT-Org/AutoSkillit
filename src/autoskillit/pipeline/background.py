@@ -64,8 +64,7 @@ class BackgroundTaskSupervisor:
         label: str,
     ) -> Any:
         try:
-            result = await coro
-            return result
+            return await coro
         except asyncio.CancelledError:
             if status_path is not None:
                 _write_status(status_path, "cancelled")

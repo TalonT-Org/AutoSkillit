@@ -461,6 +461,17 @@ class TestImplementationPipelineStructure:
             "the skip intent is already in the note: field but not schema-enforced"
         )
 
+    def test_implementation_review_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.on_context_limit == "verify", (
+            "review is advisory (skip_when_false); on context limit it should skip to "
+            "verify, not abort via on_failure"
+        )
+
+    def test_implementation_review_step_has_retries(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.retries >= 1
+
     def test_ip_recipe_passes_semantic_validation(self, recipe) -> None:
         """After Part B, validate_recipe must report no errors."""
         from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
@@ -728,6 +739,17 @@ class TestImplementationGroupsStructure:
             "review step must declare skip_when_false: inputs.review_approach to make the "
             "skip intent schema-enforced. Currently it is prose-only in the note: field."
         )
+
+    def test_ig_review_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.on_context_limit == "verify", (
+            "review is advisory (skip_when_false); on context limit it should skip to "
+            "verify, not abort via on_failure"
+        )
+
+    def test_ig_review_step_has_retries(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.retries >= 1
 
     def test_ig_recipe_passes_semantic_validation(self, recipe) -> None:
         """After Part B, validate_recipe must report no errors."""
@@ -1042,6 +1064,19 @@ class TestInvestigateFirstStructure:
         assert step.skip_when_false == "inputs.review_approach", (
             "review step must declare skip_when_false: inputs.review_approach — "
             "the skip intent is already in the note: field but not schema-enforced"
+        )
+
+    def test_remediation_review_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.on_context_limit == "dry_walkthrough", (
+            "review is advisory (skip_when_false); on context limit it should skip to "
+            "dry_walkthrough, not abort via on_failure"
+        )
+
+    def test_remediation_review_step_has_retries(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.retries >= 1, (
+            "review step should allow at least one retry before routing to on_context_limit"
         )
 
     def test_if_recipe_passes_semantic_validation(self, recipe) -> None:

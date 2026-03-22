@@ -449,15 +449,6 @@ def test_gitignore_entries_includes_temp() -> None:
     assert "temp/" in _AUTOSKILLIT_GITIGNORE_ENTRIES
 
 
-# RG-ROOT-1
-def test_root_gitignore_entries_constant_exists() -> None:
-    """_ROOT_GITIGNORE_ENTRIES must be importable from autoskillit.core.io — regression guard."""
-    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES
-
-    assert isinstance(_ROOT_GITIGNORE_ENTRIES, list)
-    assert len(_ROOT_GITIGNORE_ENTRIES) > 0
-
-
 # RG-ROOT-2
 def test_root_gitignore_entries_covers_secrets_yaml() -> None:
     """_ROOT_GITIGNORE_ENTRIES must include the root-scope secrets entry — regression guard."""

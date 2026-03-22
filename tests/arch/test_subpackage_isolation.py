@@ -668,14 +668,20 @@ def test_no_subpackage_exceeds_10_files() -> None:
         etc.) that cannot be merged without re-introducing the coupling they isolate.
       core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
         (_type_enums, _type_protocols, _type_results, _type_subprocess, etc.) to
-        prevent circular imports while keeping L0 types co-located. Exempt at 14 files.
+        prevent circular imports while keeping L0 types co-located. Also houses
+        _terminal_table.py as the L0 shared terminal rendering primitive so that
+        both cli/ (L3) and pipeline/ (L1) can import it without layer violations.
+        Exempt at 15 files.
+      cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
+        for backward-compatible cli/ imports; canonical implementation lives in
+        core/_terminal_table.py. Exempt at 12 files.
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 16,
         "recipe": 27,
         "execution": 23,
-        "core": 14,
-        "cli": 11,
+        "core": 15,
+        "cli": 12,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):

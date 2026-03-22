@@ -200,6 +200,25 @@ class TestFormatTimingTableTerminal:
         assert "implement" in result
 
 
+def test_format_token_table_terminal_output_has_leading_indent() -> None:
+    """_render_terminal_table prefixes each line with 2 spaces.
+
+    The current inline implementation does not add leading spaces. After
+    migration to _render_terminal_table, every output line must start with
+    two spaces.
+    """
+    result = TelemetryFormatter.format_token_table_terminal(_STEPS, _TOTAL)
+    for line in result.splitlines():
+        assert line.startswith("  "), f"Expected 2-space indent, got: {line!r}"
+
+
+def test_format_timing_table_terminal_output_has_leading_indent() -> None:
+    """_render_terminal_table prefixes each line with 2 spaces."""
+    result = TelemetryFormatter.format_timing_table_terminal(_TIMING_STEPS, _TIMING_TOTAL)
+    for line in result.splitlines():
+        assert line.startswith("  "), f"Expected 2-space indent, got: {line!r}"
+
+
 # ---------------------------------------------------------------------------
 # format_compact_kv
 # ---------------------------------------------------------------------------

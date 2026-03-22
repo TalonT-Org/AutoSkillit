@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
+from autoskillit.config import write_config_layer
 from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
 from autoskillit.recipe import list_recipes
 
@@ -387,18 +388,13 @@ def _register_all(scope: str, project_dir: Path) -> None:
                     config_data = load_yaml(config_path) or {}
                     if not config_data.get("github", {}).get("default_repo"):
                         config_data.setdefault("github", {})["default_repo"] = github_repo
-                        atomic_write(
-                            config_path,
-                            dump_yaml_str(
-                                config_data, default_flow_style=False, allow_unicode=True
-                            ),
-                        )
+                        write_config_layer(config_path, config_data)
                 except (OSError, YAMLError) as exc:
                     print(f"  {_Y}Warning:{_R} could not write github.default_repo: {exc}")
             else:
                 autoskillit_dir = project_dir / ".autoskillit"
                 autoskillit_dir.mkdir(exist_ok=True)
-                atomic_write(config_path, f"github:\n  default_repo: '{github_repo}'\n")
+                write_config_layer(config_path, {"github": {"default_repo": github_repo}})
 
     _create_secrets_template(project_dir)
 

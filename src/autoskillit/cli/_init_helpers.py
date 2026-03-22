@@ -130,7 +130,7 @@ def _create_secrets_template(project_dir: Path) -> None:
     atomic_write(
         secrets_path,
         "# AutoSkillit secrets — never commit this file\n"
-        "# This file is already listed in .gitignore\n\n"
+        "# This file is gitignored — do not commit it\n\n"
         "# GitHub authentication (choose one):\n"
         "#   Option 1 (recommended): Run 'gh auth login' — the gh CLI handles auth\n"
         "#     for all MCP tool commands (issues, PRs, CI status).\n"

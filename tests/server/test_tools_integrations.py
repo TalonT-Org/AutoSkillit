@@ -618,6 +618,31 @@ async def test_report_bug_github_filing_disabled(tool_ctx, tmp_path):
     assert result["github"] == {}
 
 
+@pytest.mark.anyio
+async def test_report_bug_blocking_github_client_raises_does_not_propagate(tool_ctx, tmp_path):
+    """If the GitHub client raises unexpectedly, the error must be captured in the github dict."""
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = True
+    tool_ctx.config.github.default_repo = "owner/repo"
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok(
+        "# Report\n" + _FINGERPRINT_START + "\nfp1\n" + _FINGERPRINT_END
+    )
+    tool_ctx.executor = mock_executor
+
+    mock_gh = MagicMock()
+    mock_gh.has_token = True
+    mock_gh.search_issues = AsyncMock(side_effect=RuntimeError("network failure"))
+    tool_ctx.github_client = mock_gh
+
+    # Must not raise — exception is captured in github dict
+    result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
+    assert result["success"] is True  # session succeeded
+    assert result["github"].get("skipped") is True
+    assert "unexpected error" in result["github"].get("reason", "")
+
+
 # ---------------------------------------------------------------------------
 # Config defaults
 # ---------------------------------------------------------------------------

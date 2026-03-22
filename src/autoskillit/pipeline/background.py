@@ -80,19 +80,22 @@ class BackgroundTaskSupervisor:
             if status_path is not None:
                 _write_status(status_path, "failed", error=str(exc))
             if self._audit is not None:
-                from autoskillit.core import FailureRecord, RetryReason
+                try:
+                    from autoskillit.core import FailureRecord, RetryReason
 
-                self._audit.record_failure(
-                    FailureRecord(
-                        timestamp=datetime.now(UTC).isoformat(),
-                        skill_command=label[:200],
-                        exit_code=-1,
-                        subtype="background_exception",
-                        needs_retry=False,
-                        retry_reason=RetryReason.NONE,
-                        stderr=str(exc)[:500],
+                    self._audit.record_failure(
+                        FailureRecord(
+                            timestamp=datetime.now(UTC).isoformat(),
+                            skill_command=label[:200],
+                            exit_code=-1,
+                            subtype="background_exception",
+                            needs_retry=False,
+                            retry_reason=RetryReason.NONE,
+                            stderr=str(exc)[:500],
+                        )
                     )
-                )
+                except Exception:
+                    self._log.debug("audit.record_failure raised", exc_info=True)
             if on_exception is not None:
                 try:
                     on_exception(exc)

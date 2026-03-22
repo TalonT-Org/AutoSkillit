@@ -613,6 +613,7 @@ steps:
         GO: open_integration_pr
         NO GO: remediate
     on_failure: cleanup_failure
+    on_context_limit: cleanup_failure
     optional: true
     skip_when_false: "inputs.audit"
     note: >

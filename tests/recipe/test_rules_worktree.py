@@ -292,6 +292,122 @@ def test_worktree_step_with_context_limit_no_warning() -> None:
 
 
 # ---------------------------------------------------------------------------
+# advisory-step-missing-context-limit tests
+# ---------------------------------------------------------------------------
+
+
+def test_advisory_step_missing_context_limit_fires_warning() -> None:
+    """run_skill step with skip_when_false but no on_context_limit → WARNING."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "review": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:review-approach plan.md"},
+                skip_when_false="inputs.review_approach",
+                on_success="next_step",
+                on_failure="abort",
+            ),
+            "next_step": RecipeStep(action="stop", message="Done."),
+            "abort": RecipeStep(action="stop", message="Abort."),
+        },
+        kitchen_rules=[],
+    )
+    findings = run_semantic_rules(wf)
+    assert any(f.rule == "advisory-step-missing-context-limit" for f in findings), (
+        f"Expected advisory-step-missing-context-limit, got: {findings}"
+    )
+    matched = next(f for f in findings if f.rule == "advisory-step-missing-context-limit")
+    assert matched.severity == Severity.WARNING
+
+
+def test_advisory_step_with_context_limit_no_warning() -> None:
+    """run_skill step with skip_when_false and on_context_limit set → no warning."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "review": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:review-approach plan.md"},
+                skip_when_false="inputs.review_approach",
+                on_success="next_step",
+                on_failure="abort",
+                on_context_limit="next_step",
+            ),
+            "next_step": RecipeStep(action="stop", message="Done."),
+            "abort": RecipeStep(action="stop", message="Abort."),
+        },
+        kitchen_rules=[],
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "advisory-step-missing-context-limit" for f in findings)
+
+
+def test_non_advisory_step_does_not_trigger_rule() -> None:
+    """run_skill step without skip_when_false and no on_context_limit → no finding."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "investigate": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:investigate plan.md"},
+                on_success="next_step",
+                on_failure="abort",
+            ),
+            "next_step": RecipeStep(action="stop", message="Done."),
+            "abort": RecipeStep(action="stop", message="Abort."),
+        },
+        kitchen_rules=[],
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "advisory-step-missing-context-limit" for f in findings)
+
+
+def test_non_run_skill_step_with_skip_when_false_does_not_trigger() -> None:
+    """run_cmd step with skip_when_false → rule is run_skill-only, no finding."""
+    wf = _make_workflow(
+        {
+            "check": {
+                "tool": "run_cmd",
+                "with": {"cmd": "echo hello"},
+                "skip_when_false": "inputs.some_flag",
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "advisory-step-missing-context-limit" for f in findings)
+
+
+def test_advisory_step_rule_finding_includes_step_name() -> None:
+    """The finding message contains the step name for actionable output."""
+    wf = Recipe(
+        name="test",
+        description="test",
+        steps={
+            "my_review_step": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:review-approach plan.md"},
+                skip_when_false="inputs.review_approach",
+                on_success="next_step",
+                on_failure="abort",
+            ),
+            "next_step": RecipeStep(action="stop", message="Done."),
+            "abort": RecipeStep(action="stop", message="Abort."),
+        },
+        kitchen_rules=[],
+    )
+    findings = run_semantic_rules(wf)
+    advisory_findings = [f for f in findings if f.rule == "advisory-step-missing-context-limit"]
+    assert len(advisory_findings) >= 1
+    assert "my_review_step" in advisory_findings[0].message
+
+
+# ---------------------------------------------------------------------------
 # TestCloneRootAsWorktreeRule
 # ---------------------------------------------------------------------------
 

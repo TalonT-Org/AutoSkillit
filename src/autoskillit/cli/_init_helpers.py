@@ -392,9 +392,12 @@ def _register_all(scope: str, project_dir: Path) -> None:
                 except (OSError, YAMLError) as exc:
                     print(f"  {_Y}Warning:{_R} could not write github.default_repo: {exc}")
             else:
-                autoskillit_dir = project_dir / ".autoskillit"
-                autoskillit_dir.mkdir(exist_ok=True)
-                write_config_layer(config_path, {"github": {"default_repo": github_repo}})
+                try:
+                    autoskillit_dir = project_dir / ".autoskillit"
+                    autoskillit_dir.mkdir(exist_ok=True)
+                    write_config_layer(config_path, {"github": {"default_repo": github_repo}})
+                except (OSError, YAMLError) as exc:
+                    print(f"  {_Y}Warning:{_R} could not write github.default_repo: {exc}")
 
     _create_secrets_template(project_dir)
 

@@ -27,8 +27,15 @@ def test_retry_reason_values():
         RetryReason.EMPTY_OUTPUT,
         RetryReason.DRAIN_RACE,
         RetryReason.PATH_CONTAMINATION,
+        RetryReason.CONTRACT_RECOVERY,
     }
     assert RetryReason.NONE.value == "none"
+
+
+def test_contract_recovery_retry_reason_exists():
+    """CONTRACT_RECOVERY must be a member of RetryReason."""
+    assert hasattr(RetryReason, "CONTRACT_RECOVERY")
+    assert RetryReason.CONTRACT_RECOVERY == "contract_recovery"
 
 
 def test_merge_failed_step_values():

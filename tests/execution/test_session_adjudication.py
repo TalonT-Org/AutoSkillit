@@ -1518,3 +1518,78 @@ class TestDeadEndGuardContentState:
         )
         assert outcome == SessionOutcome.SUCCEEDED
         assert reason == RetryReason.NONE
+
+
+# ---------------------------------------------------------------------------
+# T1: parse_session_result preserves file_path from Write/Edit tool_use input
+# ---------------------------------------------------------------------------
+
+import json  # noqa: E402 — imported here to keep T1 tests self-contained
+
+
+@pytest.fixture
+def make_ndjson():
+    """Build a minimal NDJSON string with assistant tool_use records and a result record.
+
+    tool_uses entries use the raw NDJSON form: each dict must have 'name', 'id', and
+    optionally 'input' (a dict whose 'file_path' key will be preserved by Step 3's changes).
+    """
+
+    def _factory(
+        tool_uses: list[dict] | None = None,
+        result_text: str = "done",
+    ) -> str:
+        records = []
+        if tool_uses:
+            content = [
+                {
+                    "type": "tool_use",
+                    "name": tu["name"],
+                    "id": tu["id"],
+                    "input": tu.get("input", {}),
+                }
+                for tu in tool_uses
+            ]
+            records.append(json.dumps({"type": "assistant", "message": {"content": content}}))
+        records.append(
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": result_text,
+                    "session_id": "test-session",
+                }
+            )
+        )
+        return "\n".join(records)
+
+    return _factory
+
+
+def test_parse_session_result_preserves_write_file_path(make_ndjson):
+    """Write tool_use input.file_path must be preserved in tool_uses entries."""
+    ndjson = make_ndjson(
+        tool_uses=[{"name": "Write", "id": "tu1", "input": {"file_path": "/abs/plan.md"}}]
+    )
+    session = parse_session_result(ndjson)
+    assert session.tool_uses == [{"name": "Write", "id": "tu1", "file_path": "/abs/plan.md"}]
+
+
+def test_parse_session_result_preserves_edit_file_path(make_ndjson):
+    """Edit tool_use input.file_path must be preserved in tool_uses entries."""
+    ndjson = make_ndjson(
+        tool_uses=[{"name": "Edit", "id": "tu2", "input": {"file_path": "/abs/file.py"}}]
+    )
+    session = parse_session_result(ndjson)
+    assert session.tool_uses == [{"name": "Edit", "id": "tu2", "file_path": "/abs/file.py"}]
+
+
+def test_parse_session_result_non_write_tools_no_file_path(make_ndjson):
+    """Non-Write/Edit tool_uses must not gain a file_path key."""
+    ndjson = make_ndjson(
+        tool_uses=[{"name": "Bash", "id": "tu3", "input": {"command": "ls"}}]
+    )
+    session = parse_session_result(ndjson)
+    assert session.tool_uses == [{"name": "Bash", "id": "tu3"}]
+    assert "file_path" not in session.tool_uses[0]

@@ -328,11 +328,7 @@ async def test_report_bug_non_blocking_outcome_writes_report_file(tool_ctx, tmp_
     assert result["status"] == "dispatched"
 
     report_path = Path(result["report_path"])
-    # Drain the event loop until the background task completes and writes the file.
-    for _ in range(20):
-        await anyio.sleep(0)
-        if report_path.exists():
-            break
+    await tool_ctx.background.drain()
 
     assert report_path.exists(), "report_path must exist after background task completes"
     assert "Bug Report" in report_path.read_text()
@@ -358,11 +354,7 @@ async def test_report_bug_non_blocking_writes_status_file_on_success(tool_ctx, t
     assert pending["status"] == "pending"
 
     # After task completes: status should update to complete
-    for _ in range(20):
-        await anyio.sleep(0)
-        data = json.loads(status_path.read_text())
-        if data["status"] == "complete":
-            break
+    await tool_ctx.background.drain()
 
     data = json.loads(status_path.read_text())
     assert data["status"] == "complete"
@@ -382,11 +374,7 @@ async def test_report_bug_non_blocking_writes_status_file_on_failure(tool_ctx, t
     result = json.loads(await report_bug("crash here", str(tmp_path), severity="non_blocking"))
     status_path = Path(result["report_path"]).with_suffix(".status.json")
 
-    for _ in range(20):
-        await anyio.sleep(0)
-        data = json.loads(status_path.read_text())
-        if data["status"] == "failed":
-            break
+    await tool_ctx.background.drain()
 
     data = json.loads(status_path.read_text())
     assert data["status"] == "failed"
@@ -394,7 +382,7 @@ async def test_report_bug_non_blocking_writes_status_file_on_failure(tool_ctx, t
 
 
 @pytest.mark.anyio
-async def test_report_bug_non_blocking_executor_raises_is_observed(tool_ctx, tmp_path, caplog):
+async def test_report_bug_non_blocking_executor_raises_is_observed(tool_ctx, tmp_path):
     """If executor.run() raises, the exception must be logged — not silently dropped."""
 
     tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
@@ -407,9 +395,7 @@ async def test_report_bug_non_blocking_executor_raises_is_observed(tool_ctx, tmp
     result = json.loads(await report_bug("error ctx", str(tmp_path), severity="non_blocking"))
     assert result["status"] == "dispatched"
 
-    # Drain until the task has run
-    for _ in range(20):
-        await anyio.sleep(0)
+    await tool_ctx.background.drain()
 
     # The exception must be captured and logged — not silently dropped
     status_path = Path(result["report_path"]).with_suffix(".status.json")
@@ -431,10 +417,7 @@ async def test_report_bug_no_pending_tasks_after_completion(tool_ctx, tmp_path):
 
     await report_bug("err", str(tmp_path), severity="non_blocking")
 
-    for _ in range(20):
-        await anyio.sleep(0)
-        if tool_ctx.background.pending_count == 0:
-            break
+    await tool_ctx.background.drain()
 
     assert tool_ctx.background.pending_count == 0
 
@@ -641,6 +624,7 @@ async def test_report_bug_blocking_github_client_raises_does_not_propagate(tool_
     assert result["success"] is True  # session succeeded
     assert result["github"].get("skipped") is True
     assert "unexpected error" in result["github"].get("reason", "")
+    assert "network failure" in result["github"].get("reason", "")
 
 
 # ---------------------------------------------------------------------------

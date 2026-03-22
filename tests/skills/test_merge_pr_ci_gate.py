@@ -38,8 +38,8 @@ def test_merge_pr_skill_references_plain_squash_fallback() -> None:
     """merge-pr SKILL.md must document the plain --squash path (without --auto)."""
     content = SKILL_PATH.read_text()
     # Must contain --squash used without --auto as a distinct case.
-    # "--squash --auto" plus a separate "--squash" (no --auto) confirms two paths.
-    assert content.count("--squash") >= 2, (
+    # Remove all "--squash --auto" occurrences; --squash must still appear as a standalone path.
+    assert "--squash" in content.replace("--squash --auto", ""), (
         "merge-pr SKILL.md must reference plain '--squash' (without --auto) as a "
         "fallback for repos where autoMergeAllowed=false"
     )

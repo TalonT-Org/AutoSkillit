@@ -31,12 +31,12 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Apply GitHub labels when `--no-label` is passed
 - Skip human escalation for ambiguous issues
 - Add useless comments to the codebase — do not use the codebase as a notepad
-- Create files outside `temp/triage-issues/` directory
+- Create files outside `.autoskillit/temp/triage-issues/` directory
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Pause for human input on ambiguous classifications
-- Write the triage report and manifest to `temp/triage-issues/` (relative to the current working directory)
+- Write the triage report and manifest to `.autoskillit/temp/triage-issues/` (relative to the current working directory)
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include rationale for every recipe classification
 - Record human decisions in the final report
@@ -271,9 +271,9 @@ Order the batches for sequential execution:
 ### Step 7: Write Outputs
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.
-Ensure `temp/triage-issues/` exists.
+Ensure `.autoskillit/temp/triage-issues/` exists.
 
-**7a. Triage report:** `temp/triage-issues/triage_report_{ts}.md`
+**7a. Triage report:** `.autoskillit/temp/triage-issues/triage_report_{ts}.md`
 
 The report contains:
 - Ordered list of batches with issues, recipe assignments, and rationale
@@ -281,7 +281,7 @@ The report contains:
 - Summary statistics (total issues, batch count, recipe distribution)
 - Human decisions section (which issues were escalated, what was decided)
 
-**7b. Machine-readable manifest:** `temp/triage-issues/triage_manifest_{ts}.json`
+**7b. Machine-readable manifest:** `.autoskillit/temp/triage-issues/triage_manifest_{ts}.json`
 
 ```json
 {
@@ -334,7 +334,7 @@ gh issue edit {number} --add-label "recipe:{recipe}"
 ## Output Location
 
 ```
-temp/triage-issues/
+.autoskillit/temp/triage-issues/
   triage_report_{ts}.md       # Human-readable triage report
   triage_manifest_{ts}.json   # Machine-readable manifest for downstream pipelines
 ```
@@ -363,8 +363,8 @@ These emit lines are consumed by `capture:` in orchestrating recipes. The
 Example emit block:
 
 ```
-triage_report = temp/triage-issues/triage_report_20260310_120000.md
-triage_manifest = temp/triage-issues/triage_manifest_20260310_120000.json
+triage_report = .autoskillit/temp/triage-issues/triage_report_20260310_120000.md
+triage_manifest = .autoskillit/temp/triage-issues/triage_manifest_20260310_120000.json
 total_issues = 12
 batch_count = 3
 recipe_distribution = {"implementation": 8, "remediation": 4}

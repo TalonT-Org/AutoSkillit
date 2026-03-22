@@ -31,8 +31,8 @@ Standards are added here when `/autoskillit:design-guards` recommends them and t
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per standard or group)
-- All output goes under `temp/audit-defense-standards/` (create if needed)
-- Final report: `temp/audit-defense-standards/defense_audit_{YYYY-MM-DD_HHMMSS}.md`
+- All output goes under `.autoskillit/temp/audit-defense-standards/` (create if needed)
+- Final report: `.autoskillit/temp/audit-defense-standards/defense_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Subagents must NOT create their own files - they return findings in their response text only
 - Provide file paths and line numbers for violations
 - Categorize by severity
@@ -121,8 +121,8 @@ Defense standards come from the `/autoskillit:design-guards` pipeline:
 1. **Launch parallel subagents** - one per standard or group of related standards
 2. **Each subagent:** runs the audit strategy, reports violations with file paths and line numbers
 3. **Consolidate findings** by standard and severity
-4. Ensure `temp/audit-defense-standards/` exists (`mkdir -p`)
-5. **Write report** to `temp/audit-defense-standards/defense_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+4. Ensure `.autoskillit/temp/audit-defense-standards/` exists (`mkdir -p`)
+5. **Write report** to `.autoskillit/temp/audit-defense-standards/defense_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 6. **Output summary** to terminal: violation count per standard, total by severity
 
 ## Report Structure

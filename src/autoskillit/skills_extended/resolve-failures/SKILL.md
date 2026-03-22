@@ -24,7 +24,7 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 - Exceed 3 fix-and-retest iterations
 - Delete the worktree if tests still fail after max attempts
 - Modify the plan file
-- Create files outside `temp/resolve-failures/` directory
+- Create files outside `.autoskillit/temp/resolve-failures/` directory
 
 **ALWAYS:**
 - Read the plan first to understand implementation intent
@@ -48,7 +48,7 @@ Read the configured test command from `.autoskillit/config.yaml` (key: `test_che
 3. Verify plan file exists and is readable
 
    **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
-   exist (e.g., plan file arguments, `temp/investigate/` reports, external file references), use
+   exist (e.g., plan file arguments, `.autoskillit/temp/investigate/` reports, external file references), use
    `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
    sibling parallel-call cancellations.
 4. Check for development environment in worktree, recreate if missing. Use the project's configured `worktree_setup.command`, or: `cd "${worktree_path}" && task install-worktree`

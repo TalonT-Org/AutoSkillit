@@ -32,8 +32,8 @@ Audit the codebase for internal cohesion: how well components integrate and main
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per cohesion dimension)
-- All output goes under `temp/audit-cohesion/` (create if needed)
-- Final report: `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`
+- All output goes under `.autoskillit/temp/audit-cohesion/` (create if needed)
+- Final report: `.autoskillit/temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Subagents must NOT create their own files — they return findings in their response text only
 - Score each dimension (STRONG, ADEQUATE, WEAK, FRACTURED)
 
@@ -405,9 +405,9 @@ After all subagents return:
 
 ### Step 3: Write Report
 
-Ensure `temp/audit-cohesion/` exists (`mkdir -p`).
+Ensure `.autoskillit/temp/audit-cohesion/` exists (`mkdir -p`).
 
-Write to `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`. (relative to the current working directory)
+Write to `.autoskillit/temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`. (relative to the current working directory)
 
 The report WILL be long. This is expected and correct — thoroughness over brevity.
 
@@ -469,7 +469,7 @@ Do NOT flag:
 - Generated files (Alembic migrations, PowerSync DDL)
 - Third-party vendored code
 - Test fixtures and cached LLM responses
-- Temporary/debug files in `temp/`
+- Temporary/debug files in `.autoskillit/temp/`
 - Configuration template files in `config/`
 
 ---

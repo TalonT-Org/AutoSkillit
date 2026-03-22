@@ -28,7 +28,7 @@ branch already checked out.
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `temp/resolve-review/`
+- Create files outside `.autoskillit/temp/resolve-review/`
 - Merge, push, or call `merge_worktree`
 - Fix issues beyond the explicit scope of the reviewer's comments
 - Exceed 3 fix-and-retest iterations
@@ -103,9 +103,9 @@ Collect all `nodes` across pages into a single list. Continue fetching while
 `pageInfo.hasNextPage` is `true`, passing `pageInfo.endCursor` as `$after`.
 
 Save raw responses to:
-- `temp/resolve-review/inline_comments_{pr_number}.json`
-- `temp/resolve-review/reviews_{pr_number}.json`
-- `temp/resolve-review/threads_{pr_number}.json` (first page; subsequent pages merged in memory)
+- `.autoskillit/temp/resolve-review/inline_comments_{pr_number}.json`
+- `.autoskillit/temp/resolve-review/reviews_{pr_number}.json`
+- `.autoskillit/temp/resolve-review/threads_{pr_number}.json` (first page; subsequent pages merged in memory)
 
 Build a lookup map from the threads response:
 - `comment_id_to_thread_id: dict[int, str]` — key: comment `databaseId` (integer), value: thread GraphQL `id` (string node ID)
@@ -194,7 +194,7 @@ the error message, domain group name, and affected comment IDs.
 
 **Merge results** into a `classification_map: dict[comment_id, verdict_entry]`.
 
-**Write analysis report** to `temp/resolve-review/analysis_{pr_number}_{ts}.md` before
+**Write analysis report** to `.autoskillit/temp/resolve-review/analysis_{pr_number}_{ts}.md` before
 any code changes are made. The report must include a summary banner:
 ```
 Analysis complete (BEFORE any code changes)
@@ -335,7 +335,7 @@ reject_entries = [
     for c in classification_map.values()
     if c['verdict'] == 'REJECT'
 ]
-pathlib.Path('temp/resolve-review/reject_patterns_${PR_NUMBER}_${ts}.json').write_text(
+pathlib.Path('.autoskillit/temp/resolve-review/reject_patterns_${PR_NUMBER}_${ts}.json').write_text(
     json.dumps(reject_entries, indent=2)
 )
 print(f'Saved {len(reject_entries)} reject patterns')
@@ -363,14 +363,14 @@ Fixes skipped: {n}
 Threads resolved: {resolved_count}/{len(addressed_thread_ids)}
   - {resolve_failed_count} failed (warnings logged above)
 Inline replies: {reply_posted_count} posted / {reply_failed_count} failed
-Reject patterns saved: temp/resolve-review/reject_patterns_{pr_number}_{ts}.json
+Reject patterns saved: .autoskillit/temp/resolve-review/reject_patterns_{pr_number}_{ts}.json
 Test iterations: {n}
 Status: PASS
 ```
 
 Save full report to:
-- Analysis report: `temp/resolve-review/analysis_{pr_number}_{ts}.md` (written before code changes)
-- Final report: `temp/resolve-review/report_{pr_number}_{ts}.md`
+- Analysis report: `.autoskillit/temp/resolve-review/analysis_{pr_number}_{ts}.md` (written before code changes)
+- Final report: `.autoskillit/temp/resolve-review/report_{pr_number}_{ts}.md`
 
 Exit 0.
 
@@ -379,4 +379,4 @@ Exit 0.
 No structured output tokens are emitted. The recipe's `resolve_review` step has no
 `capture:` block — success/failure drives routing, not captured values.
 
-Summary written to: `temp/resolve-review/report_{pr_number}_{ts}.md` (relative to the current working directory)
+Summary written to: `.autoskillit/temp/resolve-review/report_{pr_number}_{ts}.md` (relative to the current working directory)

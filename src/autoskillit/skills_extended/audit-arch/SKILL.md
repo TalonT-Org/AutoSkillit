@@ -27,7 +27,7 @@ Audit the codebase for adherence to architectural standards and rules.
 
 **ALWAYS:**
 - Use subagents for parallel exploration
-- Write report to `temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+- Write report to `.autoskillit/temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - Provide file paths and line numbers
 - Categorize by severity (CRITICAL, HIGH, MEDIUM, LOW)
 
@@ -227,7 +227,7 @@ These apply across all principles when evaluating architectural decisions:
 2. **Consolidate findings** by principle and severity
 3. **Cross-reference:** Ensure findings are categorized by the principle they violate, not just where discovered
 4. **Suggest new principle** (optional) - see below
-5. **Write report** to `temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+5. **Write report** to `.autoskillit/temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 6. **Output summary** to terminal
 
 ---

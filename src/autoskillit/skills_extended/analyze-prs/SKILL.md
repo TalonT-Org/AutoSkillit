@@ -27,7 +27,7 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
 **NEVER:**
 - Merge, close, or modify any PR
 - Modify any source code files
-- Create files outside `temp/merge-prs/` directory
+- Create files outside `.autoskillit/temp/merge-prs/` directory
 
 **ALWAYS:**
 - Use subagents to fetch PR data in parallel
@@ -255,9 +255,9 @@ Compute a timestamp: `YYYY-MM-DD_HHMMSS`.
 
 Compute integration branch name: `pr-batch/pr-merge-{YYYYMMDD-HHMMSS}`.
 
-Ensure `temp/merge-prs/` exists.
+Ensure `.autoskillit/temp/merge-prs/` exists.
 
-**5a. Machine-readable order file:** `temp/merge-prs/pr_order_{ts}.json`
+**5a. Machine-readable order file:** `.autoskillit/temp/merge-prs/pr_order_{ts}.json`
 
 ```json
 {
@@ -300,7 +300,7 @@ Ensure `temp/merge-prs/` exists.
 
 `pr_count` reflects the number of **eligible** PRs (i.e., `${#ELIGIBLE_PRS[@]}`).
 
-**5b. Human-readable analysis plan:** `temp/merge-prs/pr_analysis_plan_{ts}.md`
+**5b. Human-readable analysis plan:** `.autoskillit/temp/merge-prs/pr_analysis_plan_{ts}.md`
 
 This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline specification.
 
@@ -376,7 +376,7 @@ Report to terminal:
 ## Output Location
 
 ```
-temp/merge-prs/
+.autoskillit/temp/merge-prs/
 ├── pr_order_{ts}.json              # Machine-readable manifest (captured by recipe)
 └── pr_analysis_plan_{ts}.md        # Human-readable analysis (discovered by audit-impl)
 ```
@@ -407,4 +407,4 @@ queue_mode = {queue_mode}   # true when merge queue has ≥1 MERGEABLE entry; fa
 
 - **`/autoskillit:merge-pr`** — Merges individual PRs from this skill's ordered list
 - **`/autoskillit:make-plan`** — Called for complex PRs that need conflict resolution plans
-- **`/autoskillit:audit-impl`** — Receives `temp/merge-prs/` as plans_input
+- **`/autoskillit:audit-impl`** — Receives `.autoskillit/temp/merge-prs/` as plans_input

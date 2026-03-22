@@ -66,7 +66,7 @@ def ensure_project_temp(project_dir: Path) -> Path:
         atomic_write(gitignore_path, "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n")
     else:
         existing = gitignore_path.read_text(encoding="utf-8")
-        missing = [e for e in _AUTOSKILLIT_GITIGNORE_ENTRIES if e not in existing]
+        missing = [e for e in _AUTOSKILLIT_GITIGNORE_ENTRIES if e not in existing.splitlines()]
         if missing:
             atomic_write(gitignore_path, existing.rstrip("\n") + "\n" + "\n".join(missing) + "\n")
     root_gitignore = project_dir / ".gitignore"
@@ -74,7 +74,7 @@ def ensure_project_temp(project_dir: Path) -> Path:
         atomic_write(root_gitignore, "\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
     else:
         existing_root = root_gitignore.read_text(encoding="utf-8")
-        missing_root = [e for e in _ROOT_GITIGNORE_ENTRIES if e not in existing_root]
+        missing_root = [e for e in _ROOT_GITIGNORE_ENTRIES if e not in existing_root.splitlines()]
         if missing_root:
             atomic_write(
                 root_gitignore,

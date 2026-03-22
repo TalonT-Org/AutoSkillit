@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from autoskillit.cli._init_helpers import _KNOWN_SCANNERS
+
 
 @dataclass
 class OnboardingIntel:
@@ -57,10 +59,6 @@ _KNOWN_BUILD_FILES: dict[str, str] = {
     "package.json": "npm/yarn",
     "pyproject.toml": "uv/pip",
 }
-
-_KNOWN_SCANNERS: frozenset[str] = frozenset(
-    {"gitleaks", "detect-secrets", "trufflehog", "git-secrets"}
-)
 
 
 def _detect_scanner(project_dir: Path) -> str | None:

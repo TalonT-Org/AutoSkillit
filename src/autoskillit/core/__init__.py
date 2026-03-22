@@ -17,6 +17,9 @@ from .io import (
     _COMMITTED_BY_DESIGN as _COMMITTED_BY_DESIGN,
 )
 from .io import (
+    _ROOT_GITIGNORE_ENTRIES as _ROOT_GITIGNORE_ENTRIES,
+)
+from .io import (
     YAMLError,
     atomic_write,
     dump_yaml_str,
@@ -115,6 +118,7 @@ __all__ = [
     "dump_yaml_str",
     "ensure_project_temp",
     "load_yaml",
+    "_ROOT_GITIGNORE_ENTRIES",
     # logging
     "configure_logging",
     "get_logger",

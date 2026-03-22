@@ -39,12 +39,13 @@ def atomic_write(path: Path, content: str) -> None:
         raise
 
 
-_AUTOSKILLIT_GITIGNORE_ENTRIES = ["temp/", ".secrets.yaml", ".onboarded"]
+_AUTOSKILLIT_GITIGNORE_ENTRIES = ["temp/", ".secrets.yaml", ".onboarded", "sync_manifest.json"]
 
 _ROOT_GITIGNORE_ENTRIES = [
     ".autoskillit/.secrets.yaml",
     ".autoskillit/temp/",
     ".autoskillit/.onboarded",
+    ".autoskillit/sync_manifest.json",
 ]
 
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(

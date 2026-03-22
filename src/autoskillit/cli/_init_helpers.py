@@ -60,6 +60,9 @@ def _prompt_recipe_choice() -> str:
 
 
 def _prompt_test_command() -> list[str]:
+    if not sys.stdin.isatty():
+        print("  ERROR: Non-interactive mode requires --test-command.")
+        raise SystemExit(1)
     default = "task test-all"
     answer = input(f"Test command [{default}]: ").strip()
     return (answer if answer else default).split()

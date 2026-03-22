@@ -26,6 +26,7 @@ from autoskillit.cli._init_helpers import (
     _log_secret_scan_bypass,
     _prompt_test_command,
     _register_all,
+    _require_interactive_stdin,
 )
 from autoskillit.core import ClaudeFlags, RecipeSource, atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
@@ -507,7 +508,6 @@ def order(recipe: str | None = None):
         sys.exit(1)
 
     if recipe is None:
-        from autoskillit.cli._init_helpers import _require_interactive_stdin
         from autoskillit.cli._prompts import (
             _OPEN_KITCHEN_CHOICE,
             _build_open_kitchen_prompt,
@@ -579,12 +579,9 @@ def order(recipe: str | None = None):
     if _disabled:
         _needed = _get_subsets_needed(parsed, _disabled)
         if _needed:
-            from autoskillit.cli._init_helpers import _require_interactive_stdin
-
             subset_list = ", ".join(sorted(_needed))
             print(f"\nThis recipe requires subset(s): {subset_list}")
             _require_interactive_stdin("autoskillit order")
-            # Interactive prompt
             print("  1. Enable temporarily (for this run only)")
             print("  2. Enable permanently (update .autoskillit/config.yaml)")
             print("  3. Cancel")
@@ -601,7 +598,6 @@ def order(recipe: str | None = None):
     show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
 
     from autoskillit.cli._ansi import permissions_warning
-    from autoskillit.cli._init_helpers import _require_interactive_stdin
 
     print(permissions_warning())
     _require_interactive_stdin("autoskillit order")

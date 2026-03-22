@@ -832,16 +832,23 @@ def test_check_secret_scanning_hook_error_without_scanner(tmp_path: Path) -> Non
 def test_doctor_detects_misplaced_token_in_project_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """DR-SECRETS-1: Doctor reports ERROR when github.token is in config.yaml."""
+    """DR-SECRETS-1: Doctor reports ERROR when github.token is in project config.yaml.
+
+    home has no config so the function must detect the violation via the project path.
+    """
     from autoskillit.cli._doctor import _check_config_layers_for_secrets
     from autoskillit.core import Severity
 
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    config_dir = tmp_path / ".autoskillit"
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    config_dir = project_dir / ".autoskillit"
     config_dir.mkdir()
     (config_dir / "config.yaml").write_text("github:\n  token: ghp_leaked\n")
 
-    result = _check_config_layers_for_secrets(project_dir=tmp_path)
+    result = _check_config_layers_for_secrets(project_dir=project_dir)
     assert result.severity == Severity.ERROR
     assert "github.token" in result.message
     assert ".secrets.yaml" in result.message
@@ -851,14 +858,22 @@ def test_doctor_detects_misplaced_token_in_project_config(
 def test_doctor_reports_ok_when_no_misplaced_secrets(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """DR-SECRETS-2: Doctor reports OK when config.yaml has no secrets-only keys."""
+    """DR-SECRETS-2: Doctor reports OK when config.yaml has no secrets-only keys.
+
+    home has no config; only the project config exists with a clean (non-secret) key.
+    This exercises the project path independently of the home path.
+    """
     from autoskillit.cli._doctor import _check_config_layers_for_secrets
     from autoskillit.core import Severity
 
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    config_dir = tmp_path / ".autoskillit"
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    config_dir = project_dir / ".autoskillit"
     config_dir.mkdir()
     (config_dir / "config.yaml").write_text("github:\n  default_repo: owner/repo\n")
 
-    result = _check_config_layers_for_secrets(project_dir=tmp_path)
+    result = _check_config_layers_for_secrets(project_dir=project_dir)
     assert result.severity == Severity.OK

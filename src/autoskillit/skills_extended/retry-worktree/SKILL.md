@@ -60,7 +60,7 @@ Parse two positional arguments from the prompt:
 2. **Worktree path** — verify the directory exists and is a git worktree. Check that the development environment is set up (e.g. `.venv` exists for Python projects)
 
 **Path Detection:** Use path detection to locate both arguments. Scan all
-tokens after the skill name for those starting with `/`, `./`, `temp/`, or
+tokens after the skill name for those starting with `/`, `./`, `.autoskillit/temp/`, or
 `.autoskillit/`. The first such token is `plan_path`; the second is
 `worktree_path`. Ignore any non-path tokens that appear before them (e.g.,
 extra descriptive text like "use this plan" or "from worktree"). If fewer than

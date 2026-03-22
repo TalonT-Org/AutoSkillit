@@ -35,7 +35,7 @@ relevant arch-lens lenses, and open a GitHub Pull Request.
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `temp/open-pr/` (except temp files used for `gh pr create --body-file`)
+- Create files outside `.autoskillit/temp/open-pr/` (except temp files used for `gh pr create --body-file`)
 - Fail the pipeline if `gh` is not available or not authenticated — output `pr_url=` (empty) and exit successfully
 - Modify any source code
 
@@ -72,8 +72,8 @@ the summary file.
 
 ```bash
 export PIPELINE_CWD="$(pwd)"
-mkdir -p temp/open-pr
-python3 - <<'EOF' > temp/open-pr/token_summary.md 2>/dev/null || true
+mkdir -p .autoskillit/temp/open-pr
+python3 - <<'EOF' > .autoskillit/temp/open-pr/token_summary.md 2>/dev/null || true
 import sys, os
 from autoskillit.pipeline.tokens import DefaultTokenLog
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
@@ -90,7 +90,7 @@ print(TelemetryFormatter.format_token_table(steps, total))
 EOF
 ```
 
-- If `temp/open-pr/token_summary.md` is non-empty, set `TOKEN_SUMMARY_CONTENT` to its
+- If `.autoskillit/temp/open-pr/token_summary.md` is non-empty, set `TOKEN_SUMMARY_CONTENT` to its
   contents and embed it in the PR body under `## Token Usage Summary`.
 - If empty or absent (standalone invocation, no pipeline sessions in this cwd), omit the
   section — graceful degradation with no error.
@@ -219,7 +219,7 @@ create end_turn windows that cause stochastic session termination.
 
 **1. Write the PR context to a file using the Write tool:**
 
-- **Path:** `temp/open-pr/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
+- **Path:** `.autoskillit/temp/open-pr/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:** The following PR context block, with placeholders filled in:
 
 ```markdown
@@ -246,7 +246,7 @@ The loaded skill will read the PR context file written in step 1 above.
 
 **3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
 
-The arch-lens skills write their output to `temp/arch-lens-{lens-name}/` (relative to the current working directory). After each skill
+The arch-lens skills write their output to `.autoskillit/temp/arch-lens-{lens-name}/` (relative to the current working directory). After each skill
 runs, read the generated markdown file and extract the mermaid code block(s).
 
 After extracting the mermaid block, inspect its content for `★` or `●` characters:
@@ -264,7 +264,7 @@ After generating all diagrams, check `validated_diagrams`:
 - If `validated_diagrams` is empty → omit the `## Architecture Impact` section entirely.
   Do not include a placeholder or note in the PR body.
 
-Write the PR body to `temp/open-pr/pr_body_{timestamp}.md`. (relative to the current working directory)
+Write the PR body to `.autoskillit/temp/open-pr/pr_body_{timestamp}.md`. (relative to the current working directory)
 
 Read `## Summary` from each plan file.
 
@@ -386,7 +386,7 @@ gh pr create \
   --base {base_branch} \
   --head {feature_branch} \
   --title "{task_title}" \
-  --body-file temp/open-pr/pr_body_{timestamp}.md
+  --body-file .autoskillit/temp/open-pr/pr_body_{timestamp}.md
 ```
 
 Capture the PR URL from stdout.
@@ -396,4 +396,4 @@ Output: `pr_url={url}`
 ## Output
 
 - Always: `pr_url=<url>` (empty string when GitHub unavailable)
-- PR body written to: `temp/open-pr/pr_body_{timestamp}.md`
+- PR body written to: `.autoskillit/temp/open-pr/pr_body_{timestamp}.md`

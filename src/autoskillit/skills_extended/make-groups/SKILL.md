@@ -53,7 +53,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `temp/make-groups/` directory
+- Create files outside `.autoskillit/temp/make-groups/` directory
 - Drop, split, or rewrite requirements — reference them by original ID
 - Create groups that cannot be independently planned
 - Include implementation steps or technical approach in the group descriptions
@@ -64,7 +64,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Include every requirement from the source document in exactly one group
 - Assign each group a sequential suffix: groupA, groupB, ... groupZ
 - State dependencies between groups explicitly
-- Write to `temp/make-groups/` directory (relative to the current working directory)
+- Write to `.autoskillit/temp/make-groups/` directory (relative to the current working directory)
 
 ## Workflow
 
@@ -120,7 +120,7 @@ Sort groups so that each group's dependencies are satisfied by earlier groups. D
 
 ### Step 5: Write the Groups Documents
 
-Produce three outputs in `temp/make-groups/`:
+Produce three outputs in `.autoskillit/temp/make-groups/`:
 
 **5a. Index file (consolidated):** `groups_{topic}_{YYYY-MM-DD_HHMMSS}.md`
 
@@ -264,7 +264,7 @@ orchestrating recipe). List every per-group file in implementation order.
 ## Output Location
 
 ```
-temp/make-groups/
+.autoskillit/temp/make-groups/
 ├── groups_{topic}_{ts}.md           # Consolidated index (all groups)
 ├── manifest_{topic}_{ts}.json       # Machine-readable manifest
 ├── groupA_{topic}_{ts}.md           # Individual per-group file

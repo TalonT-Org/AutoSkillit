@@ -33,7 +33,7 @@ body suitable for final review before landing on main.
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `temp/open-pr-main/`
+- Create files outside `.autoskillit/temp/open-pr-main/`
 - Modify any source code
 - Fail if `gh` is unavailable — output `pr_url = ` (empty) and exit successfully
 - Push or merge anything — this skill only creates the PR
@@ -54,8 +54,8 @@ working directory.
 
 ```bash
 export PIPELINE_CWD="$(pwd)"
-mkdir -p temp/open-pr-main
-python3 - <<'EOF' > temp/open-pr-main/token_summary.md 2>/dev/null || true
+mkdir -p .autoskillit/temp/open-pr-main
+python3 - <<'EOF' > .autoskillit/temp/open-pr-main/token_summary.md 2>/dev/null || true
 import sys, os
 from autoskillit.pipeline.tokens import DefaultTokenLog
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
@@ -72,7 +72,7 @@ print(TelemetryFormatter.format_token_table(steps, total))
 EOF
 ```
 
-- If `temp/open-pr-main/token_summary.md` is non-empty, set `TOKEN_SUMMARY_CONTENT` to its
+- If `.autoskillit/temp/open-pr-main/token_summary.md` is non-empty, set `TOKEN_SUMMARY_CONTENT` to its
   contents and embed it in the PR body under `## Token Usage Summary`.
 - If empty or absent (standalone invocation, no pipeline sessions in this cwd), omit the
   section — graceful degradation with no error.
@@ -310,7 +310,7 @@ next lens.
 
 **1. Write the PR context to a file using the Write tool:**
 
-- **Path:** `temp/open-pr-main/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
+- **Path:** `.autoskillit/temp/open-pr-main/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:**
 
 ```markdown
@@ -341,14 +341,14 @@ This diagram is for a promotion PR merging the integration branch into main. Foc
 
 **3. Follow the loaded skill's instructions** to generate the diagram.
 
-Read the output from `temp/arch-lens-{lens-name}/` and extract the mermaid block(s).
+Read the output from `.autoskillit/temp/arch-lens-{lens-name}/` and extract the mermaid block(s).
 
 Validate: if the block contains at least one `★` or `●` → add to `validated_diagrams`.
 Otherwise discard.
 
 ### Step 15: Compose PR Body
 
-Write to `temp/open-pr-main/pr_body_{timestamp}.md` (relative to the current working directory).
+Write to `.autoskillit/temp/open-pr-main/pr_body_{timestamp}.md` (relative to the current working directory).
 
 ```markdown
 ## Promotion: integration → main
@@ -446,7 +446,7 @@ gh pr create \
   --base {base_branch} \
   --head {integration_branch} \
   --title "{pr_title}" \
-  --body-file temp/open-pr-main/pr_body_{timestamp}.md
+  --body-file .autoskillit/temp/open-pr-main/pr_body_{timestamp}.md
 ```
 
 Capture the PR URL as `pr_url`.

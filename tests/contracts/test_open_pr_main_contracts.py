@@ -55,11 +55,11 @@ def test_open_pr_main_token_summary_conditional(text):
 
 
 def test_open_pr_main_token_summary_uses_own_temp_dir(text):
-    """Token summary file must be written to temp/open-pr-main/, not temp/open-pr/."""
-    assert "temp/open-pr-main/token_summary.md" in text, (
-        "open-pr-main must write token summary to temp/open-pr-main/token_summary.md"
+    """Token summary file must be written to .autoskillit/temp/open-pr-main/, not open-pr/."""
+    assert ".autoskillit/temp/open-pr-main/token_summary.md" in text, (
+        "open-pr-main must write token summary to .autoskillit/temp/open-pr-main/token_summary.md"
     )
     # Ensure it does NOT reference the open-pr directory
-    assert "temp/open-pr/token_summary" not in text, (
-        "open-pr-main must not reference temp/open-pr/token_summary.md"
+    assert ".autoskillit/temp/open-pr/token_summary" not in text, (
+        "open-pr-main must not reference .autoskillit/temp/open-pr/token_summary.md"
     )

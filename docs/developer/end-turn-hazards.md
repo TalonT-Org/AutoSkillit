@@ -63,7 +63,7 @@ no `end_turn` gap:
 ```markdown
 **1. Write the PR context to a file using the Write tool:**
 
-- Path: temp/pr-arch-lens-context.md
+- Path: .autoskillit/temp/pr-arch-lens-context.md
 
 **2. Immediately call the Skill tool to load the arch-lens skill.**
 ```
@@ -138,7 +138,7 @@ To observe the failure mode in a controlled way:
 
 For each item in the list [alpha, beta, gamma]:
 
-**1.** Create a file at `temp/test-{item}.txt` using the Write tool.
+**1.** Create a file at `.autoskillit/temp/test-{item}.txt` using the Write tool.
 **2.** Read the file back using the Read tool to confirm it exists.
 ```
 

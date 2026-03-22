@@ -239,14 +239,14 @@ class TestSkillResolver:
     def test_file_producing_skills_have_output_guard(self) -> None:
         """File-producing skills must have a negative output constraint in NEVER block."""
         FILE_PRODUCING_SKILLS = {
-            "investigate": "temp/investigate/",
-            "make-groups": "temp/make-groups/",
-            "make-plan": "temp/make-plan/",
+            "investigate": ".autoskillit/temp/investigate/",
+            "make-groups": ".autoskillit/temp/make-groups/",
+            "make-plan": ".autoskillit/temp/make-plan/",
             "write-recipe": ".autoskillit/recipes/",
-            "rectify": "temp/rectify/",
-            "review-approach": "temp/review-approach/",
-            "setup-project": "temp/setup-project/",
-            "triage-issues": "temp/triage-issues/",
+            "rectify": ".autoskillit/temp/rectify/",
+            "review-approach": ".autoskillit/temp/review-approach/",
+            "setup-project": ".autoskillit/temp/setup-project/",
+            "triage-issues": ".autoskillit/temp/triage-issues/",
         }
         bd_ext = bundled_skills_extended_dir()
         failures: list[str] = []

@@ -41,14 +41,14 @@ DATE_ONLY_PATTERN = re.compile(
 
 # Lines that contain output file path instructions (write/save directives).
 OUTPUT_PATH_LINE = re.compile(
-    r"(?:write|save|output)\s+.*?(?:to|path|file)\s*[:=]?\s*`?temp/",
+    r"(?:write|save|output)\s+.*?(?:to|path|file)\s*[:=]?\s*`?(?:\.autoskillit/)?temp/",
     re.IGNORECASE,
 )
 
 # Shared scratch files that should not be used by any skill.
 SHARED_SCRATCH_FILES = {
-    "temp/arch-lens-selection.md",
-    "temp/pr-arch-lens-context.md",
+    ".autoskillit/temp/arch-lens-selection.md",
+    ".autoskillit/temp/pr-arch-lens-context.md",
 }
 
 # Regex matching structured output tokens: key=value with NO space around =.
@@ -119,7 +119,8 @@ def test_skill_output_uses_hhmmss_timestamp(skill_name: str) -> None:
     output_lines = [
         line
         for line in content.splitlines()
-        if re.search(r"temp/.*\{.*\}", line) and not line.strip().startswith("#")
+        if re.search(r"(?:\.autoskillit/)?temp/.*\{.*\}", line)
+        and not line.strip().startswith("#")
     ]
 
     for line in output_lines:
@@ -157,7 +158,7 @@ def test_no_shared_scratch_files(skill_name: str) -> None:
     for scratch_file in SHARED_SCRATCH_FILES:
         assert scratch_file not in content, (
             f"Skill '{skill_name}' writes to shared scratch file '{scratch_file}'.\n"
-            f"Use skill-scoped path: temp/{skill_name}/... with timestamp instead."
+            f"Use skill-scoped path: .autoskillit/temp/{skill_name}/... with timestamp instead."
         )
 
 
@@ -169,9 +170,13 @@ def test_no_namespace_prefix_in_output_paths(skill_name: str) -> None:
     assert info is not None
     content = info.path.read_text()
 
-    assert "temp/autoskillit:" not in content, (
+    assert ".autoskillit/temp/autoskillit:" not in content, (
         f"Skill '{skill_name}' uses namespace prefix in output path.\n"
-        f"Use bare skill name: temp/{skill_name}/... (no autoskillit: prefix)."
+        f"Use bare skill name: .autoskillit/temp/{skill_name}/... (no autoskillit: prefix)."
+    )
+    assert "temp/autoskillit:" not in content, (
+        f"Skill '{skill_name}' uses bare namespace prefix in output path.\n"
+        f"Use bare skill name: .autoskillit/temp/{skill_name}/... (no autoskillit: prefix)."
     )
 
 

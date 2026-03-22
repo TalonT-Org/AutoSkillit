@@ -1649,3 +1649,27 @@ class TestRunModeIngredient:
         assert "parallel" in ing.description.lower(), (
             "run_mode description must mention 'parallel' as an option"
         )
+
+
+def test_no_bare_temp_paths_in_bundled_recipe_notes() -> None:
+    """No bundled recipe YAML should reference temp/ without .autoskillit/ prefix.
+
+    Bare temp/ references are incorrect; all project-local temp output must be
+    rooted under .autoskillit/temp/ per CLAUDE.md §3.2.
+    """
+    import re
+
+    recipes_dir = builtin_recipes_dir()
+    bare_temp = re.compile(r"(?<!\.autoskillit/)temp/")
+
+    violations: list[str] = []
+    for yaml_file in sorted(recipes_dir.glob("*.yaml")):
+        text = yaml_file.read_text()
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if bare_temp.search(line):
+                violations.append(f"{yaml_file.name}:{lineno}: {line.strip()}")
+
+    assert not violations, (
+        "Bundled recipe YAML files contain bare temp/ path references.\n"
+        "Replace with .autoskillit/temp/ per CLAUDE.md §3.2:\n" + "\n".join(violations)
+    )

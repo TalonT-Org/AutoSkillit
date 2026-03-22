@@ -36,7 +36,7 @@ Do not change any code.
 - Modify any source code files
 - Propose bandaid fixes, fallbacks, or direct-only fixes
 - Suggest backward compatibility shims
-- Create files outside `temp/rectify/` directory
+- Create files outside `.autoskillit/temp/rectify/` directory
 
 **ALWAYS:**
 - Use subagents for parallel exploration
@@ -44,21 +44,21 @@ Do not change any code.
 - Focus on architectural immunity over direct fixes
 - Identify how tests missed the issue and similar/related bugs
 - Map the components and their connections thoroughly
-- Write the plan as markdown to `temp/rectify/` directory (relative to the current working directory)
+- Write the plan as markdown to `.autoskillit/temp/rectify/` directory (relative to the current working directory)
 - The solution must solve more than just the immediate issue
 
 ## Rectify Workflow
 
 ### Step 1: Identify the Investigation Context
 
-Locate the most recent investigation report in `temp/investigate/` or from conversation context. Extract:
+Locate the most recent investigation report in `.autoskillit/temp/investigate/` or from conversation context. Extract:
 - The root cause identified
 - Affected components
 - Test gaps noted
 - Any recommendations made
 
 **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
-exist (e.g., plan file arguments, `temp/investigate/` reports, external file references), use
+exist (e.g., plan file arguments, `.autoskillit/temp/investigate/` reports, external file references), use
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
 
@@ -143,7 +143,7 @@ After finalizing the plan, determine which architecture lens best illustrates th
 
 **4b. Write your lens selection rationale to a file using the Write tool:**
 
-- **Path:** `temp/rectify/arch_lens_selection_{YYYY-MM-DD_HHMMSS}.md`
+- **Path:** `.autoskillit/temp/rectify/arch_lens_selection_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:** Which lens was selected and why (1-2 sentences of rationale).
 
 **4c. MANDATORY: LOAD the appropriate arch-lens skill using the Skill tool:**
@@ -195,7 +195,7 @@ If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b
 - The title of each part file MUST include `— PART A ONLY` (or B, C, etc.).
 - Each part file MUST open with: `> **PART {X} ONLY. Do not implement any other part. Other parts are separate tasks requiring explicit authorization.**`
 
-Save the plan to: `temp/rectify/rectify_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Save the plan to: `.autoskillit/temp/rectify/rectify_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 **Structured output:** After saving the file(s), emit the following lines so pipeline orchestrators can capture both fields:
 

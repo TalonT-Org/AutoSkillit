@@ -861,7 +861,7 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes
-      a structured diagnosis to temp/diagnose-ci/. Routes to resolve_ci on success
+      a structured diagnosis to .autoskillit/temp/diagnose-ci/. Routes to resolve_ci on success
       OR failure (best-effort: resolve-failures proceeds even without a diagnosis).
       diagnosis_path is passed to resolve_ci for targeted remediation context.
 

@@ -127,7 +127,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `temp/arch-lens-process-flow/arch_diag_process_flow_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `.autoskillit/temp/arch-lens-process-flow/arch_diag_process_flow_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After writing the diagram file, emit a structured output line:
 

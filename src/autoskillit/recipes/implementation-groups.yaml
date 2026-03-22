@@ -215,7 +215,7 @@ steps:
     on_failure: release_issue_failure
     note: >
       Always runs — groups are the primary workflow in this recipe.
-      Produces group files in temp/make-groups/ containing sequenced groups (groupA, groupB, ...).
+      Produces group files in .autoskillit/temp/make-groups/ containing sequenced groups (groupA, groupB, ...).
       GROUPS MODE: Pass the file paths (group_files) directly to the plan step via context.group_files
       — do NOT read the files. The current group's file path becomes the task passed to the plan step.
       ITERATION: The agent maintains a group queue. For each group, run the full cycle
@@ -238,7 +238,7 @@ steps:
     on_success: review
     on_failure: release_issue_failure
     note: >
-      Produces plan in temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
+      Produces plan in .autoskillit/temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
       plan_parts context key contains the full ordered list of part files (sorted alphabetically).
       For a single-part plan, plan_parts has one entry equal to plan_path.
       GROUPS MODE: Replace the skill_command task with the current group's file path from
@@ -552,7 +552,7 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes
-      a structured diagnosis to temp/diagnose-ci/. Routes to resolve_ci on success
+      a structured diagnosis to .autoskillit/temp/diagnose-ci/. Routes to resolve_ci on success
       OR failure (best-effort: resolve-failures proceeds even without a diagnosis).
       diagnosis_path is passed to resolve_ci for targeted remediation context.
 

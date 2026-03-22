@@ -4,7 +4,7 @@
 Denies run_skill calls where a path-argument skill is
 invoked with extra descriptive text before the actual file path, e.g.:
 
-    /autoskillit:implement-worktree-no-merge the verified plan temp/plan.md
+    /autoskillit:implement-worktree-no-merge the verified plan .autoskillit/temp/plan.md
                                               ^^^^^^^^^^^^^^^^^^^ extra words
 
 Detection logic:
@@ -47,7 +47,7 @@ PATH_ARG_SKILLS: frozenset[str] = frozenset(
 )
 
 # Token prefixes that unambiguously identify a filesystem path argument.
-_PATH_PREFIXES: tuple[str, ...] = ("/", "./", "temp/", ".autoskillit/")
+_PATH_PREFIXES: tuple[str, ...] = ("/", "./", ".autoskillit/")
 
 # Captures the skill short-name from a skill_command string such as:
 #   /autoskillit:implement-worktree-no-merge ...

@@ -23,7 +23,7 @@ ingredients:
     default: "true"
   plans_dir:
     description: Plan files for audit
-    default: "temp/merge-prs"
+    default: ".autoskillit/temp/merge-prs"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -567,14 +567,14 @@ steps:
   collect_artifacts:
     tool: run_cmd
     with:
-      cmd: "mkdir -p ${{ inputs.plans_dir }} && find temp/make-plan/ -name '*_plan_*.md' -exec cp {} ${{ inputs.plans_dir }}/ \\; 2>/dev/null || true"
+      cmd: "mkdir -p ${{ inputs.plans_dir }} && find .autoskillit/temp/make-plan/ -name '*_plan_*.md' -exec cp {} ${{ inputs.plans_dir }}/ \\; 2>/dev/null || true"
       cwd: "${{ context.work_dir }}"
       step_name: "collect_artifacts"
     on_success: check_impl_plans
     on_failure: check_impl_plans
     note: >
-      Copies plan files generated during the pipeline (from temp/make-plan/) into
-      temp/merge-prs/ alongside any conflict reports already there.
+      Copies plan files generated during the pipeline (from .autoskillit/temp/make-plan/) into
+      .autoskillit/temp/merge-prs/ alongside any conflict reports already there.
       Always routes to check_impl_plans, which determines whether audit_impl
       is meaningful. In queue mode (context.queue_mode == true), the integration_branch
       is the base_branch itself — no batch branch push is needed. The step after
@@ -843,7 +843,7 @@ steps:
     on_failure: cleanup_failure
     note: >
       Runs when ci_watch_pr reports CI failure on the integration branch.
-      Fetches logs and writes a diagnosis to temp/diagnose-ci/ for human inspection.
+      Fetches logs and writes a diagnosis to .autoskillit/temp/diagnose-ci/ for human inspection.
       diagnosis_path is captured for observability — no automated remediation for
       integration CI, so always routes to cleanup_failure.
 
@@ -890,7 +890,7 @@ steps:
 
   escalate_stop:
     action: stop
-    message: "Pipeline failed — human intervention needed. Check the integration branch and temp/merge-prs/ for details."
+    message: "Pipeline failed — human intervention needed. Check the integration branch and .autoskillit/temp/merge-prs/ for details."
     note: >
       context.task may be null when reached via escalation_required=true from merge_pr
       (merge-pr does not set conflict_report_path on escalation paths). Do not rely on

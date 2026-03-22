@@ -64,7 +64,7 @@ Spawn Explore subagents to investigate:
 **Logging & Monitoring**
 - Find logging configuration
 - Identify observability outputs
-- Look for: logging configuration, log files, metrics, activity logs, temp/ output directories
+- Look for: logging configuration, log files, metrics, activity logs, .autoskillit/temp/ output directories
 
 **Status & Health**
 - Find status/health commands
@@ -134,7 +134,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `temp/arch-lens-operational/arch_diag_operational_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `.autoskillit/temp/arch-lens-operational/arch_diag_operational_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After writing the diagram file, emit a structured output line:
 
@@ -196,7 +196,7 @@ flowchart TB
     subgraph Monitoring ["OBSERVABILITY"]
         direction TB
         LOGS["Activity Logs<br/>━━━━━━━━━━<br/>Step-by-step"]
-        DEBUG["Debug Artifacts<br/>━━━━━━━━━━<br/>temp/ directory"]
+        DEBUG["Debug Artifacts<br/>━━━━━━━━━━<br/>.autoskillit/temp/ directory"]
     end
 
     subgraph Tasks ["TASK COMMANDS"]

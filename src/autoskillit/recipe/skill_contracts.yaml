@@ -387,7 +387,7 @@ skills:
     expected_output_patterns:
     - "triage_report\\s*=\\s*.+"
     pattern_examples:
-    - "triage_report = temp/triage-issues/triage_report_20260310_120000.md\n%%ORDER_UP%%"
+    - "triage_report = .autoskillit/temp/triage-issues/triage_report_20260310_120000.md\n%%ORDER_UP%%"
 
   review-pr:
     inputs:

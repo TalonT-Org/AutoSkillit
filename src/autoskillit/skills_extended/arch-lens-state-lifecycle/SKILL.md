@@ -129,7 +129,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `temp/arch-lens-state-lifecycle/arch_diag_state_lifecycle_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `.autoskillit/temp/arch-lens-state-lifecycle/arch_diag_state_lifecycle_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After writing the diagram file, emit a structured output line:
 

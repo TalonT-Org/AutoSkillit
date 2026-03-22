@@ -40,8 +40,8 @@ class TestLooksLikePath:
     def test_dotslash_prefix(self):
         assert _looks_like_path("./plan.md") is True
 
-    def test_temp_prefix(self):
-        assert _looks_like_path("temp/make-plan/plan.md") is True
+    def test_temp_prefix_no_longer_valid(self):
+        assert _looks_like_path("temp/make-plan/plan.md") is False
 
     def test_autoskillit_prefix(self):
         assert _looks_like_path(".autoskillit/temp/plan.md") is True
@@ -68,9 +68,11 @@ class TestSkillCmdCheckAllow:
         )
         assert _decision(result) == "allow"
 
-    def test_valid_path_temp_prefix(self):
+    def test_valid_path_autoskillit_temp_prefix(self):
         result = _run_hook(
-            {"skill_command": "/autoskillit:implement-worktree-no-merge temp/make-plan/plan.md"}
+            {
+                "skill_command": "/autoskillit:implement-worktree-no-merge .autoskillit/temp/make-plan/plan.md"
+            }
         )
         assert _decision(result) == "allow"
 
@@ -79,7 +81,9 @@ class TestSkillCmdCheckAllow:
         assert _decision(result) == "allow"
 
     def test_implement_worktree_valid(self):
-        result = _run_hook({"skill_command": "/autoskillit:implement-worktree temp/plan.md"})
+        result = _run_hook(
+            {"skill_command": "/autoskillit:implement-worktree .autoskillit/temp/plan.md"}
+        )
         assert _decision(result) == "allow"
 
     def test_retry_worktree_valid(self):
@@ -139,9 +143,11 @@ class TestSkillCmdCheckAllow:
 # ---------------------------------------------------------------------------
 
 # Canonical bug: extra words before path token (matches the bug report exactly)
-_CANONICAL_BUG = "/autoskillit:implement-worktree-no-merge the verified plan temp/rectify/plan.md"
+_CANONICAL_BUG = (
+    "/autoskillit:implement-worktree-no-merge the verified plan .autoskillit/temp/rectify/plan.md"
+)
 _WORKTREE_ABSOLUTE = "/autoskillit:implement-worktree the latest approved /home/user/plans/plan.md"
-_RETRY_EXTRA = "/autoskillit:retry-worktree use this plan temp/plan.md /path/worktree"
+_RETRY_EXTRA = "/autoskillit:retry-worktree use this plan .autoskillit/temp/plan.md /path/worktree"
 _RESOLVE_EXTRA = "/autoskillit:resolve-failures the worktree /path/worktree /path/plan.md main"
 
 
@@ -154,7 +160,7 @@ class TestSkillCmdCheckDeny:
     def test_deny_message_contains_found_path(self):
         result = _run_hook({"skill_command": _CANONICAL_BUG})
         reason = result["hookSpecificOutput"]["permissionDecisionReason"]
-        assert "temp/rectify/plan.md" in reason
+        assert ".autoskillit/temp/rectify/plan.md" in reason
 
     def test_deny_message_contains_skill_name(self):
         result = _run_hook({"skill_command": _CANONICAL_BUG})
@@ -166,7 +172,9 @@ class TestSkillCmdCheckDeny:
         result = _run_hook({"skill_command": _CANONICAL_BUG})
         reason = result["hookSpecificOutput"]["permissionDecisionReason"]
         # Should show the extracted path in the corrected format
-        assert "/autoskillit:implement-worktree-no-merge temp/rectify/plan.md" in reason
+        assert (
+            "/autoskillit:implement-worktree-no-merge .autoskillit/temp/rectify/plan.md" in reason
+        )
 
     def test_extra_words_before_absolute_path(self):
         result = _run_hook({"skill_command": _WORKTREE_ABSOLUTE})
@@ -182,7 +190,7 @@ class TestSkillCmdCheckDeny:
 
     def test_hookSpecificOutput_structure(self):
         """Verify the deny response has the correct JSON structure."""
-        cmd = "/autoskillit:implement-worktree-no-merge extra temp/plan.md"
+        cmd = "/autoskillit:implement-worktree-no-merge extra .autoskillit/temp/plan.md"
         result = _run_hook({"skill_command": cmd})
         assert "hookSpecificOutput" in result
         hso = result["hookSpecificOutput"]

@@ -308,7 +308,6 @@ def test_advisory_step_missing_context_limit_fires_warning() -> None:
                 skip_when_false="inputs.review_approach",
                 on_success="next_step",
                 on_failure="abort",
-                # on_context_limit deliberately absent
             ),
             "next_step": RecipeStep(action="stop", message="Done."),
             "abort": RecipeStep(action="stop", message="Abort."),
@@ -316,10 +315,11 @@ def test_advisory_step_missing_context_limit_fires_warning() -> None:
         kitchen_rules=[],
     )
     findings = run_semantic_rules(wf)
-    warning_findings = [f for f in findings if f.severity == Severity.WARNING]
-    assert any(f.rule == "advisory-step-missing-context-limit" for f in warning_findings), (
-        f"Expected advisory-step-missing-context-limit WARNING, got: {findings}"
+    assert any(f.rule == "advisory-step-missing-context-limit" for f in findings), (
+        f"Expected advisory-step-missing-context-limit, got: {findings}"
     )
+    matched = next(f for f in findings if f.rule == "advisory-step-missing-context-limit")
+    assert matched.severity == Severity.WARNING
 
 
 def test_advisory_step_with_context_limit_no_warning() -> None:
@@ -356,7 +356,6 @@ def test_non_advisory_step_does_not_trigger_rule() -> None:
                 with_args={"skill_command": "/autoskillit:investigate plan.md"},
                 on_success="next_step",
                 on_failure="abort",
-                # skip_when_false absent — non-advisory step
             ),
             "next_step": RecipeStep(action="stop", message="Done."),
             "abort": RecipeStep(action="stop", message="Abort."),

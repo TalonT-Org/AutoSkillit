@@ -2789,8 +2789,6 @@ class TestOutputPathTokensDerivedFromContracts:
     _EXPECTED_OUTPUT_PATH_TOKENS = frozenset(
         {
             "analysis_file",
-            "analysis_path",
-            "config_path",
             "conflict_report_path",
             "diagnosis_path",
             "diagram_path",

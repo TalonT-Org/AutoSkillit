@@ -213,7 +213,6 @@ def test_output_path_tokens_synchronized() -> None:
             "group_files",
             "manifest_path",
             "summary_path",
-            "analysis_path",
             "remediation_path",
             "diagram_path",
             "triage_report",
@@ -221,7 +220,6 @@ def test_output_path_tokens_synchronized() -> None:
             "pr_order_file",
             "analysis_file",
             "conflict_report_path",
-            "config_path",
             "recipe_path",
         }
     )
@@ -300,9 +298,12 @@ def _extract_critical_constraints_section(skill_md: str) -> str:
 
 def _get_contracted_path_capture_skills() -> dict[str, list[str]]:
     """Return {skill_name: [token_names]} for skills with path-capture contracts."""
-    contracts = yaml.safe_load(SKILL_CONTRACTS_PATH.read_text())
+    raw = yaml.safe_load(SKILL_CONTRACTS_PATH.read_text())
+    skills_data = raw.get("skills", {}) if isinstance(raw, dict) else {}
     result: dict[str, list[str]] = {}
-    for skill_name, contract in contracts.items():
+    for skill_name, contract in skills_data.items():
+        if not isinstance(contract, dict):
+            continue
         patterns = contract.get("expected_output_patterns", [])
         tokens = []
         for pattern in patterns:

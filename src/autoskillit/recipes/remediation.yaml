@@ -527,14 +527,40 @@ steps:
       step_name: "check_merge_queue"
     capture:
       queue_available: "${{ result.stdout | trim }}"
-    on_success: route_queue_mode
+    on_success: check_auto_merge
     on_failure: release_issue_success
     skip_when_false: "inputs.open_pr"
     note: >
       Detects whether the target branch has an active merge queue via GraphQL.
       Captures "true" or "false" into context.queue_available.
       On failure (gh error, parse error), degrades gracefully to release_issue_success
-      (success path). Skipped when open_pr=false — no PR was opened.
+      (success path). On success, routes to check_auto_merge for auto-merge
+      availability detection. Skipped when open_pr=false — no PR was opened.
+
+  check_auto_merge:
+    tool: run_cmd
+    with:
+      cmd: >
+        REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||') &&
+        OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
+        gh api graphql -f query="query {
+          repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
+            autoMergeAllowed
+          }
+        }" | jq -r '.data.repository.autoMergeAllowed // false'
+      cwd: "${{ context.work_dir }}"
+      step_name: "check_auto_merge"
+    capture:
+      auto_merge_available: "${{ result.stdout | trim }}"
+    on_success: route_queue_mode
+    on_failure: route_queue_mode
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Detects whether the target repository has autoMergeAllowed enabled via GraphQL.
+      Captures "true" or "false" into context.auto_merge_available.
+      On failure (gh error, network error), falls through to route_queue_mode with
+      auto_merge_available unset — route_queue_mode defaults to immediate_merge (safe
+      non-auto path). Skipped when open_pr=false — no PR was opened.
 
   route_queue_mode:
     action: route
@@ -543,7 +569,9 @@ steps:
         route: confirm_cleanup
       - when: "${{ context.queue_available }} == true"
         route: enable_auto_merge
-      - route: direct_merge
+      - when: "${{ context.auto_merge_available }} == true"
+        route: direct_merge
+      - route: immediate_merge
     skip_when_false: "inputs.open_pr"
 
   enable_auto_merge:
@@ -725,6 +753,94 @@ steps:
     note: >
       Re-enables auto-merge after conflict resolution and re-push.
       Routes back to wait_for_direct_merge to poll for completion.
+      On failure, release_issue_failure preserves the clone for debugging.
+
+  immediate_merge:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash"
+      cwd: "${{ context.work_dir }}"
+      step_name: "immediate_merge"
+    on_success: wait_for_immediate_merge
+    on_failure: confirm_cleanup
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Merges the PR immediately using plain --squash when autoMergeAllowed=false.
+      Unlike direct_merge, no --auto flag is used — GitHub executes the merge
+      synchronously rather than queueing it for when checks pass. On failure
+      (conflict or not-mergeable error from GitHub), degrades to confirm_cleanup.
+
+  wait_for_immediate_merge:
+    tool: run_cmd
+    with:
+      cmd: >
+        for i in $(seq 1 30); do
+          STATE=$(gh pr view '${{ context.pr_number }}' --json state --jq '.state');
+          if [ "$STATE" = "MERGED" ]; then echo "merged"; exit 0; fi;
+          if [ "$STATE" = "CLOSED" ]; then echo "closed"; exit 0; fi;
+          sleep 10;
+        done; echo "timeout"
+      cwd: "${{ context.work_dir }}"
+      step_name: "wait_for_immediate_merge"
+    on_result:
+      - when: "${{ result.stdout | trim }} == merged"
+        route: release_issue_success
+      - when: "${{ result.stdout | trim }} == closed"
+        route: immediate_merge_conflict_fix
+      - route: release_issue_timeout
+    on_failure: release_issue_timeout
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Polls GitHub PR state every 10s for up to 5 minutes (30 iterations).
+      Since immediate_merge uses --squash without --auto, the merge completes
+      synchronously — this poll is a confirmation window.
+      merged → release_issue_success.
+      closed → PR was rejected (stale base or conflict) — route to conflict fix.
+      timeout → release_issue_timeout.
+
+  immediate_merge_conflict_fix:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "immediate_merge_conflict_fix"
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: release_issue_failure
+      - route: re_push_immediate_fix
+    on_failure: release_issue_failure
+    retries: 1
+    on_exhausted: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Resolves rebase conflicts on the feature branch after immediate-merge rejection.
+      Analogous to direct_merge_conflict_fix.
+      escalation_required=true → release_issue_failure for human review.
+
+  re_push_immediate_fix:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.merge_target }}"
+    on_success: remerge_immediate
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+
+  remerge_immediate:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash"
+      cwd: "${{ context.work_dir }}"
+      step_name: "remerge_immediate"
+    on_success: wait_for_immediate_merge
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Re-attempts plain squash merge after conflict resolution and re-push.
+      Routes back to wait_for_immediate_merge to confirm completion.
       On failure, release_issue_failure preserves the clone for debugging.
 
   diagnose_ci:

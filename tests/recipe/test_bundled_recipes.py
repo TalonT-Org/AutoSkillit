@@ -1109,14 +1109,14 @@ class TestInvestigateFirstStructure:
             "the skip intent is already in the note: field but not schema-enforced"
         )
 
-    def test_remediation_review_step_has_on_context_limit(self, recipe) -> None:
+    def test_if_review_step_has_on_context_limit(self, recipe) -> None:
         step = recipe.steps["review"]
         assert step.on_context_limit == "dry_walkthrough", (
             "review is advisory (skip_when_false); on context limit it should skip to "
             "dry_walkthrough, not abort via on_failure"
         )
 
-    def test_remediation_review_step_has_retries(self, recipe) -> None:
+    def test_if_review_step_has_retries(self, recipe) -> None:
         step = recipe.steps["review"]
         assert step.retries >= 1, (
             "review step should allow at least one retry before routing to on_context_limit"

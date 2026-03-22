@@ -25,6 +25,7 @@ from autoskillit.execution import (
 )
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import (
+    BackgroundTaskSupervisor,
     DefaultAuditLog,
     DefaultGateState,
     DefaultTimingLog,
@@ -72,8 +73,8 @@ def _gh_cli_token() -> str | None:
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        pass
+    except Exception:
+        logger.debug("gh auth token unavailable", exc_info=True)
     return None
 
 
@@ -122,9 +123,11 @@ def make_context(
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root)
 
+    audit = DefaultAuditLog()
     ctx = ToolContext(
         config=config,
-        audit=DefaultAuditLog(),
+        audit=audit,
+        background=BackgroundTaskSupervisor(audit=audit),
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=gate,

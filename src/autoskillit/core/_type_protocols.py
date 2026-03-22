@@ -39,6 +39,7 @@ __all__ = [
     "MergeQueueWatcher",
     "SessionSkillManager",
     "TargetSkillResolver",
+    "BackgroundSupervisor",
 ]
 
 
@@ -415,3 +416,22 @@ class TargetSkillResolver(Protocol):
     """Protocol for resolving skill names to their source tier."""
 
     def resolve(self, name: str) -> Any: ...
+
+
+@runtime_checkable
+class BackgroundSupervisor(Protocol):
+    """Protocol for supervised background task execution."""
+
+    @property
+    def pending_count(self) -> int: ...
+
+    def submit(
+        self,
+        coro: Any,
+        *,
+        on_exception: Any | None = None,
+        status_path: Any | None = None,
+        label: str = "",
+    ) -> Any: ...
+
+    async def drain(self) -> None: ...

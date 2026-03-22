@@ -121,6 +121,7 @@ src/autoskillit/
 ├── pipeline/                # L1 pipeline state sub-package
 │   ├── __init__.py          #   Re-exports ToolContext, DefaultGateState, DefaultAuditLog, DefaultTokenLog
 │   ├── audit.py             #   FailureRecord, DefaultAuditLog
+│   ├── background.py        #   BackgroundTaskSupervisor — supervised background task execution; BackgroundSupervisor Protocol in core/
 │   ├── context.py           #   ToolContext DI container (config, audit, token_log, gate, plugin_dir, runner)
 │   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
 │   │                        #   (UNGATED_TOOLS is an alias for FREE_RANGE_TOOLS in core/types.py)

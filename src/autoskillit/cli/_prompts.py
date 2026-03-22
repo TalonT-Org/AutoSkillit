@@ -206,8 +206,7 @@ def show_cook_preview(
     """
     from autoskillit.cli._ansi import diagram_to_terminal, ingredients_to_terminal
     from autoskillit.config import resolve_ingredient_defaults
-    from autoskillit.recipe._api import _build_ingredient_rows
-    from autoskillit.recipe.diagrams import load_recipe_diagram
+    from autoskillit.recipe import _build_ingredient_rows, load_recipe_diagram
 
     diagram = load_recipe_diagram(recipe_name, recipes_dir)
     if diagram:

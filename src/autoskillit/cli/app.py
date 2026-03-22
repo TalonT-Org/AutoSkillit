@@ -21,8 +21,10 @@ from cyclopts import App, Parameter
 from autoskillit.cli._cook import cook as cook_interactive
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
+    _ScanResult,
     _check_secret_scanning,
     _generate_config_yaml,
+    _log_secret_scan_bypass,
     _prompt_test_command,
     _register_all,
 )

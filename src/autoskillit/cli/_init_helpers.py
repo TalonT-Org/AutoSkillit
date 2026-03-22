@@ -7,9 +7,15 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
 from autoskillit.recipe import list_recipes
+
+
+class _ScanResult(NamedTuple):
+    passed: bool
+    bypass_accepted: bool = False
 
 
 def _colors() -> tuple[str, str, str, str, str, str]:
@@ -176,17 +182,19 @@ def _log_secret_scan_bypass(project_dir: Path) -> None:
     atomic_write(config_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
 
 
-def _check_secret_scanning(project_dir: Path) -> bool:
+def _check_secret_scanning(project_dir: Path) -> _ScanResult:
     """Gate: require secret scanning hook or explicit typed consent.
 
-    Returns True if it is safe to proceed (scanner found or bypass accepted).
-    Returns False if the check fails and init should abort (caller raises SystemExit(1)).
+    Returns _ScanResult(passed=True) if scanner found.
+    Returns _ScanResult(passed=True, bypass_accepted=True) if user accepted bypass phrase.
+    Returns _ScanResult(passed=False) if the check fails and init should abort.
+    The caller is responsible for calling _log_secret_scan_bypass when bypass_accepted=True.
     """
     _B, _C, _D, _G, _Y, _R = _colors()
 
     if _detect_secret_scanner(project_dir):
         print(f"  {_Y}{'secret scanning':>12}{_R}  {_G}✓ hook detected{_R}")
-        return True
+        return _ScanResult(True)
 
     # No scanner found — require explicit opt-in
     if not sys.stdin.isatty():
@@ -198,7 +206,7 @@ def _check_secret_scanning(project_dir: Path) -> bool:
             f"  .pre-commit-config.yaml before running 'autoskillit init'.\n"
             f"  Non-interactive mode cannot bypass this check.\n"
         )
-        return False
+        return _ScanResult(False)
 
     # Interactive: show warning and require consent phrase
     border = "━" * 62
@@ -217,11 +225,11 @@ def _check_secret_scanning(project_dir: Path) -> bool:
     response = input("  > ").strip()
     if response != _SECRET_SCAN_BYPASS_PHRASE:
         print(f"\n  {_B}Aborted.{_R} Phrase did not match.")
-        return False
+        return _ScanResult(False)
 
-    _log_secret_scan_bypass(project_dir)
+    # Bypass accepted — caller logs after config is written
     print(f"  {_Y}{'bypass':>12}{_R}  {_D}accepted — logged to config.yaml{_R}")
-    return True
+    return _ScanResult(True, bypass_accepted=True)
 
 
 def _is_plugin_installed() -> bool:

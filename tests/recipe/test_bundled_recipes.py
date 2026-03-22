@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
+from autoskillit.core import SKILL_TOOLS
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
@@ -472,6 +473,27 @@ class TestImplementationPipelineStructure:
         step = recipe.steps["review"]
         assert step.retries >= 1
 
+    def test_ip_audit_impl_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["audit_impl"]
+        assert step.on_context_limit == "escalate_stop", (
+            "audit_impl is a merge gate; a context-exhausted audit cannot provide "
+            "a valid verdict — aborting via escalate_stop is correct"
+        )
+
+    def test_ip_open_pr_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["open_pr_step"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "open_pr_step is advisory (skip_when_false); on context limit the pipeline "
+            "cannot determine PR state — release the issue via release_issue_failure"
+        )
+
+    def test_ip_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
+            "pushed — abort via release_issue_failure"
+        )
+
     def test_ip_recipe_passes_semantic_validation(self, recipe) -> None:
         """After Part B, validate_recipe must report no errors."""
         from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
@@ -750,6 +772,27 @@ class TestImplementationGroupsStructure:
     def test_ig_review_step_has_retries(self, recipe) -> None:
         step = recipe.steps["review"]
         assert step.retries >= 1
+
+    def test_ig_audit_impl_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["audit_impl"]
+        assert step.on_context_limit == "escalate_stop", (
+            "audit_impl is a merge gate; a context-exhausted audit cannot provide "
+            "a valid verdict — aborting via escalate_stop is correct"
+        )
+
+    def test_ig_open_pr_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["open_pr_step"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "open_pr_step is advisory (skip_when_false); on context limit the pipeline "
+            "cannot determine PR state — release the issue via release_issue_failure"
+        )
+
+    def test_ig_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
+            "pushed — abort via release_issue_failure"
+        )
 
     def test_ig_recipe_passes_semantic_validation(self, recipe) -> None:
         """After Part B, validate_recipe must report no errors."""
@@ -1077,6 +1120,27 @@ class TestInvestigateFirstStructure:
         step = recipe.steps["review"]
         assert step.retries >= 1, (
             "review step should allow at least one retry before routing to on_context_limit"
+        )
+
+    def test_if_audit_impl_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["audit_impl"]
+        assert step.on_context_limit == "escalate_stop", (
+            "audit_impl is a merge gate; a context-exhausted audit cannot provide "
+            "a valid verdict — aborting via escalate_stop is correct"
+        )
+
+    def test_if_open_pr_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["open_pr_step"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "open_pr_step is advisory (skip_when_false); on context limit the pipeline "
+            "cannot determine PR state — release the issue via release_issue_failure"
+        )
+
+    def test_if_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
+            "pushed — abort via release_issue_failure"
         )
 
     def test_if_recipe_passes_semantic_validation(self, recipe) -> None:
@@ -1443,6 +1507,18 @@ def test_bundled_recipes_pass_unrouted_verdict_value_rule() -> None:
         )
 
 
+def test_bundled_recipes_emit_no_advisory_context_limit_warnings() -> None:
+    """All bundled recipes must emit zero advisory-step-missing-context-limit warnings."""
+    for recipe_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(recipe_path)
+        findings = run_semantic_rules(recipe)
+        violations = [f for f in findings if f.rule == "advisory-step-missing-context-limit"]
+        assert violations == [], (
+            f"Recipe '{recipe_path.stem}' has advisory run_skill steps missing "
+            f"on_context_limit: {[f.step_name for f in violations]}"
+        )
+
+
 def test_implementation_groups_has_ci_watch() -> None:
     """T_RP10: implementation-groups now has ci_watch (parity with other recipes)."""
     recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
@@ -1626,6 +1702,26 @@ def test_bundled_recipes_emit_no_graph_warnings(recipe_path):
     assert warning_events == [], (
         f"build_recipe_graph emitted {len(warning_events)} warnings for "
         f"{recipe_path.name}: {warning_events}"
+    )
+
+
+@pytest.mark.parametrize("recipe_path", _BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
+def test_all_advisory_run_skill_steps_have_on_context_limit(recipe_path):
+    """
+    Every run_skill step with skip_when_false must declare on_context_limit.
+    A step that can be skipped by configuration must also be skippable on context limit.
+    """
+    recipe = load_recipe(recipe_path)
+    violations = [
+        name
+        for name, step in recipe.steps.items()
+        if step.tool in SKILL_TOOLS
+        and step.skip_when_false is not None
+        and step.on_context_limit is None
+    ]
+    assert violations == [], (
+        f"Advisory run_skill steps in {recipe_path.name} missing on_context_limit: "
+        f"{violations}. Set on_context_limit to the appropriate skip/recovery step."
     )
 
 

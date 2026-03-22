@@ -826,3 +826,41 @@ def test_check_secret_scanning_hook_error_without_scanner(tmp_path: Path) -> Non
 
     result = _check_secret_scanning_hook(tmp_path)
     assert result.severity == Severity.ERROR
+
+
+# DR-SECRETS-1
+def test_doctor_detects_misplaced_token_in_project_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DR-SECRETS-1: Doctor reports ERROR when github.token is in config.yaml."""
+    from autoskillit.cli._doctor import _check_config_layers_for_secrets
+    from autoskillit.core import Severity
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    config_dir = tmp_path / ".autoskillit"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text("github:\n  token: ghp_leaked\n")
+
+    result = _check_config_layers_for_secrets(project_dir=tmp_path)
+    assert result.severity == Severity.ERROR
+    assert "github.token" in result.message
+    assert ".secrets.yaml" in result.message
+
+
+# DR-SECRETS-2
+def test_doctor_reports_ok_when_no_misplaced_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DR-SECRETS-2: Doctor reports OK when config.yaml has no secrets-only keys."""
+    from autoskillit.cli._doctor import _check_config_layers_for_secrets
+    from autoskillit.core import Severity
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    config_dir = tmp_path / ".autoskillit"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text(
+        "github:\n  default_repo: owner/repo\n"
+    )
+
+    result = _check_config_layers_for_secrets(project_dir=tmp_path)
+    assert result.severity == Severity.OK

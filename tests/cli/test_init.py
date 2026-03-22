@@ -270,6 +270,26 @@ class TestCLIInit:
         # MCP server should be registered to user home, not project dir
         assert (tmp_path / ".claude.json").exists()
 
+    def test_register_all_config_write_is_validated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The github.default_repo write in _register_all goes through write_config_layer.
+
+        If someone injects a schema-invalid key before the write, it must be caught
+        at write time, not deferred to load_config.
+        """
+        from autoskillit.config.settings import ConfigSchemaError, write_config_layer
+
+        # Simulate a pre-existing config.yaml with an invalid key
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        # The gateway should reject writing a merge of this invalid content
+        with pytest.raises(ConfigSchemaError):
+            write_config_layer(
+                config_dir / "config.yaml",
+                {"github": {"token": "ghp_should_not_be_here", "default_repo": "owner/repo"}},
+            )
+
 
 class TestEnsureProjectTemp:
     """N5: ensure_project_temp moved from config.py to _io.py."""

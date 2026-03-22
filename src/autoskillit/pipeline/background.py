@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 from autoskillit.core import atomic_write, get_logger
 

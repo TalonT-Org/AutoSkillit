@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 import anyio
+import pytest
+
 from autoskillit.pipeline.background import BackgroundTaskSupervisor
 
 

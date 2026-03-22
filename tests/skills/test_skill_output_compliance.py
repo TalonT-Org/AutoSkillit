@@ -173,6 +173,10 @@ def test_no_namespace_prefix_in_output_paths(skill_name: str) -> None:
         f"Skill '{skill_name}' uses namespace prefix in output path.\n"
         f"Use bare skill name: .autoskillit/temp/{skill_name}/... (no autoskillit: prefix)."
     )
+    assert "temp/autoskillit:" not in content, (
+        f"Skill '{skill_name}' uses bare namespace prefix in output path.\n"
+        f"Use bare skill name: .autoskillit/temp/{skill_name}/... (no autoskillit: prefix)."
+    )
 
 
 @pytest.mark.parametrize("skill_name", _get_file_producing_skills())

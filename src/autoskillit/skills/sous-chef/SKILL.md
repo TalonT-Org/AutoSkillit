@@ -212,9 +212,7 @@ Capture the result as `queue_available`. If `gh api graphql` fails (auth error, 
 error), the `|| echo false` fallback ensures `queue_available` defaults to `"false"`,
 routing to the safe sequential (non-queue) path rather than leaving the variable unset.
 
-Run this **once per orchestration run**, not per-PR. The `implementation` recipe performs
-this detection automatically via the `check_merge_queue` step — **do not repeat it
-manually when following a recipe**.
+Run this **once per orchestration run**, not per-PR.
 
 After detecting queue availability, also detect auto-merge availability:
 
@@ -228,9 +226,9 @@ gh api graphql -f query="query {
 
 Capture the result as `auto_merge_available`. If detection fails, default to `"false"`.
 
-**Note:** The `implementation` recipe performs both detections automatically via
-`check_merge_queue` + `check_auto_merge` — do not repeat them manually when following
-a recipe.
+**Note:** All three recipes (`implementation`, `implementation-groups`, `remediation`)
+perform both detections automatically via `check_merge_queue` + `check_auto_merge` —
+**do not repeat them manually when following a recipe**.
 
 ### 2. Route based on queue availability
 
@@ -252,8 +250,8 @@ to wait for when `autoMergeAllowed=false`). PRs MUST still be merged one at a ti
 - If following a recipe: the recipe's `route_queue_mode` step routes to the correct
   path automatically based on `context.auto_merge_available`.
 - **NEVER** use `gh pr merge --squash --auto` when `auto_merge_available == false` —
-  this command fails with "auto-merge is not allowed for this repository" and silently
-  routes to `confirm_cleanup`, leaving the PR unmerged.
+  this command fails with "auto-merge is not allowed for this repository"; in recipe
+  context it silently routes to `confirm_cleanup`, leaving the PR unmerged.
 
 For ad-hoc (off-recipe) merges:
 - If merging multiple PRs collected from parallel pipelines: route through the
@@ -275,6 +273,6 @@ closed due to a stale base):
   `immediate_merge_conflict_fix` handles rebase-and-retry automatically.
 - **NEVER use `run_cmd` for git investigation** (git rebase, git log, git reset,
   git merge). The `resolve-merge-conflicts` skill run by `direct_merge_conflict_fix`
-  has full diagnostic access.
+  and `immediate_merge_conflict_fix` has full diagnostic access.
 - **NEVER abandon a pipeline** because merge failed — route through the conflict
   recovery cycle until the PR merges or escalation is required.

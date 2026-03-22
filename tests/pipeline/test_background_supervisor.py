@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import anyio
 import pytest
 
 from autoskillit.pipeline.background import BackgroundTaskSupervisor
@@ -19,10 +18,7 @@ async def test_supervisor_captures_exception():
 
     supervisor.submit(failing_coro(), on_exception=captured.append)
 
-    for _ in range(20):
-        await anyio.sleep(0)
-        if captured:
-            break
+    await supervisor.drain()
 
     assert len(captured) == 1
     assert isinstance(captured[0], ValueError)
@@ -40,9 +36,6 @@ async def test_supervisor_pending_tasks_cleared_after_completion():
     supervisor.submit(noop())
     assert supervisor.pending_count == 1
 
-    for _ in range(20):
-        await anyio.sleep(0)
-        if supervisor.pending_count == 0:
-            break
+    await supervisor.drain()
 
     assert supervisor.pending_count == 0

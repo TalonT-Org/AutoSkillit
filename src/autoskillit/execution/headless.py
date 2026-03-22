@@ -147,6 +147,55 @@ def _recover_block_from_assistant_messages(
     return dataclasses.replace(session, result=recovered)
 
 
+def _synthesize_from_write_artifacts(
+    session: ClaudeSessionResult,
+    expected_output_patterns: list[str],
+    write_call_count: int,
+) -> ClaudeSessionResult | None:
+    """Synthesize missing structured output tokens from Write/Edit tool_use file_path data.
+
+    When the session has write evidence (write_call_count >= 1) and expected_output_patterns
+    contain path-capture patterns (e.g., ``plan_path\\s*=\\s*/.+``), scan tool_uses for
+    Write/Edit entries with absolute file_path values. For each pattern whose token name can
+    be extracted, inject ``{token_name} = {file_path}`` into session.result so that
+    _compute_outcome sees the token as if the model had emitted it.
+
+    Returns a new ClaudeSessionResult with the injected line prepended to result, or None if
+    synthesis is not possible (no matching file_path, no path-capture patterns, or pattern
+    already satisfied).
+    """
+    if write_call_count == 0:
+        return None
+
+    # Only synthesize for path-capture patterns (token_name\s*=\s*/.+).
+    # Non-path patterns (verdict=, merged=) must remain text-compliance-only.
+    # Note: re is already imported at the top of headless.py — no new import needed.
+    _PATH_CAPTURE = re.compile(r"^(\w+)\\s\*=\\s\*/.+")
+
+    synthesized_lines: list[str] = []
+    for pattern in expected_output_patterns:
+        m = _PATH_CAPTURE.match(pattern)
+        if not m:
+            continue
+        token_name = m.group(1)
+        # Skip if the pattern is already satisfied in the current result.
+        if re.search(pattern, session.result):
+            continue
+        # Find the first Write/Edit tool_use with an absolute file_path.
+        for tool_use in session.tool_uses:
+            if tool_use.get("name") in {"Write", "Edit"}:
+                fp = tool_use.get("file_path", "")
+                if fp.startswith("/"):
+                    synthesized_lines.append(f"{token_name} = {fp}")
+                    break  # one synthesis per pattern
+
+    if not synthesized_lines:
+        return None
+
+    injected = "\n".join(synthesized_lines) + "\n" + session.result
+    return dataclasses.replace(session, result=injected)
+
+
 def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     """Resolve model selection: config override > step > config default."""
     if config.model.override:

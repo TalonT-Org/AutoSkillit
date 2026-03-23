@@ -11,7 +11,16 @@ from dataclasses import dataclass as _dc
 from pathlib import Path
 from typing import Any, TypedDict
 
-from autoskillit.core import LoadResult, RecipeSource, YAMLError, get_logger, load_yaml, pkg_root
+from autoskillit.core import (
+    LoadResult,
+    RecipeSource,
+    TerminalColumn,
+    YAMLError,
+    _render_gfm_table,
+    get_logger,
+    load_yaml,
+    pkg_root,
+)
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
@@ -47,6 +56,18 @@ from autoskillit.recipe.validator import (
 )
 
 _logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# GFM ingredient table column specs
+# ---------------------------------------------------------------------------
+
+_GFM_DESC_MAX_WIDTH: int = 60
+
+_GFM_INGREDIENT_COLUMNS: tuple[TerminalColumn, ...] = (
+    TerminalColumn("Name", max_width=30, align=">"),
+    TerminalColumn("Description", max_width=_GFM_DESC_MAX_WIDTH, align="<"),
+    TerminalColumn("Default", max_width=20, align=">"),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -125,18 +146,7 @@ def format_ingredients_table(
     if not rows:
         return None
 
-    nw = max(len(r[0]) for r in rows)
-    dw = max(len(r[1]) for r in rows)
-    dfw = max(len(r[2]) for r in rows)
-    nw = max(nw, 4)
-    dw = max(dw, 11)
-    dfw = max(dfw, 7)
-    out: list[str] = []
-    out.append(f"| {'Name':>{nw}} | {'Description':<{dw}} | {'Default':>{dfw}} |")
-    out.append(f"| {'-' * (nw - 1)}: | {'-' * dw} | {'-' * (dfw - 1)}: |")
-    for name_str, desc, default_str in rows:
-        out.append(f"| {name_str:>{nw}} | {desc:<{dw}} | {default_str:>{dfw}} |")
-    return "\n".join(out)
+    return _render_gfm_table(_GFM_INGREDIENT_COLUMNS, rows)
 
 
 class LoadRecipeResult(TypedDict, total=False):

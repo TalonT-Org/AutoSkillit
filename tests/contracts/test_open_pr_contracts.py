@@ -78,13 +78,9 @@ def test_open_pr_skill_removes_token_summary_path_arg(text):
 
 def test_part_suffix_stripped_in_bash_block(text):
     """Step 2 bash block must strip the '— PART X ONLY' suffix from BASE_TITLE."""
-    # The sed command stripping the suffix must appear in the skill
-    assert "PART [A-Z] ONLY" in text, (
-        "open-pr SKILL.md must contain sed stripping '— PART X ONLY' from BASE_TITLE"
-    )
-    # The strip must be applied to the BASE_TITLE extraction, not an unrelated location
-    # Verify the sed strip is chained on the same line as the BASE_TITLE assignment
-    pattern = r"BASE_TITLE=.*sed.*PART \[A-Z\] ONLY"
+    # Verify the sed strip is chained on the same line as the BASE_TITLE assignment,
+    # and requires a pipe — guards against sed and PART pattern appearing separately
+    pattern = r"BASE_TITLE=.*\|.*sed.*PART \[A-Z\] ONLY"
     assert re.search(pattern, text), (
         "BASE_TITLE extraction must pipe through sed stripping PART X ONLY suffix"
     )

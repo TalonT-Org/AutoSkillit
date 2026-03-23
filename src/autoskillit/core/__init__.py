@@ -6,6 +6,7 @@ explicit `from autoskillit.core.logging import get_logger`.
 """
 
 from ._terminal_table import TerminalColumn as TerminalColumn
+from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
 from .branch_guard import is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions, LayoutError, validate_add_dir
@@ -107,6 +108,7 @@ from .types import (
 __all__ = [
     # _terminal_table
     "TerminalColumn",
+    "_render_gfm_table",
     "_render_terminal_table",
     # branch_guard
     "is_protected_branch",

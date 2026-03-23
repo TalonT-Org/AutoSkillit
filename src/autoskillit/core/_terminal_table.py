@@ -4,7 +4,7 @@ This module contains no autoskillit imports and no ANSI sequences. It lives
 at L0 (core/) so it can be imported safely from any layer: cli/ (L3),
 pipeline/ (L1), server/ (L3), etc.
 
-Public surface: TerminalColumn, _render_terminal_table.
+Public surface: TerminalColumn, _render_terminal_table, _render_gfm_table.
 """
 
 from __future__ import annotations
@@ -65,5 +65,59 @@ def _render_terminal_table(
             for i in range(len(columns))
         ]
         lines.append("  " + "  ".join(cells))
+
+    return "\n".join(lines)
+
+
+def _render_gfm_table(
+    columns: Sequence[TerminalColumn],
+    rows: Sequence[Sequence[str]],
+) -> str:
+    """Render a GFM pipe-table from structured rows using TerminalColumn specs.
+
+    Each column's width is the minimum of (max(len(cell) for cell in column), max_width).
+    Cells exceeding max_width are truncated with '…'. Output is flush-left GFM syntax
+    with no two-space indent prefix.
+    """
+    # Compute capped column widths (same formula as _render_terminal_table)
+    col_widths = []
+    for i, col in enumerate(columns):
+        data_width = max(
+            (len(row[i]) for row in rows if i < len(row)),
+            default=0,
+        )
+        data_width = max(data_width, len(col.label))
+        if col.max_width is not None:
+            data_width = min(data_width, col.max_width)
+        col_widths.append(data_width)
+
+    def _cell(value: str, width: int, align: str) -> str:
+        if len(value) > width:
+            value = value[: width - 1] + "…"
+        return format(value, f"{align}{width}")
+
+    lines: list[str] = []
+
+    # Header row
+    header_cells = [_cell(col.label, col_widths[i], col.align) for i, col in enumerate(columns)]
+    lines.append("| " + " | ".join(header_cells) + " |")
+
+    # Separator row: right-align uses `---:`, left-align uses `:---`
+    sep_cells = []
+    for i, col in enumerate(columns):
+        dashes = "-" * col_widths[i]
+        if col.align == ">":
+            sep_cells.append(dashes[:-1] + ":")
+        else:
+            sep_cells.append(":" + dashes[1:])
+    lines.append("| " + " | ".join(sep_cells) + " |")
+
+    # Data rows
+    for row in rows:
+        cells = [
+            _cell(row[i] if i < len(row) else "", col_widths[i], columns[i].align)
+            for i in range(len(columns))
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
 
     return "\n".join(lines)

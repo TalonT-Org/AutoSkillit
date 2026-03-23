@@ -393,6 +393,119 @@ class TestIngredientSortOrder:
         )
 
 
+class TestFormatIngredientsTableGfmWidthCap:
+    """GFM table width cap — mirrors test_ansi.py behavioral tests for the GFM path."""
+
+    def _recipe_with_long_desc(self, desc: str):
+        """Build a minimal Recipe with one ingredient whose description is `desc`."""
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
+
+        return Recipe(
+            name="test",
+            description="test recipe",
+            ingredients={"param": RecipeIngredient(description=desc, required=True)},
+            steps={"done": RecipeStep(action="stop", message="done")},
+            kitchen_rules=[],
+        )
+
+    def test_gfm_description_column_capped_at_max_width(self):
+        """format_ingredients_table must cap the description column at _GFM_DESC_MAX_WIDTH.
+
+        A 220-char description (as in implementation.yaml run_mode) must not produce a
+        220-wide GFM column. Each data row's description cell must be <= the cap.
+        """
+        from autoskillit.recipe._api import _GFM_DESC_MAX_WIDTH, format_ingredients_table
+
+        recipe = self._recipe_with_long_desc("X" * 220)
+        table = format_ingredients_table(recipe)
+        assert table is not None
+        for line in table.splitlines():
+            if "---" in line or "Description" in line:
+                continue
+            cells = [c.strip() for c in line.split("|") if c.strip()]
+            desc_cell = cells[1]  # description is the second column
+            assert len(desc_cell) <= _GFM_DESC_MAX_WIDTH, (
+                f"Description cell too wide ({len(desc_cell)} > {_GFM_DESC_MAX_WIDTH}): "
+                f"{desc_cell!r}"
+            )
+
+    def test_gfm_long_description_truncated_with_ellipsis(self):
+        """format_ingredients_table must truncate long descriptions with '…'."""
+        from autoskillit.recipe._api import format_ingredients_table
+
+        long_desc = "A" * 220
+        recipe = self._recipe_with_long_desc(long_desc)
+        table = format_ingredients_table(recipe)
+        assert table is not None
+        assert "…" in table, "Long description must be truncated with '…'"
+        assert "A" * 220 not in table, "Full 220-char description must not appear verbatim"
+
+    def test_gfm_short_description_not_truncated(self):
+        """Short descriptions must appear verbatim — no ellipsis for short content."""
+        from autoskillit.recipe._api import format_ingredients_table
+
+        recipe = self._recipe_with_long_desc("What to do with this parameter")
+        table = format_ingredients_table(recipe)
+        assert table is not None
+        assert "What to do with this parameter" in table
+        assert "…" not in table
+
+    def test_gfm_columns_aligned_with_mixed_description_lengths(self):
+        """All data rows must have consistent column positions even with varied desc lengths."""
+        from autoskillit.recipe._api import format_ingredients_table
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
+
+        recipe = Recipe(
+            name="test",
+            description="test recipe",
+            ingredients={
+                "short": RecipeIngredient(description="Short", required=True),
+                "long": RecipeIngredient(description="Y" * 220, required=False, default="val"),
+                "medium": RecipeIngredient(
+                    description="Medium length description here", required=False, default="x"
+                ),
+            },
+            steps={"done": RecipeStep(action="stop", message="done")},
+            kitchen_rules=[],
+        )
+        table = format_ingredients_table(recipe)
+        assert table is not None
+        data_lines = [
+            ln for ln in table.splitlines() if "|" in ln and "---" not in ln and "Name" not in ln
+        ]
+        # All data lines must have the same total length (GFM tables are fixed-width padded)
+        lengths = [len(ln) for ln in data_lines]
+        assert len(set(lengths)) == 1, (
+            f"Data rows have different lengths (misaligned columns): {lengths}"
+        )
+
+    def test_gfm_description_cap_with_real_implementation_recipe(self):
+        """Integration: format_ingredients_table on the real implementation recipe must
+        produce rows with description cells no wider than _GFM_DESC_MAX_WIDTH.
+
+        This is the regression test for GitHub Issue #489 (run_mode 220-char description).
+        """
+        from autoskillit.core import pkg_root
+        from autoskillit.recipe._api import _GFM_DESC_MAX_WIDTH, format_ingredients_table
+        from autoskillit.recipe.io import find_recipe_by_name, load_recipe
+
+        recipe_info = find_recipe_by_name("implementation", pkg_root() / "recipes")
+        assert recipe_info is not None
+        recipe = load_recipe(recipe_info.path)
+        table = format_ingredients_table(recipe)
+        assert table is not None
+        for line in table.splitlines():
+            if "---" in line or "Description" in line:
+                continue
+            cells = [c.strip() for c in line.split("|") if c.strip()]
+            if len(cells) >= 2:
+                desc_cell = cells[1]
+                assert len(desc_cell) <= _GFM_DESC_MAX_WIDTH, (
+                    f"run_mode description not capped in GFM output: "
+                    f"{len(desc_cell)} > {_GFM_DESC_MAX_WIDTH}"
+                )
+
+
 def test_build_ingredient_rows_returns_tuples():
     """build_ingredient_rows must return a list of (name, description, default) tuples
     with full (uncapped) description strings — the terminal renderer, not this function,

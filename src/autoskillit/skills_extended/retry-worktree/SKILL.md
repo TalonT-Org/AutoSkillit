@@ -116,7 +116,7 @@ Then assess what has been implemented:
 1. Read the plan file to understand the full scope
 2. Check what has been implemented so far:
    ```bash
-   REMOTE=$(git remote get-url upstream 2>/dev/null && echo upstream || echo origin)
+   REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
    git log --oneline $(git merge-base HEAD $REMOTE/${BASE_BRANCH})..HEAD
    git diff --stat $(git merge-base HEAD $REMOTE/${BASE_BRANCH})..HEAD
    ```
@@ -169,7 +169,7 @@ If tests fail, fix the issue and re-run.
 ### Step 5: Rebase for Squash-and-Merge
 
 ```bash
-REMOTE=$(git remote get-url upstream 2>/dev/null && echo upstream || echo origin)
+REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
 git fetch "$REMOTE"
 git rebase "$REMOTE/${BASE_BRANCH}"
 ```

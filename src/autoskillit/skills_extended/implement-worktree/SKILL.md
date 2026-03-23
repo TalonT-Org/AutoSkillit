@@ -181,7 +181,7 @@ If tests fail, fix the issue and re-run.
 
 ```bash
 CURRENT_BRANCH=$(cat ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch")
-REMOTE=$(git remote get-url upstream 2>/dev/null && echo upstream || echo origin)
+REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
 git fetch "$REMOTE"
 git rebase "$REMOTE/${CURRENT_BRANCH}"
 ```

@@ -63,7 +63,7 @@ Validation checks:
    # Resolve effective remote: prefer 'upstream' (clone isolation contract) over 'origin'.
    # In pipelines that use clone_repo(), 'origin' is a stale file:// URL and 'upstream'
    # holds the real GitHub remote. In direct checkout repos, only 'origin' exists.
-   REMOTE=$(git -C {worktree_path} remote get-url upstream 2>/dev/null \
+   REMOTE=$(git -C {worktree_path} remote get-url upstream >/dev/null 2>&1 \
             && echo upstream \
             || echo origin)
    ```

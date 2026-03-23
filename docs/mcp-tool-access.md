@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 40 MCP tools organized into three access levels that control which
+AutoSkillit provides 42 MCP tools organized into three access levels that control which
 session types can see each tool.
 
 ## Three Access Levels
@@ -64,7 +64,7 @@ Server startup sequence:
    → reveals test_check only (the sole headless-tagged tool)
 
 4. When open_kitchen is called:
-   ctx.enable_components(tags={"kitchen"})   → reveals all 38 kitchen tools
+   ctx.enable_components(tags={"kitchen"})   → reveals all 40 kitchen tools
    ctx.disable_components(tags={subset})     → re-hides each disabled subset
    (session-level enable overwrites server-level disable, so re-disabling is required)
 ```
@@ -85,7 +85,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 40 tools with their access level, tags, source file, and functional category.
+All 42 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
@@ -139,6 +139,8 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 | `clone_repo` | AS, K, CL | `server/tools_clone.py` |
 | `remove_clone` | AS, K, CL | `server/tools_clone.py` |
 | `push_to_remote` | AS, K, GH | `server/tools_clone.py` |
+| `register_clone_status` | AS, K, CL | `server/tools_clone.py` |
+| `batch_cleanup_clones` | AS, K, CL | `server/tools_clone.py` |
 
 ---
 
@@ -195,7 +197,7 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 
 ---
 
-**Total: 40 tools** — 2 Free Range + 1 Headless-tagged + 37 Kitchen-only
+**Total: 42 tools** — 2 Free Range + 1 Headless-tagged + 39 Kitchen-only
 
 For subset configuration that can hide functional-category tools, see
 [Subset Categories](subset-categories.md).

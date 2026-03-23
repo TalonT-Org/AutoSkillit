@@ -20,6 +20,15 @@ from autoskillit.workspace.clone import (
     push_to_remote,
     remove_clone,
 )
+from autoskillit.workspace.clone_registry import (
+    cleanup_candidates as cleanup_candidates,
+)
+from autoskillit.workspace.clone_registry import (
+    read_registry as read_registry,
+)
+from autoskillit.workspace.clone_registry import (
+    register_clone as register_clone,
+)
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
@@ -36,11 +45,14 @@ delete_directory_contents = _delete_directory_contents
 
 __all__ = [
     "CleanupResult",
+    "cleanup_candidates",
     "delete_directory_contents",
     "classify_remote_url",
     "DefaultCloneManager",
     "DefaultWorkspaceManager",
     "DefaultSessionSkillManager",
+    "read_registry",
+    "register_clone",
     "SkillResolver",
     "SkillsDirectoryProvider",
     "bundled_skills_dir",

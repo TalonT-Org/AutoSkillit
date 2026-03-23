@@ -183,6 +183,8 @@ class TestToolRegistration:
             "get_pr_reviews",
             "bulk_close_issues",
             "set_commit_status",
+            "register_clone_status",
+            "batch_cleanup_clones",
         }
         assert expected == tool_names
 

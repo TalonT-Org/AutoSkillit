@@ -306,16 +306,16 @@ class TestClaimReleaseGates:
         for name in self.RECIPES_WITH_RELEASE_SUCCESS_STEP:
             data = yaml.safe_load(_recipe_path(name).read_text())
             step = data["steps"]["release_issue_success"]
-            assert step["on_success"] == "confirm_cleanup", (
-                f"{name}: release_issue_success.on_success should be confirm_cleanup"
+            assert step["on_success"] == "check_defer_cleanup", (
+                f"{name}: release_issue_success.on_success should be check_defer_cleanup"
             )
 
     def test_release_issue_failure_routes_to_cleanup_failure(self):
         for name in self.RECIPES:
             data = yaml.safe_load(_recipe_path(name).read_text())
             step = data["steps"]["release_issue_failure"]
-            assert step["on_success"] == "cleanup_failure", (
-                f"{name}: release_issue_failure.on_success should be cleanup_failure"
+            assert step["on_success"] == "check_defer_on_failure", (
+                f"{name}: release_issue_failure.on_success should be check_defer_on_failure"
             )
 
     def test_ci_watch_on_success_routing(self):

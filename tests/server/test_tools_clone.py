@@ -316,6 +316,7 @@ class TestBatchCleanupClonesTool:
         assert success_path in result["deleted"]
         assert error_path in result["preserved"]
         assert result["delete_failures"] == []
+        mock_mgr.remove_clone.assert_called_once_with(success_path, "false")
 
     @pytest.mark.anyio
     async def test_batch_cleanup_clones_empty_registry(self, tool_ctx, tmp_path):

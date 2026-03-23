@@ -91,6 +91,6 @@ def test_step2_prose_instructs_suffix_stripping(text):
     step2_idx = text.find("### Step 2")
     assert step2_idx != -1, "Step 2 must exist"
     step2_section = text[step2_idx : step2_idx + 2000]
-    assert "PART" in step2_section and "ONLY" in step2_section, (
-        "Step 2 prose must mention stripping the PART X ONLY suffix"
+    assert re.search(r"PART.*ONLY", step2_section), (
+        "Step 2 prose must mention stripping the PART X ONLY suffix as a complete phrase"
     )

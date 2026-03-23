@@ -358,13 +358,24 @@ def skill_md() -> str:
 
 
 def test_resolve_merge_conflicts_remote_variable_is_defined(skill_md: str) -> None:
-    """SKILL.md bash blocks must assign a REMOTE variable before any fetch/rebase."""
-    # The REMOTE= assignment must appear in one of the bash blocks
-    bash_blocks = "\n".join(re.findall(r"```bash\s*\n(.*?)```", skill_md, re.DOTALL))
-    assert "REMOTE=" in bash_blocks, (
-        "resolve-merge-conflicts SKILL.md bash blocks must assign REMOTE= "
-        "(upstream || origin fallback) before fetch/rebase operations. "
-        "Found no REMOTE= assignment in bash blocks."
+    """SKILL.md bash blocks must assign REMOTE using the upstream-or-origin fallback pattern."""
+    bash_blocks = re.findall(r"```bash\s*\n(.*?)```", skill_md, re.DOTALL)
+    assert bash_blocks, (
+        "resolve-merge-conflicts SKILL.md has no bash blocks — cannot verify REMOTE assignment"
+    )
+    joined = "\n".join(bash_blocks)
+    # Require the upstream-or-origin pattern, not merely any REMOTE= assignment.
+    # Pattern: git remote get-url upstream ... && echo upstream ... || echo origin
+    upstream_or_origin = re.search(
+        r"REMOTE=\$\(.*?get-url\s+upstream.*?\|\|\s*echo\s+origin\s*\)",
+        joined,
+        re.DOTALL,
+    )
+    assert upstream_or_origin is not None, (
+        "resolve-merge-conflicts SKILL.md bash blocks must assign REMOTE using the "
+        "upstream-or-origin fallback pattern: "
+        "REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin). "
+        "A bare 'REMOTE=origin' or similar trivial assignment was found instead."
     )
 
 

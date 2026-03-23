@@ -116,8 +116,9 @@ def _check_undefined_bash_placeholder(ctx: ValidationContext) -> list[RuleFindin
 _GIT_REMOTE_COMMAND_RE: re.Pattern[str] = re.compile(
     r"\bgit\b.*?\b(?:fetch|rebase|log|show|rev-parse)\b"
 )
-# Matches literal 'origin' not immediately preceded by $ or { (i.e., not a shell variable).
-_LITERAL_ORIGIN_RE: re.Pattern[str] = re.compile(r"(?<!\$)(?<!\{)\borigin\b")
+# Matches literal 'origin' not immediately preceded by $, {, or - (i.e., not a shell
+# variable reference or shell default-value expression like ${REMOTE:-origin}).
+_LITERAL_ORIGIN_RE: re.Pattern[str] = re.compile(r"(?<!\$)(?<!\{)(?<!-)\borigin\b")
 
 
 def _has_hardcoded_origin_in_bash(bash_blocks: list[str]) -> bool:
@@ -140,8 +141,8 @@ def _has_hardcoded_origin_in_bash(bash_blocks: list[str]) -> bool:
         "A SKILL.md bash block uses the literal remote name 'origin' in a git command "
         "that contacts a remote (fetch, rebase, log, show, rev-parse). In clone-isolated "
         "pipelines, clone_repo() sets origin=file://, making this a stale local path. "
-        "Use: REMOTE=$(git remote get-url upstream 2>/dev/null && echo upstream || echo origin) "
-        "and reference $REMOTE throughout."
+        "Use: REMOTE=$(git remote get-url upstream >/dev/null 2>&1 "
+        "&& echo upstream || echo origin) and reference $REMOTE throughout."
     ),
 )
 def _check_hardcoded_origin_remote(ctx: ValidationContext) -> list[RuleFinding]:

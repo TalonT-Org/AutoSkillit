@@ -349,7 +349,17 @@ def test_hardcoded_origin_does_not_fire_on_fixed_resolve_merge_conflicts(tmp_pat
     """
     Regression anchor: bundled resolve-merge-conflicts must NOT trigger hardcoded-origin-remote
     after Part B fixes the skill to use REMOTE=$(upstream || origin) instead of literal 'origin'.
+
+    Uses SKILL_SEARCH_DIRS isolation: copies the real bundled skill content into tmp_path so
+    the test fails with a clear assertion error (not an opaque ENOENT) if the skill is renamed.
     """
+    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+
+    skill_info = SkillResolver().resolve("resolve-merge-conflicts")
+    assert skill_info is not None, "bundled resolve-merge-conflicts skill not found"
+    skill_dir = tmp_path / "resolve-merge-conflicts"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_bytes(skill_info.path.read_bytes())
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(
         _make_recipe_for_skill(
@@ -358,8 +368,8 @@ def test_hardcoded_origin_does_not_fire_on_fixed_resolve_merge_conflicts(tmp_pat
         )
     )
     recipe = load_recipe(recipe_path)
-    # No SKILL_SEARCH_DIRS patch — use the real bundled skill
-    findings = run_semantic_rules(recipe)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
     assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
         "hardcoded-origin-remote fired on resolve-merge-conflicts after Part B fix — "
         "check that all literal 'origin' references in bash blocks have been replaced with $REMOTE"
@@ -370,7 +380,17 @@ def test_hardcoded_origin_does_not_fire_on_fixed_retry_worktree(tmp_path: Path) 
     """
     Regression anchor: bundled retry-worktree must NOT trigger hardcoded-origin-remote
     after Part B fixes the skill to use REMOTE=$(upstream || origin) instead of literal 'origin'.
+
+    Uses SKILL_SEARCH_DIRS isolation: copies the real bundled skill content into tmp_path so
+    the test fails with a clear assertion error (not an opaque ENOENT) if the skill is renamed.
     """
+    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+
+    skill_info = SkillResolver().resolve("retry-worktree")
+    assert skill_info is not None, "bundled retry-worktree skill not found"
+    skill_dir = tmp_path / "retry-worktree"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_bytes(skill_info.path.read_bytes())
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(
         _make_recipe_for_skill(
@@ -379,7 +399,8 @@ def test_hardcoded_origin_does_not_fire_on_fixed_retry_worktree(tmp_path: Path) 
         )
     )
     recipe = load_recipe(recipe_path)
-    findings = run_semantic_rules(recipe)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
     assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
         "hardcoded-origin-remote fired on retry-worktree after Part B fix — "
         "check that all literal 'origin' references in bash blocks have been replaced with $REMOTE"
@@ -412,3 +433,43 @@ def test_hardcoded_origin_ignores_comment_lines(tmp_path: Path) -> None:
     with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert "hardcoded-origin-remote" not in [f.rule for f in findings]
+
+
+def test_hardcoded_origin_silent_for_shell_default_value_expression(tmp_path: Path) -> None:
+    """hardcoded-origin-remote must NOT fire for ${REMOTE:-origin} shell default-value syntax.
+
+    In `${REMOTE:-origin}`, 'origin' is the fallback in a parameter expansion, not a
+    hardcoded literal. The char immediately before 'origin' is '-' (from ':-'), which is
+    now guarded by the (?<!-) lookbehind in _LITERAL_ORIGIN_RE.
+    """
+    skill_dir = tmp_path / "default-val-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # default-val-skill
+            ## Arguments
+            `{worktree_path}` — worktree path
+            `{base_branch}` — branch
+
+            ### Step 0
+            ```bash
+            git -C {worktree_path} fetch "${REMOTE:-origin}" "{base_branch}"
+            git -C {worktree_path} rebase "${REMOTE:-origin}/{base_branch}"
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(
+        _make_recipe_for_skill(
+            "default-val-skill", {"worktree_path": "worktree", "base_branch": "branch"}
+        )
+    )
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
+        "Rule fired on ${REMOTE:-origin} shell default-value expression — "
+        "the (?<!-) lookbehind in _LITERAL_ORIGIN_RE should guard this pattern"
+    )

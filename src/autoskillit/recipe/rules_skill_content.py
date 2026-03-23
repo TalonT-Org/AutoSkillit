@@ -113,6 +113,78 @@ def _check_undefined_bash_placeholder(ctx: ValidationContext) -> list[RuleFindin
     return findings
 
 
+_GIT_REMOTE_COMMAND_RE: re.Pattern[str] = re.compile(
+    r"\bgit\b.*?\b(?:fetch|rebase|log|show|rev-parse)\b"
+)
+# Matches literal 'origin' not immediately preceded by $, {, or - (i.e., not a shell
+# variable reference or shell default-value expression like ${REMOTE:-origin}).
+_LITERAL_ORIGIN_RE: re.Pattern[str] = re.compile(r"(?<!\$)(?<!\{)(?<!-)\borigin\b")
+
+
+def _has_hardcoded_origin_in_bash(bash_blocks: list[str]) -> bool:
+    """Return True if any non-comment bash line uses literal 'origin' in a git remote command."""
+    for block in bash_blocks:
+        for line in block.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if not _GIT_REMOTE_COMMAND_RE.search(stripped):
+                continue
+            if _LITERAL_ORIGIN_RE.search(stripped):
+                return True
+    return False
+
+
+@semantic_rule(
+    name="hardcoded-origin-remote",
+    description=(
+        "A SKILL.md bash block uses the literal remote name 'origin' in a git command "
+        "that contacts a remote (fetch, rebase, log, show, rev-parse). In clone-isolated "
+        "pipelines, clone_repo() sets origin=file://, making this a stale local path. "
+        "Use: REMOTE=$(git remote get-url upstream >/dev/null 2>&1 "
+        "&& echo upstream || echo origin) and reference $REMOTE throughout."
+    ),
+)
+def _check_hardcoded_origin_remote(ctx: ValidationContext) -> list[RuleFinding]:
+    """Fire for any run_skill step whose SKILL.md bash blocks hardcode the 'origin' remote."""
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(skill_name)
+        if skill_md is None:
+            continue  # unknown-skill-command rule handles missing skills
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        bash_blocks = extract_bash_blocks(content)
+        if not bash_blocks:
+            continue
+        if _has_hardcoded_origin_in_bash(bash_blocks):
+            findings.append(
+                RuleFinding(
+                    rule="hardcoded-origin-remote",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Skill '{skill_name}' bash block uses the literal remote name 'origin' "
+                        f"in a git fetch/rebase/log/show/rev-parse command. In clone-isolated "
+                        f"pipelines (clone_repo sets origin=file://), this fetches from a stale "
+                        f"local path. Use: REMOTE=$(git remote get-url upstream 2>/dev/null "
+                        f"&& echo upstream || echo origin) and reference $REMOTE throughout."
+                    ),
+                )
+            )
+    return findings
+
+
 _NO_MARKDOWN_DIRECTIVE_PATTERN: re.Pattern[str] = re.compile(
     r"no\s+markdown\s+format|plain\s+text.*token|literal\s+plain\s+text",
     re.IGNORECASE,

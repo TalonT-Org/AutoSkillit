@@ -58,11 +58,20 @@ Validation checks:
    git -C {worktree_path} rev-parse --git-dir
    ```
 2. Verify `plan_path` file exists (readable Markdown).
-3. Verify `base_branch` is reachable:
+3. Resolve effective remote:
    ```bash
-   git -C {worktree_path} rev-parse --verify origin/{base_branch}
+   # Resolve effective remote: prefer 'upstream' (clone isolation contract) over 'origin'.
+   # In pipelines that use clone_repo(), 'origin' is a stale file:// URL and 'upstream'
+   # holds the real GitHub remote. In direct checkout repos, only 'origin' exists.
+   REMOTE=$(git -C {worktree_path} remote get-url upstream >/dev/null 2>&1 \
+            && echo upstream \
+            || echo origin)
    ```
-   If origin ref is not found, run `git -C {worktree_path} fetch origin {base_branch}` first.
+4. Verify `base_branch` is reachable:
+   ```bash
+   git -C {worktree_path} rev-parse --verify $REMOTE/{base_branch}
+   ```
+   If remote ref is not found, run `git -C {worktree_path} fetch $REMOTE {base_branch}` first.
 
 ### Step 1 — Load conflict context
 
@@ -77,17 +86,17 @@ Run commit log queries to understand the divergence:
 
 ```bash
 # What commits exist in the worktree that are not on the integration branch
-git -C {worktree_path} log --oneline origin/{base_branch}..HEAD
+git -C {worktree_path} log --oneline $REMOTE/{base_branch}..HEAD
 
 # What commits the integration branch received since the worktree was created
-git -C {worktree_path} fetch origin
-git -C {worktree_path} log --oneline HEAD..origin/{base_branch}
+git -C {worktree_path} fetch $REMOTE
+git -C {worktree_path} log --oneline HEAD..$REMOTE/{base_branch}
 ```
 
 ### Step 2 — Re-attempt rebase to surface conflicts
 
 ```bash
-git -C {worktree_path} rebase origin/{base_branch}
+git -C {worktree_path} rebase $REMOTE/{base_branch}
 ```
 
 **On success (clean rebase):** The integration branch advanced in a non-conflicting way
@@ -112,11 +121,11 @@ to understand the specific lines in tension.
 
 #### 3.3 — Determine intent of **theirs** (integration branch side)
 
-- Run `git -C {worktree_path} log --oneline origin/{base_branch} -5 -- {file}` to see recent
+- Run `git -C {worktree_path} log --oneline $REMOTE/{base_branch} -5 -- {file}` to see recent
   integration-branch commits touching this file
 - Retrieve integration-branch file content:
   ```bash
-  git -C {worktree_path} show origin/{base_branch}:{file}
+  git -C {worktree_path} show $REMOTE/{base_branch}:{file}
   ```
 - Infer the functional intent: what behavior was being added or changed?
 

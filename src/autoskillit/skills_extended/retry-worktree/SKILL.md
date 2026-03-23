@@ -92,7 +92,7 @@ base-branch store file written by `implement-worktree-no-merge` (fallback).
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 # Primary: read upstream tracking set by implement-worktree-no-merge
-BASE_BRANCH=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null | sed 's|origin/||')
+BASE_BRANCH=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null | sed 's|^[^/]*/||')
 
 if [ -z "$BASE_BRANCH" ]; then
     # Fallback: read explicit file store written by implement-worktree-no-merge
@@ -116,8 +116,9 @@ Then assess what has been implemented:
 1. Read the plan file to understand the full scope
 2. Check what has been implemented so far:
    ```bash
-   git log --oneline $(git merge-base HEAD origin/${BASE_BRANCH})..HEAD
-   git diff --stat $(git merge-base HEAD origin/${BASE_BRANCH})..HEAD
+   REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+   git log --oneline $(git merge-base HEAD $REMOTE/${BASE_BRANCH})..HEAD
+   git diff --stat $(git merge-base HEAD $REMOTE/${BASE_BRANCH})..HEAD
    ```
 3. Compare implemented changes against plan phases to determine:
    - Which phases are complete
@@ -168,8 +169,9 @@ If tests fail, fix the issue and re-run.
 ### Step 5: Rebase for Squash-and-Merge
 
 ```bash
-git fetch origin
-git rebase origin/${BASE_BRANCH}
+REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+git fetch "$REMOTE"
+git rebase "$REMOTE/${BASE_BRANCH}"
 ```
 
 If conflicts occur, resolve them, `git rebase --continue`, then re-run tests. Report rebase status.

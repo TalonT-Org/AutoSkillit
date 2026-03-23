@@ -1,5 +1,6 @@
 """Contract tests for open-pr skill — requirement traceability."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -72,4 +73,24 @@ def test_open_pr_skill_removes_token_summary_path_arg(text):
     """token_summary_path must no longer be documented as a positional arg."""
     assert "token_summary_path" not in text, (
         "token_summary_path arg must be removed; skill self-retrieves now"
+    )
+
+
+def test_part_suffix_stripped_in_bash_block(text):
+    """Step 2 bash block must strip the '— PART X ONLY' suffix from BASE_TITLE."""
+    # Verify the sed strip is chained on the same line as the BASE_TITLE assignment,
+    # and requires a pipe — guards against sed and PART pattern appearing separately
+    pattern = r"BASE_TITLE=.*\|.*sed.*PART \[A-Z\] ONLY"
+    assert re.search(pattern, text), (
+        "BASE_TITLE extraction must pipe through sed stripping PART X ONLY suffix"
+    )
+
+
+def test_step2_prose_instructs_suffix_stripping(text):
+    """Step 2 prose must explicitly instruct stripping the PART X ONLY suffix."""
+    step2_idx = text.find("### Step 2")
+    assert step2_idx != -1, "Step 2 must exist"
+    step2_section = text[step2_idx : step2_idx + 2000]
+    assert re.search(r"PART.*ONLY", step2_section), (
+        "Step 2 prose must mention stripping the PART X ONLY suffix as a complete phrase"
     )

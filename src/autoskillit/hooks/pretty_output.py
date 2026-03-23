@@ -25,7 +25,7 @@ _HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", "temp", ".autoskillit_hook_confi
 
 @dataclass(frozen=True)
 class _DictPayload:
-    data: dict
+    data: dict[str, Any]
 
 
 @dataclass(frozen=True)

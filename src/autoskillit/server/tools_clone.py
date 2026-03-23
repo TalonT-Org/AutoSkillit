@@ -335,28 +335,30 @@ async def batch_cleanup_clones(
                        .autoskillit/temp/clone-cleanup-registry.json in cwd.
         step_name: Optional YAML step key for wall-clock timing accumulation.
     """
-    if (gate := _require_enabled()) is not None:
-        return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="batch_cleanup_clones")
-    logger.info("batch_cleanup_clones", registry_path=registry_path)
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-    _start = time.monotonic()
     try:
+        if (gate := _require_enabled()) is not None:
+            return gate
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="batch_cleanup_clones")
+        logger.info("batch_cleanup_clones", registry_path=registry_path)
+
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
         if tool_ctx.clone_mgr is None:
             return json.dumps(
                 {"deleted": [], "preserved": [], "error": "Clone manager not configured"}
             )
-        result = await asyncio.to_thread(
-            clone_registry.batch_delete, registry_path, tool_ctx.clone_mgr.remove_clone
-        )
-        return json.dumps(result)
+
+        _start = time.monotonic()
+        try:
+            result = await asyncio.to_thread(
+                clone_registry.batch_delete, registry_path, tool_ctx.clone_mgr.remove_clone
+            )
+            return json.dumps(result)
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.warning("batch_cleanup_clones failed", exc_info=True)
         return json.dumps({"deleted": [], "preserved": [], "error": str(exc)})
-    finally:
-        if step_name:
-            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

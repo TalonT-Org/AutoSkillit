@@ -347,7 +347,12 @@ async def batch_cleanup_clones(
         tool_ctx = _get_ctx()
         if tool_ctx.clone_mgr is None:
             return json.dumps(
-                {"deleted": [], "preserved": [], "error": "Clone manager not configured"}
+                {
+                    "deleted": [],
+                    "delete_failures": [],
+                    "preserved": [],
+                    "error": "Clone manager not configured",
+                }
             )
 
         _start = time.monotonic()

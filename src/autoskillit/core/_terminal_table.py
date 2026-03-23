@@ -79,7 +79,6 @@ def _render_gfm_table(
     Cells exceeding max_width are truncated with '…'. Output is flush-left GFM syntax
     with no two-space indent prefix.
     """
-    # Compute capped column widths (same formula as _render_terminal_table)
     col_widths = []
     for i, col in enumerate(columns):
         data_width = max(

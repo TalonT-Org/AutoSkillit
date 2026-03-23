@@ -645,10 +645,11 @@ def _resolve_payload(tool_name: str, tool_response: str) -> _Payload | None:
             inner = json.loads(data["result"])
             if isinstance(inner, dict):
                 return _DictPayload(data=inner)
-            # Inner parsed but is not a dict (e.g. list, int) — treat as plain text
+            # Inner parsed but is not a dict (e.g. list, int) — pass through unformatted
+            return None
         except (json.JSONDecodeError, ValueError):
             pass
-        # Inner content is plain text (not valid JSON or not a dict)
+        # Inner content is plain text (not valid JSON)
         return _PlainTextPayload(text=data["result"])
 
     return _DictPayload(data=data)

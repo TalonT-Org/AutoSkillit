@@ -103,9 +103,11 @@ def _render_gfm_table(
     lines.append("| " + " | ".join(header_cells) + " |")
 
     # Separator row: right-align uses `---:`, left-align uses `:---`
+    # GFM requires at least one dash per separator cell; enforce minimum width of 3.
     sep_cells = []
     for i, col in enumerate(columns):
-        dashes = "-" * col_widths[i]
+        sep_width = max(col_widths[i], 3)
+        dashes = "-" * sep_width
         if col.align == ">":
             sep_cells.append(dashes[:-1] + ":")
         else:

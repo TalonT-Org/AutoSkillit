@@ -10,6 +10,7 @@ Registry file format:
 
 from __future__ import annotations
 
+import fcntl
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -36,16 +37,21 @@ def register_clone(
     status: CloneStatus,
     registry_path: str = "",
 ) -> dict[str, str]:
-    """Append a clone entry to the registry. Atomic write — safe for parallel callers."""
+    """Append a clone entry to the registry. Safe for parallel callers — holds an
+    exclusive advisory lock across the entire read-modify-write sequence."""
     path = _resolve_registry_path(registry_path)
-    existing: list[dict[str, str]] = []
-    if path.exists():
-        try:
-            existing = json.loads(path.read_text()).get("clones", [])
-        except (json.JSONDecodeError, OSError) as exc:
-            _log.warning("clone_registry: could not read %s: %s", path, exc)
-    existing.append({"path": clone_path, "status": status})
-    atomic_write(path, json.dumps({"clones": existing}, indent=2))
+    lock_path = path.with_suffix(".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        existing: list[dict[str, str]] = []
+        if path.exists():
+            try:
+                existing = json.loads(path.read_text()).get("clones", [])
+            except (json.JSONDecodeError, OSError) as exc:
+                _log.warning("clone_registry: could not read %s: %s", path, exc)
+        existing.append({"path": clone_path, "status": status})
+        atomic_write(path, json.dumps({"clones": existing}, indent=2))
     return {"registered": "true", "registry_path": str(path)}
 
 
@@ -70,8 +76,8 @@ def cleanup_candidates(
     to_preserve — clones with status='error'  (preserve for investigation)
     """
     entries = read_registry(registry_path)
-    to_delete = [e["path"] for e in entries if e.get("status") == "success"]
-    to_preserve = [e["path"] for e in entries if e.get("status") == "error"]
+    to_delete = [e["path"] for e in entries if e.get("status") == "success" and "path" in e]
+    to_preserve = [e["path"] for e in entries if e.get("status") == "error" and "path" in e]
     return to_delete, to_preserve
 
 

@@ -140,7 +140,7 @@ for `recipe:remediation` issues. Direct recipe invocations using `run_name="impl
 (the default) are unaffected.
 
 ```bash
-BASE_TITLE="$(head -1 {plan_path} | sed 's/^# //' | sed 's/ *— *PART [A-Z] ONLY$//')"
+BASE_TITLE="$(head -1 {plan_path} | sed 's/^# //' | LC_ALL=en_US.UTF-8 sed 's/ *— *PART [A-Z] ONLY$//')"
 case "$RUN_NAME" in
   feature*) TITLE="[FEATURE] $BASE_TITLE" ;;
   fix*)     TITLE="[FIX] $BASE_TITLE" ;;

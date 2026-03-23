@@ -54,3 +54,40 @@ class TestFormatterSchemaConsistency:
             assert str(data[key]) in output, (
                 f"Field '{key}' value missing from formatted kitchen_status output"
             )
+
+    @pytest.mark.anyio
+    async def test_integration_get_token_summary_table_not_eaten(self, tool_ctx):
+        """T-6: Real get_token_summary(format='table') response must survive _format_response."""
+        from autoskillit.hooks.pretty_output import _format_response
+        from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+        # Simulate what the real tool handler returns for format="table"
+        steps = [
+            {
+                "step_name": "implement",
+                "input_tokens": 45000,
+                "output_tokens": 12000,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "invocation_count": 1,
+                "wall_clock_seconds": 120.0,
+            }
+        ]
+        total = {
+            "input_tokens": 45000,
+            "output_tokens": 12000,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "total_elapsed_seconds": 120.0,
+        }
+        table_str = TelemetryFormatter.format_token_table(steps, total)
+        # Simulate Claude Code wrapping
+        tool_response = json.dumps({"result": table_str})
+        result = _format_response(
+            "mcp__plugin_autoskillit_autoskillit__get_token_summary",
+            tool_response,
+            pipeline=True,
+        )
+        assert result is not None
+        assert "## Token Usage Summary" in result
+        assert "implement" in result

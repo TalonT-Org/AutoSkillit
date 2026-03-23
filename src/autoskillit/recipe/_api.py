@@ -61,7 +61,7 @@ _logger = get_logger(__name__)
 # GFM ingredient table column specs
 # ---------------------------------------------------------------------------
 
-_GFM_DESC_MAX_WIDTH: int = 60  # mirrors TerminalColumn("Description", max_width=60)
+_GFM_DESC_MAX_WIDTH: int = 60
 
 _GFM_INGREDIENT_COLUMNS: tuple[TerminalColumn, ...] = (
     TerminalColumn("Name", max_width=30, align=">"),

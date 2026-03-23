@@ -681,7 +681,6 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
     if data.get("subtype") == "tool_exception":
         return _fmt_tool_exception(data, pipeline)
 
-    # _UNFORMATTED_TOOLS is now an active behavioral gate (not just documentation).
     if short_name in _UNFORMATTED_TOOLS:
         return _fmt_generic(short_name, data, pipeline)
 

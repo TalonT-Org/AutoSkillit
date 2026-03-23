@@ -1,10 +1,12 @@
-"""Tests for the undefined-bash-placeholder semantic rule."""
+"""Tests for the undefined-bash-placeholder and hardcoded-origin-remote semantic rules."""
 
 from __future__ import annotations
 
 import textwrap
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 import autoskillit.recipe.rules_skill_content as _rsc
 from autoskillit.recipe.io import load_recipe
@@ -223,3 +225,187 @@ def test_output_section_no_markdown_rule_passes_when_directive_present(tmp_path:
 
     rule_ids = [f.rule for f in findings]
     assert "output-section-no-markdown-directive" not in rule_ids
+
+
+# ---------------------------------------------------------------------------
+# hardcoded-origin-remote tests
+# ---------------------------------------------------------------------------
+
+
+def _make_recipe_for_skill(skill_name: str, ingredients: dict[str, str]) -> str:
+    """Generate minimal recipe YAML invoking the named skill."""
+    parts = [
+        "name: test-recipe",
+        "kitchen_rules:",
+        '  - "Use run_skill only."',
+    ]
+    if ingredients:
+        parts.append("ingredients:")
+        for k, v in ingredients.items():
+            parts.extend([f"  {k}:", f"    description: {v}", "    required: true"])
+    args = " ".join("${{{{ inputs." + k + " }}}}" for k in ingredients)
+    skill_cmd = f"/autoskillit:{skill_name}"
+    if args:
+        skill_cmd += f" {args}"
+    parts.extend(
+        [
+            "steps:",
+            "  run_impl:",
+            "    tool: run_skill",
+            "    with:",
+            f'      skill_command: "{skill_cmd}"',
+            "    on_success: done",
+            "",
+        ]
+    )
+    return "\n".join(parts)
+
+
+@pytest.mark.parametrize(
+    "bash_line,label",
+    [
+        ("git -C {worktree_path} fetch origin", "fetch origin"),
+        ("git rebase origin/{base_branch}", "rebase origin/"),
+        ("git log --oneline origin/{base_branch}..HEAD", "log origin/"),
+        ("git show origin/{base_branch}:{file}", "show origin/"),
+        ("git -C {worktree_path} rev-parse --verify origin/{base_branch}", "rev-parse origin/"),
+    ],
+)
+def test_hardcoded_origin_fires_for_git_remote_commands(
+    tmp_path: Path, bash_line: str, label: str
+) -> None:
+    """hardcoded-origin-remote must fire for any literal origin in git remote commands."""
+    skill_dir = tmp_path / "origin-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            f"""\
+            # origin-skill
+            ## Arguments
+            `{{worktree_path}}` — worktree path
+            `{{base_branch}}` — base branch
+
+            ### Step 1
+            ```bash
+            {bash_line}
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(
+        _make_recipe_for_skill(
+            "origin-skill", {"worktree_path": "worktree", "base_branch": "branch"}
+        )
+    )
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert "hardcoded-origin-remote" in [f.rule for f in findings], (
+        f"Rule did not fire for: {label!r}"
+    )
+
+
+def test_hardcoded_origin_silent_with_remote_variable(tmp_path: Path) -> None:
+    """hardcoded-origin-remote must NOT fire when skill uses $REMOTE variable."""
+    skill_dir = tmp_path / "remote-var-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # remote-var-skill
+            ## Arguments
+            `{worktree_path}` — worktree path
+            `{base_branch}` — branch
+
+            ### Step 0
+            ```bash
+            REMOTE=$(git -C {worktree_path} remote get-url upstream 2>/dev/null \\
+                     && echo upstream \\
+                     || echo origin)
+            git -C {worktree_path} fetch "$REMOTE"
+            git -C {worktree_path} rebase "$REMOTE/{base_branch}"
+            git -C {worktree_path} log --oneline "$REMOTE/{base_branch}..HEAD"
+            git -C {worktree_path} show "$REMOTE/{base_branch}:{file}"
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(
+        _make_recipe_for_skill(
+            "remote-var-skill", {"worktree_path": "worktree", "base_branch": "branch"}
+        )
+    )
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
+        "Rule fired unexpectedly on skill using $REMOTE variable"
+    )
+
+
+def test_hardcoded_origin_fires_on_bundled_resolve_merge_conflicts(tmp_path: Path) -> None:
+    """
+    Regression anchor: bundled resolve-merge-conflicts must trigger hardcoded-origin-remote
+    because it has 8 literal origin/ references. After Part B fixes the skill, this test
+    must be updated to assert the rule does NOT fire.
+    """
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(
+        _make_recipe_for_skill(
+            "resolve-merge-conflicts",
+            {"worktree_path": "wt", "plan_path": "plan", "base_branch": "branch"},
+        )
+    )
+    recipe = load_recipe(recipe_path)
+    # No SKILL_SEARCH_DIRS patch — use the real bundled skill
+    findings = run_semantic_rules(recipe)
+    assert "hardcoded-origin-remote" in [f.rule for f in findings], (
+        "Expected hardcoded-origin-remote finding before Part B fix"
+    )
+
+
+def test_hardcoded_origin_fires_on_bundled_retry_worktree(tmp_path: Path) -> None:
+    """
+    Regression anchor: bundled retry-worktree must trigger hardcoded-origin-remote.
+    After Part B fixes the skill, update to assert NOT in rule_ids.
+    """
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(
+        _make_recipe_for_skill(
+            "retry-worktree",
+            {"plan_path": "plan", "worktree_path": "wt"},
+        )
+    )
+    recipe = load_recipe(recipe_path)
+    findings = run_semantic_rules(recipe)
+    assert "hardcoded-origin-remote" in [f.rule for f in findings]
+
+
+def test_hardcoded_origin_ignores_comment_lines(tmp_path: Path) -> None:
+    """Lines starting with # must not be inspected for literal origin."""
+    skill_dir = tmp_path / "comment-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # comment-skill
+            ## Arguments
+            `{worktree_path}` — path
+
+            ### Step 1
+            ```bash
+            # In clone-isolated repos origin is file://, use $REMOTE instead
+            REMOTE=$(git remote get-url upstream 2>/dev/null && echo upstream || echo origin)
+            git fetch "$REMOTE"
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("comment-skill", {"worktree_path": "wt"}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert "hardcoded-origin-remote" not in [f.rule for f in findings]

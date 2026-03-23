@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +21,19 @@ if TYPE_CHECKING:
     from autoskillit.recipe._api import ListRecipesResult, LoadRecipeResult
 
 _HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", "temp", ".autoskillit_hook_config.json")
+
+
+@dataclass(frozen=True)
+class _DictPayload:
+    data: dict
+
+
+@dataclass(frozen=True)
+class _PlainTextPayload:
+    text: str
+
+
+_Payload = _DictPayload | _PlainTextPayload
 _CHECK_MARK = "\u2713"  # ✓
 _CROSS_MARK = "\u2717"  # ✗
 _WARN_MARK = "\u26a0"  # ⚠
@@ -223,15 +237,13 @@ def _fmt_merge_worktree(data: dict, _pipeline: bool) -> str:
 
 
 def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
-    """Format get_token_summary as compact Markdown-KV.
+    """Format get_token_summary compact Markdown-KV output.
 
-    Each step becomes: name xN [in:Xk out:Xk cached:XM t:Xs]
-    Prefers wall_clock_seconds over elapsed_seconds when both present.
-
-    When format="table" is used, the MCP response is a pre-formatted
-    markdown table string (not JSON). The outer _format_response detects
-    this as non-dict and returns None (pass-through), so this function
-    only receives the JSON dict format.
+    This formatter receives only the JSON dict payload (format="json").
+    When format="table" is used, the tool returns a pre-formatted markdown
+    string. _resolve_payload() detects this as a _PlainTextPayload and routes
+    it through _PLAIN_TEXT_FORMATTERS (pass-through), so this function is
+    never called for the table format.
     """
     lines = ["## token_summary", ""]
     steps = data.get("steps", [])
@@ -265,7 +277,13 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
 
 
 def _fmt_get_timing_summary(data: dict, _pipeline: bool) -> str:
-    """Format get_timing_summary as compact Markdown-KV.
+    """Format get_timing_summary compact Markdown-KV output.
+
+    This formatter receives only the JSON dict payload (format="json").
+    When format="table" is used, the tool returns a pre-formatted markdown
+    string. _resolve_payload() detects this as a _PlainTextPayload and routes
+    it through _PLAIN_TEXT_FORMATTERS (pass-through), so this function is
+    never called for the table format.
 
     Each step becomes: name xN [dur:Xs]
     """
@@ -430,26 +448,23 @@ _FMT_RECIPE_LIST_ITEM_SUPPRESSED: frozenset[str] = frozenset()
 
 
 def _fmt_open_kitchen(data: dict, pipeline: bool) -> str:
-    """Format open_kitchen result — plain text or combined kitchen+recipe."""
-    if "content" in data or ("error" in data and "kitchen" in data):
-        # Combined kitchen + recipe response
-        version = data.get("version", "")
+    """Format open_kitchen combined kitchen+recipe result."""
+    version = data.get("version", "")
 
-        error = data.get("error")
-        if error:
-            return (
-                f"## open_kitchen {_CROSS_MARK} v{version}\n\nKitchen open. Recipe error: {error}"
-            )
+    error = data.get("error")
+    if error:
+        return f"## open_kitchen {_CROSS_MARK} v{version}\n\nKitchen open. Recipe error: {error}"
 
-        valid = data.get("valid", True)
-        mark = _CHECK_MARK if valid else _CROSS_MARK
-        lines: list[str] = [f"## open_kitchen {mark} v{version}"]
-        lines.extend(_fmt_recipe_body(data))
-        return "\n".join(lines)
+    valid = data.get("valid", True)
+    mark = _CHECK_MARK if valid else _CROSS_MARK
+    lines: list[str] = [f"## open_kitchen {mark} v{version}"]
+    lines.extend(_fmt_recipe_body(data))
+    return "\n".join(lines)
 
-    # Plain text kitchen-open response (no recipe)
-    result = data.get("result", "")
-    return f"## open_kitchen\n\n{result}"
+
+def _fmt_open_kitchen_plain_text(text: str, _pipeline: bool) -> str:
+    """Format open_kitchen plain-text response (no recipe attached)."""
+    return f"## open_kitchen\n\n{text}"
 
 
 def _fmt_list_recipes(data: ListRecipesResult, pipeline: bool) -> str:
@@ -595,24 +610,34 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# Plain-text dispatch table: short tool name → handler(text, pipeline) -> str.
+# Used when _resolve_payload() returns a _PlainTextPayload. Named dict-formatters
+# in _FORMATTERS must never receive plain-text envelopes.
+_PLAIN_TEXT_FORMATTERS: dict[str, Callable[[str, bool], str]] = {
+    # open_kitchen returns a plain orchestrator-notice string when no recipe is loaded.
+    # All other plain-text responses pass through unchanged (pre-formatted markdown).
+    "open_kitchen": _fmt_open_kitchen_plain_text,
+}
 
-def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str | None:
-    """Parse tool_response JSON and dispatch to the appropriate formatter.
 
-    Returns formatted string or None if formatting should be skipped.
+def _resolve_payload(tool_name: str, tool_response: str) -> _Payload | None:
+    """Resolve a raw Claude Code PostToolUse event into a typed payload.
+
+    Returns:
+        _DictPayload  — tool returned a JSON dict (envelope successfully unwrapped,
+                         or outer response was already a bare dict).
+        _PlainTextPayload — tool returned a pre-formatted string (non-JSON inner content).
+        None          — response cannot be parsed or is not a dict at the outer level;
+                         hook should pass through.
     """
     try:
         data = json.loads(tool_response)
     except (json.JSONDecodeError, ValueError):
-        return None  # non-JSON response -> skip
+        return None
 
     if not isinstance(data, dict):
         return None
 
-    # Claude Code wraps MCP tool text responses in {"result": "<text>"} before
-    # passing to PostToolUse hooks. Unwrap when the inner value is a JSON object
-    # so formatters see the actual tool payload fields (success, exit_code, etc.).
-    # Scoped to MCP tools ("mcp__" prefix) since only MCP responses get envelope-wrapped.
     if (
         tool_name.startswith("mcp__")
         and list(data.keys()) == ["result"]
@@ -621,18 +646,46 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
         try:
             inner = json.loads(data["result"])
             if isinstance(inner, dict):
-                data = inner
+                return _DictPayload(data=inner)
+            # Inner parsed but is not a dict (e.g. list, int) — treat as plain text
         except (json.JSONDecodeError, ValueError):
-            pass  # Plain text result — leave as {"result": "<text>"} for _fmt_generic
+            pass
+        # Inner content is plain text (not valid JSON or not a dict)
+        return _PlainTextPayload(text=data["result"])
 
-    # Gate error: any tool can return this
+    return _DictPayload(data=data)
+
+
+def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str | None:
+    """Parse tool_response JSON and dispatch to the appropriate formatter.
+
+    Returns formatted string or None if formatting should be skipped.
+    """
+    payload = _resolve_payload(tool_name, tool_response)
+    if payload is None:
+        return None
+
+    short_name = _extract_tool_short_name(tool_name)
+
+    if isinstance(payload, _PlainTextPayload):
+        # Tool returned pre-formatted content. Named dict-formatters must not
+        # receive this shape. Route through the plain-text dispatch table or
+        # pass through unchanged.
+        handler = _PLAIN_TEXT_FORMATTERS.get(short_name)
+        return handler(payload.text, pipeline) if handler is not None else payload.text
+
+    # DictPayload path — envelope was successfully unwrapped (or was never an envelope).
+    data = payload.data
+
     if data.get("subtype") == "gate_error":
         return _fmt_gate_error(data, pipeline)
-
     if data.get("subtype") == "tool_exception":
         return _fmt_tool_exception(data, pipeline)
 
-    short_name = _extract_tool_short_name(tool_name)
+    # _UNFORMATTED_TOOLS is now an active behavioral gate (not just documentation).
+    if short_name in _UNFORMATTED_TOOLS:
+        return _fmt_generic(short_name, data, pipeline)
+
     formatter = _FORMATTERS.get(short_name)
     if formatter is not None:
         return formatter(data, pipeline)

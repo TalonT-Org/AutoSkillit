@@ -1504,7 +1504,10 @@ def test_get_token_summary_format_table_passes_through_unmodified(tmp_path):
 def test_get_timing_summary_format_table_passes_through_unmodified(tmp_path):
     """get_timing_summary(format='table') returns pre-formatted markdown;
     the hook must pass it through unchanged, not eat it via the named formatter."""
-    table = "## Step Timing Summary\n\n| Step | Duration | Invocations |\n|---|---|---|\n| clone | 4s | 1 |"
+    table = (
+        "## Step Timing Summary\n\n"
+        "| Step | Duration | Invocations |\n|---|---|---|\n| clone | 4s | 1 |"
+    )
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__get_timing_summary",
         "tool_response": json.dumps({"result": table}),

@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 
 import pytest
+import yaml
 
 from autoskillit.core import pkg_root
 from autoskillit.workspace.skills import SkillResolver
@@ -212,7 +213,6 @@ def test_output_path_tokens_synchronized() -> None:
             "group_files",
             "manifest_path",
             "summary_path",
-            "analysis_path",
             "remediation_path",
             "diagram_path",
             "triage_report",
@@ -220,7 +220,6 @@ def test_output_path_tokens_synchronized() -> None:
             "pr_order_file",
             "analysis_file",
             "conflict_report_path",
-            "config_path",
             "recipe_path",
         }
     )
@@ -246,4 +245,136 @@ def test_resolve_failures_skill_switches_code_index_to_worktree():
     assert project_root_idx != -1, "resolve-failures SKILL.md must reference PROJECT_ROOT"
     assert worktree_switch.start() > project_root_idx, (
         "worktree_path code-index switch must appear after initial PROJECT_ROOT init"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Path-capture structured output compliance
+# ---------------------------------------------------------------------------
+
+SKILL_CONTRACTS_PATH = pkg_root() / "recipe" / "skill_contracts.yaml"
+
+# Skills with path-capture contracts that must have their token instruction
+# in ## Critical Constraints (not only in ## Output or a late workflow step).
+PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
+    "make-plan": ["plan_path"],
+    "rectify": ["plan_path"],
+    "investigate": ["investigation_path"],
+    "make-groups": ["groups_path", "manifest_path", "group_files"],
+    "review-approach": ["review_path"],
+    "audit-impl": ["remediation_path"],
+    "arch-lens-c4-container": ["diagram_path"],
+    "arch-lens-process-flow": ["diagram_path"],
+    "arch-lens-data-lineage": ["diagram_path"],
+    "arch-lens-module-dependency": ["diagram_path"],
+    "arch-lens-concurrency": ["diagram_path"],
+    "arch-lens-error-resilience": ["diagram_path"],
+    "arch-lens-repository-access": ["diagram_path"],
+    "arch-lens-operational": ["diagram_path"],
+    "arch-lens-security": ["diagram_path"],
+    "arch-lens-development": ["diagram_path"],
+    "arch-lens-scenarios": ["diagram_path"],
+    "arch-lens-state-lifecycle": ["diagram_path"],
+    "arch-lens-deployment": ["diagram_path"],
+}
+
+ABSOLUTE_PATH_KEYWORDS = ("absolute", "/abs", "$(pwd)", "$(cd")
+
+
+def _read_skill_md(skill_name: str) -> str:
+    """Return the content of a skill's SKILL.md file."""
+    for rel_dir in ("skills_extended", "skills"):
+        path = pkg_root() / rel_dir / skill_name / "SKILL.md"
+        if path.exists():
+            return path.read_text()
+    raise FileNotFoundError(f"SKILL.md not found for skill: {skill_name}")
+
+
+def _extract_critical_constraints_section(skill_md: str) -> str:
+    """Return the text of the ## Critical Constraints section only."""
+    m = re.search(r"##\s+Critical Constraints\b(.+?)(?=\n##\s|\Z)", skill_md, re.DOTALL)
+    return m.group(1) if m else ""
+
+
+def _get_contracted_path_capture_skills() -> dict[str, list[str]]:
+    """Return {skill_name: [token_names]} for skills with path-capture contracts."""
+    raw = yaml.safe_load(SKILL_CONTRACTS_PATH.read_text())
+    skills_data = raw.get("skills", {}) if isinstance(raw, dict) else {}
+    result: dict[str, list[str]] = {}
+    for skill_name, contract in skills_data.items():
+        if not isinstance(contract, dict):
+            continue
+        patterns = contract.get("expected_output_patterns", [])
+        tokens = []
+        for pattern in patterns:
+            # Path-capture: token_name\s*=\s*/.+ (requires leading /)
+            m = re.match(r"^(\w+)\\s\*=\\s\*/.+", pattern)
+            if m:
+                tokens.append(m.group(1))
+        if tokens:
+            result[skill_name] = tokens
+    return result
+
+
+@pytest.mark.parametrize("skill_name,token_names", list(PATH_CAPTURE_SKILLS.items()))
+def test_path_capture_token_instruction_in_critical_constraints(
+    skill_name: str, token_names: list[str]
+) -> None:
+    """
+    Every skill with a path-capture contract must instruct the model to emit
+    the structured output token inside ## Critical Constraints.
+
+    Late-positioned instructions (only in ## Output or a workflow step) are
+    systematically under-weighted by the model in long-context sessions.
+    """
+    skill_md = _read_skill_md(skill_name)
+    constraints_section = _extract_critical_constraints_section(skill_md)
+    for token_name in token_names:
+        assert token_name in constraints_section, (
+            f"Skill '{skill_name}': token '{token_name}' must be referenced in "
+            f"## Critical Constraints, not only in ## Output or a late workflow step. "
+            f"Found section text:\n{constraints_section[:500]}"
+        )
+
+
+def test_every_contracted_skill_has_emit_instruction() -> None:
+    """
+    Every skill with a path-capture contract in skill_contracts.yaml must have
+    an emit instruction for that token somewhere in its SKILL.md.
+
+    A skill with a contract but no instruction will always produce CONTRACT_VIOLATION.
+    """
+    contracted = _get_contracted_path_capture_skills()
+    missing: list[str] = []
+    for skill_name, token_names in contracted.items():
+        try:
+            skill_md = _read_skill_md(skill_name)
+        except FileNotFoundError:
+            continue  # skill may be internal, skip
+        for token_name in token_names:
+            if token_name not in skill_md:
+                missing.append(f"{skill_name}: missing emit instruction for '{token_name}'")
+    assert not missing, (
+        "Skills with path-capture contracts but no emit instruction in SKILL.md:\n"
+        + "\n".join(f"  - {m}" for m in missing)
+    )
+
+
+@pytest.mark.parametrize("skill_name,token_names", list(PATH_CAPTURE_SKILLS.items()))
+def test_path_capture_token_instruction_mentions_absolute(
+    skill_name: str, token_names: list[str]
+) -> None:
+    """
+    The token instruction in ## Critical Constraints must reference absolute path,
+    not just say 'write to temp/' (relative path).
+    """
+    skill_md = _read_skill_md(skill_name)
+    constraints_section = _extract_critical_constraints_section(skill_md)
+    has_absolute_reference = any(
+        kw in constraints_section.lower() for kw in ABSOLUTE_PATH_KEYWORDS
+    )
+    assert has_absolute_reference, (
+        f"Skill '{skill_name}': ## Critical Constraints must mention absolute path "
+        f"(e.g., 'absolute', '$(pwd)', etc.) so the model knows to resolve the relative "
+        f"save path to an absolute path for the structured output token."
     )

@@ -36,6 +36,14 @@ hooks:
 - Show technology choices for each container
 - Identify external systems and integrations
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
+- After writing the diagram file, emit the **absolute path** as a structured output
+  token immediately before `%%ORDER_UP%%`. Resolve the relative `temp/arch-lens-c4-container/...`
+  save path to absolute by prepending the full CWD:
+  ```
+  diagram_path = /absolute/cwd/temp/arch-lens-c4-container/{filename}.md
+  %%ORDER_UP%%
+  ```
+  This token is MANDATORY — the pipeline cannot proceed without it.
 
 ---
 

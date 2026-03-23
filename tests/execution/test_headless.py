@@ -2789,8 +2789,6 @@ class TestOutputPathTokensDerivedFromContracts:
     _EXPECTED_OUTPUT_PATH_TOKENS = frozenset(
         {
             "analysis_file",
-            "analysis_path",
-            "config_path",
             "conflict_report_path",
             "diagnosis_path",
             "diagram_path",
@@ -2851,3 +2849,260 @@ class TestOutputPathTokensDerivedFromContracts:
             f"Extra (in production, not in fixture): {extra}\n"
             f"Missing (in fixture, not in production): {missing}"
         )
+
+
+# ---------------------------------------------------------------------------
+# T2: _synthesize_from_write_artifacts
+# ---------------------------------------------------------------------------
+
+from autoskillit.execution.session import ClaudeSessionResult  # noqa: E402
+
+
+@pytest.fixture
+def make_session():
+    """Build a ClaudeSessionResult with configurable result and tool_uses (parsed form)."""
+
+    def _factory(
+        result: str = "",
+        tool_uses: list[dict] | None = None,
+        subtype: str = "success",
+        is_error: bool = False,
+    ) -> ClaudeSessionResult:
+        return ClaudeSessionResult(
+            subtype=subtype,
+            is_error=is_error,
+            result=result,
+            session_id="test-session",
+            tool_uses=tool_uses or [],
+        )
+
+    return _factory
+
+
+class TestSynthesizeFromWriteArtifacts:
+    def test_synthesizes_plan_path_from_write_tool_use(self, make_session):
+        """When Write file_path is absolute and pattern is plan_path=, token is injected."""
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_session(
+            result="plan summary\n%%ORDER_UP%%",
+            tool_uses=[
+                {"name": "Write", "id": "t1", "file_path": "/abs/temp/make-plan/my_plan.md"}
+            ],
+        )
+        patterns = [r"plan_path\s*=\s*/.+"]
+        result = _synthesize_from_write_artifacts(session, patterns, write_call_count=1)
+        assert result is not None
+        assert "plan_path = /abs/temp/make-plan/my_plan.md" in result.result
+
+    def test_returns_none_when_no_write_tool_uses(self, make_session):
+        """No synthesis when write_call_count == 0."""
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_session(result="plan summary\n%%ORDER_UP%%", tool_uses=[])
+        result = _synthesize_from_write_artifacts(
+            session, [r"plan_path\s*=\s*/.+"], write_call_count=0
+        )
+        assert result is None
+
+    def test_returns_none_when_no_absolute_file_path(self, make_session):
+        """Relative file_path in Write tool_use is not used for synthesis."""
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_session(
+            result="plan summary\n%%ORDER_UP%%",
+            tool_uses=[{"name": "Write", "id": "t1", "file_path": "temp/make-plan/plan.md"}],
+        )
+        result = _synthesize_from_write_artifacts(
+            session, [r"plan_path\s*=\s*/.+"], write_call_count=1
+        )
+        assert result is None
+
+    def test_returns_none_when_pattern_already_satisfied(self, make_session):
+        """No synthesis when the pattern is already in session.result."""
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_session(
+            result="plan_path = /abs/plan.md\n%%ORDER_UP%%",
+            tool_uses=[{"name": "Write", "id": "t1", "file_path": "/abs/plan.md"}],
+        )
+        result = _synthesize_from_write_artifacts(
+            session, [r"plan_path\s*=\s*/.+"], write_call_count=1
+        )
+        assert result is None
+
+    def test_returns_none_when_no_path_capture_patterns(self, make_session):
+        """Non-path patterns (verdict= etc) are not attempted for synthesis."""
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_session(
+            result="%%ORDER_UP%%",
+            tool_uses=[{"name": "Write", "id": "t1", "file_path": "/abs/plan.md"}],
+        )
+        result = _synthesize_from_write_artifacts(
+            session, [r"verdict\s*=\s*(GO|NO GO)"], write_call_count=1
+        )
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# T3: _build_skill_result integration — CONTRACT_RECOVERY gate
+# ---------------------------------------------------------------------------
+
+from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord  # noqa: E402
+
+
+@pytest.fixture
+def make_build_skill_result_kwargs():
+    """Build a dict of kwargs for _build_skill_result from high-level parameters.
+
+    tool_uses entries use the parsed form: 'file_path' at the top level (not nested
+    in 'input'). The fixture converts them to raw NDJSON tool_use content blocks
+    with 'input': {'file_path': ...} so parse_session_result (after Step 3) preserves them.
+
+    consecutive_failures_over_budget=True creates an audit with 4 recorded failures
+    (> max_consecutive_retries=3 default) so the budget guard fires.
+    """
+    from datetime import UTC, datetime
+
+    def _factory(
+        result_text: str = "done",
+        completion_marker: str = "",
+        expected_output_patterns: list[str] | None = None,
+        tool_uses: list[dict] | None = None,
+        consecutive_failures_over_budget: bool = False,
+    ) -> dict:
+        records = []
+        if tool_uses:
+            content = []
+            for tu in tool_uses:
+                block: dict = {"type": "tool_use", "name": tu["name"], "id": tu.get("id", "")}
+                fp = tu.get("file_path")
+                if fp:
+                    block["input"] = {"file_path": fp}
+                content.append(block)
+            records.append(json.dumps({"type": "assistant", "message": {"content": content}}))
+        records.append(
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": result_text,
+                    "session_id": "test-session",
+                }
+            )
+        )
+        ndjson = "\n".join(records)
+        result = SubprocessResult(
+            returncode=0,
+            stdout=ndjson,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+        audit = None
+        skill_command = ""
+        if consecutive_failures_over_budget:
+            skill_command = "/autoskillit:make-plan"
+            audit = DefaultAuditLog()
+            for _ in range(4):  # 4 > max_consecutive_retries=3 → budget exhausted
+                audit.record_failure(
+                    FailureRecord(  # type: ignore[arg-type]
+                        timestamp=datetime.now(UTC).isoformat(),
+                        skill_command=skill_command,
+                        exit_code=-1,
+                        subtype="stale",
+                        needs_retry=True,
+                        retry_reason="resume",
+                        stderr="",
+                    )
+                )
+        return {
+            "result": result,
+            "completion_marker": completion_marker,
+            "expected_output_patterns": expected_output_patterns or [],
+            "skill_command": skill_command,
+            "audit": audit,
+        }
+
+    return _factory
+
+
+class TestContractRecoveryGate:
+    def test_adjudicated_failure_with_write_evidence_becomes_retriable(
+        self, make_build_skill_result_kwargs
+    ):
+        """
+        COMPLETED + marker present + plan_path absent + Write call with no file_path
+        → synthesis finds no usable path → CONTRACT_RECOVERY gate fires
+        → needs_retry=True, retry_reason=contract_recovery.
+        """
+        kwargs = make_build_skill_result_kwargs(
+            result_text="plan summary\n%%ORDER_UP%%",
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            tool_uses=[
+                # Write call exists (write evidence present) but no file_path key
+                # → synthesis has nothing to inject → CONTRACT_RECOVERY gate fires
+                {"name": "Write", "id": "t1"}
+            ],
+        )
+        sr = _build_skill_result(**kwargs)
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.CONTRACT_RECOVERY
+        assert sr.success is False
+
+    def test_adjudicated_failure_without_write_evidence_stays_terminal(
+        self, make_build_skill_result_kwargs
+    ):
+        """
+        COMPLETED + marker present + plan_path absent + write_call_count == 0
+        → success=False, needs_retry=False, subtype=adjudicated_failure (unchanged behavior).
+        """
+        kwargs = make_build_skill_result_kwargs(
+            result_text="plan summary\n%%ORDER_UP%%",
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            tool_uses=[],
+        )
+        sr = _build_skill_result(**kwargs)
+        assert sr.success is False
+        assert sr.needs_retry is False
+        assert sr.subtype == "adjudicated_failure"
+
+    def test_synthesis_succeeds_plan_path_token_from_write_file_path(
+        self, make_build_skill_result_kwargs
+    ):
+        """
+        COMPLETED + marker present + plan_path absent + Write file_path is absolute
+        → synthesis injects token → success=True (no CONTRACT_RECOVERY needed).
+        """
+        kwargs = make_build_skill_result_kwargs(
+            result_text="plan summary\n%%ORDER_UP%%",
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            tool_uses=[
+                {"name": "Write", "id": "t1", "file_path": "/abs/temp/make-plan/my_plan.md"}
+            ],
+        )
+        sr = _build_skill_result(**kwargs)
+        assert sr.success is True
+        assert "plan_path = /abs/temp/make-plan/my_plan.md" in sr.result
+
+    def test_contract_recovery_respects_budget_guard(self, make_build_skill_result_kwargs):
+        """
+        When budget is exhausted, budget guard must override CONTRACT_RECOVERY.
+        Write call with no file_path → synthesis fails → CONTRACT_RECOVERY promotes
+        to retriable → budget guard fires (second call inside gate) → needs_retry=False.
+        """
+        kwargs = make_build_skill_result_kwargs(
+            result_text="plan summary\n%%ORDER_UP%%",
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            tool_uses=[{"name": "Write", "id": "t1"}],  # no file_path → synthesis fails
+            consecutive_failures_over_budget=True,
+        )
+        sr = _build_skill_result(**kwargs)
+        assert sr.needs_retry is False
+        assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED

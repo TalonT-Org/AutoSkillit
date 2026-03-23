@@ -147,6 +147,55 @@ def _recover_block_from_assistant_messages(
     return dataclasses.replace(session, result=recovered)
 
 
+def _synthesize_from_write_artifacts(
+    session: ClaudeSessionResult,
+    expected_output_patterns: list[str],
+    write_call_count: int,
+) -> ClaudeSessionResult | None:
+    """Synthesize missing structured output tokens from Write/Edit tool_use file_path data.
+
+    When the session has write evidence (write_call_count >= 1) and expected_output_patterns
+    contain path-capture patterns (e.g., ``plan_path\\s*=\\s*/.+``), scan tool_uses for
+    Write/Edit entries with absolute file_path values. For each pattern whose token name can
+    be extracted, inject ``{token_name} = {file_path}`` into session.result so that
+    _compute_outcome sees the token as if the model had emitted it.
+
+    Returns a new ClaudeSessionResult with the injected line prepended to result, or None if
+    synthesis is not possible (no matching file_path, no path-capture patterns, or pattern
+    already satisfied).
+    """
+    if write_call_count == 0:
+        return None
+
+    # Only synthesize for path-capture patterns (token_name\s*=\s*/.+).
+    # Non-path patterns (verdict=, merged=) must remain text-compliance-only.
+    # Note: re is already imported at the top of headless.py — no new import needed.
+    _PATH_CAPTURE = re.compile(r"^(\w+)\\s\*=\\s\*/.+")
+
+    synthesized_lines: list[str] = []
+    for pattern in expected_output_patterns:
+        m = _PATH_CAPTURE.match(pattern)
+        if not m:
+            continue
+        token_name = m.group(1)
+        # Skip if the pattern is already satisfied in the current result.
+        if re.search(pattern, session.result):
+            continue
+        # Find the first Write/Edit tool_use with an absolute file_path.
+        for tool_use in session.tool_uses:
+            if tool_use.get("name") in {"Write", "Edit"}:
+                fp = tool_use.get("file_path", "")
+                if fp.startswith("/"):
+                    synthesized_lines.append(f"{token_name} = {fp}")
+                    break  # one synthesis per pattern
+
+    if not synthesized_lines:
+        return None
+
+    injected = "\n".join(synthesized_lines) + "\n" + session.result
+    return dataclasses.replace(session, result=injected)
+
+
 def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
     """Resolve model selection: config override > step > config default."""
     if config.model.override:
@@ -479,6 +528,9 @@ def _build_skill_result(
         returncode = result.returncode if result.returncode is not None else -1
         session = parse_session_result(result.stdout)
 
+    # Moved earlier: needed by synthesis recovery step before _compute_outcome.
+    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
+
     # Recovery check: attempt before _compute_outcome so the recovered session
     # is the input for outcome computation rather than the original.
     if completion_marker:
@@ -500,6 +552,20 @@ def _build_skill_result(
         if pattern_recovered is not None:
             session = pattern_recovered
 
+    # Artifact-aware synthesis: when write evidence exists but the structured output token
+    # is absent, synthesize it from the Write/Edit tool_use file_path. Runs regardless of
+    # channel_confirmation — write evidence is available from all sessions.
+    if (
+        expected_output_patterns
+        and write_call_count >= 1
+        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
+    ):
+        artifact_recovered = _synthesize_from_write_artifacts(
+            session, list(expected_output_patterns), write_call_count
+        )
+        if artifact_recovered is not None:
+            session = artifact_recovered
+
     outcome, retry_reason = _compute_outcome(
         session,
         returncode,
@@ -513,13 +579,28 @@ def _build_skill_result(
 
     normalized_subtype = _normalize_subtype(session.subtype, outcome, session, completion_marker)
 
+    # For adjudicated_failure with write evidence, record as retriable in the audit so
+    # the consecutive chain is intact for the budget guard inside the CONTRACT_RECOVERY gate.
+    # CONTRACT_RECOVERY failures are genuinely retriable (the gate promotes them), so
+    # recording needs_retry=True is architecturally correct.
+    _audit_needs_retry = needs_retry
+    _audit_retry_reason = retry_reason
+    if (
+        not success
+        and not needs_retry
+        and normalized_subtype == "adjudicated_failure"
+        and write_call_count >= 1
+    ):
+        _audit_needs_retry = True
+        _audit_retry_reason = RetryReason.CONTRACT_RECOVERY
+
     if not success or needs_retry:
         _capture_failure(
             skill_command,
             exit_code=returncode,
             subtype=normalized_subtype,
-            needs_retry=needs_retry,
-            retry_reason=retry_reason.value,
+            needs_retry=_audit_needs_retry,
+            retry_reason=_audit_retry_reason.value,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
@@ -552,9 +633,6 @@ def _build_skill_result(
                 cwd=cwd,
                 warnings=write_path_warnings[:5],
             )
-
-    # Behavioral write count: count Edit + Write tool calls in session
-    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
 
     if path_contamination:
         sr = SkillResult(
@@ -591,6 +669,26 @@ def _build_skill_result(
             write_call_count=write_call_count,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
+
+    # CONTRACT_RECOVERY gate: when the session was classified as adjudicated_failure but
+    # write evidence exists (write_call_count >= 1), the model wrote the artifact but
+    # omitted the structured output token — an emission omission, not a structural contract
+    # failure. Promote to RETRIABLE(CONTRACT_RECOVERY) so the pipeline can recover.
+    # The first _apply_budget_guard call skips CONTRACT_VIOLATION cases because
+    # needs_retry is False at that point. Re-apply budget_guard after promoting so that
+    # budget exhaustion can still cap CONTRACT_RECOVERY retries (diagram: CRG → BG).
+    if (
+        not sr.success
+        and not sr.needs_retry
+        and sr.subtype == "adjudicated_failure"
+        and write_call_count >= 1
+    ):
+        sr = dataclasses.replace(
+            sr,
+            needs_retry=True,
+            retry_reason=RetryReason.CONTRACT_RECOVERY,
+        )
+        sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
     # Zero-write gate: demote success to retriable failure when a write-expected
     # skill produced zero Edit/Write calls (silent degradation detection).

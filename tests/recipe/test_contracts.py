@@ -506,7 +506,6 @@ FILE_PRODUCING_SKILLS_WITH_CONTRACTS: list[str] = [
     "rectify",
     "diagnose-ci",
     "review-approach",
-    "setup-project",
     "audit-impl",
     "write-recipe",
     "make-groups",

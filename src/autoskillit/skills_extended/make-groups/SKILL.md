@@ -65,6 +65,16 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Assign each group a sequential suffix: groupA, groupB, ... groupZ
 - State dependencies between groups explicitly
 - Write to `.autoskillit/temp/make-groups/` directory (relative to the current working directory)
+- After writing the groups file and manifest, emit the **absolute paths** as structured output
+  tokens immediately before `%%ORDER_UP%%`. Resolve the relative `.autoskillit/temp/make-groups/...`
+  save paths to absolute by prepending the full CWD:
+  ```
+  groups_path = /absolute/cwd/.autoskillit/temp/make-groups/{groups_filename}.md
+  manifest_path = /absolute/cwd/.autoskillit/temp/make-groups/{manifest_filename}.json
+  group_files = /absolute/cwd/.autoskillit/temp/make-groups/{groups_filename}.md
+  %%ORDER_UP%%
+  ```
+  These tokens are MANDATORY — the pipeline cannot proceed without them.
 
 ## Workflow
 

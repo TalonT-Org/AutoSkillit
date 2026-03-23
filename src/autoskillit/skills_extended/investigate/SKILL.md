@@ -57,6 +57,14 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Use subagents for parallel exploration
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Write findings as a markdown report with unique name to `.autoskillit/temp/investigate/` directory (relative to the current working directory)
+- After writing the investigation report, emit the **absolute path** as a structured output
+  token immediately before `%%ORDER_UP%%`. Resolve the relative `.autoskillit/temp/investigate/...`
+  save path to absolute by prepending the full CWD:
+  ```
+  investigation_path = /absolute/cwd/.autoskillit/temp/investigate/{filename}.md
+  %%ORDER_UP%%
+  ```
+  This token is MANDATORY — the pipeline cannot proceed without it.
 - Identify how tests missed the issue (if applicable)
 - Check for similar existing patterns in codebase
 - Ensure approaches, solutions, and fixes are the appropriate long-term solutions with proper architecture

@@ -419,15 +419,16 @@ class TestFormatIngredientsTableGfmWidthCap:
         recipe = self._recipe_with_long_desc("X" * 220)
         table = format_ingredients_table(recipe)
         assert table is not None
-        for line in table.splitlines():
-            if "---" in line or "Description" in line:
+        for i, line in enumerate(table.splitlines()):
+            if i < 2:  # skip header row (0) and separator row (1)
                 continue
             cells = [c.strip() for c in line.split("|") if c.strip()]
-            desc_cell = cells[1]  # description is the second column
-            assert len(desc_cell) <= _GFM_DESC_MAX_WIDTH, (
-                f"Description cell too wide ({len(desc_cell)} > {_GFM_DESC_MAX_WIDTH}): "
-                f"{desc_cell!r}"
-            )
+            if len(cells) >= 2:
+                desc_cell = cells[1]  # description is the second column
+                assert len(desc_cell) <= _GFM_DESC_MAX_WIDTH, (
+                    f"Description cell too wide ({len(desc_cell)} > {_GFM_DESC_MAX_WIDTH}): "
+                    f"{desc_cell!r}"
+                )
 
     def test_gfm_long_description_truncated_with_ellipsis(self):
         """format_ingredients_table must truncate long descriptions with '…'."""
@@ -473,7 +474,8 @@ class TestFormatIngredientsTableGfmWidthCap:
         data_lines = [
             ln for ln in table.splitlines() if "|" in ln and "---" not in ln and "Name" not in ln
         ]
-        # All data lines must have the same total length (GFM tables are fixed-width padded)
+        # All data lines must have the same total length because _render_gfm_table uses
+        # format(value, f"{align}{width}") for every cell, guaranteeing fixed-width padding.
         lengths = [len(ln) for ln in data_lines]
         assert len(set(lengths)) == 1, (
             f"Data rows have different lengths (misaligned columns): {lengths}"
@@ -494,8 +496,8 @@ class TestFormatIngredientsTableGfmWidthCap:
         recipe = load_recipe(recipe_info.path)
         table = format_ingredients_table(recipe)
         assert table is not None
-        for line in table.splitlines():
-            if "---" in line or "Description" in line:
+        for i, line in enumerate(table.splitlines()):
+            if i < 2:  # skip header row (0) and separator row (1)
                 continue
             cells = [c.strip() for c in line.split("|") if c.strip()]
             if len(cells) >= 2:

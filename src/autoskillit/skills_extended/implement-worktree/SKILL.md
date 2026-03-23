@@ -181,8 +181,9 @@ If tests fail, fix the issue and re-run.
 
 ```bash
 CURRENT_BRANCH=$(cat ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch")
-git fetch origin
-git rebase origin/${CURRENT_BRANCH}
+REMOTE=$(git remote get-url upstream 2>/dev/null && echo upstream || echo origin)
+git fetch "$REMOTE"
+git rebase "$REMOTE/${CURRENT_BRANCH}"
 ```
 
 If conflicts occur, resolve them, `git rebase --continue`, then re-run tests. Report rebase status.

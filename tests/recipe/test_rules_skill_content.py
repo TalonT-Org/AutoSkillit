@@ -345,11 +345,10 @@ def test_hardcoded_origin_silent_with_remote_variable(tmp_path: Path) -> None:
     )
 
 
-def test_hardcoded_origin_fires_on_bundled_resolve_merge_conflicts(tmp_path: Path) -> None:
+def test_hardcoded_origin_does_not_fire_on_fixed_resolve_merge_conflicts(tmp_path: Path) -> None:
     """
-    Regression anchor: bundled resolve-merge-conflicts must trigger hardcoded-origin-remote
-    because it has 8 literal origin/ references. After Part B fixes the skill, this test
-    must be updated to assert the rule does NOT fire.
+    Regression anchor: bundled resolve-merge-conflicts must NOT trigger hardcoded-origin-remote
+    after Part B fixes the skill to use REMOTE=$(upstream || origin) instead of literal 'origin'.
     """
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(
@@ -361,15 +360,16 @@ def test_hardcoded_origin_fires_on_bundled_resolve_merge_conflicts(tmp_path: Pat
     recipe = load_recipe(recipe_path)
     # No SKILL_SEARCH_DIRS patch — use the real bundled skill
     findings = run_semantic_rules(recipe)
-    assert "hardcoded-origin-remote" in [f.rule for f in findings], (
-        "Expected hardcoded-origin-remote finding before Part B fix"
+    assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
+        "hardcoded-origin-remote fired on resolve-merge-conflicts after Part B fix — "
+        "check that all literal 'origin' references in bash blocks have been replaced with $REMOTE"
     )
 
 
-def test_hardcoded_origin_fires_on_bundled_retry_worktree(tmp_path: Path) -> None:
+def test_hardcoded_origin_does_not_fire_on_fixed_retry_worktree(tmp_path: Path) -> None:
     """
-    Regression anchor: bundled retry-worktree must trigger hardcoded-origin-remote.
-    After Part B fixes the skill, update to assert NOT in rule_ids.
+    Regression anchor: bundled retry-worktree must NOT trigger hardcoded-origin-remote
+    after Part B fixes the skill to use REMOTE=$(upstream || origin) instead of literal 'origin'.
     """
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(
@@ -380,7 +380,10 @@ def test_hardcoded_origin_fires_on_bundled_retry_worktree(tmp_path: Path) -> Non
     )
     recipe = load_recipe(recipe_path)
     findings = run_semantic_rules(recipe)
-    assert "hardcoded-origin-remote" in [f.rule for f in findings]
+    assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
+        "hardcoded-origin-remote fired on retry-worktree after Part B fix — "
+        "check that all literal 'origin' references in bash blocks have been replaced with $REMOTE"
+    )
 
 
 def test_hardcoded_origin_ignores_comment_lines(tmp_path: Path) -> None:

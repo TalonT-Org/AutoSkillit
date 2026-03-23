@@ -103,8 +103,10 @@ steps:
     on_failure: cleanup_failure
     note: >
       The clone's origin initially points to a file:// URL (set by clone_repo for isolation).
-      This step replaces it with the actual GitHub remote URL captured from the clone step,
-      so that gh CLI commands and git fetch origin work correctly in the clone.
+      This step replaces it with the actual GitHub remote URL so that gh CLI commands
+      (gh pr merge, gh pr view, etc.) can identify the correct GitHub repository.
+      Skills that contact remotes (resolve-merge-conflicts, retry-worktree, implement-worktree)
+      now use REMOTE=$(upstream || origin) internally and do not depend on this step.
 
   check_integration_exists:
     tool: run_cmd

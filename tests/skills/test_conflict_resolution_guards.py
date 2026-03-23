@@ -5,6 +5,8 @@ interfaces exist in SKILL.md files and the merge-prs recipe, preventing
 silent regression if sections are accidentally removed.
 """
 
+import re
+
 import pytest
 import yaml
 
@@ -344,4 +346,44 @@ def test_audit_impl_cross_references_conflict_report():
     assert "conflict_report_path" in text or "conflict resolution report" in text.lower(), (
         "audit-impl/SKILL.md must describe cross-referencing conflict_report_paths "
         "against the original plan per REQ-AUD-001"
+    )
+
+
+# ── New: resolve-merge-conflicts REMOTE variable guards ─────────────────────
+
+
+@pytest.fixture(scope="module")
+def skill_md() -> str:
+    return (SKILLS_ROOT / "resolve-merge-conflicts" / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_resolve_merge_conflicts_remote_variable_is_defined(skill_md: str) -> None:
+    """SKILL.md bash blocks must assign a REMOTE variable before any fetch/rebase."""
+    # The REMOTE= assignment must appear in one of the bash blocks
+    bash_blocks = "\n".join(re.findall(r"```bash\s*\n(.*?)```", skill_md, re.DOTALL))
+    assert "REMOTE=" in bash_blocks, (
+        "resolve-merge-conflicts SKILL.md bash blocks must assign REMOTE= "
+        "(upstream || origin fallback) before fetch/rebase operations. "
+        "Found no REMOTE= assignment in bash blocks."
+    )
+
+
+def test_resolve_merge_conflicts_no_hardcoded_origin(skill_md: str) -> None:
+    """SKILL.md must not use literal 'origin' as remote in git fetch/rebase/show/log/rev-parse."""
+    bash_blocks = re.findall(r"```bash\s*\n(.*?)```", skill_md, re.DOTALL)
+    violations = []
+    for block in bash_blocks:
+        for line in block.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            if not re.search(r"\bgit\s+(?:fetch|rebase|log|show|rev-parse)\b", stripped):
+                continue
+            # 'origin' as a literal word (not $origin / ${origin})
+            if re.search(r"(?<!\$)(?<!\$\{)\borigin\b", stripped):
+                violations.append(stripped)
+    assert not violations, (
+        "resolve-merge-conflicts SKILL.md bash blocks contain hardcoded 'origin' remote "
+        "in git commands. Use $REMOTE (resolved via upstream || origin fallback) instead.\n"
+        "Violations:\n" + "\n".join(f"  {v}" for v in violations)
     )

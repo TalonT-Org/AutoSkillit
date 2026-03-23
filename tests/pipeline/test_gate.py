@@ -16,7 +16,7 @@ def test_ungated_tools_is_frozenset():
 def test_tool_sets_total_count():
     from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
 
-    assert len(GATED_TOOLS) == 37
+    assert len(GATED_TOOLS) == 39
     assert len(UNGATED_TOOLS) == 2
 
 
@@ -62,6 +62,8 @@ def test_gated_tools_contains_expected_names():
         "list_recipes",
         "load_recipe",
         "validate_recipe",
+        "register_clone_status",
+        "batch_cleanup_clones",
     }
     assert GATED_TOOLS == expected
 
@@ -222,7 +224,7 @@ def test_all_tool_sets_disjoint_and_complete():
     assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
     assert GATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert UNGATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
-    assert len(GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS) == 40
+    assert len(GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS) == 42
 
 
 def test_worker_tools_removed_from_core():

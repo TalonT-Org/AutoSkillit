@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from typing import Literal
 
 import structlog
 from fastmcp import Context
@@ -13,8 +14,12 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
-from autoskillit.server.helpers import _notify, _require_enabled, track_response_size
-from autoskillit.workspace import clone_registry
+from autoskillit.server.helpers import (
+    _notify,
+    _require_enabled,
+    clone_registry,
+    track_response_size,
+)
 
 logger = get_logger(__name__)
 
@@ -294,17 +299,17 @@ async def register_clone_status(
         return json.dumps({"error": f"Invalid status '{status}'. Must be 'success' or 'error'."})
 
     from autoskillit.server import _get_ctx
-    from autoskillit.workspace.clone_registry import CloneStatus
 
     tool_ctx = _get_ctx()
     _start = time.monotonic()
-    typed_status: CloneStatus = "success" if status == "success" else "error"
+    typed_status: Literal["success", "error"] = "success" if status == "success" else "error"
     try:
         result = await asyncio.to_thread(
             clone_registry.register_clone, clone_path, typed_status, registry_path
         )
         return json.dumps(result)
     except Exception as exc:
+        logger.warning("register_clone_status failed", exc_info=True)
         return json.dumps({"registered": "false", "reason": str(exc)})
     finally:
         if step_name:
@@ -341,34 +346,17 @@ async def batch_cleanup_clones(
     tool_ctx = _get_ctx()
     _start = time.monotonic()
     try:
-        try:
-            to_delete, to_preserve = await asyncio.to_thread(
-                clone_registry.cleanup_candidates, registry_path
-            )
-        except Exception as exc:
-            return json.dumps({"deleted": [], "preserved": [], "error": str(exc)})
-
         if tool_ctx.clone_mgr is None:
             return json.dumps(
                 {"deleted": [], "preserved": [], "error": "Clone manager not configured"}
             )
-
-        deleted: list[str] = []
-        delete_failures: list[dict[str, str]] = []
-        for path in to_delete:
-            result = await asyncio.to_thread(tool_ctx.clone_mgr.remove_clone, path, "false")
-            if result.get("removed") == "true":
-                deleted.append(path)
-            else:
-                delete_failures.append({"path": path, "reason": result.get("reason", "unknown")})
-
-        return json.dumps(
-            {
-                "deleted": deleted,
-                "delete_failures": delete_failures,
-                "preserved": to_preserve,
-            }
+        result = await asyncio.to_thread(
+            clone_registry.batch_delete, registry_path, tool_ctx.clone_mgr.remove_clone
         )
+        return json.dumps(result)
+    except Exception as exc:
+        logger.warning("batch_cleanup_clones failed", exc_info=True)
+        return json.dumps({"deleted": [], "preserved": [], "error": str(exc)})
     finally:
         if step_name:
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

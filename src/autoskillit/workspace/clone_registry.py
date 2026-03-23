@@ -7,14 +7,15 @@ removes only success-status clones.
 Registry file format:
     {"clones": [{"path": "/abs/path/to/clone", "status": "success|error"}]}
 """
+
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from autoskillit.core.io import atomic_write
-from autoskillit.core.logging import get_logger
+from autoskillit.core import atomic_write, get_logger
 
 _log = get_logger(__name__)
 
@@ -72,3 +73,24 @@ def cleanup_candidates(
     to_delete = [e["path"] for e in entries if e.get("status") == "success"]
     to_preserve = [e["path"] for e in entries if e.get("status") == "error"]
     return to_delete, to_preserve
+
+
+def batch_delete(
+    registry_path: str,
+    remove_fn: Callable[[str, str], dict[str, str]],
+) -> dict[str, Any]:
+    """Read registry and delete success-status clones via remove_fn.
+
+    Calls remove_fn(path, "false") for each success clone. Error clones are
+    preserved. Returns {"deleted": [...], "delete_failures": [...], "preserved": [...]}.
+    """
+    to_delete, to_preserve = cleanup_candidates(registry_path)
+    deleted: list[str] = []
+    delete_failures: list[dict[str, str]] = []
+    for path in to_delete:
+        result = remove_fn(path, "false")
+        if result.get("removed") == "true":
+            deleted.append(path)
+        else:
+            delete_failures.append({"path": path, "reason": result.get("reason", "unknown")})
+    return {"deleted": deleted, "delete_failures": delete_failures, "preserved": to_preserve}

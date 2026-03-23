@@ -162,6 +162,7 @@ src/autoskillit/
 │   ├── session_skills.py    #   Per-session ephemeral skill dirs (SkillsDirectoryProvider,
 │   │                        #   DefaultSessionSkillManager, resolve_ephemeral_root)
 │   │                        #   Subset filtering + project-local override detection
+│   ├── clone_registry.py    #   Clone cleanup registry — shared file-based coordination for deferred batch cleanup (register_clone, read_registry, cleanup_candidates, batch_delete)
 │   └── skills.py            #   Bundled skill listing (SkillResolver)
 ├── recipe/                  # L2 recipe sub-package
 │   ├── __init__.py          #   Re-exports Recipe, RecipeStep, validate_recipe, load_recipe, etc.

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """MCP server for orchestrating automated skill-driven workflows.
 
-Kitchen tools (37 gated + 1 headless-tagged) are hidden at startup via FastMCP v3
+Kitchen tools (39 gated + 1 headless-tagged) are hidden at startup via FastMCP v3
 mcp.disable(tags={'kitchen'}) applied once after all tool modules are imported.
 Each new session sees only the 2 free-range tools (open_kitchen and close_kitchen).
 Headless sessions (AUTOSKILLIT_HEADLESS=1) pre-reveal only headless-tagged tools
 (test_check) via mcp.enable(tags={'headless'}) — not all kitchen tools.
-Calling the open_kitchen tool reveals all 38 kitchen-tagged tools for that session
+Calling the open_kitchen tool reveals all 40 kitchen-tagged tools for that session
 via ctx.enable_components(tags={'kitchen'}).
 
 Transport: stdio (default for FastMCP).

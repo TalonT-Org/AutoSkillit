@@ -24,6 +24,20 @@ ingredients:
   plans_dir:
     description: Plan files for audit
     default: ".autoskillit/temp/merge-prs"
+  defer_cleanup:
+    description: >-
+      When 'true', skip per-pipeline interactive cleanup and register this clone
+      in the shared registry for batch deletion after all parallel pipelines
+      complete. Set to 'true' on every parallel instance; leave 'false' for
+      sequential single-pipeline runs.
+    default: "false"
+  registry_path:
+    description: >-
+      Absolute path to the shared clone cleanup registry file. Required when
+      defer_cleanup=true. Must be identical across all parallel pipeline runs in
+      the same batch (use a fixed path like
+      /path/to/project/.autoskillit/temp/clone-cleanup-registry.json).
+    default: ""
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -825,7 +839,7 @@ steps:
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       pr_url: "${{ context.pr_url }}"
-    on_success: confirm_cleanup
+    on_success: check_defer_cleanup
     on_failure: diagnose_ci
     note: >
       Waits for the GitHub Actions CI run on context.integration_branch to complete
@@ -849,6 +863,29 @@ steps:
       Fetches logs and writes a diagnosis to .autoskillit/temp/diagnose-ci/ for human inspection.
       diagnosis_path is captured for observability — no automated remediation for
       integration CI, so always routes to cleanup_failure.
+
+  check_defer_cleanup:
+    description: "Route to deferred or immediate cleanup on success path"
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_cleanup_mode"
+      defer_cleanup: "${{ inputs.defer_cleanup }}"
+    on_result:
+      - when: "result.deferred == 'true'"
+        route: register_success_deferred
+      - route: confirm_cleanup
+    on_failure: confirm_cleanup
+
+  register_success_deferred:
+    description: "Register clone as cleanup candidate (deferred batch cleanup mode)"
+    tool: register_clone_status
+    with:
+      clone_path: "${{ context.work_dir }}"
+      status: "success"
+      registry_path: "${{ inputs.registry_path }}"
+      step_name: register_success_deferred
+    on_success: done
+    on_failure: done
 
   confirm_cleanup:
     action: confirm
@@ -898,3 +935,25 @@ steps:
       context.task may be null when reached via escalation_required=true from merge_pr
       (merge-pr does not set conflict_report_path on escalation paths). Do not rely on
       context.task being populated when handling this stop.
+
+  batch_confirm_cleanup:
+    action: confirm
+    message: >-
+      All parallel pipelines complete. Delete all registered successful clones?
+      Error pipeline clones will be preserved for investigation.
+      Type yes to delete or no to keep all.
+    note: >-
+      ORCHESTRATOR: Run this step ONCE after ALL parallel pipeline instances have
+      reached 'done' or 'escalate_stop'. Do NOT run per-pipeline instance.
+      Only applicable when run_mode=parallel and defer_cleanup=true.
+    on_success: batch_delete_clones
+    on_failure: done
+
+  batch_delete_clones:
+    description: "Delete all registered successful clones in one batch operation"
+    tool: batch_cleanup_clones
+    with:
+      registry_path: "${{ inputs.registry_path }}"
+      step_name: batch_delete_clones
+    on_success: done
+    on_failure: done

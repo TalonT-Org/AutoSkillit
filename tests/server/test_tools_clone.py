@@ -7,7 +7,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.server.tools_clone import clone_repo, push_to_remote, remove_clone
+from autoskillit.server.tools_clone import (
+    batch_cleanup_clones,
+    clone_repo,
+    push_to_remote,
+    register_clone_status,
+    remove_clone,
+)
+from autoskillit.workspace import clone_registry
 
 
 class TestCloneRepoTool:
@@ -240,3 +247,100 @@ class TestPushToRemoteTiming:
         tool_ctx.clone_mgr = mock_mgr
         await push_to_remote(clone_path="/clone", branch="main")
         assert tool_ctx.timing_log.get_report() == []
+
+
+class TestRegisterCloneStatusTool:
+    @pytest.mark.anyio
+    async def test_register_clone_status_success(self, tool_ctx, tmp_path):
+        """register_clone_status status='success' writes registry and returns registered=true."""
+        registry_path = str(tmp_path / "registry.json")
+        result = json.loads(
+            await register_clone_status(
+                clone_path="/some/path",
+                status="success",
+                registry_path=registry_path,
+            )
+        )
+        assert result["registered"] == "true"
+        assert "registry_path" in result
+
+    @pytest.mark.anyio
+    async def test_register_clone_status_error(self, tool_ctx, tmp_path):
+        """register_clone_status status='error' writes registry and returns registered=true."""
+        registry_path = str(tmp_path / "registry.json")
+        result = json.loads(
+            await register_clone_status(
+                clone_path="/some/path",
+                status="error",
+                registry_path=registry_path,
+            )
+        )
+        assert result["registered"] == "true"
+        assert "registry_path" in result
+
+    @pytest.mark.anyio
+    async def test_register_clone_status_invalid_status(self, tool_ctx, tmp_path):
+        """register_clone_status with status='invalid' returns error without writing."""
+        registry_path = str(tmp_path / "registry.json")
+        result = json.loads(
+            await register_clone_status(
+                clone_path="/some/path",
+                status="invalid",
+                registry_path=registry_path,
+            )
+        )
+        assert "error" in result
+        # Registry file must not have been created
+        assert not (tmp_path / "registry.json").exists()
+
+
+class TestBatchCleanupClonesTool:
+    @pytest.mark.anyio
+    async def test_batch_cleanup_clones_deletes_success_preserves_error(self, tool_ctx, tmp_path):
+        """batch_cleanup_clones removes success clones, skips error clones."""
+        registry_path = str(tmp_path / "registry.json")
+        success_path = str(tmp_path / "success_clone")
+        error_path = str(tmp_path / "error_clone")
+
+        # Pre-populate registry with one success and one error entry
+        clone_registry.register_clone(success_path, "success", registry_path)
+        clone_registry.register_clone(error_path, "error", registry_path)
+
+        # Mock clone_mgr so remove_clone reports success for the success clone
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+
+        result = json.loads(await batch_cleanup_clones(registry_path=registry_path))
+
+        assert success_path in result["deleted"]
+        assert error_path in result["preserved"]
+        assert result["delete_failures"] == []
+
+    @pytest.mark.anyio
+    async def test_batch_cleanup_clones_empty_registry(self, tool_ctx, tmp_path):
+        """batch_cleanup_clones with missing registry returns deleted=[], preserved=[]."""
+        registry_path = str(tmp_path / "nonexistent.json")
+        result = json.loads(await batch_cleanup_clones(registry_path=registry_path))
+        assert result == {"deleted": [], "delete_failures": [], "preserved": []}
+
+    @pytest.mark.anyio
+    async def test_batch_cleanup_clones_nonexistent_path_does_not_raise(self, tool_ctx, tmp_path):
+        """batch_cleanup_clones reports failure gracefully when a success clone path is gone."""
+        registry_path = str(tmp_path / "registry.json")
+        missing_path = str(tmp_path / "gone_clone")
+
+        # Register a success clone whose directory does not exist on disk
+        clone_registry.register_clone(missing_path, "success", registry_path)
+
+        # Mock clone_mgr to report removal failure (path not found)
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "false", "reason": "not found"}
+        tool_ctx.clone_mgr = mock_mgr
+
+        result = json.loads(await batch_cleanup_clones(registry_path=registry_path))
+
+        assert result["delete_failures"] != []
+        assert result["deleted"] == []
+        # Confirm no exception was raised (we received a well-formed result dict)
+        assert "error" not in result

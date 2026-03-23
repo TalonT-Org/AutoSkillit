@@ -1,4 +1,5 @@
-"""MCP tool handlers: clone_repo, remove_clone, push_to_remote."""
+"""MCP tool handlers: clone_repo, remove_clone, push_to_remote,
+register_clone_status, batch_cleanup_clones."""
 
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import _notify, _require_enabled, track_response_size
+from autoskillit.workspace import clone_registry
 
 logger = get_logger(__name__)
 
@@ -253,6 +255,120 @@ async def push_to_remote(
             )
 
         return json.dumps(result)
+    finally:
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "clone"})
+@track_response_size("register_clone_status")
+async def register_clone_status(
+    clone_path: str,
+    status: str,
+    registry_path: str = "",
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Register a clone path as 'success' or 'error' in the shared cleanup registry.
+
+    Called per-pipeline when defer_cleanup=true. Safe for parallel callers —
+    clone_registry uses atomic writes.
+
+    Returns {"registered": "true", "registry_path": str} on success,
+    or {"registered": "false", "reason": str} on error.
+
+    Args:
+        clone_path: Absolute path to the clone directory to register.
+        status: Completion status — "success" (safe to delete) or "error" (preserve).
+        registry_path: Absolute path to the shared registry file. Defaults to
+                       .autoskillit/temp/clone-cleanup-registry.json in cwd.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="register_clone_status", clone_path=clone_path)
+    logger.info("register_clone_status", clone_path=clone_path, status=status)
+
+    if status not in ("success", "error"):
+        return json.dumps({"error": f"Invalid status '{status}'. Must be 'success' or 'error'."})
+
+    from autoskillit.server import _get_ctx
+    from autoskillit.workspace.clone_registry import CloneStatus
+
+    tool_ctx = _get_ctx()
+    _start = time.monotonic()
+    typed_status: CloneStatus = "success" if status == "success" else "error"
+    try:
+        result = await asyncio.to_thread(
+            clone_registry.register_clone, clone_path, typed_status, registry_path
+        )
+        return json.dumps(result)
+    except Exception as exc:
+        return json.dumps({"registered": "false", "reason": str(exc)})
+    finally:
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "clone"})
+@track_response_size("batch_cleanup_clones")
+async def batch_cleanup_clones(
+    registry_path: str = "",
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Delete all success-status clones from the registry. Preserve error-status clones.
+
+    Called ONCE after all parallel pipelines have completed (after batch_confirm_cleanup
+    action: confirm). Never raises — failures are reported in the result dict.
+
+    Returns {"deleted": [...], "delete_failures": [...], "preserved": [...]}.
+
+    Args:
+        registry_path: Absolute path to the shared registry file. Defaults to
+                       .autoskillit/temp/clone-cleanup-registry.json in cwd.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="batch_cleanup_clones")
+    logger.info("batch_cleanup_clones", registry_path=registry_path)
+
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    _start = time.monotonic()
+    try:
+        try:
+            to_delete, to_preserve = await asyncio.to_thread(
+                clone_registry.cleanup_candidates, registry_path
+            )
+        except Exception as exc:
+            return json.dumps({"deleted": [], "preserved": [], "error": str(exc)})
+
+        if tool_ctx.clone_mgr is None:
+            return json.dumps(
+                {"deleted": [], "preserved": [], "error": "Clone manager not configured"}
+            )
+
+        deleted: list[str] = []
+        delete_failures: list[dict[str, str]] = []
+        for path in to_delete:
+            result = await asyncio.to_thread(tool_ctx.clone_mgr.remove_clone, path, "false")
+            if result.get("removed") == "true":
+                deleted.append(path)
+            else:
+                delete_failures.append({"path": path, "reason": result.get("reason", "unknown")})
+
+        return json.dumps(
+            {
+                "deleted": deleted,
+                "delete_failures": delete_failures,
+                "preserved": to_preserve,
+            }
+        )
     finally:
         if step_name:
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

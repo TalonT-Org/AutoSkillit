@@ -72,6 +72,20 @@ ingredients:
       one issue at a time) or parallel (all issues simultaneously with wavefront
       step scheduling — fast steps for all pipelines before any slow step).
     default: "sequential"
+  defer_cleanup:
+    description: >-
+      When 'true', skip per-pipeline interactive cleanup and register this clone
+      in the shared registry for batch deletion after all parallel pipelines
+      complete. Set to 'true' on every parallel instance; leave 'false' for
+      sequential single-pipeline runs.
+    default: "false"
+  registry_path:
+    description: >-
+      Absolute path to the shared clone cleanup registry file. Required when
+      defer_cleanup=true. Must be identical across all parallel pipeline runs in
+      the same batch (use a fixed path like
+      /path/to/project/.autoskillit/temp/clone-cleanup-registry.json).
+    default: ""
 
 steps:
   sprint_entry:
@@ -953,8 +967,8 @@ steps:
     skip_when_false: inputs.issue_url
     with:
       issue_url: ${{ inputs.issue_url }}
-    on_success: confirm_cleanup
-    on_failure: confirm_cleanup
+    on_success: check_defer_cleanup
+    on_failure: check_defer_cleanup
     note: >
       Called when wait_for_direct_merge times out. Releases the in-progress
       claim without passing target_branch, so the staged label is not applied. The
@@ -969,8 +983,8 @@ steps:
     with:
       issue_url: ${{ inputs.issue_url }}
       target_branch: ${{ inputs.base_branch }}
-    on_success: confirm_cleanup
-    on_failure: confirm_cleanup
+    on_success: check_defer_cleanup
+    on_failure: check_defer_cleanup
     note: >
       Applies staged label after successful PR merge; skipped when no issue_url.
       optional=true so cleanup proceeds even if this step errors.
@@ -982,8 +996,54 @@ steps:
     skip_when_false: inputs.issue_url
     with:
       issue_url: ${{ inputs.issue_url }}
-    on_success: cleanup_failure
+    on_success: check_defer_on_failure
+    on_failure: check_defer_on_failure
+
+  check_defer_cleanup:
+    description: "Route to deferred or immediate cleanup on success path"
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_cleanup_mode"
+      defer_cleanup: "${{ inputs.defer_cleanup }}"
+    on_result:
+      - when: "result.deferred == 'true'"
+        route: register_success_deferred
+      - route: confirm_cleanup
+    on_failure: confirm_cleanup
+
+  register_success_deferred:
+    description: "Register clone as cleanup candidate (deferred batch cleanup mode)"
+    tool: register_clone_status
+    with:
+      clone_path: "${{ context.work_dir }}"
+      status: "success"
+      registry_path: "${{ inputs.registry_path }}"
+      step_name: register_success_deferred
+    on_success: done
+    on_failure: done
+
+  check_defer_on_failure:
+    description: "Route to deferred or immediate cleanup on failure path"
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_cleanup_mode"
+      defer_cleanup: "${{ inputs.defer_cleanup }}"
+    on_result:
+      - when: "result.deferred == 'true'"
+        route: register_error_deferred
+      - route: cleanup_failure
     on_failure: cleanup_failure
+
+  register_error_deferred:
+    description: "Register clone as preserved (error pipeline — deferred mode)"
+    tool: register_clone_status
+    with:
+      clone_path: "${{ context.work_dir }}"
+      status: "error"
+      registry_path: "${{ inputs.registry_path }}"
+      step_name: register_error_deferred
+    on_success: escalate_stop
+    on_failure: escalate_stop
 
   confirm_cleanup:
     action: confirm
@@ -1028,3 +1088,25 @@ steps:
   escalate_stop:
     action: stop
     message: "Human intervention needed. Review the latest output for details."
+
+  batch_confirm_cleanup:
+    action: confirm
+    message: >-
+      All parallel pipelines complete. Delete all registered successful clones?
+      Error pipeline clones will be preserved for investigation.
+      Type yes to delete or no to keep all.
+    note: >-
+      ORCHESTRATOR: Run this step ONCE after ALL parallel pipeline instances have
+      reached 'done' or 'escalate_stop'. Do NOT run per-pipeline instance.
+      Only applicable when run_mode=parallel and defer_cleanup=true.
+    on_success: batch_delete_clones
+    on_failure: done
+
+  batch_delete_clones:
+    description: "Delete all registered successful clones in one batch operation"
+    tool: batch_cleanup_clones
+    with:
+      registry_path: "${{ inputs.registry_path }}"
+      step_name: batch_delete_clones
+    on_success: done
+    on_failure: done

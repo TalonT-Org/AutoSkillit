@@ -610,9 +610,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-# Plain-text dispatch table: short tool name → handler(text, pipeline) -> str.
-# Used when _resolve_payload() returns a _PlainTextPayload. Named dict-formatters
-# in _FORMATTERS must never receive plain-text envelopes.
+# Plain-text dispatch: called when _resolve_payload() returns _PlainTextPayload.
 _PLAIN_TEXT_FORMATTERS: dict[str, Callable[[str, bool], str]] = {
     # open_kitchen returns a plain orchestrator-notice string when no recipe is loaded.
     # All other plain-text responses pass through unchanged (pre-formatted markdown).

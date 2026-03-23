@@ -40,14 +40,12 @@ def test_gfm_ingredient_columns_all_have_bounded_max_width():
     Fails if any column is declared unbounded (max_width=None), which would allow
     overflow from long ingredient values.
     """
-    from autoskillit.recipe._api import _GFM_INGREDIENT_COLUMNS
     from autoskillit.core import TerminalColumn
+    from autoskillit.recipe._api import _GFM_INGREDIENT_COLUMNS
 
     assert len(_GFM_INGREDIENT_COLUMNS) > 0, "_GFM_INGREDIENT_COLUMNS must not be empty"
     for col in _GFM_INGREDIENT_COLUMNS:
-        assert isinstance(col, TerminalColumn), (
-            f"Column {col!r} is not a TerminalColumn instance"
-        )
+        assert isinstance(col, TerminalColumn), f"Column {col!r} is not a TerminalColumn instance"
         assert col.max_width is not None, (
             f"Column '{col.label}' has max_width=None — all GFM ingredient columns "
             "must declare a bounded max_width to prevent overflow."

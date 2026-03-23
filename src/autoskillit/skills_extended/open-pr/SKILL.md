@@ -116,7 +116,9 @@ Split `plan_paths` by comma to get a list of plan file paths.
 
 ### Step 2: Extract PR Title from Plan
 
-Read all plan files. For each, extract the first `# ` heading line and strip the `# ` prefix.
+Read all plan files. For each, extract the first `# ` heading line, strip the `# ` prefix,
+and strip any trailing `— PART [A-Z] ONLY` suffix (e.g., `— PART A ONLY`, `— PART B ONLY`).
+This suffix is a plan-level scope marker that must not appear in PR titles.
 
 - **Single plan:** Use the heading directly as `{task_title}` (current behavior).
 - **Multiple plans:** Spawn a subagent (Task tool, model: sonnet) with all extracted
@@ -138,7 +140,7 @@ for `recipe:remediation` issues. Direct recipe invocations using `run_name="impl
 (the default) are unaffected.
 
 ```bash
-BASE_TITLE="$(head -1 {plan_path} | sed 's/^# //')"
+BASE_TITLE="$(head -1 {plan_path} | sed 's/^# //' | sed 's/ *— *PART [A-Z] ONLY$//')"
 case "$RUN_NAME" in
   feature*) TITLE="[FEATURE] $BASE_TITLE" ;;
   fix*)     TITLE="[FIX] $BASE_TITLE" ;;

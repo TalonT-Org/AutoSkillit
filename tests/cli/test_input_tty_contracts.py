@@ -24,7 +24,7 @@ _TTY_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
     }
 )
 
-_CLI_DIR = Path("src/autoskillit/cli")
+_CLI_DIR = Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit" / "cli"
 
 
 def _has_tty_guard_before_input(func_body: list[ast.stmt]) -> bool:

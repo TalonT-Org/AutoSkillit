@@ -270,6 +270,12 @@ def test_orchestrator_prompt_path_contamination_falls_to_on_failure():
 
     prompt = _build_orchestrator_prompt("implementation")
     assert "path_contamination" in prompt, "Prompt must mention path_contamination retry_reason"
+    # path_contamination must be associated with on_failure routing
+    pc_idx = prompt.index("path_contamination")
+    segment = prompt[pc_idx : pc_idx + 500]
+    assert "on_failure" in segment, (
+        "Prompt must route path_contamination to on_failure near the path_contamination mention"
+    )
 
 
 def test_show_cook_preview_line_width_bounded_with_implementation_recipe(tmp_path, capsys):

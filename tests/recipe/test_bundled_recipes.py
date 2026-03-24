@@ -1653,15 +1653,23 @@ class TestImplementationRecipeMergeQueueRule:
 
     def test_kitchen_rules_mention_check_merge_queue(self, recipe) -> None:
         all_rules = " ".join(recipe.kitchen_rules)
-        assert "check_merge_queue" in all_rules and "MERGE ROUTING" in all_rules, (
-            "implementation.yaml kitchen_rules must reference both check_merge_queue "
-            "and contain a MERGE ROUTING rule"
+        assert "check_merge_queue" in all_rules, (
+            "implementation.yaml kitchen_rules must reference check_merge_queue"
+        )
+        assert "MERGE ROUTING" in all_rules, (
+            "implementation.yaml kitchen_rules must contain a MERGE ROUTING rule"
         )
 
     def test_kitchen_rules_prohibit_direct_gh_pr_merge(self, recipe) -> None:
-        all_rules = " ".join(recipe.kitchen_rules)
-        has_prohibition = "gh pr merge" in all_rules and any(
-            phrase in all_rules for phrase in ("never", "NEVER", "not", "prohibited")
+        # Find the specific rule that mentions "gh pr merge" and check for
+        # prohibition language within that rule, not across all rules.
+        merge_rules = [r for r in recipe.kitchen_rules if "gh pr merge" in r]
+        assert merge_rules, (
+            "implementation.yaml kitchen_rules must contain a rule mentioning 'gh pr merge'"
+        )
+        has_prohibition = any(
+            any(phrase in rule for phrase in ("never", "NEVER", "prohibited", "do not"))
+            for rule in merge_rules
         )
         assert has_prohibition, (
             "implementation.yaml kitchen_rules must explicitly prohibit calling "

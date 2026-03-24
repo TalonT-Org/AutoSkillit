@@ -108,7 +108,7 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     TOKEN USAGE TRACKING:
     - BEFORE executing the pipeline, call kitchen_status() and read
       token_usage_verbosity. This controls how you handle token reporting:
-        "summary" → the open_pr / open-pr-main skill self-retrieves its own
+        "summary" → the open_pr skill self-retrieves its own
                      token summary from disk (pipeline-scoped). Do NOT call
                      get_token_summary for this purpose and do NOT pre-stage
                      .autoskillit/temp/open-pr/token_summary.md — the skill handles it.

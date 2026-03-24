@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.cli._init_helpers import _KNOWN_SCANNERS
+from autoskillit.core import get_logger
+
+_log = get_logger(__name__)
 
 
 @dataclass
@@ -34,7 +37,7 @@ def is_first_run(project_dir: Path) -> bool:
             if any(recipes_dir.iterdir()):
                 return False
         except OSError:
-            pass
+            _log.debug("Could not list recipes dir %s", recipes_dir, exc_info=True)
     # 4. project already has skill overrides (already customized)
     from autoskillit.workspace import detect_project_local_overrides
 
@@ -179,9 +182,10 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
 
     # Wait up to 5s for gather_intel to complete, then shut down cleanly
     try:
-        intel_future.result(timeout=5.0)
+        intel = intel_future.result(timeout=5.0)
+        _log.debug("Onboarding intel gathered: %s", intel)
     except Exception:
-        pass
+        _log.debug("gather_intel did not complete in time", exc_info=True)
     finally:
         executor.shutdown(wait=True, cancel_futures=True)
 

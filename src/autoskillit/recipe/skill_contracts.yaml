@@ -182,7 +182,9 @@ skills:
     - name: workspace
       type: directory_path
       required: true
-    outputs: []
+    outputs:
+    - name: summary_path
+      type: file_path
   rectify:
     inputs:
     - name: investigation_path
@@ -228,20 +230,6 @@ skills:
     - "review_path\\s*=\\s*/.+"
     pattern_examples:
     - "review_path = /tmp/review.md\n%%ORDER_UP%%"
-  setup-project:
-    inputs:
-    - name: project_dir
-      type: directory_path
-      required: true
-    outputs:
-    - name: analysis_path
-      type: file_path
-    - name: config_path
-      type: file_path
-    expected_output_patterns:
-    - "analysis_path\\s*=\\s*/.+"
-    pattern_examples:
-    - "analysis_path = /tmp/analysis.md\n%%ORDER_UP%%"
   audit-friction:
     inputs: []
     outputs: []
@@ -385,7 +373,7 @@ skills:
     expected_output_patterns:
     - "triage_report\\s*=\\s*.+"
     pattern_examples:
-    - "triage_report = temp/triage-issues/triage_report_20260310_120000.md\n%%ORDER_UP%%"
+    - "triage_report = .autoskillit/temp/triage-issues/triage_report_20260310_120000.md\n%%ORDER_UP%%"
 
   review-pr:
     inputs:

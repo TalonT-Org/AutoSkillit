@@ -102,16 +102,6 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("open-pr", "closing_issue"),  # optional arg declared as [closing_issue]
         ("open-pr", "task_title"),  # derived from first heading of plan file
         ("open-pr", "timestamp"),  # generated timestamp for temp file
-        ("open-pr-main", "branch"),  # generic branch var in fetch fallback
-        (
-            "open-pr-main",
-            "changed_files_as_json_array",
-        ),  # runtime JSON serialization of changed_files
-        ("open-pr-main", "merge_base_sha"),  # computed in Step 2 via git merge-base
-        ("open-pr-main", "number"),  # per-PR/issue iteration value
-        ("open-pr-main", "pr_title"),  # constructed PR title string
-        ("open-pr-main", "pr_url"),  # captured from gh pr create output
-        ("open-pr-main", "timestamp"),  # generated timestamp for temp file
         ("pipeline-summary", "bug_count"),  # runtime computed count from audit log
         ("pipeline-summary", "date"),  # runtime computed date string
         ("prepare-issue", "body"),

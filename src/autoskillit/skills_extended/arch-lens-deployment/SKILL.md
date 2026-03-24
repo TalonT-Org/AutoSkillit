@@ -37,6 +37,14 @@ hooks:
 - Include network/communication protocols
 - Document storage locations
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
+- After writing the diagram file, emit the **absolute path** as a structured output
+  token immediately before `%%ORDER_UP%%`. Resolve the relative `temp/arch-lens-deployment/...`
+  save path to absolute by prepending the full CWD:
+  ```
+  diagram_path = /absolute/cwd/temp/arch-lens-deployment/{filename}.md
+  %%ORDER_UP%%
+  ```
+  This token is MANDATORY — the pipeline cannot proceed without it.
 
 ---
 
@@ -129,9 +137,14 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `temp/arch-lens-deployment/arch_diag_deployment_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `.autoskillit/temp/arch-lens-deployment/arch_diag_deployment_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After writing the diagram file, emit a structured output line:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 diagram_path = {absolute_path_to_diagram_file}

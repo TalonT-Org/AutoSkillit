@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from tests.arch._helpers import PROCESS_KILL_PY, PROCESS_MONITOR_PY, PROCESS_PY, PROCESS_RACE_PY
+from tests.arch._helpers import (
+    PROCESS_KILL_PY,
+    PROCESS_MONITOR_PY,
+    PROCESS_PY,
+    PROCESS_RACE_PY,
+    SRC_ROOT,
+)
 
 
 class TestNoAsyncioRuntimePrimitives:
@@ -74,6 +80,38 @@ class TestAnyioPrimitivesUsed:
     def test_anyio_move_on_after_present(self):
         source = PROCESS_PY.read_text()
         assert "anyio.move_on_after(" in source
+
+
+def test_server_has_no_asyncio_create_task() -> None:
+    """server/ must not use asyncio.create_task — use BackgroundTaskSupervisor.submit() instead."""
+    server_dir = SRC_ROOT / "server"
+    violations: list[str] = []
+    for path in sorted(server_dir.rglob("*.py")):
+        text = path.read_text()
+        if "asyncio.create_task" in text:
+            violations.append(str(path.relative_to(SRC_ROOT.parent.parent)))
+    assert not violations, (
+        "server/ must not use asyncio.create_task directly.\n"
+        "Use tool_ctx.background.submit() (BackgroundTaskSupervisor) instead.\n"
+        "Violations:\n" + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+def test_server_has_no_asyncio_ensure_future() -> None:
+    """server/ must not use asyncio.ensure_future.
+
+    Use BackgroundTaskSupervisor.submit() instead.
+    """
+    server_dir = SRC_ROOT / "server"
+    violations: list[str] = []
+    for path in sorted(server_dir.rglob("*.py")):
+        text = path.read_text()
+        if "asyncio.ensure_future" in text or "loop.create_task" in text:
+            violations.append(str(path.relative_to(SRC_ROOT.parent.parent)))
+    assert not violations, (
+        "server/ must not use asyncio.ensure_future or loop.create_task.\n"
+        "Violations:\n" + "\n".join(f"  {v}" for v in violations)
+    )
 
 
 class TestProcTypeAnnotationUpdated:

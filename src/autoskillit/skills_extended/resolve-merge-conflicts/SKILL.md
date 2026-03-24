@@ -12,7 +12,7 @@ description: >
 ## Arguments (positional)
 
 - `{worktree_path}` — absolute path to the existing worktree (must exist; rebase was aborted cleanly)
-- `{plan_path}` — absolute path to the implementation plan (`temp/make-plan/…_plan_….md`, relative to the current working directory)
+- `{plan_path}` — absolute path to the implementation plan (`.autoskillit/temp/make-plan/…_plan_….md`, relative to the current working directory)
 - `{base_branch}` — the integration branch to rebase onto (e.g. `integration/run-N`)
 
 ## Critical Constraints
@@ -30,7 +30,7 @@ description: >
 - Emit `worktree_path=` and `branch_name=` on successful resolution
 - Run `pre-commit run --all-files` after a successful rebase before emitting output tokens
 - Validate all three positional arguments before touching git state
-- Write `conflict_resolution_report_*.md` to `temp/resolve-merge-conflicts/` and emit `conflict_report_path=` after successful conflict resolution
+- Write `conflict_resolution_report_*.md` to `.autoskillit/temp/resolve-merge-conflicts/` and emit `conflict_report_path=` after successful conflict resolution
 
 ## When to Use
 
@@ -58,11 +58,20 @@ Validation checks:
    git -C {worktree_path} rev-parse --git-dir
    ```
 2. Verify `plan_path` file exists (readable Markdown).
-3. Verify `base_branch` is reachable:
+3. Resolve effective remote:
    ```bash
-   git -C {worktree_path} rev-parse --verify origin/{base_branch}
+   # Resolve effective remote: prefer 'upstream' (clone isolation contract) over 'origin'.
+   # In pipelines that use clone_repo(), 'origin' is a stale file:// URL and 'upstream'
+   # holds the real GitHub remote. In direct checkout repos, only 'origin' exists.
+   REMOTE=$(git -C {worktree_path} remote get-url upstream >/dev/null 2>&1 \
+            && echo upstream \
+            || echo origin)
    ```
-   If origin ref is not found, run `git -C {worktree_path} fetch origin {base_branch}` first.
+4. Verify `base_branch` is reachable:
+   ```bash
+   git -C {worktree_path} rev-parse --verify $REMOTE/{base_branch}
+   ```
+   If remote ref is not found, run `git -C {worktree_path} fetch $REMOTE {base_branch}` first.
 
 ### Step 1 — Load conflict context
 
@@ -77,17 +86,17 @@ Run commit log queries to understand the divergence:
 
 ```bash
 # What commits exist in the worktree that are not on the integration branch
-git -C {worktree_path} log --oneline origin/{base_branch}..HEAD
+git -C {worktree_path} log --oneline $REMOTE/{base_branch}..HEAD
 
 # What commits the integration branch received since the worktree was created
-git -C {worktree_path} fetch origin
-git -C {worktree_path} log --oneline HEAD..origin/{base_branch}
+git -C {worktree_path} fetch $REMOTE
+git -C {worktree_path} log --oneline HEAD..$REMOTE/{base_branch}
 ```
 
 ### Step 2 — Re-attempt rebase to surface conflicts
 
 ```bash
-git -C {worktree_path} rebase origin/{base_branch}
+git -C {worktree_path} rebase $REMOTE/{base_branch}
 ```
 
 **On success (clean rebase):** The integration branch advanced in a non-conflicting way
@@ -112,11 +121,11 @@ to understand the specific lines in tension.
 
 #### 3.3 — Determine intent of **theirs** (integration branch side)
 
-- Run `git -C {worktree_path} log --oneline origin/{base_branch} -5 -- {file}` to see recent
+- Run `git -C {worktree_path} log --oneline $REMOTE/{base_branch} -5 -- {file}` to see recent
   integration-branch commits touching this file
 - Retrieve integration-branch file content:
   ```bash
-  git -C {worktree_path} show origin/{base_branch}:{file}
+  git -C {worktree_path} show $REMOTE/{base_branch}:{file}
   ```
 - Infer the functional intent: what behavior was being added or changed?
 
@@ -244,12 +253,12 @@ tests here would be redundant and is explicitly prohibited.
 Create the directory and write the conflict resolution report:
 
 ```bash
-mkdir -p {worktree_path}/temp/resolve-merge-conflicts
+mkdir -p {worktree_path}/.autoskillit/temp/resolve-merge-conflicts
 ```
 
 Write the report to:
 ```
-{worktree_path}/temp/resolve-merge-conflicts/conflict_resolution_report_{YYYY-MM-DD_HHMMSS}.md
+{worktree_path}/.autoskillit/temp/resolve-merge-conflicts/conflict_resolution_report_{YYYY-MM-DD_HHMMSS}.md
 ```
 
 Report format:
@@ -280,6 +289,11 @@ Step 7.
 Skip this step — emit `worktree_path=` and `branch_name=` only (no `conflict_report_path`).
 
 ### Step 7 — Emit output tokens
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 worktree_path = {worktree_path}

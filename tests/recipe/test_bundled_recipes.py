@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
+from autoskillit.core import SKILL_TOOLS
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
@@ -461,6 +462,38 @@ class TestImplementationPipelineStructure:
             "the skip intent is already in the note: field but not schema-enforced"
         )
 
+    def test_implementation_review_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.on_context_limit == "verify", (
+            "review is advisory (skip_when_false); on context limit it should skip to "
+            "verify, not abort via on_failure"
+        )
+
+    def test_implementation_review_step_has_retries(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.retries >= 1
+
+    def test_ip_audit_impl_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["audit_impl"]
+        assert step.on_context_limit == "escalate_stop", (
+            "audit_impl is a merge gate; a context-exhausted audit cannot provide "
+            "a valid verdict — aborting via escalate_stop is correct"
+        )
+
+    def test_ip_open_pr_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["open_pr_step"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "open_pr_step is advisory (skip_when_false); on context limit the pipeline "
+            "cannot determine PR state — release the issue via release_issue_failure"
+        )
+
+    def test_ip_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
+            "pushed — abort via release_issue_failure"
+        )
+
     def test_ip_recipe_passes_semantic_validation(self, recipe) -> None:
         """After Part B, validate_recipe must report no errors."""
         from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
@@ -727,6 +760,38 @@ class TestImplementationGroupsStructure:
         assert step.skip_when_false == "inputs.review_approach", (
             "review step must declare skip_when_false: inputs.review_approach to make the "
             "skip intent schema-enforced. Currently it is prose-only in the note: field."
+        )
+
+    def test_ig_review_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.on_context_limit == "verify", (
+            "review is advisory (skip_when_false); on context limit it should skip to "
+            "verify, not abort via on_failure"
+        )
+
+    def test_ig_review_step_has_retries(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.retries >= 1
+
+    def test_ig_audit_impl_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["audit_impl"]
+        assert step.on_context_limit == "escalate_stop", (
+            "audit_impl is a merge gate; a context-exhausted audit cannot provide "
+            "a valid verdict — aborting via escalate_stop is correct"
+        )
+
+    def test_ig_open_pr_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["open_pr_step"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "open_pr_step is advisory (skip_when_false); on context limit the pipeline "
+            "cannot determine PR state — release the issue via release_issue_failure"
+        )
+
+    def test_ig_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
+            "pushed — abort via release_issue_failure"
         )
 
     def test_ig_recipe_passes_semantic_validation(self, recipe) -> None:
@@ -1042,6 +1107,40 @@ class TestInvestigateFirstStructure:
         assert step.skip_when_false == "inputs.review_approach", (
             "review step must declare skip_when_false: inputs.review_approach — "
             "the skip intent is already in the note: field but not schema-enforced"
+        )
+
+    def test_if_review_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.on_context_limit == "dry_walkthrough", (
+            "review is advisory (skip_when_false); on context limit it should skip to "
+            "dry_walkthrough, not abort via on_failure"
+        )
+
+    def test_if_review_step_has_retries(self, recipe) -> None:
+        step = recipe.steps["review"]
+        assert step.retries >= 1, (
+            "review step should allow at least one retry before routing to on_context_limit"
+        )
+
+    def test_if_audit_impl_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["audit_impl"]
+        assert step.on_context_limit == "escalate_stop", (
+            "audit_impl is a merge gate; a context-exhausted audit cannot provide "
+            "a valid verdict — aborting via escalate_stop is correct"
+        )
+
+    def test_if_open_pr_step_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["open_pr_step"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "open_pr_step is advisory (skip_when_false); on context limit the pipeline "
+            "cannot determine PR state — release the issue via release_issue_failure"
+        )
+
+    def test_if_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["ci_conflict_fix"]
+        assert step.on_context_limit == "release_issue_failure", (
+            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
+            "pushed — abort via release_issue_failure"
         )
 
     def test_if_recipe_passes_semantic_validation(self, recipe) -> None:
@@ -1378,6 +1477,24 @@ class TestReviewPrRecipeIntegration:
         )
 
 
+def test_telemetry_before_open_pr_rule_not_in_registry() -> None:
+    """The telemetry-before-open-pr rule must not be in the rule registry.
+
+    This rule was removed because open-pr now self-retrieves token telemetry
+    from disk using cwd_filter (Step 0b). If this test fails, the rule was
+    re-added to the registry and would silently fire on bundled production recipes.
+    """
+    import autoskillit.recipe  # noqa: F401 — triggers rule registration
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    rule_names = {spec.name for spec in _RULE_REGISTRY}
+    assert "telemetry-before-open-pr" not in rule_names, (
+        "telemetry-before-open-pr was re-added to the registry; "
+        "open-pr self-retrieves token telemetry via cwd_filter — "
+        "this rule is no longer needed and must not be registered"
+    )
+
+
 def test_bundled_recipes_pass_unrouted_verdict_value_rule() -> None:
     """All bundled recipes must pass the unrouted-verdict-value semantic rule."""
     for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
@@ -1523,6 +1640,44 @@ class TestBaseBranchDefaults:
 
 
 # ---------------------------------------------------------------------------
+# TestImplementationRecipeMergeQueueRule
+# ---------------------------------------------------------------------------
+
+
+class TestImplementationRecipeMergeQueueRule:
+    """implementation.yaml kitchen_rules must reference merge queue detection."""
+
+    @pytest.fixture(scope="class")
+    def recipe(self):
+        return load_recipe(builtin_recipes_dir() / "implementation.yaml")
+
+    def test_kitchen_rules_mention_check_merge_queue(self, recipe) -> None:
+        all_rules = " ".join(recipe.kitchen_rules)
+        assert "check_merge_queue" in all_rules, (
+            "implementation.yaml kitchen_rules must reference check_merge_queue"
+        )
+        assert "MERGE ROUTING" in all_rules, (
+            "implementation.yaml kitchen_rules must contain a MERGE ROUTING rule"
+        )
+
+    def test_kitchen_rules_prohibit_direct_gh_pr_merge(self, recipe) -> None:
+        # Find the specific rule that mentions "gh pr merge" and check for
+        # prohibition language within that rule, not across all rules.
+        merge_rules = [r for r in recipe.kitchen_rules if "gh pr merge" in r]
+        assert merge_rules, (
+            "implementation.yaml kitchen_rules must contain a rule mentioning 'gh pr merge'"
+        )
+        has_prohibition = any(
+            any(phrase in rule.lower() for phrase in ("never", "prohibited", "do not"))
+            for rule in merge_rules
+        )
+        assert has_prohibition, (
+            "implementation.yaml kitchen_rules must explicitly prohibit calling "
+            "gh pr merge directly outside of recipe steps"
+        )
+
+
+# ---------------------------------------------------------------------------
 # WF7: build_recipe_graph emits zero warnings for all bundled recipes
 # ---------------------------------------------------------------------------
 
@@ -1543,4 +1698,191 @@ def test_bundled_recipes_emit_no_graph_warnings(recipe_path):
     assert warning_events == [], (
         f"build_recipe_graph emitted {len(warning_events)} warnings for "
         f"{recipe_path.name}: {warning_events}"
+    )
+
+
+@pytest.mark.parametrize("recipe_path", _BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
+def test_all_advisory_run_skill_steps_have_on_context_limit(recipe_path):
+    """
+    Every run_skill step with skip_when_false must declare on_context_limit.
+    A step that can be skipped by configuration must also be skippable on context limit.
+    """
+    recipe = load_recipe(recipe_path)
+    violations = [
+        name
+        for name, step in recipe.steps.items()
+        if step.tool in SKILL_TOOLS
+        and step.skip_when_false is not None
+        and step.on_context_limit is None
+    ]
+    assert violations == [], (
+        f"Advisory run_skill steps in {recipe_path.name} missing on_context_limit: "
+        f"{violations}. Set on_context_limit to the appropriate skip/recovery step."
+    )
+
+
+# ---------------------------------------------------------------------------
+# TestRunModeIngredient
+# ---------------------------------------------------------------------------
+
+
+class TestRunModeIngredient:
+    """REQ-INGREDIENT-001 through REQ-INGREDIENT-005: run_mode ingredient in multi-issue recipes."""  # noqa: E501
+
+    @pytest.fixture(scope="class")
+    def impl_recipe(self):
+        return load_recipe(builtin_recipes_dir() / "implementation.yaml")
+
+    @pytest.fixture(scope="class")
+    def remed_recipe(self):
+        return load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+    def test_implementation_has_run_mode_ingredient(self, impl_recipe) -> None:
+        """REQ-INGREDIENT-001: implementation.yaml declares run_mode ingredient."""
+        assert "run_mode" in impl_recipe.ingredients, (
+            "implementation.yaml must declare run_mode ingredient"
+        )
+
+    def test_implementation_run_mode_default_is_sequential(self, impl_recipe) -> None:
+        """REQ-INGREDIENT-002: run_mode defaults to 'sequential'."""
+        ing = impl_recipe.ingredients["run_mode"]
+        assert ing.default == "sequential", (
+            "implementation.yaml run_mode must default to 'sequential'"
+        )
+
+    def test_implementation_run_mode_description_mentions_parallel(self, impl_recipe) -> None:
+        """REQ-INGREDIENT-001: description must document 'parallel' as a valid option."""
+        ing = impl_recipe.ingredients["run_mode"]
+        assert "parallel" in ing.description.lower(), (
+            "run_mode description must mention 'parallel' as an option"
+        )
+
+    def test_remediation_has_run_mode_ingredient(self, remed_recipe) -> None:
+        """REQ-INGREDIENT-001: remediation.yaml declares run_mode ingredient."""
+        assert "run_mode" in remed_recipe.ingredients, (
+            "remediation.yaml must declare run_mode ingredient"
+        )
+
+    def test_remediation_run_mode_default_is_sequential(self, remed_recipe) -> None:
+        """REQ-INGREDIENT-002: run_mode defaults to 'sequential'."""
+        ing = remed_recipe.ingredients["run_mode"]
+        assert ing.default == "sequential", (
+            "remediation.yaml run_mode must default to 'sequential'"
+        )
+
+    def test_remediation_run_mode_description_mentions_parallel(self, remed_recipe) -> None:
+        """REQ-INGREDIENT-001: description must document 'parallel' as a valid option."""
+        ing = remed_recipe.ingredients["run_mode"]
+        assert "parallel" in ing.description.lower(), (
+            "run_mode description must mention 'parallel' as an option"
+        )
+
+
+def test_no_bare_temp_paths_in_bundled_recipe_notes() -> None:
+    """No bundled recipe YAML should reference temp/ without .autoskillit/ prefix.
+
+    Bare temp/ references are incorrect; all project-local temp output must be
+    rooted under .autoskillit/temp/ per CLAUDE.md §3.2.
+    """
+    import re
+
+    recipes_dir = builtin_recipes_dir()
+    bare_temp = re.compile(r"(?<!\.autoskillit/)temp/")
+
+    violations: list[str] = []
+    for yaml_file in sorted(recipes_dir.glob("*.yaml")):
+        text = yaml_file.read_text()
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if bare_temp.search(line):
+                violations.append(f"{yaml_file.name}:{lineno}: {line.strip()}")
+
+    assert not violations, (
+        "Bundled recipe YAML files contain bare temp/ path references.\n"
+        "Replace with .autoskillit/temp/ per CLAUDE.md §3.2:\n" + "\n".join(violations)
+    )
+
+
+# ---------------------------------------------------------------------------
+# TestDeferCleanupRecipeStructure
+# ---------------------------------------------------------------------------
+
+
+def test_implementation_groups_has_defer_cleanup_ingredient() -> None:
+    """implementation-groups.yaml declares 'defer_cleanup' ingredient with default 'false'."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
+    assert "defer_cleanup" in recipe.ingredients, (
+        "implementation-groups.yaml must declare a 'defer_cleanup' ingredient"
+    )
+    assert recipe.ingredients["defer_cleanup"].default == "false", (
+        "defer_cleanup default must be 'false'"
+    )
+
+
+def test_implementation_has_defer_cleanup_ingredient() -> None:
+    """implementation.yaml declares 'defer_cleanup' ingredient."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    assert "defer_cleanup" in recipe.ingredients, (
+        "implementation.yaml must declare a 'defer_cleanup' ingredient"
+    )
+    assert recipe.ingredients["defer_cleanup"].default == "false", (
+        "defer_cleanup default must be 'false'"
+    )
+
+
+def test_remediation_has_defer_cleanup_ingredient() -> None:
+    """remediation.yaml declares 'defer_cleanup' ingredient."""
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+    assert "defer_cleanup" in recipe.ingredients, (
+        "remediation.yaml must declare a 'defer_cleanup' ingredient"
+    )
+    assert recipe.ingredients["defer_cleanup"].default == "false", (
+        "defer_cleanup default must be 'false'"
+    )
+
+
+def test_check_defer_cleanup_step_routes_to_register_or_confirm() -> None:
+    """check_defer_cleanup routes to register_success_deferred or confirm_cleanup."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    assert "check_defer_cleanup" in recipe.steps, (
+        "implementation.yaml must have a 'check_defer_cleanup' step"
+    )
+    step = recipe.steps["check_defer_cleanup"]
+    assert step.on_result is not None, "check_defer_cleanup must declare on_result"
+    conds = step.on_result.conditions
+    routes = {c.route for c in conds}
+    assert "register_success_deferred" in routes, (
+        "check_defer_cleanup on_result must route to 'register_success_deferred'"
+    )
+    fallthrough_routes = [c.route for c in conds if c.when is None]
+    assert fallthrough_routes == ["confirm_cleanup"], (
+        "check_defer_cleanup fallthrough (when=None) must route to 'confirm_cleanup'"
+    )
+    assert step.on_failure == "confirm_cleanup", (
+        "check_defer_cleanup on_failure must route to 'confirm_cleanup'"
+    )
+
+
+def test_register_success_deferred_routes_to_done() -> None:
+    """register_success_deferred routes on_success and on_failure to done."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    assert "register_success_deferred" in recipe.steps, (
+        "implementation.yaml must have a 'register_success_deferred' step"
+    )
+    step = recipe.steps["register_success_deferred"]
+    assert step.on_success == "done", "register_success_deferred.on_success must route to 'done'"
+    assert step.on_failure == "done", "register_success_deferred.on_failure must route to 'done'"
+
+
+def test_register_error_deferred_routes_to_escalate_stop() -> None:
+    """register_error_deferred routes on_success and on_failure to escalate_stop."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    assert "register_error_deferred" in recipe.steps, (
+        "implementation.yaml must have a 'register_error_deferred' step"
+    )
+    step = recipe.steps["register_error_deferred"]
+    assert step.on_success == "escalate_stop", (
+        "register_error_deferred.on_success must route to 'escalate_stop'"
+    )
+    assert step.on_failure == "escalate_stop", (
+        "register_error_deferred.on_failure must route to 'escalate_stop'"
     )

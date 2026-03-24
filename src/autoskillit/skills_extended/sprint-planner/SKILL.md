@@ -18,7 +18,7 @@ an existing triage manifest.
 
 **NEVER:**
 - Implement any issues — this skill is planning only
-- Create files outside `temp/sprint-planner/` directory
+- Create files outside `.autoskillit/temp/sprint-planner/` directory
 - Use native Claude Code tools (Read, Grep, Edit, Write, Bash) to modify the repo
 - Exceed the requested `sprint_size` when selecting issues
 

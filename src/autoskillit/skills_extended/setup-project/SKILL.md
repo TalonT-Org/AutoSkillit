@@ -33,7 +33,7 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 **NEVER:**
 - Modify any files in the target project without user confirmation at the summary gate
 - Run commands that change the target project
-- Create files outside `temp/setup-project/` directory (until the summary gate)
+- Create files outside `.autoskillit/temp/setup-project/` directory (until the summary gate)
 - Assume test framework — detect it from evidence
 - Use Makefile or `make` in generated examples — use Taskfile/`task` if a task runner is needed
 - Suggest `reset_guard_marker` config — that's a workspace concern, not project setup
@@ -137,12 +137,12 @@ Consolidate subagent findings into a structured profile:
 - Current git branch (for `base_branch` default)
 - Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate recipe drafts
 
-### Step 3: Write Analysis to temp/ (relative to the current working directory)
+### Step 3: Write Analysis to .autoskillit/temp/ (relative to the current working directory)
 
 Before presenting anything interactively, write the full analysis (project profile, workflow patterns, candidate workflows, shell command patterns) to:
 
 ```
-temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md
+.autoskillit/temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md
 ```
 
 Tell the user: "Full analysis saved to {path} for your review."
@@ -198,6 +198,12 @@ Interactive config suggestion flow:
 
 If no config exists, present the suggested config in full. If config exists, only highlight missing or suboptimal settings.
 
+> **NEVER include `github.token`, API keys, credentials, secrets, or any
+> secret-like values in `config.yaml`.** Tokens belong exclusively in
+> `.autoskillit/.secrets.yaml`, which is gitignored. Only include fields
+> documented in the config schema — do not invent new fields or extrapolate
+> from existing ones.
+
 Suggested config template:
 ```yaml
 test_check:
@@ -247,12 +253,17 @@ Do NOT include:
 ## Output
 
 Artifacts created:
-- `temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
+- `.autoskillit/temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
 - `.autoskillit/recipes/{name}.yaml` — approved recipes
 - `.autoskillit/config.yaml` — updated config (if changes approved)
 
 After the summary confirmation gate completes (Step 7), emit the following structured
 output tokens as the very last lines of your text output:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 analysis_path = {absolute_path_to_analysis_file}

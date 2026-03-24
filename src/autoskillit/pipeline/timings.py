@@ -13,6 +13,7 @@ from typing import Any
 
 from autoskillit.core import get_logger
 from autoskillit.pipeline.audit import _iter_session_log_entries
+from autoskillit.pipeline.tokens import canonical_step_name
 
 logger = get_logger(__name__)
 
@@ -45,14 +46,15 @@ class DefaultTimingLog:
     def record(self, step_name: str, duration_seconds: float) -> None:
         if not step_name:
             return
-        if step_name not in self._entries:
-            self._entries[step_name] = TimingEntry(step_name=step_name)
-        e = self._entries[step_name]
+        key = canonical_step_name(step_name)
+        if key not in self._entries:
+            self._entries[key] = TimingEntry(step_name=key)
+        e = self._entries[key]
         e.total_seconds += max(0.0, duration_seconds)
         e.invocation_count += 1
         logger.debug(
             "timing_recorded",
-            step_name=step_name,
+            step_name=key,
             invocation_count=e.invocation_count,
         )
 
@@ -68,26 +70,29 @@ class DefaultTimingLog:
         """Reset the store."""
         self._entries = {}
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int:
+    def load_from_log_dir(self, log_root: Path, *, since: str = "", cwd_filter: str = "") -> int:
         """Reconstruct timing entries from persisted session logs.
 
         Reads the sessions.jsonl index at log_root, filters entries by since
         (ISO timestamp), reads step_timing.json from each matching session
         directory, and accumulates into self._entries.
 
+        cwd_filter: if non-empty, only sessions whose cwd matches are loaded.
+
         Returns the count of session directories successfully loaded.
         """
         count = 0
-        for st_path in _iter_session_log_entries(log_root, since, "step_timing.json"):
+        for st_path in _iter_session_log_entries(log_root, since, "step_timing.json", cwd_filter):
             try:
                 data = json.loads(st_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 continue
 
-            step_name = data.get("step_name", "")
-            if not step_name:
+            raw_step = data.get("step_name", "")
+            if not raw_step:
                 continue
 
+            step_name = canonical_step_name(raw_step)
             if step_name not in self._entries:
                 self._entries[step_name] = TimingEntry(step_name=step_name)
             e = self._entries[step_name]

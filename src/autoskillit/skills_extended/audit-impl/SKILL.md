@@ -41,7 +41,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 **NEVER:**
 - Modify source files, plan files, or any other files — read-only audit only
 - Run tests — this skill audits, it does not fix
-- Create files outside `temp/audit-impl/`
+- Create files outside `.autoskillit/temp/audit-impl/`
 - Emit a GO verdict when any `MISSING` or `CONFLICT` finding exists
 
 **ALWAYS:**
@@ -49,6 +49,16 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Resolve all plan files before starting (abort early if any are missing)
 - Write `Dry-walkthrough verified = TRUE` as the absolute first line of any remediation file
+- On a NO GO verdict, after writing the remediation file, emit the **absolute path** as a
+  structured output token immediately before `%%ORDER_UP%%`. Resolve the relative
+  `temp/audit-impl/...` save path to absolute by prepending the full CWD:
+  ```
+  verdict = NO GO
+  remediation_path = /absolute/cwd/temp/audit-impl/{filename}.md
+  %%ORDER_UP%%
+  ```
+  On a GO verdict, emit only `verdict = GO` (no remediation_path token).
+  The remediation_path token is MANDATORY on NO GO — the pipeline cannot proceed without it.
 
 ## Workflow
 
@@ -96,7 +106,7 @@ store as `conflict_report_path_list`. Proceed even if empty — the cross-refere
 Step 2.5 is skipped when the list is empty.
 
 **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
-exist (e.g., plan file arguments, `temp/investigate/` reports, external file references), use
+exist (e.g., plan file arguments, `.autoskillit/temp/investigate/` reports, external file references), use
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
 
@@ -266,6 +276,11 @@ Exit 0. The pipeline may proceed to merge.
 After printing the GO result, emit the following structured output token as the very
 last line of your text output:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 verdict = GO
 ```
@@ -274,7 +289,7 @@ verdict = GO
 
 #### If NO GO
 
-Generate `temp/audit-impl/remediation_{topic}_{YYYY-MM-DD_HHMMSS}.md`:
+Generate `.autoskillit/temp/audit-impl/remediation_{topic}_{YYYY-MM-DD_HHMMSS}.md`:
 
 ```markdown
 Dry-walkthrough verified = TRUE
@@ -336,6 +351,11 @@ Exit 1.
 After printing the NO GO result, emit the following structured output tokens as the very
 last lines of your text output:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 verdict = NO GO
 remediation_path = {absolute_path_to_remediation_file}
@@ -349,7 +369,7 @@ NO GO; omit the `remediation_path=` line entirely on GO).
 ## Output Location
 
 ```
-temp/audit-impl/
+.autoskillit/temp/audit-impl/
 └── remediation_{topic}_{YYYY-MM-DD_HHMMSS}.md    (written on NO GO only)
 ```
 

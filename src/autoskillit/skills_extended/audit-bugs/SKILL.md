@@ -29,12 +29,12 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last week`). If
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `temp/audit-bugs/` directory
+- Create files outside `.autoskillit/temp/audit-bugs/` directory
 
 **ALWAYS:**
 - Use subagents heavily for parallel log analysis
-- All output goes under `temp/audit-bugs/` (create if needed)
-- Final report: `temp/audit-bugs/bug_pattern_audit_{YYYY-MM-DD_HHMMSS}.md`
+- All output goes under `.autoskillit/temp/audit-bugs/` (create if needed)
+- Final report: `.autoskillit/temp/audit-bugs/bug_pattern_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Subagents must NOT create their own files - they return findings in their response text only
 - Do not change any code
 
@@ -76,7 +76,7 @@ Split the matching files into batches of ~5 and dispatch general-purpose subagen
 - JSONL format: each line is a JSON object
 - `"type": "human"` entries contain user messages (error reports)
 - `"type": "assistant"` entries with text content contain investigation findings
-- Look for tool calls writing to `temp/investigate/investigation_*.md` or `temp/rectify/rectify_*.md` for structured findings
+- Look for tool calls writing to `.autoskillit/temp/investigate/investigation_*.md` or `.autoskillit/temp/rectify/rectify_*.md` for structured findings
 - Search for keywords: "root cause", "Root Cause", "fix", "summary", "finding"
 - Read the first ~500 lines for context, then search for conclusions
 
@@ -94,9 +94,9 @@ After subagents return, group findings into recurring patterns:
 
 ### Step 5: Write Report
 
-Ensure `temp/audit-bugs/` exists (`mkdir -p`).
+Ensure `.autoskillit/temp/audit-bugs/` exists (`mkdir -p`).
 
-Save to: `temp/audit-bugs/bug_pattern_audit_{YYYY-MM-DD_HHMMSS}.md`
+Save to: `.autoskillit/temp/audit-bugs/bug_pattern_audit_{YYYY-MM-DD_HHMMSS}.md`
 
 Structure:
 ```markdown

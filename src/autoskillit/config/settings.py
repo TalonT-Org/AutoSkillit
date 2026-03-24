@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     CATEGORY_TAGS,
     OutputFormat,
+    atomic_write,
     dump_yaml_str,
     load_yaml,
     pkg_root,
@@ -29,6 +30,14 @@ if TYPE_CHECKING:
     from dynaconf import Dynaconf
 
 _logger = logging.getLogger(__name__)  # noqa: TID251
+
+
+class ConfigSchemaError(ValueError):
+    """Raised when a config YAML layer contains unrecognized or misplaced keys."""
+
+
+_SECRETS_ONLY_KEYS: frozenset[str] = frozenset({"github.token"})
+_METADATA_KEYS: frozenset[str] = frozenset({"version"})
 
 
 @dataclass
@@ -389,6 +398,101 @@ class AutomationConfig:
         )
 
 
+def _build_config_schema() -> dict[str, frozenset[str]]:
+    """Derive a two-level schema map {section: {valid_field_names}} from AutomationConfig."""
+    schema: dict[str, frozenset[str]] = {}
+    for f in dataclasses.fields(AutomationConfig):
+        sub_type: type | None = None
+        if f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
+            factory = f.default_factory  # type: ignore[assignment]
+            if dataclasses.is_dataclass(factory):
+                sub_type = factory
+        elif f.default is not dataclasses.MISSING and dataclasses.is_dataclass(f.default):
+            sub_type = type(f.default)
+        schema[f.name] = (
+            frozenset(sf.name for sf in dataclasses.fields(sub_type))
+            if sub_type is not None
+            else frozenset()
+        )
+    return schema
+
+
+_CONFIG_SCHEMA: dict[str, frozenset[str]] = _build_config_schema()
+
+
+def validate_layer_keys(
+    layer_dict: dict[str, Any],
+    layer_path: Path,
+    *,
+    is_secrets_layer: bool,
+) -> None:
+    """Validate that all keys in a YAML config layer are recognized and allowed.
+
+    Raises ConfigSchemaError for:
+    - Unrecognized top-level section name
+    - Unrecognized field name within a known section
+    - A _SECRETS_ONLY_KEYS path appearing in a non-secrets layer
+    """
+    import difflib  # stdlib — safe to import here
+
+    for top_key, value in layer_dict.items():
+        if top_key in _METADATA_KEYS:
+            continue
+        if top_key not in _CONFIG_SCHEMA:
+            known = sorted(_CONFIG_SCHEMA.keys())
+            close = difflib.get_close_matches(top_key, known, n=1, cutoff=0.6)
+            hint = f" did you mean '{close[0]}'?" if close else ""
+            raise ConfigSchemaError(
+                f"Invalid configuration in {str(layer_path)!r}: "
+                f"unrecognized key '{top_key}'.{hint}"
+            )
+        # Validate sub-keys for all dict-valued sections; empty frozenset means no valid sub-keys
+        if isinstance(value, dict):
+            for sub_key in value:
+                dotted = f"{top_key}.{sub_key}"
+                if dotted in _SECRETS_ONLY_KEYS:
+                    if not is_secrets_layer:
+                        secrets_hint_path = layer_path.parent / ".secrets.yaml"
+                        top, sub = dotted.split(".", 1)
+                        raise ConfigSchemaError(
+                            f"Invalid configuration in {str(layer_path)!r}: "
+                            f"'{dotted}' is a secret key that must not appear in config.yaml.\n\n"
+                            f"To fix, add the following to {str(secrets_hint_path)!r}:\n\n"
+                            f"  {top}:\n"
+                            f"    {sub}: <your_token_value>\n\n"
+                            f"Then remove the '{dotted}' key from {str(layer_path)!r}."
+                        )
+                    continue  # secrets-only keys are valid in .secrets.yaml
+                if sub_key not in _CONFIG_SCHEMA[top_key]:
+                    known_sub = sorted(_CONFIG_SCHEMA[top_key])
+                    close = difflib.get_close_matches(sub_key, known_sub, n=1, cutoff=0.6)
+                    hint = f" did you mean '{top_key}.{close[0]}'?" if close else ""
+                    raise ConfigSchemaError(
+                        f"Invalid configuration in {str(layer_path)!r}: "
+                        f"unrecognized key '{dotted}' in section '{top_key}'.{hint}"
+                    )
+
+
+def write_config_layer(path: Path, data: dict[str, Any]) -> None:
+    """Validate config data against the schema, then atomically write it to path.
+
+    Raises ConfigSchemaError before touching the file if the data contains
+    unrecognized keys, unknown sub-keys, or any _SECRETS_ONLY_KEYS entries.
+    This is the canonical write gateway for all config.yaml write sites.
+
+    Parameters
+    ----------
+    path:
+        Destination file path. Must be a non-secrets config.yaml path — never
+        .secrets.yaml (which allows different keys).
+    data:
+        YAML-serializable dict to validate and write.
+    """
+    validate_layer_keys(data, path, is_secrets_layer=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
+
+
 def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
     """Parse subsets section, emitting warnings for unknown disabled categories."""
     disabled = list(raw.get("disabled", []))
@@ -457,10 +561,10 @@ def _merge_yaml_layers(*paths: Path) -> dict[str, Any]:
 def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
     """Create a Dynaconf instance for env-var overrides over pre-merged file layers.
 
-    File layers (defaults, user, project, secrets) are merged in advance using
-    _merge_yaml_layers(), which applies dict deep-merge + list-replace semantics.
-    The merged result is written to a temp YAML file so that Dynaconf can apply
-    env var overrides (AUTOSKILLIT_SECTION__KEY) on top.
+    File layers (defaults, user, project, secrets) are merged in advance with
+    dict deep-merge + list-replace semantics. User-writable layers are validated
+    for unrecognized keys before merging. The merged result is written to a temp
+    YAML file so that Dynaconf can apply env var overrides (AUTOSKILLIT_SECTION__KEY).
 
     Deferred import keeps dynaconf off the module-level import chain.
     """
@@ -469,12 +573,28 @@ def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
     defaults_path = pkg_root() / "config" / "defaults.yaml"
     root = project_dir or Path.cwd()
 
-    merged = _merge_yaml_layers(
-        defaults_path,
-        Path.home() / ".autoskillit" / "config.yaml",
-        root / ".autoskillit" / "config.yaml",
-        root / ".autoskillit" / ".secrets.yaml",
-    )
+    # Layer definitions: (path, should_validate, is_secrets_layer)
+    _layers = [
+        (defaults_path, False, False),
+        (Path.home() / ".autoskillit" / "config.yaml", True, False),
+        (root / ".autoskillit" / "config.yaml", True, False),
+        (root / ".autoskillit" / ".secrets.yaml", True, True),
+    ]
+
+    merged: dict[str, Any] = {}
+    for path, should_validate, is_secrets in _layers:
+        if path.is_file():
+            data = load_yaml(path)
+            if isinstance(data, dict):
+                if should_validate:
+                    validate_layer_keys(data, path, is_secrets_layer=is_secrets)
+                _apply_layer(merged, data)
+            elif data is not None:
+                raise ConfigSchemaError(
+                    f"Invalid configuration in {str(path)!r}: "
+                    f"expected a YAML mapping at the top level, "
+                    f"got {type(data).__name__!r}."
+                )
 
     # Write to a temp file so Dynaconf can load it and apply env var overrides.
     # Dynaconf reads files lazily; we trigger eager loading before the file is

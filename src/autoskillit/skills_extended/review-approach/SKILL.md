@@ -25,7 +25,7 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `temp/review-approach/` directory
+- Create files outside `.autoskillit/temp/review-approach/` directory
 
 **ALWAYS:**
 - Use subagents with web search for parallel research
@@ -35,6 +35,14 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
 - Make recommendations based on technical merit and project fit
 - Tie research back to the specific problem context
 - Include source URLs for all referenced material
+- After writing the review file, emit the **absolute path** as a structured output
+  token immediately before `%%ORDER_UP%%`. Resolve the relative `temp/review-approach/...`
+  save path to absolute by prepending the full CWD:
+  ```
+  review_path = /absolute/cwd/temp/review-approach/{filename}.md
+  %%ORDER_UP%%
+  ```
+  This token is MANDATORY — the pipeline cannot proceed without it.
 
 ## Workflow
 
@@ -65,7 +73,7 @@ Drop anything that doesn't meaningfully inform the decision.
 
 ### Step 4: Write Review
 
-Save to: `temp/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Save to: `.autoskillit/temp/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ```markdown
 # Approach Review: {Topic}
@@ -96,6 +104,11 @@ Save to: `temp/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md` (
 
 After saving the review file, emit the structured output token as the very last line
 of your text output:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 review_path = {absolute_path_to_review_file}

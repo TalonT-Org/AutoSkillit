@@ -361,6 +361,7 @@ async def enrich_issues(
 async def claim_issue(
     issue_url: str,
     label: str | None = None,
+    allow_reentry: bool = False,
 ) -> str:
     """Apply an in-progress label to a GitHub issue to claim it for processing.
 
@@ -369,12 +370,16 @@ async def claim_issue(
 
     Returns JSON with: success, claimed (bool), issue_number, label.
     When claimed=false, the issue is already being processed by another session.
+    When allow_reentry=True and label already present, returns claimed=True with reentry=True.
     On gate closed or no token: {success: false, error: "..."}.
 
     Args:
         issue_url: Full GitHub issue URL (https://github.com/owner/repo/issues/42)
                    or shorthand (owner/repo#42).
         label: Label name to apply. Defaults to github.in_progress_label from config.
+        allow_reentry: When True and the in-progress label is already present, returns
+                       claimed=True with reentry=True instead of claimed=False. Used by
+                       process-issues to re-enter recipes for upfront-claimed issues.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -403,6 +408,16 @@ async def claim_issue(
 
         current_labels = _extract_label_names(result.get("labels", []))
         if effective_label in current_labels:
+            if allow_reentry:
+                return json.dumps(
+                    {
+                        "success": True,
+                        "claimed": True,
+                        "reentry": True,
+                        "issue_number": issue_number,
+                        "label": effective_label,
+                    }
+                )
             return json.dumps(
                 {
                     "success": True,

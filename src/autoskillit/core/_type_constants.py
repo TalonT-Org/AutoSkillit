@@ -137,6 +137,8 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "list_recipes",
         "load_recipe",
         "validate_recipe",
+        "register_clone_status",
+        "batch_cleanup_clones",
     }
 )
 
@@ -176,6 +178,8 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     # clone
     "clone_repo": frozenset({"clone"}),
     "remove_clone": frozenset({"clone"}),
+    "register_clone_status": frozenset({"clone"}),
+    "batch_cleanup_clones": frozenset({"clone"}),
     # telemetry
     "get_token_summary": frozenset({"telemetry"}),
     "get_timing_summary": frozenset({"telemetry"}),
@@ -194,7 +198,16 @@ TOOL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("merge_worktree", "create_unique_branch", "check_pr_mergeable", "set_commit_status"),
     ),
     ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
-    ("Clone & Remote", ("clone_repo", "remove_clone", "push_to_remote")),
+    (
+        "Clone & Remote",
+        (
+            "clone_repo",
+            "remove_clone",
+            "push_to_remote",
+            "register_clone_status",
+            "batch_cleanup_clones",
+        ),
+    ),
     (
         "GitHub",
         (

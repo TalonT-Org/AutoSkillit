@@ -9,7 +9,6 @@ jobs:
   bump-and-sync:
     permissions:
       contents: write
-      administration: write
     if: >
       github.event.pull_request.merged == true &&
       github.event.pull_request.head.ref == 'integration'
@@ -20,6 +19,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -83,7 +83,7 @@ jobs:
       - name: Allow force-push on integration branch
         id: allow-force-push
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
           REPO="${{ github.repository }}"
@@ -211,7 +211,7 @@ jobs:
       - name: Restore integration branch protection
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
           if [[ "${INTEGRATION_PROTECTION_UPDATED:-}" != "true" ]]; then

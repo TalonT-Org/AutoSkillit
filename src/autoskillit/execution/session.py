@@ -346,9 +346,15 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                     if isinstance(content, list):
                         for block in content:
                             if isinstance(block, dict) and block.get("type") == "tool_use":
-                                acc.tool_uses.append(
-                                    {"name": block.get("name", ""), "id": block.get("id", "")}
-                                )
+                                name = block.get("name", "")
+                                entry: dict[str, str] = {"name": name, "id": block.get("id", "")}
+                                if name in {"Write", "Edit"} and isinstance(
+                                    block.get("input"), dict
+                                ):
+                                    fp = block["input"].get("file_path", "")
+                                    if fp:
+                                        entry["file_path"] = fp
+                                acc.tool_uses.append(entry)
                         text = "\n".join(
                             block.get("text", "") for block in content if isinstance(block, dict)
                         ).strip()
@@ -418,6 +424,26 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
     )
 
 
+# Compiled once at module level — no per-call overhead
+_MARKDOWN_TOKEN_RE: re.Pattern[str] = re.compile(r"\*{1,2}(\w[\w_-]*)\*{1,2}(\s*=)", re.MULTILINE)
+
+
+def _strip_markdown_from_tokens(text: str) -> str:
+    """Remove bold/italic markdown decorators from structured output token names.
+
+    Transforms model output like:
+        **plan_path** = /abs/path/plan.md
+    into the canonical form:
+        plan_path = /abs/path/plan.md
+
+    Applied before regex pattern matching to make adjudication tolerant of the
+    model's choice to visually style its output summary. Only `*word*` and
+    `**word**` patterns adjacent to `=` are normalized — decorators elsewhere
+    in the text are left unchanged.
+    """
+    return _MARKDOWN_TOKEN_RE.sub(r"\1\2", text)
+
+
 def _check_expected_patterns(result: str, patterns: Sequence[str]) -> bool:
     """Return True if ALL expected_output_patterns are found in result, or if
     no patterns are configured. This check MUST run on all session outcome paths,
@@ -426,13 +452,17 @@ def _check_expected_patterns(result: str, patterns: Sequence[str]) -> bool:
     AND semantics are intentional: patterns represent content contracts (e.g.,
     block start/end delimiters) that must all be present simultaneously.
 
+    Normalizes bold/italic markdown decorators on token names before matching,
+    so ``**plan_path** = /path`` is treated identically to ``plan_path = /path``.
+
     If any pattern is an invalid regex, returns False rather than raising.
     """
     if not patterns:
         return True
+    normalized = _strip_markdown_from_tokens(result)
     for p in patterns:
         try:
-            if not re.search(p, result):
+            if not re.search(p, normalized):
                 return False
         except re.error:
             logger.warning("invalid_expected_output_pattern", pattern=p)
@@ -689,14 +719,20 @@ def _compute_retry(
                 )
                 return False, RetryReason.NONE
             if returncode == 0 and _is_kill_anomaly(session):
+                reason = (
+                    RetryReason.RESUME
+                    if session._is_context_exhausted()
+                    else RetryReason.EMPTY_OUTPUT
+                )
                 logger.debug(
                     "compute_retry_result",
                     termination="NATURAL_EXIT",
                     channel=str(channel_confirmation),
                     needs_retry=True,
                     kill_anomaly=True,
+                    context_exhausted=reason == RetryReason.RESUME,
                 )
-                return True, RetryReason.RESUME
+                return True, reason
             # EARLY_STOP: model produced substantive output but stopped before
             # emitting the completion marker (text-then-tool boundary).
             if (
@@ -896,7 +932,7 @@ def _compute_outcome(
                 )
                 if content_state == ContentState.ABSENT:
                     needs_retry = True
-                    retry_reason = RetryReason.RESUME
+                    retry_reason = RetryReason.DRAIN_RACE
                     logger.debug(
                         "dead_end_guard",
                         action="promoted_to_retriable",

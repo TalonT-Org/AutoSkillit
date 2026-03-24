@@ -60,7 +60,7 @@ Parse two positional arguments from the prompt:
 2. **Worktree path** — verify the directory exists and is a git worktree. Check that the development environment is set up (e.g. `.venv` exists for Python projects)
 
 **Path Detection:** Use path detection to locate both arguments. Scan all
-tokens after the skill name for those starting with `/`, `./`, `temp/`, or
+tokens after the skill name for those starting with `/`, `./`, `.autoskillit/temp/`, or
 `.autoskillit/`. The first such token is `plan_path`; the second is
 `worktree_path`. Ignore any non-path tokens that appear before them (e.g.,
 extra descriptive text like "use this plan" or "from worktree"). If fewer than
@@ -92,7 +92,7 @@ base-branch store file written by `implement-worktree-no-merge` (fallback).
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 # Primary: read upstream tracking set by implement-worktree-no-merge
-BASE_BRANCH=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null | sed 's|origin/||')
+BASE_BRANCH=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null | sed 's|^[^/]*/||')
 
 if [ -z "$BASE_BRANCH" ]; then
     # Fallback: read explicit file store written by implement-worktree-no-merge
@@ -116,8 +116,9 @@ Then assess what has been implemented:
 1. Read the plan file to understand the full scope
 2. Check what has been implemented so far:
    ```bash
-   git log --oneline $(git merge-base HEAD origin/${BASE_BRANCH})..HEAD
-   git diff --stat $(git merge-base HEAD origin/${BASE_BRANCH})..HEAD
+   REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+   git log --oneline $(git merge-base HEAD $REMOTE/${BASE_BRANCH})..HEAD
+   git diff --stat $(git merge-base HEAD $REMOTE/${BASE_BRANCH})..HEAD
    ```
 3. Compare implemented changes against plan phases to determine:
    - Which phases are complete
@@ -168,8 +169,9 @@ If tests fail, fix the issue and re-run.
 ### Step 5: Rebase for Squash-and-Merge
 
 ```bash
-git fetch origin
-git rebase origin/${BASE_BRANCH}
+REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+git fetch "$REMOTE"
+git rebase "$REMOTE/${BASE_BRANCH}"
 ```
 
 If conflicts occur, resolve them, `git rebase --continue`, then re-run tests. Report rebase status.
@@ -182,6 +184,11 @@ Always confirm the merge went through before removing worktree.
 Do not merge until user confirms first!
 
 Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 worktree_path = ${WORKTREE_PATH}

@@ -108,10 +108,10 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     TOKEN USAGE TRACKING:
     - BEFORE executing the pipeline, call kitchen_status() and read
       token_usage_verbosity. This controls how you handle token reporting:
-        "summary" → call get_token_summary(clear=false, format=table) ONCE
-                     after the pipeline completes. The tool returns a
-                     pre-formatted markdown table — write it directly to
-                     temp/open-pr/token_summary.md via run_cmd.
+        "summary" → the open_pr skill self-retrieves its own
+                     token summary from disk (pipeline-scoped). Do NOT call
+                     get_token_summary for this purpose and do NOT pre-stage
+                     .autoskillit/temp/open-pr/token_summary.md — the skill handles it.
         "none"    → do NOT call get_token_summary. Skip token reporting entirely.
     - Do NOT print or render a token usage table after individual steps.
       Only one call to get_token_summary is permitted per pipeline run,
@@ -119,6 +119,10 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     - Pass step_name (the YAML step key, e.g. "implement") in the with: block
       when calling run_skill. The server accumulates token
       usage server-side, grouped by step name.
+    - The step_name value MUST match the YAML step key exactly — do NOT append
+      clone instance numbers, retry counts, or any disambiguation suffixes.
+      Parallel runs of the same step across multiple clones all use the same
+      canonical step_name; the token log aggregates them automatically.
     - Non-skill steps (test_check, run_cmd, merge_worktree) have no token usage —
       they are not included in get_token_summary output. Do not add rows for them.
 

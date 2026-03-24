@@ -53,7 +53,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `temp/make-groups/` directory
+- Create files outside `.autoskillit/temp/make-groups/` directory
 - Drop, split, or rewrite requirements — reference them by original ID
 - Create groups that cannot be independently planned
 - Include implementation steps or technical approach in the group descriptions
@@ -64,7 +64,17 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Include every requirement from the source document in exactly one group
 - Assign each group a sequential suffix: groupA, groupB, ... groupZ
 - State dependencies between groups explicitly
-- Write to `temp/make-groups/` directory (relative to the current working directory)
+- Write to `.autoskillit/temp/make-groups/` directory (relative to the current working directory)
+- After writing the groups file and manifest, emit the **absolute paths** as structured output
+  tokens immediately before `%%ORDER_UP%%`. Resolve the relative `.autoskillit/temp/make-groups/...`
+  save paths to absolute by prepending the full CWD:
+  ```
+  groups_path = /absolute/cwd/.autoskillit/temp/make-groups/{groups_filename}.md
+  manifest_path = /absolute/cwd/.autoskillit/temp/make-groups/{manifest_filename}.json
+  group_files = /absolute/cwd/.autoskillit/temp/make-groups/{groups_filename}.md
+  %%ORDER_UP%%
+  ```
+  These tokens are MANDATORY — the pipeline cannot proceed without them.
 
 ## Workflow
 
@@ -120,7 +130,7 @@ Sort groups so that each group's dependencies are satisfied by earlier groups. D
 
 ### Step 5: Write the Groups Documents
 
-Produce three outputs in `temp/make-groups/`:
+Produce three outputs in `.autoskillit/temp/make-groups/`:
 
 **5a. Index file (consolidated):** `groups_{topic}_{YYYY-MM-DD_HHMMSS}.md`
 
@@ -244,6 +254,11 @@ Report to terminal: index file path, manifest file path, per-group file count, a
 After all group files are written and the prose report is printed, emit the following
 structured output tokens as the very last lines of your text output:
 
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 groups_path = {absolute_path_to_index_file}
 manifest_path = {absolute_path_to_manifest_file}
@@ -259,7 +274,7 @@ orchestrating recipe). List every per-group file in implementation order.
 ## Output Location
 
 ```
-temp/make-groups/
+.autoskillit/temp/make-groups/
 ├── groups_{topic}_{ts}.md           # Consolidated index (all groups)
 ├── manifest_{topic}_{ts}.json       # Machine-readable manifest
 ├── groupA_{topic}_{ts}.md           # Individual per-group file

@@ -2,7 +2,7 @@
 
 ## Overview
 
-AutoSkillit's 61 bundled skills are organized into three tiers that control when and where
+AutoSkillit's 60 bundled skills are organized into three tiers that control when and where
 they appear as slash commands. The tier system is orthogonal to subset categories — you can
 disable a subset across all tiers simultaneously, or reclassify individual skills between
 tiers. See [Subset Categories](subset-categories.md) for subset configuration.
@@ -77,14 +77,14 @@ and `/autoskillit:close-kitchen`. Skills in `skills_extended/` are never seen.
    (subset-filtered and override-aware)
 3. Claude Code is launched with `--plugin-dir <ephemeral-dir>` and `--add-dir <cwd>` so
    project-local skills in `.claude/skills/` are also discoverable
-4. All 61 bundled skills appear as `/autoskillit:*` slash commands within the session
+4. All 60 bundled skills appear as `/autoskillit:*` slash commands within the session
 5. The ephemeral directory is cleaned up when the session ends
 
 ### Order session (`$ autoskillit order`)
 
 Order is similar to cook: AutoSkillit launches Claude Code with access to all tiers.
 The key difference is the orchestrator (`sous-chef` skill) is injected and the kitchen
-is pre-opened so all 40 MCP tools are available from the start.
+is pre-opened so all 42 MCP tools are available from the start.
 
 ### Headless session (launched by `run_skill`)
 

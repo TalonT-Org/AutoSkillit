@@ -94,6 +94,7 @@ class TestBuildInteractiveCmdExtended:
         with (
             patch("shutil.which", return_value="/usr/bin/claude"),
             patch("builtins.input", return_value=""),
+            patch("sys.stdin.isatty", return_value=True),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
         ):

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     AuditStore,
+    BackgroundSupervisor,
     CIRunScope,
     CIWatcher,
     CloneManager,
@@ -33,6 +34,7 @@ from autoskillit.core import (
     WorkspaceManager,
     WriteExpectedResolver,
 )
+from autoskillit.pipeline.background import BackgroundTaskSupervisor
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 
 
@@ -87,6 +89,7 @@ class ToolContext:
     github_client: GitHubFetcher | None = field(default=None)
     ci_watcher: CIWatcher | None = field(default=None)
     merge_queue_watcher: MergeQueueWatcher | None = field(default=None)
+    background: BackgroundSupervisor = field(default_factory=BackgroundTaskSupervisor)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
     write_expected_resolver: WriteExpectedResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)

@@ -22,7 +22,7 @@ Creates comprehensive architecture diagrams for selected components or systems u
 - Ask user which component/system to diagram
 - Use the `/autoskillit:mermaid` skill for diagram creation
 - Include multiple views (data flow, component structure, sequence diagrams)
-- Save diagrams to `temp/make-arch-diag/{component-name}/` (relative to the current working directory)
+- Save diagrams to `.autoskillit/temp/make-arch-diag/{component-name}/` (relative to the current working directory)
 - Use consistent color coding across all diagrams
 
 **NEVER:**
@@ -103,7 +103,7 @@ Use `/autoskillit:mermaid` skill to create each diagram:
 
 ### Step 6: Write Architecture Description
 
-Create `temp/make-arch-diag/{component}/architecture.md`:
+Create `.autoskillit/temp/make-arch-diag/{component}/architecture.md`:
 
 ```markdown
 # {Component} Architecture

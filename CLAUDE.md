@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 40 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, wait_for_merge_queue, toggle_auto_merge, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events, kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 38 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, 1 tool additionally tagged `headless` (test_check) and revealed in headless sessions via `mcp.enable(tags={'headless'})`, and 2 Free Range tools (open_kitchen, close_kitchen) always visible. Revealed per-session via `open_kitchen` tool, and 61 bundled skills (60 slash commands + 1 internal) registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 42 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, register_clone_status, batch_cleanup_clones, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, wait_for_merge_queue, toggle_auto_merge, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events, kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 40 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, 1 tool additionally tagged `headless` (test_check) and revealed in headless sessions via `mcp.enable(tags={'headless'})`, and 2 Free Range tools (open_kitchen, close_kitchen) always visible. Revealed per-session via `open_kitchen` tool, and 60 bundled skills (59 slash commands + 1 internal) registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -35,7 +35,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
 
 ### **3.2. File System**
 
-  * **Temporary Files:** All temp files must go in the project's `temp/` directory.
+  * **Temporary Files:** All temp files must go in the project's `.autoskillit/temp/` directory.
   * **Do Not Add Root Files**: Never create new root files unless explicitly required.
   * **Never commit unless told to do so**
 
@@ -109,6 +109,7 @@ src/autoskillit/
 │   ├── _type_results.py     #   LoadResult, LoadReport, SkillResult, FailureRecord, CleanupResult, CIRunScope, etc.
 │   ├── _type_protocols.py   #   19 Protocols: GatePolicy, HeadlessExecutor, GitHubFetcher, CIWatcher, etc.
 │   ├── _type_helpers.py     #   extract_skill_name, resolve_target_skill, truncate_text
+│   ├── _terminal_table.py   #   TerminalColumn, _render_terminal_table — L0 color-agnostic terminal table primitive (pipeline/ and cli/ safe)
 │   ├── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
 │   ├── claude_conventions.py #  ClaudeDirectoryConventions — canonical skill discovery directory layout constants; LayoutError, validate_add_dir()
 │   └── github_url.py        #   parse_github_repo — canonical GitHub URL parser (str → owner/repo | None)
@@ -120,6 +121,7 @@ src/autoskillit/
 ├── pipeline/                # L1 pipeline state sub-package
 │   ├── __init__.py          #   Re-exports ToolContext, DefaultGateState, DefaultAuditLog, DefaultTokenLog
 │   ├── audit.py             #   FailureRecord, DefaultAuditLog
+│   ├── background.py        #   BackgroundTaskSupervisor — supervised background task execution; BackgroundSupervisor Protocol in core/
 │   ├── context.py           #   ToolContext DI container (config, audit, token_log, gate, plugin_dir, runner)
 │   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
 │   │                        #   (UNGATED_TOOLS is an alias for FREE_RANGE_TOOLS in core/types.py)
@@ -160,6 +162,7 @@ src/autoskillit/
 │   ├── session_skills.py    #   Per-session ephemeral skill dirs (SkillsDirectoryProvider,
 │   │                        #   DefaultSessionSkillManager, resolve_ephemeral_root)
 │   │                        #   Subset filtering + project-local override detection
+│   ├── clone_registry.py    #   Clone cleanup registry — shared file-based coordination for deferred batch cleanup (register_clone, read_registry, cleanup_candidates, batch_delete)
 │   └── skills.py            #   Bundled skill listing (SkillResolver)
 ├── recipe/                  # L2 recipe sub-package
 │   ├── __init__.py          #   Re-exports Recipe, RecipeStep, validate_recipe, load_recipe, etc.
@@ -216,11 +219,13 @@ src/autoskillit/
 ├── cli/                     # L3 CLI sub-package
 │   ├── __init__.py          #   Re-exports main entry point
 │   ├── _ansi.py             #   Terminal color utilities (supports_color, NO_COLOR/TERM=dumb)
+│   ├── _terminal_table.py   #   Re-export shim: TerminalColumn, _render_terminal_table from core/_terminal_table (L0)
 │   ├── _cook.py             #   cook command: ephemeral skill session launcher (claude --add-dir)
-│   ├── _doctor.py           #   Doctor command -- 8 project setup checks
+│   ├── _doctor.py           #   Doctor command -- 9 project setup checks
 │   ├── _hooks.py            #   Unified PreToolUse hook registration helpers
 │   ├── _init_helpers.py     #   Init command helpers: interactive prompts and workspace marker
 │   ├── _marketplace.py      #   Plugin install/upgrade marketplace operations
+│   ├── _onboarding.py       #   First-run detection and guided onboarding menu (is_first_run, run_onboarding_menu)
 │   ├── _prompts.py          #   Orchestrator prompt builder for recipe execution
 │   ├── _workspace.py        #   Workspace clean helpers: age partitioning, display, and confirmation
 │   └── app.py               #   CLI: serve, init, config show, skills, recipes, workspace, doctor
@@ -267,8 +272,7 @@ src/autoskillit/
     └── process-issues/
     │
     │  ── Tier 3: Pipeline / automation skills ──
-    ├── open-pr/              ├── open-pr-main/
-    ├── open-integration-pr/
+    ├── open-pr/              ├── open-integration-pr/
     ├── merge-pr/             ├── analyze-prs/
     ├── review-pr/            ├── resolve-review/
     ├── implement-worktree-no-merge/  ├── resolve-failures/

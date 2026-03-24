@@ -26,6 +26,7 @@ from autoskillit.recipe import (
     read_staleness_cache,
     write_staleness_cache,
 )
+from autoskillit.workspace import clone_registry  # noqa: F401 — re-exported for tools_clone.py
 
 if TYPE_CHECKING:
     from fastmcp import Context

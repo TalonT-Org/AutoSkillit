@@ -42,7 +42,7 @@ Set up a project for AutoSkillit.
 
 **Creates:**
 - `.autoskillit/config.yaml` — Project configuration
-- `temp/` — Working directory for pipeline artifacts
+- `.autoskillit/temp/` — Working directory for pipeline artifacts
 - MCP server entry in `~/.claude.json`
 
 ---

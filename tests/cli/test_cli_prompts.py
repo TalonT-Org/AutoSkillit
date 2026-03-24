@@ -219,3 +219,81 @@ def test_orchestrator_prompt_multi_issue_ask_only_two_options():
     assert "sequentially (one at a time) or in parallel" in prompt.lower(), (
         "Prompt must instruct orchestrator to ask 'sequential or parallel?'"
     )
+
+
+def test_orchestrator_prompt_gates_context_limit_on_retry_reason_resume():
+    """The orchestrator prompt must gate on_context_limit routing on retry_reason=resume.
+
+    This prevents empty_output, early_stop, and zero_writes retry reasons from
+    being incorrectly routed to on_context_limit.
+    """
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    # Must require retry_reason=resume to route to on_context_limit
+    assert "retry_reason: resume" in prompt, (
+        "Prompt must gate on_context_limit routing on retry_reason: resume"
+    )
+
+
+def test_orchestrator_prompt_empty_output_falls_to_on_failure():
+    """The orchestrator prompt must explicitly route empty_output to on_failure."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    assert "empty_output" in prompt, "Prompt must mention empty_output retry_reason"
+    # empty_output must be described as falling through to on_failure — not on_context_limit
+    empty_output_idx = prompt.index("empty_output")
+    segment = prompt[empty_output_idx : empty_output_idx + 400]
+    assert "on_failure" in segment, (
+        "Prompt must route empty_output to on_failure near the empty_output mention"
+    )
+
+
+def test_orchestrator_prompt_drain_race_routes_to_on_context_limit():
+    """drain_race must be listed alongside resume as an on_context_limit trigger."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    assert "drain_race" in prompt, "Prompt must mention drain_race retry_reason"
+    # drain_race must be associated with on_context_limit routing — not standalone
+    drain_race_idx = prompt.index("drain_race")
+    segment = prompt[drain_race_idx : drain_race_idx + 400]
+    assert "on_context_limit" in segment, (
+        "Prompt must route drain_race to on_context_limit near the drain_race mention"
+    )
+
+
+def test_orchestrator_prompt_path_contamination_falls_to_on_failure():
+    """path_contamination must fall through to on_failure, not on_context_limit."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    assert "path_contamination" in prompt, "Prompt must mention path_contamination retry_reason"
+    # path_contamination must be associated with on_failure routing
+    pc_idx = prompt.index("path_contamination")
+    segment = prompt[pc_idx : pc_idx + 500]
+    assert "on_failure" in segment, (
+        "Prompt must route path_contamination to on_failure near the path_contamination mention"
+    )
+
+
+def test_show_cook_preview_line_width_bounded_with_implementation_recipe(tmp_path, capsys):
+    """show_cook_preview must not produce lines wider than 120 chars even for
+    the real implementation.yaml with its 220-char run_mode description."""
+    import re
+
+    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.core import pkg_root
+    from autoskillit.recipe.io import find_recipe_by_name, load_recipe
+
+    recipes_dir = pkg_root() / "recipes"
+    recipe_info = find_recipe_by_name("implementation", recipes_dir)
+    assert recipe_info is not None
+    parsed = load_recipe(recipe_info.path)
+
+    show_cook_preview("implementation", parsed, recipes_dir, tmp_path)
+    captured = capsys.readouterr()
+    for line in captured.out.splitlines():
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", line)
+        assert len(plain) <= 120, f"Line too wide ({len(plain)} chars): {plain!r}"

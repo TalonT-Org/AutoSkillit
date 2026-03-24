@@ -27,7 +27,9 @@ ingredients:
     description: PR instead of direct merge
     default: "true"
   auto_merge:
-    description: Enroll the PR in the merge queue automatically after checks pass
+    description: >-
+      Automatically merge the PR after required checks pass —
+      via merge queue when available, direct merge otherwise
     default: "true"
   issue_url:
     description: GitHub issue to close on merge
@@ -36,6 +38,29 @@ ingredients:
     description: Enable sprint sub-recipe prefix (triage → sprint selection → per-issue dispatch)
     default: "false"
     hidden: true
+  upfront_claimed:
+    description: "Set to 'true' when process-issues has already claimed this issue upfront. Allows claim_issue defense step to pass through without aborting."
+    default: "false"
+  run_mode:
+    description: >-
+      Execution mode when processing multiple issues. Options: sequential (default,
+      one issue at a time) or parallel (all issues simultaneously with wavefront
+      step scheduling — fast steps for all pipelines before any slow step).
+    default: "sequential"
+  defer_cleanup:
+    description: >-
+      When 'true', skip per-pipeline interactive cleanup and register this clone
+      in the shared registry for batch deletion after all parallel pipelines
+      complete. Set to 'true' on every parallel instance; leave 'false' for
+      sequential single-pipeline runs.
+    default: "false"
+  registry_path:
+    description: >-
+      Absolute path to the shared clone cleanup registry file. Required when
+      defer_cleanup=true. Must be identical across all parallel pipeline runs in
+      the same batch (use a fixed path like
+      /path/to/project/.autoskillit/temp/clone-cleanup-registry.json).
+    default: ""
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -56,6 +81,13 @@ kitchen_rules:
     All work — skill invocations, git operations, file reads — happens
     exclusively in the clone (work_dir). source_dir is used ONLY to read
     the remote URL inside push_to_remote."
+  - "MERGE ROUTING: check_merge_queue detects whether the target branch has an active
+    merge queue (GraphQL). check_auto_merge detects whether autoMergeAllowed is enabled.
+    route_queue_mode then routes to: enable_auto_merge → wait_for_queue (queue path);
+    direct_merge → wait_for_direct_merge (no queue, autoMergeAllowed=true); or
+    immediate_merge → wait_for_immediate_merge (no queue, autoMergeAllowed=false).
+    Never call gh pr merge directly via run_cmd — all merges go through these named
+    recipe steps so CI enforcement and conflict routing are preserved."
 
 steps:
   sprint_entry:
@@ -145,6 +177,7 @@ steps:
     skip_when_false: inputs.issue_url
     with:
       issue_url: ${{ inputs.issue_url }}
+      allow_reentry: ${{ inputs.upfront_claimed }}
     capture:
       claimed: "${{ result.claimed }}"
     on_result:
@@ -227,7 +260,7 @@ steps:
     on_success: review
     on_failure: release_issue_failure
     note: >
-      Produces plan in temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
+      Produces plan in .autoskillit/temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
       plan_parts context key contains the full ordered list of part files (sorted alphabetically).
       For a single-part plan, plan_parts has one entry equal to plan_path.
       REMEDIATION MODE: context.remediation_path is available when the orchestrator
@@ -249,8 +282,10 @@ steps:
       step_name: "review"
     capture:
       review_path: "${{ result.review_path }}"
+    retries: 1
     on_success: verify
     on_failure: release_issue_failure
+    on_context_limit: verify
     skip_when_false: "inputs.review_approach"
     note: "Only execute this step if review_approach input is 'true'. Otherwise skip directly to verify."
 
@@ -379,6 +414,7 @@ steps:
         route: escalate_stop
       - route: remediate
     on_failure: escalate_stop
+    on_context_limit: escalate_stop
     optional: true
     skip_when_false: "inputs.audit"
     note: >
@@ -406,6 +442,7 @@ steps:
       issue_number: "${{ context.issue_number }}"
     on_success: extract_pr_number
     on_failure: release_issue_failure
+    on_context_limit: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -413,13 +450,9 @@ steps:
       The feature branch is already published by the push step that precedes this step.
       Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
       and runs gh pr create. The skill gracefully degrades if gh is unavailable.
-      TOKEN SUMMARY: Before invoking this step, the orchestrator MUST:
-      1. Call get_token_summary(clear=false, format=table) — returns a pre-formatted markdown table.
-      2. Write the result to temp/open-pr/token_summary.md via run_cmd.
-      3. Append the file path as a 4th positional argument to the skill_command.
-      4. If context.issue_number is a non-empty string (set by fetch_issue), append it
-         as a 5th positional argument to the skill_command. The open-pr skill will insert
-         "Closes #{issue_number}" into the PR body to auto-close the issue on merge.
+      If context.issue_number is a non-empty string (set by fetch_issue), append it
+      as a 4th positional argument to the skill_command. The open-pr skill will insert
+      "Closes #{issue_number}" into the PR body to auto-close the issue on merge.
 
   extract_pr_number:
     tool: run_cmd
@@ -453,6 +486,7 @@ steps:
       - when: "true"
         route: ci_watch
     on_failure: resolve_review
+    on_context_limit: ci_watch
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -534,14 +568,43 @@ steps:
       step_name: "check_merge_queue"
     capture:
       queue_available: "${{ result.stdout | trim }}"
-    on_success: route_queue_mode
+    on_success: check_auto_merge
     on_failure: release_issue_success
     skip_when_false: "inputs.open_pr"
     note: >
       Detects whether the target branch has an active merge queue via GraphQL.
       Captures "true" or "false" into context.queue_available.
       On failure (gh error, parse error), degrades gracefully to release_issue_success
-      (non-queue path). Skipped when open_pr=false — no PR was opened.
+      (non-queue path). On success, routes to check_auto_merge for auto-merge
+      availability detection. Skipped when open_pr=false — no PR was opened.
+
+  check_auto_merge:
+    tool: run_cmd
+    with:
+      cmd: >
+        REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||') &&
+        OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
+        gh api graphql -f query="query {
+          repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
+            autoMergeAllowed
+          }
+        }" | jq -r '.data.repository.autoMergeAllowed // false'
+      cwd: "${{ context.work_dir }}"
+      step_name: "check_auto_merge"
+    capture:
+      auto_merge_available: "${{ result.stdout | trim }}"
+    on_success: route_queue_mode
+    on_failure: route_queue_mode
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Detects whether the target repository has autoMergeAllowed enabled via GraphQL.
+      Captures "true" or "false" into context.auto_merge_available.
+      On failure (gh error, network error), falls through to route_queue_mode with
+      auto_merge_available unset — route_queue_mode defaults to immediate_merge (safe
+      non-auto path). GraphQL-level errors (rate-limit, missing auth scope) also return
+      exit 0 with an errors array and no .data field; the jq // false fallback outputs
+      false safely, so auto_merge_available defaults to false on any error path.
+      Skipped when open_pr=false — no PR was opened.
 
   route_queue_mode:
     action: route
@@ -550,7 +613,9 @@ steps:
         route: confirm_cleanup
       - when: "${{ context.queue_available }} == true"
         route: enable_auto_merge
-      - route: release_issue_success
+      - when: "${{ context.auto_merge_available }} == true"
+        route: direct_merge
+      - route: immediate_merge
     skip_when_false: "inputs.open_pr"
 
   enable_auto_merge:
@@ -618,6 +683,7 @@ steps:
         route: release_issue_failure
       - route: re_push_queue_fix
     on_failure: release_issue_failure
+    on_context_limit: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
     skip_when_false: "inputs.open_pr"
@@ -650,6 +716,180 @@ steps:
       Re-submits the PR after conflict resolution. Routes back to wait_for_queue.
       If re-entry fails, release_issue_failure preserves the clone for debugging.
 
+  direct_merge:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "direct_merge"
+    on_success: wait_for_direct_merge
+    on_failure: confirm_cleanup
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Enables GitHub native auto-merge for direct merge (no merge queue). GitHub
+      merges automatically once all required checks pass. On failure (PR already
+      merged, not mergeable), degrades gracefully to confirm_cleanup.
+
+  wait_for_direct_merge:
+    tool: run_cmd
+    with:
+      cmd: >
+        for i in $(seq 1 90); do
+          STATE=$(gh pr view '${{ context.pr_number }}' --json state --jq '.state');
+          if [ "$STATE" = "MERGED" ]; then echo "merged"; exit 0; fi;
+          if [ "$STATE" = "CLOSED" ]; then echo "closed"; exit 0; fi;
+          sleep 10;
+        done; echo "timeout"
+      cwd: "${{ context.work_dir }}"
+      step_name: "wait_for_direct_merge"
+    on_result:
+      - when: "${{ result.stdout | trim }} == merged"
+        route: release_issue_success
+      - when: "${{ result.stdout | trim }} == closed"
+        route: direct_merge_conflict_fix
+      - route: release_issue_timeout
+    on_failure: release_issue_timeout
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Polls GitHub PR state every 10 s for up to 15 minutes (90 iterations).
+      merged → release_issue_success (issue labelled, cleanup runs).
+      closed → PR was closed (likely conflict) — route to conflict fix.
+      timeout / unexpected → release_issue_timeout.
+
+  direct_merge_conflict_fix:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "direct_merge_conflict_fix"
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: release_issue_failure
+      - route: re_push_direct_fix
+    on_failure: release_issue_failure
+    on_context_limit: release_issue_failure
+    retries: 1
+    on_exhausted: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Resolves rebase conflicts on the feature branch after direct-merge rejection.
+      escalation_required=true → release_issue_failure for human review.
+
+  re_push_direct_fix:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.merge_target }}"
+    on_success: redirect_merge
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+
+  redirect_merge:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "redirect_merge"
+    on_success: wait_for_direct_merge
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Re-enables auto-merge after conflict resolution and re-push.
+      Routes back to wait_for_direct_merge to poll for completion.
+      On failure, release_issue_failure preserves the clone for debugging.
+
+  immediate_merge:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash"
+      cwd: "${{ context.work_dir }}"
+      step_name: "immediate_merge"
+    on_success: wait_for_immediate_merge
+    on_failure: confirm_cleanup
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Merges the PR immediately using plain --squash when autoMergeAllowed=false.
+      Unlike direct_merge, no --auto flag is used — GitHub executes the merge
+      synchronously rather than queueing it for when checks pass. On failure
+      (conflict or not-mergeable error from GitHub), degrades to confirm_cleanup.
+
+  wait_for_immediate_merge:
+    tool: run_cmd
+    with:
+      cmd: >
+        for i in $(seq 1 30); do
+          STATE=$(gh pr view '${{ context.pr_number }}' --json state --jq '.state');
+          if [ "$STATE" = "MERGED" ]; then echo "merged"; exit 0; fi;
+          if [ "$STATE" = "CLOSED" ]; then echo "closed"; exit 0; fi;
+          sleep 10;
+        done; echo "timeout"
+      cwd: "${{ context.work_dir }}"
+      step_name: "wait_for_immediate_merge"
+    on_result:
+      - when: "${{ result.stdout | trim }} == merged"
+        route: release_issue_success
+      - when: "${{ result.stdout | trim }} == closed"
+        route: immediate_merge_conflict_fix
+      - route: release_issue_timeout
+    on_failure: release_issue_timeout
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Polls GitHub PR state every 10s for up to 5 minutes (30 iterations).
+      Since immediate_merge uses --squash without --auto, the merge completes
+      synchronously — this poll is a confirmation window.
+      merged → release_issue_success.
+      closed → PR was rejected (stale base or conflict) — route to conflict fix.
+      timeout → release_issue_timeout.
+
+  immediate_merge_conflict_fix:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "immediate_merge_conflict_fix"
+    capture:
+      conflict_escalation_required: "${{ result.escalation_required }}"
+    on_result:
+      - when: "${{ result.escalation_required }} == true"
+        route: release_issue_failure
+      - route: re_push_immediate_fix
+    on_failure: release_issue_failure
+    on_context_limit: release_issue_failure
+    retries: 1
+    on_exhausted: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Resolves rebase conflicts on the feature branch after immediate-merge rejection.
+      Analogous to direct_merge_conflict_fix.
+      escalation_required=true → release_issue_failure for human review.
+
+  re_push_immediate_fix:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      branch: "${{ context.merge_target }}"
+    on_success: remerge_immediate
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+
+  remerge_immediate:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash"
+      cwd: "${{ context.work_dir }}"
+      step_name: "remerge_immediate"
+    on_success: wait_for_immediate_merge
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Re-attempts plain squash merge after conflict resolution and re-push.
+      Routes back to wait_for_immediate_merge to confirm completion.
+      On failure, release_issue_failure preserves the clone for debugging.
+
   diagnose_ci:
     tool: run_skill
     with:
@@ -661,11 +901,12 @@ steps:
       diagnosis_path: "${{ result.diagnosis_path }}"
     on_success: resolve_ci
     on_failure: resolve_ci
+    on_context_limit: resolve_ci
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
       Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes
-      a structured diagnosis to temp/diagnose-ci/. Routes to resolve_ci on success
+      a structured diagnosis to .autoskillit/temp/diagnose-ci/. Routes to resolve_ci on success
       OR failure (best-effort: resolve-failures proceeds even without a diagnosis).
       diagnosis_path is passed to resolve_ci for targeted remediation context.
 
@@ -730,6 +971,7 @@ steps:
         route: release_issue_failure
       - route: re_push
     on_failure: release_issue_failure
+    on_context_limit: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
     skip_when_false: "inputs.open_pr"
@@ -748,8 +990,8 @@ steps:
     with:
       issue_url: ${{ inputs.issue_url }}
       target_branch: ${{ inputs.base_branch }}
-    on_success: confirm_cleanup
-    on_failure: confirm_cleanup
+    on_success: check_defer_cleanup
+    on_failure: check_defer_cleanup
     note: >
       Called on the success path after PR merge is confirmed.
       Passes target_branch so release_issue can determine whether to apply the
@@ -763,8 +1005,8 @@ steps:
     skip_when_false: inputs.issue_url
     with:
       issue_url: ${{ inputs.issue_url }}
-    on_success: confirm_cleanup
-    on_failure: confirm_cleanup
+    on_success: check_defer_cleanup
+    on_failure: check_defer_cleanup
     note: >
       Called when wait_for_merge_queue times out or errors. Releases the in-progress
       claim without passing target_branch, so the staged label is not applied. The
@@ -778,8 +1020,54 @@ steps:
     skip_when_false: inputs.issue_url
     with:
       issue_url: ${{ inputs.issue_url }}
-    on_success: cleanup_failure
+    on_success: check_defer_on_failure
+    on_failure: check_defer_on_failure
+
+  check_defer_cleanup:
+    description: "Route to deferred or immediate cleanup on success path"
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_cleanup_mode"
+      defer_cleanup: "${{ inputs.defer_cleanup }}"
+    on_result:
+      - when: "result.deferred == 'true'"
+        route: register_success_deferred
+      - route: confirm_cleanup
+    on_failure: confirm_cleanup
+
+  register_success_deferred:
+    description: "Register clone as cleanup candidate (deferred batch cleanup mode)"
+    tool: register_clone_status
+    with:
+      clone_path: "${{ context.work_dir }}"
+      status: "success"
+      registry_path: "${{ inputs.registry_path }}"
+      step_name: register_success_deferred
+    on_success: done
+    on_failure: done
+
+  check_defer_on_failure:
+    description: "Route to deferred or immediate cleanup on failure path"
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_cleanup_mode"
+      defer_cleanup: "${{ inputs.defer_cleanup }}"
+    on_result:
+      - when: "result.deferred == 'true'"
+        route: register_error_deferred
+      - route: cleanup_failure
     on_failure: cleanup_failure
+
+  register_error_deferred:
+    description: "Register clone as preserved (error pipeline — deferred mode)"
+    tool: register_clone_status
+    with:
+      clone_path: "${{ context.work_dir }}"
+      status: "error"
+      registry_path: "${{ inputs.registry_path }}"
+      step_name: register_error_deferred
+    on_success: escalate_stop
+    on_failure: escalate_stop
 
   confirm_cleanup:
     action: confirm
@@ -825,3 +1113,25 @@ steps:
   escalate_stop:
     action: stop
     message: "Pipeline failed — human intervention needed. Check the worktree and plan for details."
+
+  batch_confirm_cleanup:
+    action: confirm
+    message: >-
+      All parallel pipelines complete. Delete all registered successful clones?
+      Error pipeline clones will be preserved for investigation.
+      Type yes to delete or no to keep all.
+    note: >-
+      ORCHESTRATOR: Run this step ONCE after ALL parallel pipeline instances have
+      reached 'done' or 'escalate_stop'. Do NOT run per-pipeline instance.
+      Only applicable when run_mode=parallel and defer_cleanup=true.
+    on_success: batch_delete_clones
+    on_failure: done
+
+  batch_delete_clones:
+    description: "Delete all registered successful clones in one batch operation"
+    tool: batch_cleanup_clones
+    with:
+      registry_path: "${{ inputs.registry_path }}"
+      step_name: batch_delete_clones
+    on_success: done
+    on_failure: done

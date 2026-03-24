@@ -187,64 +187,6 @@ def _check_push_before_audit(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
-    name="telemetry-before-open-pr",
-    description=(
-        "open-pr reachable without passing through "
-        "get_token_summary or write_telemetry_files first"
-    ),
-    severity=Severity.WARNING,
-)
-def _check_telemetry_before_open_pr(ctx: ValidationContext) -> list[RuleFinding]:
-    wf = ctx.recipe
-    graph = ctx.step_graph
-
-    open_pr_steps = {
-        name
-        for name, step in wf.steps.items()
-        if step.tool in SKILL_TOOLS and "open-pr" in step.with_args.get("skill_command", "")
-    }
-    if not open_pr_steps:
-        return []
-
-    telemetry_steps = {
-        name
-        for name, step in wf.steps.items()
-        if step.tool in {"get_token_summary", "write_telemetry_files"}
-    }
-
-    entry = next(iter(wf.steps))
-
-    reachable_without_telemetry: set[str] = set()
-    queue = [entry]
-    while queue:
-        node = queue.pop()
-        if node in reachable_without_telemetry:
-            continue
-        reachable_without_telemetry.add(node)
-        if node in telemetry_steps:
-            continue  # barrier: do not expand beyond telemetry steps
-        for successor in graph.get(node, set()):
-            if successor not in reachable_without_telemetry:
-                queue.append(successor)
-
-    violations = sorted(open_pr_steps & reachable_without_telemetry)
-    return [
-        RuleFinding(
-            rule="telemetry-before-open-pr",
-            severity=Severity.WARNING,
-            step_name=name,
-            message=(
-                f"'{name}' invokes open-pr but is reachable from the entry "
-                "point without passing through a get_token_summary or "
-                "write_telemetry_files step. Token summary data may be "
-                "missing from the PR body."
-            ),
-        )
-        for name in violations
-    ]
-
-
-@semantic_rule(
     name="clone-root-as-worktree",
     description="worktree_path must not trace back to result.clone_path (the clone root)",
     severity=Severity.ERROR,

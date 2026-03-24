@@ -80,6 +80,15 @@ class TestCLIDoctor:
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
             "test_check:\n  command: ['pytest']\n"
         )
+        from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES, _ROOT_GITIGNORE_ENTRIES
+
+        (tmp_path / ".autoskillit" / ".gitignore").write_text(
+            "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n"
+        )
+        (tmp_path / ".gitignore").write_text("\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
+        (tmp_path / ".pre-commit-config.yaml").write_text(
+            "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+        )
         # Register hooks so hook_registration check passes
         # Use explicit path (tmp_path already monkeypatched as Path.home())
         from autoskillit.cli._hooks import (
@@ -183,6 +192,8 @@ class TestCLIDoctor:
             "hook_health",
             "hook_registration",
             "script_version_health",
+            "gitignore_completeness",
+            "secret_scanning_hook",
         }
         assert expected <= check_names
 
@@ -661,3 +672,208 @@ def test_doctor_detects_plugin_registration(monkeypatch: pytest.MonkeyPatch) -> 
         )
     finally:
         tmpf.unlink(missing_ok=True)
+
+
+def test_doctor_warns_on_missing_gitignore_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Doctor must WARN when .autoskillit/.gitignore is missing entries."""
+    autoskillit_dir = tmp_path / ".autoskillit"
+    autoskillit_dir.mkdir()
+    (autoskillit_dir / ".gitignore").write_text("temp/\n")
+    (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
+
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.cli._doctor import _check_gitignore_completeness
+    from autoskillit.core import Severity
+
+    result = _check_gitignore_completeness(tmp_path)
+    assert result.severity == Severity.WARNING
+    assert ".secrets.yaml" in result.message
+
+
+def test_doctor_gitignore_ok_when_all_covered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Doctor must report OK when all .autoskillit/ files are covered."""
+    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES
+
+    autoskillit_dir = tmp_path / ".autoskillit"
+    autoskillit_dir.mkdir()
+    (autoskillit_dir / ".gitignore").write_text(
+        "temp/\n.secrets.yaml\nsync_manifest.json\n.onboarded\n"
+    )
+    (autoskillit_dir / "temp").mkdir()
+    (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
+    (tmp_path / ".gitignore").write_text("\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
+
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.cli._doctor import _check_gitignore_completeness
+    from autoskillit.core import Severity
+
+    result = _check_gitignore_completeness(tmp_path)
+    assert result.severity == Severity.OK
+
+
+# RG-DROOT-1
+def test_doctor_warns_when_root_gitignore_missing_secrets_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Doctor must WARN when root .gitignore lacks .autoskillit/.secrets.yaml."""
+    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES
+
+    autoskillit_dir = tmp_path / ".autoskillit"
+    autoskillit_dir.mkdir()
+    # .autoskillit/.gitignore is complete — only root is missing
+    (autoskillit_dir / ".gitignore").write_text("\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n")
+    (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
+    # No root .gitignore
+
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.cli._doctor import _check_gitignore_completeness
+    from autoskillit.core import Severity
+
+    result = _check_gitignore_completeness(tmp_path)
+    assert result.severity == Severity.WARNING
+    assert ".autoskillit/.secrets.yaml" in result.message
+
+
+# RG-DROOT-2
+def test_doctor_ok_when_root_gitignore_has_all_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Doctor must report OK when both .autoskillit/.gitignore and root .gitignore are complete."""
+    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES, _ROOT_GITIGNORE_ENTRIES
+
+    autoskillit_dir = tmp_path / ".autoskillit"
+    autoskillit_dir.mkdir()
+    (autoskillit_dir / ".gitignore").write_text("\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n")
+    (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
+    (tmp_path / ".gitignore").write_text("\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
+
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.cli._doctor import _check_gitignore_completeness
+    from autoskillit.core import Severity
+
+    result = _check_gitignore_completeness(tmp_path)
+    assert result.severity == Severity.OK
+
+
+# SS-DOC-1
+def test_doctor_includes_secret_scanning_hook_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """doctor output includes the secret_scanning_hook check."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cli.doctor(output_json=True)
+    data = json.loads(capsys.readouterr().out)
+    check_names = {r["check"] for r in data["results"]}
+    assert "secret_scanning_hook" in check_names
+
+
+# SS-DOC-2
+def test_doctor_error_when_no_scanner_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """doctor reports ERROR severity for secret_scanning_hook when no scanner found."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    # No .pre-commit-config.yaml
+    cli.doctor(output_json=True)
+    data = json.loads(capsys.readouterr().out)
+    checks = [r for r in data["results"] if r["check"] == "secret_scanning_hook"]
+    assert len(checks) == 1
+    assert checks[0]["severity"] == "error"
+
+
+# SS-DOC-3
+def test_doctor_ok_when_scanner_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """doctor reports OK for secret_scanning_hook when a known scanner is configured."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n  - repo: https://github.com/gitleaks/gitleaks\n"
+        "    hooks:\n      - id: gitleaks\n"
+    )
+    cli.doctor(output_json=True)
+    data = json.loads(capsys.readouterr().out)
+    checks = [r for r in data["results"] if r["check"] == "secret_scanning_hook"]
+    assert len(checks) == 1
+    assert checks[0]["severity"] == "ok"
+
+
+# SS-DOC-4 (unit test for check function directly)
+def test_check_secret_scanning_hook_ok_with_gitleaks(tmp_path: Path) -> None:
+    """_check_secret_scanning_hook returns OK when gitleaks hook is present."""
+    from autoskillit.cli._doctor import _check_secret_scanning_hook
+    from autoskillit.core import Severity
+
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+    )
+    result = _check_secret_scanning_hook(tmp_path)
+    assert result.severity == Severity.OK
+
+
+# SS-DOC-5 (unit test for check function directly)
+def test_check_secret_scanning_hook_error_without_scanner(tmp_path: Path) -> None:
+    """_check_secret_scanning_hook returns ERROR when no .pre-commit-config.yaml."""
+    from autoskillit.cli._doctor import _check_secret_scanning_hook
+    from autoskillit.core import Severity
+
+    result = _check_secret_scanning_hook(tmp_path)
+    assert result.severity == Severity.ERROR
+
+
+# DR-SECRETS-1
+def test_doctor_detects_misplaced_token_in_project_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DR-SECRETS-1: Doctor reports ERROR when github.token is in project config.yaml.
+
+    home has no config so the function must detect the violation via the project path.
+    """
+    from autoskillit.cli._doctor import _check_config_layers_for_secrets
+    from autoskillit.core import Severity
+
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    config_dir = project_dir / ".autoskillit"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text("github:\n  token: ghp_leaked\n")
+
+    result = _check_config_layers_for_secrets(project_dir=project_dir)
+    assert result.severity == Severity.ERROR
+    assert "github.token" in result.message
+    assert ".secrets.yaml" in result.message
+
+
+# DR-SECRETS-2
+def test_doctor_reports_ok_when_no_misplaced_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DR-SECRETS-2: Doctor reports OK when config.yaml has no secrets-only keys.
+
+    home has no config; only the project config exists with a clean (non-secret) key.
+    This exercises the project path independently of the home path.
+    """
+    from autoskillit.cli._doctor import _check_config_layers_for_secrets
+    from autoskillit.core import Severity
+
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    config_dir = project_dir / ".autoskillit"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text("github:\n  default_repo: owner/repo\n")
+
+    result = _check_config_layers_for_secrets(project_dir=project_dir)
+    assert result.severity == Severity.OK

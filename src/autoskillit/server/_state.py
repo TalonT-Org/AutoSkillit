@@ -61,7 +61,11 @@ def _initialize(ctx: ToolContext) -> None:
     except Exception:
         logger.debug("recover_crashed_sessions at startup failed", exc_info=True)
 
-    # Telemetry recovery: restore token, timing, and audit data from the last 24 hours.
+    # Telemetry recovery: restore audit data from the last 24 hours.
+    # Token and timing logs are per-pipeline live accumulators — they must NOT be loaded
+    # from disk at startup. Loading them would contaminate the singleton with data from
+    # unrelated pipelines that previously used the same server process.
+    # Skills that need pipeline-scoped token data self-retrieve from disk using cwd_filter.
     try:
         from datetime import datetime, timedelta
 
@@ -75,15 +79,11 @@ def _initialize(ctx: ToolContext) -> None:
             since_dt = clear_marker
         since_str = since_dt.isoformat()
 
-        n_tok = ctx.token_log.load_from_log_dir(log_root, since=since_str)
-        n_tim = ctx.timing_log.load_from_log_dir(log_root, since=since_str)
         n_aud = ctx.audit.load_from_log_dir(log_root, since=since_str)
 
-        if n_tok or n_tim or n_aud:
+        if n_aud:
             logger.info(
-                "Recovered telemetry from session logs (tok=%d, timing=%d, audit=%d)",
-                n_tok,
-                n_tim,
+                "Recovered telemetry from session logs (audit=%d)",
                 n_aud,
             )
     except Exception:

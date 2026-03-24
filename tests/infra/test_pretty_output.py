@@ -719,6 +719,15 @@ def _wrap_for_claude_code(payload: dict) -> str:
     return json.dumps({"result": json.dumps(payload)})
 
 
+def _wrap_plain_str_for_claude_code(text: str) -> str:
+    """Simulate Claude Code's PostToolUse wrapping of a plain-text MCP response.
+
+    Claude Code wraps the tool's return value as {"result": "<text>"}. When the
+    tool returns a pre-formatted string (not JSON), this is the resulting shape.
+    """
+    return json.dumps({"result": text})
+
+
 # PHK-34
 def test_wrapped_run_cmd_success(tmp_path):
     """Wrapped run_cmd success must unwrap and show checkmark, exit_code, stdout."""
@@ -1466,3 +1475,87 @@ def test_fmt_list_recipes_renders_summary():
     assert formatted is not None
     assert "test-recipe" in formatted
     assert "step1 -> done" in formatted
+
+
+# ---------------------------------------------------------------------------
+# T-1/T-2: Typed payload dispatch — plain-text envelope must pass through
+# ---------------------------------------------------------------------------
+
+
+def test_get_token_summary_format_table_passes_through_unmodified(tmp_path):
+    """get_token_summary(format='table') returns pre-formatted markdown;
+    the hook must pass it through unchanged, not eat it via the named formatter."""
+    table = (
+        "## Token Usage Summary\n\n| Step | input | output |\n|---|---|---|\n| impl | 45k | 12k |"
+    )
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__get_token_summary",
+        "tool_response": json.dumps({"result": table}),
+    }
+    out, code = _run_hook(event=event, cwd=tmp_path)
+    assert code == 0
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "## Token Usage Summary" in text
+    assert "| impl |" in text
+    # Must NOT produce the empty named-formatter output
+    assert text.strip() != "## token_summary"
+
+
+def test_get_timing_summary_format_table_passes_through_unmodified(tmp_path):
+    """get_timing_summary(format='table') returns pre-formatted markdown;
+    the hook must pass it through unchanged, not eat it via the named formatter."""
+    table = (
+        "## Step Timing Summary\n\n"
+        "| Step | Duration | Invocations |\n|---|---|---|\n| clone | 4s | 1 |"
+    )
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__get_timing_summary",
+        "tool_response": json.dumps({"result": table}),
+    }
+    out, code = _run_hook(event=event, cwd=tmp_path)
+    assert code == 0
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "## Step Timing Summary" in text
+    assert "| clone |" in text
+    assert text.strip() != "## timing_summary"
+
+
+# ---------------------------------------------------------------------------
+# T-3: _wrap_plain_str_for_claude_code helper shape
+# ---------------------------------------------------------------------------
+
+
+def test_wrap_plain_str_helper_produces_correct_shape():
+    """_wrap_plain_str_for_claude_code produces the real hook event shape
+    for tools returning pre-formatted strings."""
+    raw = _wrap_plain_str_for_claude_code("hello world")
+    parsed = json.loads(raw)
+    assert parsed == {"result": "hello world"}
+
+
+# ---------------------------------------------------------------------------
+# T-4/T-5: _UNFORMATTED_TOOLS behavioral gate
+# ---------------------------------------------------------------------------
+
+
+def test_unformatted_tools_and_formatters_are_disjoint():
+    """_UNFORMATTED_TOOLS and _FORMATTERS must be mutually exclusive."""
+    from autoskillit.hooks.pretty_output import _FORMATTERS, _UNFORMATTED_TOOLS
+
+    overlap = set(_FORMATTERS) & _UNFORMATTED_TOOLS
+    assert not overlap, f"Tools in both dispatch tables: {overlap}"
+
+
+def test_unformatted_tool_routes_to_generic_not_named_formatter(tmp_path):
+    """A tool in _UNFORMATTED_TOOLS must reach _fmt_generic even if
+    coincidentally also added to _FORMATTERS (enforcement test)."""
+    # Verify get_pipeline_report (in _UNFORMATTED_TOOLS) uses generic rendering
+    payload = {"total_failures": 1, "failures": [{"step": "impl", "reason": "red"}]}
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__get_pipeline_report",
+        "tool_response": _wrap_for_claude_code(payload),
+    }
+    out, code = _run_hook(event=event, cwd=tmp_path)
+    assert code == 0
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "get_pipeline_report" in text

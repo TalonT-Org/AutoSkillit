@@ -206,7 +206,7 @@ def test_arch_lens_context_via_file_not_prose(skill_name: str) -> None:
     it as a conversational text block.
     """
     text = _skill_text(skill_name)
-    assert f"temp/{skill_name}/pr_arch_lens_context_" in text, (
+    assert f".autoskillit/temp/{skill_name}/pr_arch_lens_context_" in text, (
         f"{skill_name}/SKILL.md does not reference a skill-scoped pr_arch_lens_context file. "
         "PR context must be written to a skill-scoped temp file, not a shared path."
     )
@@ -259,7 +259,7 @@ def test_detector_passes_immune_pattern() -> None:
 
 **1. Write the PR context to a file using the Write tool:**
 
-- Path: temp/pr-arch-lens-context.md
+- Path: .autoskillit/temp/pr-arch-lens-context.md
 
 **2. Immediately call the Skill tool to load the arch-lens skill.**
 """
@@ -280,7 +280,7 @@ For each selected lens, follow this exact sequence:
 
 **1. Write the PR context to a file using the Write tool:**
 
-- Path: temp/pr-arch-lens-context.md
+- Path: .autoskillit/temp/pr-arch-lens-context.md
 
 **2. Immediately call the Skill tool to load the arch-lens skill.**
 
@@ -304,7 +304,7 @@ next lens.
 
 **1. Write the PR context to a file using the Write tool:**
 
-- Path: temp/pr-arch-lens-context.md
+- Path: .autoskillit/temp/pr-arch-lens-context.md
 
 **2. Immediately call the Skill tool to load the arch-lens skill.**
 

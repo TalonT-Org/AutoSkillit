@@ -60,7 +60,7 @@ Correct orchestration on `needs_retry=true`:
 ### Step 0: Validate Prerequisites
 
 1. Extract and verify the plan path using **path detection**: scan the tokens
-   after the skill name for the first one that starts with `/`, `./`, `temp/`,
+   after the skill name for the first one that starts with `/`, `./`, `.autoskillit/temp/`,
    or `.autoskillit/` — that token is the plan path. Ignore any non-path words
    that appear before it. If no path-like token is found, treat the entire
    argument string as pasted plan content. Verify the resolved file exists before
@@ -75,7 +75,7 @@ Correct orchestration on `needs_retry=true`:
 5. **Multi-Part Plan Detection:** Examine the plan filename. If it contains `_part_` (e.g., `_part_a`, `_part_b`, `_part_1`):
    - Extract the part identifier (A, B, C… or number) from the suffix.
    - **SCOPE FENCE — MANDATORY:** Before any exploration or implementation begins, output the following constraint:
-     > "🚧 SCOPE FENCE ACTIVE: I am implementing PART {X} ONLY. I MUST NOT open, read, or execute any other part files, regardless of what I encounter in temp/ or any other directory. Sibling part files are out of scope for this entire session."
+     > "🚧 SCOPE FENCE ACTIVE: I am implementing PART {X} ONLY. I MUST NOT open, read, or execute any other part files, regardless of what I encounter in .autoskillit/temp/ or any other directory. Sibling part files are out of scope for this entire session."
    - When launching subagents in Step 2, include this fence instruction explicitly in each subagent prompt so that the subagents do not open, read, or reference sibling part files.
 
 ### Step 1: Create Git Worktree
@@ -181,8 +181,9 @@ If tests fail, fix the issue and re-run.
 
 ```bash
 CURRENT_BRANCH=$(cat ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch")
-git fetch origin
-git rebase origin/${CURRENT_BRANCH}
+REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
+git fetch "$REMOTE"
+git rebase "$REMOTE/${CURRENT_BRANCH}"
 ```
 
 If conflicts occur, resolve them, `git rebase --continue`, then re-run tests. Report rebase status.
@@ -199,6 +200,11 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 ```bash
 CURRENT_BRANCH=$(cat ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch")
 ```
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 worktree_path = ${WORKTREE_PATH}

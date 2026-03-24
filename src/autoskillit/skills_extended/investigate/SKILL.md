@@ -50,13 +50,21 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Modify any source code files
 - Suggest backward compatibility solutions
 - Suggest fallbacks that hide errors
-- Create files outside `temp/investigate/` directory
+- Create files outside `.autoskillit/temp/investigate/` directory
 - Choose or accept approaches, solutions, and/or fixes that are chosen simply because they are easier
 
 **ALWAYS:**
 - Use subagents for parallel exploration
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
-- Write findings as a markdown report with unique name to `temp/investigate/` directory (relative to the current working directory)
+- Write findings as a markdown report with unique name to `.autoskillit/temp/investigate/` directory (relative to the current working directory)
+- After writing the investigation report, emit the **absolute path** as a structured output
+  token immediately before `%%ORDER_UP%%`. Resolve the relative `.autoskillit/temp/investigate/...`
+  save path to absolute by prepending the full CWD:
+  ```
+  investigation_path = /absolute/cwd/.autoskillit/temp/investigate/{filename}.md
+  %%ORDER_UP%%
+  ```
+  This token is MANDATORY — the pipeline cannot proceed without it.
 - Identify how tests missed the issue (if applicable)
 - Check for similar existing patterns in codebase
 - Ensure approaches, solutions, and fixes are the appropriate long-term solutions with proper architecture
@@ -64,7 +72,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 ## Investigation Workflow
 
 **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
-exist (e.g., plan file arguments, `temp/investigate/` reports, external file references), use
+exist (e.g., plan file arguments, `.autoskillit/temp/investigate/` reports, external file references), use
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
 
@@ -155,7 +163,7 @@ After subagents complete, consolidate into structured findings:
 
 ### Step 4: Write Report
 
-Write findings to: `temp/investigate/investigation_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write findings to: `.autoskillit/temp/investigate/investigation_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 Report structure:
 ```markdown
@@ -193,6 +201,11 @@ Report structure:
 
 After writing the report file, emit the structured output token as the very last line
 of your text output:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 investigation_path = {absolute_path_to_investigation_report_file}

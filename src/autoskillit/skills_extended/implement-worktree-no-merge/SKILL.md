@@ -68,7 +68,7 @@ Correct orchestration on `needs_retry=true`:
 ### Step 0: Validate Prerequisites
 
 1. Extract and verify the plan path using **path detection**: scan the tokens
-   after the skill name for the first one that starts with `/`, `./`, `temp/`,
+   after the skill name for the first one that starts with `/`, `./`, `.autoskillit/temp/`,
    or `.autoskillit/` — that token is the plan path. Ignore any non-path words
    that appear before it (orchestrators sometimes prepend descriptive text such
    as "the verified plan"). If no path-like token is found, treat the entire
@@ -84,7 +84,7 @@ Correct orchestration on `needs_retry=true`:
 5. **Multi-Part Plan Detection:** Examine the plan filename. If it contains `_part_` (e.g., `_part_a`, `_part_b`, `_part_1`):
    - Extract the part identifier (A, B, C… or number) from the suffix.
    - **SCOPE FENCE — MANDATORY:** Before any exploration or implementation begins, output the following constraint:
-     > "🚧 SCOPE FENCE ACTIVE: I am implementing PART {X} ONLY. I MUST NOT open, read, or execute any other part files, regardless of what I encounter in temp/ or any other directory. Sibling part files are out of scope for this entire session."
+     > "🚧 SCOPE FENCE ACTIVE: I am implementing PART {X} ONLY. I MUST NOT open, read, or execute any other part files, regardless of what I encounter in .autoskillit/temp/ or any other directory. Sibling part files are out of scope for this entire session."
    - When launching subagents in Step 2, include this fence instruction explicitly in each subagent prompt so that the subagents do not open, read, or reference sibling part files.
 
 ### Step 1: Create Git Worktree
@@ -116,6 +116,11 @@ fi
 Immediately after the worktree is created, output these tokens on their own
 lines so the execution layer can capture them from `assistant_messages` even
 if context is exhausted before Step 6:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 worktree_path = ${WORKTREE_PATH}
@@ -217,6 +222,11 @@ Output to terminal:
 Explicitly state: "Worktree left intact for orchestrator to test and merge."
 
 Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 worktree_path = ${WORKTREE_PATH}

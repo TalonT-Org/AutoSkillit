@@ -4,7 +4,7 @@ How AutoSkillit works under the hood.
 
 ## Overview
 
-AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 40 MCP tools and 61 bundled skills, organized into a gated visibility system.
+AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 40 MCP tools and 60 bundled skills, organized into a gated visibility system.
 
 ## Core Concepts
 
@@ -68,7 +68,7 @@ AutoSkillit supports four session modes with different tool and skill visibility
   `$ claude`); `/open-kitchen` reveals kitchen tools.
 
 - **`$ autoskillit order`**: Pipeline orchestrator session. Kitchen is pre-opened at startup —
-  all 40 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
+  all 42 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
   delegates work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
 
 - **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees 2 Free Range

@@ -255,7 +255,13 @@ class TestComputeRetry:
         assert reason == RetryReason.RESUME
 
     def test_empty_output_exit_zero_is_retriable(self):
-        """Infrastructure failure: session never ran, CLI exited cleanly."""
+        """Infrastructure failure: session never ran, CLI exited cleanly.
+
+        NATURAL_EXIT + rc=0 + empty_output subtype means the session process
+        exited before writing any output — NOT a context exhaustion. The retry
+        reason must be EMPTY_OUTPUT, not RESUME, because no partial progress
+        exists on disk. RESUME is reserved for context/turn limit cases.
+        """
         session = ClaudeSessionResult(
             subtype="empty_output", is_error=True, result="", session_id=""
         )
@@ -263,7 +269,7 @@ class TestComputeRetry:
             session, returncode=0, termination=TerminationReason.NATURAL_EXIT
         )
         assert needs is True
-        assert reason == RetryReason.RESUME
+        assert reason == RetryReason.EMPTY_OUTPUT
 
     def test_empty_output_exit_one_not_retriable(self):
         """Real failure: CLI crashed with empty output."""
@@ -474,12 +480,13 @@ class TestComputeRetrySuccessEmptyResult:
         assert retriable is False
 
     def test_success_empty_result_natural_exit_zero_rc_is_retriable(self) -> None:
-        """success + "" + NATURAL_EXIT + rc=0 must be retriable (stop-delay race).
+        """Transient empty result: session exited cleanly but result field is empty.
 
-        CLAUDE_CODE_EXIT_AFTER_STOP_DELAY causes a timer-based self-exit that produces
-        NATURAL_EXIT with subtype='success' and an empty result field. The CLI writes a
-        valid result envelope header before the timer fires, leaving result=''. This
-        is a kill-race artifact and must retry, not silently succeed-as-failure.
+        NATURAL_EXIT + rc=0 + SUCCESS subtype + empty result covers any case where
+        the Claude process self-exited cleanly without writing output — including
+        CLAUDE_CODE_EXIT_AFTER_STOP_DELAY timer-based exits AND transient API failures.
+        This is NOT a context exhaustion (no jsonl marker, no error markers). The retry
+        reason must be EMPTY_OUTPUT, not RESUME: no partial progress on disk.
         """
         session = ClaudeSessionResult(
             subtype="success",
@@ -493,7 +500,7 @@ class TestComputeRetrySuccessEmptyResult:
             session, returncode=0, termination=TerminationReason.NATURAL_EXIT
         )
         assert retriable is True
-        assert reason == RetryReason.RESUME
+        assert reason == RetryReason.EMPTY_OUTPUT
 
     def test_empty_output_completed_negative_rc_is_retriable(self) -> None:
         """empty_output + COMPLETED + rc=-15 must be retriable.
@@ -513,6 +520,43 @@ class TestComputeRetrySuccessEmptyResult:
         )
         assert retriable is True
         assert reason == RetryReason.RESUME
+
+    def test_context_exhausted_natural_exit_zero_rc_emits_resume(self) -> None:
+        """Context exhaustion on NATURAL_EXIT still emits RESUME.
+
+        When _is_context_exhausted() returns True (jsonl_context_exhausted=True),
+        NATURAL_EXIT + kill_anomaly must still emit RESUME — partial context
+        progress exists on disk and is safe to resume.
+        """
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="",
+            session_id="",
+            jsonl_context_exhausted=True,
+        )
+        needs, reason = _compute_retry(
+            session, returncode=0, termination=TerminationReason.NATURAL_EXIT
+        )
+        assert needs is True
+        assert reason == RetryReason.RESUME  # context exhausted = partial progress exists
+
+    def test_completed_kill_anomaly_still_emits_resume(self) -> None:
+        """Infrastructure kill (COMPLETED) + kill anomaly → RESUME unchanged.
+
+        COMPLETED termination means infrastructure killed the process after channel
+        confirmation — the session made progress, partial results exist. RESUME
+        is correct here regardless of _is_context_exhausted().
+        """
+        session = ClaudeSessionResult(subtype="success", is_error=False, result="", session_id="")
+        needs, reason = _compute_retry(
+            session,
+            returncode=0,
+            termination=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        assert needs is True
+        assert reason == RetryReason.RESUME  # infrastructure kill — progress existed
 
 
 class TestComputeSuccessCompletionMarker:
@@ -1017,9 +1061,10 @@ class TestEarlyStop:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
             completion_marker="%%ORDER_UP%%",
         )
-        # Empty result triggers kill_anomaly path (RESUME), not EARLY_STOP
+        # Empty result triggers kill_anomaly path (EMPTY_OUTPUT), not EARLY_STOP.
+        # No context exhaustion detected → EMPTY_OUTPUT, not RESUME.
         assert needs_retry is True
-        assert reason == RetryReason.RESUME
+        assert reason == RetryReason.EMPTY_OUTPUT
 
 
 class TestArtifactValidation:
@@ -1210,6 +1255,42 @@ class TestCheckExpectedPatterns:
     def test_check_expected_patterns_empty_patterns_always_true(self) -> None:
         assert _check_expected_patterns(result="anything", patterns=[]) is True
 
+    def test_check_expected_patterns_bold_wrapped_token_matches(self) -> None:
+        """Bold-wrapped token name must match after normalization."""
+        result = "**plan_path** = /abs/path/plan.md\n%%ORDER_UP%%"
+        assert _check_expected_patterns(result, ["plan_path\\s*=\\s*/.+"]) is True
+
+    def test_check_expected_patterns_italic_wrapped_token_matches(self) -> None:
+        """Italic-wrapped token name must match after normalization."""
+        result = "*plan_path* = /abs/path/plan.md\n%%ORDER_UP%%"
+        assert _check_expected_patterns(result, ["plan_path\\s*=\\s*/.+"]) is True
+
+    def test_check_expected_patterns_bold_verdict_matches(self) -> None:
+        """Bold-wrapped verdict token must match after normalization."""
+        result = "**verdict** = GO\n%%ORDER_UP%%"
+        assert _check_expected_patterns(result, ["verdict\\s*=\\s*(GO|NO GO)"]) is True
+
+    def test_check_expected_patterns_multiple_bold_tokens_all_match(self) -> None:
+        """Multiple bold-wrapped tokens must all match (AND semantics preserved)."""
+        result = (
+            "**plan_path** = /abs/path/plan.md\n**plan_parts** = /abs/path/plan.md\n%%ORDER_UP%%"
+        )
+        assert (
+            _check_expected_patterns(result, ["plan_path\\s*=\\s*/.+", "plan_parts\\s*=\\s*/.+"])
+            is True
+        )
+
+    def test_check_expected_patterns_bold_relative_path_still_fails(self) -> None:
+        """Bold wrapping on a relative path must still fail — normalization must not
+        mask a genuine contract violation (wrong value type)."""
+        result = "**worktree_path** = ../worktrees/impl\n%%ORDER_UP%%"
+        assert _check_expected_patterns(result, ["worktree_path\\s*=\\s*/.+"]) is False
+
+    def test_check_expected_patterns_bold_absent_value_still_fails(self) -> None:
+        """Bold key with no value must still fail — semantic content must be present."""
+        result = "**plan_path** =\n%%ORDER_UP%%"
+        assert _check_expected_patterns(result, ["plan_path\\s*=\\s*/.+"]) is False
+
 
 class TestComputeSuccessChannelBPatterns:
     """Channel B bypass must not skip expected_output_patterns validation."""
@@ -1367,7 +1448,7 @@ class TestDeadEndGuardContentState:
         assert outcome == SessionOutcome.RETRIABLE, (
             "Empty result with channel confirmation must remain RETRIABLE (drain-race rescue)."
         )
-        assert retry_reason == RetryReason.RESUME
+        assert retry_reason == RetryReason.DRAIN_RACE
 
     def test_compute_outcome_channel_b_missing_marker_is_still_retriable(
         self,
@@ -1391,4 +1472,122 @@ class TestDeadEndGuardContentState:
         assert outcome == SessionOutcome.RETRIABLE, (
             "Missing completion marker with channel confirmation must remain RETRIABLE."
         )
-        assert retry_reason == RetryReason.RESUME
+        assert retry_reason == RetryReason.DRAIN_RACE
+
+    def test_dead_end_guard_channel_confirmed_absent_emits_drain_race(
+        self,
+        make_session: Callable[..., ClaudeSessionResult],
+    ) -> None:
+        """Channel confirmed + content ABSENT → DRAIN_RACE, not RESUME.
+
+        DRAIN_RACE distinguishes "infrastructure confirmed completion, stdout not
+        fully flushed" from "session hit context limit." Both route to on_context_limit
+        because progress was confirmed, but the provenance is now explicit.
+        """
+        session = make_session(
+            subtype="success",
+            is_error=False,
+            result="",  # empty — drain race candidate
+            assistant_messages=[],
+        )
+        outcome, reason = _compute_outcome(
+            session=session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            expected_output_patterns=(),
+        )
+        assert outcome == SessionOutcome.RETRIABLE
+        assert reason == RetryReason.DRAIN_RACE  # not RESUME
+
+    def test_compute_outcome_bold_wrapped_token_is_success_not_violation(
+        self,
+        make_session: Callable[..., ClaudeSessionResult],
+    ) -> None:
+        """A session with bold-wrapped structured output tokens must succeed,
+        not be classified as CONTRACT_VIOLATION and returned as adjudicated_failure."""
+        session = make_session(result="**plan_path** = /abs/path/plan.md\n%%ORDER_UP%%")
+        outcome, reason = _compute_outcome(
+            session,
+            returncode=0,
+            termination=TerminationReason.NATURAL_EXIT,
+            completion_marker="%%ORDER_UP%%",
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            expected_output_patterns=["plan_path\\s*=\\s*/.+"],
+        )
+        assert outcome == SessionOutcome.SUCCEEDED
+        assert reason == RetryReason.NONE
+
+
+# ---------------------------------------------------------------------------
+# T1: parse_session_result preserves file_path from Write/Edit tool_use input
+# ---------------------------------------------------------------------------
+
+import json  # noqa: E402 — imported here to keep T1 tests self-contained
+
+
+@pytest.fixture
+def make_ndjson():
+    """Build a minimal NDJSON string with assistant tool_use records and a result record.
+
+    tool_uses entries use the raw NDJSON form: each dict must have 'name', 'id', and
+    optionally 'input' (a dict whose 'file_path' key will be preserved by Step 3's changes).
+    """
+
+    def _factory(
+        tool_uses: list[dict] | None = None,
+        result_text: str = "done",
+    ) -> str:
+        records = []
+        if tool_uses:
+            content = [
+                {
+                    "type": "tool_use",
+                    "name": tu["name"],
+                    "id": tu["id"],
+                    "input": tu.get("input", {}),
+                }
+                for tu in tool_uses
+            ]
+            records.append(json.dumps({"type": "assistant", "message": {"content": content}}))
+        records.append(
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": result_text,
+                    "session_id": "test-session",
+                }
+            )
+        )
+        return "\n".join(records)
+
+    return _factory
+
+
+def test_parse_session_result_preserves_write_file_path(make_ndjson):
+    """Write tool_use input.file_path must be preserved in tool_uses entries."""
+    ndjson = make_ndjson(
+        tool_uses=[{"name": "Write", "id": "tu1", "input": {"file_path": "/abs/plan.md"}}]
+    )
+    session = parse_session_result(ndjson)
+    assert session.tool_uses == [{"name": "Write", "id": "tu1", "file_path": "/abs/plan.md"}]
+
+
+def test_parse_session_result_preserves_edit_file_path(make_ndjson):
+    """Edit tool_use input.file_path must be preserved in tool_uses entries."""
+    ndjson = make_ndjson(
+        tool_uses=[{"name": "Edit", "id": "tu2", "input": {"file_path": "/abs/file.py"}}]
+    )
+    session = parse_session_result(ndjson)
+    assert session.tool_uses == [{"name": "Edit", "id": "tu2", "file_path": "/abs/file.py"}]
+
+
+def test_parse_session_result_non_write_tools_no_file_path(make_ndjson):
+    """Non-Write/Edit tool_uses must not gain a file_path key."""
+    ndjson = make_ndjson(tool_uses=[{"name": "Bash", "id": "tu3", "input": {"command": "ls"}}])
+    session = parse_session_result(ndjson)
+    assert session.tool_uses == [{"name": "Bash", "id": "tu3"}]
+    assert "file_path" not in session.tool_uses[0]

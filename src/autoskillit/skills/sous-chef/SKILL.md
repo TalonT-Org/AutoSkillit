@@ -31,10 +31,20 @@ responsible for enforcing this regardless of what the plan says.
 
 When `run_skill` returns `needs_retry=true` for **any step**:
 
-- **If the step defines `on_context_limit`** → follow `on_context_limit`.
+- **If `retry_reason: resume` AND the step defines `on_context_limit`** → follow `on_context_limit`.
   The worktree or partial state is on disk; route to the designated recovery step
   (typically `test` or `retry_worktree`) to check whether partial work was sufficient.
-- **If the step has no `on_context_limit`** → fall through to `on_failure` as usual.
+- **If `retry_reason: resume` AND the step has no `on_context_limit`** → fall through to `on_failure`.
+- **If `retry_reason: drain_race` AND the step defines `on_context_limit`** → follow `on_context_limit`.
+  The channel signal confirmed session completion; stdout was not fully flushed before kill.
+  Partial progress is confirmed — treat identically to `resume` for routing purposes.
+- **If `retry_reason: drain_race` AND the step has no `on_context_limit`** → fall through to `on_failure`.
+- **If `retry_reason: empty_output`** → fall through to `on_failure`. The session produced no
+  output; there is no partial state on disk. Do NOT route to `on_context_limit` even if defined.
+- **If `retry_reason: path_contamination`** → fall through to `on_failure`. The session wrote
+  files outside its working directory. This is a CWD boundary violation, not a context limit.
+  Do NOT route to `on_context_limit` even if defined.
+- **If `retry_reason: early_stop` or `zero_writes`** → fall through to `on_failure`.
 
 **For `implement-worktree-no-merge` specifically:**
 - `on_context_limit` routes to `retry_worktree` in standard recipes.
@@ -47,8 +57,9 @@ When a completed worktree implementation needs to be redone (e.g., after a plan 
 - Call `implement-worktree-no-merge` on the revised plan (creates a fresh worktree).
 - Clean up the old worktree explicitly if needed.
 
-Summary: `needs_retry=true` + step has `on_context_limit` → follow `on_context_limit`.
-         `needs_retry=true` + no `on_context_limit` → `on_failure`.
+Summary: `needs_retry=true` + `retry_reason=resume` or `drain_race` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=resume` or `drain_race` + no `on_context_limit` → `on_failure`.
+         `needs_retry=true` + any other `retry_reason` → `on_failure` (no partial progress).
 
 ---
 
@@ -110,3 +121,158 @@ When the user provides **more than one issue or task** in a single request:
 - Suggest picking a subset of the given issues — the user chose the scope.
 - Offer any option other than sequential or parallel when asking.
 - Ask the user to clarify scope, prioritization, or issue ordering.
+
+---
+
+## PARALLEL STEP SCHEDULING — MANDATORY
+
+This rule applies whenever you are running **multiple pipelines in parallel** (run_mode=parallel
+or user says "parallel"). Within each batched round, pipeline steps have two speeds:
+
+**Fast steps** — MCP tool calls that complete in seconds:
+`run_cmd`, `clone_repo`, `create_unique_branch`, `fetch_github_issue`,
+`claim_issue`, `merge_worktree`, `test_check`, `reset_test_dir`, `classify_fix`
+
+**Slow steps** — headless sessions that take minutes:
+Any `run_skill` invocation (investigate, implement, audit, review, etc.)
+
+### Wavefront Scheduling Rule
+
+1. **Complete all fast steps for ALL pipelines first.** Before launching any slow step,
+   advance every pipeline through its pending fast steps. Continue re-inspecting after
+   each fast-step batch until no pipeline has a fast step pending.
+
+2. **Launch all slow steps together in one parallel batch.** Once all pipelines are aligned
+   at a slow step boundary (every pipeline's next pending step is a `run_skill`), launch
+   all of them simultaneously so they overlap in wall-clock time.
+
+3. **Never launch a slow step for one pipeline while another pipeline still has fast steps
+   pending.** This is the most critical rule: a batched round waits for the slowest step in
+   the batch. A fast step launched alongside a slow step completes instantly but sits idle
+   until the slow step finishes — wasting wall-clock time and blocking re-inspection.
+
+### Rationale
+
+Batched rounds wait for the **slowest step** in the batch. If a slow `run_skill` is launched
+alongside a fast `run_cmd`, the fast step completes instantly but cannot trigger the next
+fast step for its pipeline until the entire batch (including the slow session) finishes.
+Draining all fast steps first ensures every pipeline arrives at the slow-step boundary
+simultaneously, after which all slow steps run in parallel and their wall-clock time overlaps.
+
+---
+
+## STEP NAME IMMUTABILITY — MANDATORY
+
+The `step_name` passed to `run_skill` (and all other recipe-step tools that accept
+`step_name`) must be the **exact value from the recipe YAML `with:` block**.
+
+**NEVER** append clone numbers, instance indices, retry counts, or any other
+disambiguation strings. The telemetry layer aggregates all invocations of the same
+logical step automatically — suffixing produces garbage rows in token and timing tables.
+
+Correct:
+```yaml
+with:
+  step_name: implement
+```
+
+Wrong (produces garbage):
+```yaml
+with:
+  step_name: implement-30   # ← NEVER DO THIS
+```
+
+This rule applies whether running sequential or parallel pipelines. Each clone or
+parallel run of the same step reports under the same canonical step name.
+
+---
+
+## MERGE PHASE — MANDATORY
+
+This rule applies whenever the orchestrator must merge **one or more open PRs**, whether
+produced by a single pipeline or by N parallel pipelines.
+
+### 1. Detect merge queue availability — once per orchestration session
+
+Before initiating any merge, run the following detection step via `run_cmd` (not a
+headless session):
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) &&
+OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
+BRANCH="<base_branch>" &&    # substitute the PR's target branch (e.g. "main", "integration")
+gh api graphql -f query="query {
+  repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
+    mergeQueue(branch:\"$BRANCH\") { id }
+  }
+}" | jq -r 'if .data.repository.mergeQueue != null then "true" else "false" end' || echo false
+```
+
+Capture the result as `queue_available`. If `gh api graphql` fails (auth error, network
+error), the `|| echo false` fallback ensures `queue_available` defaults to `"false"`,
+routing to the safe sequential (non-queue) path rather than leaving the variable unset.
+
+Run this **once per orchestration run**, not per-PR.
+
+After detecting queue availability, also detect auto-merge availability:
+
+```bash
+gh api graphql -f query="query {
+  repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
+    autoMergeAllowed
+  }
+}" | jq -r '.data.repository.autoMergeAllowed // false' || echo false
+```
+
+Capture the result as `auto_merge_available`. If detection fails, default to `"false"`.
+
+**Note:** All three recipes (`implementation`, `implementation-groups`, `remediation`)
+perform both detections automatically via `check_merge_queue` + `check_auto_merge` —
+**do not repeat them manually when following a recipe**.
+
+### 2. Route based on queue availability
+
+**When `queue_available == true`:**
+GitHub's merge queue serializes concurrent merges. Each pipeline's
+`enable_auto_merge → wait_for_queue` sequence is safe to proceed in parallel — the
+queue handles ordering. No additional sequencing is required from the orchestrator.
+
+**When `queue_available == false` and `auto_merge_available == true`:**
+Use `gh pr merge --squash --auto` (direct_merge path). GitHub merges the PR once
+all required status checks pass. PRs must not be merged concurrently — never execute
+two `direct_merge` steps concurrently on a non-queue branch.
+
+**When `queue_available == false` and `auto_merge_available == false`:**
+Use `gh pr merge --squash` (immediate_merge path — no `--auto` flag). GitHub
+executes the merge synchronously without waiting for status checks (there are none
+to wait for when `autoMergeAllowed=false`). PRs MUST still be merged one at a time.
+
+- If following a recipe: the recipe's `route_queue_mode` step routes to the correct
+  path automatically based on `context.auto_merge_available`.
+- **NEVER** use `gh pr merge --squash --auto` when `auto_merge_available == false` —
+  this command fails with "auto-merge is not allowed for this repository"; in recipe
+  context it silently routes to `confirm_cleanup`, leaving the PR unmerged.
+
+For ad-hoc (off-recipe) merges:
+- If merging multiple PRs collected from parallel pipelines: route through the
+  `merge-prs` recipe for batch sequential merging.
+
+### 3. NEVER bypass recipe merge steps
+
+**NEVER use `run_cmd` with `gh pr merge` to merge a PR outside of a named recipe
+step.** All PR merges must flow through the recipe's `merge_pr`, `direct_merge`,
+`immediate_merge`, or `enable_auto_merge` steps. Bypassing these steps skips CI
+enforcement, conflict detection, and conflict routing.
+
+### 4. Merge conflict failure handling
+
+When `wait_for_direct_merge` or `wait_for_immediate_merge` returns `closed` (PR was
+closed due to a stale base):
+
+- **Route to the appropriate conflict fix** — `direct_merge_conflict_fix` or
+  `immediate_merge_conflict_fix` handles rebase-and-retry automatically.
+- **NEVER use `run_cmd` for git investigation** (git rebase, git log, git reset,
+  git merge). The `resolve-merge-conflicts` skill run by `direct_merge_conflict_fix`
+  and `immediate_merge_conflict_fix` has full diagnostic access.
+- **NEVER abandon a pipeline** because merge failed — route through the conflict
+  recovery cycle until the PR merges or escalation is required.

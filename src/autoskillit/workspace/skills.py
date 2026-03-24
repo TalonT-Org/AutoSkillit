@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -14,27 +14,31 @@ class SkillInfo:
     name: str
     source: SkillSource
     path: Path
-    categories: frozenset[str] = field(default_factory=frozenset)
+    categories: frozenset[str] = frozenset()
 
 
-def read_skill_categories(path: Path) -> frozenset[str]:
-    """Parse categories: from SKILL.md YAML frontmatter."""
+def _read_skill_frontmatter(path: Path) -> dict[str, Any]:
+    """Parse SKILL.md YAML frontmatter, returning a dict (empty on any failure)."""
     try:
         with open(path, encoding="utf-8") as fh:
             content = fh.read()
     except (OSError, UnicodeDecodeError):
-        return frozenset()
+        return {}
     if not content.startswith("---"):
-        return frozenset()
+        return {}
     parts = content.split("---", 2)
     if len(parts) < 3:
-        return frozenset()
+        return {}
     try:
         data: Any = load_yaml(parts[1])
     except YAMLError:
-        return frozenset()
-    if not isinstance(data, dict):
-        return frozenset()
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def read_skill_categories(path: Path) -> frozenset[str]:
+    """Parse categories: from SKILL.md YAML frontmatter."""
+    data = _read_skill_frontmatter(path)
     categories = data.get("categories", [])
     if not isinstance(categories, list):
         return frozenset()
@@ -68,6 +72,23 @@ def detect_project_local_overrides(project_dir: Path) -> frozenset[str]:
     return frozenset(overrides)
 
 
+def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Path) -> SkillInfo:
+    """Build a SkillInfo by reading all frontmatter fields in a single parse."""
+    data = _read_skill_frontmatter(skill_path)
+    categories_raw = data.get("categories", [])
+    categories = (
+        frozenset(str(c) for c in categories_raw)
+        if isinstance(categories_raw, list)
+        else frozenset()
+    )
+    return SkillInfo(
+        name=name,
+        source=source,
+        path=skill_path,
+        categories=categories,
+    )
+
+
 class SkillResolver:
     """List bundled skills from both the skills/ and skills_extended/ directories."""
 
@@ -83,12 +104,7 @@ class SkillResolver:
         ):
             skill_path = directory / name / "SKILL.md"
             if skill_path.is_file():
-                return SkillInfo(
-                    name=name,
-                    source=source,
-                    path=skill_path,
-                    categories=read_skill_categories(skill_path),
-                )
+                return _skill_info_from_frontmatter(name, source, skill_path)
         return None
 
     def list_all(self) -> list[SkillInfo]:
@@ -121,12 +137,7 @@ def _scan_directory(source: SkillSource, directory: Path) -> list[SkillInfo]:
     if not directory.is_dir():
         return []
     return [
-        SkillInfo(
-            name=d.name,
-            source=source,
-            path=d / "SKILL.md",
-            categories=read_skill_categories(d / "SKILL.md"),
-        )
+        _skill_info_from_frontmatter(d.name, source, d / "SKILL.md")
         for d in sorted(directory.iterdir())
         if d.is_dir() and (d / "SKILL.md").is_file() and d.name not in _INTERNAL_SKILLS
     ]

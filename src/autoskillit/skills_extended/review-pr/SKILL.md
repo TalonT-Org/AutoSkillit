@@ -25,7 +25,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `temp/review-pr/`
+- Create files outside `.autoskillit/temp/review-pr/`
 - Approve a PR that has `changes_requested` findings
 - Post review comments when `gh` is unavailable — output `verdict=approved` and exit 0
 - Review files outside the PR diff — scope all audit to diff content only
@@ -96,7 +96,7 @@ gh pr diff {pr_number}
 gh repo view --json nameWithOwner -q .nameWithOwner
 ```
 
-Save the diff to `temp/review-pr/diff_{pr_number}.txt`. (relative to the current working directory)
+Save the diff to `.autoskillit/temp/review-pr/diff_{pr_number}.txt`. (relative to the current working directory)
 
 ### Step 2.7: Deterministic Diff Annotation
 
@@ -117,9 +117,9 @@ print(f'Annotated {len(ranges)} files, wrote ${ANNOTATED_DIFF_PATH} and ${RANGES
 ```
 
 Where:
-- `DIFF_PATH` is `temp/review-pr/diff_{pr_number}.txt` (saved in Step 2)
-- `ANNOTATED_DIFF_PATH` is `temp/review-pr/annotated_diff_{pr_number}.txt`
-- `RANGES_PATH` is `temp/review-pr/ranges_{pr_number}.json`
+- `DIFF_PATH` is `.autoskillit/temp/review-pr/diff_{pr_number}.txt` (saved in Step 2)
+- `ANNOTATED_DIFF_PATH` is `.autoskillit/temp/review-pr/annotated_diff_{pr_number}.txt`
+- `RANGES_PATH` is `.autoskillit/temp/review-pr/ranges_{pr_number}.json`
 
 `VALID_LINE_RANGES` is now a JSON file on disk. Load it in Step 4 for filtering.
 If the diff is empty or the Python invocation fails, leave `VALID_LINE_RANGES` empty (no filtering).
@@ -448,9 +448,14 @@ gh pr review {pr_number} --comment --body "AutoSkillit review: uncertain trade-o
 
 ### Step 8: Write Summary and Emit Verdict
 
-Save findings summary to `temp/review-pr/summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
+Save findings summary to `.autoskillit/temp/review-pr/summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
 
 Output the verdict as the final line:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 verdict = {approved|changes_requested|needs_human}
@@ -465,4 +470,4 @@ Exit 1 only for unrecoverable tool-level errors.
 - `verdict=changes_requested` — Blocking issues found; recipe routes to `resolve_review`
 - `verdict=needs_human` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
 
-Summary written to: `temp/review-pr/summary_{pr_number}_{timestamp}.md`
+Summary written to: `.autoskillit/temp/review-pr/summary_{pr_number}_{timestamp}.md`

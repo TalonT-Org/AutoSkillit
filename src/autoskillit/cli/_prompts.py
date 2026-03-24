@@ -114,13 +114,29 @@ FAILURE PREDICATES — when to follow on_failure:
 - classify_fix: "error:" line present in output
 
 CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
-- When run_skill returns "success: False" AND "needs_retry: true":
+- When run_skill returns "success: False" AND "needs_retry: true" AND "retry_reason: resume":
   - If the current step defines an on_context_limit route → follow on_context_limit.
   - If the current step has NO on_context_limit route → fall through to on_failure.
-- "needs_retry: true" means the session hit a context or turn limit with partial
-  progress on disk. Routing to on_context_limit (e.g., test or retry_worktree)
-  checks whether partial work was sufficient before re-running from scratch.
-- NEVER route needs_retry=true directly to on_failure when on_context_limit exists.
+  - "retry_reason: resume" means the session hit a context or turn limit with partial
+    progress on disk. on_context_limit (e.g., retry_worktree or test) checks whether
+    partial work was sufficient before re-running from scratch.
+  - NEVER route retry_reason=resume directly to on_failure when on_context_limit exists.
+- When run_skill returns "needs_retry: true" AND "retry_reason: drain_race":
+  - The infrastructure confirmed session completion (Channel A or B) but stdout was not
+    fully flushed before the process was killed. Partial progress was confirmed by the
+    channel signal. Route identically to "resume": follow on_context_limit if defined,
+    fall through to on_failure otherwise.
+  - NEVER route retry_reason=drain_race to on_failure when on_context_limit exists.
+- When run_skill returns "needs_retry: true" AND "retry_reason: empty_output":
+  - The session exited cleanly but produced no output (transient API issue or infrastructure
+    failure). No partial progress exists on disk. Do NOT route to on_context_limit.
+  - Fall through to on_failure regardless of whether on_context_limit is defined.
+- When run_skill returns "needs_retry: true" AND "retry_reason: path_contamination":
+  - The session wrote files outside its working directory. This is a CWD boundary violation,
+    not a context limit. No partial worktree progress should be resumed.
+  - Fall through to on_failure regardless of whether on_context_limit is defined.
+- When run_skill returns "needs_retry: true" AND "retry_reason: early_stop" or "zero_writes":
+  - These are not context limit conditions. Fall through to on_failure.
 
 TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
 - Tool-level failure (run_skill returns "success: False"): Follow on_failure. This fires
@@ -190,7 +206,7 @@ def show_cook_preview(
     """
     from autoskillit.cli._ansi import diagram_to_terminal, ingredients_to_terminal
     from autoskillit.config import resolve_ingredient_defaults
-    from autoskillit.recipe import format_ingredients_table, load_recipe_diagram
+    from autoskillit.recipe import build_ingredient_rows, load_recipe_diagram
 
     diagram = load_recipe_diagram(recipe_name, recipes_dir)
     if diagram:
@@ -198,6 +214,6 @@ def show_cook_preview(
         print()  # blank line between diagram and table
 
     resolved = resolve_ingredient_defaults(project_dir)
-    table = format_ingredients_table(parsed_recipe, resolved_defaults=resolved)
-    if table:
-        print(ingredients_to_terminal(table))
+    rows = build_ingredient_rows(parsed_recipe, resolved_defaults=resolved)
+    if rows:
+        print(ingredients_to_terminal(rows))

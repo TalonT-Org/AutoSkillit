@@ -18,7 +18,7 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.repository import DefaultRecipeRepository
-from autoskillit.server._factory import make_context
+from autoskillit.server._factory import _gh_cli_token, make_context
 from autoskillit.workspace.cleanup import DefaultWorkspaceManager
 from tests.conftest import MockSubprocessRunner
 
@@ -106,8 +106,29 @@ def test_make_context_github_client_uses_env_token(monkeypatch):
 
 def test_make_context_github_client_no_token(monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr("autoskillit.server._factory._gh_cli_token", lambda: None)
     ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".")
     assert ctx.github_client.has_token is False
+
+
+def test_make_context_github_client_uses_gh_cli_fallback(monkeypatch):
+    """When no config token or GITHUB_TOKEN env var, fall back to gh auth token."""
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr("autoskillit.server._factory._gh_cli_token", lambda: "gh-cli-token")
+    config = AutomationConfig()
+    ctx = make_context(config, runner=None, plugin_dir=".")
+    assert ctx.github_client.has_token is True
+
+
+def test_make_context_github_client_config_token_takes_priority_over_gh_cli(monkeypatch):
+    """Config token takes priority over gh CLI token."""
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr("autoskillit.server._factory._gh_cli_token", lambda: "gh-cli-token")
+    config = AutomationConfig()
+    config.github.token = "config-token"
+    ctx = make_context(config, runner=None, plugin_dir=".")
+    assert ctx.github_client.has_token is True
+    assert ctx.github_client._token == "config-token"
 
 
 def test_make_context_github_client_token_snapshot_is_immutable(monkeypatch):
@@ -254,3 +275,40 @@ def test_cook_and_factory_session_skill_manager_ctor_args_in_sync() -> None:
         f"  _factory.py: {factory_count} positional arg(s)\n"
         "Align both call sites or update this test if the API intentionally diverged."
     )
+
+
+# ---------------------------------------------------------------------------
+# _gh_cli_token unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_gh_cli_token_returns_token_on_success(monkeypatch):
+    """_gh_cli_token returns stdout when gh auth token succeeds."""
+    import subprocess as _subprocess
+
+    def fake_run(cmd, *, capture_output, text, timeout):
+        return _subprocess.CompletedProcess(cmd, 0, stdout="gho_abc123\n", stderr="")
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
+    assert _gh_cli_token() == "gho_abc123"
+
+
+def test_gh_cli_token_returns_none_on_failure(monkeypatch):
+    """_gh_cli_token returns None when gh auth token fails."""
+    import subprocess as _subprocess
+
+    def fake_run(cmd, *, capture_output, text, timeout):
+        return _subprocess.CompletedProcess(cmd, 1, stdout="", stderr="not logged in")
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
+    assert _gh_cli_token() is None
+
+
+def test_gh_cli_token_returns_none_when_gh_not_installed(monkeypatch):
+    """_gh_cli_token returns None when gh is not on PATH."""
+
+    def fake_run(cmd, *, capture_output, text, timeout):
+        raise FileNotFoundError("gh")
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
+    assert _gh_cli_token() is None

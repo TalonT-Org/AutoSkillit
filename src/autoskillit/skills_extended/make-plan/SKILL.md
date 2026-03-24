@@ -129,7 +129,7 @@ call is mandatory at the start of every headless session that uses code-index to
 
 **5b. Write your lens selection rationale to a file using the Write tool:**
 
-- **Path:** `temp/make-plan/arch_lens_selection_{YYYY-MM-DD_HHMMSS}.md`
+- **Path:** `.autoskillit/temp/make-plan/arch_lens_selection_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:** Which lens was selected and why (1-2 sentences of rationale).
 
 **5c. MANDATORY: LOAD the appropriate arch-lens skill using the Skill tool:**
@@ -206,7 +206,7 @@ Before writing the final plan, verify:
 
 ## Critical Constraints
 
-**NEVER use EnterPlanMode.** This skill IS the planning process. Execute the planning steps directly — explore with subagents, design the approach, write the plan file to `temp/make-plan/` (relative to the current working directory). Do not enter plan mode, do not call ExitPlanMode. Just do the work and deliver the plan.
+**NEVER use EnterPlanMode.** This skill IS the planning process. Execute the planning steps directly — explore with subagents, design the approach, write the plan file to `.autoskillit/temp/make-plan/` (relative to the current working directory). Do not enter plan mode, do not call ExitPlanMode. Just do the work and deliver the plan.
 
 **NEVER include:**
 - Multiple alternative approaches (recommend ONE only)
@@ -220,11 +220,20 @@ Before writing the final plan, verify:
 - Change any code
 - Choose an approach because it's easier
 - Reject an approach because it's harder
-- Create files outside `temp/make-plan/` directory
+- Create files outside `.autoskillit/temp/make-plan/` directory
 - **Use `git merge` in implementation plans.** When a plan needs to bring in changes from another branch, use `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure. See "Conflict-Resolution Plan Requirements" section for full guidance.
 
 **ALWAYS:**
-- Write to `temp/make-plan/` directory (relative to the current working directory)
+- Write to `.autoskillit/temp/make-plan/` directory (relative to the current working directory)
+- After writing the plan file, emit the **absolute path** as a structured output token
+  immediately before `%%ORDER_UP%%`. The save path is relative (`.autoskillit/temp/make-plan/...`) but
+  the token **must** use the absolute path (prepend the full CWD):
+  ```
+  plan_path = /absolute/cwd/.autoskillit/temp/make-plan/{filename}.md
+  plan_parts = /absolute/cwd/.autoskillit/temp/make-plan/{filename}.md
+  %%ORDER_UP%%
+  ```
+  This token is MANDATORY — the pipeline cannot capture the output without it.
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Recommend the single best technical solution
 - Ground decisions in design quality and correctness
@@ -241,11 +250,17 @@ If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b
 - The title of each part file MUST include `— PART A ONLY` (or B, C, etc.) so scope is immediately visible.
 - Each part file MUST open with the scope warning block shown in the multi-part template below.
 
-Save the plan to: `temp/make-plan/{task_name}_plan_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Save the plan to: `.autoskillit/temp/make-plan/{task_name}_plan_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 **Structured output:** After saving the file(s), emit the following lines so pipeline orchestrators can capture both fields:
 
 For a single-part plan:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 plan_path = {absolute_path}
 plan_parts = {absolute_path}

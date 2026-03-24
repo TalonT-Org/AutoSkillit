@@ -35,14 +35,16 @@ conflicts from earlier merges in the queue.
 
 **NEVER:**
 - Modify any source code files directly (conflict resolution is handled by `make-plan` + `implement-worktree-no-merge`)
-- Use `git merge` to merge the PR into the integration branch — always use `gh pr merge --squash --auto`
+- Use `git merge` to merge the PR into the integration branch — always use `gh pr merge --squash --auto` (when `autoMergeAllowed=true`) or `gh pr merge --squash` (when `autoMergeAllowed=false`)
 - Close or comment on the PR
 - Leave the git working tree in a dirty state
-- Create files outside `temp/merge-prs/` directory
+- Create files outside `.autoskillit/temp/merge-prs/` directory
 
 **ALWAYS:**
 - Run `git status` before any operation to verify clean state
-- Use `gh pr merge {pr_number} --squash --auto` for the simple path — this enforces the repository's required status checks before the merge executes
+- Detect `autoMergeAllowed` via GraphQL before Step 2 (Step 1.8) to select the correct merge command
+- Use `gh pr merge {pr_number} --squash --auto` when `autoMergeAllowed=true` — enforces required status checks before merge executes
+- Use `gh pr merge {pr_number} --squash` when `autoMergeAllowed=false` — GitHub merges synchronously without waiting for checks
 - Poll `gh pr view {pr_number} --json state,mergedAt` to confirm the merge completed
 - Fetch the PR branch from remote before the deletion regression scan and conflict analysis
 
@@ -160,30 +162,52 @@ The correct resolution for every regression listed above is to **remove the rein
 code** from the PR's changes, not to restore it. The base branch's deletion is authoritative.
 ```
 
+### Step 1.8: Detect Auto-Merge Availability
+
+```bash
+REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||')
+OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/}
+AUTO_MERGE_ALLOWED=$(gh api graphql -f query="query {
+  repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
+    autoMergeAllowed
+  }
+}" 2>/dev/null | jq -r '.data.repository.autoMergeAllowed // false')
+```
+
+Capture `AUTO_MERGE_ALLOWED` ("true" or "false"). On gh failure, default to "false"
+(the safe path: use plain `--squash`, not `--squash --auto`).
+
 ### Step 2: Simple Path — gh pr merge
 
-Queue the merge on GitHub using auto-merge so that the integration branch ruleset
-(required status checks) is enforced before GitHub executes the merge:
+**When `AUTO_MERGE_ALLOWED == true`** (repo has branch protection with required checks):
+
+Queue the merge via auto-merge so GitHub's required status checks are enforced
+before GitHub executes the merge:
 
 ```bash
 gh pr merge {pr_number} --squash --auto
 ```
 
-**After queuing, poll until the PR is merged or until timeout:**
+Poll interval: 30 seconds, timeout: 600 seconds (10 minutes).
+
+**When `AUTO_MERGE_ALLOWED == false`** (no branch protection / required checks):
+
+Merge immediately — GitHub executes the squash merge synchronously:
 
 ```bash
-gh pr view {pr_number} --json state,mergedAt
+gh pr merge {pr_number} --squash
 ```
 
-- Poll interval: 30 seconds, timeout: 600 seconds (10 minutes)
-- If `state == "MERGED"`: return `merged=true, needs_plan=false`
-- If PR state transitions to `CLOSED` unexpectedly (CI failed and auto-merge was
-  cancelled): return `merged=false` with an error message describing the CI failure
-  so the pipeline can route to cleanup_failure
-- Do NOT fall back to local git merge. If `gh pr merge` exits non-zero because
-  GitHub detected a merge conflict (e.g. "Merge conflict" error), treat this as
-  conflict detection: return `needs_plan=true` with `conflict_report_path` set so
-  the pipeline routes to the complex worktree path.
+Poll interval: 10 seconds, timeout: 300 seconds (5 minutes). Since `--squash`
+without `--auto` merges immediately, the poll is a short confirmation window.
+
+In both cases, poll `gh pr view {pr_number} --json state,mergedAt` until:
+- `state == "MERGED"`: return `merged=true, needs_plan=false`
+- `state == "CLOSED"` unexpectedly: treat as conflict detection and return
+  `needs_plan=true` with `conflict_report_path` set.
+- Timeout: return `merged=false` with a timeout error.
+
+Do NOT fall back to local git merge regardless of `AUTO_MERGE_ALLOWED`.
 
 ### Step 3: Complexity Path — `needs_check` (Re-assessment)
 
@@ -255,7 +279,7 @@ Extract the `## Requirements` section if present — set `requirements_section =
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.
 
-Write `temp/merge-prs/conflict_pr{pr_number}_plan_{ts}.md`:
+Write `.autoskillit/temp/merge-prs/conflict_pr{pr_number}_plan_{ts}.md`:
 
 ```markdown
 # Conflict Resolution Plan: PR #{pr_number} — "{pr_title}"
@@ -377,7 +401,7 @@ Print a JSON result block to stdout for recipe capture:
     "pr_number": 47,
     "pr_branch": "feature/db-refactor",
     "pr_title": "Refactor database layer",
-    "conflict_report_path": "temp/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": ".autoskillit/temp/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
 
@@ -396,7 +420,7 @@ with `conflict_report_path` set. The pipeline then routes to make-plan → imple
     "pr_number": 47,
     "pr_branch": "feature/stale-branch",
     "pr_title": "Feature from stale branch",
-    "conflict_report_path": "temp/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": ".autoskillit/temp/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
 
@@ -421,6 +445,12 @@ After printing the result block, emit the following structured output tokens as 
 very last lines of your text output:
 
 **On successful GitHub auto-merge:**
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 merged = true
 needs_plan = false
@@ -431,6 +461,12 @@ pr_title = {pr_title}
 ```
 
 **On complex / conflict detected:**
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 merged = false
 needs_plan = true
@@ -443,6 +479,12 @@ conflict_report_path = {absolute_path_to_conflict_plan_file}
 ```
 
 **On deletion regression detected:**
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 merged = false
 needs_plan = true
@@ -455,6 +497,12 @@ conflict_report_path = {absolute_path_to_conflict_plan_file}
 ```
 
 **On escalation required:**
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
+
 ```
 merged = false
 needs_plan = false
@@ -472,7 +520,7 @@ written. Omit the line entirely on a successful direct merge or when `escalation
 ## Output Location
 
 ```
-temp/merge-prs/
+.autoskillit/temp/merge-prs/
 └── conflict_pr{N}_plan_{ts}.md    (written only when needs_plan=true)
 ```
 

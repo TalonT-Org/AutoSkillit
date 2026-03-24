@@ -92,7 +92,7 @@ class TestZeroWriteDetection:
             "type": "result",
             "subtype": "success",
             "is_error": False,
-            "result": "conflict_report_path = /tmp/wt/temp/report.md\nworktree_path = /tmp/wt",
+            "result": "conflict_report_path = /tmp/wt/.autoskillit/temp/report.md\nworktree_path = /tmp/wt",
             "session_id": "test-sess",
         }
         stdout = json.dumps(result_record)

@@ -39,6 +39,7 @@ __all__ = [
     "MergeQueueWatcher",
     "SessionSkillManager",
     "TargetSkillResolver",
+    "BackgroundSupervisor",
 ]
 
 
@@ -70,7 +71,9 @@ class AuditStore(Protocol):
 
     def record_success(self, skill_command: str) -> None: ...
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
+    def load_from_log_dir(
+        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+    ) -> int: ...
 
 
 @runtime_checkable
@@ -93,7 +96,9 @@ class TokenStore(Protocol):
 
     def clear(self) -> None: ...
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
+    def load_from_log_dir(
+        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+    ) -> int: ...
 
 
 @runtime_checkable
@@ -108,7 +113,9 @@ class TimingStore(Protocol):
 
     def clear(self) -> None: ...
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "") -> int: ...
+    def load_from_log_dir(
+        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+    ) -> int: ...
 
 
 @runtime_checkable
@@ -409,3 +416,22 @@ class TargetSkillResolver(Protocol):
     """Protocol for resolving skill names to their source tier."""
 
     def resolve(self, name: str) -> Any: ...
+
+
+@runtime_checkable
+class BackgroundSupervisor(Protocol):
+    """Protocol for supervised background task execution."""
+
+    @property
+    def pending_count(self) -> int: ...
+
+    def submit(
+        self,
+        coro: Any,
+        *,
+        on_exception: Any | None = None,
+        status_path: Any | None = None,
+        label: str = "",
+    ) -> Any: ...
+
+    async def drain(self) -> None: ...

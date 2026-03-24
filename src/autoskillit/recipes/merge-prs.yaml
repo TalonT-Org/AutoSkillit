@@ -23,7 +23,21 @@ ingredients:
     default: "true"
   plans_dir:
     description: Plan files for audit
-    default: "temp/merge-prs"
+    default: ".autoskillit/temp/merge-prs"
+  defer_cleanup:
+    description: >-
+      When 'true', skip per-pipeline interactive cleanup and register this clone
+      in the shared registry for batch deletion after all parallel pipelines
+      complete. Set to 'true' on every parallel instance; leave 'false' for
+      sequential single-pipeline runs.
+    default: "false"
+  registry_path:
+    description: >-
+      Absolute path to the shared clone cleanup registry file. Required when
+      defer_cleanup=true. Must be identical across all parallel pipeline runs in
+      the same batch (use a fixed path like
+      /path/to/project/.autoskillit/temp/clone-cleanup-registry.json).
+    default: ""
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -103,8 +117,10 @@ steps:
     on_failure: cleanup_failure
     note: >
       The clone's origin initially points to a file:// URL (set by clone_repo for isolation).
-      This step replaces it with the actual GitHub remote URL captured from the clone step,
-      so that gh CLI commands and git fetch origin work correctly in the clone.
+      This step replaces it with the actual GitHub remote URL so that gh CLI commands
+      (gh pr merge, gh pr view, etc.) can identify the correct GitHub repository.
+      Skills that contact remotes (resolve-merge-conflicts, retry-worktree, implement-worktree)
+      now use REMOTE=$(upstream || origin) internally and do not depend on this step.
 
   check_integration_exists:
     tool: run_cmd
@@ -567,14 +583,14 @@ steps:
   collect_artifacts:
     tool: run_cmd
     with:
-      cmd: "mkdir -p ${{ inputs.plans_dir }} && find temp/make-plan/ -name '*_plan_*.md' -exec cp {} ${{ inputs.plans_dir }}/ \\; 2>/dev/null || true"
+      cmd: "mkdir -p ${{ inputs.plans_dir }} && find .autoskillit/temp/make-plan/ -name '*_plan_*.md' -exec cp {} ${{ inputs.plans_dir }}/ \\; 2>/dev/null || true"
       cwd: "${{ context.work_dir }}"
       step_name: "collect_artifacts"
     on_success: check_impl_plans
     on_failure: check_impl_plans
     note: >
-      Copies plan files generated during the pipeline (from temp/make-plan/) into
-      temp/merge-prs/ alongside any conflict reports already there.
+      Copies plan files generated during the pipeline (from .autoskillit/temp/make-plan/) into
+      .autoskillit/temp/merge-prs/ alongside any conflict reports already there.
       Always routes to check_impl_plans, which determines whether audit_impl
       is meaningful. In queue mode (context.queue_mode == true), the integration_branch
       is the base_branch itself — no batch branch push is needed. The step after
@@ -613,6 +629,7 @@ steps:
         GO: open_integration_pr
         NO GO: remediate
     on_failure: cleanup_failure
+    on_context_limit: cleanup_failure
     optional: true
     skip_when_false: "inputs.audit"
     note: >
@@ -822,7 +839,7 @@ steps:
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       pr_url: "${{ context.pr_url }}"
-    on_success: confirm_cleanup
+    on_success: check_defer_cleanup
     on_failure: diagnose_ci
     note: >
       Waits for the GitHub Actions CI run on context.integration_branch to complete
@@ -843,9 +860,32 @@ steps:
     on_failure: cleanup_failure
     note: >
       Runs when ci_watch_pr reports CI failure on the integration branch.
-      Fetches logs and writes a diagnosis to temp/diagnose-ci/ for human inspection.
+      Fetches logs and writes a diagnosis to .autoskillit/temp/diagnose-ci/ for human inspection.
       diagnosis_path is captured for observability — no automated remediation for
       integration CI, so always routes to cleanup_failure.
+
+  check_defer_cleanup:
+    description: "Route to deferred or immediate cleanup on success path"
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_cleanup_mode"
+      defer_cleanup: "${{ inputs.defer_cleanup }}"
+    on_result:
+      - when: "result.deferred == 'true'"
+        route: register_success_deferred
+      - route: confirm_cleanup
+    on_failure: confirm_cleanup
+
+  register_success_deferred:
+    description: "Register clone as cleanup candidate (deferred batch cleanup mode)"
+    tool: register_clone_status
+    with:
+      clone_path: "${{ context.work_dir }}"
+      status: "success"
+      registry_path: "${{ inputs.registry_path }}"
+      step_name: register_success_deferred
+    on_success: done
+    on_failure: done
 
   confirm_cleanup:
     action: confirm
@@ -890,8 +930,30 @@ steps:
 
   escalate_stop:
     action: stop
-    message: "Pipeline failed — human intervention needed. Check the integration branch and temp/merge-prs/ for details."
+    message: "Pipeline failed — human intervention needed. Check the integration branch and .autoskillit/temp/merge-prs/ for details."
     note: >
       context.task may be null when reached via escalation_required=true from merge_pr
       (merge-pr does not set conflict_report_path on escalation paths). Do not rely on
       context.task being populated when handling this stop.
+
+  batch_confirm_cleanup:
+    action: confirm
+    message: >-
+      All parallel pipelines complete. Delete all registered successful clones?
+      Error pipeline clones will be preserved for investigation.
+      Type yes to delete or no to keep all.
+    note: >-
+      ORCHESTRATOR: Run this step ONCE after ALL parallel pipeline instances have
+      reached 'done' or 'escalate_stop'. Do NOT run per-pipeline instance.
+      Only applicable when run_mode=parallel and defer_cleanup=true.
+    on_success: batch_delete_clones
+    on_failure: done
+
+  batch_delete_clones:
+    description: "Delete all registered successful clones in one batch operation"
+    tool: batch_cleanup_clones
+    with:
+      registry_path: "${{ inputs.registry_path }}"
+      step_name: batch_delete_clones
+    on_success: done
+    on_failure: done

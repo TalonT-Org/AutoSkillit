@@ -308,6 +308,121 @@ async def test_report_bug_non_blocking_default_severity(tool_ctx, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Non-blocking outcome tests (supervised background task)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_report_bug_non_blocking_outcome_writes_report_file(tool_ctx, tmp_path):
+    """After the background task completes, report_path must exist with content."""
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok("# Bug Report\nroot cause: missing guard")
+    tool_ctx.executor = mock_executor
+
+    result = json.loads(
+        await report_bug("KeyError in foo", str(tmp_path), severity="non_blocking")
+    )
+    assert result["status"] == "dispatched"
+
+    report_path = Path(result["report_path"])
+    await tool_ctx.background.drain()
+
+    assert report_path.exists(), "report_path must exist after background task completes"
+    assert "Bug Report" in report_path.read_text()
+
+
+@pytest.mark.anyio
+async def test_report_bug_non_blocking_writes_status_file_on_success(tool_ctx, tmp_path):
+    """A status.json file must be written with status='complete' after successful dispatch."""
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok("# Report\nfoo")
+    tool_ctx.executor = mock_executor
+
+    result = json.loads(await report_bug("err", str(tmp_path), severity="non_blocking"))
+    report_path = Path(result["report_path"])
+
+    # Before task runs: pending status file should exist
+    status_path = report_path.with_suffix(".status.json")
+    assert status_path.exists(), "status file must be written synchronously on dispatch"
+    pending = json.loads(status_path.read_text())
+    assert pending["status"] == "pending"
+
+    # After task completes: status should update to complete
+    await tool_ctx.background.drain()
+
+    data = json.loads(status_path.read_text())
+    assert data["status"] == "complete"
+    assert "completed_at" in data
+
+
+@pytest.mark.anyio
+async def test_report_bug_non_blocking_writes_status_file_on_failure(tool_ctx, tmp_path):
+    """When the headless session fails, status.json must reflect the failure."""
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_fail()
+    tool_ctx.executor = mock_executor
+
+    result = json.loads(await report_bug("crash here", str(tmp_path), severity="non_blocking"))
+    status_path = Path(result["report_path"]).with_suffix(".status.json")
+
+    await tool_ctx.background.drain()
+
+    data = json.loads(status_path.read_text())
+    assert data["status"] == "failed"
+    assert "completed_at" in data
+
+
+@pytest.mark.anyio
+async def test_report_bug_non_blocking_executor_raises_is_observed(tool_ctx, tmp_path):
+    """If executor.run() raises, the exception must be logged — not silently dropped."""
+
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    mock_executor = AsyncMock()
+    mock_executor.run.side_effect = RuntimeError("executor exploded")
+    tool_ctx.executor = mock_executor
+
+    result = json.loads(await report_bug("error ctx", str(tmp_path), severity="non_blocking"))
+    assert result["status"] == "dispatched"
+
+    await tool_ctx.background.drain()
+
+    # The exception must be captured and logged — not silently dropped
+    status_path = Path(result["report_path"]).with_suffix(".status.json")
+    assert status_path.exists(), "status file must exist even when executor raises"
+    data = json.loads(status_path.read_text())
+    assert data["status"] == "failed"
+    assert "executor exploded" in data.get("error", "")
+
+
+@pytest.mark.anyio
+async def test_report_bug_no_pending_tasks_after_completion(tool_ctx, tmp_path):
+    """After background task completes, no tasks remain in the supervisor's pending set."""
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = False
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok()
+    tool_ctx.executor = mock_executor
+
+    await report_bug("err", str(tmp_path), severity="non_blocking")
+
+    await tool_ctx.background.drain()
+
+    assert tool_ctx.background.pending_count == 0
+
+
+# ---------------------------------------------------------------------------
 # GitHub filing — blocking mode (easier to assert synchronously)
 # ---------------------------------------------------------------------------
 
@@ -484,6 +599,32 @@ async def test_report_bug_github_filing_disabled(tool_ctx, tmp_path):
 
     mock_gh.search_issues.assert_not_awaited()
     assert result["github"] == {}
+
+
+@pytest.mark.anyio
+async def test_report_bug_blocking_github_client_raises_does_not_propagate(tool_ctx, tmp_path):
+    """If the GitHub client raises unexpectedly, the error must be captured in the github dict."""
+    tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx.config.report_bug.github_filing = True
+    tool_ctx.config.github.default_repo = "owner/repo"
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = _skill_ok(
+        "# Report\n" + _FINGERPRINT_START + "\nfp1\n" + _FINGERPRINT_END
+    )
+    tool_ctx.executor = mock_executor
+
+    mock_gh = MagicMock()
+    mock_gh.has_token = True
+    mock_gh.search_issues = AsyncMock(side_effect=RuntimeError("network failure"))
+    tool_ctx.github_client = mock_gh
+
+    # Must not raise — exception is captured in github dict
+    result = json.loads(await report_bug("err", str(tmp_path), severity="blocking"))
+    assert result["success"] is True  # session succeeded
+    assert result["github"].get("skipped") is True
+    assert "unexpected error" in result["github"].get("reason", "")
+    assert "network failure" in result["github"].get("reason", "")
 
 
 # ---------------------------------------------------------------------------
@@ -705,6 +846,57 @@ class TestClaimIssueTool:
             "tool": "claim_issue",
             "issue_url": "https://github.com/owner/repo/issues/1",
         }
+
+    @pytest.mark.anyio
+    async def test_claim_issue_allow_reentry_true_returns_claimed_true_when_already_labeled(
+        self, tool_ctx
+    ):
+        """allow_reentry=True with label present: returns claimed=True and reentry=True."""
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {
+            "success": True,
+            "labels": [{"name": "in-progress"}],
+        }
+        tool_ctx.github_client = mock_client
+        result = json.loads(
+            await claim_issue("https://github.com/owner/repo/issues/42", allow_reentry=True)
+        )
+        assert result["success"] is True
+        assert result["claimed"] is True
+        assert result["reentry"] is True
+        mock_client.add_labels.assert_not_called()  # no re-application needed
+
+    @pytest.mark.anyio
+    async def test_claim_issue_allow_reentry_false_returns_claimed_false_when_already_labeled(
+        self, tool_ctx
+    ):
+        """Default allow_reentry=False: claimed=False when label already present."""
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {
+            "success": True,
+            "labels": [{"name": "in-progress"}],
+        }
+        tool_ctx.github_client = mock_client
+        result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+        assert result["success"] is True
+        assert result["claimed"] is False
+        assert "reentry" not in result
+
+    @pytest.mark.anyio
+    async def test_claim_issue_allow_reentry_true_still_claims_when_label_absent(self, tool_ctx):
+        """allow_reentry=True with no pre-existing label performs normal claim."""
+        mock_client = AsyncMock()
+        mock_client.fetch_issue.return_value = {"success": True, "labels": []}
+        mock_client.ensure_label.return_value = {"success": True, "created": True}
+        mock_client.add_labels.return_value = {"success": True, "labels": ["in-progress"]}
+        tool_ctx.github_client = mock_client
+        result = json.loads(
+            await claim_issue("https://github.com/owner/repo/issues/42", allow_reentry=True)
+        )
+        assert result["success"] is True
+        assert result["claimed"] is True
+        assert result.get("reentry", False) is False
+        mock_client.add_labels.assert_called_once()
 
 
 class TestReleaseIssueTool:

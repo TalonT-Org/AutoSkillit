@@ -344,9 +344,9 @@ def test_ci_watch_pr_uses_integration_branch(recipe) -> None:
 
 
 def test_ci_watch_pr_routing(recipe) -> None:
-    """ci_watch_pr on_success -> confirm_cleanup; on_failure -> diagnose_ci."""
+    """ci_watch_pr on_success -> check_defer_cleanup; on_failure -> diagnose_ci."""
     step = recipe.steps["ci_watch_pr"]
-    assert step.on_success == "confirm_cleanup"
+    assert step.on_success == "check_defer_cleanup"
     assert step.on_failure == "diagnose_ci"
 
 

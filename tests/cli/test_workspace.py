@@ -86,6 +86,7 @@ class TestRunWorkspaceClean:
         entry_mtime = entry.stat().st_mtime
         monkeypatch.setattr("autoskillit.cli._workspace.time.time", lambda: entry_mtime + 20_000)
         monkeypatch.setattr(builtins, "input", lambda _: "y")
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
         run_workspace_clean(dir=str(tmp_path), force=False)
         assert not entry.exists()
@@ -102,6 +103,7 @@ class TestRunWorkspaceClean:
         entry_mtime = entry.stat().st_mtime
         monkeypatch.setattr("autoskillit.cli._workspace.time.time", lambda: entry_mtime + 20_000)
         monkeypatch.setattr(builtins, "input", lambda _: "n")
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
         run_workspace_clean(dir=str(tmp_path), force=False)
         assert entry.exists()

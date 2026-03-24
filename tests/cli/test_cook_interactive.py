@@ -13,6 +13,11 @@ from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 
 
 class TestCookInteractive:
+    @pytest.fixture(autouse=True)
+    def _no_first_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
     # CH-1
     def test_cook_init_session_cook(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """cook calls init_session with cook_session=True."""
@@ -150,3 +155,167 @@ class TestCookInteractive:
 
         args = mock_run.call_args[0][0]
         assert "--dangerously-skip-permissions" in args
+
+    # CH-8
+    def test_cook_calls_onboarding_menu_on_first_run(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """When is_first_run() returns True, run_onboarding_menu is called once."""
+        from unittest.mock import MagicMock, patch
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        menu_called: list[bool] = []
+
+        # Override the autouse fixture's patch with True for this test
+        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: True)
+        monkeypatch.setattr(
+            "autoskillit.cli._onboarding.run_onboarding_menu",
+            lambda *a, **kw: menu_called.append(True) or None,
+        )
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+        ):
+            import autoskillit.cli._cook as module
+
+            module.cook()
+
+        assert menu_called == [True]
+
+    # CH-9
+    def test_cook_skips_onboarding_if_not_first_run(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """When is_first_run() returns False, run_onboarding_menu is NOT called."""
+        from unittest.mock import MagicMock, patch
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        menu_called: list[bool] = []
+
+        monkeypatch.setattr(
+            "autoskillit.cli._onboarding.run_onboarding_menu",
+            lambda *a, **kw: menu_called.append(True) or None,
+        )
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+        ):
+            import autoskillit.cli._cook as module
+
+            module.cook()
+
+        assert menu_called == []
+
+    # CH-10
+    def test_cook_forwards_initial_prompt_to_build_cmd(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """When run_onboarding_menu returns a non-None string, it appears in subprocess cmd."""
+        from unittest.mock import MagicMock, patch
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        prompt_text = "/autoskillit:setup-project"
+
+        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: True)
+        monkeypatch.setattr(
+            "autoskillit.cli._onboarding.run_onboarding_menu",
+            lambda *a, **kw: prompt_text,
+        )
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
+        ):
+            import autoskillit.cli._cook as module
+
+            module.cook()
+
+        args = mock_run.call_args[0][0]
+        assert prompt_text in args
+
+    # CH-11
+    def test_cook_marks_onboarded_in_finally_when_prompt_set(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """When run_onboarding_menu returns non-None and session completes, mark called."""
+        from unittest.mock import MagicMock, patch
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        marked: list[bool] = []
+
+        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: True)
+        monkeypatch.setattr(
+            "autoskillit.cli._onboarding.run_onboarding_menu",
+            lambda *a, **kw: "/autoskillit:setup-project",
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._onboarding.mark_onboarded",
+            lambda _p: marked.append(True),
+        )
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+        ):
+            import autoskillit.cli._cook as module
+
+            module.cook()
+
+        assert marked == [True]
+
+    # CH-12
+    def test_cook_does_not_mark_onboarded_when_prompt_is_none(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """When run_onboarding_menu returns None, mark_onboarded is NOT called from finally."""
+        from unittest.mock import MagicMock, patch
+
+        fake_skills_dir = tmp_path / "skills"
+        fake_skills_dir.mkdir()
+        mock_mgr = MagicMock()
+        mock_mgr.init_session.return_value = fake_skills_dir
+        marked: list[bool] = []
+
+        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: True)
+        monkeypatch.setattr(
+            "autoskillit.cli._onboarding.run_onboarding_menu",
+            lambda *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._onboarding.mark_onboarded",
+            lambda _p: marked.append(True),
+        )
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("builtins.input", return_value=""),
+            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+        ):
+            import autoskillit.cli._cook as module
+
+            module.cook()
+
+        assert marked == []

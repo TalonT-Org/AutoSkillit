@@ -151,8 +151,8 @@ class DefaultGitHubFetcher:
                             "error": (
                                 f"Issue not found (HTTP 404): {issue_ref}. "
                                 "The repository may be private or restricted. "
-                                "Configure github.token in .autoskillit/config.yaml "
-                                "or set GITHUB_TOKEN before starting the server."
+                                "Set github.token in .autoskillit/.secrets.yaml, "
+                                "set GITHUB_TOKEN, or log in with gh auth login."
                             ),
                         }
                     return {"success": False, "error": f"Issue not found: {issue_ref}"}
@@ -358,7 +358,8 @@ class DefaultGitHubFetcher:
                 resp = await client.get(url, headers=self._headers())
                 if resp.status_code == 404:
                     hint = (
-                        " Configure github.token in .autoskillit/config.yaml."
+                        " Set github.token in .autoskillit/.secrets.yaml,"
+                        " set GITHUB_TOKEN, or log in with gh auth login."
                         if not self._token
                         else ""
                     )

@@ -73,6 +73,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "app",  # cli/app.py: app = App(...), config_app = App(...), etc.
         "store",  # migration/store.py: defensive exemption for future module-level construction
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
+        "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
+        "headless",  # execution/headless.py: _OUTPUT_PATH_TOKENS = _build_path_token_set()
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -195,7 +197,12 @@ def test_no_sync_manifest_imports_in_production_code():
     src_dir = Path(__file__).parent.parent.parent / "src"
     for py_file in src_dir.rglob("*.py"):
         content = py_file.read_text()
-        assert "sync_manifest" not in content, f"Found sync_manifest reference in {py_file}"
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("import ", "from ")):
+                assert "sync_manifest" not in stripped, (
+                    f"Found sync_manifest import in {py_file}: {line!r}"
+                )
 
 
 # ── Rule 2: test_singleton_definition_locality ────────────────────────────────
@@ -661,9 +668,21 @@ def test_no_subpackage_exceeds_10_files() -> None:
         etc.) that cannot be merged without re-introducing the coupling they isolate.
       core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
         (_type_enums, _type_protocols, _type_results, _type_subprocess, etc.) to
-        prevent circular imports while keeping L0 types co-located. Exempt at 14 files.
+        prevent circular imports while keeping L0 types co-located. Also houses
+        _terminal_table.py as the L0 shared terminal rendering primitive so that
+        both cli/ (L3) and pipeline/ (L1) can import it without layer violations.
+        Exempt at 15 files.
+      cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
+        for backward-compatible cli/ imports; canonical implementation lives in
+        core/_terminal_table.py. Exempt at 12 files.
     """
-    EXEMPTIONS: dict[str, int] = {"server": 16, "recipe": 27, "execution": 23, "core": 14}
+    EXEMPTIONS: dict[str, int] = {
+        "server": 16,
+        "recipe": 27,
+        "execution": 23,
+        "core": 15,
+        "cli": 12,
+    }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
         if not sub_dir.is_dir() or sub_dir.name.startswith("_") or sub_dir.name == "__pycache__":

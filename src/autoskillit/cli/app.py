@@ -21,9 +21,12 @@ from cyclopts import App, Parameter
 from autoskillit.cli._cook import cook as cook_interactive
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
+    _check_secret_scanning,
     _generate_config_yaml,
+    _log_secret_scan_bypass,
     _prompt_test_command,
     _register_all,
+    _require_interactive_stdin,
 )
 from autoskillit.core import ClaudeFlags, RecipeSource, atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
@@ -141,9 +144,15 @@ def init(
     config_dir.mkdir(exist_ok=True)
     config_path = config_dir / "config.yaml"
 
+    gate = _check_secret_scanning(project_dir)
+    if not gate.passed:
+        raise SystemExit(1)
+
     if config_path.exists() and not force:
         print(f"  Config already exists: {config_path}")
         print("  Use --force to overwrite.")
+        if gate.bypass_accepted:
+            _log_secret_scan_bypass(project_dir)
     else:
         if test_command is not None:
             cmd_parts = test_command.split()
@@ -151,6 +160,10 @@ def init(
             cmd_parts = _prompt_test_command()
 
         atomic_write(config_path, _generate_config_yaml(cmd_parts))
+        if gate.bypass_accepted:
+            _log_secret_scan_bypass(project_dir)
+        onboarded_marker = config_dir / ".onboarded"
+        onboarded_marker.unlink(missing_ok=True)
 
     _register_all(scope, project_dir)
 
@@ -501,6 +514,7 @@ def order(recipe: str | None = None):
             _resolve_recipe_input,
         )
 
+        _require_interactive_stdin("autoskillit order")
         available = list_recipes(Path.cwd()).items
         if not available:
             print("No recipes found. Run 'autoskillit recipes list' to check.")
@@ -565,16 +579,9 @@ def order(recipe: str | None = None):
     if _disabled:
         _needed = _get_subsets_needed(parsed, _disabled)
         if _needed:
-            if not sys.stdin.isatty():
-                print(
-                    f"ERROR: Recipe '{recipe}' requires subset(s) "
-                    f"{sorted(_needed)} which are currently disabled."
-                )
-                print("Enable the subset(s) in .autoskillit/config.yaml or run interactively.")
-                sys.exit(1)
-            # Interactive prompt
             subset_list = ", ".join(sorted(_needed))
-            print(f"\nThis recipe requires the following disabled subset(s): {subset_list}")
+            print(f"\nThis recipe requires subset(s): {subset_list}")
+            _require_interactive_stdin("autoskillit order")
             print("  1. Enable temporarily (for this run only)")
             print("  2. Enable permanently (update .autoskillit/config.yaml)")
             print("  3. Cancel")
@@ -593,6 +600,7 @@ def order(recipe: str | None = None):
     from autoskillit.cli._ansi import permissions_warning
 
     print(permissions_warning())
+    _require_interactive_stdin("autoskillit order")
     confirm = input("Launch session? [Enter/n]: ").strip().lower()
     if confirm in ("n", "no"):
         return

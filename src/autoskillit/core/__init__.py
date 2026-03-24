@@ -5,11 +5,23 @@ so callers can do either `from autoskillit.core import get_logger` or the
 explicit `from autoskillit.core.logging import get_logger`.
 """
 
+from ._terminal_table import TerminalColumn as TerminalColumn
+from ._terminal_table import _render_gfm_table as _render_gfm_table
+from ._terminal_table import _render_terminal_table as _render_terminal_table
 from .branch_guard import is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions, LayoutError, validate_add_dir
 from .github_url import _parse_issue_ref as _parse_issue_ref
 from .github_url import normalize_owner_repo as normalize_owner_repo
 from .github_url import parse_github_repo as parse_github_repo
+from .io import (
+    _AUTOSKILLIT_GITIGNORE_ENTRIES as _AUTOSKILLIT_GITIGNORE_ENTRIES,
+)
+from .io import (
+    _COMMITTED_BY_DESIGN as _COMMITTED_BY_DESIGN,
+)
+from .io import (
+    _ROOT_GITIGNORE_ENTRIES as _ROOT_GITIGNORE_ENTRIES,
+)
 from .io import (
     YAMLError,
     atomic_write,
@@ -45,6 +57,7 @@ from .types import (
     TOOL_SUBSET_TAGS,
     UNGATED_TOOLS,
     AuditStore,
+    BackgroundSupervisor,
     ChannelBStatus,
     ChannelConfirmation,
     CIRunScope,
@@ -93,6 +106,10 @@ from .types import (
 )
 
 __all__ = [
+    # _terminal_table
+    "TerminalColumn",
+    "_render_gfm_table",
+    "_render_terminal_table",
     # branch_guard
     "is_protected_branch",
     # claude_conventions
@@ -109,6 +126,7 @@ __all__ = [
     "dump_yaml_str",
     "ensure_project_temp",
     "load_yaml",
+    "_ROOT_GITIGNORE_ENTRIES",
     # logging
     "configure_logging",
     "get_logger",
@@ -141,6 +159,7 @@ __all__ = [
     "TOOL_CATEGORIES",
     "UNGATED_TOOLS",
     "AuditStore",
+    "BackgroundSupervisor",
     "CIRunScope",
     "CIWatcher",
     "MergeQueueWatcher",

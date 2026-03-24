@@ -706,7 +706,7 @@ def test_write_clear_marker_is_atomic(tmp_path):
 def test_flush_session_log_includes_write_path_warnings_in_summary(tmp_path):
     """summary.json records write_path_warnings list."""
     warnings = [
-        "Write tool wrote to /source/repo/temp/foo.md (outside cwd /clone)",
+        "Write tool wrote to /source/repo/.autoskillit/temp/foo.md (outside cwd /clone)",
         "Edit tool wrote to /source/repo/src/file.py (outside cwd /clone)",
     ]
     _flush(tmp_path, session_id="warn-session", write_path_warnings=warnings, proc_snapshots=None)

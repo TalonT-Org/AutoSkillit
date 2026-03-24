@@ -219,7 +219,7 @@ arch-lens-process-flow, arch-lens-repository-access, arch-lens-scenarios, arch-l
 audit-arch, audit-bugs, audit-cohesion, audit-defense-standards, audit-friction, audit-impl, audit-tests,
 close-kitchen, collapse-issues, design-guards, diagnose-ci, dry-walkthrough, elaborate-phase,
 enrich-issues, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
-make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr, open-kitchen, open-pr, open-pr-main, pipeline-summary,
+make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr, open-kitchen, open-pr, pipeline-summary,
 prepare-issue, process-issues, rectify, report-bug, resolve-failures, resolve-merge-conflicts, resolve-review,
 retry-worktree, review-approach, review-pr, setup-project, smoke-task, sprint-planner, triage-issues, verify-diag, write-recipe
 
@@ -501,6 +501,11 @@ When called directly as `/autoskillit:write-recipe`:
 
 After telling the user, emit the structured output token as the very last line of your
 text output:
+
+> **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
+> markdown formatting on the token names**. Do not wrap token names in `**bold**`,
+> `*italic*`, or any other markdown. The adjudicator performs a regex match on the
+> exact token name — decorators cause match failure.
 
 ```
 recipe_path = {absolute_path_to_saved_recipe_file}

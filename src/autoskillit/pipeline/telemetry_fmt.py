@@ -8,6 +8,23 @@ maintains an output-equivalent inline implementation guarded by test 1g.
 
 from __future__ import annotations
 
+from autoskillit.core import TerminalColumn, _render_terminal_table
+
+_TOKEN_COLUMNS = (
+    TerminalColumn("STEP", max_width=40, align="<"),
+    TerminalColumn("INPUT", max_width=10, align=">"),
+    TerminalColumn("OUTPUT", max_width=10, align=">"),
+    TerminalColumn("CACHED", max_width=10, align=">"),
+    TerminalColumn("COUNT", max_width=7, align=">"),
+    TerminalColumn("TIME", max_width=8, align=">"),
+)
+
+_TIMING_COLUMNS = (
+    TerminalColumn("STEP", max_width=40, align="<"),
+    TerminalColumn("DURATION", max_width=10, align=">"),
+    TerminalColumn("INVOCATIONS", max_width=11, align=">"),
+)
+
 
 class TelemetryFormatter:
     """Stateless formatter for token and timing telemetry data."""
@@ -127,15 +144,7 @@ class TelemetryFormatter:
             fmt_dur(total.get("total_elapsed_seconds", 0.0)),
         )
 
-        headers = ("STEP", "INPUT", "OUTPUT", "CACHED", "COUNT", "TIME")
-        all_rows = rows + [total_row]
-        widths = [max(len(headers[i]), max(len(r[i]) for r in all_rows)) for i in range(6)]
-
-        output_lines = ["  ".join(headers[i].ljust(widths[i]) for i in range(6))]
-        output_lines.append("  ".join("-" * w for w in widths))
-        for r in all_rows:
-            output_lines.append("  ".join(r[i].ljust(widths[i]) for i in range(6)))
-        return "\n".join(output_lines)
+        return _render_terminal_table(_TOKEN_COLUMNS, rows + [total_row])
 
     @staticmethod
     def format_timing_table_terminal(steps: list[dict], total: dict) -> str:
@@ -153,15 +162,7 @@ class TelemetryFormatter:
             )
         total_row = ("Total", fmt_dur(total.get("total_seconds", 0.0)), "")
 
-        headers = ("STEP", "DURATION", "INVOCATIONS")
-        all_rows = rows + [total_row]
-        widths = [max(len(headers[i]), max(len(r[i]) for r in all_rows)) for i in range(3)]
-
-        output_lines = ["  ".join(headers[i].ljust(widths[i]) for i in range(3))]
-        output_lines.append("  ".join("-" * w for w in widths))
-        for r in all_rows:
-            output_lines.append("  ".join(r[i].ljust(widths[i]) for i in range(3)))
-        return "\n".join(output_lines)
+        return _render_terminal_table(_TIMING_COLUMNS, rows + [total_row])
 
     @staticmethod
     def format_compact_kv(

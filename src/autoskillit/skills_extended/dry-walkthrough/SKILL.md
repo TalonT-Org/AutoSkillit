@@ -29,7 +29,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 
 ## Arguments
 
-`{plan_path}`   — Absolute path to the plan file to validate (optional: falls back to most recent temp/ artifact if omitted)
+`{plan_path}`   — Absolute path to the plan file to validate (optional: falls back to most recent .autoskillit/temp/ artifact if omitted)
 
 ## Critical Constraints
 
@@ -63,7 +63,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 Read the plan from:
 - Path provided by user
 - Plan content pasted directly
-- Most recent plan in temp/ subdirectories
+- Most recent plan in .autoskillit/temp/ subdirectories
 
 ### Multi-Part Plan Detection
 
@@ -72,7 +72,7 @@ After resolving the plan path, check whether this is a part file of a multi-part
 1. **Detect the part suffix:** If the plan filename contains `_part_` (e.g., `_part_a`, `_part_b`, `_part_1`), this is one part of a multi-part plan. Extract the part identifier (A, B, C… or number) from the suffix.
 
 2. **⚠️ SCOPE BOUNDARY — CRITICAL:** If a part suffix is detected, immediately output to the terminal:
-   > "⚠️ MULTI-PART PLAN DETECTED: Validating PART {X} ONLY. This session MUST NOT read, open, reference, or validate any other part files. Sibling part files visible in temp/ or any other directory are entirely out of scope and must be ignored."
+   > "⚠️ MULTI-PART PLAN DETECTED: Validating PART {X} ONLY. This session MUST NOT read, open, reference, or validate any other part files. Sibling part files visible in .autoskillit/temp/ or any other directory are entirely out of scope and must be ignored."
 
 3. **Verify the scope warning block:** Check that the plan file contains the mandatory scope warning block immediately after the title line. The block must match this form:
    ```
@@ -237,7 +237,7 @@ After updating the plan, output a summary to the terminal (your response text):
 
 ## Example
 
-**Input:** User says "dry walkthrough temp/make-plan/api_retry_plan.md"
+**Input:** User says "dry walkthrough .autoskillit/temp/make-plan/api_retry_plan.md"
 
 **Process:**
 1. Read the plan
@@ -251,7 +251,7 @@ After updating the plan, output a summary to the terminal (your response text):
 ```
 ## Dry Walkthrough Complete
 
-**Plan:** temp/make-plan/api_retry_plan.md
+**Plan:** .autoskillit/temp/make-plan/api_retry_plan.md
 **Status:** REVISED
 
 ### Changes Made

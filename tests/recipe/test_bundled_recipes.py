@@ -1668,7 +1668,7 @@ class TestImplementationRecipeMergeQueueRule:
             "implementation.yaml kitchen_rules must contain a rule mentioning 'gh pr merge'"
         )
         has_prohibition = any(
-            any(phrase in rule for phrase in ("never", "NEVER", "prohibited", "do not"))
+            any(phrase in rule.lower() for phrase in ("never", "prohibited", "do not"))
             for rule in merge_rules
         )
         assert has_prohibition, (

@@ -789,7 +789,7 @@ measure of work volume — not raw commit count.
 
 #### Step 8.1: Evaluate PR Threshold
 
-**Threshold:** If `len(prs) >= 20`, perform a minor version bump. Below 20 PRs, the
+**Threshold:** If `len(prs) >= 15`, perform a minor version bump. Below 15 PRs, the
 CI workflow's automatic patch bump on merge (`version-bump.yml`) is sufficient.
 
 If the threshold is met:
@@ -835,7 +835,7 @@ git commit -m "chore: bump minor version to $NEW_VERSION for promotion ($PR_COUN
 
 If `dry_run` is true and a version bump would be triggered, report it in the promotion
 report but do NOT commit it. Note: "Minor version bump to X.Y.0 would be applied
-(N PRs >= 20 threshold)".
+(N PRs >= 15 threshold)".
 
 ### Phase 9: PR Creation
 

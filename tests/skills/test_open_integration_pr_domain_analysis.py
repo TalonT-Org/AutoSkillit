@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 SKILL_MD = (
     Path(__file__).parents[2] / "src/autoskillit/skills_extended/open-integration-pr/SKILL.md"
 )
+_CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
 
 
 @pytest.fixture
@@ -14,8 +16,9 @@ def skill_text() -> str:
     return SKILL_MD.read_text()
 
 
-def test_skill_references_partition_files_by_domain(skill_text: str) -> None:
-    assert "partition_files_by_domain" in skill_text
+def test_skill_reads_domain_partitions_from_file(skill_text: str) -> None:
+    """C-OIP-1: SKILL.md must read domain_partitions_path from disk (no autoskillit import)."""
+    assert "domain_partitions_path" in skill_text
 
 
 def test_skill_defines_step_4c_domain_partition(skill_text: str) -> None:
@@ -80,3 +83,13 @@ def test_skill_diff_truncation_guard(skill_text: str) -> None:
 
 def test_skill_skips_empty_domains(skill_text: str) -> None:
     assert "empty diffs" in skill_text or "removed from" in skill_text
+
+
+def test_open_integration_pr_contract_has_domain_partitions_path() -> None:
+    """C-OIP-1: open-integration-pr contract must declare domain_partitions_path input."""
+    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    inputs = raw.get("skills", {}).get("open-integration-pr", {}).get("inputs", [])
+    names = [inp["name"] for inp in inputs]
+    assert "domain_partitions_path" in names, (
+        "open-integration-pr contract must have a domain_partitions_path input entry"
+    )

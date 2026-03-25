@@ -3,8 +3,10 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
 SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/analyze-prs/SKILL.md"
+_CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -48,4 +50,14 @@ def test_analyze_prs_json_example_uses_pr_batch_prefix(skill_text: str) -> None:
     """JSON example in SKILL.md must show pr-batch/ prefix."""
     assert '"pr-batch/pr-merge-' in skill_text, (
         "JSON example in SKILL.md must show correct pr-batch/ prefix"
+    )
+
+
+def test_analyze_prs_contract_has_merge_queue_data_path() -> None:
+    """C-APR-1: analyze-prs contract must declare merge_queue_data_path input."""
+    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    inputs = raw.get("skills", {}).get("analyze-prs", {}).get("inputs", [])
+    names = [inp["name"] for inp in inputs]
+    assert "merge_queue_data_path" in names, (
+        "analyze-prs contract must have a merge_queue_data_path input entry"
     )

@@ -262,6 +262,9 @@ skills:
     - name: base_branch
       type: string
       required: true
+    - name: merge_queue_data_path
+      type: file_path
+      required: false
     outputs:
     - name: pr_order_file
       type: file_path
@@ -346,6 +349,9 @@ skills:
     - name: audit_verdict
       type: string
       required: false
+    - name: domain_partitions_path
+      type: file_path
+      required: false
     outputs:
     - name: pr_url
       type: string
@@ -380,6 +386,12 @@ skills:
     - name: base_branch
       type: string
       required: true
+    - name: annotated_diff_path
+      type: file_path
+      required: false
+    - name: hunk_ranges_path
+      type: file_path
+      required: false
     outputs:
     - name: verdict
       type: string

@@ -616,17 +616,11 @@ def test_no_autoskillit_import_silent_for_no_python_blocks(tmp_path: Path) -> No
     )
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "Four bundled skills (open-pr, open-integration-pr, review-pr, analyze-prs) "
-        "currently import autoskillit in bash blocks. Will pass once Parts B and C "
-        "remove all violations."
-    ),
-)
 def test_no_autoskillit_import_zero_findings_on_bundled_recipes() -> None:
-    """SC-PKG-7: merge-prs.yaml must yield zero no-autoskillit-import findings
-    once all known violations in bundled skills are resolved (Parts B and C)."""
+    """SC-PKG-7: merge-prs.yaml must yield zero no-autoskillit-import findings.
+
+    All violations in bundled skills (open-integration-pr, review-pr, analyze-prs)
+    have been resolved by Part C — python3 blocks replaced with stdlib file-reads."""
     from autoskillit.recipe.io import builtin_recipes_dir  # noqa: PLC0415
 
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")

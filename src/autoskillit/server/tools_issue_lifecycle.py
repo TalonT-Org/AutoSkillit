@@ -535,7 +535,7 @@ async def release_issue(
                     {
                         "success": False,
                         "issue_number": issue_number,
-                        "label": effective_label,
+                        "label": effective_staged_label,
                         "error": err,
                     }
                 )

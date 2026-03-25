@@ -32,7 +32,9 @@ def _log_root() -> pathlib.Path:
     """Return the autoskillit session log root (stdlib-only platform check)."""
     if platform.system() == "Darwin":
         return pathlib.Path.home() / "Library/Application Support/autoskillit/logs"
-    return pathlib.Path.home() / ".local/share/autoskillit/logs"
+    xdg = os.environ.get("XDG_DATA_HOME")
+    base = pathlib.Path(xdg) if xdg else pathlib.Path.home() / ".local/share"
+    return base / "autoskillit/logs"
 
 
 def _extract_pr_url(tool_name: str, tool_response_raw: str) -> str | None:
@@ -63,7 +65,7 @@ def _extract_pr_url(tool_name: str, tool_response_raw: str) -> str | None:
     else:
         result_text = outer.get("result", "")
 
-    if not result_text:
+    if not result_text or not isinstance(result_text, str):
         return None
 
     m = re.search(r"https://github\.com/[^/\s]+/[^/\s]+/pull/\d+", result_text)
@@ -103,12 +105,14 @@ def _load_sessions(log_root: pathlib.Path, cwd: str) -> dict[str, dict[str, Any]
     Preserves insertion order (Python 3.7+).
     """
     index_path = log_root / "sessions.jsonl"
-    if not index_path.exists():
+    try:
+        raw = index_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, PermissionError):
         return {}
 
     aggregated: dict[str, dict[str, Any]] = {}
 
-    for line in index_path.read_text(encoding="utf-8").splitlines():
+    for line in raw.splitlines():
         line = line.strip()
         if not line:
             continue
@@ -228,10 +232,23 @@ def main() -> None:
         if "## Token Usage Summary" in view_proc.stdout:
             sys.exit(0)
 
-        token_table = _format_table(aggregated)
-        new_body = view_proc.stdout.rstrip() + "\n\n" + token_table
+        current_body = view_proc.stdout.rstrip()
+        if not current_body.strip():
+            sys.stderr.write(
+                "token_summary_appender: empty PR body from gh pr view — aborting edit\n"
+            )
+            sys.exit(0)
 
-        subprocess.run(["gh", "pr", "edit", pr_url, "--body", new_body], check=True)
+        token_table = _format_table(aggregated)
+        new_body = current_body + "\n\n" + token_table
+
+        try:
+            subprocess.run(["gh", "pr", "edit", pr_url, "--body", new_body], check=True)
+        except subprocess.CalledProcessError as cpe:
+            sys.stderr.write(
+                f"token_summary_appender: gh pr edit failed (rc={cpe.returncode}): {cpe.stderr}\n"
+            )
+            sys.exit(1)
 
     except SystemExit:
         raise

@@ -132,8 +132,12 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
     if graphql_result.returncode != 0:
         entries: list = []
     else:
-        data = json.loads(graphql_result.stdout)
-        entries = parse_merge_queue_response(data)
+        try:
+            data = json.loads(graphql_result.stdout)
+        except (json.JSONDecodeError, ValueError):
+            entries = []
+        else:
+            entries = parse_merge_queue_response(data)
 
     out_path = Path(output_dir) / "merge_queue_data.json"
     atomic_write(out_path, json.dumps(entries))

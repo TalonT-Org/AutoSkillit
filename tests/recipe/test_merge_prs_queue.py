@@ -221,6 +221,62 @@ def test_implementation_open_pr_step_routes_to_extract_pr_number(impl_recipe) ->
 
 
 # ---------------------------------------------------------------------------
+# implementation.yaml — check_merge_group_trigger
+# ---------------------------------------------------------------------------
+
+
+def test_implementation_check_merge_group_trigger_exists(impl_recipe) -> None:
+    """check_merge_group_trigger step must exist in implementation recipe."""
+    assert "check_merge_group_trigger" in impl_recipe.steps
+
+
+def test_implementation_check_merge_group_trigger_skip_when_false_is_open_pr(impl_recipe) -> None:
+    """check_merge_group_trigger must use skip_when_false: inputs.open_pr."""
+    step = impl_recipe.steps["check_merge_group_trigger"]
+    assert step.skip_when_false == "inputs.open_pr"
+
+
+def test_implementation_check_merge_group_trigger_captures_merge_group_trigger(
+    impl_recipe,
+) -> None:
+    """check_merge_group_trigger must capture merge_group_trigger."""
+    step = impl_recipe.steps["check_merge_group_trigger"]
+    assert "merge_group_trigger" in step.capture
+
+
+def test_implementation_check_merge_group_trigger_routes_to_check_auto_merge(impl_recipe) -> None:
+    """check_merge_group_trigger.on_success and on_failure must both route to check_auto_merge."""
+    step = impl_recipe.steps["check_merge_group_trigger"]
+    assert step.on_success == "check_auto_merge"
+    assert step.on_failure == "check_auto_merge"
+
+
+def test_implementation_check_merge_queue_routes_to_check_merge_group_trigger(impl_recipe) -> None:
+    """check_merge_queue.on_success must route to check_merge_group_trigger."""
+    step = impl_recipe.steps["check_merge_queue"]
+    assert step.on_success == "check_merge_group_trigger"
+
+
+def test_implementation_route_queue_mode_requires_merge_group_trigger(impl_recipe) -> None:
+    """route_queue_mode must NOT route to enable_auto_merge without checking merge_group_trigger.
+
+    Specifically, the conditions list must not contain a bare 'queue_available == true'
+    → enable_auto_merge without also requiring merge_group_trigger == true.
+    """
+    step = impl_recipe.steps["route_queue_mode"]
+    assert step.action == "route"
+    conditions = step.on_result.conditions if step.on_result else []
+    # Find any condition that routes to enable_auto_merge
+    queue_conditions = [c for c in conditions if c.route == "enable_auto_merge"]
+    assert len(queue_conditions) == 1, "Exactly one condition must route to enable_auto_merge"
+    cond_when = queue_conditions[0].when or ""
+    assert "merge_group_trigger" in cond_when, (
+        "The enable_auto_merge route condition must reference merge_group_trigger "
+        "to prevent queue enrollment when the CI workflow lacks the trigger"
+    )
+
+
+# ---------------------------------------------------------------------------
 # remediation.yaml — validate passes
 # ---------------------------------------------------------------------------
 
@@ -310,6 +366,71 @@ def test_remediation_open_pr_step_routes_to_extract_pr_number(remed_recipe) -> N
     """open_pr_step.on_success must route to extract_pr_number."""
     step = remed_recipe.steps["open_pr_step"]
     assert step.on_success == "extract_pr_number"
+
+
+# ---------------------------------------------------------------------------
+# remediation.yaml — check_merge_group_trigger
+# ---------------------------------------------------------------------------
+
+
+def test_remediation_check_merge_group_trigger_exists(remed_recipe) -> None:
+    """check_merge_group_trigger step must exist in remediation recipe."""
+    assert "check_merge_group_trigger" in remed_recipe.steps
+
+
+def test_remediation_check_merge_group_trigger_skip_when_false_is_open_pr(remed_recipe) -> None:
+    step = remed_recipe.steps["check_merge_group_trigger"]
+    assert step.skip_when_false == "inputs.open_pr"
+
+
+def test_remediation_check_merge_group_trigger_captures_merge_group_trigger(remed_recipe) -> None:
+    step = remed_recipe.steps["check_merge_group_trigger"]
+    assert "merge_group_trigger" in step.capture
+
+
+def test_remediation_check_merge_group_trigger_routes_to_check_auto_merge(remed_recipe) -> None:
+    step = remed_recipe.steps["check_merge_group_trigger"]
+    assert step.on_success == "check_auto_merge"
+    assert step.on_failure == "check_auto_merge"
+
+
+def test_remediation_check_merge_queue_routes_to_check_merge_group_trigger(remed_recipe) -> None:
+    step = remed_recipe.steps["check_merge_queue"]
+    assert step.on_success == "check_merge_group_trigger"
+
+
+def test_remediation_route_queue_mode_requires_merge_group_trigger(remed_recipe) -> None:
+    step = remed_recipe.steps["route_queue_mode"]
+    conditions = step.on_result.conditions if step.on_result else []
+    queue_conditions = [c for c in conditions if c.route == "enable_auto_merge"]
+    assert len(queue_conditions) == 1
+    cond_when = queue_conditions[0].when or ""
+    assert "merge_group_trigger" in cond_when
+
+
+# ---------------------------------------------------------------------------
+# implementation-groups.yaml — check_merge_group_trigger
+# ---------------------------------------------------------------------------
+
+
+def test_impl_groups_check_merge_group_trigger_exists(impl_groups_recipe) -> None:
+    assert "check_merge_group_trigger" in impl_groups_recipe.steps
+
+
+def test_impl_groups_check_merge_queue_routes_to_check_merge_group_trigger(
+    impl_groups_recipe,
+) -> None:
+    step = impl_groups_recipe.steps["check_merge_queue"]
+    assert step.on_success == "check_merge_group_trigger"
+
+
+def test_impl_groups_route_queue_mode_requires_merge_group_trigger(impl_groups_recipe) -> None:
+    step = impl_groups_recipe.steps["route_queue_mode"]
+    conditions = step.on_result.conditions if step.on_result else []
+    queue_conditions = [c for c in conditions if c.route == "enable_auto_merge"]
+    assert len(queue_conditions) == 1
+    cond_when = queue_conditions[0].when or ""
+    assert "merge_group_trigger" in cond_when
 
 
 @pytest.fixture(scope="module", params=["impl", "remed", "impl_groups"])
@@ -470,10 +591,10 @@ def test_check_auto_merge_has_skip_when_false(any_recipe) -> None:
     assert step.skip_when_false == "inputs.open_pr"
 
 
-def test_check_merge_queue_routes_to_check_auto_merge_on_success(any_recipe) -> None:
-    """check_merge_queue.on_success must route to check_auto_merge, not route_queue_mode."""
+def test_check_merge_queue_routes_to_check_merge_group_trigger_on_success(any_recipe) -> None:
+    """check_merge_queue.on_success must route to check_merge_group_trigger."""
     step = any_recipe.steps["check_merge_queue"]
-    assert step.on_success == "check_auto_merge"
+    assert step.on_success == "check_merge_group_trigger"
 
 
 def test_route_queue_mode_has_auto_merge_available_condition(any_recipe) -> None:

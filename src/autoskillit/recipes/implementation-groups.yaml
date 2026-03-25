@@ -623,15 +623,52 @@ steps:
       step_name: "check_merge_queue"
     capture:
       queue_available: "${{ result.stdout | trim }}"
-    on_success: check_auto_merge
+    on_success: check_merge_group_trigger
     on_failure: release_issue_success
     skip_when_false: "inputs.open_pr"
     note: >
       Detects whether the target branch has an active merge queue via GraphQL.
       Captures "true" or "false" into context.queue_available.
       On failure (gh error, parse error), degrades gracefully to release_issue_success
-      (non-queue path). On success, routes to check_auto_merge for auto-merge
-      availability detection. Skipped when open_pr=false — no PR was opened.
+      (non-queue path). On success, routes to check_merge_group_trigger to validate
+      that a CI workflow includes the merge_group trigger before proceeding.
+      Skipped when open_pr=false — no PR was opened.
+
+  check_merge_group_trigger:
+    tool: run_cmd
+    with:
+      cmd: >
+        REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||') &&
+        OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
+        FOUND="" &&
+        while IFS= read -r wf; do
+          content=$(gh api "repos/$OWNER/$REPO_NAME/contents/.github/workflows/$wf" -q '.content' 2>/dev/null)
+          [ -n "$content" ] && echo "$content" | base64 -d 2>/dev/null | grep -q 'merge_group' && FOUND=true && break
+        done < <(gh api "repos/$OWNER/$REPO_NAME/contents/.github/workflows" 2>/dev/null | jq -r '.[] | select(.type == "file") | .name') &&
+        if [ "$FOUND" = "true" ]; then echo "true"; else
+          echo "WARNING: Merge queue detected on ${{ inputs.base_branch }} but no CI workflow includes merge_group trigger -- degrading to non-queue merge path" >&2
+          echo "false"
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "check_merge_group_trigger"
+    capture:
+      merge_group_trigger: "${{ result.stdout | trim }}"
+    on_success: check_auto_merge
+    on_failure: check_auto_merge
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Validates that at least one CI workflow in .github/workflows/ includes the
+      merge_group event trigger. Skipped when open_pr=false (skip_when_false:
+      inputs.open_pr), consistent with all queue finale steps. When
+      queue_available=false, this step still runs but route_queue_mode's compound
+      condition prevents routing to enable_auto_merge. Lists workflow files via
+      GitHub API, decodes each file's base64 content, and greps for 'merge_group'.
+      Captures merge_group_trigger as "true" (trigger found) or "false" (absent).
+      On success or failure, routes to check_auto_merge so the pipeline always
+      continues. Emits a WARNING to stderr when the trigger is absent so the
+      orchestrator can surface a clear diagnostic. When merge_group_trigger is absent
+      or this step fails, route_queue_mode will not route to enable_auto_merge,
+      preventing the PR from entering a queue where CI checks can never fire.
 
   check_auto_merge:
     tool: run_cmd
@@ -666,7 +703,7 @@ steps:
     on_result:
       - when: "${{ inputs.auto_merge }} != 'true'"
         route: confirm_cleanup
-      - when: "${{ context.queue_available }} == true"
+      - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true"
         route: enable_auto_merge
       - when: "${{ context.auto_merge_available }} == true"
         route: direct_merge

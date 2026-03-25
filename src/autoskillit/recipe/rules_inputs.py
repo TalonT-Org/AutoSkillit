@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from packaging.version import Version
 
 from autoskillit.core import (
@@ -238,6 +240,45 @@ def _check_unreachable_steps(ctx: ValidationContext) -> list[RuleFinding]:
                     message=(
                         f"Step '{step_name}' is not the entry point and no other step "
                         f"routes to it. It will never execute. Remove it or add routing."
+                    ),
+                )
+            )
+    return findings
+
+
+_PIPELINE_INTERNAL_PATTERNS = re.compile(
+    r"(?i)^(Set to |Set by |Set when |Used by |Passed by )|"
+    r"\b(upstream orchestrat|already claimed|batch orchestrat)\b"
+)
+
+
+@semantic_rule(
+    name="pipeline-internal-not-hidden",
+    severity=Severity.WARNING,
+    description=(
+        "Ingredient description suggests pipeline-internal use (set by automation, "
+        "not by users) but hidden: true is not set. Add hidden: true to suppress "
+        "this ingredient from the agent's ingredients table."
+    ),
+)
+def _check_pipeline_internal_not_hidden(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for name, ing in (ctx.recipe.ingredients or {}).items():
+        if getattr(ing, "hidden", False):
+            continue
+        desc = getattr(ing, "description", "") or ""
+        if _PIPELINE_INTERNAL_PATTERNS.search(desc):
+            findings.append(
+                RuleFinding(
+                    rule="pipeline-internal-not-hidden",
+                    severity=Severity.WARNING,
+                    step_name=name,
+                    message=(
+                        f"Ingredient '{name}' description suggests it is set by pipeline "
+                        f"automation, not by users. Add `hidden: true` to suppress it from "
+                        f"the agent's ingredients table."
                     ),
                 )
             )

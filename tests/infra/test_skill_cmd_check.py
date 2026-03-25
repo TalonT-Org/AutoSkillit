@@ -71,7 +71,7 @@ class TestSkillCmdCheckAllow:
     def test_valid_path_autoskillit_temp_prefix(self):
         result = _run_hook(
             {
-                "skill_command": "/autoskillit:implement-worktree-no-merge .autoskillit/temp/make-plan/plan.md"
+                "skill_command": "/autoskillit:implement-worktree-no-merge .autoskillit/temp/make-plan/plan.md"  # noqa: E501
             }
         )
         assert _decision(result) == "allow"

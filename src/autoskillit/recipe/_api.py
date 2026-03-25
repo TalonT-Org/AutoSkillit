@@ -353,6 +353,8 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
     # Merge ingredients: sub-recipe non-hidden ingredients into parent
     merged_ingredients = dict(parent.ingredients)
     for ing_name, ing in sub.ingredients.items():
+        if getattr(ing, "hidden", False):
+            continue  # do not propagate hidden sub-recipe ingredients to parent
         if ing_name not in merged_ingredients:
             merged_ingredients[ing_name] = ing
 

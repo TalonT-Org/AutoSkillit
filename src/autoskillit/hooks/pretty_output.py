@@ -386,14 +386,61 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
     }
 )
 
+# Maps derived-display field name → source field name in LoadRecipeResult.
+# When a derived field is present in a response, the formatter strips its
+# corresponding source block from the source field to prevent duplicate display.
+# All entries must map to "content" — only content-derived fields require
+# ingredients-block stripping. Non-content source fields are not supported here.
+#
+# HOW TO USE: When adding a new field to _FMT_LOAD_RECIPE_RENDERED, ask:
+#   "Is this field a re-rendering of content already in another RENDERED field?"
+# If yes, add an entry here: {new_derived_field: "content"}.
+# The augmented field coverage test will enforce this declaration.
+_LOAD_RECIPE_CONTENT_DERIVED_FROM: dict[str, str] = {
+    "ingredients_table": "content",  # GFM table derived from the ingredients: block in content
+}
+
+
+def _strip_yaml_ingredients_block(yaml_text: str) -> str:
+    """Remove the top-level `ingredients:` block from YAML text.
+
+    Called by _fmt_recipe_body() when ingredients_table is present, so the
+    RECIPE block does not repeat the TABLE block. Operates line-by-line:
+    drops the `ingredients:` key and all its indented children until a
+    non-indented line signals the next top-level key. Preserves all other
+    top-level keys (steps, kitchen_rules, description, etc.) unchanged.
+    """
+    lines = yaml_text.splitlines(keepends=True)
+    result: list[str] = []
+    in_ingredients = False
+    for line in lines:
+        if line.startswith("ingredients:"):
+            in_ingredients = True
+            continue
+        if in_ingredients:
+            if line and not line[0].isspace():
+                # First non-indented non-empty line = next top-level key
+                in_ingredients = False
+                result.append(line)
+            # else: still inside the ingredients block — skip
+        else:
+            result.append(line)
+    return "".join(result)
+
 
 def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
     """Shared recipe content rendering for load_recipe and open_kitchen+recipe."""
     lines: list[str] = []
     content = data.get("content")
     if content:
+        # When a derived field is present, strip its source block from content
+        # to prevent duplicate display. The derivation map drives this automatically.
+        display_content = content
+        for derived_field in _LOAD_RECIPE_CONTENT_DERIVED_FROM:
+            if data.get(derived_field):
+                display_content = _strip_yaml_ingredients_block(display_content)
         lines.append("\n--- RECIPE ---")
-        lines.append(content)
+        lines.append(display_content)
         lines.append("--- END RECIPE ---")
     ing_table = data.get("ingredients_table")
     if ing_table:

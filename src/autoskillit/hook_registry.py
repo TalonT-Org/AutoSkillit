@@ -51,6 +51,11 @@ HOOK_REGISTRY: list[HookDef] = [
         matcher="mcp__.*autoskillit.*",
         scripts=["pretty_output.py"],
     ),
+    HookDef(
+        event_type="PostToolUse",
+        matcher=r"mcp__.*autoskillit.*__run_skill.*",
+        scripts=["token_summary_appender.py"],
+    ),
 ]
 
 

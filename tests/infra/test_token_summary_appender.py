@@ -14,8 +14,6 @@ from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 def _run_hook(
     event: dict | None = None,
@@ -70,9 +68,7 @@ def _make_run_skill_event(result_text: str = "Done.\n%%ORDER_UP%%") -> dict:
 
 def _write_sessions(log_root: Path, entries: list[dict]) -> None:
     """Write sessions.jsonl and token_usage.json files for test setup."""
-    (log_root / "sessions.jsonl").write_text(
-        "\n".join(json.dumps(e) for e in entries) + "\n"
-    )
+    (log_root / "sessions.jsonl").write_text("\n".join(json.dumps(e) for e in entries) + "\n")
     for entry in entries:
         dir_name = entry["dir_name"]
         session_dir = log_root / "sessions" / dir_name

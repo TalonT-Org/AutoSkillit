@@ -323,9 +323,6 @@ skills:
     - name: base_branch
       type: string
       required: true
-    - name: token_summary_path
-      type: file_path
-      required: false
     - name: closing_issue
       type: string
       required: false

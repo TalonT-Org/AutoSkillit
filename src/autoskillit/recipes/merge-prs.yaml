@@ -130,7 +130,7 @@ steps:
       cmd: "git ls-remote --exit-code --heads origin \"${{ inputs.base_branch }}\""
       cwd: "${{ context.work_dir }}"
       step_name: "check_integration_exists"
-    on_success: analyze_prs
+    on_success: fetch_merge_queue_data
     on_failure: confirm_create_integration
     note: >
       Checks whether base_branch exists on the remote. Exit code 0 means the
@@ -157,7 +157,7 @@ steps:
       cmd: "DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') && DEFAULT_BRANCH=${DEFAULT_BRANCH:-main} && git checkout \"$DEFAULT_BRANCH\" && git pull && git checkout -b '${{ inputs.base_branch }}' && git push origin '${{ inputs.base_branch }}'"
       cwd: "${{ context.work_dir }}"
       step_name: "create_persistent_integration"
-    on_success: analyze_prs
+    on_success: fetch_merge_queue_data
     on_failure: cleanup_failure
     note: >
       Creates base_branch from the repository's default branch (auto-detected
@@ -165,10 +165,27 @@ steps:
       branch creation in confirm_create_integration. Once created, subsequent
       pipeline runs skip directly from check_integration_exists to analyze_prs.
 
+  fetch_merge_queue_data:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.fetch_merge_queue_data"
+      base_branch: "${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      output_dir: "${{ context.work_dir }}/.autoskillit/temp/merge-prs"
+    capture:
+      merge_queue_data_path: "${{ result.merge_queue_data_path }}"
+    on_success: analyze_prs
+    on_failure: analyze_prs
+    note: >
+      Pre-fetches GitHub merge queue data server-side (where autoskillit is always
+      installed). Writes parsed queue entries to disk as JSON. On failure, falls
+      through to analyze_prs which uses the fallback empty QUEUE_ENTRIES path
+      (QUEUE_MODE=false). Eliminates the autoskillit import in analyze-prs SKILL.md.
+
   analyze_prs:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:analyze-prs ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:analyze-prs ${{ inputs.base_branch }} merge_queue_data_path=${{ context.merge_queue_data_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "analyze_prs"
     capture:
@@ -183,6 +200,7 @@ steps:
       queue_mode ("true" when a GitHub merge queue with MERGEABLE entries is active
       on base_branch; "false" otherwise). If the skill reports pr_count=0 (no open
       PRs), skip directly to cleanup_success — no integration branch is needed.
+      merge_queue_data_path is pre-computed by fetch_merge_queue_data step.
 
   route_by_queue_mode:
     action: route
@@ -606,7 +624,7 @@ steps:
       step_name: "check_impl_plans"
     on_result:
       - when: "${{ result.stdout | trim }} == 0"
-        route: open_integration_pr
+        route: compute_domain_partitions
       - route: audit_impl
     on_failure: audit_impl
     note: >
@@ -628,7 +646,7 @@ steps:
     on_result:
       field: verdict
       routes:
-        GO: open_integration_pr
+        GO: compute_domain_partitions
         NO GO: remediate
     on_failure: cleanup_failure
     on_context_limit: cleanup_failure
@@ -653,10 +671,28 @@ steps:
       remediation_path: "${{ context.remediation_path }}"
     on_success: plan
 
+  compute_domain_partitions:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.compute_domain_partitions"
+      integration_branch: "${{ context.integration_branch }}"
+      base_branch: "${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      output_dir: "${{ context.work_dir }}/.autoskillit/temp/open-integration-pr"
+    capture:
+      domain_partitions_path: "${{ result.domain_partitions_path }}"
+    on_success: open_integration_pr
+    on_failure: open_integration_pr
+    note: >
+      Pre-computes domain partitions for open-integration-pr server-side (where
+      autoskillit is always installed). Writes the JSON result to disk. On failure,
+      falls through to open_integration_pr which uses an empty domain_partitions_path
+      fallback. Eliminates the autoskillit import in open-integration-pr SKILL.md.
+
   open_integration_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-integration-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }} \"${{ context.all_conflict_report_paths }}\""
+      skill_command: "/autoskillit:open-integration-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }} \"${{ context.all_conflict_report_paths }}\" domain_partitions_path=${{ context.domain_partitions_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "open_integration_pr"
     capture:
@@ -695,7 +731,7 @@ steps:
       cwd: "${{ context.work_dir }}"
     on_result:
       - when: "${{ result.mergeable_status }} == MERGEABLE"
-        route: review_pr_integration
+        route: annotate_pr_diff
       - when: "${{ result.mergeable_status }} == CONFLICTING"
         route: resolve_integration_conflicts
       - route: cleanup_failure
@@ -772,7 +808,7 @@ steps:
       cwd: "${{ context.work_dir }}"
     on_result:
       - when: "${{ result.mergeable_status }} == MERGEABLE"
-        route: review_pr_integration
+        route: annotate_pr_diff
       - route: cleanup_failure
     on_failure: cleanup_failure
     note: >
@@ -781,10 +817,28 @@ steps:
       to cleanup_failure for human intervention (REQ-MERGE-004). No second conflict
       resolution attempt — one cycle only.
 
+  annotate_pr_diff:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.annotate_pr_diff"
+      pr_number: "${{ context.review_pr_number }}"
+      cwd: "${{ context.work_dir }}"
+      output_dir: "${{ context.work_dir }}/.autoskillit/temp/review-pr"
+    capture:
+      annotated_diff_path: "${{ result.annotated_diff_path }}"
+      hunk_ranges_path: "${{ result.hunk_ranges_path }}"
+    on_success: review_pr_integration
+    on_failure: review_pr_integration
+    note: >
+      Pre-computes annotated diff and hunk ranges for review-pr server-side (where
+      autoskillit is always installed). Writes both files to disk. On failure, falls
+      through to review_pr_integration which uses empty VALID_LINE_RANGES fallback.
+      Eliminates the autoskillit import in review-pr SKILL.md.
+
   review_pr_integration:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:review-pr ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:review-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr_integration"
     capture:

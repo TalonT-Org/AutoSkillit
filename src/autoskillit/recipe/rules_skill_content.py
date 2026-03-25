@@ -185,6 +185,63 @@ def _check_hardcoded_origin_remote(ctx: ValidationContext) -> list[RuleFinding]:
     return findings
 
 
+_AUTOSKILLIT_IMPORT_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"^\s*from\s+autoskillit[\s.]", re.MULTILINE),
+    re.compile(r"^\s*import\s+autoskillit[\s,.]", re.MULTILINE),
+    re.compile(r"['\"]autoskillit['\"]"),  # __import__ / importlib string form
+]
+
+
+@semantic_rule(
+    name="no-autoskillit-import-in-skill-python-block",
+    severity=Severity.ERROR,
+    description=(
+        "SKILL.md bash block imports from `autoskillit` package. "
+        "Bash blocks in SKILL.md execute inside headless sessions where "
+        "the active Python interpreter is not guaranteed to have `autoskillit` "
+        "installed. Only stdlib imports are permitted in SKILL.md python3 blocks."
+    ),
+)
+def _check_no_autoskillit_import(ctx: ValidationContext) -> list[RuleFinding]:
+    """Fire for any run_skill step whose SKILL.md bash blocks import the autoskillit package."""
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(skill_name)
+        if skill_md is None:
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        bash_blocks = extract_bash_blocks(content)
+        for block in bash_blocks:
+            for pattern in _AUTOSKILLIT_IMPORT_PATTERNS:
+                match = pattern.search(block)
+                if match:
+                    findings.append(
+                        RuleFinding(
+                            rule="no-autoskillit-import-in-skill-python-block",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Skill '{skill_name}' bash block contains `autoskillit` import "
+                                f"(matched: {match.group()!r}). "
+                                "Use stdlib only in SKILL.md python3 blocks."
+                            ),
+                        )
+                    )
+                    break  # one finding per block, avoid duplicate pattern matches
+    return findings
+
+
 _NO_MARKDOWN_DIRECTIVE_PATTERN: re.Pattern[str] = re.compile(
     r"no\s+markdown\s+format|plain\s+text.*token|literal\s+plain\s+text",
     re.IGNORECASE,

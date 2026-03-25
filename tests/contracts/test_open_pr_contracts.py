@@ -62,11 +62,11 @@ def test_open_pr_requirements_section_placement(text):
     assert req_pos < arch_pos, "## Requirements must precede ## Architecture Impact in PR body"
 
 
-def test_open_pr_skill_self_retrieves_token_summary(text):
-    """SKILL.md must document self-retrieval of token summary via cwd_filter."""
-    assert "load_from_log_dir" in text, "SKILL.md must document load_from_log_dir self-retrieval"
-    assert "cwd_filter" in text, "SKILL.md must document cwd_filter scoping key"
-    assert "PIPELINE_CWD" in text, "SKILL.md must document PIPELINE_CWD=$(pwd) discovery"
+def test_open_pr_skill_token_summary_via_hook(text):
+    """SKILL.md must document that token summary is appended by the PostToolUse hook."""
+    assert "token_summary_appender" in text, (
+        "SKILL.md must reference token_summary_appender PostToolUse hook"
+    )
 
 
 def test_open_pr_skill_removes_token_summary_path_arg(text):

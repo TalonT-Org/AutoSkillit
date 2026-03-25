@@ -21,12 +21,14 @@ from autoskillit.hooks import HOOK_REGISTRY, generate_hooks_json
 def _extract_hook_commands() -> list[str]:
     """Extract all command strings from generate_hooks_json() output."""
     data = generate_hooks_json()
+    hooks = data.get("hooks", {})
     commands: list[str] = []
-    for entry in data.get("hooks", {}).get("PreToolUse", []):
-        for hook in entry.get("hooks", []):
-            cmd = hook.get("command", "")
-            if cmd:
-                commands.append(cmd)
+    for event_type in ("PreToolUse", "PostToolUse"):
+        for entry in hooks.get(event_type, []):
+            for hook in entry.get("hooks", []):
+                cmd = hook.get("command", "")
+                if cmd:
+                    commands.append(cmd)
     return commands
 
 

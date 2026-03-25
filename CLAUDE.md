@@ -239,7 +239,8 @@ src/autoskillit/
 │   ├── skill_command_guard.py #  PreToolUse hook — blocks run_skill with non-slash skill_command
 │   ├── open_kitchen_guard.py #  PreToolUse hook — blocks open_kitchen from headless sessions
 │   ├── headless_orchestration_guard.py #  PreToolUse hook — blocks run_skill/run_cmd/run_python from headless sessions
-│   └── pretty_output.py     #   PostToolUse hook — reformats MCP JSON responses as Markdown-KV
+│   ├── pretty_output.py     #   PostToolUse hook — reformats MCP JSON responses as Markdown-KV
+│   └── token_summary_appender.py #  PostToolUse hook — appends ## Token Usage Summary table to PR body after run_skill returns a GitHub PR URL
 ├── migrations/              # Data: versioned migration YAML notes
 │   └── __init__.py
 ├── recipes/                 # Bundled recipe YAML definitions

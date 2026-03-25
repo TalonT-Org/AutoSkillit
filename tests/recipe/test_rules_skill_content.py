@@ -1,4 +1,5 @@
-"""Tests for the undefined-bash-placeholder and hardcoded-origin-remote semantic rules."""
+"""Tests for skill-content semantic rules: undefined-bash-placeholder,
+hardcoded-origin-remote, and no-autoskillit-import-in-skill-python-block."""
 
 from __future__ import annotations
 
@@ -472,4 +473,160 @@ def test_hardcoded_origin_silent_for_shell_default_value_expression(tmp_path: Pa
     assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
         "Rule fired on ${REMOTE:-origin} shell default-value expression — "
         "the (?<!-) lookbehind in _LITERAL_ORIGIN_RE should guard this pattern"
+    )
+
+
+# ---------------------------------------------------------------------------
+# no-autoskillit-import-in-skill-python-block tests  (SC-PKG-1 – SC-PKG-7)
+# ---------------------------------------------------------------------------
+
+_PKG_RULE_ID = "no-autoskillit-import-in-skill-python-block"
+
+
+def _write_pkg_skill_and_run(tmp_path: Path, skill_md_content: str) -> list[object]:
+    """Write a synthetic skill SKILL.md and a minimal recipe calling it, then run rules."""
+    skill_name = "pkg-skill"
+    skill_dir = tmp_path / skill_name
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(skill_md_content)
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill(skill_name, {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        return run_semantic_rules(recipe)
+
+
+def test_no_autoskillit_import_fires_for_from_import(tmp_path: Path) -> None:
+    """SC-PKG-1: `from autoskillit.foo import bar` in a python3 -c block triggers the rule."""
+    skill_md = textwrap.dedent(
+        """\
+        # pkg-skill
+
+        ### Step 1
+        ```bash
+        python3 -c "
+        from autoskillit.pipeline.tokens import DefaultTokenLog
+        print(DefaultTokenLog())
+        "
+        ```
+        """
+    )
+    findings = _write_pkg_skill_and_run(tmp_path, skill_md)
+    assert _PKG_RULE_ID in [f.rule for f in findings], (
+        "Expected rule to fire for 'from autoskillit...' import in python3 -c block"
+    )
+
+
+def test_no_autoskillit_import_fires_for_heredoc_form(tmp_path: Path) -> None:
+    """SC-PKG-2: heredoc `python3 - <<'EOF'...EOF` form triggers the rule."""
+    skill_md = textwrap.dedent(
+        """\
+        # pkg-skill
+
+        ### Step 1
+        ```bash
+        python3 - <<'EOF'
+        from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+        print(TelemetryFormatter())
+        EOF
+        ```
+        """
+    )
+    findings = _write_pkg_skill_and_run(tmp_path, skill_md)
+    assert _PKG_RULE_ID in [f.rule for f in findings], (
+        "Expected rule to fire for heredoc python3 block with autoskillit import"
+    )
+
+
+def test_no_autoskillit_import_fires_for_bare_import(tmp_path: Path) -> None:
+    """SC-PKG-3: bare `import autoskillit` on its own line triggers the rule."""
+    skill_md = textwrap.dedent(
+        """\
+        # pkg-skill
+
+        ### Step 1
+        ```bash
+        python3 -c "
+        import autoskillit
+        print(autoskillit.__version__)
+        "
+        ```
+        """
+    )
+    findings = _write_pkg_skill_and_run(tmp_path, skill_md)
+    assert _PKG_RULE_ID in [f.rule for f in findings], (
+        "Expected rule to fire for bare 'import autoskillit' in python3 block"
+    )
+
+
+def test_no_autoskillit_import_fires_for_dunder_import(tmp_path: Path) -> None:
+    """SC-PKG-4: `__import__('autoskillit' + '.foo', fromlist=[''])` string form triggers."""
+    skill_md = textwrap.dedent(
+        """\
+        # pkg-skill
+
+        ### Step 1
+        ```bash
+        python3 -c "
+        mod = __import__('autoskillit' + '.execution.github', fromlist=[''])
+        "
+        ```
+        """
+    )
+    findings = _write_pkg_skill_and_run(tmp_path, skill_md)
+    assert _PKG_RULE_ID in [f.rule for f in findings], (
+        "Expected rule to fire for __import__('autoskillit'...) string form"
+    )
+
+
+def test_no_autoskillit_import_silent_for_stdlib_only(tmp_path: Path) -> None:
+    """SC-PKG-5: stdlib-only python3 -c block does NOT trigger the rule."""
+    skill_md = textwrap.dedent(
+        """\
+        # pkg-skill
+
+        ### Step 1
+        ```bash
+        python3 -c "import json, sys; print(json.dumps({}))"
+        ```
+        """
+    )
+    findings = _write_pkg_skill_and_run(tmp_path, skill_md)
+    assert _PKG_RULE_ID not in [f.rule for f in findings], (
+        "Rule must not fire for stdlib-only python3 block"
+    )
+
+
+def test_no_autoskillit_import_silent_for_no_python_blocks(tmp_path: Path) -> None:
+    """SC-PKG-6: SKILL.md with no python3 blocks does NOT trigger the rule."""
+    skill_md = textwrap.dedent(
+        """\
+        # pkg-skill
+
+        ### Step 1
+        ```bash
+        echo "hello world"
+        git status
+        ```
+        """
+    )
+    findings = _write_pkg_skill_and_run(tmp_path, skill_md)
+    assert _PKG_RULE_ID not in [f.rule for f in findings], (
+        "Rule must not fire when no python3 blocks are present"
+    )
+
+
+def test_no_autoskillit_import_zero_findings_on_bundled_recipes() -> None:
+    """SC-PKG-7: merge-prs.yaml must yield zero no-autoskillit-import findings.
+
+    All violations in bundled skills (open-integration-pr, review-pr, analyze-prs)
+    have been resolved by Part C — python3 blocks replaced with stdlib file-reads."""
+    from autoskillit.recipe.io import builtin_recipes_dir  # noqa: PLC0415
+
+    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    findings = run_semantic_rules(recipe)
+    pkg_findings = [f for f in findings if f.rule == _PKG_RULE_ID]
+    assert len(pkg_findings) == 0, (
+        f"Expected zero findings for {_PKG_RULE_ID!r}, got {len(pkg_findings)}: "
+        + "; ".join(f.message for f in pkg_findings)
     )

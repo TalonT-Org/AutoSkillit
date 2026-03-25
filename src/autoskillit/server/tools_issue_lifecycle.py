@@ -211,6 +211,11 @@ async def prepare_issue(
     if tool_ctx.executor is None:
         return json.dumps({"success": False, "error": "Executor not configured"})
 
+    if labels:
+        for lbl in labels:
+            if err := tool_ctx.config.github.check_label_allowed(lbl):
+                return json.dumps({"success": False, "error": err})
+
     skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
 
     expected_output_patterns: list[str] = []
@@ -402,6 +407,9 @@ async def claim_issue(
         except ValueError as exc:
             return json.dumps({"success": False, "error": str(exc)})
 
+        if err := tool_ctx.config.github.check_label_allowed(effective_label):
+            return json.dumps({"success": False, "error": err})
+
         result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
         if not result.get("success"):
             return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
@@ -523,6 +531,16 @@ async def release_issue(
         effective_staged_label = staged_label or tool_ctx.config.github.staged_label
 
         if should_stage:
+            if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "issue_number": issue_number,
+                        "label": effective_label,
+                        "error": err,
+                    }
+                )
+
             ensure_result = await tool_ctx.github_client.ensure_label(
                 owner,
                 repo,

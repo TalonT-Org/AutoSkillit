@@ -246,7 +246,7 @@ def _check_unreachable_steps(ctx: ValidationContext) -> list[RuleFinding]:
     return findings
 
 
-_PIPELINE_INTERNAL_PATTERNS = re.compile(
+_PIPELINE_INTERNAL_PATTERN = re.compile(
     r"(?i)^(Set to |Set by |Set when |Used by |Passed by )|"
     r"\b(upstream orchestrat|already claimed|batch orchestrat)\b"
 )
@@ -269,7 +269,7 @@ def _check_pipeline_internal_not_hidden(
         if getattr(ing, "hidden", False):
             continue
         desc = getattr(ing, "description", "") or ""
-        if _PIPELINE_INTERNAL_PATTERNS.search(desc):
+        if _PIPELINE_INTERNAL_PATTERN.search(desc):
             findings.append(
                 RuleFinding(
                     rule="pipeline-internal-not-hidden",

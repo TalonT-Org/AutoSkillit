@@ -31,6 +31,7 @@ ingredients:
       complete. Set to 'true' on every parallel instance; leave 'false' for
       sequential single-pipeline runs.
     default: "false"
+    hidden: true
   registry_path:
     description: >-
       Absolute path to the shared clone cleanup registry file. Required when
@@ -38,6 +39,7 @@ ingredients:
       the same batch (use a fixed path like
       /path/to/project/.autoskillit/temp/clone-cleanup-registry.json).
     default: ""
+    hidden: true
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,

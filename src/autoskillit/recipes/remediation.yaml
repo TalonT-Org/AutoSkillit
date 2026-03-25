@@ -66,12 +66,14 @@ ingredients:
   upfront_claimed:
     description: "Set to 'true' when process-issues has already claimed this issue upfront. Allows claim_issue defense step to pass through without aborting."
     default: "false"
+    hidden: true
   run_mode:
     description: >-
       Execution mode when processing multiple issues. Options: sequential (default,
       one issue at a time) or parallel (all issues simultaneously with wavefront
       step scheduling — fast steps for all pipelines before any slow step).
     default: "sequential"
+    hidden: true
   defer_cleanup:
     description: >-
       When 'true', skip per-pipeline interactive cleanup and register this clone
@@ -79,6 +81,7 @@ ingredients:
       complete. Set to 'true' on every parallel instance; leave 'false' for
       sequential single-pipeline runs.
     default: "false"
+    hidden: true
   registry_path:
     description: >-
       Absolute path to the shared clone cleanup registry file. Required when
@@ -86,6 +89,7 @@ ingredients:
       the same batch (use a fixed path like
       /path/to/project/.autoskillit/temp/clone-cleanup-registry.json).
     default: ""
+    hidden: true
 
 steps:
   sprint_entry:

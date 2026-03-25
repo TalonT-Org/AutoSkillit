@@ -140,7 +140,7 @@ class GitHubConfig:
     def check_label_allowed(self, label: str) -> str | None:
         """Return None if label is permitted, or an error message string if not.
 
-        When allowed_labels is empty, all labels are permitted (backward compat).
+        When allowed_labels is empty, all labels are permitted (unrestricted/opt-out mode).
         """
         if not self.allowed_labels:
             return None
@@ -156,7 +156,7 @@ class GitHubConfig:
     def check_labels_allowed(self, labels: list[str]) -> str | None:
         """Return None if all labels are permitted, or an error message for the first violation.
 
-        When allowed_labels is empty, all labels are permitted (backward compat).
+        When allowed_labels is empty, all labels are permitted (unrestricted/opt-out mode).
         """
         for label in labels:
             if err := self.check_label_allowed(label):

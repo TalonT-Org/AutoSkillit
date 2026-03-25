@@ -358,3 +358,4 @@ Output: `pr_url={url}`
 
 - Always: `pr_url=<url>` (empty string when GitHub unavailable)
 - PR body written to: `.autoskillit/temp/open-pr/pr_body_{timestamp}.md`
+- Token usage summary: appended automatically to the PR body by the `token_summary_appender.py` PostToolUse hook after this skill's result is returned

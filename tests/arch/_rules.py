@@ -83,6 +83,7 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
         "remove_clone_guard.py",
         "skill_cmd_check.py",
         "skill_command_guard.py",
+        "token_summary_appender.py",
     }
 )
 

@@ -7,9 +7,7 @@ from pathlib import Path
 import yaml
 
 _CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
-_SKILL_MD = (
-    Path(__file__).parents[2] / "src/autoskillit/skills_extended/review-pr/SKILL.md"
-)
+_SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/review-pr/SKILL.md"
 
 
 def test_review_pr_contract_has_annotated_diff_path() -> None:

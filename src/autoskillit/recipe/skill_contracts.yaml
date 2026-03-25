@@ -387,10 +387,10 @@ skills:
       type: string
       required: true
     - name: annotated_diff_path
-      type: file_path
+      type: string
       required: false
     - name: hunk_ranges_path
-      type: file_path
+      type: string
       required: false
     outputs:
     - name: verdict

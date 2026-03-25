@@ -45,7 +45,8 @@ def compute_domain_partitions(
     """
     import subprocess  # noqa: PLC0415
 
-    from autoskillit.execution.pr_analysis import partition_files_by_domain  # noqa: PLC0415
+    from autoskillit.core import atomic_write  # noqa: PLC0415
+    from autoskillit.execution import partition_files_by_domain  # noqa: PLC0415
 
     result = subprocess.run(
         ["git", "diff", "--name-only", f"{base_branch}..{integration_branch}"],
@@ -57,8 +58,7 @@ def compute_domain_partitions(
     files = [f for f in result.stdout.strip().split("\n") if f]
     partitions = partition_files_by_domain(files)
     out_path = Path(output_dir) / "domain_partitions.json"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(partitions))
+    atomic_write(out_path, json.dumps(partitions))
     return {"domain_partitions_path": str(out_path)}
 
 
@@ -71,10 +71,8 @@ def annotate_pr_diff(pr_number: str, cwd: str, output_dir: str) -> dict[str, str
     """
     import subprocess  # noqa: PLC0415
 
-    from autoskillit.execution.diff_annotator import (  # noqa: PLC0415
-        annotate_diff,
-        parse_hunk_ranges,
-    )
+    from autoskillit.core import atomic_write  # noqa: PLC0415
+    from autoskillit.execution import annotate_diff, parse_hunk_ranges  # noqa: PLC0415
 
     result = subprocess.run(
         ["gh", "pr", "diff", pr_number],
@@ -88,8 +86,8 @@ def annotate_pr_diff(pr_number: str, cwd: str, output_dir: str) -> dict[str, str
     out.mkdir(parents=True, exist_ok=True)
     annotated_path = out / f"annotated_diff_{pr_number}.txt"
     ranges_path = out / f"ranges_{pr_number}.json"
-    annotated_path.write_text(annotate_diff(diff))
-    ranges_path.write_text(json.dumps(parse_hunk_ranges(diff)))
+    atomic_write(annotated_path, annotate_diff(diff))
+    atomic_write(ranges_path, json.dumps(parse_hunk_ranges(diff)))
     return {
         "annotated_diff_path": str(annotated_path),
         "hunk_ranges_path": str(ranges_path),
@@ -105,7 +103,8 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
     """
     import subprocess  # noqa: PLC0415
 
-    from autoskillit.execution.github import parse_merge_queue_response  # noqa: PLC0415
+    from autoskillit.core import atomic_write  # noqa: PLC0415
+    from autoskillit.execution import parse_merge_queue_response  # noqa: PLC0415
 
     repo_info = subprocess.run(
         ["gh", "repo", "view", "--json", "owner,name"],
@@ -137,6 +136,5 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
         entries = parse_merge_queue_response(data)
 
     out_path = Path(output_dir) / "merge_queue_data.json"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(entries))
+    atomic_write(out_path, json.dumps(entries))
     return {"merge_queue_data_path": str(out_path)}

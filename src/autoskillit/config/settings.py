@@ -135,6 +135,33 @@ class GitHubConfig:
     default_repo: str | None = None
     in_progress_label: str = "in-progress"
     staged_label: str = "staged"
+    allowed_labels: list[str] = field(default_factory=list)
+
+    def check_label_allowed(self, label: str) -> str | None:
+        """Return None if label is permitted, or an error message string if not.
+
+        When allowed_labels is empty, all labels are permitted (unrestricted/opt-out mode).
+        """
+        if not self.allowed_labels:
+            return None
+        if label not in self.allowed_labels:
+            allowed_sorted = sorted(self.allowed_labels)
+            return (
+                f"Label '{label}' is not in the configured allowed labels. "
+                f"Allowed: {allowed_sorted}. "
+                f"Add '{label}' to github.allowed_labels in your config to permit it."
+            )
+        return None
+
+    def check_labels_allowed(self, labels: list[str]) -> str | None:
+        """Return None if all labels are permitted, or an error message for the first violation.
+
+        When allowed_labels is empty, all labels are permitted (unrestricted/opt-out mode).
+        """
+        for label in labels:
+            if err := self.check_label_allowed(label):
+                return err
+        return None
 
 
 @dataclass
@@ -353,6 +380,7 @@ class AutomationConfig:
                 default_repo=val(gh, "default_repo", _gh["default_repo"]) or None,
                 in_progress_label=str(val(gh, "in_progress_label", _gh["in_progress_label"])),
                 staged_label=str(val(gh, "staged_label", _gh["staged_label"])),
+                allowed_labels=list(val(gh, "allowed_labels", _gh["allowed_labels"])),
             ),
             report_bug=ReportBugConfig(
                 timeout=int(val(rb, "timeout", _rb["timeout"])),

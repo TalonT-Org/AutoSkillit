@@ -462,6 +462,9 @@ async def _file_or_update_github_issue(
 
         owner, repo = default_repo.split("/", 1)
         labels = config.report_bug.github_labels
+        for lbl in labels:
+            if err := config.github.check_label_allowed(lbl):
+                return {"skipped": True, "reason": err}
 
         search_result = await github_client.search_issues(fingerprint, owner, repo)
         if not search_result.get("success"):

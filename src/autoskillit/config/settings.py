@@ -153,6 +153,16 @@ class GitHubConfig:
             )
         return None
 
+    def check_labels_allowed(self, labels: list[str]) -> str | None:
+        """Return None if all labels are permitted, or an error message for the first violation.
+
+        When allowed_labels is empty, all labels are permitted (backward compat).
+        """
+        for label in labels:
+            if err := self.check_label_allowed(label):
+                return err
+        return None
+
 
 @dataclass
 class ReportBugConfig:

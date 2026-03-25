@@ -133,7 +133,10 @@ class TestPrepareIssueWhitelist:
 
         from autoskillit.core import SkillResult
         from autoskillit.core.types import RetryReason
-        from autoskillit.server.tools_issue_lifecycle import _PREPARE_RESULT_END, _PREPARE_RESULT_START
+        from autoskillit.server.tools_issue_lifecycle import (
+            _PREPARE_RESULT_END,
+            _PREPARE_RESULT_START,
+        )
 
         tool_ctx.config.github.allowed_labels = ["bug", "enhancement"]
         mock_executor = AsyncMock()
@@ -168,7 +171,10 @@ class TestPrepareIssueWhitelist:
 
         from autoskillit.core import SkillResult
         from autoskillit.core.types import RetryReason
-        from autoskillit.server.tools_issue_lifecycle import _PREPARE_RESULT_END, _PREPARE_RESULT_START
+        from autoskillit.server.tools_issue_lifecycle import (
+            _PREPARE_RESULT_END,
+            _PREPARE_RESULT_START,
+        )
 
         tool_ctx.config.github.allowed_labels = ["bug"]  # restrictive whitelist
         mock_executor = AsyncMock()

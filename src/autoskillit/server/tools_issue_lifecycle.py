@@ -212,9 +212,8 @@ async def prepare_issue(
         return json.dumps({"success": False, "error": "Executor not configured"})
 
     if labels:
-        for lbl in labels:
-            if err := tool_ctx.config.github.check_label_allowed(lbl):
-                return json.dumps({"success": False, "error": err})
+        if err := tool_ctx.config.github.check_labels_allowed(labels):
+            return json.dumps({"success": False, "error": err})
 
     skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
 

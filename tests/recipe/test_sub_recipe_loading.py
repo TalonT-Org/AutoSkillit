@@ -276,8 +276,7 @@ def test_sub_recipe_hidden_ingredients_remain_hidden(tmp_path: Path) -> None:
 
     parent = _make_parent_recipe()
     active, _ = _build_active_recipe(parent, {"sprint_mode": "true"}, tmp_path)
-    # hidden_flag should be merged but excluded from the table
-    assert "hidden_flag" in active.ingredients
-    assert active.ingredients["hidden_flag"].hidden is True
+    # hidden sub-recipe ingredients must not be merged into the parent at all
+    assert "hidden_flag" not in active.ingredients
     table = format_ingredients_table(active)
     assert table is None or "hidden_flag" not in (table or "")

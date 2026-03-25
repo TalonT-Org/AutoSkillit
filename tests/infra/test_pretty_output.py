@@ -1389,17 +1389,17 @@ def test_fmt_load_recipe_field_coverage():
 
 
 def test_fmt_load_recipe_derivation_map_coverage():
-    """Every key and value in _LOAD_RECIPE_DERIVED_FROM must be in _FMT_LOAD_RECIPE_RENDERED.
+    """Every key/value in _LOAD_RECIPE_CONTENT_DERIVED_FROM must be in _FMT_LOAD_RECIPE_RENDERED.
     Catches when a new derived field is added without declaring its source relationship."""
     from autoskillit.hooks.pretty_output import (
         _FMT_LOAD_RECIPE_RENDERED,
-        _LOAD_RECIPE_DERIVED_FROM,
+        _LOAD_RECIPE_CONTENT_DERIVED_FROM,
     )
 
-    for derived_field, source_field in _LOAD_RECIPE_DERIVED_FROM.items():
+    for derived_field, source_field in _LOAD_RECIPE_CONTENT_DERIVED_FROM.items():
         assert derived_field in _FMT_LOAD_RECIPE_RENDERED, (
             f"Derived field '{derived_field}' must be in _FMT_LOAD_RECIPE_RENDERED. "
-            f"If it was moved to SUPPRESSED, remove it from _LOAD_RECIPE_DERIVED_FROM."
+            f"If it was moved to SUPPRESSED, remove it from _LOAD_RECIPE_CONTENT_DERIVED_FROM."
         )
         assert source_field in _FMT_LOAD_RECIPE_RENDERED, (
             f"Source field '{source_field}' must be in _FMT_LOAD_RECIPE_RENDERED "

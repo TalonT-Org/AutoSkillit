@@ -389,12 +389,14 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
 # Maps derived-display field name → source field name in LoadRecipeResult.
 # When a derived field is present in a response, the formatter strips its
 # corresponding source block from the source field to prevent duplicate display.
+# All entries must map to "content" — only content-derived fields require
+# ingredients-block stripping. Non-content source fields are not supported here.
 #
 # HOW TO USE: When adding a new field to _FMT_LOAD_RECIPE_RENDERED, ask:
 #   "Is this field a re-rendering of content already in another RENDERED field?"
-# If yes, add an entry here: {new_derived_field: source_field}.
+# If yes, add an entry here: {new_derived_field: "content"}.
 # The augmented field coverage test will enforce this declaration.
-_LOAD_RECIPE_DERIVED_FROM: dict[str, str] = {
+_LOAD_RECIPE_CONTENT_DERIVED_FROM: dict[str, str] = {
     "ingredients_table": "content",  # GFM table derived from the ingredients: block in content
 }
 
@@ -434,8 +436,8 @@ def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
         # When a derived field is present, strip its source block from content
         # to prevent duplicate display. The derivation map drives this automatically.
         display_content = content
-        for derived_field, source_field in _LOAD_RECIPE_DERIVED_FROM.items():
-            if source_field == "content" and data.get(derived_field):
+        for derived_field in _LOAD_RECIPE_CONTENT_DERIVED_FROM:
+            if data.get(derived_field):
                 display_content = _strip_yaml_ingredients_block(display_content)
         lines.append("\n--- RECIPE ---")
         lines.append(display_content)

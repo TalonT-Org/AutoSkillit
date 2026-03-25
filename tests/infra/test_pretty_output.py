@@ -1628,6 +1628,10 @@ def test_fmt_recipe_body_ingredients_not_duplicated_when_table_present():
         "suggestions": [],
     }
     result = "\n".join(_fmt_recipe_body(data))
+    assert "--- INGREDIENTS TABLE" in result, (
+        "_fmt_recipe_body did not emit the INGREDIENTS TABLE header — "
+        "deduplication guarantee cannot be tested."
+    )
     recipe_section = result.split("--- INGREDIENTS TABLE")[0]
     # Ingredient names must appear ONLY in the table, not in the raw YAML block.
     # `task:` and `review_approach:` as YAML keys indicate the ingredients: block.
@@ -1703,6 +1707,10 @@ def test_fmt_open_kitchen_ingredients_not_duplicated_when_table_present():
     }
     # _fmt_open_kitchen returns str (not list[str]); no join needed.
     result = _fmt_open_kitchen(data, pipeline=False)
+    assert "--- INGREDIENTS TABLE" in result, (
+        "_fmt_open_kitchen did not emit the INGREDIENTS TABLE header — "
+        "deduplication guarantee cannot be tested."
+    )
     recipe_section = result.split("--- INGREDIENTS TABLE")[0]
     assert "  task:" not in recipe_section
     assert "review_approach:" not in recipe_section

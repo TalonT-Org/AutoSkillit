@@ -418,12 +418,15 @@ def _launch_cook_session(
     *,
     initial_message: str | None = None,
     extra_env: dict[str, str] | None = None,
+    resume_session_id: str | None = None,
 ) -> None:
     """Launch an interactive Claude Code cook session with the given system prompt."""
     if shutil.which("claude") is None:
         print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
-    spec = build_interactive_cmd(initial_prompt=initial_message)
+    spec = build_interactive_cmd(
+        initial_prompt=initial_message, resume_session_id=resume_session_id
+    )
     cmd = spec.cmd + [
         ClaudeFlags.PLUGIN_DIR,
         str(pkg_root()),
@@ -476,13 +479,17 @@ def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> N
 
 
 @app.command(name="cook", alias="c")
-def _cook_cmd() -> None:
-    """Launch an interactive Claude session with all skills and kitchen tools."""
-    cook_interactive()
+def _cook_cmd(*, resume: bool = False, session_id: str | None = None) -> None:
+    """Launch an interactive Claude session with all skills and kitchen tools.
+
+    Use --resume to restore a previous session. Combine with --session-id
+    to target a specific session; omit for automatic discovery.
+    """
+    cook_interactive(resume=resume, session_id=session_id)
 
 
 @app.command
-def order(recipe: str | None = None):
+def order(recipe: str | None = None, *, resume: bool = False, session_id: str | None = None):
     """Launch an interactive Claude Code session to execute a recipe.
 
     Starts Claude Code with hard tool restrictions: only AskUserQuestion
@@ -493,6 +500,10 @@ def order(recipe: str | None = None):
     ----------
     recipe
         Name of the recipe (from .autoskillit/recipes/). Prompts if omitted.
+    resume
+        When True, attempt to restore a previous session.
+    session_id
+        Explicit session ID to resume; omit for automatic discovery.
     """
     from autoskillit.cli._prompts import _build_orchestrator_prompt
     from autoskillit.recipe import (
@@ -506,6 +517,15 @@ def order(recipe: str | None = None):
         print("ERROR: 'order' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
+
+    # Resolve resume session ID — must come before the 'if recipe is None:' block
+    from autoskillit.core import find_latest_session_id
+
+    resume_session_id: str | None = None
+    if resume:
+        resume_session_id = session_id or find_latest_session_id()
+        if resume_session_id is None:
+            print("No previous session found. Starting a fresh session.")
 
     if recipe is None:
         from autoskillit.cli._prompts import (
@@ -529,7 +549,11 @@ def order(recipe: str | None = None):
             from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
 
             greeting = random.choice(_OPEN_KITCHEN_GREETINGS)
-            _launch_cook_session(_build_open_kitchen_prompt(), initial_message=greeting)
+            _launch_cook_session(
+                _build_open_kitchen_prompt(),
+                initial_message=greeting,
+                resume_session_id=resume_session_id,
+            )
             return
         elif resolved is None:
             print(f"Invalid selection: '{raw}'")
@@ -610,6 +634,7 @@ def order(recipe: str | None = None):
         _build_orchestrator_prompt(recipe),
         initial_message=greeting,
         extra_env=_extra_env if _extra_env else None,
+        resume_session_id=resume_session_id,
     )
 
 

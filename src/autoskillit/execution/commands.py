@@ -28,6 +28,7 @@ def build_interactive_cmd(
     model: str | None = None,
     plugin_dir: Path | None = None,
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+    resume_session_id: str | None = None,
 ) -> ClaudeInteractiveCmd:
     """Build a Claude interactive session command.
 
@@ -43,8 +44,12 @@ def build_interactive_cmd(
         When provided, appended as ``--plugin-dir <path>``.
     add_dirs
         Each entry is appended as ``--add-dir <path>``.
+    resume_session_id
+        When provided, appended as ``--resume <id>`` before any positional prompt.
     """
     cmd = ["claude", ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
+    if resume_session_id is not None:
+        cmd += [ClaudeFlags.RESUME, resume_session_id]
     if model:
         cmd += [ClaudeFlags.MODEL, model]
     if plugin_dir is not None:

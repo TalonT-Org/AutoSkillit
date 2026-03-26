@@ -52,6 +52,39 @@ def claude_code_log_path(cwd: str, session_id: str) -> Path | None:
     return claude_code_project_dir(cwd) / f"{session_id}.jsonl"
 
 
+def find_latest_session_id(cwd: str | None = None) -> str | None:
+    """Return the session_id of the most recent Claude Code session for cwd.
+
+    Scans ~/.claude/projects/<encoded-cwd>/ for .jsonl files and returns
+    the stem of the most recently modified one. Returns None when no
+    sessions exist for the given directory.
+
+    Parameters
+    ----------
+    cwd
+        Working directory path string. Defaults to the current working directory.
+    """
+    effective_cwd = cwd if cwd is not None else str(Path.cwd())
+    project_dir = claude_code_project_dir(effective_cwd)
+    if not project_dir.exists():
+        return None
+
+    def _safe_mtime(f: Path) -> float:
+        try:
+            return f.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    jsonl_files = sorted(
+        (f for f in project_dir.glob("*.jsonl")),
+        key=_safe_mtime,
+        reverse=True,
+    )
+    if not jsonl_files:
+        return None
+    return jsonl_files[0].stem
+
+
 def is_git_worktree(path: Path) -> bool:
     """Return True if path is inside a git linked worktree.
 

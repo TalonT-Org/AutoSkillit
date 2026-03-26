@@ -827,6 +827,91 @@ class TestCLIOrder:
             f"No open-kitchen greeting found as positional arg in: {cmd}"
         )
 
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_resume_discovered_session_id_in_subprocess_cmd(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order(resume=True) discovers session via find_latest_session_id and passes --resume."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        with patch("autoskillit.core.find_latest_session_id", return_value="sess_abc"):
+            cli.order("test-script", resume=True)
+
+        cmd = mock_run.call_args[0][0]
+        assert "--resume" in cmd
+        assert cmd[cmd.index("--resume") + 1] == "sess_abc"
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_resume_explicit_session_id_skips_discovery(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order(resume=True, session_id='explicit-abc') uses explicit id; discovery not called."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        discovery_calls: list = []
+
+        def fake_discover(cwd=None):
+            discovery_calls.append(cwd)
+            return "should-not-be-used"
+
+        with patch("autoskillit.core.find_latest_session_id", side_effect=fake_discover):
+            cli.order("test-script", resume=True, session_id="explicit-abc")
+
+        cmd = mock_run.call_args[0][0]
+        assert "--resume" in cmd
+        assert cmd[cmd.index("--resume") + 1] == "explicit-abc"
+        assert not discovery_calls, (
+            "find_latest_session_id must not be called when session_id is explicit"
+        )
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_resume_no_prior_session_starts_fresh(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order(resume=True) with no prior session omits --resume from subprocess command."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        with patch("autoskillit.core.find_latest_session_id", return_value=None):
+            cli.order("test-script", resume=True)
+
+        cmd = mock_run.call_args[0][0]
+        assert "--resume" not in cmd
+
 
 class TestOrderDisplayOwnership:
     """order() delegates recipe display to the Claude session via load_recipe."""

@@ -309,3 +309,12 @@ def test_init_session_includes_non_disabled_skills(tmp_path: Path) -> None:
     assert (session_path / ".claude" / "skills" / "safe-skill").exists(), (
         "Skills in non-disabled categories must be included"
     )
+
+
+# REQ-EPH-002
+def test_cleanup_stale_default_is_72_hours() -> None:
+    import inspect
+
+    sig = inspect.signature(DefaultSessionSkillManager.cleanup_stale)
+    default = sig.parameters["max_age_seconds"].default
+    assert default == 259200, f"Expected 259200 (72h), got {default}"

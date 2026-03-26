@@ -59,6 +59,23 @@ class TestBuildInteractiveCmd:
         # cmd is just ["claude", "--dangerously-skip-permissions"]
         assert len(result.cmd) == 2
 
+    # REQ-CMD-001
+    def test_resume_session_id_appended(self) -> None:
+        result = build_interactive_cmd(resume_session_id="abc123")
+        assert "--resume" in result.cmd
+        idx = result.cmd.index("--resume")
+        assert result.cmd[idx + 1] == "abc123"
+
+    def test_no_resume_flag_when_none(self) -> None:
+        result = build_interactive_cmd()
+        assert "--resume" not in result.cmd
+
+    def test_resume_placed_before_initial_prompt(self) -> None:
+        result = build_interactive_cmd(resume_session_id="abc123", initial_prompt="hello")
+        resume_idx = result.cmd.index("--resume")
+        prompt_idx = result.cmd.index("hello")
+        assert resume_idx < prompt_idx
+
 
 class TestBuildInteractiveCmdExtended:
     def test_accepts_plugin_dir(self, tmp_path: Path) -> None:

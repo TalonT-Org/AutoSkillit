@@ -8,6 +8,8 @@ import subprocess
 import uuid
 from pathlib import Path
 
+from autoskillit.cli._terminal import terminal_guard
+
 
 def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
@@ -87,7 +89,8 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     ).cmd
     env = {**os.environ}
     try:
-        result = subprocess.run(cmd, env=env)
+        with terminal_guard():
+            result = subprocess.run(cmd, env=env)
         if result.returncode != 0:
             raise SystemExit(result.returncode)
     finally:

@@ -674,7 +674,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         Exempt at 15 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
-        core/_terminal_table.py. Exempt at 12 files.
+        core/_terminal_table.py. Also contains _terminal.py — the terminal state
+        management context manager (terminal_guard) for interactive subprocess
+        sessions. Exempt at 13 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
         file so Claude Code can invoke it directly as a subprocess. Adding
@@ -686,7 +688,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 27,
         "execution": 23,
         "core": 15,
-        "cli": 12,
+        "cli": 13,
         "hooks": 11,
     }
     violations: list[str] = []

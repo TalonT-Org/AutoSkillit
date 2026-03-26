@@ -28,6 +28,7 @@ from autoskillit.cli._init_helpers import (
     _register_all,
     _require_interactive_stdin,
 )
+from autoskillit.cli._terminal import terminal_guard
 from autoskillit.core import ClaudeFlags, RecipeSource, atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
 
@@ -438,7 +439,8 @@ def _launch_cook_session(
     env = {**os.environ, **spec.env}
     if extra_env:
         env.update(extra_env)
-    result = subprocess.run(cmd, env=env)
+    with terminal_guard():
+        result = subprocess.run(cmd, env=env)
     if result.returncode != 0:
         sys.exit(result.returncode)
 

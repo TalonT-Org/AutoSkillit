@@ -368,7 +368,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
             patch(
-                "autoskillit.core.paths.find_latest_session_id",
+                "autoskillit.core.find_latest_session_id",
                 return_value="session123",
             ),
         ):
@@ -401,7 +401,7 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
-            patch("autoskillit.core.paths.find_latest_session_id", side_effect=fake_discover),
+            patch("autoskillit.core.find_latest_session_id", side_effect=fake_discover),
         ):
             import autoskillit.cli._cook as module
 
@@ -427,7 +427,7 @@ class TestCookInteractive:
             patch("builtins.input", return_value=""),
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
-            patch("autoskillit.core.paths.find_latest_session_id", return_value=None),
+            patch("autoskillit.core.find_latest_session_id", return_value=None),
         ):
             import autoskillit.cli._cook as module
 

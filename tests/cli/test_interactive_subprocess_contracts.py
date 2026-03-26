@@ -3,10 +3,8 @@ terminal (no capture_output, no stdout=PIPE/DEVNULL) must be wrapped in
 a terminal_guard() context manager.
 
 Follows the same AST-walk pattern as test_input_tty_contracts.py.
-
-DEPENDENCY: Requires Part A to be applied (cli/_terminal.py must exist and
-both interactive subprocess.run calls must be wrapped) before this test passes.
 """
+
 import ast
 from pathlib import Path
 
@@ -67,11 +65,7 @@ def _collect_violations(source: str, filename: str) -> list[int]:
                 and isinstance(node.func.value, ast.Name)
                 and node.func.value.id == "subprocess"
             )
-            if (
-                is_subprocess_run
-                and not _is_capturing_call(node)
-                and self._guard_depth == 0
-            ):
+            if is_subprocess_run and not _is_capturing_call(node) and self._guard_depth == 0:
                 violations.append(node.lineno)
             self.generic_visit(node)
 
@@ -94,7 +88,7 @@ def test_interactive_subprocess_calls_wrapped_in_terminal_guard(py_file: Path) -
     """
     source = py_file.read_text()
     if "subprocess.run" not in source:
-        return  # skip files with no subprocess calls
+        pytest.skip(f"{py_file.name}: no subprocess.run calls")
 
     violations = _collect_violations(source, str(py_file))
     assert violations == [], (

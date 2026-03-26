@@ -7,6 +7,7 @@ subprocess launch. Safe in non-TTY environments (CI, pipes).
 Follows the same resource-lifecycle pattern as execution/_process_io.py's
 create_temp_io() context manager.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -34,7 +35,7 @@ def terminal_guard():
         try:
             fd = sys.stdin.fileno()
             old_settings = termios.tcgetattr(fd)
-        except termios.error:
+        except (termios.error, OSError, TypeError):
             fd = None
 
     try:
@@ -44,10 +45,7 @@ def terminal_guard():
             try:
                 termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
             except termios.error:
-                try:
-                    os.system("stty sane 2>/dev/null")
-                except Exception:
-                    pass
+                os.system("stty sane 2>/dev/null")
         try:
             sys.stdout.write("\033[?1049l\033[?1l\033>\033[0m\033[?25h")
             sys.stdout.flush()

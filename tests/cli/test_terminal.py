@@ -3,6 +3,7 @@
 Uses mock-based approach — no real subprocess needed. Pattern follows
 the investigation's test strategy recommendation.
 """
+
 from __future__ import annotations
 
 import termios
@@ -35,9 +36,7 @@ class TestTerminalGuardTTYRestore:
             with terminal_guard():
                 pass
 
-            mock_termios.tcsetattr.assert_called_once_with(
-                0, termios.TCSAFLUSH, fake_attrs
-            )
+            mock_termios.tcsetattr.assert_called_once_with(0, termios.TCSAFLUSH, fake_attrs)
 
     def test_restores_on_keyboard_interrupt(self):
         """tcsetattr is called even when KeyboardInterrupt is raised inside the guard."""
@@ -59,9 +58,7 @@ class TestTerminalGuardTTYRestore:
                 with terminal_guard():
                     raise KeyboardInterrupt
 
-            mock_termios.tcsetattr.assert_called_once_with(
-                0, termios.TCSAFLUSH, fake_attrs
-            )
+            mock_termios.tcsetattr.assert_called_once_with(0, termios.TCSAFLUSH, fake_attrs)
 
     def test_restores_on_system_exit(self):
         """tcsetattr is called when SystemExit is raised (non-zero subprocess returncode)."""
@@ -100,11 +97,7 @@ class TestTerminalGuardTTYRestore:
             with terminal_guard():
                 pass
 
-            written = "".join(
-                c.args[0]
-                for c in mock_stdout.write.call_args_list
-                if c.args
-            )
+            written = "".join(c.args[0] for c in mock_stdout.write.call_args_list if c.args)
             assert "\033[?1049l" in written, "Must exit alternate screen buffer"
             assert "\033[?1l" in written, "Must reset application cursor keys"
             assert "\033>" in written, "Must reset application keypad mode"
@@ -125,11 +118,7 @@ class TestTerminalGuardTTYRestore:
                 with terminal_guard():
                     raise KeyboardInterrupt
 
-            written = "".join(
-                c.args[0]
-                for c in mock_stdout.write.call_args_list
-                if c.args
-            )
+            written = "".join(c.args[0] for c in mock_stdout.write.call_args_list if c.args)
             assert "\033[?1049l" in written, "Must exit alternate screen buffer"
             assert "\033[?1l" in written
 
@@ -218,9 +207,7 @@ class TestCookTerminalGuard:
         )
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")
         # is_first_run is imported inside cook() body — patch the source module
-        monkeypatch.setattr(
-            "autoskillit.cli._onboarding.is_first_run", lambda _: False
-        )
+        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
         # cook() calls input() for launch confirmation before subprocess.run
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         # cook() calls init_session to create a skills directory
@@ -229,7 +216,9 @@ class TestCookTerminalGuard:
         monkeypatch.setattr(
             DefaultSessionSkillManager,
             "init_session",
-            lambda self, session_id, *, cook_session=False, config=None, project_dir=None: fake_skills_dir,
+            lambda self, session_id, *, cook_session=False, config=None, project_dir=None: (
+                fake_skills_dir
+            ),
         )
 
         with pytest.raises(KeyboardInterrupt):
@@ -239,9 +228,7 @@ class TestCookTerminalGuard:
             "tcsetattr must be called even when subprocess raises KeyboardInterrupt"
         )
 
-    def test_launch_cook_session_restores_terminal_on_keyboard_interrupt(
-        self, monkeypatch
-    ):
+    def test_launch_cook_session_restores_terminal_on_keyboard_interrupt(self, monkeypatch):
         """_launch_cook_session() must restore terminal on exception."""
         import importlib
 
@@ -269,6 +256,4 @@ class TestCookTerminalGuard:
         with pytest.raises(KeyboardInterrupt):
             app_mod._launch_cook_session("system prompt")
 
-        assert tcsetattr_calls, (
-            "terminal must be restored by _launch_cook_session on exception"
-        )
+        assert tcsetattr_calls, "terminal must be restored by _launch_cook_session on exception"

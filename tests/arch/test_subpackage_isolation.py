@@ -675,6 +675,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Exempt at 12 files.
+      hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
+        (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
+        file so Claude Code can invoke it directly as a subprocess. Adding
+        session_start_reminder.py for the SessionStart event brings the count to 11.
+        Exempt at 11 files.
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 16,
@@ -682,6 +687,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 23,
         "core": 15,
         "cli": 12,
+        "hooks": 11,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):

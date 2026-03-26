@@ -229,7 +229,7 @@ src/autoskillit/
 │   ├── _prompts.py          #   Orchestrator prompt builder for recipe execution
 │   ├── _workspace.py        #   Workspace clean helpers: age partitioning, display, and confirmation
 │   └── app.py               #   CLI: serve, init, config show, skills, recipes, workspace, doctor
-├── hooks/                   # Claude Code PreToolUse and PostToolUse hook scripts
+├── hooks/                   # Claude Code PreToolUse, PostToolUse, and SessionStart hook scripts
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration (auto-discovered by Claude Code)
 │   ├── branch_protection_guard.py #  PreToolUse hook — denies merge_worktree/push_to_remote targeting protected branches
@@ -240,7 +240,8 @@ src/autoskillit/
 │   ├── open_kitchen_guard.py #  PreToolUse hook — blocks open_kitchen from headless sessions
 │   ├── headless_orchestration_guard.py #  PreToolUse hook — blocks run_skill/run_cmd/run_python from headless sessions
 │   ├── pretty_output.py     #   PostToolUse hook — reformats MCP JSON responses as Markdown-KV
-│   └── token_summary_appender.py #  PostToolUse hook — appends ## Token Usage Summary table to PR body after run_skill returns a GitHub PR URL
+│   ├── token_summary_appender.py #  PostToolUse hook — appends ## Token Usage Summary table to PR body after run_skill returns a GitHub PR URL
+│   └── session_start_reminder.py #  SessionStart hook — injects /autoskillit:open-kitchen reminder when resuming a prior session (transcript_path size > 0)
 ├── migrations/              # Data: versioned migration YAML notes
 │   └── __init__.py
 ├── recipes/                 # Bundled recipe YAML definitions

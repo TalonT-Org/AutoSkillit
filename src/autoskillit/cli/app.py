@@ -519,7 +519,7 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
         sys.exit(1)
 
     # Resolve resume session ID — must come before the 'if recipe is None:' block
-    from autoskillit.core.paths import find_latest_session_id as _find_latest
+    from autoskillit.core import find_latest_session_id as _find_latest
 
     _resume_session_id: str | None = None
     if resume:

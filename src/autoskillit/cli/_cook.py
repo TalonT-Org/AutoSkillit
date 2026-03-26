@@ -53,8 +53,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
 
     from autoskillit.cli._onboarding import is_first_run, mark_onboarded, run_onboarding_menu
     from autoskillit.config import load_config
-    from autoskillit.core import configure_logging, pkg_root
-    from autoskillit.core.paths import find_latest_session_id
+    from autoskillit.core import configure_logging, find_latest_session_id, pkg_root
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()

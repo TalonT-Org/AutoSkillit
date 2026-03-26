@@ -519,12 +519,12 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
         sys.exit(1)
 
     # Resolve resume session ID — must come before the 'if recipe is None:' block
-    from autoskillit.core import find_latest_session_id as _find_latest
+    from autoskillit.core import find_latest_session_id
 
-    _resume_session_id: str | None = None
+    resume_session_id: str | None = None
     if resume:
-        _resume_session_id = session_id or _find_latest()
-        if _resume_session_id is None:
+        resume_session_id = session_id or find_latest_session_id()
+        if resume_session_id is None:
             print("No previous session found. Starting a fresh session.")
 
     if recipe is None:
@@ -552,7 +552,7 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
             _launch_cook_session(
                 _build_open_kitchen_prompt(),
                 initial_message=greeting,
-                resume_session_id=_resume_session_id,
+                resume_session_id=resume_session_id,
             )
             return
         elif resolved is None:
@@ -634,7 +634,7 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
         _build_orchestrator_prompt(recipe),
         initial_message=greeting,
         extra_env=_extra_env if _extra_env else None,
-        resume_session_id=_resume_session_id,
+        resume_session_id=resume_session_id,
     )
 
 

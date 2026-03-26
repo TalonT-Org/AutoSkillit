@@ -781,68 +781,12 @@ No breaking changes detected.
 <sub>Generated with Claude Code via AutoSkillit</sub>
 ```
 
-### Phase 8: Version Bump Decision
-
-After Phase 2 discovers the PR count, determine whether this promotion warrants a minor
-version bump. Since each PR is squash-merged onto integration, PR count is the meaningful
-measure of work volume — not raw commit count.
-
-#### Step 8.1: Evaluate PR Threshold
-
-**Threshold:** If `len(prs) >= 15`, perform a minor version bump. Below 15 PRs, the
-CI workflow's automatic patch bump on merge (`version-bump.yml`) is sufficient.
-
-If the threshold is met:
-
-1. Read the current version:
-```bash
-python3 -c "
-import tomllib, pathlib
-print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])
-"
-```
-
-2. Compute the new version — increment MINOR, reset PATCH to 0:
-```bash
-IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
-```
-
-3. Apply the bump using project conventions:
-```bash
-# Update pyproject.toml version
-python3 -c "
-import pathlib
-p = pathlib.Path('pyproject.toml')
-p.write_text(p.read_text().replace('version = \"$CURRENT_VERSION\"', 'version = \"$NEW_VERSION\"', 1))
-"
-
-# Sync plugin.json and regenerate lockfile
-task sync-plugin-version && uv lock
-```
-
-4. Search tests for hardcoded version strings (e.g., `AUTOSKILLIT_INSTALLED_VERSION`
-   monkeypatches) and update them to match `NEW_VERSION`.
-
-5. Commit the bump on the integration branch:
-```bash
-git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
-git commit -m "chore: bump minor version to $NEW_VERSION for promotion ($PR_COUNT PRs)"
-```
-
-6. Store `version_bumped = true` and `new_version = $NEW_VERSION` for inclusion in the
-   PR body. If the threshold is not met, store `version_bumped = false`.
-
-If `dry_run` is true and a version bump would be triggered, report it in the promotion
-report but do NOT commit it. Note: "Minor version bump to X.Y.0 would be applied
-(N PRs >= 15 threshold)".
-
-### Phase 9: PR Creation
+### Phase 8: PR Creation
 
 If `dry_run` is true:
 - Output `report_path = {absolute path to promotion_report}` and skip to Output.
 
-#### Step 9.1: Check GitHub Availability
+#### Step 8.1: Check GitHub Availability
 
 ```bash
 gh auth status 2>/dev/null
@@ -850,7 +794,7 @@ gh auth status 2>/dev/null
 
 If exit code non-zero: output `pr_url = ` and exit successfully.
 
-#### Step 9.2: Compose PR Body
+#### Step 8.2: Compose PR Body
 
 Write the PR body to `.autoskillit/temp/promote-to-main/pr_body_{timestamp}.md`.
 
@@ -869,7 +813,7 @@ Include these sections (in order):
 10. `## Token Usage Summary` (if available)
 11. Footer
 
-#### Step 9.3: Create Promotion PR
+#### Step 8.3: Create Promotion PR
 
 Construct the PR title using actual branch names from arguments:
 
@@ -887,7 +831,7 @@ gh pr create \
 
 Capture the PR URL as `pr_url`.
 
-#### Step 9.4: Add Labels (optional)
+#### Step 8.4: Add Labels (optional)
 
 ```bash
 gh pr edit {pr_url} --add-label "promotion" 2>/dev/null
@@ -904,6 +848,4 @@ report_path = {absolute path to .autoskillit/temp/promote-to-main/promotion_repo
 pr_url = {pr_url, empty if dry-run or gh unavailable}
 verdict = {created|dry_run|preflight_failed}
 category_summary = {e.g., "14 fixes, 13 features, 3 infra"}
-version_bumped = {true|false}
-new_version = {X.Y.0, only if version_bumped is true}
 ```

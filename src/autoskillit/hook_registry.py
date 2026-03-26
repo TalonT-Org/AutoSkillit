@@ -16,8 +16,8 @@ from autoskillit.core import pkg_root
 class HookDef:
     """A single hook group: event type, matcher pattern, and ordered script list."""
 
-    matcher: str
-    event_type: Literal["PreToolUse", "PostToolUse"] = "PreToolUse"
+    matcher: str = ""
+    event_type: Literal["PreToolUse", "PostToolUse", "SessionStart"] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
 
 
@@ -56,6 +56,10 @@ HOOK_REGISTRY: list[HookDef] = [
         matcher=r"mcp__.*autoskillit.*__run_skill.*",
         scripts=["token_summary_appender.py"],
     ),
+    HookDef(
+        event_type="SessionStart",
+        scripts=["session_start_reminder.py"],
+    ),
 ]
 
 
@@ -64,12 +68,14 @@ def generate_hooks_json() -> dict:
     hooks_dir = pkg_root() / "hooks"
     by_event: dict[str, list] = {}
     for hook_def in HOOK_REGISTRY:
-        entry = {
-            "matcher": hook_def.matcher,
-            "hooks": [
-                {"type": "command", "command": f"python3 {hooks_dir / script}"}
-                for script in hook_def.scripts
-            ],
-        }
+        hook_commands = [
+            {"type": "command", "command": f"python3 {hooks_dir / script}"}
+            for script in hook_def.scripts
+        ]
+        entry: dict[str, object]
+        if hook_def.event_type == "SessionStart":
+            entry = {"hooks": hook_commands}
+        else:
+            entry = {"matcher": hook_def.matcher, "hooks": hook_commands}
         by_event.setdefault(hook_def.event_type, []).append(entry)
     return {"hooks": by_event}

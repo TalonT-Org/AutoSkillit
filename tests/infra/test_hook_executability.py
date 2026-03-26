@@ -23,7 +23,7 @@ def _extract_hook_commands() -> list[str]:
     data = generate_hooks_json()
     hooks = data.get("hooks", {})
     commands: list[str] = []
-    for event_type in ("PreToolUse", "PostToolUse"):
+    for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
         for entry in hooks.get(event_type, []):
             for hook in entry.get("hooks", []):
                 cmd = hook.get("command", "")
@@ -56,7 +56,7 @@ def test_hook_registry_matches_generated_hooks_json() -> None:
     generated_pairs: set[tuple[str, str]] = set()
     for event_entries in data.get("hooks", {}).values():
         for entry in event_entries:
-            matcher = entry["matcher"]
+            matcher = entry.get("matcher", "")
             for hook in entry["hooks"]:
                 cmd = hook["command"]
                 script_name = cmd.split("/")[-1]
@@ -77,3 +77,17 @@ def test_hook_registry_scripts_exist_on_disk() -> None:
         for script in hook_def.scripts:
             script_path = hooks_dir / script
             assert script_path.is_file(), f"Registry script not found on disk: {script_path}"
+
+
+# REQ-HOOK-001
+def test_hook_registry_has_session_start_entry() -> None:
+    session_start_entries = [h for h in HOOK_REGISTRY if h.event_type == "SessionStart"]
+    assert session_start_entries, "HOOK_REGISTRY must contain a SessionStart entry"
+
+
+def test_generate_hooks_json_session_start_no_matcher() -> None:
+    result = generate_hooks_json()
+    session_start_entries = result["hooks"].get("SessionStart", [])
+    assert session_start_entries, "hooks.json must include SessionStart"
+    for entry in session_start_entries:
+        assert "matcher" not in entry, "SessionStart entries must not have a matcher key"

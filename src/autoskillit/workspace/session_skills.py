@@ -291,7 +291,7 @@ class DefaultSessionSkillManager:
         atomic_write(skill_md, updated)
         return True
 
-    def cleanup_stale(self, max_age_seconds: int = 86400) -> int:
+    def cleanup_stale(self, max_age_seconds: int = 259200) -> int:
         """Remove session dirs not accessed within max_age_seconds.
 
         Returns count of removed directories.

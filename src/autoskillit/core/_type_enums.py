@@ -113,6 +113,9 @@ class ClaudeFlags(StrEnum):
     OUTPUT_FORMAT = "--output-format"
     VERBOSE = "--verbose"
 
+    # Session resume
+    RESUME = "--resume"
+
     # Interactive session restrictions
     TOOLS = "--tools"
     APPEND_SYSTEM_PROMPT = "--append-system-prompt"

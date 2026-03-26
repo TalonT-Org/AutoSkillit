@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 
 
-def cook() -> None:
+def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
@@ -54,9 +54,16 @@ def cook() -> None:
     from autoskillit.cli._onboarding import is_first_run, mark_onboarded, run_onboarding_menu
     from autoskillit.config import load_config
     from autoskillit.core import configure_logging, pkg_root
+    from autoskillit.core.paths import find_latest_session_id
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
+
+    resume_session_id: str | None = None
+    if resume:
+        resume_session_id = session_id or find_latest_session_id()
+        if resume_session_id is None:
+            print("No previous session found. Starting a fresh session.")
 
     project_dir = Path.cwd()
     initial_prompt: str | None = None
@@ -64,16 +71,20 @@ def cook() -> None:
     if _first_run:
         initial_prompt = run_onboarding_menu(project_dir, color=color)
 
-    session_id = uuid.uuid4().hex[:16]
+    session_id_local = uuid.uuid4().hex[:16]
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
+    session_mgr.cleanup_stale()
     config = load_config()
     skills_dir = session_mgr.init_session(
-        session_id, cook_session=True, config=config, project_dir=project_dir
+        session_id_local, cook_session=True, config=config, project_dir=project_dir
     )
 
     cmd = build_interactive_cmd(
-        plugin_dir=pkg_root(), add_dirs=[skills_dir], initial_prompt=initial_prompt
+        plugin_dir=pkg_root(),
+        add_dirs=[skills_dir],
+        initial_prompt=initial_prompt,
+        resume_session_id=resume_session_id,
     ).cmd
     env = {**os.environ}
     try:
@@ -83,4 +94,3 @@ def cook() -> None:
     finally:
         if _first_run and initial_prompt is not None:
             mark_onboarded(project_dir)
-        shutil.rmtree(skills_dir, ignore_errors=True)

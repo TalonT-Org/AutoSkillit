@@ -68,9 +68,16 @@ def find_latest_session_id(cwd: str | None = None) -> str | None:
     project_dir = claude_code_project_dir(effective_cwd)
     if not project_dir.exists():
         return None
+
+    def _safe_mtime(f: Path) -> float:
+        try:
+            return f.stat().st_mtime
+        except OSError:
+            return 0.0
+
     jsonl_files = sorted(
         (f for f in project_dir.glob("*.jsonl")),
-        key=lambda f: f.stat().st_mtime,
+        key=_safe_mtime,
         reverse=True,
     )
     if not jsonl_files:

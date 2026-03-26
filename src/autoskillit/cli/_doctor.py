@@ -107,6 +107,47 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     )
 
 
+def _count_hook_registry_drift(settings_path: Path) -> int:
+    """Return count of canonical hook commands not present in deployed settings.json."""
+    from autoskillit.hooks import generate_hooks_json
+
+    canonical = generate_hooks_json()
+    deployed_data = _load_settings_data(settings_path)
+
+    def _extract_cmds(hooks_dict: dict) -> set[str]:
+        return {
+            hook.get("command", "")
+            for event_entries in hooks_dict.values()
+            if isinstance(event_entries, list)
+            for entry in event_entries
+            for hook in entry.get("hooks", [])
+            if hook.get("command", "")
+        }
+
+    canonical_cmds = _extract_cmds(canonical.get("hooks", {}))
+    deployed_cmds = _extract_cmds(deployed_data.get("hooks", {}))
+    return len(canonical_cmds - deployed_cmds)
+
+
+def _check_hook_registry_drift(settings_path: Path) -> DoctorResult:
+    """Compare generate_hooks_json() with what is deployed in settings.json."""
+    n = _count_hook_registry_drift(settings_path)
+    if n > 0:
+        return DoctorResult(
+            severity=Severity.WARNING,
+            check="hook_registry_drift",
+            message=(
+                f"Hook registry has changed since last install. "
+                f"Run 'autoskillit install' to deploy {n} new/changed hook(s)."
+            ),
+        )
+    return DoctorResult(
+        severity=Severity.OK,
+        check="hook_registry_drift",
+        message="Deployed hooks match HOOK_REGISTRY.",
+    )
+
+
 def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
     """Check that every file in .autoskillit/ is gitignored or in the committed allowlist."""
     from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES, _COMMITTED_BY_DESIGN
@@ -358,6 +399,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 7: Hook registration in settings.json
     results.append(_check_hook_registration(_claude_settings_path("user")))
+
+    # Check 7b: Hook registry drift (structural comparison via generate_hooks_json())
+    results.append(_check_hook_registry_drift(_claude_settings_path("user")))
 
     # Check 8: Script version health
     from autoskillit import __version__

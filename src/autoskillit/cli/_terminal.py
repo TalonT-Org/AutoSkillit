@@ -14,10 +14,15 @@ import contextlib
 import os
 import sys
 import termios
+from collections.abc import Generator
+
+from autoskillit.core import get_logger
+
+_log = get_logger(__name__)
 
 
 @contextlib.contextmanager
-def terminal_guard():
+def terminal_guard() -> Generator[None, None, None]:
     """Save and restore terminal state around an interactive subprocess.
 
     On entry: saves termios TTY attributes (kernel TTY discipline).
@@ -45,9 +50,11 @@ def terminal_guard():
             try:
                 termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
             except termios.error:
+                _log.debug("tcsetattr failed; falling back to stty sane")
                 os.system("stty sane 2>/dev/null")
-        try:
-            sys.stdout.write("\033[?1049l\033[?1l\033>\033[0m\033[?25h")
-            sys.stdout.flush()
-        except OSError:
-            pass
+        if fd is not None:
+            try:
+                sys.stdout.write("\033[?1049l\033[?1l\033>\033[0m\033[?25h")
+                sys.stdout.flush()
+            except OSError:
+                pass

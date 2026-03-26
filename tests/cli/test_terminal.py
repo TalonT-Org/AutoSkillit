@@ -80,7 +80,7 @@ class TestTerminalGuardTTYRestore:
                 with terminal_guard():
                     raise SystemExit(1)
 
-            mock_termios.tcsetattr.assert_called_once()
+            mock_termios.tcsetattr.assert_called_once_with(0, termios.TCSAFLUSH, fake_attrs)
 
     def test_emits_vt100_reset_sequences_on_normal_exit(self):
         """Escape sequences are written to stdout after normal subprocess exit."""

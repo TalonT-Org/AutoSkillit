@@ -12,7 +12,9 @@ import yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 VERSION_BUMP_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "version-bump.yml"
-PATCH_BUMP_INTEGRATION_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "patch-bump-integration.yml"
+PATCH_BUMP_INTEGRATION_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "patch-bump-integration.yml"
+)
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -258,9 +260,7 @@ class TestPatchBumpIntegrationWorkflow:
         assert all(p for p in pins)
 
     def test_uv_version_consistent_with_tests_yml(self):
-        tests_wf = yaml.safe_load(
-            (REPO_ROOT / ".github" / "workflows" / "tests.yml").read_text()
-        )
+        tests_wf = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "tests.yml").read_text())
         bump_wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
         tests_pins = _uv_version_pins(tests_wf)
         bump_pins = _uv_version_pins(bump_wf)

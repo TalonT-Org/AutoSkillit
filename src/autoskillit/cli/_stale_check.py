@@ -14,27 +14,18 @@ import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from autoskillit.core.paths import pkg_root
-
-if TYPE_CHECKING:
-    pass
 
 _DISMISS_FILE = "update_check.json"
 _DISMISS_WINDOW = timedelta(days=7)
 _FETCH_TIMEOUT = 5
 
-_GITHUB_RELEASES_URL = (
-    "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest"
-)
+_GITHUB_RELEASES_URL = "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest"
 _GITHUB_INTEGRATION_PYPROJECT_URL = (
-    "https://api.github.com/repos/TalonT-Org/AutoSkillit/contents/pyproject.toml"
-    "?ref=integration"
+    "https://api.github.com/repos/TalonT-Org/AutoSkillit/contents/pyproject.toml?ref=integration"
 )
-_INSTALL_FROM_INTEGRATION = (
-    "git+https://github.com/TalonT-Org/AutoSkillit.git@integration"
-)
+_INSTALL_FROM_INTEGRATION = "git+https://github.com/TalonT-Org/AutoSkillit.git@integration"
 
 
 def is_dev_mode(home: Path | None = None) -> bool:
@@ -177,8 +168,7 @@ def run_stale_check(home: Path | None = None) -> None:
     if os.environ.get("CLAUDECODE") or not sys.stdin.isatty() or not sys.stdout.isatty():
         return
 
-    import importlib.metadata
-
+    import autoskillit as _pkg
     from autoskillit.cli._hooks import _claude_settings_path
 
     _home = home or Path.home()
@@ -186,10 +176,7 @@ def run_stale_check(home: Path | None = None) -> None:
     state = _read_dismiss_state(_home)
     latest = _fetch_latest_version(dev_mode)
 
-    try:
-        current = importlib.metadata.version("autoskillit")
-    except importlib.metadata.PackageNotFoundError:
-        current = "0.0.0"
+    current: str = getattr(_pkg, "__version__", "0.0.0")
 
     # Binary version check
     if latest is not None:

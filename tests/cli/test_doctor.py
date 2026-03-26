@@ -191,6 +191,7 @@ class TestCLIDoctor:
             "version_consistency",
             "hook_health",
             "hook_registration",
+            "hook_registry_drift",
             "script_version_health",
             "gitignore_completeness",
             "secret_scanning_hook",
@@ -877,3 +878,46 @@ def test_doctor_reports_ok_when_no_misplaced_secrets(
 
     result = _check_config_layers_for_secrets(project_dir=project_dir)
     assert result.severity == Severity.OK
+
+
+# DC-11: _check_hook_registry_drift — deployed matches canonical → OK
+def test_check_hook_registry_drift_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from autoskillit.cli._doctor import _check_hook_registry_drift
+    from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
+    from autoskillit.core import Severity
+
+    settings = tmp_path / "settings.json"
+    _evict_stale_autoskillit_hooks(settings)
+    sync_hooks_to_settings(settings)
+    result = _check_hook_registry_drift(settings)
+    assert result.severity == Severity.OK
+    assert result.check == "hook_registry_drift"
+
+
+# DC-12: _check_hook_registry_drift — missing hooks → WARNING with count
+def test_check_hook_registry_drift_warning(tmp_path: Path) -> None:
+    import json
+
+    from autoskillit.cli._doctor import _check_hook_registry_drift
+    from autoskillit.core import Severity
+
+    settings = tmp_path / "settings.json"
+    # Write settings.json with no hooks (simulating stale install)
+    settings.write_text(json.dumps({"hooks": {}}))
+    result = _check_hook_registry_drift(settings)
+    assert result.severity == Severity.WARNING
+    assert result.check == "hook_registry_drift"
+    assert "autoskillit install" in result.message
+    assert "new/changed" in result.message
+
+
+# DC-13: doctor JSON output includes hook_registry_drift check
+def test_doctor_json_output_includes_hook_registry_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cli.doctor(output_json=True)
+    data = json.loads(capsys.readouterr().out)
+    check_names = {r["check"] for r in data["results"]}
+    assert "hook_registry_drift" in check_names

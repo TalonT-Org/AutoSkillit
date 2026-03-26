@@ -20,6 +20,12 @@ class HookDef:
     event_type: Literal["PreToolUse", "PostToolUse", "SessionStart"] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        if self.event_type != "SessionStart" and not self.matcher:
+            raise ValueError(
+                f"HookDef with event_type={self.event_type!r} requires a non-empty matcher"
+            )
+
 
 HOOK_REGISTRY: list[HookDef] = [
     HookDef(

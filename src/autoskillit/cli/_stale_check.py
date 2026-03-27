@@ -21,7 +21,8 @@ from autoskillit.core import get_logger, pkg_root
 logger = get_logger(__name__)
 
 _DISMISS_FILE = "update_check.json"
-_DISMISS_WINDOW = timedelta(days=7)
+_DISMISS_WINDOW = timedelta(hours=12)
+_SNOOZE_WINDOW = timedelta(hours=1)
 _FETCH_TIMEOUT = 5
 
 _GITHUB_RELEASES_URL = "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest"
@@ -50,21 +51,12 @@ def is_dev_mode(home: Path | None = None) -> bool:
         return True
 
     # pkg_root() inside a git main checkout
-    # Walk from pkg_root() upward; stop at the first .git entry found
-    candidate = pkg_root()
-    while True:
-        git_path = candidate / ".git"
-        if git_path.is_dir():
-            # .git directory = main checkout = dev mode
-            return True
-        if git_path.is_file():
-            # .git file = worktree = not dev mode
-            return False
-        parent = candidate.parent
-        if parent == candidate:
-            # Reached filesystem root without finding .git
-            return False
-        candidate = parent
+    # Delegate to the canonical implementation in core/paths.py.
+    # is_git_main_checkout() returns True for .git-dir (main checkout) = dev mode.
+    # is_git_main_checkout() returns False for .git-file (worktree) and no-repo = not dev mode.
+    from autoskillit.core import is_git_main_checkout
+
+    return is_git_main_checkout(pkg_root())
 
 
 def _read_dismiss_state(home: Path) -> dict[str, object]:
@@ -74,7 +66,8 @@ def _read_dismiss_state(home: Path) -> dict[str, object]:
     """
     state_file = home / ".autoskillit" / _DISMISS_FILE
     try:
-        return json.loads(state_file.read_text(encoding="utf-8"))
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
     except Exception:
         logger.debug("Failed to read dismiss state from %s", state_file, exc_info=True)
         return {}
@@ -159,6 +152,95 @@ def _is_dismissed(state: dict[str, object], check_type: str, latest: str | None)
         return False
 
 
+def _is_snoozed(state: dict[str, object], check_type: str) -> bool:
+    """Return True if an update attempt for check_type is within the snooze window.
+
+    Snooze encodes "update attempted but outcome unverified; retry soon."
+    It expires by time only — there is no version comparison.
+
+    State key: ``"{check_type}_snoozed"`` (e.g. ``"binary_snoozed"``).
+    """
+    try:
+        entry = state.get(f"{check_type}_snoozed")
+        if not isinstance(entry, dict):
+            return False
+        snoozed_at = datetime.fromisoformat(entry["snoozed_at"])
+        return datetime.now(UTC) - snoozed_at < _SNOOZE_WINDOW
+    except Exception:
+        logger.debug("Failed to parse snooze state for check_type=%s", check_type, exc_info=True)
+        return False
+
+
+def _verify_update_result(
+    current: str,
+    latest: str,
+    home: Path,
+    state: dict[str, object],
+) -> bool:
+    """Verify that the update subprocess advanced the installed version.
+
+    Calls importlib.metadata.version() directly to bypass the lru_cache in
+    version_info() and the process-lifetime cache in autoskillit.__version__.
+
+    Returns True if the version advanced (update succeeded).
+    Returns False if the version is unchanged (update silently failed).
+    On False, writes a binary_snoozed record and prints an actionable warning.
+    """
+    import importlib.metadata
+
+    try:
+        new_version = importlib.metadata.version("autoskillit")
+    except Exception:
+        logger.debug("Failed to read version after update attempt", exc_info=True)
+        new_version = current  # Treat as unchanged if unreadable
+
+    if new_version != current:
+        return True
+
+    # Version unchanged — record a snooze and surface a warning
+    state["binary_snoozed"] = {
+        "snoozed_at": datetime.now(UTC).isoformat(),
+        "attempted_version": latest,
+    }
+    _write_dismiss_state(home, state)
+    print(
+        f"\nUpdate attempted but version is still {current}. "
+        f"If you have an editable install, run:\n"
+        f"  uv pip install -e <project_dir>\n"
+        f"Or for a tool install:\n"
+        f"  uv tool upgrade autoskillit",
+        flush=True,
+    )
+    return False
+
+
+def _detect_install_type() -> tuple[str, str | None]:
+    """Detect whether autoskillit is installed as an editable or tool install.
+
+    Returns:
+        ("editable", project_dir_str) — for editable installs (pip install -e)
+        ("tool", None) — for uv tool or other non-editable installs
+    """
+    import importlib.metadata
+
+    try:
+        dist = importlib.metadata.Distribution.from_name("autoskillit")
+        raw = dist.read_text("direct_url.json")
+        if raw:
+            import json as _json
+
+            data = _json.loads(raw)
+            if data.get("dir_info", {}).get("editable"):
+                url = data.get("url", "")
+                # file:// URL → strip scheme
+                if url.startswith("file://"):
+                    return ("editable", url[7:])
+    except Exception:
+        logger.debug("Failed to detect install type from direct_url.json", exc_info=True)
+
+    return ("tool", None)
+
+
 def run_stale_check(home: Path | None = None) -> None:
     """Run the stale-install check on interactive CLI invocations.
 
@@ -190,15 +272,26 @@ def run_stale_check(home: Path | None = None) -> None:
     if latest is not None:
         from packaging.version import Version
 
-        if Version(latest) > Version(current) and not _is_dismissed(state, "binary", latest):
+        if (
+            Version(latest) > Version(current)
+            and not _is_dismissed(state, "binary", latest)
+            and not _is_snoozed(state, "binary")
+        ):
             print(
                 f"\nAutoSkillit {latest} is available (you have {current}).",
                 flush=True,
             )
             answer = input("Update now? [Y/n] ").strip().lower()
             if answer in ("", "y", "yes"):
+                install_type, project_dir = _detect_install_type()
                 with terminal_guard():
-                    if dev_mode:
+                    if dev_mode and install_type == "editable" and project_dir:
+                        subprocess.run(
+                            ["uv", "pip", "install", "-e", project_dir],
+                            check=False,
+                            env=_skip_env,
+                        )
+                    elif dev_mode:
                         subprocess.run(
                             ["uv", "tool", "install", "--force", _INSTALL_FROM_INTEGRATION],
                             check=False,
@@ -211,6 +304,7 @@ def run_stale_check(home: Path | None = None) -> None:
                             env=_skip_env,
                         )
                     subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)
+                _verify_update_result(current, latest, _home, state)
                 return
             else:
                 state["binary"] = {

@@ -62,6 +62,5 @@ def test_autoskillit_subprocess_calls_inject_skip_stale_check_guard() -> None:
                 violations.append(f"{rel}:{lineno}\n  {fragment.strip()}")
     assert not violations, (
         f"Found {len(violations)} subprocess.run(['autoskillit', ...]) call(s) "
-        f"missing env= guard '{REQUIRED_GUARD}':\n\n"
-        + "\n\n".join(violations)
+        f"missing env= guard '{REQUIRED_GUARD}':\n\n" + "\n\n".join(violations)
     )

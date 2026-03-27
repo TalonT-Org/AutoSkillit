@@ -33,7 +33,7 @@ def _collect_site_packages_for_interpreter(python: str, worktree_path: Path) -> 
         logging.debug("_editable_guard: failed to resolve python path %s", python)
         return []
 
-    if str(python_real).startswith(str(worktree_path)):
+    if python_real.is_relative_to(worktree_path):
         return []
 
     try:
@@ -107,7 +107,7 @@ def _is_editable_in_worktree(direct_url: dict, worktree_path: Path) -> bool:
 
     # Strip file:// prefix and check if the path is inside the worktree
     source_path = url[len("file://") :]
-    return source_path.startswith(str(worktree_path))
+    return Path(source_path).is_relative_to(worktree_path)
 
 
 def scan_editable_installs_for_worktree(

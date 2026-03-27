@@ -156,7 +156,9 @@ def test_run_stale_check_writes_dismiss_on_no(
     monkeypatch.setattr(autoskillit, "__version__", "0.5.0")
     monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "0.9.0")
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
-    monkeypatch.setattr(_sc, "_count_hook_registry_drift_for_path", lambda p: 0)
+    import autoskillit.cli._doctor as _doctor
+
+    monkeypatch.setattr(_doctor, "_count_hook_registry_drift", lambda p: 0)
     from autoskillit.cli._stale_check import _read_dismiss_state, run_stale_check
 
     run_stale_check(home=tmp_path)

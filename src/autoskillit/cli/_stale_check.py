@@ -159,17 +159,6 @@ def _is_dismissed(state: dict[str, object], check_type: str, latest: str | None)
         return False
 
 
-def _count_hook_registry_drift_for_path(settings_path: Path) -> int:
-    """Thin delegator to _doctor._count_hook_registry_drift.
-
-    Extracted as a separate callable so tests can monkeypatch it at the
-    _stale_check boundary without importing _doctor.
-    """
-    from autoskillit.cli._doctor import _count_hook_registry_drift
-
-    return _count_hook_registry_drift(settings_path)
-
-
 def run_stale_check(home: Path | None = None) -> None:
     """Run the stale-install check on interactive CLI invocations.
 
@@ -222,8 +211,10 @@ def run_stale_check(home: Path | None = None) -> None:
                 _write_dismiss_state(_home, state)
 
     # Hook drift check
+    from autoskillit.cli._doctor import _count_hook_registry_drift
+
     settings_path = _claude_settings_path("user")
-    n_drift = _count_hook_registry_drift_for_path(settings_path)
+    n_drift = _count_hook_registry_drift(settings_path)
     if n_drift > 0 and not _is_dismissed(state, "hooks", None):
         print(
             f"\n{n_drift} new/changed hook(s) detected since last install.",

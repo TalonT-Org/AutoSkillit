@@ -18,6 +18,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 CLI_ROOT = Path(__file__).parents[2] / "src" / "autoskillit" / "cli"
 REQUIRED_GUARD = "AUTOSKILLIT_SKIP_STALE_CHECK"
 
@@ -56,22 +58,19 @@ def _collect_autoskillit_subprocess_calls(source: str) -> list[tuple[int, str, b
 
 
 def test_autoskillit_subprocess_calls_inject_skip_stale_check_guard() -> None:
-    """All subprocess.run(['autoskillit', ...]) calls in the CLI must pass env=
-    containing AUTOSKILLIT_SKIP_STALE_CHECK. This prevents infinite re-entry
-    loops where the child process re-runs the stale check before install completes.
-
-    A call is compliant when:
-    - It has an ``env=`` keyword argument, AND
-    - ``AUTOSKILLIT_SKIP_STALE_CHECK`` appears somewhere in the same file
-      (satisfying both inline dicts and named-variable patterns).
-    """
+    """All CLI subprocess.run(['autoskillit', ...]) calls must inject the skip-stale-check guard."""
+    if not CLI_ROOT.is_dir():
+        pytest.skip("Source tree unavailable")
     violations: list[str] = []
     for py_file in sorted(CLI_ROOT.rglob("*.py")):
         source = py_file.read_text(encoding="utf-8")
         if "autoskillit" not in source:
             continue
         calls = _collect_autoskillit_subprocess_calls(source)
-        guard_in_file = REQUIRED_GUARD in source
+        non_comment_source = "\n".join(
+            line for line in source.splitlines() if not line.lstrip().startswith("#")
+        )
+        guard_in_file = REQUIRED_GUARD in non_comment_source
         for lineno, fragment, has_env_kwarg in calls:
             if not has_env_kwarg or not guard_in_file:
                 rel = py_file.relative_to(CLI_ROOT.parents[2])

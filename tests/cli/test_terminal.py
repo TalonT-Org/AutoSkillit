@@ -180,6 +180,70 @@ class TestTerminalGuardTTYRestore:
 
             mock_os.system.assert_called_once_with("stty sane 2>/dev/null")
 
+    def test_emits_enter_alt_screen_on_entry(self):
+        """terminal_guard() emits \\033[?1049h to stdout before yielding control."""
+        from autoskillit.cli._terminal import terminal_guard
+
+        write_calls_before_yield: list[str] = []
+        all_write_calls: list[str] = []
+
+        with (
+            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli._terminal.termios"),
+            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+        ):
+            mock_stdin.isatty.return_value = True
+            mock_stdin.fileno.return_value = 0
+            mock_stdout.write.side_effect = lambda s: all_write_calls.append(s)
+
+            with terminal_guard():
+                # Capture the write calls that happened before we reached here
+                write_calls_before_yield.extend(all_write_calls)
+
+            assert any("\033[?1049h" in s for s in write_calls_before_yield), (
+                "\\033[?1049h (enter alternate screen) must be written to stdout "
+                "before yielding — current writes before yield: "
+                f"{write_calls_before_yield!r}"
+            )
+            mock_stdout.flush.assert_called()
+
+    def test_emits_exit_alt_screen_on_system_exit(self):
+        """terminal_guard() emits \\033[?1049l in finally even when SystemExit raised."""
+        from autoskillit.cli._terminal import terminal_guard
+
+        with (
+            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli._terminal.termios"),
+            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+        ):
+            mock_stdin.isatty.return_value = True
+            mock_stdin.fileno.return_value = 0
+
+            with pytest.raises(SystemExit):
+                with terminal_guard():
+                    raise SystemExit(1)
+
+            written = "".join(c.args[0] for c in mock_stdout.write.call_args_list if c.args)
+            assert "\033[?1049l" in written, (
+                "\\033[?1049l (exit alternate screen) must be emitted on SystemExit"
+            )
+
+    def test_noop_does_not_emit_escape_sequences(self):
+        """When stdin is not a TTY, no VT100 escape sequences are written to stdout."""
+        from autoskillit.cli._terminal import terminal_guard
+
+        with (
+            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli._terminal.termios"),
+            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+        ):
+            mock_stdin.isatty.return_value = False
+
+            with terminal_guard():
+                pass
+
+            mock_stdout.write.assert_not_called()
+
 
 class TestCookTerminalGuard:
     """cook() and _launch_cook_session() apply terminal_guard correctly."""

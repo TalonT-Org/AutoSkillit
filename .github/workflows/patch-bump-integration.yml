@@ -1,0 +1,88 @@
+name: Auto Patch Version Bump on Integration PR
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [integration]
+
+jobs:
+  bump-patch:
+    permissions:
+      contents: write
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: integration
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          uv-version: "0.9.21"
+
+      - name: Compute new patch version
+        id: version
+        run: |
+          set -euo pipefail
+          CURRENT=$(python3 -c "
+          import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])
+          ")
+          if ! echo "$CURRENT" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "ERROR: version '$CURRENT' is not a valid semver (X.Y.Z) — cannot compute patch bump" >&2
+            exit 1
+          fi
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          NEW="$MAJOR.$MINOR.$((PATCH + 1))"
+          echo "old=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Update pyproject.toml
+        run: |
+          python3 - <<'EOF'
+          import pathlib, os, sys
+          p = pathlib.Path("pyproject.toml")
+          old_ver = f'version = "{os.environ["OLD_VERSION"]}"'
+          new_ver = f'version = "{os.environ["NEW_VERSION"]}"'
+          old_content = p.read_text()
+          new_content = old_content.replace(old_ver, new_ver, 1)
+          if new_content == old_content:
+              print(f"ERROR: version pattern {old_ver!r} not found in pyproject.toml", file=sys.stderr)
+              sys.exit(1)
+          p.write_text(new_content)
+          EOF
+        env:
+          OLD_VERSION: ${{ steps.version.outputs.old }}
+          NEW_VERSION: ${{ steps.version.outputs.new }}
+
+      - name: Update plugin.json
+        run: |
+          python3 - <<'EOF'
+          import json, pathlib, os
+          p = pathlib.Path("src/autoskillit/.claude-plugin/plugin.json")
+          data = json.loads(p.read_text())
+          data["version"] = os.environ["NEW_VERSION"]
+          p.write_text(json.dumps(data, indent=2) + "\n")
+          EOF
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new }}
+
+      - name: Regenerate uv.lock
+        run: uv lock
+
+      - name: Commit and push version bump to integration
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+          else
+            git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
+            git push origin integration
+          fi

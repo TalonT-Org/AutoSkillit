@@ -280,7 +280,7 @@ class TestOrchestratorPromptDelegation:
         """
         from autoskillit.cli._prompts import _build_orchestrator_prompt
 
-        prompt = _build_orchestrator_prompt("implementation")
+        prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
         # Must NOT contain recipe YAML markers
         assert "--- RECIPE ---" not in prompt
         assert "--- END RECIPE ---" not in prompt

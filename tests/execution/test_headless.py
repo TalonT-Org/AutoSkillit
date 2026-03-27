@@ -2033,7 +2033,7 @@ class TestRetryBudgetEnforcement:
             max_consecutive_retries=3,
         )
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.STALE
 
     def test_budget_at_threshold_overrides_needs_retry_to_false(self) -> None:
         """At exactly max_consecutive_retries prior failures: needs_retry is overridden."""
@@ -2058,7 +2058,7 @@ class TestRetryBudgetEnforcement:
             max_consecutive_retries=3,
         )
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.STALE
 
     def test_budget_other_skill_command_not_counted(self) -> None:
         """Consecutive failures for a different skill_command don't exhaust this skill's budget."""
@@ -2071,7 +2071,7 @@ class TestRetryBudgetEnforcement:
             max_consecutive_retries=3,
         )
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.STALE
 
     def test_budget_applies_to_normal_path_context_exhaustion(self) -> None:
         """Budget applies to the normal path (not just stale), e.g. context exhaustion."""

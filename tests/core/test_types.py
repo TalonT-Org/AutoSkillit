@@ -28,6 +28,7 @@ def test_retry_reason_values():
         RetryReason.DRAIN_RACE,
         RetryReason.PATH_CONTAMINATION,
         RetryReason.CONTRACT_RECOVERY,
+        RetryReason.STALE,
     }
     assert RetryReason.NONE.value == "none"
 

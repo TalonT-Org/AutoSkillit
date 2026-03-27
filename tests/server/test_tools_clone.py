@@ -193,7 +193,7 @@ class TestPushToRemoteTool:
         tool_ctx.clone_mgr = mock_mgr
         await push_to_remote(clone_path="/clone", source_dir="/src", branch="main", force="true")
         _args, kwargs = mock_mgr.push_to_remote.call_args
-        assert kwargs.get("force") is True or (len(_args) > 3 and _args[3] is True)
+        assert kwargs.get("force") is True
 
     @pytest.mark.anyio
     async def test_push_to_remote_mcp_handler_default_force_false(self, tool_ctx):
@@ -203,7 +203,7 @@ class TestPushToRemoteTool:
         tool_ctx.clone_mgr = mock_mgr
         await push_to_remote(clone_path="/clone", source_dir="/src", branch="main")
         _args, kwargs = mock_mgr.push_to_remote.call_args
-        assert kwargs.get("force") is False or (len(_args) > 3 and _args[3] is False)
+        assert kwargs.get("force") is False
 
 
 class TestCloneRepoTiming:

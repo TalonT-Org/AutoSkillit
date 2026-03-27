@@ -120,9 +120,7 @@ def test_run_stale_check_skips_claudecode(monkeypatch: pytest.MonkeyPatch) -> No
     import autoskillit.cli._stale_check as _sc
 
     monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *a: calls.append("fetch") or None)
-    from autoskillit.cli._stale_check import run_stale_check
-
-    run_stale_check()
+    _sc.run_stale_check()
     assert "fetch" not in calls
 
 
@@ -134,9 +132,7 @@ def test_run_stale_check_skips_non_tty(monkeypatch: pytest.MonkeyPatch) -> None:
     import autoskillit.cli._stale_check as _sc
 
     monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *a: calls.append("fetch") or None)
-    from autoskillit.cli._stale_check import run_stale_check
-
-    run_stale_check()
+    _sc.run_stale_check()
     assert "fetch" not in calls
 
 
@@ -146,22 +142,25 @@ def test_run_stale_check_writes_dismiss_on_no(
 ) -> None:
     monkeypatch.delenv("CLAUDECODE", raising=False)
     fake_stdin = io.StringIO("n\n")
-    monkeypatch.setattr(sys, "stdin", fake_stdin)
-    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    fake_stdout = io.StringIO()
     import autoskillit
     import autoskillit.cli._stale_check as _sc
 
+    # Patch at module boundary — swap fakes in, never mutate real stdin/stdout
+    monkeypatch.setattr(_sc.sys, "stdin", fake_stdin)
+    monkeypatch.setattr(_sc.sys, "stdout", fake_stdout)
+    monkeypatch.setattr(fake_stdin, "isatty", lambda: True)
+    monkeypatch.setattr(fake_stdout, "isatty", lambda: True)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(autoskillit, "__version__", "0.5.0")
     monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "0.9.0")
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
     import autoskillit.cli._doctor as _doctor
 
     monkeypatch.setattr(_doctor, "_count_hook_registry_drift", lambda p: 0)
-    from autoskillit.cli._stale_check import _read_dismiss_state, run_stale_check
+    from autoskillit.cli._stale_check import _read_dismiss_state
 
-    run_stale_check(home=tmp_path)
+    _sc.run_stale_check(home=tmp_path)
     state = _read_dismiss_state(tmp_path)
     binary_entry = state.get("binary")
     assert isinstance(binary_entry, dict)

@@ -911,13 +911,16 @@ def test_check_hook_registry_drift_warning(tmp_path: Path) -> None:
     assert "new/changed" in result.message
 
 
-# DC-13: doctor JSON output includes hook_registry_drift check
+# DC-13: doctor JSON output includes hook_registry_drift check with correct severity
 def test_doctor_json_output_includes_hook_registry_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
+    from autoskillit.core import Severity
+
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
     cli.doctor(output_json=True)
     data = json.loads(capsys.readouterr().out)
-    check_names = {r["check"] for r in data["results"]}
-    assert "hook_registry_drift" in check_names
+    drift = next(r for r in data["results"] if r["check"] == "hook_registry_drift")
+    # No settings.json in tmp_path → all canonical hooks missing → WARNING
+    assert drift["severity"] == Severity.WARNING

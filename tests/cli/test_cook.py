@@ -1173,3 +1173,80 @@ class TestRecipesCLI:
         captured = capsys.readouterr()
         assert captured.out.strip(), "Expected recipe names in output"
         assert "implementation" in captured.out
+
+
+_PLUGIN_KEY = "autoskillit@autoskillit-local"
+
+
+class TestOrderMcpPrefixSelection:
+    """order() must embed the resolved MCP prefix in the system prompt."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("autoskillit.cli._prompts.show_cook_preview", lambda *a, **kw: None)
+
+    @pytest.fixture(autouse=True)
+    def _interactive_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_prompt_uses_direct_prefix_when_no_marketplace_install(
+        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """order() builds a prompt with the direct prefix when installed_plugins.json lacks key."""
+        from autoskillit.cli._mcp_names import DIRECT_PREFIX
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "test-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        plugins_file = tmp_path / "plugins.json"
+        plugins_file.write_text('{"version": 2, "plugins": {}}')
+        monkeypatch.setattr(
+            "autoskillit.cli._mcp_names._installed_plugins_path", lambda: plugins_file
+        )
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.order("test-script")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
+        captured_prompt = cmd[prompt_idx + 1]
+        assert f"{DIRECT_PREFIX}open_kitchen" in captured_prompt
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_prompt_uses_marketplace_prefix_when_plugin_installed(
+        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """order() uses marketplace prefix when autoskillit is plugin-installed."""
+        from autoskillit.cli._mcp_names import MARKETPLACE_PREFIX
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "test-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        plugins_file = tmp_path / "plugins.json"
+        plugins_file.write_text(f'{{"version": 2, "plugins": {{"{_PLUGIN_KEY}": []}}}}')
+        monkeypatch.setattr(
+            "autoskillit.cli._mcp_names._installed_plugins_path", lambda: plugins_file
+        )
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.order("test-script")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
+        captured_prompt = cmd[prompt_idx + 1]
+        assert f"{MARKETPLACE_PREFIX}open_kitchen" in captured_prompt

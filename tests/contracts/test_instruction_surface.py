@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
 
 
@@ -500,3 +501,17 @@ def test_claude_md_documents_all_source_modules() -> None:
         f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "
         "Update the Architecture section in CLAUDE.md."
     )
+
+
+@pytest.mark.parametrize("mcp_prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
+def test_orchestrator_tool_name_matches_open_kitchen_hook_matcher(mcp_prefix: str) -> None:
+    """The fully-qualified tool name in the prompt must satisfy the hook registry matcher."""
+    from autoskillit.hook_registry import HOOK_REGISTRY
+
+    open_kitchen_matchers = [h.matcher for h in HOOK_REGISTRY if "open_kitchen" in h.matcher]
+    assert open_kitchen_matchers, "Expected at least one open_kitchen hook matcher"
+    qualified_name = f"{mcp_prefix}open_kitchen"
+    for matcher in open_kitchen_matchers:
+        assert re.search(matcher, qualified_name), (
+            f"Prompt tool name '{qualified_name}' does not match hook matcher '{matcher}'"
+        )

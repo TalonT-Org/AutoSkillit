@@ -43,6 +43,13 @@ def terminal_guard() -> Generator[None, None, None]:
         except (termios.error, OSError, TypeError):
             fd = None
 
+    if fd is not None:
+        try:
+            sys.stdout.write("\033[?1049h")
+            sys.stdout.flush()
+        except OSError:
+            pass
+
     try:
         yield
     finally:

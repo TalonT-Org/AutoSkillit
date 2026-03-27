@@ -12,8 +12,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, get_logger
-from autoskillit.core._type_results import TestResult
+from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, TestResult, get_logger
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig

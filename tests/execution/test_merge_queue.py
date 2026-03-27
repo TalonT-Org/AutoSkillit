@@ -735,6 +735,7 @@ class TestPendingCIGuard:
                         }
                     }
                 },
+                request=httpx.Request("POST", url),
             )
 
         watcher._client.post = _mock_post  # type: ignore[method-assign]

@@ -4,6 +4,13 @@ must inject AUTOSKILLIT_SKIP_STALE_CHECK into the child's environment.
 This test prevents infinite re-entry loops where the child process re-runs the
 stale check before install completes. Analogous to test_interactive_subprocess_contracts.py
 which enforces terminal_guard() wrapping for all non-capturing subprocess calls.
+
+Contract: each call site must satisfy BOTH conditions:
+  1. An ``env=`` keyword argument is present in the call.
+  2. The string literal ``AUTOSKILLIT_SKIP_STALE_CHECK`` appears somewhere in the
+     same source file, confirming the env dict is built from the guard (the variable
+     pattern ``_skip_env = {**os.environ, "AUTOSKILLIT_SKIP_STALE_CHECK": "1"}``
+     satisfies this without requiring the literal to appear inside the call expression).
 """
 
 from __future__ import annotations
@@ -15,8 +22,9 @@ CLI_ROOT = Path(__file__).parents[2] / "src" / "autoskillit" / "cli"
 REQUIRED_GUARD = "AUTOSKILLIT_SKIP_STALE_CHECK"
 
 
-def _collect_autoskillit_subprocess_calls(source: str) -> list[tuple[int, str]]:
-    """Return (lineno, source_fragment) for every subprocess.run(['autoskillit',...]) call."""
+def _collect_autoskillit_subprocess_calls(source: str) -> list[tuple[int, str, bool]]:
+    """Return (lineno, source_fragment, has_env_kwarg) for every
+    subprocess.run(['autoskillit',...]) call."""
     tree = ast.parse(source)
     results = []
     lines = source.splitlines()
@@ -42,25 +50,40 @@ def _collect_autoskillit_subprocess_calls(source: str) -> list[tuple[int, str]]:
             continue
         end = getattr(node, "end_lineno", node.lineno)
         fragment = "\n".join(lines[node.lineno - 1 : end])
-        results.append((node.lineno, fragment))
+        has_env_kwarg = any(kw.arg == "env" for kw in node.keywords)
+        results.append((node.lineno, fragment, has_env_kwarg))
     return results
 
 
 def test_autoskillit_subprocess_calls_inject_skip_stale_check_guard() -> None:
     """All subprocess.run(['autoskillit', ...]) calls in the CLI must pass env=
     containing AUTOSKILLIT_SKIP_STALE_CHECK. This prevents infinite re-entry
-    loops where the child process re-runs the stale check before install completes."""
+    loops where the child process re-runs the stale check before install completes.
+
+    A call is compliant when:
+    - It has an ``env=`` keyword argument, AND
+    - ``AUTOSKILLIT_SKIP_STALE_CHECK`` appears somewhere in the same file
+      (satisfying both inline dicts and named-variable patterns).
+    """
     violations: list[str] = []
     for py_file in sorted(CLI_ROOT.rglob("*.py")):
         source = py_file.read_text(encoding="utf-8")
         if "autoskillit" not in source:
             continue
         calls = _collect_autoskillit_subprocess_calls(source)
-        for lineno, fragment in calls:
-            if REQUIRED_GUARD not in fragment:
+        guard_in_file = REQUIRED_GUARD in source
+        for lineno, fragment, has_env_kwarg in calls:
+            if not has_env_kwarg or not guard_in_file:
                 rel = py_file.relative_to(CLI_ROOT.parents[2])
-                violations.append(f"{rel}:{lineno}\n  {fragment.strip()}")
+                reason = []
+                if not has_env_kwarg:
+                    reason.append("missing env= kwarg")
+                if not guard_in_file:
+                    reason.append(f"'{REQUIRED_GUARD}' not found anywhere in file")
+                violations.append(
+                    f"{rel}:{lineno} ({', '.join(reason)})\n  {fragment.strip()}"
+                )
     assert not violations, (
         f"Found {len(violations)} subprocess.run(['autoskillit', ...]) call(s) "
-        f"missing env= guard '{REQUIRED_GUARD}':\n\n" + "\n\n".join(violations)
+        f"not satisfying the env guard contract:\n\n" + "\n\n".join(violations)
     )

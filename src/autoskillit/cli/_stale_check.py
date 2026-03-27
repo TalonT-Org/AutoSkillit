@@ -109,10 +109,13 @@ def _fetch_latest_version(dev_mode: bool) -> str | None:
                 data = json.loads(resp.read())
             import base64
 
-            content = base64.b64decode(data["content"]).decode("utf-8")
+            raw_content = data.get("content")
+            if not isinstance(raw_content, str):
+                return None
+            content = base64.b64decode(raw_content).decode("utf-8")
             for line in content.splitlines():
                 line = line.strip()
-                if line.startswith("version") and "=" in line:
+                if line.split("=", 1)[0].strip() == "version":
                     return line.split("=", 1)[1].strip().strip('"').strip("'")
             return None
         else:

@@ -8,7 +8,6 @@ import subprocess
 import uuid
 from pathlib import Path
 
-from autoskillit.cli._onboarding import mark_onboarded
 from autoskillit.cli._terminal import terminal_guard
 
 
@@ -25,6 +24,8 @@ def _run_cook_session(
         result = subprocess.run(cmd, env=env)
     if result.returncode == 0:
         if _first_run and initial_prompt is not None:
+            from autoskillit.cli._onboarding import mark_onboarded
+
             mark_onboarded(project_dir)
     else:
         raise SystemExit(result.returncode)

@@ -54,7 +54,7 @@ def is_dev_mode(home: Path | None = None) -> bool:
     # Delegate to the canonical implementation in core/paths.py.
     # is_git_main_checkout() returns True for .git-dir (main checkout) = dev mode.
     # is_git_main_checkout() returns False for .git-file (worktree) and no-repo = not dev mode.
-    from autoskillit.core.paths import is_git_main_checkout
+    from autoskillit.core import is_git_main_checkout
 
     return is_git_main_checkout(pkg_root())
 

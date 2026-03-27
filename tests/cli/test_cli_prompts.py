@@ -317,13 +317,20 @@ def test_orchestrator_prompt_stale_retries_not_routed_to_context_limit():
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("implementation")
-    # Must instruct the orchestrator to check subtype when retry_reason=resume
-    assert "subtype" in prompt
-    # The word "stale" must appear near "retry" (not near "on_context_limit")
-    stale_idx = prompt.find("subtype")
-    window = prompt[stale_idx : stale_idx + 300]
-    assert "stale" in window
-    assert "retry" in window.lower()
+    # subtype=stale must appear as an explicit routing discriminant
+    assert "subtype=stale" in prompt or "subtype: stale" in prompt
+    # The prompt must explicitly prohibit routing stale to on_context_limit
+    assert "subtype=stale" in prompt and "on_context_limit" in prompt
+    never_idx = prompt.find("NEVER route")
+    if never_idx != -1:
+        never_window = prompt[never_idx : never_idx + 200]
+        assert "subtype=stale" in never_window or "stale" in never_window.lower()
+    else:
+        # At minimum: stale discriminant must appear in a NOT/DO NOT context
+        stale_idx = prompt.find("subtype=stale")
+        window = prompt[stale_idx : stale_idx + 300]
+        assert "retry" in window.lower()
+        assert "do not" in window.lower() or "not" in window.lower()
 
 
 def test_orchestrator_prompt_context_exhaustion_still_routes_to_context_limit():
@@ -331,10 +338,11 @@ def test_orchestrator_prompt_context_exhaustion_still_routes_to_context_limit():
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("implementation")
-    # context_exhaustion subtype must still route to on_context_limit
+    # context_exhaustion subtype must be explicitly referenced — hard assertion, no fallback
     ctx_idx = prompt.find("context_exhaustion")
-    if ctx_idx == -1:
-        # At minimum, retry_reason=resume without stale must route to on_context_limit
-        resume_idx = prompt.find("retry_reason: resume")
-        window = prompt[resume_idx : resume_idx + 500]
-        assert "on_context_limit" in window
+    assert ctx_idx != -1, (
+        "prompt must reference 'context_exhaustion' subtype to route it to on_context_limit; "
+        "dropping this token causes the routing guard to silently degrade"
+    )
+    window = prompt[ctx_idx : ctx_idx + 500]
+    assert "on_context_limit" in window

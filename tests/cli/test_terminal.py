@@ -180,12 +180,22 @@ class TestTerminalGuardTTYRestore:
 
             mock_os.system.assert_called_once_with("stty sane 2>/dev/null")
 
-    def test_emits_enter_alt_screen_on_entry(self):
-        """terminal_guard() emits \\033[?1049h to stdout before yielding control."""
+    def test_does_not_emit_entry_alt_screen_sequence(self):
+        """terminal_guard() must NOT emit \\033[?1049h before yielding.
+
+        DECSET 1049 (?1049h) is a boolean toggle — no nesting counter.
+        The subprocess (e.g. Claude Code Ink TUI) emits its own ?1049h on
+        startup. A prior ?1049h from terminal_guard() would overwrite the
+        DECSC cursor save point, corrupting Ink's viewport height calculation
+        and removing the scrollbar. terminal_guard() is an exit-only safety
+        net: it must never emit entry-side terminal mode-switch sequences.
+
+        Regression guard for: investigation_terminal_guard_alt_screen_scrollbar
+        """
         from autoskillit.cli._terminal import terminal_guard
 
-        write_calls_before_yield: list[str] = []
-        all_write_calls: list[str] = []
+        writes_before_yield: list[str] = []
+        all_writes: list[str] = []
 
         with (
             patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
@@ -194,18 +204,16 @@ class TestTerminalGuardTTYRestore:
         ):
             mock_stdin.isatty.return_value = True
             mock_stdin.fileno.return_value = 0
-            mock_stdout.write.side_effect = lambda s: all_write_calls.append(s)
+            mock_stdout.write.side_effect = lambda s: all_writes.append(s)
 
             with terminal_guard():
-                # Capture the write calls that happened before we reached here
-                write_calls_before_yield.extend(all_write_calls)
+                writes_before_yield.extend(all_writes)
 
-            assert any("\033[?1049h" in s for s in write_calls_before_yield), (
-                "\\033[?1049h (enter alternate screen) must be written to stdout "
-                "before yielding — current writes before yield: "
-                f"{write_calls_before_yield!r}"
-            )
-            mock_stdout.flush.assert_called()
+        assert not any("\033[?1049h" in s for s in writes_before_yield), (
+            "terminal_guard() must not emit \\033[?1049h (smcup) on entry. "
+            "The subprocess (e.g. Ink TUI) owns alt-screen entry. "
+            f"Found in pre-yield writes: {writes_before_yield!r}"
+        )
 
     def test_emits_exit_alt_screen_on_system_exit(self):
         """terminal_guard() emits \\033[?1049l in finally even when SystemExit raised."""

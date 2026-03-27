@@ -73,6 +73,35 @@ def _collect_violations(source: str, filename: str) -> list[int]:
     return violations
 
 
+def test_terminal_guard_never_emits_smcup_on_entry() -> None:
+    """_terminal.py must not contain the smcup escape sequence (?1049h).
+
+    terminal_guard() is an exit-only safety net. It emits ?1049l (rmcup)
+    in its finally block as a safety net for abnormal subprocess exits, but
+    must NEVER emit ?1049h (smcup) on entry. DECSET 1049 is a boolean toggle
+    with no nesting counter — emitting it before a TUI subprocess launch
+    (e.g. Claude Code Ink) overwrites the DECSC cursor save point and corrupts
+    the TUI's viewport layout.
+
+    This source-scan guard complements the mock-based behavioral test
+    (test_does_not_emit_entry_alt_screen_sequence) and catches any future PR
+    that attempts to re-add entry-side alt-screen sequences.
+
+    Regression guard for: investigation_terminal_guard_alt_screen_scrollbar
+    See: test_interactive_subprocess_calls_wrapped_in_terminal_guard for the
+    analogous structural guard on subprocess call sites.
+    """
+    terminal_py = CLI_DIR / "_terminal.py"
+    source = terminal_py.read_text()
+    assert "?1049h" not in source, (
+        f"{terminal_py.name} must not emit \\033[?1049h (smcup). "
+        "terminal_guard() is an exit-only cleanup safety net. "
+        "The subprocess (e.g. Claude Code Ink TUI) is the sole owner of "
+        "alt-screen entry. See: test_does_not_emit_entry_alt_screen_sequence "
+        "for the behavioral guard."
+    )
+
+
 @pytest.mark.parametrize("py_file", sorted(CLI_DIR.glob("*.py")))
 def test_interactive_subprocess_calls_wrapped_in_terminal_guard(py_file: Path) -> None:
     """Every non-capturing subprocess.run call in cli/ must be inside terminal_guard().

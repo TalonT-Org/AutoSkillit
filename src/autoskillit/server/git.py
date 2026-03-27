@@ -405,7 +405,7 @@ async def perform_merge(
             "failed_step": MergeFailedStep.EDITABLE_INSTALL_GUARD,
             "state": MergeState.MERGE_SUCCEEDED_CLEANUP_BLOCKED,
             "worktree_path": worktree_path,
-            "merge_succeeded": False,
+            "merge_succeeded": True,
             "poisoned_installs": poisoned,
             "worktree_removed": False,
             "branch_deleted": False,

@@ -428,12 +428,13 @@ def _resolve_session_id(
 ) -> str:
     """Return the best-available Claude session UUID.
 
-    Precedence: stdout-parsed session_id (Channel A) > Channel B JSONL filename stem.
-    Returns "" only when both sources are empty.
+    Precedence: stdout-parsed session_id (Channel A) > transport-resolved
+    session_id (process.py) > Channel B JSONL filename stem.
+    Returns "" only when all sources are empty.
     """
     if session is not None and session.session_id:
         return session.session_id
-    return result.channel_b_session_id
+    return result.session_id or result.channel_b_session_id
 
 
 def _build_skill_result(

@@ -3,7 +3,7 @@
 import pytest
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core.types import SubprocessResult, TerminationReason
+from autoskillit.core.types import SubprocessResult, TerminationReason, TestResult
 from tests.conftest import StatefulMockTester
 
 
@@ -143,7 +143,9 @@ async def test_perform_merge_returns_success_on_green_tests(
     from autoskillit.server.git import perform_merge
 
     fake_wt = str(tmp_path)
-    tester = StatefulMockTester(results=[(True, "= 50 passed ="), (True, "= 50 passed =")])
+    tester = StatefulMockTester(
+        results=[TestResult(True, "= 50 passed =", ""), TestResult(True, "= 50 passed =", "")]
+    )
     # Queue 9 steps: rev-parse, branch, dirty check, fetch, rebase,
     # wt-list, merge, remove, branch-D
     # (test gate now handled by tester, not subprocess)
@@ -181,7 +183,9 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
     from autoskillit.server.git import perform_merge
 
     # Pre-rebase: pass; post-rebase: fail
-    tester = StatefulMockTester(results=[(True, "= 10 passed ="), (False, "= 1 failed =")])
+    tester = StatefulMockTester(
+        results=[TestResult(True, "= 10 passed =", ""), TestResult(False, "= 1 failed =", "")]
+    )
     # Queue: rev-parse (valid worktree), branch, dirty check, fetch ok,
     # ref check (5.5), git log --merges (5.6, no merge commits), rebase ok
     # No merge/cleanup queued — gate blocks before those
@@ -202,6 +206,8 @@ async def test_perform_merge_blocks_on_post_rebase_test_failure(
     assert result["failed_step"] == MergeFailedStep.POST_REBASE_TEST_GATE
     assert result["state"] == MergeState.WORKTREE_INTACT
     assert "worktree_path" in result
+    assert result["test_stdout"] == "= 1 failed ="
+    assert result["test_stderr"] == ""
     assert tester.call_count == 2  # both gates ran
 
 
@@ -211,7 +217,7 @@ async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_run
     from autoskillit.server.git import perform_merge
 
     fake_wt = str(tmp_path)
-    tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
+    tester = StatefulMockTester(results=[TestResult(True, "ok", ""), TestResult(True, "ok", "")])
     # Queue all 10 steps for success path
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
@@ -258,7 +264,7 @@ async def test_perform_merge_blocks_on_missing_remote_tracking_ref(
 
     worktree_dir = tmp_path / "wt"
     worktree_dir.mkdir()
-    tester = StatefulMockTester(results=[(True, "= 10 passed =")])
+    tester = StatefulMockTester(results=[TestResult(True, "= 10 passed =", "")])
     # Step 2: worktree verified (needs /worktrees/ in git-dir path)
     conftest_mock_runner.push(_make_result(0, str(tmp_path / ".git/worktrees/wt"), ""))
     # Step 3: branch name found
@@ -295,7 +301,7 @@ async def test_perform_merge_strips_tracked_generated_files(
     from autoskillit.server.git import perform_merge
 
     fake_wt = str(tmp_path)
-    tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
+    tester = StatefulMockTester(results=[TestResult(True, "ok", ""), TestResult(True, "ok", "")])
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
     conftest_mock_runner.push(
@@ -348,7 +354,7 @@ async def test_perform_merge_noop_when_no_generated_files_tracked(
     from autoskillit.server.git import perform_merge
 
     fake_wt = str(tmp_path)
-    tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
+    tester = StatefulMockTester(results=[TestResult(True, "ok", ""), TestResult(True, "ok", "")])
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (empty — no generated files)
@@ -385,7 +391,7 @@ async def test_perform_merge_fails_on_generated_file_cleanup_error(
     from autoskillit.server.git import perform_merge
 
     fake_wt = str(tmp_path)
-    tester = StatefulMockTester(results=[(True, "ok")])
+    tester = StatefulMockTester(results=[TestResult(True, "ok", "")])
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
     conftest_mock_runner.push(
@@ -413,7 +419,7 @@ async def test_perform_merge_dirty_check_ignores_generated_files(
     from autoskillit.server.git import perform_merge
 
     fake_wt = str(tmp_path)
-    tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
+    tester = StatefulMockTester(results=[TestResult(True, "ok", ""), TestResult(True, "ok", "")])
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (no tracked generated files)
@@ -448,7 +454,7 @@ async def test_perform_merge_strips_generated_files_before_dirty_check(
     from autoskillit.server.git import perform_merge
 
     fake_wt = str(tmp_path)
-    tester = StatefulMockTester(results=[(True, "ok"), (True, "ok")])
+    tester = StatefulMockTester(results=[TestResult(True, "ok", ""), TestResult(True, "ok", "")])
     conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse
     conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))  # branch
     conftest_mock_runner.push(

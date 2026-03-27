@@ -19,6 +19,7 @@ T = TypeVar("T")
 __all__ = [
     "LoadReport",
     "LoadResult",
+    "TestResult",
     "ValidatedAddDir",
     "WriteBehaviorSpec",
     "FailureRecord",
@@ -26,6 +27,15 @@ __all__ = [
     "CleanupResult",
     "CIRunScope",
 ]
+
+
+@dataclass
+class TestResult:
+    """Result of a test runner invocation."""
+
+    passed: bool
+    stdout: str
+    stderr: str
 
 
 @dataclass

@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, get_logger
+from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, TestResult, get_logger
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -80,19 +80,26 @@ def parse_pytest_summary(stdout: str) -> dict[str, int]:
     return {}
 
 
-def check_test_passed(returncode: int, stdout: str) -> bool:
+def check_test_passed(returncode: int, stdout: str, stderr: str = "") -> bool:
     """Determine test pass/fail with cross-validation.
 
-    Uses exit code as primary signal and cross-validates against parsed output.
-    Enforces closed-world assumption: an absent summary is not evidence of
-    passing.
+    Uses exit code as primary signal and cross-validates against parsed output
+    when pytest-format output is detected. For non-pytest runners that produce
+    no pytest summary, trusts the exit code directly.
+
+    Known limitation: if pytest crashes with exit code 0 before printing its
+    summary line (e.g. a conftest module that calls sys.exit(0) during
+    collection), no summary is found and this function returns True. There is
+    no reliable heuristic to distinguish that case from a legitimate non-pytest
+    runner that exits 0 with no summary output.
     """
     if returncode != 0:
         return False
-    counts = parse_pytest_summary(stdout)
+    combined = stdout + ("\n" + stderr if stderr else "")
+    counts = parse_pytest_summary(combined)
     if not counts:
-        # CWA: no summary line found — cannot confirm pass.
-        return False
+        # No pytest summary detected — runner is not pytest; trust exit code.
+        return True
     if counts.get("failed", 0) > 0 or counts.get("error", 0) > 0:
         return False
     return True
@@ -105,10 +112,10 @@ class DefaultTestRunner:
         self._config = config
         self._runner = runner
 
-    async def run(self, cwd: Path) -> tuple[bool, str]:
+    async def run(self, cwd: Path) -> TestResult:
         command = self._config.test_check.command
         timeout = float(self._config.test_check.timeout)
         env = build_sanitized_env()
         result = await self._runner(command, cwd=cwd, timeout=timeout, env=env)
-        passed = check_test_passed(result.returncode, result.stdout)
-        return passed, result.stdout
+        passed = check_test_passed(result.returncode, result.stdout, result.stderr)
+        return TestResult(passed=passed, stdout=result.stdout, stderr=result.stderr)

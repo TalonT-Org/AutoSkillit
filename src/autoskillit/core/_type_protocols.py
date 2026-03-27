@@ -15,6 +15,7 @@ from ._type_results import (
     CleanupResult,
     FailureRecord,
     SkillResult,
+    TestResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
 )
@@ -139,9 +140,12 @@ class McpResponseStore(Protocol):
 
 @runtime_checkable
 class TestRunner(Protocol):
-    """Protocol for running a test suite and reporting pass/fail."""
+    """Protocol for running a test suite and reporting pass/fail.
 
-    async def run(self, cwd: Path) -> tuple[bool, str]: ...
+    Returns a TestResult with passed, stdout, and stderr from the test run.
+    """
+
+    async def run(self, cwd: Path) -> TestResult: ...
 
 
 @runtime_checkable

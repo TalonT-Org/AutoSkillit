@@ -229,14 +229,15 @@ async def perform_merge(
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
             }
-        passed, test_stdout = await tester.run(Path(worktree_path))
-        if not passed:
+        test_result = await tester.run(Path(worktree_path))
+        if not test_result.passed:
             return {
                 "error": "Tests failed in worktree — merge blocked",
                 "failed_step": MergeFailedStep.TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
-                "test_output": test_stdout,
+                "test_stdout": test_result.stdout,
+                "test_stderr": test_result.stderr,
             }
 
     # 5. Fetch
@@ -325,7 +326,8 @@ async def perform_merge(
 
     # 6.5. Post-rebase test gate — re-tests the rebased commits before merging
     if tester is not None and config.safety.test_gate_on_merge:
-        passed, _ = await tester.run(Path(worktree_path))
+        test_result = await tester.run(Path(worktree_path))
+        passed = test_result.passed
         if not passed:
             return {
                 "error": (
@@ -335,6 +337,8 @@ async def perform_merge(
                 "failed_step": MergeFailedStep.POST_REBASE_TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
+                "test_stdout": test_result.stdout,
+                "test_stderr": test_result.stderr,
             }
 
     # 7. Discover main repo path

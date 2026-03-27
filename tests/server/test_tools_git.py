@@ -134,6 +134,7 @@ class TestMergeWorktree:
             _make_result(0, "/repo/.git/worktrees/wt\n", "")
         )  # rev-parse --git-dir
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (pre-dirty-tree check)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(1, "FAIL\n= 3 failed, 97 passed =", ""))  # test-check
         result = json.loads(await merge_worktree(str(wt), "dev"))

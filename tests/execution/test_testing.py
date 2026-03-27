@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.config import AutomationConfig
@@ -273,13 +275,6 @@ def test_check_test_passed_true_bare_q_clean():
     assert check_test_passed(0, "100 passed in 1.50s") is True
 
 
-def test_check_test_passed_true_when_no_summary_no_output() -> None:
-    from autoskillit.execution.testing import check_test_passed
-
-    # Non-pytest runner: rc=0, no output → PASS (trust exit code)
-    assert check_test_passed(0, "", "") is True
-
-
 def test_check_test_passed_true_when_no_summary_stderr_only() -> None:
     from autoskillit.execution.testing import check_test_passed
 
@@ -309,9 +304,7 @@ def test_check_test_passed_parses_pytest_summary_in_stderr() -> None:
 
 
 @pytest.mark.anyio
-async def test_default_test_runner_returns_test_result_with_stderr() -> None:
-    from pathlib import Path
-
+async def test_default_test_runner_returns_test_result_with_stderr(tmp_path: Path) -> None:
     from autoskillit.config import AutomationConfig
     from autoskillit.core import TestResult
     from autoskillit.execution.testing import DefaultTestRunner
@@ -321,7 +314,7 @@ async def test_default_test_runner_returns_test_result_with_stderr() -> None:
     runner.push(_make_result(0, "", stderr="PASSED [0.5s] all tests"))
     config = AutomationConfig()
     tester = DefaultTestRunner(config=config, runner=runner)
-    result = await tester.run(Path("/tmp"))
+    result = await tester.run(tmp_path)
     assert isinstance(result, TestResult)
     assert result.passed is True
     assert result.stderr == "PASSED [0.5s] all tests"

@@ -19,7 +19,6 @@ def _run_hook(
     event: dict | None = None,
     raw_stdin: str | None = None,
     log_root: Path | None = None,
-    cwd: str | None = None,
     hook_config_path: Path | None = None,
 ) -> tuple[str, int]:
     """Run token_summary_appender.main() with synthetic stdin.
@@ -31,9 +30,6 @@ def _run_hook(
             When provided, patches ``_read_pipeline_id`` to return the ``pipeline_id``
             value from that file. When absent, ``_read_pipeline_id`` reads from the
             real filesystem (returns '' if no file present in the test CWD).
-        cwd: Legacy parameter — patches ``os.getcwd`` for backward compatibility.
-            No longer used by the hook after the pipeline_id fix, but retained so
-            existing tests (TSA-4) can pass the parameter without error.
     """
     from autoskillit.hooks.token_summary_appender import main
 
@@ -49,13 +45,6 @@ def _run_hook(
                 patch(
                     "autoskillit.hooks.token_summary_appender._log_root",
                     return_value=log_root,
-                )
-            )
-        if cwd is not None:
-            stack.enter_context(
-                patch(
-                    "autoskillit.hooks.token_summary_appender.os.getcwd",
-                    return_value=cwd,
                 )
             )
         if hook_config_path is not None:
@@ -155,27 +144,26 @@ def test_tsa3_no_sessions_jsonl_exits_zero(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# TSA-4: no CWD-matching sessions → exits 0 silently
+# TSA-4: no pipeline_id → sessions skipped → exits 0 silently
 # ---------------------------------------------------------------------------
 
 
-def test_tsa4_no_cwd_matching_sessions_exits_zero(tmp_path: Path) -> None:
-    """sessions.jsonl exists but no entries match current CWD → exits 0."""
+def test_tsa4_no_pipeline_id_sessions_exits_zero(tmp_path: Path) -> None:
+    """sessions.jsonl exists but no pipeline_id set → hook skips all sessions → exits 0."""
     log_root = tmp_path / "logs"
     log_root.mkdir()
 
-    other_cwd = "/some/other/pipeline"
     _write_sessions(
         log_root,
         [
-            {"dir_name": "s1", "cwd": other_cwd, "step_name": "plan"},
+            {"dir_name": "s1", "cwd": "/some/other/pipeline", "step_name": "plan"},
         ],
     )
 
     pr_url = "https://github.com/owner/repo/pull/42"
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
 
-    _, exit_code = _run_hook(event, log_root=log_root, cwd="/current/pipeline")
+    _, exit_code = _run_hook(event, log_root=log_root)
     assert exit_code == 0
 
 
@@ -437,7 +425,6 @@ def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
         _, exit_code = _run_hook(
             event,
             log_root=log_root,
-            cwd="/remediation-20260327-080817",  # different from sessions' worktree cwd
             hook_config_path=hook_config,
         )
     assert exit_code == 0

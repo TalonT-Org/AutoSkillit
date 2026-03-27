@@ -474,7 +474,7 @@ def _build_skill_result(
                 return SkillResult(
                     success=True,
                     result=_truncate(stale_session.agent_result),
-                    session_id=stale_session.session_id,
+                    session_id=stale_session.session_id or result.session_id,
                     subtype="recovered_from_stale",
                     is_error=False,
                     exit_code=stale_returncode,
@@ -489,7 +489,7 @@ def _build_skill_result(
             exit_code=result.returncode if result.returncode is not None else -1,
             subtype="stale",
             needs_retry=True,
-            retry_reason=RetryReason.RESUME,
+            retry_reason=RetryReason.STALE,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
@@ -499,12 +499,12 @@ def _build_skill_result(
                 "Session went stale (no activity for configured threshold). "
                 "Partial progress may have been made. Retry to continue."
             ),
-            session_id="",
+            session_id=result.session_id,
             subtype="stale",
             is_error=False,
             exit_code=-1,
             needs_retry=True,
-            retry_reason=RetryReason.RESUME,
+            retry_reason=RetryReason.STALE,
             stderr="",
             token_usage=None,
         )
@@ -521,7 +521,7 @@ def _build_skill_result(
                 subtype=CliSubtype.TIMEOUT,
                 is_error=True,
                 result="",
-                session_id="",
+                session_id=result.session_id,
                 errors=[],
             )
     else:
@@ -638,7 +638,7 @@ def _build_skill_result(
         sr = SkillResult(
             success=False,
             result=result_text,
-            session_id=session.session_id,
+            session_id=session.session_id or result.session_id,
             subtype="path_contamination",
             is_error=session.is_error,
             exit_code=returncode,
@@ -655,7 +655,7 @@ def _build_skill_result(
         sr = SkillResult(
             success=success,
             result=result_text,
-            session_id=session.session_id,
+            session_id=session.session_id or result.session_id,
             subtype=normalized_subtype,
             is_error=session.is_error,
             exit_code=returncode,
@@ -845,9 +845,6 @@ async def run_headless_core(
         new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
         audit_record = new_audit_records[0] if new_audit_records else None
 
-        # Resolve effective session ID: prefer stdout-parsed, fall back to Channel B discovery
-        effective_session_id = skill_result.session_id or result.channel_b_session_id
-
         if result.proc_snapshots is not None or not skill_result.success or bool(step_name):
             from autoskillit.execution.session_log import flush_session_log
 
@@ -855,7 +852,7 @@ async def run_headless_core(
                 flush_session_log(
                     log_dir=ctx.config.linux_tracing.log_dir,
                     cwd=cwd,
-                    session_id=effective_session_id,
+                    session_id=skill_result.session_id,
                     pid=result.pid,
                     skill_command=original_skill_command,
                     success=skill_result.success,

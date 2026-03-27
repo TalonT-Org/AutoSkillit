@@ -70,9 +70,24 @@ def _context_exhausted_session_json() -> str:
     )
 
 
-def _sr(returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT):
+def _sr(
+    returncode=0,
+    stdout="",
+    stderr="",
+    termination=TerminationReason.NATURAL_EXIT,
+    session_id: str = "",
+    channel_b_session_id: str = "",
+):
     """Build a minimal SubprocessResult for _build_skill_result tests."""
-    return SubprocessResult(returncode, stdout, stderr, termination, pid=12345)
+    return SubprocessResult(
+        returncode,
+        stdout,
+        stderr,
+        termination,
+        pid=12345,
+        session_id=session_id,
+        channel_b_session_id=channel_b_session_id,
+    )
 
 
 class TestSessionLogDir:
@@ -643,7 +658,7 @@ class TestStalenessReturnsNeedsRetry:
     """Stale SubprocessResult triggers needs_retry response."""
 
     def test_staleness_returns_needs_retry(self):
-        """A stale result produces needs_retry=True, retry_reason='resume'."""
+        """A stale result produces needs_retry=True, retry_reason='stale'."""
         stale_result = SubprocessResult(
             returncode=-1,
             stdout="",
@@ -653,7 +668,7 @@ class TestStalenessReturnsNeedsRetry:
         )
         response = json.loads(_build_skill_result(stale_result).to_json())
         assert response["needs_retry"] is True
-        assert response["retry_reason"] == "resume"
+        assert response["retry_reason"] == "stale"
         assert response["subtype"] == "stale"
         assert response["success"] is False
 
@@ -1995,7 +2010,7 @@ class TestRetryBudgetEnforcement:
             exit_code=-1,
             subtype="stale",
             needs_retry=True,
-            retry_reason="resume",
+            retry_reason="stale",
             stderr="",
         )
 
@@ -3014,7 +3029,7 @@ def make_build_skill_result_kwargs():
                         exit_code=-1,
                         subtype="stale",
                         needs_retry=True,
-                        retry_reason="resume",
+                        retry_reason="stale",
                         stderr="",
                     )
                 )
@@ -3164,9 +3179,7 @@ class TestBuildSkillResultSessionIdFromSubprocess:
         partial_assistant_stdout = json.dumps(
             {
                 "type": "assistant",
-                "message": {
-                    "content": [{"type": "text", "text": "Doing work..."}]
-                },
+                "message": {"content": [{"type": "text", "text": "Doing work..."}]},
             }
         )
         result = SubprocessResult(

@@ -1122,7 +1122,6 @@ class TestRunHeadlessCoreFlushTelemetry:
     ):
         """flush_session_log receives the same session_id as the returned SkillResult."""
         import autoskillit.execution.session_log as sl_mod
-
         from autoskillit.core.types import SubprocessResult, TerminationReason
 
         calls = []
@@ -1141,7 +1140,9 @@ class TestRunHeadlessCoreFlushTelemetry:
             session_id="test-uuid-coherence-check",
         )
         tool_ctx.runner.push(stale_result)
-        result_json = json.loads(await run_skill("/investigate foo", "/tmp", step_name="implement"))
+        result_json = json.loads(
+            await run_skill("/investigate foo", "/tmp", step_name="implement")
+        )
         assert len(calls) == 1
         # flush and returned SkillResult must carry the same session_id
         assert calls[0]["session_id"] == result_json["session_id"]

@@ -126,6 +126,8 @@ def _make_result(
     stderr: str = "",
     termination_reason: TerminationReason = TerminationReason.NATURAL_EXIT,
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
+    session_id: str = "",
+    channel_b_session_id: str = "",
 ) -> SubprocessResult:
     """Create a SubprocessResult for mocking run_managed_async."""
     return SubprocessResult(
@@ -135,6 +137,8 @@ def _make_result(
         termination=termination_reason,
         pid=12345,
         channel_confirmation=channel_confirmation,
+        session_id=session_id,
+        channel_b_session_id=channel_b_session_id,
     )
 
 

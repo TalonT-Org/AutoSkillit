@@ -75,7 +75,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "headless",  # execution/headless.py: _OUTPUT_PATH_TOKENS = _build_path_token_set()
-        "_stale_check",  # cli/_stale_check.py: _DISMISS_WINDOW = timedelta(days=7) — intentional module-level constant
+        # cli/_stale_check.py: _DISMISS_WINDOW = timedelta(days=7) — intentional constant
+        "_stale_check",
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(

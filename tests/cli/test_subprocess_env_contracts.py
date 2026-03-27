@@ -94,7 +94,7 @@ def test_autoskillit_subprocess_calls_inject_skip_stale_check_guard() -> None:
 def test_stale_check_all_subprocess_calls_have_env_kwarg() -> None:
     """Every subprocess.run call in cli/_stale_check.py must carry env=.
 
-    This is a stronger contract than test_autoskillit_subprocess_calls_inject_skip_stale_check_guard,
+    This is a stronger contract than the autoskillit-prefix scanner in this file,
     which only checks ['autoskillit', ...] prefix calls. The stale check also
     invokes ['uv', ...] commands and those must also carry env=_skip_env to
     prevent environment pollution into child processes.

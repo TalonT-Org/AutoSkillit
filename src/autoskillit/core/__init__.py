@@ -38,6 +38,7 @@ from .paths import (
     claude_code_log_path,
     claude_code_project_dir,
     find_latest_session_id,
+    is_git_main_checkout,
     is_git_worktree,
     pkg_root,
 )
@@ -137,6 +138,7 @@ __all__ = [
     "claude_code_log_path",
     "claude_code_project_dir",
     "find_latest_session_id",
+    "is_git_main_checkout",
     "is_git_worktree",
     "pkg_root",
     # types

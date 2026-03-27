@@ -104,6 +104,24 @@ def is_git_worktree(path: Path) -> bool:
     return False  # not in a git repo
 
 
+def is_git_main_checkout(path: Path) -> bool:
+    """Return True if ``path`` is inside a git main checkout (has a .git directory).
+
+    Returns False for worktrees (.git file) and for directories not inside any
+    git repository.
+
+    This is the semantic inverse of ``is_git_worktree()`` for the "main checkout"
+    case — it differs in that "not in a git repo" returns False (not True).
+    """
+    for parent in [path, *path.parents]:
+        git_path = parent / ".git"
+        if git_path.is_dir():
+            return True
+        if git_path.is_file():
+            return False
+    return False
+
+
 GENERATED_FILES: frozenset[str] = frozenset(
     {
         "src/autoskillit/hooks/hooks.json",

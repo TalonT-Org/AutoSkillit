@@ -273,6 +273,8 @@ def test_run_stale_check_dev_mode_y_path_command(
     monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "99.0.0")
     monkeypatch.setattr(_sc, "_read_dismiss_state", lambda home: {})
     monkeypatch.setattr(_sc, "_write_dismiss_state", lambda home, state: None)
+    # Force non-editable path so this test continues to assert uv tool install --force
+    monkeypatch.setattr(_sc, "_detect_install_type", lambda: ("tool", None))
 
     def fake_run(cmd: list[str], **kwargs: object) -> object:
         calls.append((cmd, kwargs))

@@ -51,21 +51,12 @@ def is_dev_mode(home: Path | None = None) -> bool:
         return True
 
     # pkg_root() inside a git main checkout
-    # Walk from pkg_root() upward; stop at the first .git entry found
-    candidate = pkg_root()
-    while True:
-        git_path = candidate / ".git"
-        if git_path.is_dir():
-            # .git directory = main checkout = dev mode
-            return True
-        if git_path.is_file():
-            # .git file = worktree = not dev mode
-            return False
-        parent = candidate.parent
-        if parent == candidate:
-            # Reached filesystem root without finding .git
-            return False
-        candidate = parent
+    # Delegate to the canonical implementation in core/paths.py.
+    # is_git_main_checkout() returns True for .git-dir (main checkout) = dev mode.
+    # is_git_main_checkout() returns False for .git-file (worktree) and no-repo = not dev mode.
+    from autoskillit.core.paths import is_git_main_checkout
+
+    return is_git_main_checkout(pkg_root())
 
 
 def _read_dismiss_state(home: Path) -> dict[str, object]:
@@ -223,6 +214,33 @@ def _verify_update_result(
     return False
 
 
+def _detect_install_type() -> tuple[str, str | None]:
+    """Detect whether autoskillit is installed as an editable or tool install.
+
+    Returns:
+        ("editable", project_dir_str) — for editable installs (pip install -e)
+        ("tool", None) — for uv tool or other non-editable installs
+    """
+    import importlib.metadata
+
+    try:
+        dist = importlib.metadata.Distribution.from_name("autoskillit")
+        raw = dist.read_text("direct_url.json")
+        if raw:
+            import json as _json
+
+            data = _json.loads(raw)
+            if data.get("dir_info", {}).get("editable"):
+                url = data.get("url", "")
+                # file:// URL → strip scheme
+                if url.startswith("file://"):
+                    return ("editable", url[7:])
+    except Exception:
+        logger.debug("Failed to detect install type from direct_url.json", exc_info=True)
+
+    return ("tool", None)
+
+
 def run_stale_check(home: Path | None = None) -> None:
     """Run the stale-install check on interactive CLI invocations.
 
@@ -265,8 +283,15 @@ def run_stale_check(home: Path | None = None) -> None:
             )
             answer = input("Update now? [Y/n] ").strip().lower()
             if answer in ("", "y", "yes"):
+                install_type, project_dir = _detect_install_type()
                 with terminal_guard():
-                    if dev_mode:
+                    if dev_mode and install_type == "editable" and project_dir:
+                        subprocess.run(
+                            ["uv", "pip", "install", "-e", project_dir],
+                            check=False,
+                            env=_skip_env,
+                        )
+                    elif dev_mode:
                         subprocess.run(
                             ["uv", "tool", "install", "--force", _INSTALL_FROM_INTEGRATION],
                             check=False,

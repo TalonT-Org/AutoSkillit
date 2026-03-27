@@ -5,9 +5,9 @@ into system Python without an explicit --python .venv target.
 This guards the interactive orchestrator path (headless sessions cannot call
 run_cmd at all — they are blocked by headless_orchestration_guard.py).
 """
+
 import json
 import sys
-
 
 _UNSAFE_PATTERNS = (
     "pip install -e",
@@ -22,9 +22,14 @@ def _is_unsafe_editable_install(cmd: str) -> bool:
     cmd_lower = cmd.lower()
     if not any(p in cmd_lower for p in _UNSAFE_PATTERNS):
         return False
-    # Allow if the command explicitly targets a .venv Python (relative or absolute path)
-    if "--python" in cmd and ".venv" in cmd:
-        return False
+    # Allow if the command explicitly targets a .venv Python via --python.
+    # Use token-level parsing to avoid substring false-positives (e.g. /tmp/.venv-poison/).
+    tokens = cmd_lower.split()
+    for i, token in enumerate(tokens):
+        if token == "--python" and i + 1 < len(tokens):
+            python_arg = tokens[i + 1]
+            if python_arg.startswith(".venv") or "/.venv/" in python_arg:
+                return False
     return True
 
 
@@ -39,18 +44,20 @@ def main() -> None:
         sys.exit(0)
 
     if _is_unsafe_editable_install(cmd):
-        payload = json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": (
-                    "Blocked: editable install without --python .venv. "
-                    "Use `task install-worktree` or add `--python .venv/bin/python`. "
-                    "Installing into system Python creates dangling entry points when "
-                    "the worktree is deleted."
-                ),
+        payload = json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        "Blocked: editable install without --python .venv. "
+                        "Use `task install-worktree` or add `--python .venv/bin/python`. "
+                        "Installing into system Python creates dangling entry points when "
+                        "the worktree is deleted."
+                    ),
+                }
             }
-        })
+        )
         sys.stdout.write(payload + "\n")
 
     sys.exit(0)

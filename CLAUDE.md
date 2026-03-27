@@ -226,6 +226,7 @@ src/autoskillit/
 │   ├── _hooks.py            #   Unified PreToolUse hook registration helpers
 │   ├── _init_helpers.py     #   Init command helpers: interactive prompts and workspace marker
 │   ├── _marketplace.py      #   Plugin install/upgrade marketplace operations
+│   ├── _mcp_names.py        #   MCP prefix detection for prompt builders (detect_autoskillit_mcp_prefix, DIRECT_PREFIX, MARKETPLACE_PREFIX, resolve_tool_name)
 │   ├── _onboarding.py       #   First-run detection and guided onboarding menu (is_first_run, run_onboarding_menu)
 │   ├── _prompts.py          #   Orchestrator prompt builder for recipe execution
 │   ├── _stale_check.py      #   Stale-install check: version comparison, hook-drift prompt, dismissal state

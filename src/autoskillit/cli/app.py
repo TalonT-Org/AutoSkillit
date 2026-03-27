@@ -507,6 +507,7 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
     session_id
         Explicit session ID to resume; omit for automatic discovery.
     """
+    from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
     from autoskillit.cli._prompts import _build_orchestrator_prompt
     from autoskillit.recipe import (
         find_recipe_by_name,
@@ -528,6 +529,8 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
         resume_session_id = session_id or find_latest_session_id()
         if resume_session_id is None:
             print("No previous session found. Starting a fresh session.")
+
+    mcp_prefix = detect_autoskillit_mcp_prefix()
 
     if recipe is None:
         from autoskillit.cli._prompts import (
@@ -552,7 +555,7 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
 
             greeting = random.choice(_OPEN_KITCHEN_GREETINGS)
             _launch_cook_session(
-                _build_open_kitchen_prompt(),
+                _build_open_kitchen_prompt(mcp_prefix=mcp_prefix),
                 initial_message=greeting,
                 resume_session_id=resume_session_id,
             )
@@ -633,7 +636,7 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
 
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
     _launch_cook_session(
-        _build_orchestrator_prompt(recipe),
+        _build_orchestrator_prompt(recipe, mcp_prefix=mcp_prefix),
         initial_message=greeting,
         extra_env=_extra_env if _extra_env else None,
         resume_session_id=resume_session_id,

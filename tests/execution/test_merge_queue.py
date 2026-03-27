@@ -676,6 +676,7 @@ class TestPendingCIGuard:
 
         assert result["success"] is True
         assert result["pr_state"] == "merged"
+        assert call_count >= 3
 
     @pytest.mark.anyio
     async def test_returns_ejected_when_checks_terminal_and_not_in_queue(self):

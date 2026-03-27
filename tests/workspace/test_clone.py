@@ -966,6 +966,76 @@ class TestPushToRemoteMocked:
         param = sig.parameters["force"]
         assert param.default is False, "force param must default to False"
 
+    def test_force_with_lease_stale_returns_error_type(self) -> None:
+        """push_to_remote returns error_type=force_with_lease_stale when git reports stale info."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+
+        mock_push = MagicMock()
+        mock_push.returncode = 1
+        mock_push.stderr = "! [rejected] main -> main (stale info)"
+
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+            result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
+
+        assert result["success"] is False
+        assert result.get("error_type") == "force_with_lease_stale"
+
+    def test_force_with_lease_no_upstream_returns_error_type(self) -> None:
+        """push_to_remote returns error_type=force_with_lease_no_upstream for missing upstream."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+
+        mock_push = MagicMock()
+        mock_push.returncode = 1
+        mock_push.stderr = "error: The current branch main has no upstream branch."
+
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+            result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
+
+        assert result["success"] is False
+        assert result.get("error_type") == "force_with_lease_no_upstream"
+
+    def test_force_push_generic_failure_has_no_error_type(self) -> None:
+        """push_to_remote returns no error_type for generic force-push failures."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+
+        mock_push = MagicMock()
+        mock_push.returncode = 1
+        mock_push.stderr = "error: failed to push some refs"
+
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+            result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
+
+        assert result["success"] is False
+        assert "error_type" not in result
+
+    def test_non_force_failure_has_no_error_type(self) -> None:
+        """push_to_remote returns no error_type for non-force push failures."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+
+        mock_push = MagicMock()
+        mock_push.returncode = 1
+        mock_push.stderr = "! [rejected] main -> main (stale info)"
+
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]):
+            result = push_to_remote(
+                "/clone", "/source", "main", protected_branches=[], force=False
+            )
+
+        assert result["success"] is False
+        assert "error_type" not in result
+
 
 class TestPushToRemoteNonBare:
     """push_to_remote fails with error_type when remote is a local non-bare repo."""

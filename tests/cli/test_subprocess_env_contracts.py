@@ -80,9 +80,7 @@ def test_autoskillit_subprocess_calls_inject_skip_stale_check_guard() -> None:
                     reason.append("missing env= kwarg")
                 if not guard_in_file:
                     reason.append(f"'{REQUIRED_GUARD}' not found anywhere in file")
-                violations.append(
-                    f"{rel}:{lineno} ({', '.join(reason)})\n  {fragment.strip()}"
-                )
+                violations.append(f"{rel}:{lineno} ({', '.join(reason)})\n  {fragment.strip()}")
     assert not violations, (
         f"Found {len(violations)} subprocess.run(['autoskillit', ...]) call(s) "
         f"not satisfying the env guard contract:\n\n" + "\n\n".join(violations)

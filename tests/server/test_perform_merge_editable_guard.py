@@ -33,14 +33,14 @@ async def test_perform_merge_aborts_before_cleanup_on_poisoned_install(
     When scan_editable_installs_for_worktree returns non-empty results after the merge
     step, perform_merge must return an error result WITHOUT calling git worktree remove.
     """
-    import autoskillit.server._editable_guard as _editable_guard
+    import autoskillit.server.git as git_module
     from autoskillit.server.git import perform_merge
 
     fake_wt = str(tmp_path)
     poisoned_report = ["autoskillit editable at file:///fake/worktree/src (autoskillit-0.6.12)"]
 
     monkeypatch.setattr(
-        _editable_guard,
+        git_module,
         "scan_editable_installs_for_worktree",
         lambda worktree_path, site_packages_dirs=None: poisoned_report,
     )
@@ -91,13 +91,13 @@ async def test_perform_merge_proceeds_normally_when_guard_returns_empty(
     When scan_editable_installs_for_worktree returns [] (no poisoned installs),
     perform_merge must NOT abort — it must proceed to cleanup normally.
     """
-    import autoskillit.server._editable_guard as guard_module
+    import autoskillit.server.git as git_module
     from autoskillit.server.git import perform_merge
 
     fake_wt = str(tmp_path)
 
     monkeypatch.setattr(
-        guard_module,
+        git_module,
         "scan_editable_installs_for_worktree",
         lambda worktree_path, site_packages_dirs=None: [],
     )

@@ -106,7 +106,7 @@ class TestCLIDoctor:
                 side_effect=lambda cmd: local_bin if cmd == "autoskillit" else shutil.which(cmd),
             ),
             patch(
-                "autoskillit.cli._doctor.subprocess.run",
+                "subprocess.run",
                 return_value=type("R", (), {"returncode": 0, "stdout": local_bin})(),
             ),
         ):

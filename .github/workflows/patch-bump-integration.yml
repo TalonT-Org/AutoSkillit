@@ -5,6 +5,10 @@ on:
     types: [closed]
     branches: [integration]
 
+concurrency:
+  group: patch-bump-integration
+  cancel-in-progress: false
+
 jobs:
   bump-patch:
     permissions:

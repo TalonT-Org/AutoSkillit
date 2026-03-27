@@ -32,6 +32,10 @@ jobs:
           import tomllib, pathlib
           print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])
           ")
+          if ! echo "$CURRENT" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "ERROR: version '$CURRENT' is not a valid semver (X.Y.Z) — cannot compute patch bump" >&2
+            exit 1
+          fi
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           NEW="$MAJOR.$MINOR.$((PATCH + 1))"
           echo "old=$CURRENT" >> "$GITHUB_OUTPUT"

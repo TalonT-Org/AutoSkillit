@@ -330,6 +330,35 @@ class TestPatchBumpIntegrationWorkflow:
             "patch-bump-integration.yml must not force-push to integration"
         )
 
+    def test_has_concurrency_group(self):
+        """Workflow must declare a concurrency group to serialize merge-queue batches."""
+        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        assert wf.get("concurrency") is not None, (
+            "patch-bump-integration.yml must declare a concurrency group — "
+            "without it, batched merge queue PRs race and silently skip version bumps"
+        )
+
+    def test_concurrency_group_name(self):
+        """Concurrency group name must be a fixed string (not PR-number-scoped)."""
+        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        concurrency = wf.get("concurrency", {})
+        group = concurrency.get("group", "")
+        assert group == "patch-bump-integration", (
+            f"concurrency.group must be 'patch-bump-integration' (got {group!r}) — "
+            "a fixed group name ensures all simultaneous batch runs queue behind one another"
+        )
+
+    def test_concurrency_cancel_in_progress_is_false(self):
+        """cancel-in-progress must be false so every queued run executes its bump."""
+        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        concurrency = wf.get("concurrency", {})
+        cancel = concurrency.get("cancel-in-progress", None)
+        assert cancel is False, (
+            f"concurrency.cancel-in-progress must be false (got {cancel!r}) — "
+            "true would cancel intermediate runs, silently skipping version bumps "
+            "for all but the last PR in a merge queue batch"
+        )
+
 
 # ── release.yml ───────────────────────────────────────────────────────────────
 

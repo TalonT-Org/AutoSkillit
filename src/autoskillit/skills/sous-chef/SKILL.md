@@ -31,10 +31,13 @@ responsible for enforcing this regardless of what the plan says.
 
 When `run_skill` returns `needs_retry=true` for **any step**:
 
-- **If `retry_reason: resume` AND the step defines `on_context_limit`** → follow `on_context_limit`.
+- **If `retry_reason: resume` AND `subtype: stale`** → re-execute the same step (decrement the
+  retries counter). A stale session was killed by the hung-process watchdog — this is NOT a
+  context limit. Do NOT follow `on_context_limit`. If retries are exhausted, follow `on_exhausted`.
+- **If `retry_reason: resume` AND `subtype≠stale` AND the step defines `on_context_limit`** → follow `on_context_limit`.
   The worktree or partial state is on disk; route to the designated recovery step
   (typically `test` or `retry_worktree`) to check whether partial work was sufficient.
-- **If `retry_reason: resume` AND the step has no `on_context_limit`** → fall through to `on_failure`.
+- **If `retry_reason: resume` AND `subtype≠stale` AND the step has no `on_context_limit`** → fall through to `on_failure`.
 - **If `retry_reason: drain_race` AND the step defines `on_context_limit`** → follow `on_context_limit`.
   The channel signal confirmed session completion; stdout was not fully flushed before kill.
   Partial progress is confirmed — treat identically to `resume` for routing purposes.
@@ -61,8 +64,11 @@ When a completed worktree implementation needs to be redone (e.g., after a plan 
 - Call `implement-worktree-no-merge` on the revised plan (creates a fresh worktree).
 - Clean up the old worktree explicitly if needed.
 
-Summary: `needs_retry=true` + `retry_reason=resume` or `drain_race` + step has `on_context_limit` → follow `on_context_limit`.
-         `needs_retry=true` + `retry_reason=resume` or `drain_race` + no `on_context_limit` → `on_failure`.
+Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-execute step (decrement retries; on_exhausted when budget gone).
+         `needs_retry=true` + `retry_reason=resume` + `subtype≠stale` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=resume` + `subtype≠stale` + no `on_context_limit` → `on_failure`.
+         `needs_retry=true` + `retry_reason=drain_race` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=drain_race` + no `on_context_limit` → `on_failure`.
          `needs_retry=true` + `retry_reason=stale` → decrement retries counter → `on_failure` when exhausted (no partial progress, not a context limit).
          `needs_retry=true` + any other `retry_reason` → `on_failure` (no partial progress).
 

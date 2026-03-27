@@ -244,6 +244,9 @@ def test_orchestrator_prompt_gates_context_limit_on_retry_reason_resume():
     assert "retry_reason: resume" in prompt, (
         "Prompt must gate on_context_limit routing on retry_reason: resume"
     )
+    # Routing is 2-dimensional: subtype discriminates stale from context_exhaustion
+    assert "subtype" in prompt, "Prompt must reference subtype as a routing discriminant"
+    assert "stale" in prompt, "Prompt must mention stale subtype to give it its own routing branch"
 
 
 def test_orchestrator_prompt_empty_output_falls_to_on_failure():
@@ -307,3 +310,31 @@ def test_show_cook_preview_line_width_bounded_with_implementation_recipe(tmp_pat
     for line in captured.out.splitlines():
         plain = re.sub(r"\x1b\[[0-9;]*m", "", line)
         assert len(plain) <= 120, f"Line too wide ({len(plain)} chars): {plain!r}"
+
+
+def test_orchestrator_prompt_stale_retries_not_routed_to_context_limit():
+    """Stale path (subtype=stale) must be retried, not routed to on_context_limit."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    # Must instruct the orchestrator to check subtype when retry_reason=resume
+    assert "subtype" in prompt
+    # The word "stale" must appear near "retry" (not near "on_context_limit")
+    stale_idx = prompt.find("subtype")
+    window = prompt[stale_idx : stale_idx + 300]
+    assert "stale" in window
+    assert "retry" in window.lower()
+
+
+def test_orchestrator_prompt_context_exhaustion_still_routes_to_context_limit():
+    """Genuine context exhaustion must still route to on_context_limit."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    # context_exhaustion subtype must still route to on_context_limit
+    ctx_idx = prompt.find("context_exhaustion")
+    if ctx_idx == -1:
+        # At minimum, retry_reason=resume without stale must route to on_context_limit
+        resume_idx = prompt.find("retry_reason: resume")
+        window = prompt[resume_idx : resume_idx + 500]
+        assert "on_context_limit" in window

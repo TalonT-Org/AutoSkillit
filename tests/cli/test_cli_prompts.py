@@ -77,6 +77,16 @@ def test_orchestrator_prompt_instructs_open_kitchen_with_recipe_first():
     assert "collect" in prompt[ok_idx:].lower() or "ingredient" in prompt[ok_idx:].lower()
 
 
+def test_orchestrator_prompt_open_kitchen_uses_keyword_form():
+    """open_kitchen must use keyword argument form in the orchestrator prompt."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    assert "open_kitchen(name=" in prompt, (
+        "open_kitchen must use keyword argument form to avoid Claude guessing wrong param name"
+    )
+
+
 def test_orchestrator_prompt_does_not_contain_greeting_pool():
     """Greetings are delivered via positional arg, not embedded in system prompt."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
@@ -234,6 +244,9 @@ def test_orchestrator_prompt_gates_context_limit_on_retry_reason_resume():
     assert "retry_reason: resume" in prompt, (
         "Prompt must gate on_context_limit routing on retry_reason: resume"
     )
+    # Routing is 2-dimensional: subtype discriminates stale from context_exhaustion
+    assert "subtype" in prompt, "Prompt must reference subtype as a routing discriminant"
+    assert "stale" in prompt, "Prompt must mention stale subtype to give it its own routing branch"
 
 
 def test_orchestrator_prompt_empty_output_falls_to_on_failure():
@@ -297,3 +310,39 @@ def test_show_cook_preview_line_width_bounded_with_implementation_recipe(tmp_pat
     for line in captured.out.splitlines():
         plain = re.sub(r"\x1b\[[0-9;]*m", "", line)
         assert len(plain) <= 120, f"Line too wide ({len(plain)} chars): {plain!r}"
+
+
+def test_orchestrator_prompt_stale_retries_not_routed_to_context_limit():
+    """Stale path (subtype=stale) must be retried, not routed to on_context_limit."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    # subtype=stale must appear as an explicit routing discriminant
+    assert "subtype=stale" in prompt or "subtype: stale" in prompt
+    # The prompt must explicitly prohibit routing stale to on_context_limit
+    assert "subtype=stale" in prompt and "on_context_limit" in prompt
+    never_idx = prompt.find("NEVER route")
+    if never_idx != -1:
+        never_window = prompt[never_idx : never_idx + 200]
+        assert "subtype=stale" in never_window or "stale" in never_window.lower()
+    else:
+        # At minimum: stale discriminant must appear in a NOT/DO NOT context
+        stale_idx = prompt.find("subtype=stale")
+        window = prompt[stale_idx : stale_idx + 300]
+        assert "retry" in window.lower()
+        assert "do not" in window.lower() or "not" in window.lower()
+
+
+def test_orchestrator_prompt_context_exhaustion_still_routes_to_context_limit():
+    """Genuine context exhaustion must still route to on_context_limit."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    # context_exhaustion subtype must be explicitly referenced — hard assertion, no fallback
+    ctx_idx = prompt.find("context_exhaustion")
+    assert ctx_idx != -1, (
+        "prompt must reference 'context_exhaustion' subtype to route it to on_context_limit; "
+        "dropping this token causes the routing guard to silently degrade"
+    )
+    window = prompt[ctx_idx : ctx_idx + 500]
+    assert "on_context_limit" in window

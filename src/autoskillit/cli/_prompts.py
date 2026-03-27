@@ -115,12 +115,13 @@ FAILURE PREDICATES — when to follow on_failure:
 
 CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
 - When run_skill returns "success: False" AND "needs_retry: true" AND "retry_reason: resume":
-  - If the current step defines an on_context_limit route → follow on_context_limit.
-  - If the current step has NO on_context_limit route → fall through to on_failure.
-  - "retry_reason: resume" means the session hit a context or turn limit with partial
-    progress on disk. on_context_limit (e.g., retry_worktree or test) checks whether
-    partial work was sufficient before re-running from scratch.
-  - NEVER route retry_reason=resume directly to on_failure when on_context_limit exists.
+  - Check "subtype" to discriminate the termination cause:
+    - If subtype=stale: a transient hung process was killed by the watchdog. Retry
+      the step (decrement the retries counter). Do NOT follow on_context_limit.
+      If retries are exhausted, follow on_exhausted.
+    - If subtype≠stale (e.g. context_exhaustion, error_max_turns): follow on_context_limit
+      if defined, fall through to on_failure otherwise. This is the default resume path.
+  - NEVER route retry_reason=resume with subtype=stale to on_context_limit.
 - When run_skill returns "needs_retry: true" AND "retry_reason: drain_race":
   - The infrastructure confirmed session completion (Channel A or B) but stdout was not
     fully flushed before the process was killed. Partial progress was confirmed by the

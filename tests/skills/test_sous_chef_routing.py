@@ -8,6 +8,10 @@ def test_sous_chef_stale_routing_rule_present():
     from autoskillit.core.paths import pkg_root
 
     skill_md = (pkg_root() / "skills" / "sous-chef" / "SKILL.md").read_text()
-    assert "stale" in skill_md.lower()
-    # subtype must appear as a routing discriminant
-    assert "subtype" in skill_md
+    # Assert the compound routing discriminant, not just individual words — a heading or
+    # description containing "stale" and "subtype" separately would satisfy a weaker check
+    # without the routing rule being correctly wired.
+    assert "subtype: stale" in skill_md or "subtype=stale" in skill_md, (
+        "sous-chef/SKILL.md must contain 'subtype: stale' or 'subtype=stale' as a "
+        "compound routing discriminant, not just the words 'stale' and 'subtype' separately"
+    )

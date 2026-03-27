@@ -116,8 +116,8 @@ FAILURE PREDICATES — when to follow on_failure:
 CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
 - When run_skill returns "success: False" AND "needs_retry: true" AND "retry_reason: resume":
   - Check "subtype" to discriminate the termination cause:
-    - If subtype=stale: a transient hung process was killed by the watchdog. Re-execute
-      the same step (decrement the retries counter). Do NOT follow on_context_limit.
+    - If subtype=stale: a transient hung process was killed by the watchdog. Retry
+      the step (decrement the retries counter). Do NOT follow on_context_limit.
       If retries are exhausted, follow on_exhausted.
     - If subtype≠stale (e.g. context_exhaustion, error_max_turns): follow on_context_limit
       if defined, fall through to on_failure otherwise. This is the default resume path.

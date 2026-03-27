@@ -21,8 +21,7 @@ _TTY_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
         "_prompt_github_repo",  # call-site-guarded: only caller (_register_all) wraps in isatty()
         "_check_secret_scanning",  # custom-handled: returns _ScanResult(False) non-interactively
         "run_onboarding_menu",  # custom-handled: catches EOFError on each input()
-        # custom-handled: guards with isatty() check at function entry before any input()
-        "run_stale_check",
+        "run_stale_check",  # custom-handled: guards with isatty() check at entry
     }
 )
 

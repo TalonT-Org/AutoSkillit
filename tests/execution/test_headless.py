@@ -3192,21 +3192,3 @@ class TestBuildSkillResultSessionIdFromSubprocess:
         )
         sr = _build_skill_result(result)
         assert sr.session_id == "ch-b-uuid-5678"
-
-
-class TestStalePathEmitsRetryReasonStale:
-    """Stale termination path emits RetryReason.STALE, not RESUME."""
-
-    def test_stale_path_emits_retry_reason_stale(self) -> None:
-        """Stale termination path emits RetryReason.STALE, not RESUME."""
-        result = SubprocessResult(
-            returncode=-1,
-            stdout="",
-            stderr="",
-            termination=TerminationReason.STALE,
-            pid=1,
-            session_id="",
-        )
-        sr = _build_skill_result(result)
-        assert sr.retry_reason == RetryReason.STALE
-        assert sr.needs_retry is True

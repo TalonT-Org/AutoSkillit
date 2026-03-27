@@ -77,6 +77,16 @@ def test_orchestrator_prompt_instructs_open_kitchen_with_recipe_first():
     assert "collect" in prompt[ok_idx:].lower() or "ingredient" in prompt[ok_idx:].lower()
 
 
+def test_orchestrator_prompt_open_kitchen_uses_keyword_form():
+    """open_kitchen must use keyword argument form in the orchestrator prompt."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation")
+    assert "open_kitchen(name=" in prompt, (
+        "open_kitchen must use keyword argument form to avoid Claude guessing wrong param name"
+    )
+
+
 def test_orchestrator_prompt_does_not_contain_greeting_pool():
     """Greetings are delivered via positional arg, not embedded in system prompt."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt

@@ -187,6 +187,50 @@ class TestSessionLogDir:
         assert _session_log_dir(cwd) == claude_code_project_dir(cwd)
 
 
+class TestResolveSessionId:
+    """Unit tests for _resolve_session_id — the session UUID resolution helper."""
+
+    def test_prefers_session_session_id(self):
+        """stdout-parsed session_id is preferred over Channel B when both present."""
+        from autoskillit.execution.headless import _resolve_session_id
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        session = ClaudeSessionResult(
+            session_id="from-stdout", subtype="success", is_error=False, result="", errors=[]
+        )
+        result = _sr(channel_b_session_id="from-channel-b")
+        assert _resolve_session_id(session, result) == "from-stdout"
+
+    def test_falls_back_to_channel_b_when_session_empty(self):
+        """Channel B UUID is used when stdout-parsed session_id is empty."""
+        from autoskillit.execution.headless import _resolve_session_id
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        session = ClaudeSessionResult(
+            session_id="", subtype="success", is_error=False, result="", errors=[]
+        )
+        result = _sr(channel_b_session_id="from-channel-b")
+        assert _resolve_session_id(session, result) == "from-channel-b"
+
+    def test_returns_empty_when_both_empty(self):
+        """Returns empty string when neither source has a session ID."""
+        from autoskillit.execution.headless import _resolve_session_id
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        session = ClaudeSessionResult(
+            session_id="", subtype="success", is_error=False, result="", errors=[]
+        )
+        result = _sr(channel_b_session_id="")
+        assert _resolve_session_id(session, result) == ""
+
+    def test_handles_none_session(self):
+        """When session is None, falls back to Channel B UUID."""
+        from autoskillit.execution.headless import _resolve_session_id
+
+        result = _sr(channel_b_session_id="from-channel-b")
+        assert _resolve_session_id(None, result) == "from-channel-b"
+
+
 class TestBuildSkillResult:
     """Coverage for _build_skill_result — the primary output-routing function."""
 
@@ -243,6 +287,94 @@ class TestBuildSkillResult:
         )
         assert skill.success is False
         assert skill.needs_retry is True
+
+    def test_build_skill_result_stale_path_uses_channel_b_session_id(self):
+        """_build_skill_result must populate session_id from Channel B on stale path."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        result = SubprocessResult(
+            returncode=1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=12345,
+            channel_b_session_id="b077addc-926d-4869-b27a-7465a4c0fda4",
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="ORDER_UP",
+            skill_command="/autoskillit:review-approach",
+            audit=None,
+            expected_output_patterns=[],
+            cwd="/tmp",
+        )
+        assert skill_result.session_id == "b077addc-926d-4869-b27a-7465a4c0fda4"
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
+
+    def test_build_skill_result_timeout_empty_stdout_uses_channel_b_session_id(self):
+        """_build_skill_result must use Channel B session_id on TIMED_OUT with empty stdout."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        result = SubprocessResult(
+            returncode=1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+            channel_b_session_id="c1ee2a00-1234-5678-abcd-deadbeefcafe",
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="ORDER_UP",
+            skill_command="/autoskillit:implement-worktree",
+            audit=None,
+            expected_output_patterns=[],
+            cwd="/tmp",
+        )
+        assert skill_result.session_id == "c1ee2a00-1234-5678-abcd-deadbeefcafe"
+        assert skill_result.success is False
+
+    def test_build_skill_result_prefers_stdout_session_id_over_channel_b(self):
+        """stdout-parsed session_id takes precedence over Channel B UUID."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        stdout_session = "aaaaaaaa-0000-0000-0000-000000000001"
+        channel_b_uuid = "bbbbbbbb-0000-0000-0000-000000000002"
+        stdout = (
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "session_id": stdout_session,
+                    "result": "ORDER_UP\n",
+                    "is_error": False,
+                }
+            )
+            + "\n"
+        )
+        result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_b_session_id=channel_b_uuid,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="ORDER_UP",
+            skill_command="/autoskillit:smoke-task",
+            audit=None,
+            expected_output_patterns=[],
+            cwd="/tmp",
+        )
+        assert skill_result.session_id == stdout_session  # NOT channel_b_uuid
+
+    def test_make_result_exposes_channel_b_session_id(self):
+        """_make_result must accept channel_b_session_id to enable Channel B path tests."""
+        result = _make_result(channel_b_session_id="test-uuid-123")
+        assert result.channel_b_session_id == "test-uuid-123"
 
 
 class TestRecoverFromSeparateMarker:

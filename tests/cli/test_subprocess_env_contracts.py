@@ -86,11 +86,6 @@ def test_autoskillit_subprocess_calls_inject_skip_stale_check_guard() -> None:
     )
 
 
-# NOTE: test_stale_check_all_subprocess_calls_have_env_kwarg (in test_stale_check.py)
-# extends this contract to cover ALL subprocess calls within _stale_check.py,
-# including ["uv", ...] calls that are invisible to this file's AST scanner.
-
-
 def test_stale_check_all_subprocess_calls_have_env_kwarg() -> None:
     """Every subprocess.run call in cli/_stale_check.py must carry env=.
 

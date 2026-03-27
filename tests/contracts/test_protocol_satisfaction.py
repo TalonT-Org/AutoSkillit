@@ -166,6 +166,15 @@ def test_default_test_runner_satisfies_test_runner():
     assert isinstance(DefaultTestRunner(mock_config, MagicMock()), TestRunner)
 
 
+def test_test_runner_return_type_is_test_result() -> None:
+    from typing import get_type_hints
+
+    from autoskillit.core import TestResult, TestRunner
+
+    hints = get_type_hints(TestRunner.run)
+    assert hints["return"] is TestResult
+
+
 def test_default_headless_executor_satisfies_headless_executor():
     from unittest.mock import MagicMock
 

@@ -10,6 +10,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     SubprocessRunner,
     TerminationReason,
+    TestResult,
 )
 from tests._helpers import _flush_structlog_proxy_caches
 
@@ -18,18 +19,19 @@ class StatefulMockTester:
     """Test double for TestRunner returning pre-configured results on successive calls.
 
     Enables the scenario: pre-rebase tests pass, post-rebase tests fail.
-    Falls back to (True, "") for any call beyond the configured list.
+    Falls back to TestResult(passed=True, stdout="", stderr="") for any call beyond the
+    configured list.
     """
 
-    def __init__(self, results: list[tuple[bool, str]]) -> None:
+    def __init__(self, results: list[TestResult]) -> None:
         self._results = list(results)
         self._index = 0
 
-    async def run(self, cwd: _Path) -> tuple[bool, str]:
+    async def run(self, cwd: _Path) -> TestResult:
         if self._index < len(self._results):
             result = self._results[self._index]
         else:
-            result = (True, "")
+            result = TestResult(passed=True, stdout="", stderr="")
         self._index += 1
         return result
 

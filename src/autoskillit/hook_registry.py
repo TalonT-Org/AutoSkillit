@@ -49,6 +49,10 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["branch_protection_guard.py"],
     ),
     HookDef(
+        matcher=r"mcp__.*autoskillit.*__run_cmd",
+        scripts=["unsafe_install_guard.py"],
+    ),
+    HookDef(
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*",
         scripts=["headless_orchestration_guard.py"],
     ),

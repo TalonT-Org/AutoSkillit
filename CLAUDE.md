@@ -202,6 +202,7 @@ src/autoskillit/
 │   ├── __init__.py          #   FastMCP app, kitchen gating (mcp.disable tags={'kitchen'}),
 │   │                        #   headless tool reveal (AUTOSKILLIT_HEADLESS)
 │   ├── git.py               #   Git merge workflow for merge_worktree (perform_merge)
+│   ├── _editable_guard.py   #   Pre-deletion editable install guard — scan_editable_installs_for_worktree (stdlib-only)
 │   ├── helpers.py           #   Shared server-layer helpers (worktree setup, path utilities)
 │   ├── tools_kitchen.py     #   open_kitchen, close_kitchen tool handlers + recipe:// resource
 │   ├── tools_ci.py          #   wait_for_ci, get_ci_status, set_commit_status, toggle_auto_merge, wait_for_merge_queue tool handlers
@@ -241,6 +242,7 @@ src/autoskillit/
 │   ├── skill_cmd_check.py   #   PreToolUse hook — validates skill_command path argument format
 │   ├── skill_command_guard.py #  PreToolUse hook — blocks run_skill with non-slash skill_command
 │   ├── open_kitchen_guard.py #  PreToolUse hook — blocks open_kitchen from headless sessions
+│   ├── unsafe_install_guard.py #  PreToolUse hook — blocks run_cmd editable installs without --python .venv
 │   ├── headless_orchestration_guard.py #  PreToolUse hook — blocks run_skill/run_cmd/run_python from headless sessions
 │   ├── pretty_output.py     #   PostToolUse hook — reformats MCP JSON responses as Markdown-KV
 │   ├── token_summary_appender.py #  PostToolUse hook — appends ## Token Usage Summary table to PR body after run_skill returns a GitHub PR URL

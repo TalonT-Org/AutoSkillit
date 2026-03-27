@@ -54,6 +54,7 @@ def test_merge_failed_step_values():
         MergeFailedStep.GENERATED_FILE_CLEANUP,
         MergeFailedStep.POST_REBASE_TEST_GATE,
         MergeFailedStep.MERGE,
+        MergeFailedStep.EDITABLE_INSTALL_GUARD,
     }
 
 
@@ -69,6 +70,7 @@ def test_merge_state_values():
         MergeState.WORKTREE_DIRTY_MID_OPERATION,
         MergeState.MAIN_REPO_MERGE_ABORTED,
         MergeState.MAIN_REPO_DIRTY_ABORT_FAILED,
+        MergeState.MERGE_SUCCEEDED_CLEANUP_BLOCKED,
     }
 
 

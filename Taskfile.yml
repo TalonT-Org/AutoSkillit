@@ -154,4 +154,4 @@ tasks:
     desc: Install dev version of autoskillit from the integration branch
     cmds:
       - uv tool install --force "git+https://github.com/TalonT-Org/AutoSkillit.git@integration"
-      - autoskillit install
+      - "$(uv tool dir)/autoskillit/bin/autoskillit install"

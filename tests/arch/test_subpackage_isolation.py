@@ -526,13 +526,15 @@ def test_cli_is_package() -> None:
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 16 Python files (REQ-DSGN-002).
+    """server/ must not exceed 17 Python files (REQ-DSGN-002).
 
     Limit updated from 14 to 16 after tools_integrations was split into
     tools_github, tools_issue_lifecycle, and tools_pr_ops.
+    Limit updated from 16 to 17 after _editable_guard.py was added as
+    the pre-deletion editable install guard for perform_merge().
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 16, f"server/ has {len(py_files)} files, max is 16"
+    assert len(py_files) <= 17, f"server/ has {len(py_files)} files, max is 17"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
@@ -686,12 +688,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
         Exempt at 11 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 16,
+        "server": 17,
         "recipe": 27,
         "execution": 23,
         "core": 15,
         "cli": 15,
-        "hooks": 11,
+        "hooks": 12,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):

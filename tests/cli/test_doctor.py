@@ -99,10 +99,15 @@ class TestCLIDoctor:
         settings_path = tmp_path / ".claude" / "settings.json"
         _evict_stale_autoskillit_hooks(settings_path)
         sync_hooks_to_settings(settings_path)
-        with patch(
-            "autoskillit.cli.shutil.which",
-            side_effect=lambda cmd: (
-                "/usr/local/bin/autoskillit" if cmd == "autoskillit" else shutil.which(cmd)
+        local_bin = str(tmp_path / ".local" / "bin" / "autoskillit")
+        with (
+            patch(
+                "autoskillit.cli.shutil.which",
+                side_effect=lambda cmd: local_bin if cmd == "autoskillit" else shutil.which(cmd),
+            ),
+            patch(
+                "subprocess.run",
+                return_value=type("R", (), {"returncode": 0, "stdout": local_bin})(),
             ),
         ):
             cli.doctor()
@@ -195,6 +200,8 @@ class TestCLIDoctor:
             "script_version_health",
             "gitignore_completeness",
             "secret_scanning_hook",
+            "editable_install_source_exists",  # ★ new
+            "stale_entry_points",  # ★ new
         }
         assert expected <= check_names
 
@@ -924,3 +931,144 @@ def test_doctor_json_output_includes_hook_registry_drift(
     drift = next(r for r in data["results"] if r["check"] == "hook_registry_drift")
     # No settings.json in tmp_path → all canonical hooks missing → WARNING
     assert drift["severity"] == Severity.WARNING
+
+
+class TestEditableInstallSourceExistsCheck:
+    """Tests for the editable_install_source_exists doctor check."""
+
+    def test_check_ok_when_not_editable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Non-editable install → OK."""
+        import importlib.metadata as meta
+
+        from autoskillit.cli._doctor import _check_editable_install_source_exists
+
+        class FakeDist:
+            def read_text(self, filename: str) -> str | None:
+                if filename == "direct_url.json":
+                    return '{"url": "https://pypi.org/...", "dir_info": {"editable": false}}'
+                return None
+
+        monkeypatch.setattr(meta.Distribution, "from_name", lambda name: FakeDist())
+        result = _check_editable_install_source_exists()
+        assert result.check == "editable_install_source_exists"
+        assert result.severity.value == "ok"
+
+    def test_check_error_when_editable_source_missing(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Editable install pointing to a deleted directory → ERROR."""
+        import importlib.metadata as meta
+
+        from autoskillit.cli._doctor import _check_editable_install_source_exists
+
+        deleted_path = tmp_path / "deleted-worktree" / "src"
+        # Do NOT create deleted_path — it does not exist
+
+        class FakeDist:
+            def read_text(self, filename: str) -> str | None:
+                if filename == "direct_url.json":
+                    return json.dumps(
+                        {
+                            "url": f"file://{deleted_path}",
+                            "dir_info": {"editable": True},
+                        }
+                    )
+                return None
+
+        monkeypatch.setattr(meta.Distribution, "from_name", lambda name: FakeDist())
+        result = _check_editable_install_source_exists()
+        assert result.check == "editable_install_source_exists"
+        assert result.severity.value == "error"
+        assert str(deleted_path) in result.message
+
+    def test_check_ok_when_editable_source_exists(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Editable install pointing to an existing directory → OK."""
+        import importlib.metadata as meta
+
+        from autoskillit.cli._doctor import _check_editable_install_source_exists
+
+        existing_path = tmp_path / "src"
+        existing_path.mkdir()
+
+        class FakeDist:
+            def read_text(self, filename: str) -> str | None:
+                if filename == "direct_url.json":
+                    return json.dumps(
+                        {
+                            "url": f"file://{existing_path}",
+                            "dir_info": {"editable": True},
+                        }
+                    )
+                return None
+
+        monkeypatch.setattr(meta.Distribution, "from_name", lambda name: FakeDist())
+        result = _check_editable_install_source_exists()
+        assert result.check == "editable_install_source_exists"
+        assert result.severity.value == "ok"
+
+    def test_check_ok_when_not_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """PackageNotFoundError → check returns OK (not installed in this env)."""
+        import importlib.metadata as meta
+
+        from autoskillit.cli._doctor import _check_editable_install_source_exists
+
+        monkeypatch.setattr(
+            meta.Distribution,
+            "from_name",
+            lambda name: (_ for _ in ()).throw(meta.PackageNotFoundError(name)),
+        )
+        result = _check_editable_install_source_exists()
+        assert result.check == "editable_install_source_exists"
+        assert result.severity.value == "ok"
+
+
+class TestStaleEntryPointsCheck:
+    """Tests for the stale_entry_points doctor check."""
+
+    def test_check_ok_when_single_entry_point_in_local_bin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Single autoskillit binary at ~/.local/bin → OK."""
+        import subprocess
+
+        from autoskillit.cli._doctor import _check_stale_entry_points
+
+        local_bin_path = str(Path.home() / ".local/bin/autoskillit")
+        monkeypatch.setattr(shutil, "which", lambda name: local_bin_path)
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": local_bin_path})(),
+        )
+        result = _check_stale_entry_points()
+        assert result.check == "stale_entry_points"
+        assert result.severity.value == "ok"
+
+    def test_check_warning_when_stale_entry_point_outside_local_bin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """autoskillit binary outside ~/.local/bin → WARNING."""
+        import subprocess
+
+        from autoskillit.cli._doctor import _check_stale_entry_points
+
+        stale_path = "/usr/local/micromamba/bin/autoskillit"
+        monkeypatch.setattr(shutil, "which", lambda name: stale_path)
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: type(
+                "R",
+                (),
+                {
+                    "returncode": 0,
+                    "stdout": f"{stale_path}\n{Path.home()}/.local/bin/autoskillit",
+                },
+            )(),
+        )
+        result = _check_stale_entry_points()
+        assert result.check == "stale_entry_points"
+        assert result.severity.value == "warning"
+        assert stale_path in result.message

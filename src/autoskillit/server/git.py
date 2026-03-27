@@ -24,6 +24,7 @@ from autoskillit.core import (
     is_protected_branch,
     truncate_text,
 )
+from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -382,6 +383,33 @@ async def perform_merge(
             "stderr": merge_stderr,
             "worktree_path": worktree_path,
             **({"abort_failed": True, "abort_stderr": abort_stderr} if abort_failed else {}),
+        }
+
+    # 8.5. Pre-deletion editable install guard
+    poisoned = scan_editable_installs_for_worktree(Path(worktree_path))
+    if poisoned:
+        descriptions = "; ".join(poisoned)
+        logger.error(
+            "merge_worktree_editable_install_guard",
+            worktree_path=worktree_path,
+            poisoned_installs=poisoned,
+        )
+        return {
+            "error": (
+                f"Editable install(s) targeting this worktree detected in system Python: "
+                f"{descriptions}. "
+                f"Remove the editable install first: "
+                f"`uv pip uninstall autoskillit --python <system-python>` "
+                f"then re-run merge_worktree."
+            ),
+            "failed_step": MergeFailedStep.EDITABLE_INSTALL_GUARD,
+            "state": MergeState.MERGE_SUCCEEDED_CLEANUP_BLOCKED,
+            "worktree_path": worktree_path,
+            "merge_succeeded": True,
+            "poisoned_installs": poisoned,
+            "worktree_removed": False,
+            "branch_deleted": False,
+            "cleanup_succeeded": False,
         }
 
     # 9. Cleanup

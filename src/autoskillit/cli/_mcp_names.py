@@ -38,7 +38,7 @@ def detect_autoskillit_mcp_prefix() -> str:
         data = json.loads(_installed_plugins_path().read_text())
         if _AUTOSKILLIT_PLUGIN_KEY in data.get("plugins", {}):
             return MARKETPLACE_PREFIX
-    except (OSError, json.JSONDecodeError, AttributeError):
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
         pass
     return DIRECT_PREFIX
 

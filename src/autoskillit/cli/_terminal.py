@@ -47,8 +47,8 @@ def terminal_guard() -> Generator[None, None, None]:
         try:
             sys.stdout.write("\033[?1049h")
             sys.stdout.flush()
-        except OSError:
-            pass
+        except OSError as exc:
+            _log.debug("alt-screen entry write failed: %s", exc)
 
     try:
         yield

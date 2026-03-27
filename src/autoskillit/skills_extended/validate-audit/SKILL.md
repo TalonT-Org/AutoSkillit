@@ -33,6 +33,8 @@ signal downstream processing.
   `audit-tests`, or `audit-cohesion`. If omitted, use the most recent file under
   `.autoskillit/temp/audit-arch/`, `.autoskillit/temp/audit-tests/`, or
   `.autoskillit/temp/audit-cohesion/` (most recent mtime wins across all three).
+  If no files exist under any of these directories, print an error message and exit
+  with a non-zero status.
 
 ## Critical Constraints
 
@@ -80,6 +82,10 @@ Read the audit report file. Detect its source by examining the document title or
 - **audit-tests**: Title contains "Test Suite Audit" or findings reference issue categories
 - **audit-cohesion**: Title contains "Cohesion Audit" or findings reference "Dimension C{N}"
 
+If none of the three patterns match, print:
+`"Error: unrecognized audit report format — expected title 'Architectural Audit', 'Test Suite Audit', or 'Cohesion Audit'. Aborting."`
+and exit with a non-zero status.
+
 For each finding, extract:
 - **ID** — principle/category/dimension label (e.g., P3, Category 1, C5) or a short slug
 - **Text** — the full finding description
@@ -99,7 +105,7 @@ by the top-level package touched (e.g., `pipeline/`, `execution/`, `server/`, `c
 
 - Target **8–9 code-area batches** for code validation agents.
 - Findings without file references: place in a "cross-cutting" batch.
-- Fewer than 8 distinct areas: merge smallest clusters until ≥ 8 groups exist.
+- Fewer than 8 distinct areas: assign each area its own batch; use however many batches are available.
 - More than 9 distinct areas: merge smallest clusters until ≤ 9 groups remain.
 - The 10th slot is reserved for the history research agent (runs against ALL findings).
 

@@ -463,3 +463,81 @@ def test_read_dismiss_state_non_dict_json_returns_empty(tmp_path: Path) -> None:
 
     result = _read_dismiss_state(tmp_path)
     assert result == {}, f"Expected empty dict for non-dict JSON root, got: {result}"
+
+
+# SC-B-2: is_dev_mode() returns False when pkg_root() is inside a git worktree
+def test_is_dev_mode_git_file_worktree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """is_dev_mode() returns False when pkg_root() is inside a git worktree
+    (i.e., .git is a file, not a directory)."""
+    import autoskillit.cli._stale_check as _sc
+
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    worktree_dir = repo_root / "src" / "autoskillit"
+    worktree_dir.mkdir(parents=True)
+    # .git as a file = worktree indicator
+    (repo_root / ".git").write_text("gitdir: /some/real/repo/.git/worktrees/foo")
+
+    monkeypatch.setattr(_sc, "pkg_root", lambda: worktree_dir)
+
+    result = _sc.is_dev_mode(home=tmp_path)
+    assert result is False, (
+        "is_dev_mode() must return False when pkg_root() is inside a git worktree (.git is a file)"
+    )
+
+
+# SC-B-3: dev-mode Y-path dispatches editable install command when direct_url.json reports editable
+def test_run_stale_check_dev_mode_editable_install_y_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Dev-mode Y-path with editable install must dispatch 'uv pip install -e <dir>'
+    instead of 'uv tool install --force'."""
+    import importlib.metadata
+
+    import autoskillit.cli._stale_check as _sc
+
+    monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: True)
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "99.0.0")
+    monkeypatch.setattr(_sc, "_read_dismiss_state", lambda home: {})
+    monkeypatch.setattr(_sc.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(_sc.sys.stdout, "isatty", lambda: True)
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+
+    import autoskillit as _pkg
+
+    monkeypatch.setattr(_pkg, "__version__", "0.6.7")
+
+    # Simulate editable install: direct_url.json reports editable=True
+    fake_dist = MagicMock()
+    fake_dist.read_text.return_value = (
+        '{"url": "file:///home/user/autoskillit", "dir_info": {"editable": true}}'
+    )
+    monkeypatch.setattr(
+        importlib.metadata.Distribution,
+        "from_name",
+        staticmethod(lambda name: fake_dist),
+    )
+    # Simulate successful update
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "99.0.0")
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> object:
+        calls.append(cmd)
+        return type("R", (), {"returncode": 0})()
+
+    monkeypatch.setattr(_sc.subprocess, "run", fake_run)
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+
+    _sc.run_stale_check(home=tmp_path)
+
+    uv_calls = [c for c in calls if c[0] == "uv"]
+    assert len(uv_calls) == 1
+    assert uv_calls[0][:3] == ["uv", "pip", "install"], (
+        f"Editable install should use 'uv pip install -e', got: {uv_calls[0]}"
+    )
+    assert "-e" in uv_calls[0]
+    assert "/home/user/autoskillit" in uv_calls[0]
+    # Must NOT use uv tool install --force for editable installs
+    assert not any("tool" in str(c) and "install" in str(c) for c in uv_calls)

@@ -1250,3 +1250,34 @@ class TestOrderMcpPrefixSelection:
         prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
         captured_prompt = cmd[prompt_idx + 1]
         assert f"{MARKETPLACE_PREFIX}open_kitchen" in captured_prompt
+
+
+# SC-B-4: mark_onboarded() must NOT be called when the cook subprocess exits non-zero
+def test_cook_mark_onboarded_not_called_on_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """mark_onboarded() must not be called when the cook subprocess exits non-zero."""
+    import autoskillit.cli._cook as _cook
+
+    onboarded_calls: list[Path] = []
+    monkeypatch.setattr(
+        _cook, "mark_onboarded", lambda project_dir: onboarded_calls.append(project_dir)
+    )
+
+    def fake_run(cmd: list[str], env: dict[str, str] | None = None) -> object:
+        return type("R", (), {"returncode": 1})()
+
+    monkeypatch.setattr(_cook.subprocess, "run", fake_run)
+
+    with pytest.raises(SystemExit):
+        _cook._run_cook_session(
+            cmd=["claude", "--test"],
+            env={},
+            _first_run=True,
+            initial_prompt="test",
+            project_dir=tmp_path,
+        )
+
+    assert onboarded_calls == [], (
+        "mark_onboarded() must not be called when the subprocess exits non-zero"
+    )

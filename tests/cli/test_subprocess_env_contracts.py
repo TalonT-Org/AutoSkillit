@@ -84,3 +84,48 @@ def test_autoskillit_subprocess_calls_inject_skip_stale_check_guard() -> None:
         f"Found {len(violations)} subprocess.run(['autoskillit', ...]) call(s) "
         f"not satisfying the env guard contract:\n\n" + "\n\n".join(violations)
     )
+
+
+# NOTE: test_stale_check_all_subprocess_calls_have_env_kwarg (in test_stale_check.py)
+# extends this contract to cover ALL subprocess calls within _stale_check.py,
+# including ["uv", ...] calls that are invisible to this file's AST scanner.
+
+
+def test_stale_check_all_subprocess_calls_have_env_kwarg() -> None:
+    """Every subprocess.run call in cli/_stale_check.py must carry env=.
+
+    This is a stronger contract than test_autoskillit_subprocess_calls_inject_skip_stale_check_guard,
+    which only checks ['autoskillit', ...] prefix calls. The stale check also
+    invokes ['uv', ...] commands and those must also carry env=_skip_env to
+    prevent environment pollution into child processes.
+    """
+    stale_check = CLI_ROOT / "_stale_check.py"
+    if not stale_check.exists():
+        pytest.skip("Source tree unavailable")
+
+    content = stale_check.read_text(encoding="utf-8")
+    tree = ast.parse(content)
+
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (
+            isinstance(func, ast.Attribute)
+            and func.attr in ("run", "Popen")
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "subprocess"
+        ):
+            continue
+        has_env = any(kw.arg == "env" for kw in node.keywords)
+        if not has_env:
+            violations.append(f"Line {node.lineno}: subprocess.{func.attr}() missing env= kwarg")
+
+    assert not violations, (
+        "All subprocess calls in _stale_check.py must carry env=_skip_env.\n"
+        + "\n".join(violations)
+    )
+
+    # File-level: must also define AUTOSKILLIT_SKIP_STALE_CHECK
+    assert REQUIRED_GUARD in content

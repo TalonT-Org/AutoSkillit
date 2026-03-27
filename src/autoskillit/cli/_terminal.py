@@ -25,10 +25,18 @@ _log = get_logger(__name__)
 def terminal_guard() -> Generator[None, None, None]:
     """Save and restore terminal state around an interactive subprocess.
 
+    Exit-only safety net: this guard emits NO entry-side terminal mode-switch
+    sequences. The subprocess is the sole owner of alt-screen entry (e.g.,
+    Claude Code's Ink TUI emits its own \\033[?1049h on startup). Emitting
+    \\033[?1049h before the subprocess would cause double-emission of DECSET
+    1049, overwriting the DECSC cursor save point set by Ink and corrupting its
+    viewport height calculation (DECSET 1049 is a boolean toggle — no nesting
+    counter exists in any terminal emulator).
+
     On entry: saves termios TTY attributes (kernel TTY discipline).
     On exit (any path, including exceptions): restores saved attributes and
-    emits VT100 reset sequences to undo application-mode escape sequences
-    that Claude Code may have sent but not reverted on abnormal exit.
+    emits VT100 reset sequences as a safety net for application-mode escape
+    sequences that Claude Code may have sent but not reverted on abnormal exit.
 
     Safe to call when stdin is not a real TTY (pipes, CI, headless tests):
     detection is done gracefully and the context manager becomes a no-op.
@@ -42,13 +50,6 @@ def terminal_guard() -> Generator[None, None, None]:
             old_settings = termios.tcgetattr(fd)
         except (termios.error, OSError, TypeError):
             fd = None
-
-    if fd is not None:
-        try:
-            sys.stdout.write("\033[?1049h")
-            sys.stdout.flush()
-        except OSError as exc:
-            _log.debug("alt-screen entry write failed: %s", exc)
 
     try:
         yield

@@ -488,7 +488,7 @@ def _build_skill_result(
                 return SkillResult(
                     success=True,
                     result=_truncate(stale_session.agent_result),
-                    session_id=stale_session.session_id or result.session_id,
+                    session_id=stale_session.session_id or _resolve_session_id(None, result),
                     subtype="recovered_from_stale",
                     is_error=False,
                     exit_code=stale_returncode,
@@ -513,7 +513,7 @@ def _build_skill_result(
                 "Session went stale (no activity for configured threshold). "
                 "Partial progress may have been made. Retry to continue."
             ),
-            session_id=result.session_id,
+            session_id=_resolve_session_id(None, result),
             subtype="stale",
             is_error=False,
             exit_code=-1,
@@ -535,7 +535,7 @@ def _build_skill_result(
                 subtype=CliSubtype.TIMEOUT,
                 is_error=True,
                 result="",
-                session_id=result.session_id,
+                session_id=_resolve_session_id(None, result),
                 errors=[],
             )
     else:

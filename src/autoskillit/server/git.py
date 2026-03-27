@@ -337,6 +337,8 @@ async def perform_merge(
                 "failed_step": MergeFailedStep.POST_REBASE_TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
+                "test_stdout": test_result.stdout,
+                "test_stderr": test_result.stderr,
             }
 
     # 7. Discover main repo path

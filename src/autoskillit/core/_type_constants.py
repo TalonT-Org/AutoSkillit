@@ -33,6 +33,7 @@ AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
 AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
     {
         "AUTOSKILLIT_HEADLESS",
+        "AUTOSKILLIT_SKIP_STALE_CHECK",
     }
 )
 

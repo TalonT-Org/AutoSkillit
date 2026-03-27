@@ -224,6 +224,11 @@ def _clear_headless_env(monkeypatch):
         mcp.disable(tags={"kitchen"})
 
 
+@pytest.fixture(autouse=True)
+def _clear_skip_stale_check_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+
+
 @pytest.fixture(scope="function")
 def anyio_backend():
     """Lock all @pytest.mark.anyio tests to the asyncio backend."""

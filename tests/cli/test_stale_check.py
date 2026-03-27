@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import io
+import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -165,3 +167,94 @@ def test_run_stale_check_writes_dismiss_on_no(
     binary_entry = state.get("binary")
     assert isinstance(binary_entry, dict)
     assert binary_entry.get("dismissed_version") == "0.9.0"
+
+
+# SC-14: binary update Y-path — subprocess calls receive AUTOSKILLIT_SKIP_STALE_CHECK env
+def test_run_stale_check_binary_update_y_path_injects_guard_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+    fake_stdin = io.StringIO("y\n")
+    fake_stdout = io.StringIO()
+    import autoskillit
+    import autoskillit.cli._stale_check as _sc
+
+    monkeypatch.setattr(_sc.sys, "stdin", fake_stdin)
+    monkeypatch.setattr(_sc.sys, "stdout", fake_stdout)
+    monkeypatch.setattr(fake_stdin, "isatty", lambda: True)
+    monkeypatch.setattr(fake_stdout, "isatty", lambda: True)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(autoskillit, "__version__", "0.1.0")
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "9.9.9")
+    monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
+    import autoskillit.cli._doctor as _doctor
+
+    monkeypatch.setattr(_doctor, "_count_hook_registry_drift", lambda p: 0)
+
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(_sc.subprocess, "run", mock_run)
+    monkeypatch.setattr(_sc, "_is_dismissed", lambda *a, **kw: False)
+
+    _sc.run_stale_check(home=tmp_path)
+
+    assert mock_run.call_count == 2
+    assert mock_run.call_args_list[0][0][0] == ["uv", "tool", "upgrade", "autoskillit"]
+    assert mock_run.call_args_list[1][0][0] == ["autoskillit", "install"]
+    assert "AUTOSKILLIT_SKIP_STALE_CHECK" in mock_run.call_args_list[0].kwargs["env"]
+    assert "AUTOSKILLIT_SKIP_STALE_CHECK" in mock_run.call_args_list[1].kwargs["env"]
+    assert mock_run.call_args_list[0].kwargs["env"]["AUTOSKILLIT_SKIP_STALE_CHECK"] == "1"
+    assert mock_run.call_args_list[1].kwargs["env"]["AUTOSKILLIT_SKIP_STALE_CHECK"] == "1"
+
+
+# SC-15: hook drift Y-path — subprocess call receives AUTOSKILLIT_SKIP_STALE_CHECK env
+def test_run_stale_check_hook_drift_y_path_injects_guard_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+    fake_stdin = io.StringIO("y\n")
+    fake_stdout = io.StringIO()
+    import autoskillit.cli._stale_check as _sc
+
+    monkeypatch.setattr(_sc.sys, "stdin", fake_stdin)
+    monkeypatch.setattr(_sc.sys, "stdout", fake_stdout)
+    monkeypatch.setattr(fake_stdin, "isatty", lambda: True)
+    monkeypatch.setattr(fake_stdout, "isatty", lambda: True)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: None)
+    import autoskillit.cli._doctor as _doctor
+
+    monkeypatch.setattr(_doctor, "_count_hook_registry_drift", lambda p: 3)
+    monkeypatch.setattr(_sc, "_is_dismissed", lambda *a, **kw: False)
+
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(_sc.subprocess, "run", mock_run)
+
+    _sc.run_stale_check(home=tmp_path)
+
+    assert mock_run.call_count == 1
+    assert mock_run.call_args_list[0][0][0] == ["autoskillit", "install"]
+    assert "AUTOSKILLIT_SKIP_STALE_CHECK" in mock_run.call_args_list[0].kwargs["env"]
+    assert mock_run.call_args_list[0].kwargs["env"]["AUTOSKILLIT_SKIP_STALE_CHECK"] == "1"
+
+
+# SC-16: re-entry guard — run_stale_check returns immediately when env var set
+def test_run_stale_check_returns_immediately_when_skip_env_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.cli._stale_check as _sc
+
+    monkeypatch.setenv("AUTOSKILLIT_SKIP_STALE_CHECK", "1")
+    monkeypatch.setattr(_sc.sys, "stdin", MagicMock(isatty=lambda: True))
+    monkeypatch.setattr(_sc.sys, "stdout", MagicMock(isatty=lambda: True))
+    calls: list[str] = []
+
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *a: calls.append("fetch") or None)
+    mock_run = MagicMock()
+    monkeypatch.setattr(_sc.subprocess, "run", mock_run)
+
+    _sc.run_stale_check()
+
+    assert "fetch" not in calls
+    mock_run.assert_not_called()

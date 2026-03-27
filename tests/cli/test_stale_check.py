@@ -71,10 +71,8 @@ def test_read_dismiss_state_malformed(tmp_path: Path) -> None:
 def test_write_dismiss_state_roundtrip(tmp_path: Path) -> None:
     from autoskillit.cli._stale_check import _read_dismiss_state, _write_dismiss_state
 
-    state = {
-        "dismissed_at": "2026-03-26T00:00:00+00:00",
-        "dismissed_version": "1.2.3",
-        "check_type": "binary",
+    state: dict[str, object] = {
+        "binary": {"dismissed_at": "2026-03-26T00:00:00+00:00", "dismissed_version": "1.2.3"},
     }
     _write_dismiss_state(tmp_path, state)
     result = _read_dismiss_state(tmp_path)
@@ -86,10 +84,8 @@ def test_is_dismissed_within_window(tmp_path: Path) -> None:
     from autoskillit.cli._stale_check import _is_dismissed
 
     recently = datetime.now(UTC) - timedelta(days=1)
-    state = {
-        "dismissed_at": recently.isoformat(),
-        "dismissed_version": "1.2.3",
-        "check_type": "binary",
+    state: dict[str, object] = {
+        "binary": {"dismissed_at": recently.isoformat(), "dismissed_version": "1.2.3"},
     }
     assert _is_dismissed(state, "binary", "1.2.3") is True
 
@@ -99,10 +95,8 @@ def test_is_dismissed_expired(tmp_path: Path) -> None:
     from autoskillit.cli._stale_check import _is_dismissed
 
     old = datetime.now(UTC) - timedelta(days=8)
-    state = {
-        "dismissed_at": old.isoformat(),
-        "dismissed_version": "1.2.3",
-        "check_type": "binary",
+    state: dict[str, object] = {
+        "binary": {"dismissed_at": old.isoformat(), "dismissed_version": "1.2.3"},
     }
     assert _is_dismissed(state, "binary", "1.2.3") is False
 
@@ -112,10 +106,8 @@ def test_is_dismissed_newer_version_resets(tmp_path: Path) -> None:
     from autoskillit.cli._stale_check import _is_dismissed
 
     recently = datetime.now(UTC) - timedelta(days=1)
-    state = {
-        "dismissed_at": recently.isoformat(),
-        "dismissed_version": "1.2.3",
-        "check_type": "binary",
+    state: dict[str, object] = {
+        "binary": {"dismissed_at": recently.isoformat(), "dismissed_version": "1.2.3"},
     }
     # latest is 1.3.0, beyond dismissed 1.2.3 → not dismissed
     assert _is_dismissed(state, "binary", "1.3.0") is False
@@ -169,5 +161,6 @@ def test_run_stale_check_writes_dismiss_on_no(
 
     run_stale_check(home=tmp_path)
     state = _read_dismiss_state(tmp_path)
-    assert state.get("check_type") == "binary"
-    assert state.get("dismissed_version") == "0.9.0"
+    binary_entry = state.get("binary")
+    assert isinstance(binary_entry, dict)
+    assert binary_entry.get("dismissed_version") == "0.9.0"

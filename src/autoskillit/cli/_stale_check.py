@@ -67,7 +67,7 @@ def is_dev_mode(home: Path | None = None) -> bool:
         candidate = parent
 
 
-def _read_dismiss_state(home: Path) -> dict:
+def _read_dismiss_state(home: Path) -> dict[str, object]:
     """Read dismissal state from ~/.autoskillit/update_check.json.
 
     Returns empty dict on any error (missing file, malformed JSON, etc.).
@@ -80,7 +80,7 @@ def _read_dismiss_state(home: Path) -> dict:
         return {}
 
 
-def _write_dismiss_state(home: Path, state: dict) -> None:
+def _write_dismiss_state(home: Path, state: dict[str, object]) -> None:
     """Write dismissal state atomically to ~/.autoskillit/update_check.json."""
     from autoskillit.core import atomic_write
 
@@ -129,23 +129,26 @@ def _fetch_latest_version(dev_mode: bool) -> str | None:
         return None
 
 
-def _is_dismissed(state: dict, check_type: str, latest: str | None) -> bool:
+def _is_dismissed(state: dict[str, object], check_type: str, latest: str | None) -> bool:
     """Return True if the given check_type has been dismissed within the window.
 
     Dismissal expires when:
     - The ``dismissed_at`` timestamp is older than 7 days, OR
     - ``latest`` is a higher version than ``dismissed_version``
+
+    State format: ``{"binary": {"dismissed_at": ..., "dismissed_version": ...}, "hooks": {...}}``
     """
     try:
-        if state.get("check_type") != check_type:
+        entry = state.get(check_type)
+        if not isinstance(entry, dict):
             return False
-        dismissed_at = datetime.fromisoformat(state["dismissed_at"])
+        dismissed_at = datetime.fromisoformat(entry["dismissed_at"])
         if datetime.now(UTC) - dismissed_at >= _DISMISS_WINDOW:
             return False
         if latest is not None:
             from packaging.version import Version
 
-            if Version(latest) > Version(state["dismissed_version"]):
+            if Version(latest) > Version(entry["dismissed_version"]):
                 return False
         return True
     except Exception:
@@ -209,14 +212,11 @@ def run_stale_check(home: Path | None = None) -> None:
                     subprocess.run(["autoskillit", "install"], check=False)
                 return
             else:
-                _write_dismiss_state(
-                    _home,
-                    {
-                        "dismissed_at": datetime.now(UTC).isoformat(),
-                        "dismissed_version": latest,
-                        "check_type": "binary",
-                    },
-                )
+                state["binary"] = {
+                    "dismissed_at": datetime.now(UTC).isoformat(),
+                    "dismissed_version": latest,
+                }
+                _write_dismiss_state(_home, state)
 
     # Hook drift check
     settings_path = _claude_settings_path("user")
@@ -231,11 +231,8 @@ def run_stale_check(home: Path | None = None) -> None:
             with terminal_guard():
                 subprocess.run(["autoskillit", "install"], check=False)
         else:
-            _write_dismiss_state(
-                _home,
-                {
-                    "dismissed_at": datetime.now(UTC).isoformat(),
-                    "dismissed_version": current,
-                    "check_type": "hooks",
-                },
-            )
+            state["hooks"] = {
+                "dismissed_at": datetime.now(UTC).isoformat(),
+                "dismissed_version": current,
+            }
+            _write_dismiss_state(_home, state)

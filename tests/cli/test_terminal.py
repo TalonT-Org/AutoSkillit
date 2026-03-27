@@ -205,6 +205,7 @@ class TestTerminalGuardTTYRestore:
                 "before yielding — current writes before yield: "
                 f"{write_calls_before_yield!r}"
             )
+            mock_stdout.flush.assert_called()
 
     def test_emits_exit_alt_screen_on_system_exit(self):
         """terminal_guard() emits \\033[?1049l in finally even when SystemExit raised."""

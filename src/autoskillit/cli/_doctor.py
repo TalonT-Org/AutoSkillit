@@ -219,6 +219,80 @@ def _check_secret_scanning_hook(project_dir: Path) -> DoctorResult:
     return DoctorResult(Severity.ERROR, "secret_scanning_hook", msg)
 
 
+def _check_editable_install_source_exists() -> DoctorResult:
+    """Detect editable autoskillit installs whose source directory no longer exists."""
+    import importlib.metadata as meta
+
+    check_name = "editable_install_source_exists"
+    try:
+        dist = meta.Distribution.from_name("autoskillit")
+    except meta.PackageNotFoundError:
+        return DoctorResult(Severity.OK, check_name, "autoskillit not installed in this env")
+
+    direct_url_text = dist.read_text("direct_url.json")
+    if not direct_url_text:
+        return DoctorResult(Severity.OK, check_name, "Not an editable install")
+
+    try:
+        direct_url = json.loads(direct_url_text)
+    except json.JSONDecodeError:
+        return DoctorResult(Severity.OK, check_name, "direct_url.json unreadable — skipped")
+
+    is_editable = (
+        direct_url.get("dir_info", {}).get("editable") is True
+        or direct_url.get("editable") is True
+    )
+    if not is_editable:
+        return DoctorResult(Severity.OK, check_name, "Not an editable install")
+
+    url = direct_url.get("url", "")
+    src_path = url.removeprefix("file://")
+    if not src_path or Path(src_path).exists():
+        return DoctorResult(Severity.OK, check_name, "Editable install source directory exists")
+
+    return DoctorResult(
+        Severity.ERROR,
+        check_name,
+        f"autoskillit is installed from a deleted directory: {src_path}. "
+        f"Fix: uv tool install --force autoskillit && autoskillit install",
+    )
+
+
+def _check_stale_entry_points() -> DoctorResult:
+    """Detect autoskillit binaries on PATH outside ~/.local/bin (stale/poisoned installs)."""
+    import subprocess
+
+    check_name = "stale_entry_points"
+    primary = shutil.which("autoskillit")
+    if not primary:
+        return DoctorResult(Severity.OK, check_name, "autoskillit not found on PATH")
+
+    try:
+        result = subprocess.run(
+            ["which", "-a", "autoskillit"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        all_paths = [p.strip() for p in result.stdout.splitlines() if p.strip()]
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        all_paths = [primary]
+
+    expected_prefix = str(Path.home() / ".local")
+    stale = [p for p in all_paths if not p.startswith(expected_prefix)]
+    if not stale:
+        return DoctorResult(Severity.OK, check_name, "No stale autoskillit entry points found")
+
+    stale_list = ", ".join(stale)
+    return DoctorResult(
+        Severity.WARNING,
+        check_name,
+        f"Found autoskillit entry point(s) outside ~/.local/bin: {stale_list}. "
+        f"These may be stale editable installs. "
+        f"Fix: uv tool install --force autoskillit && autoskillit install",
+    )
+
+
 def _check_config_layers_for_secrets(
     project_dir: Path | None = None,
 ) -> DoctorResult:
@@ -469,6 +543,12 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 10: Secret scanning hook
     results.append(_check_secret_scanning_hook(Path.cwd()))
+
+    # Check 11: Editable install source directory still exists
+    results.append(_check_editable_install_source_exists())
+
+    # Check 12: No stale autoskillit entry points outside ~/.local/bin
+    results.append(_check_stale_entry_points())
 
     # Output
     if output_json:

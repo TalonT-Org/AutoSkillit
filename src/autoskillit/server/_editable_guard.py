@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shutil
 import site
 import subprocess
@@ -107,7 +106,7 @@ def _is_editable_in_worktree(direct_url: dict, worktree_path: Path) -> bool:
         return False
 
     # Strip file:// prefix and check if the path is inside the worktree
-    source_path = url[len("file://"):]
+    source_path = url[len("file://") :]
     return source_path.startswith(str(worktree_path))
 
 
@@ -146,10 +145,10 @@ def scan_editable_installs_for_worktree(
 
             if _is_editable_in_worktree(data, worktree_path):
                 dist_info_name = direct_url_file.parent.name
-                pkg_name = dist_info_name.split("-")[0] if "-" in dist_info_name else dist_info_name
-                url = data.get("url", "")
-                findings.append(
-                    f"{pkg_name} editable at {url} ({dist_info_name})"
+                pkg_name = (
+                    dist_info_name.split("-")[0] if "-" in dist_info_name else dist_info_name
                 )
+                url = data.get("url", "")
+                findings.append(f"{pkg_name} editable at {url} ({dist_info_name})")
 
     return findings

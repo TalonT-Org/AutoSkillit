@@ -350,3 +350,74 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
         _, exit_code = _run_hook(event, log_root=log_root, cwd=cwd)
 
     assert exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# TSA-9: pipeline_id match + CWD mismatch → sessions FOUND → hook appends table
+# ---------------------------------------------------------------------------
+
+
+def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
+    """pipeline_id match + CWD mismatch → sessions FOUND → hook appends table.
+
+    Production failure mode: hook fires in orchestrator dir, sessions have worktree CWD.
+    pipeline_id correlation makes CWD irrelevant.
+    """
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    pipeline_id = "test-pipeline-abc123"
+
+    _write_sessions(log_root, [{
+        "dir_name": "s1", "cwd": "/worktrees/impl-fix",
+        "pipeline_id": pipeline_id, "step_name": "implement",
+        "input_tokens": 1000, "output_tokens": 500,
+        "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+        "timing_seconds": 20.0,
+    }])
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
+    pr_url = "https://github.com/owner/repo/pull/42"
+    event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
+    view_result = MagicMock(returncode=0, stdout="Existing PR body.")
+    edit_calls: list = []
+
+    def run_side(args, **kwargs):
+        if "view" in args:
+            return view_result
+        if "edit" in args:
+            edit_calls.append(args)
+            return MagicMock(returncode=0)
+        return MagicMock(returncode=0)
+
+    with patch("subprocess.run", side_effect=run_side):
+        _, exit_code = _run_hook(
+            event, log_root=log_root,
+            cwd="/remediation-20260327-080817",  # different from sessions' worktree cwd
+            hook_config_path=hook_config,
+        )
+    assert exit_code == 0
+    assert len(edit_calls) == 1, "gh pr edit must be called when pipeline_id matches"
+
+
+# ---------------------------------------------------------------------------
+# TSA-10: pipeline_id mismatch → no sessions found → exits 0, no gh pr edit
+# ---------------------------------------------------------------------------
+
+
+def test_tsa_pipeline_id_mismatch_exits_zero(tmp_path: Path) -> None:
+    """Wrong pipeline_id → no sessions found → exits 0, no gh pr edit."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    _write_sessions(log_root, [{"dir_name": "s1", "cwd": "/worktree",
+        "pipeline_id": "pipeline-A", "step_name": "implement",
+        "input_tokens": 1000, "output_tokens": 500,
+        "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+        "timing_seconds": 10.0}])
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"pipeline_id": "pipeline-B"}))
+    event = _make_run_skill_event(
+        "pr_url=https://github.com/owner/repo/pull/99\n%%ORDER_UP%%"
+    )
+    _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+    assert exit_code == 0

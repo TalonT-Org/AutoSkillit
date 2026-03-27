@@ -221,7 +221,7 @@ close-kitchen, collapse-issues, design-guards, diagnose-ci, dry-walkthrough, ela
 enrich-issues, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
 make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr, open-kitchen, open-pr, pipeline-summary,
 prepare-issue, process-issues, rectify, report-bug, resolve-failures, resolve-merge-conflicts, resolve-review,
-retry-worktree, review-approach, review-pr, setup-project, smoke-task, sprint-planner, triage-issues, verify-diag, write-recipe
+retry-worktree, review-approach, review-pr, setup-project, smoke-task, sprint-planner, triage-issues, validate-audit, verify-diag, write-recipe
 
 ## Skill Reference Disambiguation
 

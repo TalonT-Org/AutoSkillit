@@ -643,7 +643,7 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
 def main() -> None:
     """Entry point for autoskillit."""
     _first_arg = sys.argv[1] if len(sys.argv) > 1 else "serve"
-    if _first_arg not in ("serve",):
+    if _first_arg != "serve":
         from autoskillit.cli._stale_check import run_stale_check
 
         run_stale_check()

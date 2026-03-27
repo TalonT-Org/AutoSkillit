@@ -277,6 +277,7 @@ async def run_skill(
             model=model,
             add_dirs=skill_add_dirs,
             step_name=step_name,
+            pipeline_id=tool_ctx.pipeline_id,
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_spec,
         )

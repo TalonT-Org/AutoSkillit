@@ -305,32 +305,59 @@ def test_iter_session_log_entries_pipeline_id_filter(tmp_path):
     from autoskillit.pipeline.audit import _iter_session_log_entries
 
     entries = [
-        {"session_id": "a", "dir_name": "a", "timestamp": "2026-03-27T08:00:00",
-         "cwd": "/work", "pipeline_id": "run-1", "step_name": "plan"},
-        {"session_id": "b", "dir_name": "b", "timestamp": "2026-03-27T08:01:00",
-         "cwd": "/work", "pipeline_id": "run-1", "step_name": "implement"},
-        {"session_id": "c", "dir_name": "c", "timestamp": "2026-03-27T08:02:00",
-         "cwd": "/work", "pipeline_id": "run-2", "step_name": "plan"},
+        {
+            "session_id": "a",
+            "dir_name": "a",
+            "timestamp": "2026-03-27T08:00:00",
+            "cwd": "/work",
+            "pipeline_id": "run-1",
+            "step_name": "plan",
+        },
+        {
+            "session_id": "b",
+            "dir_name": "b",
+            "timestamp": "2026-03-27T08:01:00",
+            "cwd": "/work",
+            "pipeline_id": "run-1",
+            "step_name": "implement",
+        },
+        {
+            "session_id": "c",
+            "dir_name": "c",
+            "timestamp": "2026-03-27T08:02:00",
+            "cwd": "/work",
+            "pipeline_id": "run-2",
+            "step_name": "plan",
+        },
     ]
     (tmp_path / "sessions.jsonl").write_text("\n".join(json.dumps(e) for e in entries))
     for e in entries:  # dummy token files so entries pass file-existence check
         d = tmp_path / "sessions" / e["dir_name"]
         d.mkdir(parents=True)
-        (d / "token_usage.json").write_text(json.dumps(
-            {"step_name": e["step_name"], "input_tokens": 1, "output_tokens": 1,
-             "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
-             "timing_seconds": 1.0}
-        ))
+        (d / "token_usage.json").write_text(
+            json.dumps(
+                {
+                    "step_name": e["step_name"],
+                    "input_tokens": 1,
+                    "output_tokens": 1,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "timing_seconds": 1.0,
+                }
+            )
+        )
 
-    results = list(_iter_session_log_entries(
-        tmp_path, since="", filename="token_usage.json",
-        pipeline_id_filter="run-1"
-    ))
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="token_usage.json", pipeline_id_filter="run-1"
+        )
+    )
     assert len(results) == 2  # 2 sessions with pipeline_id="run-1"
 
     # Verify the filter is directional — run-2 has only 1 session
-    results_run2 = list(_iter_session_log_entries(
-        tmp_path, since="", filename="token_usage.json",
-        pipeline_id_filter="run-2"
-    ))
+    results_run2 = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="token_usage.json", pipeline_id_filter="run-2"
+        )
+    )
     assert len(results_run2) == 1

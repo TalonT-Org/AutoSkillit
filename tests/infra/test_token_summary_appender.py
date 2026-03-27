@@ -20,10 +20,20 @@ def _run_hook(
     raw_stdin: str | None = None,
     log_root: Path | None = None,
     cwd: str | None = None,
+    hook_config_path: Path | None = None,
 ) -> tuple[str, int]:
     """Run token_summary_appender.main() with synthetic stdin.
 
     Returns (stdout_output, exit_code).
+
+    Args:
+        hook_config_path: Path to a hook config JSON file containing ``pipeline_id``.
+            When provided, patches ``_read_pipeline_id`` to return the ``pipeline_id``
+            value from that file. When absent, ``_read_pipeline_id`` reads from the
+            real filesystem (returns '' if no file present in the test CWD).
+        cwd: Legacy parameter — patches ``os.getcwd`` for backward compatibility.
+            No longer used by the hook after the pipeline_id fix, but retained so
+            existing tests (TSA-4) can pass the parameter without error.
     """
     from autoskillit.hooks.token_summary_appender import main
 
@@ -46,6 +56,16 @@ def _run_hook(
                 patch(
                     "autoskillit.hooks.token_summary_appender.os.getcwd",
                     return_value=cwd,
+                )
+            )
+        if hook_config_path is not None:
+            pipeline_id = json.loads(hook_config_path.read_text(encoding="utf-8")).get(
+                "pipeline_id", ""
+            )
+            stack.enter_context(
+                patch(
+                    "autoskillit.hooks.token_summary_appender._read_pipeline_id",
+                    return_value=pipeline_id,
                 )
             )
         try:
@@ -168,7 +188,7 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
     """Matching sessions → aggregate token data and append ## Token Usage Summary."""
     log_root = tmp_path / "logs"
     log_root.mkdir()
-    cwd = str(tmp_path / "pipeline_cwd")
+    pipeline_id = "test-pipeline-tsa5"
 
     # 3 sessions: plan-1, plan-2, open-pr
     _write_sessions(
@@ -176,7 +196,8 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
         [
             {
                 "dir_name": "session-1",
-                "cwd": cwd,
+                "cwd": "/some/worktree",
+                "pipeline_id": pipeline_id,
                 "step_name": "plan-1",
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -186,7 +207,8 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
             },
             {
                 "dir_name": "session-2",
-                "cwd": cwd,
+                "cwd": "/some/worktree",
+                "pipeline_id": pipeline_id,
                 "step_name": "plan-2",
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -196,7 +218,8 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
             },
             {
                 "dir_name": "session-3",
-                "cwd": cwd,
+                "cwd": "/some/worktree",
+                "pipeline_id": pipeline_id,
                 "step_name": "open-pr",
                 "input_tokens": 500,
                 "output_tokens": 250,
@@ -206,6 +229,9 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
             },
         ],
     )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
 
     pr_url = "https://github.com/owner/repo/pull/42"
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
@@ -225,7 +251,7 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
         return MagicMock(returncode=0)
 
     with patch("subprocess.run", side_effect=subprocess_side_effect):
-        _, exit_code = _run_hook(event, log_root=log_root, cwd=cwd)
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
 
     assert exit_code == 0
     assert len(edit_calls) == 1
@@ -249,14 +275,15 @@ def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
     """PR body already contains ## Token Usage Summary → gh pr edit NOT called."""
     log_root = tmp_path / "logs"
     log_root.mkdir()
-    cwd = str(tmp_path / "pipeline_cwd")
+    pipeline_id = "test-pipeline-tsa6"
 
     _write_sessions(
         log_root,
         [
             {
                 "dir_name": "session-1",
-                "cwd": cwd,
+                "cwd": "/some/worktree",
+                "pipeline_id": pipeline_id,
                 "step_name": "plan",
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -266,6 +293,9 @@ def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
             },
         ],
     )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
 
     pr_url = "https://github.com/owner/repo/pull/42"
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
@@ -282,7 +312,7 @@ def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
         return view_result
 
     with patch("subprocess.run", side_effect=subprocess_side_effect):
-        _, exit_code = _run_hook(event, log_root=log_root, cwd=cwd)
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
 
     assert exit_code == 0
     assert len(edit_calls) == 0
@@ -314,14 +344,15 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
     """gh pr edit returning non-zero → hook exits non-zero (error surfaced)."""
     log_root = tmp_path / "logs"
     log_root.mkdir()
-    cwd = str(tmp_path / "pipeline_cwd")
+    pipeline_id = "test-pipeline-tsa8"
 
     _write_sessions(
         log_root,
         [
             {
                 "dir_name": "session-1",
-                "cwd": cwd,
+                "cwd": "/some/worktree",
+                "pipeline_id": pipeline_id,
                 "step_name": "plan",
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -331,6 +362,9 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
             },
         ],
     )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
 
     pr_url = "https://github.com/owner/repo/pull/42"
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
@@ -347,7 +381,7 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
         return MagicMock(returncode=0)
 
     with patch("subprocess.run", side_effect=subprocess_side_effect):
-        _, exit_code = _run_hook(event, log_root=log_root, cwd=cwd)
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
 
     assert exit_code != 0
 
@@ -367,13 +401,22 @@ def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
     log_root.mkdir()
     pipeline_id = "test-pipeline-abc123"
 
-    _write_sessions(log_root, [{
-        "dir_name": "s1", "cwd": "/worktrees/impl-fix",
-        "pipeline_id": pipeline_id, "step_name": "implement",
-        "input_tokens": 1000, "output_tokens": 500,
-        "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
-        "timing_seconds": 20.0,
-    }])
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/worktrees/impl-fix",
+                "pipeline_id": pipeline_id,
+                "step_name": "implement",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 20.0,
+            }
+        ],
+    )
 
     hook_config = tmp_path / ".autoskillit_hook_config.json"
     hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
@@ -392,7 +435,8 @@ def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
 
     with patch("subprocess.run", side_effect=run_side):
         _, exit_code = _run_hook(
-            event, log_root=log_root,
+            event,
+            log_root=log_root,
             cwd="/remediation-20260327-080817",  # different from sessions' worktree cwd
             hook_config_path=hook_config,
         )
@@ -409,15 +453,24 @@ def test_tsa_pipeline_id_mismatch_exits_zero(tmp_path: Path) -> None:
     """Wrong pipeline_id → no sessions found → exits 0, no gh pr edit."""
     log_root = tmp_path / "logs"
     log_root.mkdir()
-    _write_sessions(log_root, [{"dir_name": "s1", "cwd": "/worktree",
-        "pipeline_id": "pipeline-A", "step_name": "implement",
-        "input_tokens": 1000, "output_tokens": 500,
-        "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
-        "timing_seconds": 10.0}])
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/worktree",
+                "pipeline_id": "pipeline-A",
+                "step_name": "implement",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 10.0,
+            }
+        ],
+    )
     hook_config = tmp_path / ".autoskillit_hook_config.json"
     hook_config.write_text(json.dumps({"pipeline_id": "pipeline-B"}))
-    event = _make_run_skill_event(
-        "pr_url=https://github.com/owner/repo/pull/99\n%%ORDER_UP%%"
-    )
+    event = _make_run_skill_event("pr_url=https://github.com/owner/repo/pull/99\n%%ORDER_UP%%")
     _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
     assert exit_code == 0

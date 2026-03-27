@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from uuid import uuid4
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -38,7 +39,8 @@ def _write_hook_config() -> None:
     """
     from autoskillit.server import _get_ctx, logger
 
-    cfg = _get_ctx().config.quota_guard
+    ctx = _get_ctx()
+    cfg = ctx.config.quota_guard
     payload = {
         "quota_guard": {
             "threshold": cfg.threshold if cfg.threshold is not None else 90.0,
@@ -46,7 +48,8 @@ def _write_hook_config() -> None:
             "cache_path": cfg.cache_path
             if cfg.cache_path is not None
             else "~/.claude/autoskillit_quota_cache.json",
-        }
+        },
+        "pipeline_id": ctx.pipeline_id,
     }
     hook_cfg_path = _hook_config_path(Path.cwd())
     try:
@@ -60,8 +63,10 @@ async def _open_kitchen_handler() -> None:
     """Set the tools-enabled flag. Extracted for testability."""
     from autoskillit.server import _get_ctx, logger
 
-    _get_ctx().gate.enable()
-    logger.info("open_kitchen", gate_state="open")
+    ctx = _get_ctx()
+    ctx.gate.enable()
+    ctx.pipeline_id = str(uuid4())
+    logger.info("open_kitchen", gate_state="open", pipeline_id=ctx.pipeline_id)
     _write_hook_config()
     await _prime_quota_cache()
 

@@ -94,6 +94,7 @@ class ToolContext:
     write_expected_resolver: WriteExpectedResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: TargetSkillResolver | None = field(default=None)
+    pipeline_id: str = field(default="")
 
     @property
     def default_ci_scope(self) -> CIRunScope:

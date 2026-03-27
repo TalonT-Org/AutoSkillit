@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import functools
+
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import SkillResolver
 
 
+@functools.cache
 def _skill_text() -> str:
     info = SkillResolver().resolve("validate-audit")
     assert info is not None, "validate-audit skill not found"
@@ -60,9 +63,7 @@ class TestValidateAuditContent:
 
     # T-VAL-013
     def test_interactive_headless_distinction(self) -> None:
-        text = _skill_text().lower()
-        assert "headless" in text
-        assert "interactive" in text
+        assert "Interactive vs Headless" in _skill_text()
 
     # T-VAL-014
     def test_output_dir(self) -> None:
@@ -70,4 +71,4 @@ class TestValidateAuditContent:
 
     # T-VAL-015
     def test_history_research_agent(self) -> None:
-        assert "history" in _skill_text().lower()
+        assert "history research agent" in _skill_text().lower()

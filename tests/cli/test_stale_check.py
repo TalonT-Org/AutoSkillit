@@ -243,11 +243,12 @@ def test_run_stale_check_hook_drift_y_path_injects_guard_env(
 def test_run_stale_check_returns_immediately_when_skip_env_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AUTOSKILLIT_SKIP_STALE_CHECK", "1")
-    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
-    calls: list[str] = []
     import autoskillit.cli._stale_check as _sc
+
+    monkeypatch.setenv("AUTOSKILLIT_SKIP_STALE_CHECK", "1")
+    monkeypatch.setattr(_sc.sys, "stdin", MagicMock(isatty=lambda: True))
+    monkeypatch.setattr(_sc.sys, "stdout", MagicMock(isatty=lambda: True))
+    calls: list[str] = []
 
     monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *a: calls.append("fetch") or None)
     mock_run = MagicMock()

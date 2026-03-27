@@ -15,7 +15,10 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from autoskillit.core.paths import pkg_root
+from autoskillit.cli._terminal import terminal_guard
+from autoskillit.core import get_logger, pkg_root
+
+logger = get_logger(__name__)
 
 _DISMISS_FILE = "update_check.json"
 _DISMISS_WINDOW = timedelta(days=7)
@@ -73,12 +76,13 @@ def _read_dismiss_state(home: Path) -> dict:
     try:
         return json.loads(state_file.read_text(encoding="utf-8"))
     except Exception:
+        logger.debug("Failed to read dismiss state from %s", state_file, exc_info=True)
         return {}
 
 
 def _write_dismiss_state(home: Path, state: dict) -> None:
     """Write dismissal state atomically to ~/.autoskillit/update_check.json."""
-    from autoskillit.core.io import atomic_write
+    from autoskillit.core import atomic_write
 
     state_file = home / ".autoskillit" / _DISMISS_FILE
     state_file.parent.mkdir(parents=True, exist_ok=True)
@@ -121,6 +125,7 @@ def _fetch_latest_version(dev_mode: bool) -> str | None:
             tag = data.get("tag_name", "")
             return tag.lstrip("v") if tag else None
     except Exception:
+        logger.debug("Failed to fetch latest version from GitHub", exc_info=True)
         return None
 
 
@@ -144,6 +149,7 @@ def _is_dismissed(state: dict, check_type: str, latest: str | None) -> bool:
                 return False
         return True
     except Exception:
+        logger.debug("Failed to parse dismiss state for check_type=%s", check_type, exc_info=True)
         return False
 
 
@@ -189,17 +195,18 @@ def run_stale_check(home: Path | None = None) -> None:
             )
             answer = input("Update now? [Y/n] ").strip().lower()
             if answer in ("", "y", "yes"):
-                if dev_mode:
-                    subprocess.run(
-                        ["uv", "tool", "install", "--force", _INSTALL_FROM_INTEGRATION],
-                        check=False,
-                    )
-                else:
-                    subprocess.run(
-                        ["uv", "tool", "upgrade", "autoskillit"],
-                        check=False,
-                    )
-                subprocess.run(["autoskillit", "install"], check=False)
+                with terminal_guard():
+                    if dev_mode:
+                        subprocess.run(
+                            ["uv", "tool", "install", "--force", _INSTALL_FROM_INTEGRATION],
+                            check=False,
+                        )
+                    else:
+                        subprocess.run(
+                            ["uv", "tool", "upgrade", "autoskillit"],
+                            check=False,
+                        )
+                    subprocess.run(["autoskillit", "install"], check=False)
                 return
             else:
                 _write_dismiss_state(
@@ -221,7 +228,8 @@ def run_stale_check(home: Path | None = None) -> None:
         )
         answer = input("Run 'autoskillit install' to sync hooks? [Y/n] ").strip().lower()
         if answer in ("", "y", "yes"):
-            subprocess.run(["autoskillit", "install"], check=False)
+            with terminal_guard():
+                subprocess.run(["autoskillit", "install"], check=False)
         else:
             _write_dismiss_state(
                 _home,

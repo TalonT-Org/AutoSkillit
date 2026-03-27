@@ -474,3 +474,102 @@ def test_tsa_pipeline_id_mismatch_exits_zero(tmp_path: Path) -> None:
     event = _make_run_skill_event("pr_url=https://github.com/owner/repo/pull/99\n%%ORDER_UP%%")
     _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
     assert exit_code == 0
+
+
+def test_tsa_gh_pr_edit_stderr_captured(tmp_path: Path) -> None:
+    """gh pr edit failure includes stderr in the logged error message."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    pipeline_id = "pipe-edit-test"
+
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/w",
+                "pipeline_id": pipeline_id,
+                "step_name": "plan",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 5.0,
+            }
+        ],
+    )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
+
+    pr_url = "https://github.com/owner/repo/pull/1"
+    event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
+
+    view_ok = MagicMock(returncode=0, stdout="Some body.")
+    error = subprocess.CalledProcessError(1, ["gh", "pr", "edit"])
+    error.stderr = "authentication required"  # only populated with capture_output=True
+
+    def run_side(args, **kwargs):
+        if "view" in args:
+            return view_ok
+        if "edit" in args:
+            raise error
+        return MagicMock(returncode=0)
+
+    stderr_output: list[str] = []
+    with patch("subprocess.run", side_effect=run_side):
+        with patch("sys.stderr") as mock_stderr:
+            mock_stderr.write = lambda s: stderr_output.append(s)
+            _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+
+    assert exit_code == 1
+    combined = "".join(stderr_output)
+    assert "authentication required" in combined, (
+        "stderr from CalledProcessError must appear in diagnostic output — "
+        "requires capture_output=True on the subprocess.run call"
+    )
+
+
+def test_tsa_gh_pr_view_failure_emits_diagnostic(tmp_path: Path) -> None:
+    """gh pr view non-zero exit emits a stderr message before exiting 0."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    pipeline_id = "pipe-view-fail"
+
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/w",
+                "pipeline_id": pipeline_id,
+                "step_name": "plan",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 5.0,
+            }
+        ],
+    )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
+
+    pr_url = "https://github.com/owner/repo/pull/2"
+    event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
+
+    view_fail = MagicMock(returncode=1, stderr="HTTP 401 Unauthorized", stdout="")
+
+    stderr_output: list[str] = []
+    with patch("subprocess.run", return_value=view_fail):
+        with patch("sys.stderr") as mock_stderr:
+            mock_stderr.write = lambda s: stderr_output.append(s)
+            _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+
+    assert exit_code == 0
+    combined = "".join(stderr_output)
+    assert combined.strip(), (
+        "gh pr view failure must emit a diagnostic to stderr before exiting — "
+        "silent sys.exit(0) makes auth/network errors indistinguishable from no-op"
+    )

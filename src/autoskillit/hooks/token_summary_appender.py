@@ -238,6 +238,10 @@ def main() -> None:
             text=True,
         )
         if view_proc.returncode != 0:
+            sys.stderr.write(
+                f"token_summary_appender: gh pr view failed (rc={view_proc.returncode}): "
+                f"{view_proc.stderr.strip() if view_proc.stderr else 'no stderr'}\n"
+            )
             sys.exit(0)
         if "## Token Usage Summary" in view_proc.stdout:
             sys.exit(0)
@@ -253,7 +257,12 @@ def main() -> None:
         new_body = current_body + "\n\n" + token_table
 
         try:
-            subprocess.run(["gh", "pr", "edit", pr_url, "--body", new_body], check=True)
+            subprocess.run(
+                ["gh", "pr", "edit", pr_url, "--body", new_body],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
         except subprocess.CalledProcessError as cpe:
             sys.stderr.write(
                 f"token_summary_appender: gh pr edit failed (rc={cpe.returncode}): {cpe.stderr}\n"

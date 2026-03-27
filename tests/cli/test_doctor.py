@@ -1072,3 +1072,35 @@ class TestStaleEntryPointsCheck:
         assert result.check == "stale_entry_points"
         assert result.severity.value == "warning"
         assert stale_path in result.message
+
+
+def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
+    """hook_health must verify PostToolUse and SessionStart scripts exist, not just PreToolUse."""
+    from autoskillit.cli._doctor import _check_hook_health
+    from autoskillit.core import Severity
+
+    # Write a settings.json that includes token_summary_appender (PostToolUse)
+    # but point it at a non-existent path.
+    settings = {
+        "hooks": {
+            "PostToolUse": [
+                {
+                    "matcher": ".*run_skill.*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "python3 /nonexistent/token_summary_appender.py",
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps(settings))
+
+    result = _check_hook_health(settings_path)
+    assert result.severity != Severity.OK, (
+        "hook_health must report non-OK when a PostToolUse hook script is missing"
+    )
+    assert "token_summary_appender" in result.message or "PostToolUse" in result.message

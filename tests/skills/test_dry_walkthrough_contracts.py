@@ -179,6 +179,6 @@ def test_dry_walkthrough_step4_pip_enforcement_prescribes_install_worktree(
         "Without this, the enforcement clause is incomplete."
     )
     # The enforcement must route to the config-driven worktree_setup.command
-    assert "worktree_setup.command" in skill_text or "worktree_setup" in skill_text, (
+    assert "worktree_setup.command" in skill_text, (
         "Step 4 must reference worktree_setup.command as the config-driven alternative."
     )

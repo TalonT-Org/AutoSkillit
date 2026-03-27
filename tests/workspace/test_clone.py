@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import re
 import shutil
 import subprocess
@@ -11,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit.workspace.clone import (
+    DefaultCloneManager,
     classify_remote_url,
     clone_repo,
     detect_branch,
@@ -882,14 +884,16 @@ class TestPushToRemoteMocked:
         mock_push.stderr = ""
 
         with patch("subprocess.run", side_effect=[mock_url, mock_push]) as mock_run:
-            result = push_to_remote("/clone", "/source", "main", protected_branches=[])
+            result = push_to_remote(
+                "/clone", "/source", "main", protected_branches=[], force=False
+            )
 
         assert result == {"success": True, "stderr": ""}
         # First call: git remote get-url origin from source_dir
         first_call = mock_run.call_args_list[0]
         assert first_call[0][0] == ["git", "remote", "get-url", "origin"]
         assert first_call[1]["cwd"] == "/source"
-        # Second call: git push -u upstream <branch> from clone_path
+        # Second call: git push -u upstream <branch> from clone_path — no --force-with-lease
         second_call = mock_run.call_args_list[1]
         assert second_call[0][0] == ["git", "push", "-u", "upstream", "main"]
         assert second_call[1]["cwd"] == "/clone"
@@ -907,6 +911,60 @@ class TestPushToRemoteMocked:
         assert result["success"] is False
         assert "origin" in result["stderr"]
         assert mock_run.call_count == 1  # no push attempted
+
+    def test_push_to_remote_with_force_injects_force_with_lease(self) -> None:
+        """T1: push_to_remote with force=True appends --force-with-lease to push command."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+
+        mock_push = MagicMock()
+        mock_push.returncode = 0
+        mock_push.stderr = ""
+
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]) as mock_run:
+            result = push_to_remote("/clone", "/source", "main", protected_branches=[], force=True)
+
+        assert result == {"success": True, "stderr": ""}
+        second_call = mock_run.call_args_list[1]
+        cmd = second_call[0][0]
+        assert "--force-with-lease" in cmd
+        assert "git" in cmd
+        assert "push" in cmd
+        assert "upstream" in cmd
+        assert "main" in cmd
+        assert second_call[1]["cwd"] == "/clone"
+
+    def test_push_to_remote_default_force_false_does_not_inject_lease(self) -> None:
+        """T2: push_to_remote with force=False (default) does not inject --force-with-lease."""
+        mock_url = MagicMock()
+        mock_url.returncode = 0
+        mock_url.stdout = "git@github.com:org/repo.git\n"
+        mock_url.stderr = ""
+
+        mock_push = MagicMock()
+        mock_push.returncode = 0
+        mock_push.stderr = ""
+
+        with patch("subprocess.run", side_effect=[mock_url, mock_push]) as mock_run:
+            result = push_to_remote(
+                "/clone", "/source", "main", protected_branches=[], force=False
+            )
+
+        assert result == {"success": True, "stderr": ""}
+        second_call = mock_run.call_args_list[1]
+        cmd = second_call[0][0]
+        assert cmd == ["git", "push", "-u", "upstream", "main"]
+
+    def test_default_clone_manager_push_to_remote_accepts_force_param(self) -> None:
+        """T5: DefaultCloneManager.push_to_remote has force keyword param with default False."""
+        sig = inspect.signature(DefaultCloneManager.push_to_remote)
+        assert "force" in sig.parameters, (
+            "DefaultCloneManager.push_to_remote must have 'force' param"
+        )
+        param = sig.parameters["force"]
+        assert param.default is False, "force param must default to False"
 
 
 class TestPushToRemoteNonBare:

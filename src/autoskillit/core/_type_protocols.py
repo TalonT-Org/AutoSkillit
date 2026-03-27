@@ -259,6 +259,7 @@ class CloneManager(Protocol):
         *,
         remote_url: str = "",
         protected_branches: list[str] | None = None,
+        force: bool = False,
     ) -> dict[str, str | bool]: ...
 
 

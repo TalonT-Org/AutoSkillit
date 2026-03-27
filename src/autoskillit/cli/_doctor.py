@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -246,7 +247,7 @@ def _check_editable_install_source_exists() -> DoctorResult:
         return DoctorResult(Severity.OK, check_name, "Not an editable install")
 
     url = direct_url.get("url", "")
-    src_path = url.removeprefix("file://")
+    src_path = urllib.parse.urlparse(url).path if url.startswith("file://") else ""
     if not src_path or Path(src_path).exists():
         return DoctorResult(Severity.OK, check_name, "Editable install source directory exists")
 
@@ -278,8 +279,8 @@ def _check_stale_entry_points() -> DoctorResult:
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         all_paths = [primary]
 
-    expected_prefix = str(Path.home() / ".local")
-    stale = [p for p in all_paths if not p.startswith(expected_prefix)]
+    expected_prefix = Path.home() / ".local"
+    stale = [p for p in all_paths if not Path(p).is_relative_to(expected_prefix)]
     if not stale:
         return DoctorResult(Severity.OK, check_name, "No stale autoskillit entry points found")
 

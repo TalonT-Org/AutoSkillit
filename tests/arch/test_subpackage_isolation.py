@@ -75,7 +75,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "headless",  # execution/headless.py: _OUTPUT_PATH_TOKENS = _build_path_token_set()
-        "_stale_check",  # cli/_stale_check.py: _DISMISS_WINDOW = timedelta(days=7)
+        "_stale_check",  # cli/_stale_check.py: _DISMISS_WINDOW = timedelta(hours=12)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -1148,3 +1148,31 @@ def test_pipeline_init_no_longer_exports_domain_paths():
 
     assert "DOMAIN_PATHS" not in m.__all__
     assert "partition_files_by_domain" not in m.__all__
+
+
+def test_singleton_exemption_comment_matches_module_constant() -> None:
+    """The _stale_check exemption comment in SINGLETON_ALLOWED_MODULES must
+    accurately reflect the current _DISMISS_WINDOW constant value."""
+
+    from autoskillit.cli._stale_check import _DISMISS_WINDOW
+
+    # Read this test file itself
+    this_file = Path(__file__)
+    content = this_file.read_text(encoding="utf-8")
+
+    # Build the expected Python expression from the live constant
+    total_seconds = _DISMISS_WINDOW.total_seconds()
+    if total_seconds % 3600 == 0:
+        hours = int(total_seconds // 3600)
+        expected_fragment = f"timedelta(hours={hours})"
+    elif total_seconds % 86400 == 0:
+        days = int(total_seconds // 86400)
+        expected_fragment = f"timedelta(days={days})"
+    else:
+        expected_fragment = repr(_DISMISS_WINDOW)
+
+    assert expected_fragment in content, (
+        f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
+        f"Expected to find '{expected_fragment}' (current _DISMISS_WINDOW={_DISMISS_WINDOW!r}). "
+        "Update the inline comment on the '_stale_check' entry."
+    )

@@ -21,7 +21,8 @@ from autoskillit.core import get_logger, pkg_root
 logger = get_logger(__name__)
 
 _DISMISS_FILE = "update_check.json"
-_DISMISS_WINDOW = timedelta(days=7)
+_DISMISS_WINDOW = timedelta(hours=12)
+_SNOOZE_WINDOW = timedelta(hours=1)
 _FETCH_TIMEOUT = 5
 
 _GITHUB_RELEASES_URL = "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest"
@@ -74,7 +75,8 @@ def _read_dismiss_state(home: Path) -> dict[str, object]:
     """
     state_file = home / ".autoskillit" / _DISMISS_FILE
     try:
-        return json.loads(state_file.read_text(encoding="utf-8"))
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
     except Exception:
         logger.debug("Failed to read dismiss state from %s", state_file, exc_info=True)
         return {}
@@ -159,6 +161,68 @@ def _is_dismissed(state: dict[str, object], check_type: str, latest: str | None)
         return False
 
 
+def _is_snoozed(state: dict[str, object], check_type: str) -> bool:
+    """Return True if an update attempt for check_type is within the snooze window.
+
+    Snooze encodes "update attempted but outcome unverified; retry soon."
+    It expires by time only — there is no version comparison.
+
+    State key: ``"{check_type}_snoozed"`` (e.g. ``"binary_snoozed"``).
+    """
+    try:
+        entry = state.get(f"{check_type}_snoozed")
+        if not isinstance(entry, dict):
+            return False
+        snoozed_at = datetime.fromisoformat(entry["snoozed_at"])
+        return datetime.now(UTC) - snoozed_at < _SNOOZE_WINDOW
+    except Exception:
+        logger.debug("Failed to parse snooze state for check_type=%s", check_type, exc_info=True)
+        return False
+
+
+def _verify_update_result(
+    current: str,
+    latest: str,
+    home: Path,
+    state: dict[str, object],
+) -> bool:
+    """Verify that the update subprocess advanced the installed version.
+
+    Calls importlib.metadata.version() directly to bypass the lru_cache in
+    version_info() and the process-lifetime cache in autoskillit.__version__.
+
+    Returns True if the version advanced (update succeeded).
+    Returns False if the version is unchanged (update silently failed).
+    On False, writes a binary_snoozed record and prints an actionable warning.
+    """
+    import importlib.metadata
+
+    try:
+        new_version = importlib.metadata.version("autoskillit")
+    except Exception:
+        logger.debug("Failed to read version after update attempt", exc_info=True)
+        new_version = current  # Treat as unchanged if unreadable
+
+    if new_version != current:
+        return True
+
+    # Version unchanged — record a snooze and surface a warning
+    state["binary_snoozed"] = {
+        "snoozed_at": datetime.now(UTC).isoformat(),
+        "attempted_version": latest,
+    }
+    _write_dismiss_state(home, state)
+    print(
+        f"\nUpdate attempted but version is still {current}. "
+        f"If you have an editable install, run:\n"
+        f"  uv pip install -e <project_dir>\n"
+        f"Or for a tool install:\n"
+        f"  uv tool upgrade autoskillit",
+        flush=True,
+    )
+    return False
+
+
 def run_stale_check(home: Path | None = None) -> None:
     """Run the stale-install check on interactive CLI invocations.
 
@@ -190,7 +254,11 @@ def run_stale_check(home: Path | None = None) -> None:
     if latest is not None:
         from packaging.version import Version
 
-        if Version(latest) > Version(current) and not _is_dismissed(state, "binary", latest):
+        if (
+            Version(latest) > Version(current)
+            and not _is_dismissed(state, "binary", latest)
+            and not _is_snoozed(state, "binary")
+        ):
             print(
                 f"\nAutoSkillit {latest} is available (you have {current}).",
                 flush=True,
@@ -211,6 +279,7 @@ def run_stale_check(home: Path | None = None) -> None:
                             env=_skip_env,
                         )
                     subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)
+                _verify_update_result(current, latest, _home, state)
                 return
             else:
                 state["binary"] = {

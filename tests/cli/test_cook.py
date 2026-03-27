@@ -1265,7 +1265,7 @@ def test_cook_mark_onboarded_not_called_on_failure(
         lambda project_dir: onboarded_calls.append(project_dir),
     )
 
-    def fake_run(cmd: list[str], env: dict[str, str] | None = None) -> object:
+    def fake_run(cmd: list[str], **kwargs: object) -> object:
         return type("R", (), {"returncode": 1})()
 
     monkeypatch.setattr(_cook.subprocess, "run", fake_run)

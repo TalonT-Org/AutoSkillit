@@ -71,7 +71,7 @@ def _build_orchestrator_prompt(recipe_name: str) -> str:
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
 FIRST ACTION — before prompting for any inputs:
-0. Call open_kitchen('{recipe_name}') to open the kitchen and load the recipe.
+0. Call open_kitchen(name='{recipe_name}') to open the kitchen and load the recipe.
 1. The response contains a pre-formatted ingredients table
    between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
    Display it verbatim in your response — do not reformat or re-render it.

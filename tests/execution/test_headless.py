@@ -70,9 +70,24 @@ def _context_exhausted_session_json() -> str:
     )
 
 
-def _sr(returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT):
+def _sr(
+    returncode=0,
+    stdout="",
+    stderr="",
+    termination=TerminationReason.NATURAL_EXIT,
+    session_id: str = "",
+    channel_b_session_id: str = "",
+):
     """Build a minimal SubprocessResult for _build_skill_result tests."""
-    return SubprocessResult(returncode, stdout, stderr, termination, pid=12345)
+    return SubprocessResult(
+        returncode,
+        stdout,
+        stderr,
+        termination,
+        pid=12345,
+        session_id=session_id,
+        channel_b_session_id=channel_b_session_id,
+    )
 
 
 class TestSessionLogDir:
@@ -643,7 +658,7 @@ class TestStalenessReturnsNeedsRetry:
     """Stale SubprocessResult triggers needs_retry response."""
 
     def test_staleness_returns_needs_retry(self):
-        """A stale result produces needs_retry=True, retry_reason='resume'."""
+        """A stale result produces needs_retry=True, retry_reason='stale'."""
         stale_result = SubprocessResult(
             returncode=-1,
             stdout="",
@@ -653,7 +668,7 @@ class TestStalenessReturnsNeedsRetry:
         )
         response = json.loads(_build_skill_result(stale_result).to_json())
         assert response["needs_retry"] is True
-        assert response["retry_reason"] == "resume"
+        assert response["retry_reason"] == "stale"
         assert response["subtype"] == "stale"
         assert response["success"] is False
 
@@ -1995,7 +2010,7 @@ class TestRetryBudgetEnforcement:
             exit_code=-1,
             subtype="stale",
             needs_retry=True,
-            retry_reason="resume",
+            retry_reason="stale",
             stderr="",
         )
 
@@ -2018,7 +2033,7 @@ class TestRetryBudgetEnforcement:
             max_consecutive_retries=3,
         )
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.STALE
 
     def test_budget_at_threshold_overrides_needs_retry_to_false(self) -> None:
         """At exactly max_consecutive_retries prior failures: needs_retry is overridden."""
@@ -2043,7 +2058,7 @@ class TestRetryBudgetEnforcement:
             max_consecutive_retries=3,
         )
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.STALE
 
     def test_budget_other_skill_command_not_counted(self) -> None:
         """Consecutive failures for a different skill_command don't exhaust this skill's budget."""
@@ -2056,7 +2071,7 @@ class TestRetryBudgetEnforcement:
             max_consecutive_retries=3,
         )
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.STALE
 
     def test_budget_applies_to_normal_path_context_exhaustion(self) -> None:
         """Budget applies to the normal path (not just stale), e.g. context exhaustion."""
@@ -3014,7 +3029,7 @@ def make_build_skill_result_kwargs():
                         exit_code=-1,
                         subtype="stale",
                         needs_retry=True,
-                        retry_reason="resume",
+                        retry_reason="stale",
                         stderr="",
                     )
                 )
@@ -3106,3 +3121,74 @@ class TestContractRecoveryGate:
         sr = _build_skill_result(**kwargs)
         assert sr.needs_retry is False
         assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED
+
+
+class TestBuildSkillResultSessionIdFromSubprocess:
+    """_build_skill_result propagates result.session_id on all paths."""
+
+    def test_stale_path_session_id_from_subprocess_result(self) -> None:
+        """Stale path: SkillResult.session_id == result.session_id (not hardcoded '')."""
+        result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=1,
+            session_id="real-uuid-from-channel-b",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "real-uuid-from-channel-b"
+
+    def test_timeout_empty_stdout_session_id_from_subprocess_result(self) -> None:
+        """TIMED_OUT with empty stdout: SkillResult.session_id == result.session_id."""
+        result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=1,
+            session_id="real-uuid-from-channel-b",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "real-uuid-from-channel-b"
+
+    def test_channel_a_session_id_takes_precedence(self) -> None:
+        """When stdout has a result record with session_id, it wins over result.session_id."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "result": "done",
+                "session_id": "stdout-uuid",
+                "is_error": False,
+            }
+        )
+        result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            session_id="ch-b-uuid",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "stdout-uuid"
+
+    def test_context_exhaustion_session_id_from_subprocess_result(self) -> None:
+        """Context-exhaustion (no result record): uses result.session_id as fallback."""
+        partial_assistant_stdout = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "Doing work..."}]},
+            }
+        )
+        result = SubprocessResult(
+            returncode=1,
+            stdout=partial_assistant_stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            session_id="ch-b-uuid-5678",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "ch-b-uuid-5678"

@@ -292,6 +292,14 @@ class TestChannelBFullPipelineAdjudication:
 
         With strengthened Channel A, data_confirmed=False, provenance bypass fires.
         Result: success=True, needs_retry=False (no wasteful retry of completed session).
+
+        Timing notes:
+        - completion_drain_timeout=0.5s: the heartbeat has already seen the empty result
+          and failed to confirm by the time Channel B fires (~1s after task group start),
+          so 0.5s of additional drain time is more than sufficient semantically.
+        - timeout=60s: guards against the outer wall-clock expiring under xdist -n 4 load.
+          Under heavy load the stdout_session_id_ready wait (1.0s) and inner drain (0.5s)
+          can each overrun 10x, giving a worst-case total of ~15s well inside 60s.
         """
         from autoskillit.execution.headless import _build_skill_result
 
@@ -303,10 +311,10 @@ class TestChannelBFullPipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=30,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
-            completion_drain_timeout=2.0,
+            completion_drain_timeout=0.5,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
@@ -407,9 +415,21 @@ class TestPostExitDrainWindow:
         """Process exits before Phase 1 polls; drain window lets Channel B detect marker.
 
         Uses _phase1_poll=1.0 to guarantee the process exits (~100ms) before the
-        first Phase 1 poll fires. The drain window (completion_drain_timeout=5.0)
+        first Phase 1 poll fires. The drain window (completion_drain_timeout=30.0)
         gives the session monitor enough time to complete its poll and detect the
         marker in the JSONL file, producing CHANNEL_B confirmation.
+
+        Timing rationale for completion_drain_timeout=30.0:
+        - Before channel_b_ready can be set, _watch_session_log must:
+            1. Wait up to 1.0s for stdout_session_id_ready (move_on_after(1.0))
+            2. Sleep _phase1_poll=1.0s before Phase 1's first check
+            3. Sleep _phase2_poll=0.05s before Phase 2's first check
+          Total minimum: ~2.05s under normal conditions.
+        - Under xdist -n 4 load, asyncio.sleep() can overrun significantly.
+          With 10x jitter on Phase 1 alone (1.0s → 10s) the total exceeds 5.0s.
+          30.0s provides ~15x headroom against Phase 1 jitter alone.
+        - The test does NOT take 30s: channel_b_ready is set within ~2s normally
+          and move_on_after exits as soon as the event fires.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -419,10 +439,10 @@ class TestPostExitDrainWindow:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=30,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
-            completion_drain_timeout=5.0,
+            completion_drain_timeout=30.0,
             _phase1_poll=1.0,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,

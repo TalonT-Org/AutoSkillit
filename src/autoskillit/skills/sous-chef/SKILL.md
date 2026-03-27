@@ -45,6 +45,10 @@ When `run_skill` returns `needs_retry=true` for **any step**:
   files outside its working directory. This is a CWD boundary violation, not a context limit.
   Do NOT route to `on_context_limit` even if defined.
 - **If `retry_reason: early_stop` or `zero_writes`** → fall through to `on_failure`.
+- **If `retry_reason: stale`** → decrement the `retries` counter for this step.
+  Re-execute the same step if retries remain. If retries are exhausted, fall through
+  to `on_failure`. Do NOT route to `on_context_limit` — stale is a transient failure,
+  not a context limit. No partial progress is assumed.
 
 **For `implement-worktree-no-merge` specifically:**
 - `on_context_limit` routes to `retry_worktree` in standard recipes.
@@ -59,6 +63,7 @@ When a completed worktree implementation needs to be redone (e.g., after a plan 
 
 Summary: `needs_retry=true` + `retry_reason=resume` or `drain_race` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=resume` or `drain_race` + no `on_context_limit` → `on_failure`.
+         `needs_retry=true` + `retry_reason=stale` → decrement retries counter → `on_failure` when exhausted (no partial progress, not a context limit).
          `needs_retry=true` + any other `retry_reason` → `on_failure` (no partial progress).
 
 ---

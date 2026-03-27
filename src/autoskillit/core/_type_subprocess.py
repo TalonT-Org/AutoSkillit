@@ -58,6 +58,12 @@ __all__ = [
 #:   returncode=-1 (hardcoded in _build_skill_result, not from process)
 #:   _build_skill_result constructs synthetic ClaudeSessionResult(subtype="timeout").
 #:   Always returns success=False, needs_retry=False.
+#:
+#: session_id (resolved identity):
+#:   Populated by process.py using _resolve_session_id(signals.stdout_session_id,
+#:   signals.channel_b_session_id). Preferred over channel_b_session_id for all
+#:   downstream consumers. When both sources are empty (crash/pre-start): "".
+#:   channel_b_session_id is retained alongside for diagnostic provenance.
 _TERMINATION_CONTRACT = None  # Marker — contract is documented above in comments.
 
 
@@ -80,6 +86,14 @@ class SubprocessResult:
     """
     proc_snapshots: list[dict[str, object]] | None = None
     channel_b_session_id: str = ""
+    session_id: str = ""
+    """Canonically resolved session identity — merge of stdout_session_id and
+    channel_b_session_id computed at SubprocessResult construction time in process.py.
+
+    Preferred field for downstream consumers (SkillResult, flush_session_log).
+    channel_b_session_id is retained as a diagnostic field indicating the specific
+    discovery channel.
+    """
     start_ts: str = ""
     end_ts: str = ""
     elapsed_seconds: float = 0.0

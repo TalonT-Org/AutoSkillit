@@ -58,6 +58,7 @@ logger = get_logger(__name__)
 __all__ = [
     "DefaultSubprocessRunner",
     "_extract_stdout_session_id",
+    "_resolve_session_id",
     "RaceAccumulator",
     "RaceSignals",
     "_has_active_api_connection",
@@ -79,6 +80,14 @@ __all__ = [
     "run_managed_async",
     "run_managed_sync",
 ]
+
+
+def _resolve_session_id(
+    stdout_session_id: str | None,
+    channel_b_session_id: str,
+) -> str:
+    """Merge session ID sources: stdout type=system wins; Channel B JSONL filename fallback."""
+    return stdout_session_id or channel_b_session_id or ""
 
 
 async def run_managed_async(
@@ -277,6 +286,9 @@ async def run_managed_async(
                 channel_confirmation=_channel_confirmation,
                 proc_snapshots=snapshots_data,
                 channel_b_session_id=signals.channel_b_session_id,
+                session_id=_resolve_session_id(
+                    signals.stdout_session_id, signals.channel_b_session_id
+                ),
             )
             proc_log.debug(
                 "run_managed_async_result",

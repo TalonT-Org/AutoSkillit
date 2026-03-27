@@ -1117,6 +1117,38 @@ class TestRunHeadlessCoreFlushTelemetry:
         assert calls[0]["timing_seconds"] is not None
 
     @pytest.mark.anyio
+    async def test_flush_session_log_session_id_matches_returned_skill_result(
+        self, tool_ctx, monkeypatch
+    ):
+        """flush_session_log receives the same session_id as the returned SkillResult."""
+        import autoskillit.execution.session_log as sl_mod
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+
+        calls = []
+
+        def mock_flush(**kwargs):
+            calls.append(kwargs)
+
+        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
+        # Stale result with session_id resolved from Channel B
+        stale_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=12345,
+            session_id="test-uuid-coherence-check",
+        )
+        tool_ctx.runner.push(stale_result)
+        result_json = json.loads(
+            await run_skill("/investigate foo", "/tmp", step_name="implement")
+        )
+        assert len(calls) == 1
+        # flush and returned SkillResult must carry the same session_id
+        assert calls[0]["session_id"] == result_json["session_id"]
+        assert result_json["session_id"] != ""
+
+    @pytest.mark.anyio
     async def test_flushes_on_success_when_step_name_set(self, tool_ctx, monkeypatch):
         """Successful sessions without proc_snapshots still flush when step_name is provided."""
         import autoskillit.execution.session_log as sl_mod

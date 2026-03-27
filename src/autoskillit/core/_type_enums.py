@@ -27,6 +27,7 @@ __all__ = [
 
 class RetryReason(StrEnum):
     RESUME = "resume"
+    STALE = "stale"  # Transient stale session — retry from scratch; not a context limit
     NONE = "none"
     BUDGET_EXHAUSTED = "budget_exhausted"
     EARLY_STOP = "early_stop"

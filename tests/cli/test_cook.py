@@ -1261,7 +1261,8 @@ def test_cook_mark_onboarded_not_called_on_failure(
 
     onboarded_calls: list[Path] = []
     monkeypatch.setattr(
-        _cook, "mark_onboarded", lambda project_dir: onboarded_calls.append(project_dir)
+        "autoskillit.cli._onboarding.mark_onboarded",
+        lambda project_dir: onboarded_calls.append(project_dir),
     )
 
     def fake_run(cmd: list[str], env: dict[str, str] | None = None) -> object:

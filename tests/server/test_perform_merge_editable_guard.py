@@ -1,7 +1,8 @@
 """Integration tests verifying perform_merge() aborts before cleanup on poisoned installs."""
-import pytest
-from unittest.mock import patch
+
 from pathlib import Path
+
+import pytest
 
 
 @pytest.mark.anyio
@@ -43,6 +44,7 @@ async def test_perform_merge_proceeds_normally_when_guard_returns_empty(
     perform_merge must NOT abort — it must proceed to cleanup normally.
     """
     import autoskillit.server._editable_guard as guard_module
+
     monkeypatch.setattr(
         guard_module,
         "scan_editable_installs_for_worktree",

@@ -202,6 +202,7 @@ src/autoskillit/
 │   ├── __init__.py          #   FastMCP app, kitchen gating (mcp.disable tags={'kitchen'}),
 │   │                        #   headless tool reveal (AUTOSKILLIT_HEADLESS)
 │   ├── git.py               #   Git merge workflow for merge_worktree (perform_merge)
+│   ├── _editable_guard.py   #   Pre-deletion editable install guard — scan_editable_installs_for_worktree (stdlib-only)
 │   ├── helpers.py           #   Shared server-layer helpers (worktree setup, path utilities)
 │   ├── tools_kitchen.py     #   open_kitchen, close_kitchen tool handlers + recipe:// resource
 │   ├── tools_ci.py          #   wait_for_ci, get_ci_status, set_commit_status, toggle_auto_merge, wait_for_merge_queue tool handlers

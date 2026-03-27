@@ -169,7 +169,9 @@ def test_dry_walkthrough_step4_pip_enforcement_clause_detects_editable(skill_tex
     )
 
 
-def test_dry_walkthrough_step4_pip_enforcement_prescribes_install_worktree(skill_text: str) -> None:
+def test_dry_walkthrough_step4_pip_enforcement_prescribes_install_worktree(
+    skill_text: str,
+) -> None:
     """Step 4 must prescribe task install-worktree as the replacement for raw pip invocations."""
     # The enforcement section must name the safe replacement
     assert "install-worktree" in skill_text, (

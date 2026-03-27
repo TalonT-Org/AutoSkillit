@@ -1,6 +1,6 @@
 """Unit tests for server/_editable_guard.py — scan_editable_installs_for_worktree."""
+
 import json
-import pytest
 from pathlib import Path
 
 from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
@@ -13,7 +13,6 @@ def _make_dist_info(site_packages: Path, pkg: str, version: str, direct_url: dic
 
 
 class TestScanEditableInstalls:
-
     def test_empty_site_packages_returns_empty(self, tmp_path: Path) -> None:
         """No dist-info directories → empty result."""
         site = tmp_path / "site-packages"
@@ -28,10 +27,15 @@ class TestScanEditableInstalls:
         """Editable install with url inside worktree_path → reported."""
         worktree = tmp_path / "worktree"
         site = tmp_path / "site-packages"
-        _make_dist_info(site, "autoskillit", "0.6.12", {
-            "url": f"file://{worktree}/src",
-            "dir_info": {"editable": True},
-        })
+        _make_dist_info(
+            site,
+            "autoskillit",
+            "0.6.12",
+            {
+                "url": f"file://{worktree}/src",
+                "dir_info": {"editable": True},
+            },
+        )
         result = scan_editable_installs_for_worktree(worktree, [site])
         assert len(result) == 1
         assert "autoskillit" in result[0].lower()
@@ -42,10 +46,15 @@ class TestScanEditableInstalls:
         worktree = tmp_path / "worktree"
         other = tmp_path / "other-project"
         site = tmp_path / "site-packages"
-        _make_dist_info(site, "autoskillit", "0.6.12", {
-            "url": f"file://{other}/src",
-            "dir_info": {"editable": True},
-        })
+        _make_dist_info(
+            site,
+            "autoskillit",
+            "0.6.12",
+            {
+                "url": f"file://{other}/src",
+                "dir_info": {"editable": True},
+            },
+        )
         result = scan_editable_installs_for_worktree(worktree, [site])
         assert result == []
 
@@ -53,10 +62,15 @@ class TestScanEditableInstalls:
         """Install with editable=False → not reported even if url points to worktree."""
         worktree = tmp_path / "worktree"
         site = tmp_path / "site-packages"
-        _make_dist_info(site, "autoskillit", "0.6.12", {
-            "url": f"file://{worktree}/src",
-            "dir_info": {"editable": False},
-        })
+        _make_dist_info(
+            site,
+            "autoskillit",
+            "0.6.12",
+            {
+                "url": f"file://{worktree}/src",
+                "dir_info": {"editable": False},
+            },
+        )
         result = scan_editable_installs_for_worktree(worktree, [site])
         assert result == []
 
@@ -64,10 +78,15 @@ class TestScanEditableInstalls:
         """New-format direct_url.json (top-level 'editable' key) is also detected."""
         worktree = tmp_path / "worktree"
         site = tmp_path / "site-packages"
-        _make_dist_info(site, "autoskillit", "0.6.12", {
-            "url": f"file://{worktree}/src",
-            "editable": True,
-        })
+        _make_dist_info(
+            site,
+            "autoskillit",
+            "0.6.12",
+            {
+                "url": f"file://{worktree}/src",
+                "editable": True,
+            },
+        )
         result = scan_editable_installs_for_worktree(worktree, [site])
         assert len(result) == 1
 
@@ -98,9 +117,14 @@ class TestScanEditableInstalls:
         site_b = tmp_path / "site-b"
         # Only site_b has the poisoned install
         site_a.mkdir()
-        _make_dist_info(site_b, "autoskillit", "0.6.12", {
-            "url": f"file://{worktree}/src",
-            "dir_info": {"editable": True},
-        })
+        _make_dist_info(
+            site_b,
+            "autoskillit",
+            "0.6.12",
+            {
+                "url": f"file://{worktree}/src",
+                "dir_info": {"editable": True},
+            },
+        )
         result = scan_editable_installs_for_worktree(worktree, [site_a, site_b])
         assert len(result) == 1

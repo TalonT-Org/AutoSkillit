@@ -53,6 +53,7 @@ class MergeFailedStep(StrEnum):
     GENERATED_FILE_CLEANUP = "generated_file_cleanup"
     POST_REBASE_TEST_GATE = "post_rebase_test_gate"
     MERGE = "merge"
+    EDITABLE_INSTALL_GUARD = "editable_install_guard"
 
 
 class MergeState(StrEnum):
@@ -65,6 +66,7 @@ class MergeState(StrEnum):
     WORKTREE_DIRTY_MID_OPERATION = "worktree_dirty_mid_operation"
     MAIN_REPO_MERGE_ABORTED = "main_repo_merge_aborted"
     MAIN_REPO_DIRTY_ABORT_FAILED = "main_repo_dirty_abort_failed"
+    MERGE_SUCCEEDED_CLEANUP_BLOCKED = "merge_succeeded_cleanup_blocked"
 
 
 class RestartScope(StrEnum):

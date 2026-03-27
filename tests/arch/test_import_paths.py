@@ -189,11 +189,19 @@ def test_req_imp_004_cli_app_namespace_limit() -> None:
 
 
 def test_req_imp_005_git_only_core_at_runtime() -> None:
-    """server/git.py runtime imports (outside TYPE_CHECKING) must be from autoskillit.core."""
+    """server/git.py runtime imports (outside TYPE_CHECKING) must be from autoskillit.core.
+
+    Exception: autoskillit.server._editable_guard is allowed — it is a same-package
+    pure-stdlib module that implements the pre-deletion editable install guard, and
+    has zero upward imports into config/pipeline/execution layers.
+    """
+    _ALLOWED = frozenset({"autoskillit.server._editable_guard"})
     path = SRC / "server" / "git.py"
     violations: list[str] = []
     for mod, in_tc in _parse_imports(path):
         if in_tc:
+            continue
+        if mod in _ALLOWED:
             continue
         top2 = ".".join(mod.split(".")[:2])
         if top2 != "autoskillit.core":

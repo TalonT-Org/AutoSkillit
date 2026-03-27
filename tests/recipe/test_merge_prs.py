@@ -581,3 +581,14 @@ def test_pmp_setup_remote_not_using_inputs_source_dir(recipe) -> None:
         "setup_remote must not use 'git -C ${{ inputs.source_dir }}' — "
         "fails when source_dir is empty (the default value)"
     )
+
+
+def test_pmp_push_ejected_fix_has_force_true(recipe) -> None:
+    """T13: push_ejected_fix must have force='true' (post-rebase push needs --force-with-lease)."""
+    assert "push_ejected_fix" in recipe.steps
+    step = recipe.steps["push_ejected_fix"]
+    assert step.tool == "push_to_remote"
+    assert step.with_args.get("force") == "true", (
+        "push_ejected_fix must include force='true' — it follows a resolve-merge-conflicts "
+        "step that rewrites commit SHAs, so a non-fast-forward force push is required"
+    )

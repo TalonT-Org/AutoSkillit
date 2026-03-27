@@ -324,6 +324,7 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.ejected_pr_branch }}"
+      force: "true"
     on_success: reenter_queue
     on_failure: cleanup_failure
 

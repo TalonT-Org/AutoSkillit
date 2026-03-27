@@ -172,6 +172,7 @@ async def push_to_remote(
     branch: str,
     source_dir: str = "",
     remote_url: str = "",
+    force: str = "",
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
@@ -236,6 +237,7 @@ async def push_to_remote(
                 branch,
                 remote_url=remote_url,
                 protected_branches=tool_ctx.config.safety.protected_branches,
+                force=force.strip().lower() == "true",
             )
         )
 

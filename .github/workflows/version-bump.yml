@@ -104,8 +104,15 @@ jobs:
           python3 - <<'EOF'
           import pathlib, os, sys
           p = pathlib.Path("pyproject.toml")
-          old_ver = f'version = "{os.environ["OLD_VERSION"]}"'
-          new_ver = f'version = "{os.environ["NEW_VERSION"]}"'
+          old_str = os.environ["OLD_VERSION"]
+          new_str = os.environ["NEW_VERSION"]
+          old_parts = tuple(int(x) for x in old_str.split("."))
+          new_parts = tuple(int(x) for x in new_str.split("."))
+          if new_parts <= old_parts:
+              print(f"ERROR: new_int {new_str!r} would downgrade integration from {old_str!r}", file=sys.stderr)
+              sys.exit(1)
+          old_ver = f'version = "{old_str}"'
+          new_ver = f'version = "{new_str}"'
           old_content = p.read_text()
           new_content = old_content.replace(old_ver, new_ver, 1)
           if new_content == old_content:

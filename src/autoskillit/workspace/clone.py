@@ -522,14 +522,23 @@ def push_to_remote(
         text=True,
     )
     if push_result.returncode != 0:
+        stderr_text = push_result.stderr.strip()
         logger.error(
             "push_to_remote_failed",
             clone_path=clone_path,
             remote_url=resolved_url,
             branch=branch,
-            stderr=push_result.stderr.strip(),
+            stderr=stderr_text,
         )
-        return {"success": False, "stderr": push_result.stderr.strip()}
+        failure: dict[str, str | bool] = {"success": False, "stderr": stderr_text}
+        if force:
+            if "stale info" in stderr_text:
+                failure["error_type"] = "force_with_lease_stale"
+            elif (
+                "no upstream configured" in stderr_text or "has no upstream branch" in stderr_text
+            ):
+                failure["error_type"] = "force_with_lease_no_upstream"
+        return failure
 
     logger.info(
         "push_to_remote_succeeded",

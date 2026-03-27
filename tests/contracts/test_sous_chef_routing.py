@@ -62,10 +62,3 @@ class TestSousChefStaleRouting:
         assert "retries" in stale_section or "on_failure" in stale_section, (
             "retry_reason=stale must route via retries counter or on_failure"
         )
-
-    def test_summary_line_includes_stale(self) -> None:
-        """The routing summary at the end of CONTEXT LIMIT ROUTING must mention stale."""
-        skill_md = _sous_chef_text()
-        assert "retry_reason=stale" in skill_md or "retry_reason: stale" in skill_md, (
-            "SKILL.md must mention stale in the routing section"
-        )

@@ -3106,3 +3106,94 @@ class TestContractRecoveryGate:
         sr = _build_skill_result(**kwargs)
         assert sr.needs_retry is False
         assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED
+
+
+class TestBuildSkillResultSessionIdFromSubprocess:
+    """_build_skill_result propagates result.session_id on all paths."""
+
+    def test_stale_path_session_id_from_subprocess_result(self) -> None:
+        """Stale path: SkillResult.session_id == result.session_id (not hardcoded '')."""
+        result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=1,
+            session_id="real-uuid-from-channel-b",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "real-uuid-from-channel-b"
+
+    def test_timeout_empty_stdout_session_id_from_subprocess_result(self) -> None:
+        """TIMED_OUT with empty stdout: SkillResult.session_id == result.session_id."""
+        result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=1,
+            session_id="real-uuid-from-channel-b",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "real-uuid-from-channel-b"
+
+    def test_channel_a_session_id_takes_precedence(self) -> None:
+        """When stdout has a result record with session_id, it wins over result.session_id."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "result": "done",
+                "session_id": "stdout-uuid",
+                "is_error": False,
+            }
+        )
+        result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            session_id="ch-b-uuid",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "stdout-uuid"
+
+    def test_context_exhaustion_session_id_from_subprocess_result(self) -> None:
+        """Context-exhaustion (no result record): uses result.session_id as fallback."""
+        partial_assistant_stdout = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "Doing work..."}]
+                },
+            }
+        )
+        result = SubprocessResult(
+            returncode=1,
+            stdout=partial_assistant_stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            session_id="ch-b-uuid-5678",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "ch-b-uuid-5678"
+
+
+class TestStalePathEmitsRetryReasonStale:
+    """Stale termination path emits RetryReason.STALE, not RESUME."""
+
+    def test_stale_path_emits_retry_reason_stale(self) -> None:
+        """Stale termination path emits RetryReason.STALE, not RESUME."""
+        result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=1,
+            session_id="",
+        )
+        sr = _build_skill_result(result)
+        assert sr.retry_reason == RetryReason.STALE
+        assert sr.needs_retry is True

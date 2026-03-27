@@ -105,17 +105,21 @@ This aggregates token usage across all constituent PR sessions that ran in this 
 working directory.
 
 ```bash
-export PIPELINE_CWD="$(pwd)"
 mkdir -p .autoskillit/temp/promote-to-main
 python3 - <<'EOF' > .autoskillit/temp/promote-to-main/token_summary.md 2>/dev/null || true
-import sys, os
+import json, pathlib, sys
 from autoskillit.pipeline.tokens import DefaultTokenLog
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 from autoskillit.execution.session_log import resolve_log_dir
 
+cfg_path = pathlib.Path(".autoskillit") / "temp" / ".autoskillit_hook_config.json"
+pipeline_id = ""
+if cfg_path.exists():
+    pipeline_id = json.loads(cfg_path.read_text()).get("pipeline_id", "")
+
 log_root = resolve_log_dir("")
 tl = DefaultTokenLog()
-n = tl.load_from_log_dir(log_root, cwd_filter=os.environ.get("PIPELINE_CWD", ""))
+n = tl.load_from_log_dir(log_root, pipeline_id_filter=pipeline_id)
 if n == 0:
     sys.exit(0)
 steps = tl.get_report()

@@ -136,7 +136,14 @@ class DefaultTokenLog:
         """Reset the store."""
         self._entries = {}
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "", cwd_filter: str = "") -> int:
+    def load_from_log_dir(
+        self,
+        log_root: Path,
+        *,
+        since: str = "",
+        cwd_filter: str = "",
+        pipeline_id_filter: str = "",
+    ) -> int:
         """Reconstruct token entries from persisted session logs.
 
         Reads the sessions.jsonl index at log_root, filters entries by since
@@ -145,13 +152,14 @@ class DefaultTokenLog:
         with the existing in-memory state).
 
         cwd_filter: if non-empty, only sessions whose cwd matches are loaded.
-        This enables per-pipeline-run scoping when multiple pipelines share
-        the same global log directory.
+        pipeline_id_filter: if non-empty, only sessions whose pipeline_id matches are loaded.
 
         Returns the count of session directories successfully loaded.
         """
         count = 0
-        for tu_path in _iter_session_log_entries(log_root, since, "token_usage.json", cwd_filter):
+        for tu_path in _iter_session_log_entries(
+            log_root, since, "token_usage.json", cwd_filter, pipeline_id_filter
+        ):
             try:
                 data = json.loads(tu_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):

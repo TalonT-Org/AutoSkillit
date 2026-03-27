@@ -98,8 +98,18 @@ def _fmt_duration(seconds: float) -> str:
     return f"{h}h {m}m"
 
 
-def _load_sessions(log_root: pathlib.Path, cwd: str) -> dict[str, dict[str, Any]]:
-    """Load and aggregate token data from sessions matching cwd.
+def _read_pipeline_id() -> str:
+    """Read pipeline_id from hook_config.json. Returns '' if absent or unset."""
+    path = pathlib.Path.cwd() / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return str(data.get("pipeline_id", ""))
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError, OSError):
+        return ""
+
+
+def _load_sessions(log_root: pathlib.Path, pipeline_id: str) -> dict[str, dict[str, Any]]:
+    """Load and aggregate token data from sessions matching pipeline_id.
 
     Returns a dict keyed by canonical step name, with aggregated counts.
     Preserves insertion order (Python 3.7+).
@@ -121,7 +131,7 @@ def _load_sessions(log_root: pathlib.Path, cwd: str) -> dict[str, dict[str, Any]
         except json.JSONDecodeError:
             continue
 
-        if idx.get("cwd") != cwd:
+        if not pipeline_id or idx.get("pipeline_id") != pipeline_id:
             continue
 
         dir_name = idx.get("dir_name", "")
@@ -214,10 +224,10 @@ def main() -> None:
         if not pr_url:
             sys.exit(0)
 
-        cwd = os.getcwd()
+        pipeline_id = _read_pipeline_id()
         log_root = _log_root()
 
-        aggregated = _load_sessions(log_root, cwd)
+        aggregated = _load_sessions(log_root, pipeline_id)
         if not aggregated:
             sys.exit(0)
 
@@ -228,6 +238,10 @@ def main() -> None:
             text=True,
         )
         if view_proc.returncode != 0:
+            sys.stderr.write(
+                f"token_summary_appender: gh pr view failed (rc={view_proc.returncode}): "
+                f"{view_proc.stderr.strip() if view_proc.stderr else 'no stderr'}\n"
+            )
             sys.exit(0)
         if "## Token Usage Summary" in view_proc.stdout:
             sys.exit(0)
@@ -243,7 +257,12 @@ def main() -> None:
         new_body = current_body + "\n\n" + token_table
 
         try:
-            subprocess.run(["gh", "pr", "edit", pr_url, "--body", new_body], check=True)
+            subprocess.run(
+                ["gh", "pr", "edit", pr_url, "--body", new_body],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
         except subprocess.CalledProcessError as cpe:
             sys.stderr.write(
                 f"token_summary_appender: gh pr edit failed (rc={cpe.returncode}): {cpe.stderr}\n"

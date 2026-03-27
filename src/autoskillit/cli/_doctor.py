@@ -149,6 +149,28 @@ def _check_hook_registry_drift(settings_path: Path) -> DoctorResult:
     )
 
 
+def _check_hook_health(settings_path: Path) -> DoctorResult:
+    """Verify all deployed hook scripts exist on disk for all event types."""
+    data = _load_settings_data(settings_path)
+    broken_hooks: list[str] = []
+    for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
+        for entry in data.get("hooks", {}).get(event_type, []):
+            for hook in entry.get("hooks", []):
+                cmd = hook.get("command", "")
+                parts = cmd.split()
+                if len(parts) >= 2:
+                    script_path = Path(parts[-1])
+                    if not script_path.is_file():
+                        broken_hooks.append(cmd)
+    if broken_hooks:
+        return DoctorResult(
+            severity=Severity.ERROR,
+            check="hook_health",
+            message=f"Hook scripts not found: {', '.join(broken_hooks)}",
+        )
+    return DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible")
+
+
 def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
     """Check that every file in .autoskillit/ is gitignored or in the committed allowlist."""
     from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES, _COMMITTED_BY_DESIGN
@@ -448,29 +470,8 @@ def run_doctor(*, output_json: bool = False) -> None:
             )
         )
 
-    # Check 6: Hook executability — validates scripts from the canonical registry
-    from autoskillit.hooks import generate_hooks_json
-
-    hooks_data = generate_hooks_json()
-    broken_hooks: list[str] = []
-    for entry in hooks_data.get("hooks", {}).get("PreToolUse", []):
-        for hook in entry.get("hooks", []):
-            cmd = hook.get("command", "")
-            parts = cmd.split()
-            if len(parts) >= 2:
-                script_path = Path(parts[-1])
-                if not script_path.is_file():
-                    broken_hooks.append(cmd)
-    if broken_hooks:
-        results.append(
-            DoctorResult(
-                Severity.ERROR,
-                "hook_health",
-                f"Hook scripts not found: {', '.join(broken_hooks)}",
-            )
-        )
-    else:
-        results.append(DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible"))
+    # Check 6: Hook executability — validates deployed scripts for all event types
+    results.append(_check_hook_health(_claude_settings_path("user")))
 
     # Check 7: Hook registration in settings.json
     results.append(_check_hook_registration(_claude_settings_path("user")))

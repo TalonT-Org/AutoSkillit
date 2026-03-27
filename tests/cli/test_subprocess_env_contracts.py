@@ -58,7 +58,7 @@ def _collect_autoskillit_subprocess_calls(source: str) -> list[tuple[int, str, b
 
 
 def test_autoskillit_subprocess_calls_inject_skip_stale_check_guard() -> None:
-    """CLI subprocess.run(['autoskillit', ...]) calls must inject the skip-stale-check guard."""
+    """subprocess.run(['autoskillit', ...]) calls must inject the skip-stale-check guard."""
     if not CLI_ROOT.is_dir():
         pytest.skip("Source tree unavailable")
     violations: list[str] = []

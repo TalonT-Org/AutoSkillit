@@ -748,3 +748,24 @@ def test_flush_session_log_write_call_count_defaults_to_zero(tmp_path):
     _flush(tmp_path, session_id="wc-default", proc_snapshots=None)
     summary = json.loads((tmp_path / "sessions" / "wc-default" / "summary.json").read_text())
     assert summary["write_call_count"] == 0
+
+
+def test_flush_session_log_writes_pipeline_id(tmp_path):
+    """pipeline_id parameter is written to sessions.jsonl index entry."""
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/some/worktree",
+        pipeline_id="my-pipeline-123",
+        session_id="sess-001",
+        pid=12345,
+        skill_command="/autoskillit:implement",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-03-27T08:00:00",
+        proc_snapshots=None,
+    )
+
+    index = (tmp_path / "sessions.jsonl").read_text()
+    entry = json.loads(index.strip())
+    assert entry["pipeline_id"] == "my-pipeline-123"

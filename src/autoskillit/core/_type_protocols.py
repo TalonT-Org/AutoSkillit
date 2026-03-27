@@ -73,7 +73,12 @@ class AuditStore(Protocol):
     def record_success(self, skill_command: str) -> None: ...
 
     def load_from_log_dir(
-        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+        self,
+        log_root: Path,
+        *,
+        since: str = "",
+        cwd_filter: str = "",
+        pipeline_id_filter: str = "",
     ) -> int: ...
 
 
@@ -98,7 +103,12 @@ class TokenStore(Protocol):
     def clear(self) -> None: ...
 
     def load_from_log_dir(
-        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+        self,
+        log_root: Path,
+        *,
+        since: str = "",
+        cwd_filter: str = "",
+        pipeline_id_filter: str = "",
     ) -> int: ...
 
 
@@ -115,7 +125,12 @@ class TimingStore(Protocol):
     def clear(self) -> None: ...
 
     def load_from_log_dir(
-        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+        self,
+        log_root: Path,
+        *,
+        since: str = "",
+        cwd_filter: str = "",
+        pipeline_id_filter: str = "",
     ) -> int: ...
 
 
@@ -159,6 +174,7 @@ class HeadlessExecutor(Protocol):
         *,
         model: str = "",
         step_name: str = "",
+        pipeline_id: str = "",
         add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,

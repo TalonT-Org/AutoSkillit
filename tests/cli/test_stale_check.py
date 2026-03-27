@@ -203,6 +203,7 @@ def test_run_stale_check_binary_update_y_path_injects_guard_env(
     assert mock_run.call_args_list[1][0][0] == ["autoskillit", "install"]
     assert "AUTOSKILLIT_SKIP_STALE_CHECK" in mock_run.call_args_list[0].kwargs["env"]
     assert "AUTOSKILLIT_SKIP_STALE_CHECK" in mock_run.call_args_list[1].kwargs["env"]
+    assert mock_run.call_args_list[0].kwargs["env"]["AUTOSKILLIT_SKIP_STALE_CHECK"] == "1"
     assert mock_run.call_args_list[1].kwargs["env"]["AUTOSKILLIT_SKIP_STALE_CHECK"] == "1"
 
 

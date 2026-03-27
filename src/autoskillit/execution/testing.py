@@ -86,6 +86,12 @@ def check_test_passed(returncode: int, stdout: str, stderr: str = "") -> bool:
     Uses exit code as primary signal and cross-validates against parsed output
     when pytest-format output is detected. For non-pytest runners that produce
     no pytest summary, trusts the exit code directly.
+
+    Known limitation: if pytest crashes with exit code 0 before printing its
+    summary line (e.g. a conftest module that calls sys.exit(0) during
+    collection), no summary is found and this function returns True. There is
+    no reliable heuristic to distinguish that case from a legitimate non-pytest
+    runner that exits 0 with no summary output.
     """
     if returncode != 0:
         return False

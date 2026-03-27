@@ -271,16 +271,25 @@ class TestPatchBumpIntegrationWorkflow:
         )
 
     def test_pyproject_toml_is_updated(self):
-        text = PATCH_BUMP_INTEGRATION_WORKFLOW.read_text()
-        assert "pyproject.toml" in text
+        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        job = next(iter(wf.get("jobs", {}).values()))
+        step = _find_step(job, "Update pyproject.toml")
+        assert step is not None, "Workflow must have an 'Update pyproject.toml' step"
+        assert "pyproject.toml" in step.get("run", ""), "Update step must reference pyproject.toml"
 
     def test_plugin_json_is_updated(self):
-        text = PATCH_BUMP_INTEGRATION_WORKFLOW.read_text()
-        assert "plugin.json" in text
+        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        job = next(iter(wf.get("jobs", {}).values()))
+        step = _find_step(job, "Update plugin.json")
+        assert step is not None, "Workflow must have an 'Update plugin.json' step"
+        assert "plugin.json" in step.get("run", ""), "Update step must reference plugin.json"
 
     def test_uv_lock_is_regenerated(self):
-        text = PATCH_BUMP_INTEGRATION_WORKFLOW.read_text()
-        assert "uv lock" in text
+        wf = _load(PATCH_BUMP_INTEGRATION_WORKFLOW)
+        job = next(iter(wf.get("jobs", {}).values()))
+        step = _find_step(job, "Regenerate uv.lock")
+        assert step is not None, "Workflow must have a 'Regenerate uv.lock' step"
+        assert "uv lock" in step.get("run", ""), "Regenerate step must run 'uv lock'"
 
     def test_uses_github_actions_bot_identity(self):
         text = PATCH_BUMP_INTEGRATION_WORKFLOW.read_text()

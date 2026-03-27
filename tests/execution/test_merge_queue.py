@@ -792,7 +792,7 @@ class TestRelatedCoverage:
             )
 
         assert result["pr_state"] == "stalled"
-        assert watcher._toggle_auto_merge.call_count >= 1  # type: ignore[union-attr]
+        assert watcher._toggle_auto_merge.call_count == 1  # type: ignore[union-attr]
 
     @pytest.mark.anyio
     async def test_returns_error_when_repo_has_no_slash(self):

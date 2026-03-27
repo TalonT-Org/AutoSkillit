@@ -73,6 +73,7 @@ BUNDLED_SKILLS = [
     "sous-chef",
     "sprint-planner",
     "triage-issues",
+    "validate-audit",
     "verify-diag",
     "write-recipe",
 ]
@@ -102,6 +103,7 @@ AUDIT_SKILL_NAMES = [
     "audit-tests",
     "audit-cohesion",
     "audit-defense-standards",
+    "validate-audit",
 ]
 
 BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)
@@ -403,11 +405,11 @@ class TestSkillResolver:
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 57
+        assert len(skills) == 58
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 59 public skills (2 Tier-1 + 57 extended)."""
-        assert len(SkillResolver().list_all()) == 59
+        """list_all() returns 60 public skills (2 Tier-1 + 58 extended)."""
+        assert len(SkillResolver().list_all()) == 60
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
@@ -520,6 +522,7 @@ class TestSkillCategories:
             "audit-bugs",
             "audit-friction",
             "audit-impl",
+            "validate-audit",
         ]:
             info = resolver.resolve(name)
             assert info is not None

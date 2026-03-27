@@ -228,6 +228,7 @@ src/autoskillit/
 │   ├── _marketplace.py      #   Plugin install/upgrade marketplace operations
 │   ├── _onboarding.py       #   First-run detection and guided onboarding menu (is_first_run, run_onboarding_menu)
 │   ├── _prompts.py          #   Orchestrator prompt builder for recipe execution
+│   ├── _stale_check.py      #   Stale-install check: version comparison, hook-drift prompt, dismissal state
 │   ├── _workspace.py        #   Workspace clean helpers: age partitioning, display, and confirmation
 │   └── app.py               #   CLI: serve, init, config show, skills, recipes, workspace, doctor
 ├── hooks/                   # Claude Code PreToolUse, PostToolUse, and SessionStart hook scripts

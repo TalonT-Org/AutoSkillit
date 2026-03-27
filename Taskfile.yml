@@ -149,3 +149,9 @@ tasks:
           uv pip install -e '.[dev]' --python .venv/bin/python
         fi
         echo "Done: $(python --version 2>/dev/null || .venv/bin/python --version)"
+
+  install-dev:
+    desc: Install dev version of autoskillit from the integration branch
+    cmds:
+      - uv tool install --force "git+https://github.com/TalonT-Org/AutoSkillit.git@integration"
+      - autoskillit install

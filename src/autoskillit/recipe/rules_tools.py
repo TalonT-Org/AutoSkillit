@@ -72,6 +72,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "workflow",
             "timeout_seconds",
             "cwd",
+            "step_name",
         }
     ),
     "wait_for_merge_queue": frozenset(
@@ -86,6 +87,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "stall_grace_period",
             "max_stall_retries",
             "not_in_queue_confirmation_cycles",
+            "step_name",
         }
     ),
     "get_ci_status": frozenset({"branch", "run_id", "repo", "workflow", "cwd"}),
@@ -133,7 +135,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
         }
     ),
     "enrich_issues": frozenset({"issue_number", "batch", "dry_run", "repo"}),
-    "claim_issue": frozenset({"issue_url", "label"}),
+    "claim_issue": frozenset({"issue_url", "label", "allow_reentry"}),
     "release_issue": frozenset({"issue_url", "label", "target_branch", "staged_label"}),
     "fetch_github_issue": frozenset({"issue_url", "include_comments"}),
     "get_issue_title": frozenset({"issue_url"}),

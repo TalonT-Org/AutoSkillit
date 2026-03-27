@@ -29,7 +29,9 @@ def _extract_routing_rule(skill_md: str, retry_reason: str) -> str:
             continue
         if in_routing_section and line.startswith("---"):
             break
-        if in_routing_section and re.search(rf"retry_reason[:\s]+{re.escape(retry_reason)}", line):
+        if in_routing_section and re.search(
+            rf"retry_reason[:\s=]+{re.escape(retry_reason)}", line
+        ):
             extracted.append(line)
     return "\n".join(extracted)
 

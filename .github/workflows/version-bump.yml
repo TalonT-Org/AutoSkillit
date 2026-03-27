@@ -96,6 +96,7 @@ jobs:
           import tomllib, pathlib
           print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])
           ")
+          [ -n "$CURRENT" ] || { echo "ERROR: int_version: CURRENT is empty — checkout may have failed or pyproject.toml is absent" >&2; exit 1; }
           echo "old=$CURRENT" >> "$GITHUB_OUTPUT"
 
       - name: Update pyproject.toml (integration)

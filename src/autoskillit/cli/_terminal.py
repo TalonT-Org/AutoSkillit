@@ -27,9 +27,9 @@ def terminal_guard() -> Generator[None, None, None]:
 
     Exit-only safety net: this guard emits NO entry-side terminal mode-switch
     sequences. The subprocess is the sole owner of alt-screen entry (e.g.,
-    Claude Code's Ink TUI emits its own \\033[?1049h on startup). Emitting
-    \\033[?1049h before the subprocess would cause double-emission of DECSET
-    1049, overwriting the DECSC cursor save point set by Ink and corrupting its
+    Claude Code's Ink TUI emits its own smcup sequence on startup). Emitting
+    smcup before the subprocess would cause double-emission of DECSET 1049,
+    overwriting the DECSC cursor save point set by Ink and corrupting its
     viewport height calculation (DECSET 1049 is a boolean toggle — no nesting
     counter exists in any terminal emulator).
 

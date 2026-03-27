@@ -654,7 +654,7 @@ class TestPendingCIGuard:
 
     @pytest.mark.anyio
     async def test_continues_polling_when_checks_expected_and_not_in_queue(self):
-        """EXPECTED means 'check configured but not yet started' — same as PENDING: keep polling."""
+        """EXPECTED means 'check not yet started' — same as PENDING: keep polling."""
         watcher = _make_watcher()
         call_count = 0
 
@@ -679,7 +679,7 @@ class TestPendingCIGuard:
 
     @pytest.mark.anyio
     async def test_returns_ejected_when_checks_terminal_and_not_in_queue(self):
-        """checks_state=SUCCESS + not in queue → genuine ejection (guard must not block real ejections)."""
+        """checks_state=SUCCESS + not in queue → genuine ejection (guard must not block it)."""
         watcher = _make_watcher()
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=_queue_state(
@@ -697,7 +697,7 @@ class TestPendingCIGuard:
 
     @pytest.mark.anyio
     async def test_returns_ejected_when_no_status_checks_configured(self):
-        """checks_state=None (no required checks) → ejected; unchanged behavior for repos without CI."""
+        """checks_state=None (no required checks) → ejected; unchanged for repos without CI."""
         watcher = _make_watcher()
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=_queue_state(
@@ -768,7 +768,7 @@ class TestRelatedCoverage:
 
     @pytest.mark.anyio
     async def test_is_stall_candidate_when_has_hooks(self):
-        """merge_state_status=HAS_HOOKS + auto-merge enabled → stall detection fires (not ejected)."""
+        """merge_state_status=HAS_HOOKS + auto-merge enabled → stall detection fires."""
         watcher = _make_watcher()
         enabled_at = datetime.now(UTC) - timedelta(seconds=120)
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]

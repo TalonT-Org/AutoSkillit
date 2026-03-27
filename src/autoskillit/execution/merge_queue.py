@@ -203,6 +203,7 @@ class DefaultMergeQueueWatcher:
             is_stall_candidate = enabled_at is not None and merge_status in {"CLEAN", "HAS_HOOKS"}
 
             if is_stall_candidate:
+                assert enabled_at is not None  # guaranteed by is_stall_candidate
                 stall_duration = max(0.0, (now - enabled_at).total_seconds())
 
                 if stall_duration < stall_grace_period:
@@ -235,13 +236,13 @@ class DefaultMergeQueueWatcher:
                     f"PR #{pr_number} stall unresolved after {max_stall_retries} toggle attempts",
                 )
 
-            # D6: checks_state guard — CI still running means PR not yet eligible for queue admission
+            # D6: checks_state guard — CI still running, PR not yet eligible for queue
             if state["checks_state"] in {"PENDING", "EXPECTED"}:
                 await asyncio.sleep(poll_interval)
                 continue
 
             # Positive confirmation: checks are terminal (SUCCESS/FAILURE/ERROR) or absent (None).
-            # PR is confirmed not in queue, not merged, and checks are not pending → genuine ejection.
+            # PR confirmed not in queue, not merged, checks not pending → genuine ejection.
             return _make_result(
                 False,
                 "ejected",

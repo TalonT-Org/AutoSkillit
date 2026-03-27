@@ -166,8 +166,15 @@ def run_stale_check(home: Path | None = None) -> None:
     - Skips when CLAUDECODE=1 (headless/MCP session)
     - Skips when stdin or stdout is not a TTY
     """
-    if os.environ.get("CLAUDECODE") or not sys.stdin.isatty() or not sys.stdout.isatty():
+    if (
+        os.environ.get("CLAUDECODE")
+        or os.environ.get("AUTOSKILLIT_SKIP_STALE_CHECK")
+        or not sys.stdin.isatty()
+        or not sys.stdout.isatty()
+    ):
         return
+
+    _skip_env = {**os.environ, "AUTOSKILLIT_SKIP_STALE_CHECK": "1"}
 
     import autoskillit as _pkg
     from autoskillit.cli._hooks import _claude_settings_path
@@ -195,13 +202,15 @@ def run_stale_check(home: Path | None = None) -> None:
                         subprocess.run(
                             ["uv", "tool", "install", "--force", _INSTALL_FROM_INTEGRATION],
                             check=False,
+                            env=_skip_env,
                         )
                     else:
                         subprocess.run(
                             ["uv", "tool", "upgrade", "autoskillit"],
                             check=False,
+                            env=_skip_env,
                         )
-                    subprocess.run(["autoskillit", "install"], check=False)
+                    subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)
                 return
             else:
                 state["binary"] = {
@@ -223,7 +232,7 @@ def run_stale_check(home: Path | None = None) -> None:
         answer = input("Run 'autoskillit install' to sync hooks? [Y/n] ").strip().lower()
         if answer in ("", "y", "yes"):
             with terminal_guard():
-                subprocess.run(["autoskillit", "install"], check=False)
+                subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)
         else:
             state["hooks"] = {
                 "dismissed_at": datetime.now(UTC).isoformat(),

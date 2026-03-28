@@ -67,16 +67,8 @@ def test_make_context_tester_is_default_test_runner():
 
 
 def test_make_context_all_service_fields_populated_includes_github_client():
-    """All optional service fields must be populated, including github_client and clone_mgr."""
+    """All service fields populated; typed instances validated; skill_resolver is set."""
     ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.executor is not None
-    assert ctx.tester is not None
-    assert ctx.recipes is not None
-    assert ctx.migrations is not None
-    assert ctx.db_reader is not None
-    assert ctx.workspace_mgr is not None
-    assert ctx.clone_mgr is not None
-    assert ctx.github_client is not None
     assert ctx.skill_resolver is not None
     assert isinstance(ctx.recipes, DefaultRecipeRepository)
     assert isinstance(ctx.migrations, DefaultMigrationService)

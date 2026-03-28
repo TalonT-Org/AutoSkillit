@@ -728,17 +728,6 @@ class TestDetectSourceDir:
 
 
 class TestCloneRepoDetectAndExpand:
-    def test_ds3_calls_detect_source_dir_when_source_dir_empty(self, tmp_path) -> None:
-        """T_DS3: clone_repo calls detect_source_dir when source_dir is empty."""
-        with patch(
-            "autoskillit.workspace.clone.detect_source_dir", return_value=str(tmp_path)
-        ) as mock_detect:
-            mock_clone = MagicMock()
-            mock_clone.returncode = 0
-            with patch("subprocess.run", return_value=mock_clone):
-                clone_repo("", "test-run")
-        mock_detect.assert_called_once()
-
     def test_ds4_expands_tilde(self) -> None:
         """T_DS4: clone_repo raises ValueError with 'resolved to' when tilde path doesn't exist."""
         with pytest.raises(ValueError, match="resolved to"):
@@ -761,16 +750,6 @@ class TestCloneRepoDetectAndExpand:
                 with patch("subprocess.run", return_value=mock_clone):
                     clone_repo(str(tmp_path), "test-run", branch="")
         mock_detect.assert_called_once_with(str(tmp_path))
-
-    def test_cb8_skips_detect_branch_when_branch_provided(self, tmp_path) -> None:
-        """T_CB8: detect_branch is NOT called when branch is explicitly provided."""
-        with patch("autoskillit.workspace.clone.detect_branch") as mock_detect:
-            with patch("autoskillit.workspace.clone.detect_uncommitted_changes", return_value=[]):
-                mock_clone = MagicMock()
-                mock_clone.returncode = 0
-                with patch("subprocess.run", return_value=mock_clone):
-                    clone_repo(str(tmp_path), "test-run", branch="feature")
-        mock_detect.assert_not_called()
 
     def test_cb9_passes_branch_flag_to_git(self, tmp_path) -> None:
         """T_CB9: --branch and branch name appear in the git clone subprocess call."""

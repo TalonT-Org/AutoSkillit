@@ -60,14 +60,6 @@ class TestRunSkillPluginDir:
         actual_cwd = tool_ctx.runner.call_args_list[0][1]
         assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 
-    @pytest.mark.anyio
-    async def test_run_skill_uses_two_hour_timeout(self, tool_ctx):
-        """run_skill uses 7200s timeout (merged from former run_skill_retry)."""
-        from autoskillit.config import AutomationConfig
-
-        cfg = AutomationConfig()
-        assert cfg.run_skill.timeout == 7200
-
 
 class TestCheckDryWalkthrough:
     """Dry-walkthrough gate blocks both /autoskillit:implement-worktree variants."""

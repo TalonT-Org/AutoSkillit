@@ -6,6 +6,7 @@ Zero autoskillit imports. Provides the shared constant vocabulary for all higher
 from __future__ import annotations
 
 from importlib.metadata import version
+from typing import NamedTuple
 
 __all__ = [
     "AUTOSKILLIT_INSTALLED_VERSION",
@@ -18,6 +19,8 @@ __all__ = [
     "HEADLESS_TOOLS",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
+    "PackDef",
+    "PACK_REGISTRY",
     "CATEGORY_TAGS",
     "TOOL_SUBSET_TAGS",
     "TOOL_CATEGORIES",
@@ -149,9 +152,26 @@ FREE_RANGE_TOOLS: frozenset[str] = frozenset({"open_kitchen", "close_kitchen"})
 
 UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS
 
-CATEGORY_TAGS: frozenset[str] = frozenset(
-    {"github", "ci", "clone", "telemetry", "arch-lens", "audit"}
-)
+
+class PackDef(NamedTuple):
+    """Definition of a named skill pack with default visibility state."""
+
+    default_enabled: bool
+    description: str
+
+
+PACK_REGISTRY: dict[str, PackDef] = {
+    "github": PackDef(True, "GitHub issue and PR tools"),
+    "ci": PackDef(True, "CI polling and merge queue tools"),
+    "clone": PackDef(True, "Clone-based run isolation tools"),
+    "telemetry": PackDef(True, "Token, timing, and quota reporting"),
+    "arch-lens": PackDef(True, "Architecture diagram lenses"),
+    "audit": PackDef(True, "Codebase audit skills"),
+    "research": PackDef(False, "Research recipe and experiment skills"),
+    "exp-lens": PackDef(False, "Experimental design audit lenses"),
+}
+
+CATEGORY_TAGS: frozenset[str] = frozenset(PACK_REGISTRY.keys())
 
 # Maps each MCP tool name to its functional category subset tags.
 # Mirrors the FastMCP @mcp.tool(tags=...) category assignments in the server layer.

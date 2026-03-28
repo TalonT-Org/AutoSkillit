@@ -66,6 +66,9 @@ async def _open_kitchen_handler() -> None:
     ctx = _get_ctx()
     ctx.gate.enable()
     ctx.pipeline_id = str(uuid4())
+    # Store recipe packs — populated from LoadRecipeResult.requires_packs in #524.
+    # For now, store empty frozenset to establish the contract.
+    ctx.active_recipe_packs = frozenset()
     logger.info("open_kitchen", gate_state="open", pipeline_id=ctx.pipeline_id)
     _write_hook_config()
     await _prime_quota_cache()
@@ -87,6 +90,7 @@ def _close_kitchen_handler() -> None:
     from autoskillit.server import _get_ctx, logger
 
     _get_ctx().gate.disable()
+    _get_ctx().active_recipe_packs = None
     logger.info("close_kitchen", gate_state="closed")
     hook_cfg_path = _hook_config_path(Path.cwd())
     try:
@@ -155,6 +159,7 @@ async def open_kitchen(
             resolved_defaults=_defaults,
             ingredient_overrides=overrides,
         )
+        tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
         recipe_info = tool_ctx.recipes.find(name, Path.cwd())
         result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
         result["kitchen"] = "open"

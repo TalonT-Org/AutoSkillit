@@ -453,3 +453,37 @@ async def test_open_kitchen_no_redisable_when_empty(tmp_path, monkeypatch):
                     await open_kitchen(ctx=mock_ctx)
 
     mock_ctx.disable_components.assert_not_called()
+
+
+# REQ-PACK-008: open_kitchen stores active_recipe_packs
+@pytest.mark.anyio
+async def test_open_kitchen_sets_active_recipe_packs(tmp_path, monkeypatch):
+    """After _open_kitchen_handler(), ctx.active_recipe_packs is frozenset()."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import _open_kitchen_handler
+
+                    await _open_kitchen_handler()
+
+    assert mock_ctx.active_recipe_packs == frozenset()
+
+
+# REQ-PACK-008: close_kitchen clears active_recipe_packs
+def test_close_kitchen_clears_active_recipe_packs(tmp_path, monkeypatch):
+    """After _close_kitchen_handler(), ctx.active_recipe_packs is None."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.active_recipe_packs = frozenset(["research"])
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools_kitchen import _close_kitchen_handler
+
+            _close_kitchen_handler()
+
+    assert mock_ctx.active_recipe_packs is None

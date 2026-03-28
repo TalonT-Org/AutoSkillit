@@ -115,6 +115,9 @@ subsets:
   disabled: []
   custom_tags: {}
 
+packs:
+  enabled: []
+
 skills:
   tier1:
     - open-kitchen

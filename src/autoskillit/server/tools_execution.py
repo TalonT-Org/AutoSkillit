@@ -256,6 +256,7 @@ async def run_skill(
             cook_session=False,
             config=tool_ctx.config,
             project_dir=Path(cwd),
+            recipe_packs=tool_ctx.active_recipe_packs,
         )
         skill_add_dirs.append(session_root)
 

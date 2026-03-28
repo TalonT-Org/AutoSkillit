@@ -222,6 +222,11 @@ class SubsetsConfig:
     custom_tags: dict[str, list[str]] = field(default_factory=dict)
 
 
+@dataclass
+class PacksConfig:
+    enabled: list[str] = field(default_factory=list)
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -256,6 +261,7 @@ class AutomationConfig:
     ci: CIConfig = field(default_factory=CIConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
+    packs: PacksConfig = field(default_factory=PacksConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -293,6 +299,7 @@ class AutomationConfig:
         ci = sec("ci")
         sk = sec("skills")
         _sub = sec("subsets")
+        pk = sec("packs")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -423,6 +430,7 @@ class AutomationConfig:
                 tier3=list(val(sk, "tier3", _sk["tier3"])),
             ),
             subsets=_build_subsets_config(_sub),
+            packs=_build_packs_config(pk),
         )
 
 
@@ -549,6 +557,20 @@ def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
                 tag,
             )
     return SubsetsConfig(disabled=disabled, custom_tags=custom_tags)
+
+
+def _build_packs_config(raw: dict[str, Any]) -> PacksConfig:
+    """Parse packs section, warning on unknown pack names."""
+    from autoskillit.core import PACK_REGISTRY
+
+    enabled = list(raw.get("enabled", []))
+    for pack_name in enabled:
+        if pack_name not in PACK_REGISTRY:
+            _logger.warning(
+                "Unknown pack name %r in packs.enabled (not in PACK_REGISTRY)",
+                pack_name,
+            )
+    return PacksConfig(enabled=enabled)
 
 
 def _to_optional_list(value: Any) -> list[str] | None:

@@ -82,7 +82,7 @@ async def test_run_headless_core_two_add_dirs(make_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_run_skill_passes_ephemeral_session_dir_as_add_dir(tool_ctx, monkeypatch):
+async def test_raw_skills_extended_excluded_from_run_skill_add_dirs(tool_ctx, monkeypatch):
     """T-OVR-014: run_skill passes ephemeral session dir (not raw skills_extended/) as add_dirs."""
     from autoskillit.core import SkillResult
     from autoskillit.server import _state

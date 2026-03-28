@@ -56,7 +56,7 @@ def test_triage_enrich_is_idempotent():
     # "idempotent" mention (the current skill uses it only for label creation).
     idempotent = (
         ("idempotent" in lower and "## requirements" in lower)
-        or "already has" in lower
+        or ("already has" in lower and "## requirements" in lower)
         or ("skip if" in lower and "## requirements" in lower)
         or ("skip when" in lower and "## requirements" in lower)
     )

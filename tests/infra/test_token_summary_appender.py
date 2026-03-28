@@ -260,7 +260,7 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
 
     assert exit_code == 0
     assert len(edit_calls) == 1
-    field_idx = edit_calls[0].index("--field")
+    field_idx = edit_calls[0].index("--raw-field")
     body_arg = edit_calls[0][field_idx + 1]
     assert body_arg.startswith("body=")
     body_content = body_arg[len("body=") :]

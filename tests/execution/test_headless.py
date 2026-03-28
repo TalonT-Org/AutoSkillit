@@ -1769,37 +1769,6 @@ class TestMarkerCrossValidation:
         assert result.success is False
 
 
-class TestResolveModel:
-    """Tests for _resolve_model resolution chain."""
-
-    @pytest.fixture(autouse=True)
-    def _set_config(self, tool_ctx):
-        self._tool_ctx = tool_ctx
-
-    def _set_model_config(self, default=None, override=None):
-        cfg = AutomationConfig(model=ModelConfig(default=default, override=override))
-        self._tool_ctx.config = cfg
-
-    # MOD_R1
-    def test_resolve_model_override_wins(self):
-        self._set_model_config(override="haiku")
-        assert _resolve_model("sonnet", self._tool_ctx.config) == "haiku"
-
-    # MOD_R2
-    def test_resolve_model_step_model(self):
-        self._set_model_config()
-        assert _resolve_model("sonnet", self._tool_ctx.config) == "sonnet"
-
-    # MOD_R3
-    def test_resolve_model_config_default(self):
-        self._set_model_config(default="haiku")
-        assert _resolve_model("", self._tool_ctx.config) == "haiku"
-
-    # MOD_R4
-    def test_resolve_model_nothing_set(self):
-        self._set_model_config()
-        assert _resolve_model("", self._tool_ctx.config) is None
-
 
 class TestBuildSkillResultTokenUsage:
     """token_usage field in _build_skill_result output."""

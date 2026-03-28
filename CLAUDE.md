@@ -121,7 +121,7 @@ src/autoskillit/
 ├── pipeline/                # L1 pipeline state sub-package
 │   ├── __init__.py          #   Re-exports ToolContext, DefaultGateState, DefaultAuditLog, DefaultTokenLog
 │   ├── audit.py             #   FailureRecord, DefaultAuditLog
-│   ├── background.py        #   BackgroundTaskSupervisor — supervised background task execution; BackgroundSupervisor Protocol in core/
+│   ├── background.py        #   DefaultBackgroundSupervisor — supervised background task execution; BackgroundSupervisor Protocol in core/
 │   ├── context.py           #   ToolContext DI container (config, audit, token_log, gate, plugin_dir, runner)
 │   ├── gate.py              #   DefaultGateState, GATED_TOOLS, UNGATED_TOOLS, gate_error_result
 │   │                        #   (UNGATED_TOOLS is an alias for FREE_RANGE_TOOLS in core/types.py)
@@ -129,8 +129,7 @@ src/autoskillit/
 │   ├── telemetry_fmt.py     #   TelemetryFormatter — canonical token/timing display (single source of truth)
 │   ├── timings.py           #   TimingEntry, DefaultTimingLog — per-step wall-clock accumulation
 │   ├── tokens.py            #   TokenEntry, DefaultTokenLog
-│   ├── pr_gates.py          #   PR eligibility gates: is_ci_passing, is_review_passing, partition_prs
-│   └── fidelity.py          #   Fidelity helpers: extract_linked_issues, is_valid_fidelity_finding
+│   └── pr_gates.py          #   PR eligibility gates: is_ci_passing, is_review_passing, partition_prs
 ├── execution/               # L1 execution sub-package
 │   ├── __init__.py          #   Re-exports public surface
 │   ├── commands.py          #   ClaudeInteractiveCmd/ClaudeHeadlessCmd builders

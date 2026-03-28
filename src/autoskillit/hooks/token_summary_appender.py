@@ -94,7 +94,7 @@ def _humanize(n: int | float | None) -> str:
         return f"{n / 1_000_000:.1f}M"
     if n >= 1_000:
         return f"{n / 1_000:.1f}k"
-    return str(int(n))
+    return str(n)
 
 
 def _fmt_duration(seconds: float) -> str:

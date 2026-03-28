@@ -1,16 +1,16 @@
-"""Unit tests for BackgroundTaskSupervisor."""
+"""Unit tests for DefaultBackgroundSupervisor."""
 
 from __future__ import annotations
 
 import pytest
 
-from autoskillit.pipeline.background import BackgroundTaskSupervisor
+from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 
 
 @pytest.mark.anyio
 async def test_supervisor_captures_exception():
     """Submitted coroutines that raise must not produce unobserved task exceptions."""
-    supervisor = BackgroundTaskSupervisor(audit=None, log=None)
+    supervisor = DefaultBackgroundSupervisor(audit=None, log=None)
     captured = []
 
     async def failing_coro():
@@ -28,7 +28,7 @@ async def test_supervisor_captures_exception():
 @pytest.mark.anyio
 async def test_supervisor_pending_tasks_cleared_after_completion():
     """In-flight task count must return to zero after all submitted coros complete."""
-    supervisor = BackgroundTaskSupervisor(audit=None, log=None)
+    supervisor = DefaultBackgroundSupervisor(audit=None, log=None)
 
     async def noop():
         pass

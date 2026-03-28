@@ -9,11 +9,12 @@ store with a defensive copy getter.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, get_type_hints
 
 from autoskillit.core import FailureRecord, RetryReason, get_logger
 
@@ -23,6 +24,43 @@ STDERR_MAX_LEN = 500
 COMMAND_MAX_LEN = 200
 
 __all__ = ["FailureRecord", "DefaultAuditLog", "STDERR_MAX_LEN", "COMMAND_MAX_LEN"]
+
+_CONCRETE_TYPES = (str, int, bool, float)
+
+
+def _validate_failure_record_dict(record_dict: dict[str, Any]) -> bool:
+    """Return True if record_dict is structurally valid for FailureRecord construction.
+
+    Checks:
+    1. All dataclass fields are present as keys.
+    2. Values for concrete non-generic fields (str, int, bool, float) match their
+       declared type.
+
+    Uses typing.get_type_hints() to resolve string annotations produced by
+    ``from __future__ import annotations`` in core/_type_results.py.
+    Wrong-type or missing-field records are rejected (return False) so that
+    load_from_log_dir skips them rather than silently accepting mistyped data.
+    """
+    try:
+        hints = get_type_hints(FailureRecord)
+    except Exception:
+        logger.warning(
+            "get_type_hints(FailureRecord) failed; falling back to key-presence check",
+            exc_info=True,
+        )
+        return all(f.name in record_dict for f in dataclasses.fields(FailureRecord))
+
+    for f in dataclasses.fields(FailureRecord):
+        if f.name not in record_dict:
+            return False
+        resolved = hints.get(f.name)
+        if resolved in _CONCRETE_TYPES:
+            val = record_dict[f.name]
+            if resolved is int and isinstance(val, bool):
+                return False
+            if not isinstance(val, resolved):
+                return False
+    return True
 
 
 def _iter_session_log_entries(
@@ -218,6 +256,10 @@ class DefaultAuditLog:
                 continue
 
             for record_dict in data:
+                if not isinstance(record_dict, dict):
+                    continue
+                if not _validate_failure_record_dict(record_dict):
+                    continue
                 try:
                     self._records.append(FailureRecord(**record_dict))
                     count += 1

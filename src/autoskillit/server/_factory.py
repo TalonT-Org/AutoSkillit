@@ -25,8 +25,8 @@ from autoskillit.execution import (
 )
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import (
-    BackgroundTaskSupervisor,
     DefaultAuditLog,
+    DefaultBackgroundSupervisor,
     DefaultGateState,
     DefaultTimingLog,
     DefaultTokenLog,
@@ -127,7 +127,7 @@ def make_context(
     ctx = ToolContext(
         config=config,
         audit=audit,
-        background=BackgroundTaskSupervisor(audit=audit),
+        background=DefaultBackgroundSupervisor(audit=audit),
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=gate,

@@ -31,7 +31,7 @@ from autoskillit.workspace import clone_registry  # noqa: F401 — re-exported f
 if TYPE_CHECKING:
     from fastmcp import Context
 
-    from autoskillit.execution.process import SubprocessResult
+    from autoskillit.core import SubprocessResult
 
 logger = get_logger(__name__)
 

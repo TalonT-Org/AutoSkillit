@@ -21,6 +21,7 @@ from typing import Any
 import httpx
 
 from autoskillit.core import CIRunScope, get_logger
+from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
 
@@ -58,14 +59,7 @@ class DefaultCIWatcher:
         self._token = token
 
     def _headers(self) -> dict[str, str]:
-        h = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "autoskillit",
-        }
-        if self._token:
-            h["Authorization"] = f"Bearer {self._token}"
-        return h
+        return github_headers(self._token)
 
     async def _resolve_repo(self, repo: str | None, cwd: str) -> str | None:
         """Resolve owner/repo from argument or git remote."""

@@ -13,6 +13,7 @@ from typing import Any, TypedDict
 import httpx
 
 from autoskillit.core import get_logger
+from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
 
@@ -87,14 +88,8 @@ class DefaultMergeQueueWatcher:
     """
 
     def __init__(self, token: str | None) -> None:
-        headers: dict[str, str] = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
         self._client = httpx.AsyncClient(
-            headers=headers,
+            headers=github_headers(token),
             limits=httpx.Limits(keepalive_expiry=60),
             timeout=30.0,
         )

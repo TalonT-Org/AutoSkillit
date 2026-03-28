@@ -27,7 +27,7 @@ from autoskillit.core import (
 from autoskillit.workspace.skills import SkillInfo, SkillResolver, detect_project_local_overrides
 
 if TYPE_CHECKING:
-    from autoskillit.config.settings import AutomationConfig
+    from autoskillit.config import AutomationConfig
 
 # Candidate ephemeral roots, tried in order.
 # resolve_ephemeral_root() appends tempfile.gettempdir() as the final fallback.

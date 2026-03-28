@@ -6,6 +6,8 @@ and the missing User-Agent in DefaultMergeQueueWatcher.
 
 from __future__ import annotations
 
+import asyncio
+
 from autoskillit.execution.github import github_headers
 from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
 
@@ -53,13 +55,19 @@ def test_merge_queue_watcher_includes_user_agent_in_client_headers():
     inline in __init__ and omitted User-Agent.
     """
     watcher = DefaultMergeQueueWatcher(token=None)
-    # httpx.AsyncClient merges headers case-insensitively; check both cases
-    client_headers = dict(watcher._client.headers)
-    assert client_headers.get("user-agent") == "autoskillit"
+    try:
+        # httpx.AsyncClient merges headers case-insensitively; check both cases
+        client_headers = dict(watcher._client.headers)
+        assert client_headers.get("user-agent") == "autoskillit"
+    finally:
+        asyncio.run(watcher.aclose())
 
 
 def test_merge_queue_watcher_includes_user_agent_with_token():
     """User-Agent must be present even when a token is provided."""
     watcher = DefaultMergeQueueWatcher(token="tok")
-    client_headers = dict(watcher._client.headers)
-    assert client_headers.get("user-agent") == "autoskillit"
+    try:
+        client_headers = dict(watcher._client.headers)
+        assert client_headers.get("user-agent") == "autoskillit"
+    finally:
+        asyncio.run(watcher.aclose())

@@ -769,7 +769,8 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_swallows_attribute_error_from_ctx(self):
-        """AttributeError from ctx.info (e.g. _CurrentContext sentinel) is swallowed."""
+        """Contract: must not raise even when ctx.info raises AttributeError
+        (e.g. _CurrentContext sentinel). Test completion is the assertion."""
         from autoskillit.server.helpers import _notify
 
         ctx = AsyncMock()
@@ -779,7 +780,8 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_swallows_runtime_error_from_ctx(self):
-        """RuntimeError from ctx.info (no active MCP session) is swallowed."""
+        """Contract: must not raise even when ctx.info raises RuntimeError
+        (no active MCP session). Test completion is the assertion."""
         from autoskillit.server.helpers import _notify
 
         ctx = AsyncMock()
@@ -788,7 +790,8 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_swallows_key_error_from_ctx(self):
-        """KeyError from FastMCP's stdlib logging path is swallowed."""
+        """Contract: must not raise even when ctx.info raises KeyError
+        (FastMCP stdlib logging path). Test completion is the assertion."""
         from autoskillit.server.helpers import _notify
 
         ctx = AsyncMock()

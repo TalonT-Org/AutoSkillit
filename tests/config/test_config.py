@@ -364,9 +364,9 @@ class TestQuotaGuardConfig:
 class TestLoggingConfig:
     """LoggingConfig dataclass and YAML loading."""
 
-    def test_logging_config_defaults(self):
+    def test_logging_config_defaults(self, tmp_path):
         """LOG_C1: LoggingConfig has correct defaults from defaults.yaml."""
-        cfg = load_config(None)  # package defaults only (nonexistent project)
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.logging.level == "INFO"
         assert cfg.logging.json_output is None
 
@@ -432,9 +432,9 @@ class TestLoggingConfig:
 class TestLinuxTracingConfig:
     """LinuxTracingConfig dataclass and YAML loading."""
 
-    def test_linux_tracing_config_defaults(self):
+    def test_linux_tracing_config_defaults(self, tmp_path):
         """LT_C1: LinuxTracingConfig defaults: enabled, 5s interval, empty log_dir."""
-        cfg = load_config(None)
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.linux_tracing.enabled is True
         assert cfg.linux_tracing.proc_interval == 5.0
         assert cfg.linux_tracing.log_dir == ""
@@ -718,20 +718,22 @@ class TestBranchingConfig:
         assert cfg.default_base_branch == "integration"
         assert cfg.promotion_target == "main"
 
-    def test_branching_config_promotion_target_defaults_match_yaml(self) -> None:
+    def test_branching_config_promotion_target_defaults_match_yaml(self, tmp_path) -> None:
         """Python default for promotion_target matches defaults.yaml."""
         from autoskillit.config import load_config
         from autoskillit.config.settings import BranchingConfig
 
-        loaded = load_config()  # loads only defaults.yaml + user config
+        loaded = load_config(tmp_path / "settings.toml")
         assert loaded.branching.promotion_target == BranchingConfig().promotion_target
 
-    def test_branching_config_promotion_target_env_var_override(self, monkeypatch) -> None:
+    def test_branching_config_promotion_target_env_var_override(
+        self, monkeypatch, tmp_path
+    ) -> None:
         """AUTOSKILLIT_BRANCHING__PROMOTION_TARGET env var overrides promotion_target."""
         from autoskillit.config import load_config
 
         monkeypatch.setenv("AUTOSKILLIT_BRANCHING__PROMOTION_TARGET", "stable")
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.branching.promotion_target == "stable"
 
 
@@ -823,11 +825,11 @@ class TestSkillsConfig:
         assert len(skills.get("tier2", [])) >= 20
         assert len(skills.get("tier3", [])) >= 10
 
-    def test_load_config_populates_skills_tiers(self) -> None:
+    def test_load_config_populates_skills_tiers(self, tmp_path) -> None:
         """load_config() produces an AutomationConfig with tier assignments from defaults."""
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert "open-kitchen" in cfg.skills.tier1
         assert "make-plan" in cfg.skills.tier2
         assert "open-pr" in cfg.skills.tier3

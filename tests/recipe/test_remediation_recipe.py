@@ -30,5 +30,3 @@ def test_remediation_recipe_has_release_issue_success_step(recipe):
         "remediation.yaml is missing a release_issue step on the success path. "
         "Without it, issues are never promoted to staged state after a successful remediation."
     )
-
-

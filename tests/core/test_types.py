@@ -33,7 +33,6 @@ def test_retry_reason_values():
     assert RetryReason.NONE.value == "none"
 
 
-
 def test_merge_failed_step_values():
     """MergeFailedStep enum covers all failure points."""
     assert set(MergeFailedStep) == {
@@ -67,7 +66,6 @@ def test_merge_state_values():
         MergeState.MAIN_REPO_DIRTY_ABORT_FAILED,
         MergeState.MERGE_SUCCEEDED_CLEANUP_BLOCKED,
     }
-
 
 
 def test_restart_scope_values():

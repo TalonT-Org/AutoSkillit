@@ -682,7 +682,6 @@ class TestGatedToolObservability:
         assert result["success"] is False
 
 
-
 class TestNotifyHelper:
     """Unit tests for the centralized _notify() notification helper."""
 

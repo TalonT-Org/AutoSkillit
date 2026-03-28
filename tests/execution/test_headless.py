@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.config import AutomationConfig, ModelConfig
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     ChannelConfirmation,
@@ -17,7 +16,6 @@ from autoskillit.execution.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
     _build_skill_result,
     _extract_worktree_path,
-    _resolve_model,
     _scan_jsonl_write_paths,
 )
 from tests.conftest import _make_result, _make_timeout_result
@@ -1767,7 +1765,6 @@ class TestMarkerCrossValidation:
             audit=None,
         )
         assert result.success is False
-
 
 
 class TestBuildSkillResultTokenUsage:

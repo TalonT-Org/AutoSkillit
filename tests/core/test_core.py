@@ -42,7 +42,6 @@ def test_dump_yaml_not_in_core_all():
     assert not hasattr(core_io, "dump_yaml")
 
 
-
 def test_package_logger_name_not_in_core_all():
     import autoskillit.core as core
 

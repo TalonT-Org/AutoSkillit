@@ -1864,7 +1864,10 @@ def test_register_error_deferred_routes_to_escalate_stop() -> None:
     ["implementation.yaml", "implementation-groups.yaml", "remediation.yaml"],
 )
 def test_re_push_steps_have_force_true(recipe_name: str) -> None:
-    """All re_push/* steps must have force='true' — post-rebase push requires --force-with-lease."""
+    """All re_push/* steps must have force='true'.
+
+    Post-rebase push requires --force-with-lease.
+    """
     recipe = load_recipe(builtin_recipes_dir() / recipe_name)
     for step_name in (
         "re_push",
@@ -1872,9 +1875,7 @@ def test_re_push_steps_have_force_true(recipe_name: str) -> None:
         "re_push_direct_fix",
         "re_push_immediate_fix",
     ):
-        assert step_name in recipe.steps, (
-            f"Expected step {step_name!r} in {recipe_name}"
-        )
+        assert step_name in recipe.steps, f"Expected step {step_name!r} in {recipe_name}"
         step = recipe.steps[step_name]
         assert step.tool == "push_to_remote"
         assert step.with_args.get("force") == "true", (

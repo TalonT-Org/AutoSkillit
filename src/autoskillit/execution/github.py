@@ -60,6 +60,23 @@ def _format_issue_markdown(
     return "\n".join(lines)
 
 
+def _github_headers(token: str | None) -> dict[str, str]:
+    """Build the standard GitHub REST API headers dict.
+
+    Returns a fresh dict containing Accept, X-GitHub-Api-Version, and
+    User-Agent on every call. Injects Authorization when token is provided.
+    Single source of truth for all three execution-layer GitHub clients.
+    """
+    h: dict[str, str] = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "autoskillit",
+    }
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    return h
+
+
 def parse_merge_queue_response(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Parse a GitHub GraphQL merge queue response into a sorted entry list.
 
@@ -114,14 +131,7 @@ class DefaultGitHubFetcher:
         return bool(self._token)
 
     def _headers(self) -> dict[str, str]:
-        h = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "autoskillit",
-        }
-        if self._token:
-            h["Authorization"] = f"Bearer {self._token}"
-        return h
+        return _github_headers(self._token)
 
     async def fetch_issue(
         self,

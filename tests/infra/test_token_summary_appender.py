@@ -105,6 +105,23 @@ def test_tsa1_token_summary_appender_script_exists() -> None:
     assert (pkg_root() / "hooks" / "token_summary_appender.py").exists()
 
 
+def test_tsa_rest_api_no_gh_pr_commands() -> None:
+    """Hook source must not contain 'gh pr edit' or 'gh pr view' subprocess calls.
+
+    REQ-TEST-001: verifies both read and write operations use gh api (REST).
+    """
+    from autoskillit.core.paths import pkg_root
+
+    source = (pkg_root() / "hooks" / "token_summary_appender.py").read_text(encoding="utf-8")
+    assert "gh pr edit" not in source, (
+        "gh pr edit found in hook — must be replaced with "
+        "gh api repos/.../pulls/{N} --method PATCH --field body=..."
+    )
+    assert "gh pr view" not in source, (
+        "gh pr view found in hook — must be replaced with gh api repos/.../pulls/{N} --jq '.body'"
+    )
+
+
 # ---------------------------------------------------------------------------
 # TSA-2: no PR URL in result → exits 0, makes no gh calls
 # ---------------------------------------------------------------------------
@@ -231,9 +248,9 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
     edit_calls: list[list[str]] = []
 
     def subprocess_side_effect(args: list[str], **kwargs: object) -> MagicMock:
-        if len(args) >= 3 and args[1] == "pr" and args[2] == "view":
+        if "api" in args and "--method" not in args:
             return view_result
-        if len(args) >= 3 and args[1] == "pr" and args[2] == "edit":
+        if "api" in args and "--method" in args:
             edit_calls.append(list(args))
             return MagicMock(returncode=0)
         return MagicMock(returncode=0)
@@ -243,15 +260,17 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
 
     assert exit_code == 0
     assert len(edit_calls) == 1
-    body_idx = edit_calls[0].index("--body")
-    body_arg = edit_calls[0][body_idx + 1]
-    assert "## Token Usage Summary" in body_arg
+    field_idx = edit_calls[0].index("--field")
+    body_arg = edit_calls[0][field_idx + 1]
+    assert body_arg.startswith("body=")
+    body_content = body_arg[len("body=") :]
+    assert "## Token Usage Summary" in body_content
     # plan-1 and plan-2 should collapse to "plan"
-    assert "plan" in body_arg
+    assert "plan" in body_content
     # open-pr should be preserved
-    assert "open-pr" in body_arg
+    assert "open-pr" in body_content
     # Total row
-    assert "**Total**" in body_arg
+    assert "**Total**" in body_content
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +314,7 @@ def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
     edit_calls: list = []
 
     def subprocess_side_effect(args: list[str], **kwargs: object) -> MagicMock:
-        if len(args) >= 3 and args[1] == "pr" and args[2] == "edit":
+        if "api" in args and "--method" in args:
             edit_calls.append(args)
         return view_result
 
@@ -362,9 +381,9 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
     view_result.stdout = "Existing body without summary."
 
     def subprocess_side_effect(args: list[str], **kwargs: object) -> MagicMock:
-        if len(args) >= 3 and args[1] == "pr" and args[2] == "view":
+        if "api" in args and "--method" not in args:
             return view_result
-        if len(args) >= 3 and args[1] == "pr" and args[2] == "edit":
+        if "api" in args and "--method" in args:
             raise subprocess.CalledProcessError(1, args)
         return MagicMock(returncode=0)
 
@@ -414,9 +433,9 @@ def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
     edit_calls: list = []
 
     def run_side(args, **kwargs):
-        if "view" in args:
+        if "api" in args and "--method" not in args:
             return view_result
-        if "edit" in args:
+        if "api" in args and "--method" in args:
             edit_calls.append(args)
             return MagicMock(returncode=0)
         return MagicMock(returncode=0)
@@ -428,7 +447,7 @@ def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
             hook_config_path=hook_config,
         )
     assert exit_code == 0
-    assert len(edit_calls) == 1, "gh pr edit must be called when pipeline_id matches"
+    assert len(edit_calls) == 1, "gh api PATCH must be called when pipeline_id matches"
 
 
 # ---------------------------------------------------------------------------
@@ -493,13 +512,13 @@ def test_tsa_gh_pr_edit_stderr_captured(tmp_path: Path) -> None:
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
 
     view_ok = MagicMock(returncode=0, stdout="Some body.")
-    error = subprocess.CalledProcessError(1, ["gh", "pr", "edit"])
+    error = subprocess.CalledProcessError(1, ["gh", "api", "repos/owner/repo/pulls/1"])
     error.stderr = "authentication required"  # only populated with capture_output=True
 
     def run_side(args, **kwargs):
-        if "view" in args:
+        if "api" in args and "--method" not in args:
             return view_ok
-        if "edit" in args:
+        if "api" in args and "--method" in args:
             raise error
         return MagicMock(returncode=0)
 

@@ -281,7 +281,7 @@ def main() -> None:
                     f"repos/{owner}/{repo}/pulls/{pr_number}",
                     "--method",
                     "PATCH",
-                    "--field",
+                    "--raw-field",
                     f"body={new_body}",
                 ],
                 check=True,

@@ -441,10 +441,9 @@ class TestCookInteractive:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """cook --resume <uuid> must not raise UnusedCliTokensError — REQ-CLI-003."""
-        import sys
         from unittest.mock import patch
 
-        app_mod = sys.modules["autoskillit.cli.app"]
+        import autoskillit.cli.app as app_mod
 
         captured: dict = {}
 
@@ -466,10 +465,9 @@ class TestCookInteractive:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """app(['cook', '--resume']) with no uuid must still work — REQ-CLI-003."""
-        import sys
         from unittest.mock import patch
 
-        app_mod = sys.modules["autoskillit.cli.app"]
+        import autoskillit.cli.app as app_mod
 
         captured: dict = {}
 
@@ -484,3 +482,26 @@ class TestCookInteractive:
 
         assert captured["resume"] is True
         assert captured["session_id"] is None
+
+    # REQ-CLI-003
+    def test_cook_cmd_positional_session_id_implies_resume(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """app(['cook', '<uuid>']) without --resume must imply resume=True — REQ-CLI-003."""
+        from unittest.mock import patch
+
+        import autoskillit.cli.app as app_mod
+
+        captured: dict = {}
+
+        def fake_cook(*, resume: bool = False, session_id: str | None = None) -> None:
+            captured["resume"] = resume
+            captured["session_id"] = session_id
+
+        with patch.object(app_mod, "cook_interactive", fake_cook):
+            with pytest.raises(SystemExit) as exc_info:
+                app_mod.app(["cook", "fa910a41-d1ca-4cae-b878-01028a0c7c1c"])
+            assert exc_info.value.code == 0
+
+        assert captured["session_id"] == "fa910a41-d1ca-4cae-b878-01028a0c7c1c"
+        assert captured["resume"] is True

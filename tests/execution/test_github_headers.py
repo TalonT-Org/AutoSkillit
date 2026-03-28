@@ -3,19 +3,17 @@
 These tests are the immunity suite for issue P6-5: triplicated header construction
 and the missing User-Agent in DefaultMergeQueueWatcher.
 """
+
 from __future__ import annotations
 
-import pytest
-
-from autoskillit.execution.github import _github_headers
 from autoskillit.execution.ci import DefaultCIWatcher
-from autoskillit.execution.github import DefaultGitHubFetcher
+from autoskillit.execution.github import DefaultGitHubFetcher, _github_headers
 from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
-
 
 # ---------------------------------------------------------------------------
 # _github_headers — unit tests (currently fails: function does not exist)
 # ---------------------------------------------------------------------------
+
 
 def test_github_headers_contains_required_base_keys():
     """_github_headers must include Accept, X-GitHub-Api-Version, and User-Agent."""
@@ -48,6 +46,7 @@ def test_github_headers_returns_new_dict_each_call():
 # DefaultMergeQueueWatcher — User-Agent bug fix (currently fails)
 # ---------------------------------------------------------------------------
 
+
 def test_merge_queue_watcher_includes_user_agent_in_client_headers():
     """DefaultMergeQueueWatcher must include User-Agent: autoskillit in its client.
 
@@ -70,6 +69,7 @@ def test_merge_queue_watcher_includes_user_agent_with_token():
 # ---------------------------------------------------------------------------
 # Consistency: all three classes produce the same base headers
 # ---------------------------------------------------------------------------
+
 
 def test_all_three_classes_produce_same_base_headers():
     """DefaultGitHubFetcher, DefaultCIWatcher, and _github_headers(None) must agree.

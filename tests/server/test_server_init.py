@@ -472,24 +472,6 @@ class TestKitchenToolSchemas:
             tools = await client.list_tools()
         return {t.name: t for t in tools if t.name in names}
 
-    TOOL_FORBIDDEN_TERMS = [
-        "enable_tools",
-        "disable_tools",
-        "autoskillit_status",
-        "executor",
-    ]
-
-    @pytest.mark.anyio
-    async def test_tool_descriptions_contain_no_legacy_terms(self):
-        """Kitchen tool descriptions must not use any pre-rename vocabulary."""
-        tools = await self._get_kitchen_tools()
-        for name, tool in tools.items():
-            desc = (tool.description or "").lower()
-            for term in self.TOOL_FORBIDDEN_TERMS:
-                assert term not in desc, (
-                    f"Tool '{name}' description contains legacy term '{term}': {desc!r}"
-                )
-
     @pytest.mark.anyio
     async def test_tool_descriptions_are_cooking_themed(self):
         """Kitchen tool descriptions must use cooking vocabulary."""

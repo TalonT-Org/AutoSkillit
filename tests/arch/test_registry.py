@@ -7,6 +7,9 @@ that form the symbolic registry of architecture enforcement rules.
 from __future__ import annotations
 
 import ast
+import importlib
+import inspect
+import re
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
@@ -289,10 +292,6 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
     (not B) is correct -- it targets the local binding in B, which is the namespace that
     module B's own functions resolve.
     """
-    import importlib
-    import inspect
-    import re
-
     # Match string literals in monkeypatch.setattr("autoskillit.A.B.C", ...)
     # where A is a sub-package, B is a submodule, C is the name.
     pattern = re.compile(

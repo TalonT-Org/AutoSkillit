@@ -327,6 +327,7 @@ def test_package_all_matches_exports() -> None:
         "workspace",
         "recipe",
         "migration",
+        "hooks",
         "cli",
         "server",
     ]
@@ -367,3 +368,42 @@ def test_package_all_matches_exports() -> None:
                     )
 
     assert not violations, "__all__ completeness violations:\n" + "\n".join(violations)
+
+
+# ── REQ-ARCH-005: root-level module allowlist ──────────────────────────────────
+
+
+def test_root_module_allowlist() -> None:
+    """REQ-ARCH-005: Exactly the expected set of .py files exists at the package root.
+
+    Fails when a new root-level .py file is added without updating this allowlist,
+    forcing deliberate acknowledgement of new root-level additions.
+    Also fails if an expected file is missing, catching stale allowlist entries.
+    """
+    _ALLOWED_ROOT_MODULES = frozenset(
+        {
+            "__init__.py",
+            "__main__.py",
+            "_llm_triage.py",
+            "hook_registry.py",
+            "smoke_utils.py",
+            "version.py",
+        }
+    )
+
+    actual = frozenset(p.name for p in SRC_ROOT.glob("*.py"))
+
+    unexpected = actual - _ALLOWED_ROOT_MODULES
+    assert not unexpected, (
+        f"Unauthorized root-level .py file(s) added to src/autoskillit/: "
+        f"{sorted(unexpected)}. "
+        "Either move the file to a sub-package or update the allowlist in "
+        "test_root_module_allowlist()."
+    )
+
+    missing = _ALLOWED_ROOT_MODULES - actual
+    assert not missing, (
+        f"Expected root-level .py file(s) no longer found in src/autoskillit/: "
+        f"{sorted(missing)}. "
+        "Remove the file from the allowlist in test_root_module_allowlist()."
+    )

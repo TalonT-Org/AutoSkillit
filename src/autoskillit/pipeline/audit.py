@@ -54,8 +54,12 @@ def _validate_failure_record_dict(record_dict: dict[str, Any]) -> bool:
         if f.name not in record_dict:
             return False
         resolved = hints.get(f.name)
-        if resolved in _CONCRETE_TYPES and not isinstance(record_dict[f.name], resolved):
-            return False
+        if resolved in _CONCRETE_TYPES:
+            val = record_dict[f.name]
+            if resolved is int and isinstance(val, bool):
+                return False
+            if not isinstance(val, resolved):
+                return False
     return True
 
 

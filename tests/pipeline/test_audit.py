@@ -241,11 +241,6 @@ class TestDefaultAuditLogLoadFromLogDir:
 class TestIterSessionLogEntries:
     """Tests for the _iter_session_log_entries shared generator (P6-F1)."""
 
-    def test_iter_session_log_entries_importable(self):
-        from autoskillit.pipeline.audit import _iter_session_log_entries
-
-        assert callable(_iter_session_log_entries)
-
     def test_iter_session_log_entries_yields_matching_files(self, tmp_path):
         import json
 

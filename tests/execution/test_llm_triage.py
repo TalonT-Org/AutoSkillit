@@ -10,16 +10,6 @@ import pytest
 from autoskillit.recipe.contracts import StaleItem
 
 # ---------------------------------------------------------------------------
-# T-P3-4-B: Module importable
-# ---------------------------------------------------------------------------
-
-
-def test_llm_triage_module_importable():
-    """_llm_triage module must exist and export triage_staleness."""
-    from autoskillit._llm_triage import triage_staleness  # noqa: F401
-
-
-# ---------------------------------------------------------------------------
 # T-P1-7-A: SKILL.md cached per unique skill
 # ---------------------------------------------------------------------------
 

@@ -656,11 +656,6 @@ class TestReleaseReadinessConfig:
 
         assert ModelConfig().default == "sonnet"
 
-    def test_report_bug_config_exported(self):
-        from autoskillit.config import ReportBugConfig  # must not raise ImportError
-
-        assert ReportBugConfig is not None
-
 
 class TestBranchingConfig:
     def test_branching_config_default_base_branch_is_main(self) -> None:
@@ -778,12 +773,6 @@ class TestBuildSubsetsConfigCustomTagsValidation:
 
         result = _build_subsets_config({"custom_tags": {}})
         assert result.custom_tags == {}
-
-
-def test_resolve_ingredient_defaults_in_config():
-    from autoskillit.config import resolve_ingredient_defaults
-
-    assert callable(resolve_ingredient_defaults)
 
 
 class TestSkillsConfig:

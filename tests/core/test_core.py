@@ -3,30 +3,6 @@
 from __future__ import annotations
 
 
-def test_core_logging_importable():
-    from autoskillit.core.logging import (  # noqa: F401
-        PACKAGE_LOGGER_NAME,
-        configure_logging,
-        get_logger,
-    )
-
-    assert callable(get_logger)
-    assert callable(configure_logging)
-
-
-def test_core_io_importable():
-    from autoskillit.core.io import (  # noqa: F401
-        YAMLError,
-        atomic_write,
-        dump_yaml_str,
-        ensure_project_temp,
-        load_yaml,
-    )
-
-    assert callable(load_yaml)
-    assert callable(atomic_write)
-
-
 def test_core_io_module_has_docstring():
     import autoskillit.core.io as m
 

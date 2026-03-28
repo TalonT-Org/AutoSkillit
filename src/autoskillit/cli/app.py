@@ -481,17 +481,18 @@ def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> N
 
 
 @app.command(name="cook", alias="c")
-def _cook_cmd(*, resume: bool = False, session_id: str | None = None) -> None:
+def _cook_cmd(session_id: str | None = None, *, resume: bool = False) -> None:
     """Launch an interactive Claude session with all skills and kitchen tools.
 
-    Use --resume to restore a previous session. Combine with --session-id
-    to target a specific session; omit for automatic discovery.
+    Use --resume to restore a previous session. Optionally provide a session ID
+    directly after --resume to target a specific session; omit for automatic
+    discovery of the most recent session.
     """
-    cook_interactive(resume=resume, session_id=session_id)
+    cook_interactive(resume=resume or (session_id is not None), session_id=session_id)
 
 
 @app.command
-def order(recipe: str | None = None, *, resume: bool = False, session_id: str | None = None):
+def order(recipe: str | None = None, session_id: str | None = None, *, resume: bool = False):
     """Launch an interactive Claude Code session to execute a recipe.
 
     Starts Claude Code with hard tool restrictions: only AskUserQuestion
@@ -502,10 +503,11 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
     ----------
     recipe
         Name of the recipe (from .autoskillit/recipes/). Prompts if omitted.
+    session_id
+        Explicit session ID to resume. Provide after the recipe name.
+        Implies --resume when non-None.
     resume
         When True, attempt to restore a previous session.
-    session_id
-        Explicit session ID to resume; omit for automatic discovery.
     """
     from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
     from autoskillit.cli._prompts import _build_orchestrator_prompt
@@ -525,7 +527,7 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
     from autoskillit.core import find_latest_session_id
 
     resume_session_id: str | None = None
-    if resume:
+    if resume or session_id:
         resume_session_id = session_id or find_latest_session_id()
         if resume_session_id is None:
             print("No previous session found. Starting a fresh session.")

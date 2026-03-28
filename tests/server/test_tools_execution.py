@@ -385,14 +385,6 @@ class TestRunSkillEnvPrefix:
         assert cmd[1] == "AUTOSKILLIT_HEADLESS=1"
         assert cmd[2] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=60000"
 
-    @pytest.mark.anyio
-    async def test_run_skill_retry_not_registered(self, tool_ctx):
-        """run_skill_retry is removed — merged into run_skill (same tool, unified timeout)."""
-
-        import autoskillit.server.tools_execution as mod
-
-        assert not hasattr(mod, "run_skill_retry")
-
 
 class TestRunSkillPassesSessionLogDir:
     """run_skill passes session_log_dir derived from cwd."""
@@ -689,12 +681,6 @@ class TestGatedToolObservability:
         result = json.loads(await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx))
         assert result["success"] is False
 
-    @pytest.mark.anyio
-    async def test_run_skill_retry_not_registered(self, tool_ctx, mock_ctx):
-        """run_skill_retry is removed — only run_skill exists."""
-        import autoskillit.server.tools_execution as mod
-
-        assert not hasattr(mod, "run_skill_retry")
 
 
 class TestNotifyHelper:

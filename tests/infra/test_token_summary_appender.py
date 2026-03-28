@@ -579,3 +579,20 @@ def test_tsa_gh_pr_view_failure_emits_diagnostic(tmp_path: Path) -> None:
         "gh pr view failure must emit a diagnostic to stderr before exiting — "
         "silent sys.exit(0) makes auth/network errors indistinguishable from no-op"
     )
+
+
+def test_tsa_humanize_preserves_decimal() -> None:
+    """_humanize must use str(n) not str(int(n)) for sub-1000 values.
+
+    Fails before P6-2 fix (str(int(45.7)) → '45'), passes after (str(45.7) → '45.7').
+    Token counts are always integers in practice, so this is a semantic correctness fix.
+    """
+    from autoskillit.hooks.token_summary_appender import _humanize
+
+    assert _humanize(999) == "999"
+    assert _humanize(0) == "0"
+    assert _humanize(None) == "0"
+    # The key assertion: a float below 1000 must NOT be truncated to int
+    assert _humanize(45.7) == "45.7", (
+        "str(int(n)) truncates decimals — must be str(n) to match telemetry_fmt.py"
+    )

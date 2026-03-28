@@ -425,6 +425,7 @@ class SessionSkillManager(Protocol):
         cook_session: bool = False,
         config: Any | None = None,
         project_dir: Path | None = None,
+        recipe_packs: frozenset[str] | None = None,
     ) -> ValidatedAddDir: ...
 
     def activate_tier2(self, session_id: str, skill_name: str) -> bool: ...

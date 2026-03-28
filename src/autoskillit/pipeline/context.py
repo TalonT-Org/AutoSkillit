@@ -69,6 +69,8 @@ class ToolContext:
     merge_queue_watcher:  MergeQueueWatcher — polls GitHub merge queue for a PR
     session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
     skill_resolver:       TargetSkillResolver — resolves skill names to source tier
+    active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
+                          (frozenset() when kitchen open but no recipe loaded; None when closed)
     """
 
     config: AutomationConfig
@@ -95,6 +97,7 @@ class ToolContext:
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: TargetSkillResolver | None = field(default=None)
     pipeline_id: str = field(default="")
+    active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
 
     @property
     def default_ci_scope(self) -> CIRunScope:

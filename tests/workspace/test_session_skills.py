@@ -318,3 +318,172 @@ def test_cleanup_stale_default_is_72_hours() -> None:
     sig = inspect.signature(DefaultSessionSkillManager.cleanup_stale)
     default = sig.parameters["max_age_seconds"].default
     assert default == 259200, f"Expected 259200 (72h), got {default}"
+
+
+# REQ-PACK-005 / REQ-PACK-006: _resolve_effective_disabled
+def test_resolve_effective_disabled_default_disabled_excluded() -> None:
+    from autoskillit.core import PACK_REGISTRY
+    from autoskillit.workspace.session_skills import _resolve_effective_disabled
+
+    result = _resolve_effective_disabled(
+        explicit_disabled=[],
+        pack_registry=PACK_REGISTRY,
+        packs_enabled=[],
+        recipe_packs=None,
+    )
+    # Default-disabled packs (research, exp-lens) should be in result
+    assert "research" in result
+    assert "exp-lens" in result
+    # Default-enabled packs should NOT be disabled
+    assert "github" not in result
+
+
+def test_resolve_effective_disabled_packs_enabled_overrides_default() -> None:
+    from autoskillit.core import PACK_REGISTRY
+    from autoskillit.workspace.session_skills import _resolve_effective_disabled
+
+    result = _resolve_effective_disabled(
+        explicit_disabled=[],
+        pack_registry=PACK_REGISTRY,
+        packs_enabled=["research"],
+        recipe_packs=None,
+    )
+    assert "research" not in result  # enabled by packs.enabled
+
+
+# REQ-PACK-004: subsets.disabled always overrides packs.enabled
+def test_resolve_effective_disabled_explicit_wins_over_pack_enabled() -> None:
+    from autoskillit.core import PACK_REGISTRY
+    from autoskillit.workspace.session_skills import _resolve_effective_disabled
+
+    result = _resolve_effective_disabled(
+        explicit_disabled=["github"],  # explicitly disabled
+        pack_registry=PACK_REGISTRY,
+        packs_enabled=["github"],  # also in packs.enabled — explicit wins
+        recipe_packs=None,
+    )
+    assert "github" in result  # explicit disable survives
+
+
+def test_resolve_effective_disabled_recipe_packs_overrides_default() -> None:
+    from autoskillit.core import PACK_REGISTRY
+    from autoskillit.workspace.session_skills import _resolve_effective_disabled
+
+    result = _resolve_effective_disabled(
+        explicit_disabled=[],
+        pack_registry=PACK_REGISTRY,
+        packs_enabled=[],
+        recipe_packs=frozenset(["research"]),
+    )
+    assert "research" not in result  # enabled by recipe
+
+
+# REQ-PACK-006: Cook sessions skip default-disabled packs
+def test_cook_session_skips_default_disabled_packs(tmp_path: Path) -> None:
+    """Cook session excludes default-disabled pack skills when packs.enabled=[]."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config.settings import AutomationConfig
+    from autoskillit.workspace.skills import SkillInfo, SkillSource
+
+    skill_dir = tmp_path / "skills" / "research-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\ncategories:\n  - research\n---\n# Research Skill\n")
+
+    provider = MagicMock()
+    provider.list_skills.return_value = [
+        SkillInfo(
+            name="research-skill",
+            source=SkillSource.BUNDLED_EXTENDED,
+            path=skill_dir / "SKILL.md",
+            categories=frozenset({"research"}),
+        )
+    ]
+    provider.get_skill_content.return_value = (
+        "---\ncategories:\n  - research\n---\n# Research Skill\n"
+    )
+
+    root = tmp_path / "sessions"
+    root.mkdir()
+    config = AutomationConfig()  # packs.enabled=[] by default
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
+    session_path = mgr.init_session("cook-research", cook_session=True, config=config)
+
+    assert not (session_path / ".claude" / "skills" / "research-skill").exists(), (
+        "Default-disabled pack skill must not be in cook session when packs.enabled=[]"
+    )
+
+
+# REQ-PACK-005: headless sessions exclude default-disabled packs
+def test_headless_session_excludes_default_disabled_pack_skills(tmp_path: Path) -> None:
+    """Skills in 'exp-lens' pack are excluded from headless session when packs.enabled=[]."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config.settings import AutomationConfig
+    from autoskillit.workspace.skills import SkillInfo, SkillSource
+
+    skill_dir = tmp_path / "skills" / "exp-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\ncategories:\n  - exp-lens\n---\n# Experimental Skill\n"
+    )
+
+    provider = MagicMock()
+    provider.list_skills.return_value = [
+        SkillInfo(
+            name="exp-skill",
+            source=SkillSource.BUNDLED_EXTENDED,
+            path=skill_dir / "SKILL.md",
+            categories=frozenset({"exp-lens"}),
+        )
+    ]
+
+    root = tmp_path / "sessions"
+    root.mkdir()
+    config = AutomationConfig()  # packs.enabled=[] by default
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
+    session_path = mgr.init_session("headless-exp", cook_session=False, config=config)
+
+    assert not (session_path / ".claude" / "skills" / "exp-skill").exists(), (
+        "Default-disabled pack skill must not be in headless session when packs.enabled=[]"
+    )
+
+
+def test_init_session_recipe_packs_enables_default_disabled(tmp_path: Path) -> None:
+    """recipe_packs param enables default-disabled pack skills for this session."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config.settings import AutomationConfig
+    from autoskillit.workspace.skills import SkillInfo, SkillSource
+
+    skill_dir = tmp_path / "skills" / "research-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\ncategories:\n  - research\n---\n# Research Skill\n")
+
+    provider = MagicMock()
+    provider.list_skills.return_value = [
+        SkillInfo(
+            name="research-skill",
+            source=SkillSource.BUNDLED_EXTENDED,
+            path=skill_dir / "SKILL.md",
+            categories=frozenset({"research"}),
+        )
+    ]
+    provider.get_skill_content.return_value = (
+        "---\ncategories:\n  - research\n---\n# Research Skill\n"
+    )
+
+    root = tmp_path / "sessions"
+    root.mkdir()
+    config = AutomationConfig()  # packs.enabled=[] by default
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
+    session_path = mgr.init_session(
+        "headless-recipe-research",
+        cook_session=False,
+        config=config,
+        recipe_packs=frozenset(["research"]),
+    )
+
+    assert (session_path / ".claude" / "skills" / "research-skill").exists(), (
+        "Default-disabled pack skill should be present when enabled via recipe_packs"
+    )

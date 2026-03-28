@@ -463,6 +463,30 @@ def _get_subsets_needed(recipe: Recipe, disabled_subsets: frozenset[str]) -> fro
     return frozenset(needed)
 
 
+def _get_packs_needed(recipe: Recipe, default_disabled_packs: frozenset[str]) -> frozenset[str]:
+    """Return pack names from default_disabled_packs that are required by recipe."""
+    requires = frozenset(getattr(recipe, "requires_packs", []))
+    return requires & default_disabled_packs
+
+
+def _enable_packs_permanently(project_dir: Path, packs: frozenset[str]) -> None:
+    """Add specified packs to packs.enabled in .autoskillit/config.yaml."""
+    from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
+
+    config_path = project_dir / ".autoskillit" / "config.yaml"
+    try:
+        data: dict = (load_yaml(config_path) or {}) if config_path.exists() else {}
+    except YAMLError:
+        data = {}
+    packs_section = data.setdefault("packs", {})
+    current_enabled: list[str] = packs_section.get("enabled", [])
+    new_enabled = sorted(set(current_enabled) | packs)
+    packs_section["enabled"] = new_enabled
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(config_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
+    print(f"Updated {config_path}: added {sorted(packs)} to packs.enabled")
+
+
 def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> None:
     """Remove specified subsets from subsets.disabled in .autoskillit/config.yaml."""
     from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
@@ -621,6 +645,36 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
                 _extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
             elif _choice == "2":
                 _enable_subsets_permanently(Path.cwd(), _needed)
+            else:
+                return
+
+    # Pack gate — check default-disabled packs (REQ-PACK-010)
+    from autoskillit.core import PACK_REGISTRY as _PACK_REGISTRY
+
+    _default_disabled = frozenset(
+        tag for tag, pack_def in _PACK_REGISTRY.items() if not pack_def.default_enabled
+    )
+    _pack_enabled = frozenset(_cfg.packs.enabled)
+    _default_disabled_packs = _default_disabled - _pack_enabled
+
+    if _default_disabled_packs:
+        _packs_needed = _get_packs_needed(parsed, _default_disabled_packs)
+        if _packs_needed:
+            pack_list = ", ".join(sorted(_packs_needed))
+            print(f"\nThis recipe requires pack(s): {pack_list}")
+            _require_interactive_stdin("autoskillit order")
+            print("  1. Enable temporarily (for this run only)")
+            print("  2. Enable permanently (update .autoskillit/config.yaml)")
+            print("  3. Cancel")
+            _pack_choice = input("Choose [1/2/3]: ").strip()
+            if _pack_choice == "1":
+                import json as _json
+
+                _extra_env["AUTOSKILLIT_PACKS__ENABLED"] = "@json " + _json.dumps(
+                    sorted(_packs_needed)
+                )
+            elif _pack_choice == "2":
+                _enable_packs_permanently(Path.cwd(), _packs_needed)
             else:
                 return
 

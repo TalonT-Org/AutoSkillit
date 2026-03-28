@@ -13,6 +13,16 @@ from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 # Known violations fixed in Parts B and C — excluded from general semantic-error assertions.
 _NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
 
+
+def _assert_ci_conflict_fix_on_context_limit(recipe) -> None:
+    """Shared assertion: ci_conflict_fix must abort via release_issue_failure on context limit."""
+    step = recipe.steps["ci_conflict_fix"]
+    assert step.on_context_limit == "release_issue_failure", (
+        "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
+        "pushed — abort via release_issue_failure"
+    )
+
+
 # ---------------------------------------------------------------------------
 # TestImplementationPipelineStructure
 # ---------------------------------------------------------------------------
@@ -491,11 +501,7 @@ class TestImplementationPipelineStructure:
         )
 
     def test_ip_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
-        step = recipe.steps["ci_conflict_fix"]
-        assert step.on_context_limit == "release_issue_failure", (
-            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
-            "pushed — abort via release_issue_failure"
-        )
+        _assert_ci_conflict_fix_on_context_limit(recipe)
 
 
 # ---------------------------------------------------------------------------
@@ -781,11 +787,7 @@ class TestImplementationGroupsStructure:
         )
 
     def test_ig_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
-        step = recipe.steps["ci_conflict_fix"]
-        assert step.on_context_limit == "release_issue_failure", (
-            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
-            "pushed — abort via release_issue_failure"
-        )
+        _assert_ci_conflict_fix_on_context_limit(recipe)
 
 
 # ---------------------------------------------------------------------------
@@ -1120,11 +1122,7 @@ class TestInvestigateFirstStructure:
         )
 
     def test_if_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
-        step = recipe.steps["ci_conflict_fix"]
-        assert step.on_context_limit == "release_issue_failure", (
-            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
-            "pushed — abort via release_issue_failure"
-        )
+        _assert_ci_conflict_fix_on_context_limit(recipe)
 
 
 # ---------------------------------------------------------------------------

@@ -30,7 +30,11 @@ from autoskillit.execution.diff_annotator import (
     filter_findings,
     parse_hunk_ranges,
 )
-from autoskillit.execution.github import DefaultGitHubFetcher, parse_merge_queue_response
+from autoskillit.execution.github import (
+    DefaultGitHubFetcher,
+    github_headers,
+    parse_merge_queue_response,
+)
 from autoskillit.execution.headless import (
     DefaultHeadlessExecutor,
     run_headless_core,
@@ -119,6 +123,7 @@ __all__ = [
     "DefaultDatabaseReader",
     # github
     "DefaultGitHubFetcher",
+    "github_headers",
     "parse_merge_queue_response",
     # linux_tracing
     "LINUX_TRACING_AVAILABLE",

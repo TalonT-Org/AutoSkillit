@@ -13,7 +13,7 @@ from typing import Any, TypedDict
 import httpx
 
 from autoskillit.core import get_logger
-from autoskillit.execution.github import _github_headers
+from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
 
@@ -89,7 +89,7 @@ class DefaultMergeQueueWatcher:
 
     def __init__(self, token: str | None) -> None:
         self._client = httpx.AsyncClient(
-            headers=_github_headers(token),
+            headers=github_headers(token),
             limits=httpx.Limits(keepalive_expiry=60),
             timeout=30.0,
         )

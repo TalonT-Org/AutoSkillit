@@ -60,7 +60,7 @@ def _format_issue_markdown(
     return "\n".join(lines)
 
 
-def _github_headers(token: str | None) -> dict[str, str]:
+def github_headers(token: str | None) -> dict[str, str]:
     """Build the standard GitHub REST API headers dict.
 
     Returns a fresh dict containing Accept, X-GitHub-Api-Version, and
@@ -131,7 +131,7 @@ class DefaultGitHubFetcher:
         return bool(self._token)
 
     def _headers(self) -> dict[str, str]:
-        return _github_headers(self._token)
+        return github_headers(self._token)
 
     async def fetch_issue(
         self,

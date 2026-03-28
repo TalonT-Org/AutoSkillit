@@ -21,7 +21,7 @@ from typing import Any
 import httpx
 
 from autoskillit.core import CIRunScope, get_logger
-from autoskillit.execution.github import _github_headers
+from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
 
@@ -59,7 +59,7 @@ class DefaultCIWatcher:
         self._token = token
 
     def _headers(self) -> dict[str, str]:
-        return _github_headers(self._token)
+        return github_headers(self._token)
 
     async def _resolve_repo(self, repo: str | None, cwd: str) -> str | None:
         """Resolve owner/repo from argument or git remote."""

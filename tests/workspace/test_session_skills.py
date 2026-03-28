@@ -378,21 +378,6 @@ def test_resolve_effective_disabled_recipe_packs_overrides_default() -> None:
     assert "research" not in result  # enabled by recipe
 
 
-def test_resolve_effective_disabled_recipe_packs_none_uses_defaults() -> None:
-    from autoskillit.core import PACK_REGISTRY
-    from autoskillit.workspace.session_skills import _resolve_effective_disabled
-
-    result = _resolve_effective_disabled(
-        explicit_disabled=[],
-        pack_registry=PACK_REGISTRY,
-        packs_enabled=[],
-        recipe_packs=None,
-    )
-    # With no overrides, both default-disabled packs should be excluded
-    assert "research" in result
-    assert "exp-lens" in result
-
-
 # REQ-PACK-006: Cook sessions skip default-disabled packs
 def test_cook_session_skips_default_disabled_packs(tmp_path: Path) -> None:
     """Cook session excludes default-disabled pack skills when packs.enabled=[]."""

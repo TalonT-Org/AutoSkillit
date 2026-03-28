@@ -2104,7 +2104,9 @@ class TestCrashSessionLog:
     """flush_session_log is called with success=False when runner raises."""
 
     @pytest.mark.anyio
-    async def test_crash_session_log_written_when_runner_raises(self, monkeypatch, tool_ctx):
+    async def test_crash_session_log_written_when_runner_raises(
+        self, monkeypatch, tool_ctx, tmp_path
+    ):
         """flush_session_log is called with CRASHED termination_reason when runner raises."""
         from autoskillit.execution.headless import run_headless_core
 
@@ -2121,7 +2123,7 @@ class TestCrashSessionLog:
         tool_ctx.runner = raising_runner  # type: ignore[assignment]
 
         with pytest.raises(RuntimeError, match="simulated crash"):
-            await run_headless_core("/investigate test", cwd="/tmp", ctx=tool_ctx)
+            await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
 
         crash_calls = [f for f in flushed if f.get("termination_reason") == "CRASHED"]
         assert len(crash_calls) >= 1

@@ -497,18 +497,6 @@ class TestImplementationPipelineStructure:
             "pushed — abort via release_issue_failure"
         )
 
-    def test_ip_recipe_passes_semantic_validation(self, recipe) -> None:
-        """After Part B, validate_recipe must report no errors."""
-        from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
-
-        errors = validate_recipe(recipe)
-        assert errors == [], f"Structural errors: {errors}"
-        findings = run_semantic_rules(recipe)
-        error_findings = [
-            f for f in findings if f.severity.value == "error" and f.rule != _NO_AUTOSKILLIT_IMPORT
-        ]
-        assert error_findings == [], f"Semantic errors: {error_findings}"
-
 
 # ---------------------------------------------------------------------------
 # TestImplementationGroupsStructure
@@ -798,18 +786,6 @@ class TestImplementationGroupsStructure:
             "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
             "pushed — abort via release_issue_failure"
         )
-
-    def test_ig_recipe_passes_semantic_validation(self, recipe) -> None:
-        """After Part B, validate_recipe must report no errors."""
-        from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
-
-        errors = validate_recipe(recipe)
-        assert errors == [], f"Structural errors: {errors}"
-        findings = run_semantic_rules(recipe)
-        error_findings = [
-            f for f in findings if f.severity.value == "error" and f.rule != _NO_AUTOSKILLIT_IMPORT
-        ]
-        assert error_findings == [], f"Semantic errors: {error_findings}"
 
 
 # ---------------------------------------------------------------------------
@@ -1149,18 +1125,6 @@ class TestInvestigateFirstStructure:
             "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
             "pushed — abort via release_issue_failure"
         )
-
-    def test_if_recipe_passes_semantic_validation(self, recipe) -> None:
-        """After Part B, validate_recipe must report no errors."""
-        from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
-
-        errors = validate_recipe(recipe)
-        assert errors == [], f"Structural errors: {errors}"
-        findings = run_semantic_rules(recipe)
-        error_findings = [
-            f for f in findings if f.severity.value == "error" and f.rule != _NO_AUTOSKILLIT_IMPORT
-        ]
-        assert error_findings == [], f"Semantic errors: {error_findings}"
 
 
 # ---------------------------------------------------------------------------

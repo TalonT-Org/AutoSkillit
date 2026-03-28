@@ -463,16 +463,10 @@ def _get_subsets_needed(recipe: Recipe, disabled_subsets: frozenset[str]) -> fro
     return frozenset(needed)
 
 
-def _get_packs_needed(
-    recipe: Recipe, unenabled_default_disabled: frozenset[str]
-) -> frozenset[str]:
-    """Return pack names from unenabled_default_disabled that are required by recipe.
-
-    Checks recipe.requires_packs (added by #524). Returns empty set until that
-    attribute is present on the Recipe type.
-    """
+def _get_packs_needed(recipe: Recipe, default_disabled_packs: frozenset[str]) -> frozenset[str]:
+    """Return pack names from default_disabled_packs that are required by recipe."""
     requires = frozenset(getattr(recipe, "requires_packs", []))
-    return requires & unenabled_default_disabled
+    return requires & default_disabled_packs
 
 
 def _enable_packs_permanently(project_dir: Path, packs: frozenset[str]) -> None:
@@ -659,10 +653,10 @@ def order(recipe: str | None = None, *, resume: bool = False, session_id: str | 
         tag for tag, pack_def in _PACK_REGISTRY.items() if not pack_def.default_enabled
     )
     _pack_enabled = frozenset(_cfg.packs.enabled)
-    _unenabled_default_disabled = _default_disabled - _pack_enabled
+    _default_disabled_packs = _default_disabled - _pack_enabled
 
-    if _unenabled_default_disabled:
-        _packs_needed = _get_packs_needed(parsed, _unenabled_default_disabled)
+    if _default_disabled_packs:
+        _packs_needed = _get_packs_needed(parsed, _default_disabled_packs)
         if _packs_needed:
             pack_list = ", ".join(sorted(_packs_needed))
             print(f"\nThis recipe requires pack(s): {pack_list}")

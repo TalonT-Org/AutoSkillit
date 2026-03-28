@@ -971,10 +971,11 @@ class TestPacksConfig:
         assert PacksConfig().enabled == []
 
     def test_automation_config_has_packs_field(self) -> None:
-        from autoskillit.config import AutomationConfig
+        from autoskillit.config import AutomationConfig, PacksConfig
 
         cfg = AutomationConfig()
-        assert hasattr(cfg, "packs")
+        assert isinstance(cfg.packs, PacksConfig)
+        assert cfg.packs.enabled == []
 
     def test_load_config_packs_enabled(self, tmp_path) -> None:
         from autoskillit.config import load_config
@@ -1013,12 +1014,6 @@ class TestPacksConfig:
             logger.removeHandler(handler)
         assert config.packs.enabled == ["nonexistent-pack"]  # preserved as-is
         assert any("nonexistent-pack" in r.getMessage() for r in captured)
-
-    def test_packs_config_importable_from_config_package(self) -> None:
-        from autoskillit.config import PacksConfig
-
-        assert hasattr(PacksConfig, "__dataclass_fields__")
-        assert "enabled" in PacksConfig.__dataclass_fields__
 
     def test_write_config_layer_accepts_packs_enabled(self, tmp_path) -> None:
         """write_config_layer does not raise for valid packs.enabled."""

@@ -264,7 +264,8 @@ async def report_bug(
                 indent=2,
             ),
         )
-        assert tool_ctx.background is not None  # always set by ToolContext.__post_init__
+        if tool_ctx.background is None:  # always set by ToolContext.__post_init__
+            raise RuntimeError("ToolContext.background not initialized")
         tool_ctx.background.submit(
             _run_report_session(
                 skill_command,

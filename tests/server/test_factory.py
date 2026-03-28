@@ -67,8 +67,8 @@ def test_make_context_tester_is_default_test_runner():
     assert isinstance(ctx.tester, DefaultTestRunner)
 
 
-def test_make_context_all_service_fields_populated_includes_github_client():
-    """All service fields populated; typed instances validated; skill_resolver is set."""
+def test_make_context_service_fields_are_typed_instances():
+    """Core service fields are typed instances (skill_resolver, clone_mgr, repositories)."""
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert isinstance(ctx.skill_resolver, SkillResolver)
     assert isinstance(ctx.clone_mgr, DefaultCloneManager)

@@ -441,9 +441,10 @@ class TestCookInteractive:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """cook --resume <uuid> must not raise UnusedCliTokensError — REQ-CLI-003."""
+        import sys
         from unittest.mock import patch
 
-        import autoskillit.cli.app as app_mod
+        app_mod = sys.modules["autoskillit.cli.app"]
 
         captured: dict = {}
 
@@ -465,9 +466,10 @@ class TestCookInteractive:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """app(['cook', '--resume']) with no uuid must still work — REQ-CLI-003."""
+        import sys
         from unittest.mock import patch
 
-        import autoskillit.cli.app as app_mod
+        app_mod = sys.modules["autoskillit.cli.app"]
 
         captured: dict = {}
 
@@ -488,9 +490,10 @@ class TestCookInteractive:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """app(['cook', '<uuid>']) without --resume must imply resume=True — REQ-CLI-003."""
+        import sys
         from unittest.mock import patch
 
-        import autoskillit.cli.app as app_mod
+        app_mod = sys.modules["autoskillit.cli.app"]
 
         captured: dict = {}
 

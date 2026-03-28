@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.recipe._api import ListRecipesResult, LoadRecipeResult
+    from autoskillit.recipe import ListRecipesResult, LoadRecipeResult
 
 _HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", "temp", ".autoskillit_hook_config.json")
 

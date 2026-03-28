@@ -232,7 +232,7 @@ def test_req_imp_006_prompts_no_gate_state_import() -> None:
 
 
 def test_req_imp_007_pretty_output_no_private_recipe_api_import() -> None:
-    """hooks/pretty_output.py TYPE_CHECKING must import from autoskillit.recipe, not recipe._api.
+    """hooks/pretty_output.py TYPE_CHECKING must not use recipe._api.
 
     ListRecipesResult and LoadRecipeResult are re-exported via autoskillit.recipe.__all__.
     Importing from the private recipe._api sub-module bypasses the canonical surface (P14-1).
@@ -241,7 +241,8 @@ def test_req_imp_007_pretty_output_no_private_recipe_api_import() -> None:
     for mod, in_tc in _parse_imports(path):
         if in_tc and mod == "autoskillit.recipe._api":
             pytest.fail(
-                "hooks/pretty_output.py TYPE_CHECKING must use 'from autoskillit.recipe import ...' "
+                "hooks/pretty_output.py TYPE_CHECKING must use "
+                "'from autoskillit.recipe import ...' "
                 "instead of 'from autoskillit.recipe._api import ...' (P14-1). "
                 "Both ListRecipesResult and LoadRecipeResult are in recipe.__all__."
             )
@@ -258,14 +259,15 @@ def test_req_imp_008_server_helpers_no_execution_process_import() -> None:
     for mod, in_tc in _parse_imports(path):
         if in_tc and mod == "autoskillit.execution.process":
             pytest.fail(
-                "server/helpers.py TYPE_CHECKING must use 'from autoskillit.core import SubprocessResult' "
-                "instead of 'from autoskillit.execution.process import SubprocessResult' (P14-3). "
-                "SubprocessResult is available via autoskillit.core.__all__."
+                "server/helpers.py TYPE_CHECKING must use "
+                "'from autoskillit.core import SubprocessResult' "
+                "instead of 'from autoskillit.execution.process import SubprocessResult' "
+                "(P14-3). SubprocessResult is available via autoskillit.core.__all__."
             )
 
 
 def test_req_imp_009_session_skills_no_config_settings_import() -> None:
-    """workspace/session_skills.py TYPE_CHECKING must import AutomationConfig from autoskillit.config.
+    """workspace/session_skills.py TYPE_CHECKING must use autoskillit.config.
 
     AutomationConfig is the first entry in autoskillit.config.__all__ and is re-exported
     from config/__init__.py. Importing from config.settings bypasses the canonical public
@@ -275,7 +277,8 @@ def test_req_imp_009_session_skills_no_config_settings_import() -> None:
     for mod, in_tc in _parse_imports(path):
         if in_tc and mod == "autoskillit.config.settings":
             pytest.fail(
-                "workspace/session_skills.py TYPE_CHECKING must use 'from autoskillit.config import AutomationConfig' "
-                "instead of 'from autoskillit.config.settings import AutomationConfig' (P14-4). "
-                "AutomationConfig is available via autoskillit.config.__all__."
+                "workspace/session_skills.py TYPE_CHECKING must use "
+                "'from autoskillit.config import AutomationConfig' "
+                "instead of 'from autoskillit.config.settings import AutomationConfig' "
+                "(P14-4). AutomationConfig is available via autoskillit.config.__all__."
             )

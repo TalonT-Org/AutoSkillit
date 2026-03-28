@@ -63,6 +63,9 @@ def test_close_kitchen_no_file_no_error(tmp_path, monkeypatch):
 
             _close_kitchen_handler()  # Should not raise
 
+    # Gate file was never created — confirm it still does not exist
+    assert not (tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json").exists()
+
 
 # T-CACHE-1
 @pytest.mark.anyio

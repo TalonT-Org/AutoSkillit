@@ -97,7 +97,7 @@ class ToolContext:
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: TargetSkillResolver | None = field(default=None)
     pipeline_id: str = field(default="")
-    active_recipe_packs: frozenset[str] | None = field(default=None)
+    active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
 
     @property
     def default_ci_scope(self) -> CIRunScope:

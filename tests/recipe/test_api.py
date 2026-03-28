@@ -98,7 +98,7 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
     """Second call for unchanged recipe returns cached result without re-running pipeline."""
     import autoskillit.recipe._api as api_mod
 
-    api_mod._LOAD_CACHE.clear()
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -124,7 +124,7 @@ def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, mo
     """Changing the recipe file mtime causes a cache miss."""
     import autoskillit.recipe._api as api_mod
 
-    api_mod._LOAD_CACHE.clear()
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -151,7 +151,7 @@ def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, mon
     """Package version change invalidates the cache."""
     import autoskillit.recipe._api as api_mod
 
-    api_mod._LOAD_CACHE.clear()
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -177,7 +177,7 @@ def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monke
     """Adding a new recipe file to the project directory invalidates the cache."""
     import autoskillit.recipe._api as api_mod
 
-    api_mod._LOAD_CACHE.clear()
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -210,7 +210,7 @@ def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, monkeypatch):
     """load_and_validate calls the timing helper for each pipeline stage."""
     import autoskillit.recipe._api as api_mod
 
-    api_mod._LOAD_CACHE.clear()
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)

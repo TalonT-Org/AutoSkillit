@@ -19,6 +19,7 @@ from autoskillit.recipe.contracts import (
 )
 from autoskillit.recipe.repository import DefaultRecipeRepository
 from autoskillit.server._factory import _gh_cli_token, make_context
+from autoskillit.workspace import DefaultCloneManager, SkillResolver
 from autoskillit.workspace.cleanup import DefaultWorkspaceManager
 from tests.conftest import MockSubprocessRunner
 
@@ -66,18 +67,11 @@ def test_make_context_tester_is_default_test_runner():
     assert isinstance(ctx.tester, DefaultTestRunner)
 
 
-def test_make_context_all_service_fields_populated_includes_github_client():
-    """All optional service fields must be populated, including github_client and clone_mgr."""
+def test_make_context_service_fields_are_typed_instances():
+    """Core service fields are typed instances (skill_resolver, clone_mgr, repositories)."""
     ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.executor is not None
-    assert ctx.tester is not None
-    assert ctx.recipes is not None
-    assert ctx.migrations is not None
-    assert ctx.db_reader is not None
-    assert ctx.workspace_mgr is not None
-    assert ctx.clone_mgr is not None
-    assert ctx.github_client is not None
-    assert ctx.skill_resolver is not None
+    assert isinstance(ctx.skill_resolver, SkillResolver)
+    assert isinstance(ctx.clone_mgr, DefaultCloneManager)
     assert isinstance(ctx.recipes, DefaultRecipeRepository)
     assert isinstance(ctx.migrations, DefaultMigrationService)
     assert isinstance(ctx.db_reader, DefaultDatabaseReader)

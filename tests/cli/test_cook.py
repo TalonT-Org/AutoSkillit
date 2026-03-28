@@ -1282,3 +1282,54 @@ def test_cook_mark_onboarded_not_called_on_failure(
     assert onboarded_calls == [], (
         "mark_onboarded() must not be called when the subprocess exits non-zero"
     )
+
+
+# REQ-CLI-003
+class TestOrderResumeParsing:
+    """CLI-level parsing tests for `order --resume [session-id]`."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub terminal preview to avoid subprocess calls."""
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts.show_cook_preview",
+            lambda *a, **kw: None,
+        )
+
+    @pytest.fixture(autouse=True)
+    def _interactive_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """order() requires an interactive TTY — default to True for this class."""
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+    def test_order_recipe_resume_with_session_id(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """order my-recipe --resume <uuid> passes session_id to launch — REQ-CLI-003."""
+        from unittest.mock import MagicMock, patch
+
+        from autoskillit.cli.app import app
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict = {}
+
+        def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_session_id=None):
+            captured["resume_session_id"] = resume_session_id
+
+        with (
+            patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch),
+            patch(
+                "autoskillit.recipe.find_recipe_by_name",
+                return_value=MagicMock(path=tmp_path / "dummy.yaml", name="my-recipe"),
+            ),
+            patch("autoskillit.recipe.load_recipe", return_value=MagicMock()),
+            patch("autoskillit.recipe.validate_recipe", return_value=[]),
+            patch("autoskillit.core.find_latest_session_id", return_value=None),
+            patch("builtins.input", return_value=""),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                app(["order", "my-recipe", "--resume", "fa910a41-d1ca-4cae-b878-01028a0c7c1c"])
+            assert exc_info.value.code == 0
+
+        assert captured["resume_session_id"] == "fa910a41-d1ca-4cae-b878-01028a0c7c1c"

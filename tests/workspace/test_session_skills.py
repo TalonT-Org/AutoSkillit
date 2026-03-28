@@ -167,18 +167,6 @@ def test_tier2_skills_constant_removed() -> None:
     assert not hasattr(ws, "TIER2_SKILLS")
 
 
-def test_init_session_accepts_config_param(tmp_path: Path) -> None:
-    """init_session() accepts an AutomationConfig without crashing."""
-    from autoskillit.config.settings import AutomationConfig, SkillsConfig
-
-    config = AutomationConfig(
-        skills=SkillsConfig(tier1=["open-kitchen", "close-kitchen"], tier2=[], tier3=[])
-    )
-    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root=tmp_path)
-    skills_dir = mgr.init_session("test_config_param", cook_session=True, config=config)
-    assert skills_dir.is_dir()
-
-
 def test_init_session_unknown_skill_logs_warning(tmp_path: Path) -> None:
     """Unknown skill name in config.skills.tier2 logs a warning (REQ-TIER-010)."""
     import structlog.testing

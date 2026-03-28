@@ -20,6 +20,8 @@ Exemptions:
 from __future__ import annotations
 
 import ast
+import hashlib
+import os
 import sys
 from pathlib import Path
 
@@ -187,9 +189,6 @@ def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
     slim-sprig sha256sum template function.
     """
     if sys.platform == "linux":
-        import hashlib
-        import os
-
         cwd_hash = hashlib.sha256(os.getcwd().encode()).hexdigest()[:8]
         path_str = str(tmp_path)
         assert f"pytest-tmp-{cwd_hash}" in path_str, (

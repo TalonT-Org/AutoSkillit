@@ -113,6 +113,7 @@ tests/
 │   ├── test_sous_chef_routing.py
 │   ├── test_sous_chef_scheduling.py
 │   ├── test_tools_recipe_contracts.py
+│   ├── test_review_pr_diff_annotation.py
 │   └── test_version_consistency.py
 ├── core/                                # Core layer tests
 │   ├── __init__.py
@@ -308,8 +309,6 @@ tests/
 │   ├── test_skill_genericization.py
 │   ├── test_skill_output_compliance.py
 │   ├── test_skill_placeholder_contracts.py
-│   ├── test_review_pr_diff_annotation.py
-│   ├── test_sous_chef_routing.py
 │   └── test_validate_audit_contracts.py
 └── workspace/                           # Workspace and clone tests
     ├── __init__.py

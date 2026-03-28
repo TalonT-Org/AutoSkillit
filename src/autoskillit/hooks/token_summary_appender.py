@@ -4,7 +4,7 @@
 Fires after every run_skill response. If the result text contains a GitHub PR URL,
 reads on-disk session logs (sessions.jsonl + per-session token_usage.json), aggregates
 token usage by canonical step name, and appends a ## Token Usage Summary table to the
-PR body via gh pr edit.
+PR body via the GitHub REST API (gh api).
 
 Stdlib-only — runs under any Python interpreter without the autoskillit package.
 """
@@ -21,6 +21,18 @@ import sys
 from typing import Any
 
 _SUFFIX_RE = re.compile(r"-\d+$")
+_PR_PARTS_RE = re.compile(r"https://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
+
+
+def _parse_pr_url_parts(pr_url: str) -> tuple[str, str, int] | None:
+    """Extract (owner, repo, pr_number) from a GitHub PR URL.
+
+    Returns None if the URL does not match the expected pattern.
+    """
+    m = _PR_PARTS_RE.search(pr_url)
+    if not m:
+        return None
+    return m.group(1), m.group(2), int(m.group(3))
 
 
 def _canonical(name: str) -> str:
@@ -224,6 +236,11 @@ def main() -> None:
         if not pr_url:
             sys.exit(0)
 
+        parts = _parse_pr_url_parts(pr_url)
+        if not parts:
+            sys.exit(0)
+        owner, repo, pr_number = parts
+
         pipeline_id = _read_pipeline_id()
         log_root = _log_root()
 
@@ -231,15 +248,15 @@ def main() -> None:
         if not aggregated:
             sys.exit(0)
 
-        # Idempotency guard: check if PR body already has the summary
+        # Idempotency guard: read current PR body via REST API
         view_proc = subprocess.run(
-            ["gh", "pr", "view", pr_url, "--json", "body", "--jq", ".body"],
+            ["gh", "api", f"repos/{owner}/{repo}/pulls/{pr_number}", "--jq", ".body"],
             capture_output=True,
             text=True,
         )
         if view_proc.returncode != 0:
             sys.stderr.write(
-                f"token_summary_appender: gh pr view failed (rc={view_proc.returncode}): "
+                f"token_summary_appender: gh api read failed (rc={view_proc.returncode}): "
                 f"{view_proc.stderr.strip() if view_proc.stderr else 'no stderr'}\n"
             )
             sys.exit(0)
@@ -249,7 +266,7 @@ def main() -> None:
         current_body = view_proc.stdout.rstrip()
         if not current_body.strip():
             sys.stderr.write(
-                "token_summary_appender: empty PR body from gh pr view — aborting edit\n"
+                "token_summary_appender: empty PR body from gh api — aborting update\n"
             )
             sys.exit(0)
 
@@ -258,14 +275,23 @@ def main() -> None:
 
         try:
             subprocess.run(
-                ["gh", "pr", "edit", pr_url, "--body", new_body],
+                [
+                    "gh",
+                    "api",
+                    f"repos/{owner}/{repo}/pulls/{pr_number}",
+                    "--method",
+                    "PATCH",
+                    "--raw-field",
+                    f"body={new_body}",
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
             )
         except subprocess.CalledProcessError as cpe:
             sys.stderr.write(
-                f"token_summary_appender: gh pr edit failed (rc={cpe.returncode}): {cpe.stderr}\n"
+                f"token_summary_appender: gh api update failed"
+                f" (rc={cpe.returncode}): {cpe.stderr}\n"
             )
             sys.exit(1)
 

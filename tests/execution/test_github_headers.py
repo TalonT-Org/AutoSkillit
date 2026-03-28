@@ -11,7 +11,7 @@ from autoskillit.execution.github import DefaultGitHubFetcher, _github_headers
 from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
 
 # ---------------------------------------------------------------------------
-# _github_headers — unit tests (currently fails: function does not exist)
+# _github_headers — unit tests
 # ---------------------------------------------------------------------------
 
 
@@ -43,7 +43,7 @@ def test_github_headers_returns_new_dict_each_call():
 
 
 # ---------------------------------------------------------------------------
-# DefaultMergeQueueWatcher — User-Agent bug fix (currently fails)
+# DefaultMergeQueueWatcher — User-Agent bug fix
 # ---------------------------------------------------------------------------
 
 

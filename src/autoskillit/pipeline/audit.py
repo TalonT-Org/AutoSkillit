@@ -44,7 +44,10 @@ def _validate_failure_record_dict(record_dict: dict[str, Any]) -> bool:
     try:
         hints = get_type_hints(FailureRecord)
     except Exception:
-        # Type resolution failure — fall back to key-presence check only.
+        logger.warning(
+            "get_type_hints(FailureRecord) failed; falling back to key-presence check",
+            exc_info=True,
+        )
         return all(f.name in record_dict for f in dataclasses.fields(FailureRecord))
 
     for f in dataclasses.fields(FailureRecord):

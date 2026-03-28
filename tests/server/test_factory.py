@@ -19,7 +19,7 @@ from autoskillit.recipe.contracts import (
 )
 from autoskillit.recipe.repository import DefaultRecipeRepository
 from autoskillit.server._factory import _gh_cli_token, make_context
-from autoskillit.workspace import SkillResolver
+from autoskillit.workspace import DefaultCloneManager, SkillResolver
 from autoskillit.workspace.cleanup import DefaultWorkspaceManager
 from tests.conftest import MockSubprocessRunner
 
@@ -71,6 +71,7 @@ def test_make_context_all_service_fields_populated_includes_github_client():
     """All service fields populated; typed instances validated; skill_resolver is set."""
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert isinstance(ctx.skill_resolver, SkillResolver)
+    assert isinstance(ctx.clone_mgr, DefaultCloneManager)
     assert isinstance(ctx.recipes, DefaultRecipeRepository)
     assert isinstance(ctx.migrations, DefaultMigrationService)
     assert isinstance(ctx.db_reader, DefaultDatabaseReader)

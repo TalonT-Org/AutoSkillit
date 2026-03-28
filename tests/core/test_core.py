@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-def test_core_io_module_has_docstring():
+def test_atomic_write_docstring_contains_atomic_keyword():
     import autoskillit.core.io as m
 
     assert m.__doc__ and "atomic" in m.__doc__

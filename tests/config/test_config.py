@@ -297,7 +297,7 @@ class TestSyncConfigRemoval:
         assert not hasattr(cfg_mod, "SyncConfig")
 
 
-class TestRunSkillRetryConfigFields:
+class TestRunSkillConfigFields:
     def test_run_skill_retry_config_removed(self):
         """run_skill_retry config section was merged into run_skill (timeout now 7200s)."""
         cfg = AutomationConfig()

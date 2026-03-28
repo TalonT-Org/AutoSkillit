@@ -64,3 +64,11 @@ class TestSousChefStaleRouting:
         assert "retries" in stale_section or "on_failure" in stale_section, (
             "retry_reason=stale must route via retries counter or on_failure"
         )
+
+    def test_stale_routing_uses_subtype_discriminant(self) -> None:
+        """sous-chef/SKILL.md must contain 'subtype: stale' as a compound routing discriminant."""
+        skill_md = _sous_chef_text()
+        assert "subtype: stale" in skill_md or "subtype=stale" in skill_md, (
+            "sous-chef/SKILL.md must contain 'subtype: stale' or 'subtype=stale' as a "
+            "compound routing discriminant, not just the words 'stale' and 'subtype' separately"
+        )

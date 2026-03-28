@@ -22,6 +22,13 @@ All tests run under `-n 4 --dist worksteal`. Every test must be safe for paralle
 - Never use bare assignment or `try/finally` to restore server state — use `monkeypatch` or
   rely on `tool_ctx`'s fixture teardown.
 
+## Placement Convention: tests/skills/ vs tests/contracts/
+
+- `tests/skills/` — tests that exercise the skill loader, skill discovery, or skill
+  resolution infrastructure (SkillResolver, SessionSkillManager, etc.)
+- `tests/contracts/` — tests that verify SKILL.md contract content: required sections,
+  output patterns, schema validity
+
 ## Performance
 
 - `PYTHONDONTWRITEBYTECODE=1` is set via Taskfile — no `.pyc` disk writes
@@ -51,6 +58,8 @@ tests/
 │   ├── test_anyio_migration.py          # Anyio migration guards
 │   ├── test_ast_rules.py
 │   ├── test_cli_decomposition.py
+│   ├── test_gfm_rendering_guard.py
+│   ├── test_never_raises_contracts.py
 │   ├── test_import_paths.py
 │   ├── test_layer_enforcement.py
 │   ├── test_registry.py
@@ -66,12 +75,21 @@ tests/
 │   ├── test_cook.py
 │   ├── test_doctor.py
 │   ├── test_init.py
-│   └── test_install.py
+│   ├── test_install.py
+│   ├── test_input_tty_contracts.py
+│   ├── test_interactive_subprocess_contracts.py
+│   ├── test_mcp_names.py
+│   ├── test_onboarding.py
+│   ├── test_stale_check.py
+│   ├── test_subprocess_env_contracts.py
+│   ├── test_terminal.py
+│   └── test_workspace.py
 ├── config/                              # Config loading tests
 │   ├── __init__.py
 │   ├── test_config.py
 │   ├── test_helpers.py                  # resolve_ingredient_defaults (moved from server/ in groupG)
-│   └── test_settings_staged_label.py
+│   ├── test_settings_staged_label.py
+│   └── test_settings_allowed_labels.py
 ├── contracts/                           # Protocol satisfaction + package gateway contracts
 │   ├── __init__.py
 │   ├── test_claim_issue_contracts.py
@@ -91,6 +109,11 @@ tests/
 │   ├── test_skill_contracts.py
 │   ├── test_target_skill_invocability.py
 │   ├── test_triage_contracts.py
+│   ├── test_api_surface_alignment.py
+│   ├── test_sous_chef_routing.py
+│   ├── test_sous_chef_scheduling.py
+│   ├── test_tools_recipe_contracts.py
+│   ├── test_review_pr_diff_annotation.py
 │   └── test_version_consistency.py
 ├── core/                                # Core layer tests
 │   ├── __init__.py
@@ -101,7 +124,10 @@ tests/
 │   ├── test_io.py
 │   ├── test_logging.py
 │   ├── test_paths.py
-│   └── test_types.py
+│   ├── test_types.py
+│   ├── test_core_terminal_table.py
+│   ├── test_type_constants.py
+│   └── test_types_structure.py
 ├── execution/                           # Subprocess integration + session tests
 │   ├── __init__.py
 │   ├── test_anomaly_detection.py
@@ -121,6 +147,8 @@ tests/
 │   ├── test_merge_queue.py
 │   ├── test_normalize_subtype.py
 │   ├── test_output_format_contract.py
+│   ├── test_pr_analysis.py
+│   ├── test_process_race.py
 │   ├── test_process_channel_b.py
 │   ├── test_process_debug_logging.py
 │   ├── test_process_jsonl.py
@@ -162,16 +190,22 @@ tests/
 │   ├── test_security_config.py
 │   ├── test_skill_cmd_check.py
 │   ├── test_skill_command_guard.py
-│   └── test_taskfile.py
+│   ├── test_taskfile.py
+│   ├── test_hook_sync.py
+│   ├── test_session_start_reminder.py
+│   ├── test_token_summary_appender.py
+│   └── test_unsafe_install_guard.py
 ├── migration/                           # Migration engine and store tests
 │   ├── __init__.py
 │   ├── test_engine.py
 │   ├── test_loader.py
-│   └── test_store.py
+│   ├── test_store.py
+│   └── test_api.py
 ├── pipeline/                            # Audit log, gate, fidelity, and PR-gate tests
 │   ├── __init__.py
 │   ├── test_audit.py
 │   ├── test_context.py
+│   ├── test_background_supervisor.py
 │   ├── test_fidelity.py                 # (moved from root test_review_pr_fidelity.py in groupG)
 │   ├── test_gate.py
 │   ├── test_mcp_response.py
@@ -183,26 +217,33 @@ tests/
 ├── recipe/                              # Recipe I/O, validation, schema tests
 │   ├── __init__.py
 │   ├── conftest.py
+│   ├── test__api.py                     # private _api module tests
 │   ├── test_anti_pattern_guards.py
 │   ├── test_api.py
+│   ├── test_bundled_recipe_hidden_policy.py
 │   ├── test_bundled_recipes.py
 │   ├── test_contracts.py
 │   ├── test_diagrams.py
 │   ├── test_hidden_ingredients.py
+│   ├── test_implementation.py
+│   ├── test_implementation_groups.py
 │   ├── test_implementation_sprint_mode.py
 │   ├── test_io.py
 │   ├── test_issue_url_pipeline.py
 │   ├── test_loader.py
 │   ├── test_merge_prs.py
 │   ├── test_merge_prs_queue.py
+│   ├── test_merge_sub_recipe_hidden.py
 │   ├── test_remediation_recipe.py
 │   ├── test_remediation_sprint_mode.py
 │   ├── test_rule_decomposition.py
 │   ├── test_rules_bypass.py
 │   ├── test_rules_ci.py
+│   ├── test_rules_clone.py
 │   ├── test_rules_contracts.py
 │   ├── test_rules_dataflow.py
 │   ├── test_rules_inputs.py
+│   ├── test_rules_pipeline_internal.py
 │   ├── test_rules_project_local_override.py
 │   ├── test_rules_recipe.py
 │   ├── test_rules_skill_content.py
@@ -225,6 +266,9 @@ tests/
 ├── server/                              # Server unit tests (tool handlers)
 │   ├── __init__.py
 │   ├── test_factory.py
+│   ├── test_editable_guard.py
+│   ├── test_perform_merge_editable_guard.py
+│   ├── test_tools_label_validation.py
 │   ├── test_git.py
 │   ├── test_headless_session.py         # (moved from root test_phase2_cook_session.py in groupG)
 │   ├── test_mcp_overrides.py            # (moved from recipe/ in groupG)
@@ -264,7 +308,8 @@ tests/
 │   ├── test_skill_compliance.py
 │   ├── test_skill_genericization.py
 │   ├── test_skill_output_compliance.py
-│   └── test_skill_placeholder_contracts.py
+│   ├── test_skill_placeholder_contracts.py
+│   └── test_validate_audit_contracts.py
 └── workspace/                           # Workspace and clone tests
     ├── __init__.py
     ├── conftest.py
@@ -273,6 +318,7 @@ tests/
     ├── test_clone_ci_contract.py
     ├── test_project_local_overrides.py
     ├── test_session_skills.py           # (moved from root test_phase2_session_skills.py in groupG)
+    ├── test_clone_registry.py
     └── test_skills.py
 
 temp/                        # Temporary/working files (gitignored)

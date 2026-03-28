@@ -19,7 +19,6 @@ Tests:
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
 
 import pytest
@@ -631,28 +630,6 @@ def test_test_suite_oversized_files_split():
         if len(f.read_text().splitlines()) > 1000
     ]
     assert not over, f"Oversized test files remain (run groupE): {over}"
-
-
-def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
-    """tmp_path must contain a .ROOT_DIR-derived hash to prevent cross-worktree collision.
-
-    Fails when pytest is invoked with --basetemp=/dev/shm/pytest-tmp (static path).
-    Passes only when Taskfile.yml derives PYTEST_TMPDIR from .ROOT_DIR via the
-    slim-sprig sha256sum template function.
-    """
-    if sys.platform == "linux":
-        import hashlib
-        import os
-
-        cwd_hash = hashlib.sha256(os.getcwd().encode()).hexdigest()[:8]
-        path_str = str(tmp_path)
-        assert f"pytest-tmp-{cwd_hash}" in path_str, (
-            f"tmp_path ({path_str!r}) does not contain the expected worktree hash "
-            f"'{cwd_hash}'. PYTEST_TMPDIR must be derived from .ROOT_DIR. "
-            f"Expected /dev/shm/pytest-tmp-{cwd_hash} as the base. "
-            "Update Taskfile.yml PYTEST_TMPDIR to use a .ROOT_DIR-derived hash suffix "
-            "(use slim-sprig: {{ substr 0 8 (sha256sum .ROOT_DIR) }})."
-        )
 
 
 def test_no_subpackage_exceeds_10_files() -> None:

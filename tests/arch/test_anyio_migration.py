@@ -83,7 +83,10 @@ class TestAnyioPrimitivesUsed:
 
 
 def test_server_has_no_asyncio_create_task() -> None:
-    """server/ must not use asyncio.create_task — use BackgroundTaskSupervisor.submit() instead."""
+    """server/ must not use asyncio.create_task.
+
+    Use DefaultBackgroundSupervisor.submit() instead.
+    """
     server_dir = SRC_ROOT / "server"
     violations: list[str] = []
     for path in sorted(server_dir.rglob("*.py")):
@@ -92,7 +95,7 @@ def test_server_has_no_asyncio_create_task() -> None:
             violations.append(str(path.relative_to(SRC_ROOT.parent.parent)))
     assert not violations, (
         "server/ must not use asyncio.create_task directly.\n"
-        "Use tool_ctx.background.submit() (BackgroundTaskSupervisor) instead.\n"
+        "Use tool_ctx.background.submit() (DefaultBackgroundSupervisor) instead.\n"
         "Violations:\n" + "\n".join(f"  {v}" for v in violations)
     )
 
@@ -100,7 +103,7 @@ def test_server_has_no_asyncio_create_task() -> None:
 def test_server_has_no_asyncio_ensure_future() -> None:
     """server/ must not use asyncio.ensure_future.
 
-    Use BackgroundTaskSupervisor.submit() instead.
+    Use DefaultBackgroundSupervisor.submit() instead.
     """
     server_dir = SRC_ROOT / "server"
     violations: list[str] = []

@@ -210,3 +210,22 @@ def test_tool_context_has_timing_log_field(tmp_path):
     ctx = _make_ctx(tmp_path)
     assert ctx.timing_log is not None
     assert isinstance(ctx.timing_log, TimingStore)
+
+
+def test_toolcontext_default_background_wired_with_audit(tmp_path):
+    """ToolContext without explicit background= must produce a supervisor
+    whose audit is the same instance as ctx.audit."""
+    from autoskillit.pipeline.background import DefaultBackgroundSupervisor
+
+    audit = DefaultAuditLog()
+    ctx = ToolContext(
+        config=AutomationConfig(),
+        audit=audit,
+        token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
+        gate=DefaultGateState(),
+        plugin_dir=str(tmp_path),
+        runner=None,
+    )
+    assert isinstance(ctx.background, DefaultBackgroundSupervisor)
+    assert ctx.background._audit is audit

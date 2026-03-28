@@ -264,6 +264,7 @@ async def report_bug(
                 indent=2,
             ),
         )
+        assert tool_ctx.background is not None  # always set by ToolContext.__post_init__
         tool_ctx.background.submit(
             _run_report_session(
                 skill_command,

@@ -34,7 +34,7 @@ from autoskillit.core import (
     WorkspaceManager,
     WriteExpectedResolver,
 )
-from autoskillit.pipeline.background import BackgroundTaskSupervisor
+from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 
 
@@ -91,13 +91,17 @@ class ToolContext:
     github_client: GitHubFetcher | None = field(default=None)
     ci_watcher: CIWatcher | None = field(default=None)
     merge_queue_watcher: MergeQueueWatcher | None = field(default=None)
-    background: BackgroundSupervisor = field(default_factory=BackgroundTaskSupervisor)
+    background: BackgroundSupervisor | None = field(default=None)
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
     write_expected_resolver: WriteExpectedResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: TargetSkillResolver | None = field(default=None)
     pipeline_id: str = field(default="")
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
+
+    def __post_init__(self) -> None:
+        if self.background is None:
+            self.background = DefaultBackgroundSupervisor(audit=self.audit)
 
     @property
     def default_ci_scope(self) -> CIRunScope:

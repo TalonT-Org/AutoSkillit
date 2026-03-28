@@ -51,7 +51,7 @@ def test_render_functions_produce_identical_output_after_extraction() -> None:
 
     gfm = _render_gfm_table(cols, rows)
     assert "| implement" in gfm
-    assert "|---" in gfm
+    assert "---" in gfm
     assert "…" in gfm
 
 

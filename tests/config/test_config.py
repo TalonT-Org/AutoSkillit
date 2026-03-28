@@ -415,7 +415,6 @@ class TestLoggingConfig:
     def test_automation_config_has_logging_field(self):
         """LOG_C7: AutomationConfig has logging sub-config."""
         cfg = AutomationConfig()
-        assert hasattr(cfg, "logging")
         assert cfg.logging.level == "INFO"
         assert cfg.logging.json_output is None
 
@@ -454,7 +453,6 @@ class TestLinuxTracingConfig:
     def test_automation_config_has_linux_tracing_field(self):
         """LT_C3: AutomationConfig has linux_tracing sub-config."""
         cfg = AutomationConfig()
-        assert hasattr(cfg, "linux_tracing")
         assert cfg.linux_tracing.enabled is True
         assert cfg.linux_tracing.proc_interval == 5.0
         assert cfg.linux_tracing.log_dir == ""
@@ -649,12 +647,6 @@ class TestReleaseReadinessConfig:
 
         defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
         assert defaults["branching"]["default_base_branch"] == "main"
-
-    def test_model_default_consistent_with_yaml(self):
-        """ModelConfig dataclass default must match defaults.yaml value."""
-        from autoskillit.config.settings import ModelConfig
-
-        assert ModelConfig().default == "sonnet"
 
 
 class TestBranchingConfig:

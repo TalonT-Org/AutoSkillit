@@ -14,13 +14,18 @@ from tests._helpers import _flush_structlog_proxy_caches as _flush_logger_proxy_
 
 class TestGetLogger:
     def test_returns_bound_logger(self):
-        """get_logger() returns a structlog BoundLogger callable."""
+        """get_logger() returns a structlog BoundLoggerLazyProxy instance."""
+        from structlog._config import BoundLoggerLazyProxy
+
         from autoskillit.core.logging import get_logger
 
         logger = get_logger(__name__)
-        assert callable(logger.info)
-        assert callable(logger.debug)
-        assert callable(logger.error)
+        # callable() is non-trivially true for any BoundLoggerLazyProxy attribute —
+        # __getattr__ delegates every access, so callable(proxy.anything) is always True.
+        # Use isinstance to verify the actual type contract instead.
+        assert isinstance(logger, BoundLoggerLazyProxy), (
+            f"get_logger() returned {type(logger).__name__}, expected BoundLoggerLazyProxy"
+        )
 
     def test_module_name_used_as_logger_name(self):
         """get_logger(__name__) creates a logger named after the module."""

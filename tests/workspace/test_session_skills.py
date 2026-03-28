@@ -20,6 +20,9 @@ from autoskillit.workspace.session_skills import (
 def test_resolve_ephemeral_root_returns_writable_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import autoskillit.workspace.session_skills as ss
+
+    monkeypatch.setattr(ss, "_CANDIDATE_ROOTS", [tmp_path])
     root = resolve_ephemeral_root()
     assert root.exists()
     assert root.is_dir()

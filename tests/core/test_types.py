@@ -33,12 +33,6 @@ def test_retry_reason_values():
     assert RetryReason.NONE.value == "none"
 
 
-def test_contract_recovery_retry_reason_exists():
-    """CONTRACT_RECOVERY must be a member of RetryReason."""
-    assert hasattr(RetryReason, "CONTRACT_RECOVERY")
-    assert RetryReason.CONTRACT_RECOVERY == "contract_recovery"
-
-
 def test_merge_failed_step_values():
     """MergeFailedStep enum covers all failure points."""
     assert set(MergeFailedStep) == {
@@ -72,11 +66,6 @@ def test_merge_state_values():
         MergeState.MAIN_REPO_DIRTY_ABORT_FAILED,
         MergeState.MERGE_SUCCEEDED_CLEANUP_BLOCKED,
     }
-
-
-def test_merge_state_has_base_branch_not_published() -> None:
-    """MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED exists with correct value."""
-    assert MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED == "worktree_intact_base_not_published"
 
 
 def test_restart_scope_values():

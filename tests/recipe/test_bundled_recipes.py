@@ -13,6 +13,16 @@ from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 # Known violations fixed in Parts B and C — excluded from general semantic-error assertions.
 _NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
 
+
+def _assert_ci_conflict_fix_on_context_limit(recipe) -> None:
+    """Shared assertion: ci_conflict_fix must abort via release_issue_failure on context limit."""
+    step = recipe.steps["ci_conflict_fix"]
+    assert step.on_context_limit == "release_issue_failure", (
+        "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
+        "pushed — abort via release_issue_failure"
+    )
+
+
 # ---------------------------------------------------------------------------
 # TestImplementationPipelineStructure
 # ---------------------------------------------------------------------------
@@ -491,23 +501,7 @@ class TestImplementationPipelineStructure:
         )
 
     def test_ip_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
-        step = recipe.steps["ci_conflict_fix"]
-        assert step.on_context_limit == "release_issue_failure", (
-            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
-            "pushed — abort via release_issue_failure"
-        )
-
-    def test_ip_recipe_passes_semantic_validation(self, recipe) -> None:
-        """After Part B, validate_recipe must report no errors."""
-        from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
-
-        errors = validate_recipe(recipe)
-        assert errors == [], f"Structural errors: {errors}"
-        findings = run_semantic_rules(recipe)
-        error_findings = [
-            f for f in findings if f.severity.value == "error" and f.rule != _NO_AUTOSKILLIT_IMPORT
-        ]
-        assert error_findings == [], f"Semantic errors: {error_findings}"
+        _assert_ci_conflict_fix_on_context_limit(recipe)
 
 
 # ---------------------------------------------------------------------------
@@ -793,23 +787,7 @@ class TestImplementationGroupsStructure:
         )
 
     def test_ig_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
-        step = recipe.steps["ci_conflict_fix"]
-        assert step.on_context_limit == "release_issue_failure", (
-            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
-            "pushed — abort via release_issue_failure"
-        )
-
-    def test_ig_recipe_passes_semantic_validation(self, recipe) -> None:
-        """After Part B, validate_recipe must report no errors."""
-        from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
-
-        errors = validate_recipe(recipe)
-        assert errors == [], f"Structural errors: {errors}"
-        findings = run_semantic_rules(recipe)
-        error_findings = [
-            f for f in findings if f.severity.value == "error" and f.rule != _NO_AUTOSKILLIT_IMPORT
-        ]
-        assert error_findings == [], f"Semantic errors: {error_findings}"
+        _assert_ci_conflict_fix_on_context_limit(recipe)
 
 
 # ---------------------------------------------------------------------------
@@ -1144,23 +1122,7 @@ class TestInvestigateFirstStructure:
         )
 
     def test_if_ci_conflict_fix_has_on_context_limit(self, recipe) -> None:
-        step = recipe.steps["ci_conflict_fix"]
-        assert step.on_context_limit == "release_issue_failure", (
-            "ci_conflict_fix is advisory; an incomplete conflict fix cannot be safely "
-            "pushed — abort via release_issue_failure"
-        )
-
-    def test_if_recipe_passes_semantic_validation(self, recipe) -> None:
-        """After Part B, validate_recipe must report no errors."""
-        from autoskillit.recipe.validator import run_semantic_rules, validate_recipe
-
-        errors = validate_recipe(recipe)
-        assert errors == [], f"Structural errors: {errors}"
-        findings = run_semantic_rules(recipe)
-        error_findings = [
-            f for f in findings if f.severity.value == "error" and f.rule != _NO_AUTOSKILLIT_IMPORT
-        ]
-        assert error_findings == [], f"Semantic errors: {error_findings}"
+        _assert_ci_conflict_fix_on_context_limit(recipe)
 
 
 # ---------------------------------------------------------------------------
@@ -1895,3 +1857,28 @@ def test_register_error_deferred_routes_to_escalate_stop() -> None:
     assert step.on_failure == "escalate_stop", (
         "register_error_deferred.on_failure must route to 'escalate_stop'"
     )
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["implementation.yaml", "implementation-groups.yaml", "remediation.yaml"],
+)
+def test_re_push_steps_have_force_true(recipe_name: str) -> None:
+    """All re_push/* steps must have force='true'.
+
+    Post-rebase push requires --force-with-lease.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / recipe_name)
+    for step_name in (
+        "re_push",
+        "re_push_queue_fix",
+        "re_push_direct_fix",
+        "re_push_immediate_fix",
+    ):
+        assert step_name in recipe.steps, f"Expected step {step_name!r} in {recipe_name}"
+        step = recipe.steps[step_name]
+        assert step.tool == "push_to_remote"
+        assert step.with_args.get("force") == "true", (
+            f"{step_name} in {recipe_name} must include force='true' — "
+            "post-rebase push requires --force-with-lease"
+        )

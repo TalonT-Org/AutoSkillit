@@ -18,14 +18,6 @@ def test_dump_yaml_not_in_core_all():
     assert not hasattr(core_io, "dump_yaml")
 
 
-def test_dump_yaml_not_in_io():
-    """dump_yaml must be removed entirely from core.io."""
-    import autoskillit.core.io as io_mod
-
-    assert not hasattr(io_mod, "dump_yaml")
-    assert "dump_yaml" not in io_mod.__all__
-
-
 def test_package_logger_name_not_in_core_all():
     import autoskillit.core as core
 

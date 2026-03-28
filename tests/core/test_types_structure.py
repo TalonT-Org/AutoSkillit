@@ -14,7 +14,9 @@ def test_enums_importable_from_sub_module():
 def test_protocols_importable_from_sub_module():
     from autoskillit.core._type_protocols import GatePolicy, HeadlessExecutor
 
+    assert callable(GatePolicy)
     assert GatePolicy.__module__ == "autoskillit.core._type_protocols"
+    assert callable(HeadlessExecutor)
     assert HeadlessExecutor.__module__ == "autoskillit.core._type_protocols"
 
 

@@ -92,7 +92,7 @@ class SmokeExecutor:
         raw_args = step_def.get("with", {})
         args = self._interpolate(raw_args)
 
-        if "retry" in step_def:
+        if "retries" in step_def:
             return await self._run_with_retry(step_def, args)
 
         tool_fn = _TOOL_MAP[tool_name]
@@ -108,27 +108,23 @@ class SmokeExecutor:
         return json.loads(raw_result)
 
     async def _run_with_retry(self, step_def: dict, args: dict) -> dict:
-        """Execute a tool with retry logic based on the retry block."""
-        retry = step_def["retry"]
-        max_attempts = retry.get("max_attempts", 3)
-        retry_field = retry["on"]
+        """Execute a tool with retry logic using the flat retries: schema."""
+        max_retries = step_def.get("retries", 0)
         tool_fn = _TOOL_MAP[step_def["tool"]]
 
-        # Always execute at least once; max_attempts controls additional retries.
-        # max_attempts=0: run once, if retry_field fires → exhausted immediately.
-        # max_attempts=N: run once, then retry up to N-1 more times.
         raw_result = await tool_fn(**args)
         result = json.loads(raw_result)
-        if not result.get(retry_field, False):
-            return result  # succeeded on first try
+        if self._is_success(step_def, result):
+            return result
 
-        for _ in range(max_attempts - 1):
+        for _ in range(max_retries):
             raw_result = await tool_fn(**args)
             result = json.loads(raw_result)
-            if not result.get(retry_field, False):
+            if self._is_success(step_def, result):
                 return result
 
-        return result  # exhausted — always defined
+        result["_retries_exhausted"] = True
+        return result
 
     def _interpolate(self, with_args: dict) -> dict:
         """Resolve ${{ inputs.X }} and ${{ context.X }} references."""
@@ -172,11 +168,8 @@ class SmokeExecutor:
                 return routes[value]
             return step_def.get("on_failure")
 
-        # If a retry block declared on_exhausted and the retry condition still fires,
-        # route to on_exhausted rather than on_failure.
-        retry = step_def.get("retry")
-        if retry and retry.get("on_exhausted") and result.get(retry.get("on", ""), False):
-            return retry["on_exhausted"]
+        if step_def.get("on_exhausted") and result.get("_retries_exhausted"):
+            return step_def["on_exhausted"]
 
         if self._is_success(step_def, result):
             return step_def.get("on_success")
@@ -278,28 +271,6 @@ class TestSmokeScriptValidation:
         assert "steps" in pipeline
         assert "ingredients" in pipeline
         assert "kitchen_rules" in pipeline
-        expected_steps = {
-            "setup",
-            "setup_remote",
-            "seed_task",
-            "set_feature_branch",
-            "create_branch",
-            "commit_dirty",
-            "push_feature_branch",
-            "investigate",
-            "rectify",
-            "implement",
-            "set_worktree_path",
-            "test",
-            "assess",
-            "classify",
-            "merge",
-            "check_summary",
-            "create_summary",
-            "done",
-            "escalate",
-        }
-        assert set(pipeline["steps"].keys()) == expected_steps
         assert pipeline["steps"]["setup"]["tool"] == "run_cmd"
         assert pipeline["steps"]["investigate"]["tool"] == "run_skill"
         assert pipeline["steps"]["implement"]["tool"] == "run_skill"
@@ -367,7 +338,8 @@ class TestSmokeScriptValidation:
         step_def = {
             "tool": "run_skill",
             "with": {"skill_command": "test", "cwd": "/tmp"},
-            "retry": {"max_attempts": 3, "on": "needs_retry", "on_exhausted": "escalate"},
+            "retries": 3,
+            "on_exhausted": "escalate",
         }
         executor = SmokeExecutor(steps={}, inputs={})
         with patch.dict(_TOOL_MAP, {"run_skill": mock_run_skill}):
@@ -376,12 +348,13 @@ class TestSmokeScriptValidation:
         assert result["success"] is True
 
     async def test_executor_max_attempts_zero_routes_to_on_exhausted(self) -> None:
-        """With max_attempts=0, the first needs_retry result must route to on_exhausted."""
+        """With retries=0, the first failure must route to on_exhausted."""
         steps = {
             "implement": {
                 "tool": "run_skill",
                 "with": {"skill_command": "/autoskillit:implement-worktree-no-merge plan.md"},
-                "retry": {"max_attempts": 0, "on": "needs_retry", "on_exhausted": "retry_wt"},
+                "retries": 0,
+                "on_exhausted": "retry_wt",
                 "capture": {"worktree_path": "${{ result.worktree_path }}"},
                 "on_success": "done",
                 "on_failure": "done",

@@ -70,6 +70,32 @@ def test_hook_registry_matches_generated_hooks_json() -> None:
     assert registry_pairs == generated_pairs
 
 
+def test_hooks_json_on_disk_exists_and_matches() -> None:
+    """hooks.json on disk must exist and match generate_hooks_json() exactly.
+
+    This test fails when the generation step has not been run. It guards
+    against drift between HOOK_REGISTRY and the on-disk plugin manifest.
+    """
+    hooks_json_path = pkg_root() / "hooks" / "hooks.json"
+    assert hooks_json_path.exists(), (
+        "src/autoskillit/hooks/hooks.json is missing. "
+        'Run: uv run python -c "'
+        "from autoskillit.hooks import generate_hooks_json; "
+        "from autoskillit.core.io import atomic_write; "
+        "from autoskillit.core.paths import pkg_root; "
+        "import json; "
+        "atomic_write(pkg_root() / 'hooks' / 'hooks.json', "
+        "json.dumps(generate_hooks_json(), indent=2) + chr(10))"
+        '"'
+    )
+    on_disk = json.loads(hooks_json_path.read_text())
+    expected = generate_hooks_json()
+    assert on_disk == expected, (
+        "hooks.json on disk does not match generate_hooks_json(). "
+        "Re-run the generation command to regenerate."
+    )
+
+
 def test_hook_registry_scripts_exist_on_disk() -> None:
     """Every script referenced in HOOK_REGISTRY must exist as a file in hooks/."""
     hooks_dir = pkg_root() / "hooks"

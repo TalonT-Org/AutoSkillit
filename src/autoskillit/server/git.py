@@ -25,6 +25,7 @@ from autoskillit.core import (
     truncate_text,
 )
 from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
+from autoskillit.workspace import remove_git_worktree, remove_worktree_sidecar
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -413,15 +414,21 @@ async def perform_merge(
         }
 
     # 9. Cleanup
-    wt_rc, _, wt_stderr = await _run_git(
-        ["git", "worktree", "remove", "--force", worktree_path], main_repo, 30, runner
-    )
-    if wt_rc != 0:
+    wt_result = await remove_git_worktree(Path(worktree_path), Path(main_repo), runner)
+    wt_rc = 0 if wt_result.success else 1
+    if not wt_result.success:
         logger.warning(
             "merge_worktree_cleanup_failed",
             operation="worktree_remove",
             path=worktree_path,
-            stderr=wt_stderr.strip(),
+            failures=wt_result.failed,
+        )
+
+    sidecar_result = remove_worktree_sidecar(Path(main_repo), worktree_branch)
+    if not sidecar_result.success:
+        logger.warning(
+            "merge_worktree_sidecar_cleanup_failed",
+            failures=sidecar_result.failed,
         )
 
     br_rc, _, br_stderr = await _run_git(

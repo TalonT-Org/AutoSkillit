@@ -1038,3 +1038,25 @@ class TestWriteConfigLayer:
         assert config_path.is_file()
         data = _yaml.safe_load(config_path.read_text())
         assert data["github"]["default_repo"] == "owner/repo"
+
+
+class TestWorkspaceConfig:
+    """WorkspaceConfig section is present in AutomationConfig with correct defaults."""
+
+    def test_workspace_config_exists_on_automation_config(self):
+        from autoskillit.config import load_config
+
+        cfg = load_config()
+        assert hasattr(cfg, "workspace")
+
+    def test_workspace_worktree_root_defaults_to_none(self):
+        from autoskillit.config import load_config
+
+        cfg = load_config()
+        assert cfg.workspace.worktree_root is None
+
+    def test_workspace_runs_root_defaults_to_none(self):
+        from autoskillit.config import load_config
+
+        cfg = load_config()
+        assert cfg.workspace.runs_root is None

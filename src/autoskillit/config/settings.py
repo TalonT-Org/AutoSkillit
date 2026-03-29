@@ -227,6 +227,12 @@ class PacksConfig:
     enabled: list[str] = field(default_factory=list)
 
 
+@dataclass
+class WorkspaceConfig:
+    worktree_root: str | None = None  # null = auto-resolve to ../worktrees/
+    runs_root: str | None = None  # null = auto-resolve to ../autoskillit-runs/
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -262,6 +268,7 @@ class AutomationConfig:
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
     packs: PacksConfig = field(default_factory=PacksConfig)
+    workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -300,6 +307,7 @@ class AutomationConfig:
         sk = sec("skills")
         _sub = sec("subsets")
         pk = sec("packs")
+        ws_raw = sec("workspace")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -321,6 +329,7 @@ class AutomationConfig:
         _br = _field_defaults(BranchingConfig)
         _ci = _field_defaults(CIConfig)
         _sk = _field_defaults(SkillsConfig)
+        _wsc = _field_defaults(WorkspaceConfig)
 
         return cls(
             test_check=TestCheckConfig(
@@ -431,6 +440,10 @@ class AutomationConfig:
             ),
             subsets=_build_subsets_config(_sub),
             packs=_build_packs_config(pk),
+            workspace=WorkspaceConfig(
+                worktree_root=val(ws_raw, "worktree_root", _wsc["worktree_root"]) or None,
+                runs_root=val(ws_raw, "runs_root", _wsc["runs_root"]) or None,
+            ),
         )
 
 

@@ -2677,14 +2677,15 @@ class TestBuildSkillResultChannelBPatternRecovery:
         Recovery (and CHANNEL_B bypass) must be blocked when session.session_complete
         is False. Synthesis must not inject the file path into result.
         """
-        from autoskillit.execution.session import ClaudeSessionResult  # noqa: E402
 
         tool_use_line = json.dumps(
             {
                 "type": "tool_use",
                 "id": "t1",
                 "name": "Write",
-                "input": {"file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"},
+                "input": {
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"
+                },
             }
         )
         # UNPARSEABLE result (no proper result record)
@@ -2704,7 +2705,9 @@ class TestBuildSkillResultChannelBPatternRecovery:
         )
         assert sr.success is False
         assert sr.subtype not in {"success"}
-        assert "arch_lens_selection" not in sr.result
+        # Synthesis must not have injected the structured token (raw NDJSON may contain
+        # the file path string, but the plan_path = ... assignment must be absent)
+        assert "plan_path =" not in sr.result
 
     def test_synthesis_not_run_for_timeout_channel_b_with_write_evidence(self) -> None:
         """CHANNEL_B + TIMEOUT + write evidence must not produce success=True."""
@@ -2713,7 +2716,9 @@ class TestBuildSkillResultChannelBPatternRecovery:
                 "type": "tool_use",
                 "id": "t1",
                 "name": "Write",
-                "input": {"file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"},
+                "input": {
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"
+                },
             }
         )
         result_line = json.dumps(
@@ -3199,7 +3204,9 @@ class TestSynthesizeFromWriteArtifacts:
             session, [r"plan_path\s*=\s*/.+"], write_call_count=2
         )
         assert result is not None
-        assert "plan_path = /cwd/.autoskillit/temp/make-plan/task_plan_2026-01-01.md" in result.result
+        assert (
+            "plan_path = /cwd/.autoskillit/temp/make-plan/task_plan_2026-01-01.md" in result.result
+        )
         assert "arch_lens_selection" not in result.result
 
 

@@ -42,9 +42,10 @@ _TOKEN_FIELDS = (
     "cache_read_input_tokens",
 )
 
-_FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
+FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {CliSubtype.UNKNOWN, CliSubtype.EMPTY_OUTPUT, CliSubtype.UNPARSEABLE, CliSubtype.TIMEOUT}
 )
+_FAILURE_SUBTYPES = FAILURE_SUBTYPES  # backward-compat alias
 
 
 class ContentState(StrEnum):
@@ -166,6 +167,16 @@ class ClaudeSessionResult:
         if self.needs_retry:
             return RetryReason.RESUME
         return RetryReason.NONE
+
+    @property
+    def session_complete(self) -> bool:
+        """True when this session reached a normal completion state.
+
+        A session is complete when it is not in an error state AND its subtype
+        is not in the failure set (UNKNOWN, EMPTY_OUTPUT, UNPARSEABLE, TIMEOUT).
+        Recovery operations and CHANNEL_B bypass may only run on complete sessions.
+        """
+        return not self.is_error and self.subtype not in FAILURE_SUBTYPES
 
 
 def extract_token_usage(stdout: str) -> dict[str, Any] | None:
@@ -578,21 +589,36 @@ def _compute_success(
     session completed successfully. Stdout content is not required.
     """
     # Gate 0.5: Channel B provenance bypass — session JSONL is authoritative.
+    # When expected_output_patterns is non-empty, the bypass requires session_complete
+    # to guard against synthesis-injected false positives: a failure-subtype session
+    # (UNPARSEABLE, TIMEOUT) whose result was mutated by synthesis must not be accepted
+    # as successful via CHANNEL_B. When no patterns are configured, the bypass fires
+    # unconditionally — the JSONL marker is sufficient evidence of completion (drain race).
     match channel_confirmation:
         case ChannelConfirmation.CHANNEL_B:
-            # PRECONDITION: _recover_block_from_assistant_messages MUST be called
-            # (and its recovered session substituted) before this function when
-            # channel_confirmation=CHANNEL_B and expected_output_patterns is set.
-            # Callers that bypass _build_skill_result must honour this contract.
-            if not _check_expected_patterns(session.result.strip(), expected_output_patterns):
+            if expected_output_patterns and not session.session_complete:
+                # Patterns exist but session is a failure subtype — fall through to
+                # termination dispatch so standard content validation rejects it.
                 logger.debug(
-                    "channel_b_content_check_failed",
-                    result_len=len(session.result),
+                    "channel_b_bypass_skipped_incomplete_session",
+                    subtype=str(session.subtype),
+                    is_error=session.is_error,
                     pattern_count=len(expected_output_patterns),
                 )
-                return False
-            logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
-            return True
+            else:
+                # PRECONDITION: _recover_block_from_assistant_messages MUST be called
+                # (and its recovered session substituted) before this function when
+                # channel_confirmation=CHANNEL_B and expected_output_patterns is set.
+                # Callers that bypass _build_skill_result must honour this contract.
+                if not _check_expected_patterns(session.result.strip(), expected_output_patterns):
+                    logger.debug(
+                        "channel_b_content_check_failed",
+                        result_len=len(session.result),
+                        pattern_count=len(expected_output_patterns),
+                    )
+                    return False
+                logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
+                return True
         case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
             pass  # fall through to termination dispatch
         case _ as _unreachable_cc:

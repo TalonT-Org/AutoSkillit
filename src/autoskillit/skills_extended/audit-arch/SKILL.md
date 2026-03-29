@@ -239,8 +239,32 @@ These apply across all principles when evaluating architectural decisions:
 3. **Consolidate findings** by principle and severity
 4. **Cross-reference:** Ensure findings are categorized by the principle they violate, not just where discovered
 5. **Suggest new principle** (optional) - see below
-6. **Write report** to `.autoskillit/temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
-7. **Output summary** to terminal
+6. **Self-Validation Pass** — Before finalizing findings, spot-check a sample of
+   factual claims against the actual codebase. Perform all four checks:
+
+   a. **HIGH/CRITICAL re-read**: For every HIGH or CRITICAL finding, use the Read
+      tool to re-open the exact file and line range cited. Confirm the code exhibits
+      the claimed behavior. Downgrade or remove the finding if the evidence does not
+      hold.
+
+   b. **Concrete-class check** (resource-leak and data-loss findings): For any
+      finding about a missing `aclose`, unclosed resource, or silent data loss, read
+      the concrete class body — not only the Protocol or interface declaration. If the
+      concrete implementation provides the method or handles the data correctly,
+      remove or revise the finding to reflect the accurate scope.
+
+   c. **Enforcement-search confirmation** (enforcement-gap findings): For any finding
+      claiming no test enforces a rule or constant, confirm that a Grep search of
+      `tests/` for the exact symbol was performed during this audit. If it was not,
+      run it now; discard the finding if a matching test exists.
+
+   d. **Internal validation note**: After completing (a)–(c), record a one-sentence
+      note for each reviewed finding: either `CONFIRMED – <original claim stands>` or
+      `REVISED – <corrected claim or reason for removal>`. These notes are for
+      internal quality control and do not appear in the final report.
+
+7. **Write report** to `.autoskillit/temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+8. **Output summary** to terminal
 
 ---
 

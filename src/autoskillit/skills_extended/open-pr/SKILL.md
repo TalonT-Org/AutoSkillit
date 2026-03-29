@@ -4,6 +4,13 @@ categories: [github]
 description: Create a GitHub PR for a completed implementation, with auto-selected arch-lens
   diagrams embedded in the PR body. Use after pipeline implementation when open_pr mode is
   enabled.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: open-pr] Opening pull request...'"
+          once: true
 ---
 
 # Open PR

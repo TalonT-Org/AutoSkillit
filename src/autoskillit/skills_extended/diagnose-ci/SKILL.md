@@ -1,6 +1,13 @@
 ---
 name: diagnose-ci
 categories: [ci]
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: diagnose-ci] Diagnosing CI failures...'"
+          once: true
 ---
 
 # diagnose-ci Skill

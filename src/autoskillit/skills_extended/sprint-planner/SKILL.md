@@ -1,6 +1,13 @@
 ---
 name: sprint-planner
 description: Select a focused, conflict-free sprint from an existing triage manifest. Use when orchestrating a sprint planning step that needs issue overlap analysis and sprint manifest production.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: sprint-planner] Planning sprint...'"
+          once: true
 ---
 
 # Sprint Planner

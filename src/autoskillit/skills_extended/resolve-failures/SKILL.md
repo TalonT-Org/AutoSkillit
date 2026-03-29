@@ -1,6 +1,13 @@
 ---
 name: resolve-failures
 description: Fix test failures in a worktree without merging. Leaves worktree green and unmerged for the orchestrator's merge gate. Use when tests fail after implementation. Takes worktree path, plan path, and base branch as positional arguments.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: resolve-failures] Resolving test failures...'"
+          once: true
 ---
 
 # Resolve Failures Skill

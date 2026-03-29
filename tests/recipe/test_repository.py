@@ -138,20 +138,17 @@ def test_get_list_invalidated_on_project_dir_change(
 # ---------------------------------------------------------------------------
 
 
-def test_load_and_validate_delegates_to_api(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_load_and_validate_delegates_to_api(tmp_path: Path) -> None:
     """load_and_validate calls _api.load_and_validate with correct args."""
     expected = {"success": True, "recipe": "data"}
     mock_api = MagicMock(return_value=expected)
 
-    monkeypatch.setattr("autoskillit.recipe._api.load_and_validate", mock_api)
-    # Patch find to return a mock recipe_info
     foo = _make_recipe_info("foo", tmp_path / "foo.yaml")
-    with patch("autoskillit.recipe.repository.list_recipes", return_value=_load_result(foo)):
-        with patch("autoskillit.recipe.repository._dir_mtime", return_value=1.0):
-            repo = DefaultRecipeRepository()
-            result = repo.load_and_validate("foo", tmp_path)
+    with patch("autoskillit.recipe._api.load_and_validate", mock_api):
+        with patch("autoskillit.recipe.repository.list_recipes", return_value=_load_result(foo)):
+            with patch("autoskillit.recipe.repository._dir_mtime", return_value=1.0):
+                repo = DefaultRecipeRepository()
+                result = repo.load_and_validate("foo", tmp_path)
 
     assert result == expected
     mock_api.assert_called_once()
@@ -159,30 +156,28 @@ def test_load_and_validate_delegates_to_api(
     assert call_kwargs.args[0] == "foo"
 
 
-def test_validate_from_path_delegates_to_api(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_validate_from_path_delegates_to_api(tmp_path: Path) -> None:
     """validate_from_path calls _api.validate_from_path."""
     expected = {"valid": True}
     mock_api = MagicMock(return_value=expected)
-    monkeypatch.setattr("autoskillit.recipe._api.validate_from_path", mock_api)
 
-    repo = DefaultRecipeRepository()
-    script_path = tmp_path / "recipe.yaml"
-    result = repo.validate_from_path(script_path)
+    with patch("autoskillit.recipe._api.validate_from_path", mock_api):
+        repo = DefaultRecipeRepository()
+        script_path = tmp_path / "recipe.yaml"
+        result = repo.validate_from_path(script_path)
 
     assert result == expected
     mock_api.assert_called_once_with(script_path)
 
 
-def test_list_all_delegates_to_api(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_all_delegates_to_api() -> None:
     """list_all() calls _api.list_all()."""
     expected = {"items": []}
     mock_api = MagicMock(return_value=expected)
-    monkeypatch.setattr("autoskillit.recipe._api.list_all", mock_api)
 
-    repo = DefaultRecipeRepository()
-    result = repo.list_all()
+    with patch("autoskillit.recipe._api.list_all", mock_api):
+        repo = DefaultRecipeRepository()
+        result = repo.list_all()
 
     assert result == expected
     mock_api.assert_called_once_with(project_dir=None)

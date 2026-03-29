@@ -230,7 +230,7 @@ These apply across all principles when evaluating architectural decisions:
    | Finding category | Required verification before reporting |
    |---|---|
    | **Missing export** (symbol absent from public API) | Use the Read tool to open the relevant `__init__.py`. Verify both `__all__` contents and direct re-export statements. Discard the finding if the symbol is present. |
-   | **Missing decorator** (e.g., `@runtime_checkable`) | Use the Read tool to open the file containing the class definition. Inspect the 3–5 lines directly preceding the `class` keyword. Discard the finding if the decorator is present. |
+   | **Missing decorator** (e.g., `runtime_checkable`) | Use the Read tool to open the file containing the class definition. Inspect the 3–5 lines directly preceding the `class` keyword. Discard the finding if the decorator is present. |
    | **Enforcement gap** (no test for a rule or constant) | Use the Grep tool to search `tests/` for the exact symbol or constant name. Discard the finding if a matching test file is found. |
    | **Code duplication** | Use the Read tool to retrieve the full body of each function. Compare the full signature (parameters, return type) and logic step-by-step. Same-named functions at different abstraction levels are NOT duplicates. Discard if logically distinct. |
    | **Misplaced file or incorrect import path** | Use the Bash tool to run `git log --oneline -- {file_path}` (substituting the actual path). Inspect commit messages for intentional placement decisions. Discard the finding if a commit explains the placement. |

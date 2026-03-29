@@ -103,11 +103,15 @@ async def run_workspace_clean(
         Path(cfg.workspace.worktree_root) if cfg.workspace.worktree_root else base / WORKTREES_DIR
     )
     if not worktrees_dir.exists():
+        print(f"No {WORKTREES_DIR}/ directory found under: {base}")
         return
 
     runner = DefaultSubprocessRunner()
     git_worktrees = set(await list_git_worktrees(project_root, worktrees_dir, runner))
-    fs_worktrees = {p for p in worktrees_dir.iterdir() if p.is_dir()}
+    try:
+        fs_worktrees = {p for p in worktrees_dir.iterdir() if p.is_dir()}
+    except FileNotFoundError:
+        fs_worktrees = set()
     all_worktrees = git_worktrees | fs_worktrees
 
     stale_wts = sorted(p for p in all_worktrees if now - p.stat().st_mtime >= threshold)
@@ -139,6 +143,13 @@ async def run_workspace_clean(
             return
 
     for wt in stale_wts:
-        await remove_git_worktree(wt, project_root, runner)
-        remove_worktree_sidecar(project_root, wt.name)
-        print(f"Removed worktree: {wt.name}")
+        wt_result = await remove_git_worktree(wt, project_root, runner)
+        sidecar_result = remove_worktree_sidecar(project_root, wt.name)
+        if not wt_result.success:
+            for fail_path, fail_err in wt_result.failed:
+                print(f"Failed to remove worktree {fail_path}: {fail_err}", file=sys.stderr)
+        if not sidecar_result.success:
+            for fail_path, fail_err in sidecar_result.failed:
+                print(f"Failed to remove sidecar {fail_path}: {fail_err}", file=sys.stderr)
+        if wt_result.success and sidecar_result.success:
+            print(f"Removed worktree: {wt.name}")

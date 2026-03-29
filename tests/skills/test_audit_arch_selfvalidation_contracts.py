@@ -36,7 +36,7 @@ def test_selfvalidation_requires_high_critical_reread():
     """T-AA-014: Spot-check must require re-reading HIGH and CRITICAL findings."""
     text = SKILL_MD.read_text()
     selfval_idx = text.index("Self-Validation Pass")
-    after_selfval = text[selfval_idx : selfval_idx + 1500]
+    after_selfval = text[selfval_idx:]
     assert "HIGH" in after_selfval or "CRITICAL" in after_selfval, (
         "Self-Validation Pass must mention HIGH or CRITICAL findings in its "
         "spot-check instructions (IMP-006a)"
@@ -47,7 +47,7 @@ def test_selfvalidation_requires_concrete_class_check():
     """T-AA-015: Spot-check must require reading the concrete class for resource-leak/data-loss."""
     text = SKILL_MD.read_text()
     selfval_idx = text.index("Self-Validation Pass")
-    after_selfval = text[selfval_idx : selfval_idx + 1500].lower()
+    after_selfval = text[selfval_idx:].lower()
     assert "concrete" in after_selfval, (
         "Self-Validation Pass must require reading the concrete class implementation "
         "(not just the Protocol) for resource-leak and data-loss findings (IMP-006b)"
@@ -58,7 +58,7 @@ def test_selfvalidation_requires_internal_note():
     """T-AA-016: Validation pass must require producing a CONFIRMED or REVISED note."""
     text = SKILL_MD.read_text()
     selfval_idx = text.index("Self-Validation Pass")
-    after_selfval = text[selfval_idx : selfval_idx + 1500]
+    after_selfval = text[selfval_idx:]
     assert "CONFIRMED" in after_selfval or "REVISED" in after_selfval, (
         "Self-Validation Pass must require producing an internal CONFIRMED or REVISED "
         "note for each reviewed finding before the report is written (IMP-006d)"

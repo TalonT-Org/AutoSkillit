@@ -5,13 +5,13 @@ enumeration via `git worktree list --porcelain`, and removal via
 `git worktree remove --force` with an shutil.rmtree fallback for
 directories that are no longer registered with git (orphans).
 """
+
 from __future__ import annotations
 
 import shutil
 from pathlib import Path
 
-from autoskillit.core import CleanupResult
-from autoskillit.core._type_subprocess import SubprocessRunner
+from autoskillit.core import CleanupResult, SubprocessRunner
 
 _SIDECAR_ROOT = (".autoskillit", "temp", "worktrees")
 

@@ -1,14 +1,15 @@
 # tests/workspace/test_worktree.py
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+
+from autoskillit.core import CleanupResult
 from autoskillit.workspace.worktree import (
     list_git_worktrees,
     remove_git_worktree,
     remove_worktree_sidecar,
 )
-from autoskillit.core import CleanupResult
 
 
 class TestListGitWorktrees:
@@ -64,7 +65,9 @@ class TestRemoveGitWorktree:
         """When git worktree remove fails, falls back to shutil.rmtree for orphaned dirs."""
         wt = tmp_path / "worktrees" / "impl-orphan"
         wt.mkdir(parents=True)
-        runner = AsyncMock(return_value=MagicMock(returncode=1, stdout="", stderr="not registered"))
+        runner = AsyncMock(
+            return_value=MagicMock(returncode=1, stdout="", stderr="not registered")
+        )
         result = await remove_git_worktree(wt, tmp_path, runner)
         assert isinstance(result, CleanupResult)
         assert str(wt) in result.deleted
@@ -76,7 +79,10 @@ class TestRemoveGitWorktree:
         wt = tmp_path / "worktrees" / "impl-locked"
         wt.mkdir(parents=True)
         runner = AsyncMock(return_value=MagicMock(returncode=1, stdout="", stderr="error"))
-        with patch("autoskillit.workspace.worktree.shutil.rmtree", side_effect=OSError("permission denied")):
+        with patch(
+            "autoskillit.workspace.worktree.shutil.rmtree",
+            side_effect=OSError("permission denied"),
+        ):
             result = await remove_git_worktree(wt, tmp_path, runner)
         assert str(wt) in [p for p, _ in result.failed]
 
@@ -90,7 +96,7 @@ class TestRemoveGitWorktree:
 
 
 class TestRemoveWorktreeSidecar:
-    """remove_worktree_sidecar(project_root, worktree_name) removes .autoskillit/temp/worktrees/<name>/."""
+    """remove_worktree_sidecar removes .autoskillit/temp/worktrees/<name>/."""
 
     def test_removes_sidecar_directory(self, tmp_path):
         name = "impl-foo-20260101-120000"

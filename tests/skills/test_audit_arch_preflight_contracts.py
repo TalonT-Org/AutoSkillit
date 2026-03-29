@@ -58,7 +58,7 @@ def test_imp004_full_body_comparison():
     """T-AA-006: IMP-004 gate requires comparing full function bodies."""
     text = SKILL_MD.read_text()
     text_lower = text.lower()
-    assert "full body" in text_lower or "full bodies" in text_lower, (
+    assert "full body" in text_lower, (
         "Pre-flight checklist must require comparing full function bodies before "
         "reporting code duplication (IMP-004)"
     )

@@ -34,7 +34,7 @@ async def test_fetch_github_issue_no_client(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_fetch_github_issue_success(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_fetch_github_issue_success(tool_ctx) -> None:
     """client.fetch_issue returns data → JSON with that data."""
     issue_data = {
         "success": True,
@@ -66,7 +66,7 @@ async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx) -> None:
 
 @pytest.mark.anyio
 async def test_fetch_github_issue_bare_number_with_default_repo(
-    tool_ctx, monkeypatch: pytest.MonkeyPatch
+    tool_ctx,
 ) -> None:
     """issue_url='42', default_repo='owner/repo' → resolves to 'owner/repo#42'."""
     tool_ctx.config.github.default_repo = "owner/repo"
@@ -112,7 +112,7 @@ async def test_get_issue_title_no_client(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_get_issue_title_success(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_get_issue_title_success(tool_ctx) -> None:
     """client.fetch_title returns data → JSON with title and slug."""
     title_data = {
         "success": True,

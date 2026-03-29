@@ -180,7 +180,7 @@ async def test_prepare_issue_no_executor(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_prepare_issue_session_failure(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_prepare_issue_session_failure(tool_ctx) -> None:
     """executor.run → success=False → error response with diagnostic fields."""
     skill_result = _make_skill_result(
         success=False, subtype="timeout", exit_code=1, stderr="process killed"
@@ -195,7 +195,7 @@ async def test_prepare_issue_session_failure(tool_ctx, monkeypatch: pytest.Monke
 
 
 @pytest.mark.anyio
-async def test_prepare_issue_empty_output(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_prepare_issue_empty_output(tool_ctx) -> None:
     """success=True but result="" → drain-race error."""
     skill_result = _make_skill_result(success=True, result="")
     tool_ctx.executor = AsyncMock()
@@ -207,7 +207,7 @@ async def test_prepare_issue_empty_output(tool_ctx, monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.anyio
-async def test_prepare_issue_block_parse_error(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_prepare_issue_block_parse_error(tool_ctx) -> None:
     """success=True, output present, but no delimiters → 'no result block found' error."""
     skill_result = _make_skill_result(success=True, result="some output without delimiters")
     tool_ctx.executor = AsyncMock()
@@ -219,7 +219,7 @@ async def test_prepare_issue_block_parse_error(tool_ctx, monkeypatch: pytest.Mon
 
 
 @pytest.mark.anyio
-async def test_prepare_issue_success(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_prepare_issue_success(tool_ctx) -> None:
     """Complete success path → success=True, block fields merged without 'success' key conflict."""
     block_data = {"issue_url": "https://github.com/o/r/issues/1", "issue_number": 1}
     payload = json.dumps(block_data)
@@ -244,7 +244,7 @@ async def test_enrich_issues_gate_closed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_enrich_issues_success(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_enrich_issues_success(tool_ctx) -> None:
     """Successful enrich → success=True, enriched list in response."""
     block_data = {"enriched": [42], "skipped_already_enriched": []}
     payload = json.dumps(block_data)
@@ -278,7 +278,7 @@ async def test_claim_issue_no_client(tool_ctx) -> None:
 
 @pytest.mark.anyio
 async def test_claim_issue_already_claimed_returns_not_claimed(
-    tool_ctx, monkeypatch: pytest.MonkeyPatch
+    tool_ctx,
 ) -> None:
     """Label already present, allow_reentry=False → claimed=False."""
     issue_data = {
@@ -300,7 +300,7 @@ async def test_claim_issue_already_claimed_returns_not_claimed(
 
 
 @pytest.mark.anyio
-async def test_claim_issue_reentry_allowed(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_claim_issue_reentry_allowed(tool_ctx) -> None:
     """Label already present, allow_reentry=True → claimed=True, reentry=True."""
     issue_data = {
         "success": True,
@@ -322,7 +322,7 @@ async def test_claim_issue_reentry_allowed(tool_ctx, monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.anyio
-async def test_claim_issue_success(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_claim_issue_success(tool_ctx) -> None:
     """Label not present → applies label, claimed=True."""
     issue_data = {"success": True, "labels": []}
     tool_ctx.github_client = AsyncMock()
@@ -352,7 +352,7 @@ async def test_release_issue_gate_closed(tool_ctx) -> None:
 
 @pytest.mark.anyio
 async def test_release_issue_no_staging_when_same_branch(
-    tool_ctx, monkeypatch: pytest.MonkeyPatch
+    tool_ctx,
 ) -> None:
     """target_branch == promotion_target → staged=False."""
     tool_ctx.github_client = AsyncMock()
@@ -372,7 +372,7 @@ async def test_release_issue_no_staging_when_same_branch(
 
 @pytest.mark.anyio
 async def test_release_issue_stages_when_different_branch(
-    tool_ctx, monkeypatch: pytest.MonkeyPatch
+    tool_ctx,
 ) -> None:
     """target_branch != promotion_target → staged=True, staged_label applied."""
     tool_ctx.github_client = AsyncMock()

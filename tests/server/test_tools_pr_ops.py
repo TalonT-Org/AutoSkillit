@@ -51,7 +51,7 @@ def test_map_pr_view_reviews_empty() -> None:
 
 
 @pytest.mark.anyio
-async def test_close_issues_sequentially_all_succeed(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_close_issues_sequentially_all_succeed() -> None:
     """All gh calls return rc=0 → closed=[1,2], failed=[]."""
     with patch(
         "autoskillit.server.tools_pr_ops._run_subprocess",
@@ -64,9 +64,7 @@ async def test_close_issues_sequentially_all_succeed(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.anyio
-async def test_close_issues_sequentially_partial_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_close_issues_sequentially_partial_failure() -> None:
     """First rc=0, second rc=1 → closed=[1], failed=[2]."""
     call_count = {"n": 0}
 

@@ -25,7 +25,8 @@ from autoskillit.core import GENERATED_FILES, get_logger, is_protected_branch
 
 logger = get_logger(__name__)
 
-_RUNS_DIR = "autoskillit-runs"
+RUNS_DIR = "autoskillit-runs"
+WORKTREES_DIR = "worktrees"
 
 # URL prefixes that unambiguously identify a network remote
 _NETWORK_URL_PREFIXES = ("https://", "http://", "git@", "git://", "ssh://", "file://")
@@ -285,7 +286,7 @@ def clone_repo(
             }
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-    runs_parent = source.parent / _RUNS_DIR
+    runs_parent = source.parent / RUNS_DIR
     clone_path = runs_parent / f"{run_name}-{timestamp}"
     runs_parent.mkdir(parents=True, exist_ok=True)
 

@@ -10,6 +10,8 @@ from autoskillit.workspace.cleanup import (
     _delete_directory_contents,
 )
 from autoskillit.workspace.clone import (
+    RUNS_DIR,
+    WORKTREES_DIR,
     DefaultCloneManager,
     classify_remote_url,
     clone_repo,
@@ -40,6 +42,11 @@ from autoskillit.workspace.skills import (
     bundled_skills_extended_dir,
     detect_project_local_overrides,
 )
+from autoskillit.workspace.worktree import (
+    list_git_worktrees,
+    remove_git_worktree,
+    remove_worktree_sidecar,
+)
 
 delete_directory_contents = _delete_directory_contents
 
@@ -51,8 +58,12 @@ __all__ = [
     "DefaultCloneManager",
     "DefaultWorkspaceManager",
     "DefaultSessionSkillManager",
+    "list_git_worktrees",
     "read_registry",
     "register_clone",
+    "remove_git_worktree",
+    "remove_worktree_sidecar",
+    "RUNS_DIR",
     "SkillResolver",
     "SkillsDirectoryProvider",
     "bundled_skills_dir",
@@ -66,4 +77,5 @@ __all__ = [
     "push_to_remote",
     "remove_clone",
     "resolve_ephemeral_root",
+    "WORKTREES_DIR",
 ]

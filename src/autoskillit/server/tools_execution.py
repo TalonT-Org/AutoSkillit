@@ -11,7 +11,6 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
-    PIPELINE_FORBIDDEN_TOOLS,
     LayoutError,
     ValidatedAddDir,
     get_logger,
@@ -296,11 +295,3 @@ async def run_skill(
     finally:
         if step_name:
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
-
-
-__all__ = [
-    "PIPELINE_FORBIDDEN_TOOLS",
-    "run_cmd",
-    "run_python",
-    "run_skill",
-]

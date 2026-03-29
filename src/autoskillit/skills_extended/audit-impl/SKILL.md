@@ -2,6 +2,13 @@
 name: audit-impl
 categories: [audit]
 description: Audit a completed implementation against its originating plan(s). Returns GO (merge approved) or NO GO (generates remediation file for retry). Final gate before merge in any implementation pipeline.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: audit-impl] Auditing implementation against plan...'"
+          once: true
 ---
 
 # Implementation Audit Skill

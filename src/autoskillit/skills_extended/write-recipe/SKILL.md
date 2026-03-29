@@ -1,6 +1,13 @@
 ---
 name: write-recipe
 description: Generate YAML recipes for .autoskillit/recipes/. Use when user says "make script skill", "generate script", "script a workflow", "write a script", "create a script", "new recipe", "write a pipeline", or when loaded by other skills for script formatting.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: write-recipe] Writing recipe...'"
+          once: true
 ---
 
 # Make Script Skill

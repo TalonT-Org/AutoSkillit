@@ -1,6 +1,13 @@
 ---
 name: mermaid
 description: Create and edit mermaid diagrams in markdown files. Use when creating flowcharts, sequence diagrams, or any mermaid syntax in .md files.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: mermaid] Creating or editing mermaid diagram...'"
+          once: true
 ---
 
 # Mermaid Diagram Creation

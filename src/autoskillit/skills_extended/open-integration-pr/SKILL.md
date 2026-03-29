@@ -6,6 +6,13 @@ description: >
   a rich PR body with per-PR details, arch-lens diagrams, and carried-forward Closes #N
   references. Closes all collapsed PRs with a comment after creation. Use inside the
   merge-prs after all PRs have been merged into the integration branch.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: open-integration-pr] Opening integration pull request...'"
+          once: true
 ---
 
 # Open Integration PR

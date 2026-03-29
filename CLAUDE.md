@@ -103,11 +103,11 @@ src/autoskillit/
 │   ├── logging.py           #   get_logger, configure_logging, PACKAGE_LOGGER_NAME
 │   ├── paths.py             #   pkg_root(), is_git_worktree() — canonical package root resolver
 │   ├── types.py             #   Thin re-export hub — imports * from all _type_*.py sub-modules
-│   ├── _type_enums.py       #   12 StrEnums: RetryReason, MergeState, ClaudeFlags, Severity, etc.
+│   ├── _type_enums.py       #   14 StrEnums: RetryReason, MergeState, ClaudeFlags, Severity, etc.
 │   ├── _type_subprocess.py  #   SubprocessResult, SubprocessRunner Protocol, _TERMINATION_CONTRACT
 │   ├── _type_constants.py   #   GATED_TOOLS, FREE_RANGE_TOOLS, SKILL_TOOLS, SKILL_COMMAND_PREFIX, etc.
 │   ├── _type_results.py     #   LoadResult, LoadReport, SkillResult, FailureRecord, CleanupResult, CIRunScope, etc.
-│   ├── _type_protocols.py   #   19 Protocols: GatePolicy, HeadlessExecutor, GitHubFetcher, CIWatcher, etc.
+│   ├── _type_protocols.py   #   20 Protocols: GatePolicy, HeadlessExecutor, GitHubFetcher, CIWatcher, etc.
 │   ├── _type_helpers.py     #   extract_skill_name, resolve_target_skill, truncate_text
 │   ├── _terminal_table.py   #   TerminalColumn, _render_terminal_table — L0 color-agnostic terminal table primitive (pipeline/ and cli/ safe)
 │   ├── branch_guard.py      #   is_protected_branch — pure-function protected-branch validation
@@ -119,7 +119,8 @@ src/autoskillit/
 │   ├── ingredient_defaults.py #  resolve_ingredient_defaults — auto-detect source_dir + base_branch
 │   └── settings.py          #   Dataclass config + dynaconf-backed layered resolution
 ├── pipeline/                # L1 pipeline state sub-package
-│   ├── __init__.py          #   Re-exports ToolContext, DefaultGateState, DefaultAuditLog, DefaultTokenLog
+│   ├── __init__.py          #   Re-exports ToolContext, DefaultGateState, DefaultAuditLog, DefaultTokenLog,
+│   │                        #   TelemetryFormatter, DefaultBackgroundSupervisor, DefaultTimingLog
 │   ├── audit.py             #   FailureRecord, DefaultAuditLog
 │   ├── background.py        #   DefaultBackgroundSupervisor — supervised background task execution; BackgroundSupervisor Protocol in core/
 │   ├── context.py           #   ToolContext DI container (config, audit, token_log, gate, plugin_dir, runner)
@@ -155,7 +156,7 @@ src/autoskillit/
 │   ├── testing.py           #   Pytest output parsing and pass/fail adjudication
 │   └── pr_analysis.py       #   PR analysis helpers: extract_linked_issues, is_valid_fidelity_finding, DOMAIN_PATHS, partition_files_by_domain
 ├── workspace/               # L1 workspace sub-package
-│   ├── __init__.py          #   Re-exports CleanupResult, SkillResolver, SessionSkillManager, clone_repo, remove_clone, push_to_remote
+│   ├── __init__.py          #   Re-exports CleanupResult, SkillResolver, DefaultSessionSkillManager, clone_repo, remove_clone, push_to_remote
 │   ├── cleanup.py           #   Directory teardown utilities (CleanupResult, preserve list)
 │   ├── clone.py             #   Clone-based run isolation: clone_repo, remove_clone, push_to_remote
 │   ├── session_skills.py    #   Per-session ephemeral skill dirs (SkillsDirectoryProvider,
@@ -192,7 +193,7 @@ src/autoskillit/
 │   ├── staleness_cache.py   #   Disk-backed staleness check cache (StalenessEntry, read_staleness_cache, write_staleness_cache)
 │   └── validator.py         #   validate_recipe, run_semantic_rules (re-exported), analyze_dataflow
 ├── migration/               # L2 migration sub-package
-│   ├── __init__.py          #   Re-exports MigrationEngine, applicable_migrations, FailureStore
+│   ├── __init__.py          #   Re-exports MigrationEngine, applicable_migrations, FailureStore, check_and_migrate
 │   ├── engine.py            #   MigrationEngine, adapter ABC hierarchy, default_migration_engine()
 │   ├── _api.py              #   Top-level check_and_migrate convenience function
 │   ├── loader.py            #   Migration note discovery and version chaining
@@ -205,7 +206,7 @@ src/autoskillit/
 │   ├── helpers.py           #   Shared server-layer helpers (worktree setup, path utilities)
 │   ├── tools_kitchen.py     #   open_kitchen, close_kitchen tool handlers + recipe:// resource
 │   ├── tools_ci.py          #   wait_for_ci, get_ci_status, set_commit_status, toggle_auto_merge, wait_for_merge_queue tool handlers
-│   ├── tools_clone.py       #   clone_repo, remove_clone, push_to_remote tool handlers
+│   ├── tools_clone.py       #   clone_repo, remove_clone, push_to_remote, register_clone_status, batch_cleanup_clones tool handlers
 │   ├── tools_execution.py   #   run_cmd, run_python, run_skill tool handlers
 │   ├── tools_git.py         #   merge_worktree, classify_fix, create_unique_branch, check_pr_mergeable tool handlers
 │   ├── tools_recipe.py      #   migrate_recipe, load_recipe, list_recipes, validate_recipe tool handlers
@@ -222,7 +223,7 @@ src/autoskillit/
 │   ├── _terminal.py         #   terminal_guard() context manager — saves/restores TTY attrs around interactive subprocess
 │   ├── _terminal_table.py   #   Re-export shim: TerminalColumn, _render_terminal_table from core/_terminal_table (L0)
 │   ├── _cook.py             #   cook command: ephemeral skill session launcher (claude --add-dir)
-│   ├── _doctor.py           #   Doctor command -- 9 project setup checks
+│   ├── _doctor.py           #   Doctor command -- 12 project setup checks
 │   ├── _hooks.py            #   Unified PreToolUse hook registration helpers
 │   ├── _init_helpers.py     #   Init command helpers: interactive prompts and workspace marker
 │   ├── _marketplace.py      #   Plugin install/upgrade marketplace operations
@@ -231,7 +232,7 @@ src/autoskillit/
 │   ├── _prompts.py          #   Orchestrator prompt builder for recipe execution
 │   ├── _stale_check.py      #   Stale-install check: version comparison, hook-drift prompt, dismissal state
 │   ├── _workspace.py        #   Workspace clean helpers: age partitioning, display, and confirmation
-│   └── app.py               #   CLI: serve, init, config show, skills, recipes, workspace, doctor
+│   └── app.py               #   CLI: serve, init, config show, skills, recipes, workspace, doctor, migrate, quota_status
 ├── hooks/                   # Claude Code PreToolUse, PostToolUse, and SessionStart hook scripts
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration (auto-discovered by Claude Code)
@@ -249,6 +250,9 @@ src/autoskillit/
 ├── migrations/              # Data: versioned migration YAML notes
 │   └── __init__.py
 ├── recipes/                 # Bundled recipe YAML definitions
+│   ├── contracts/           # Per-recipe contract cards (generated)
+│   ├── diagrams/            # Per-recipe flow diagrams (generated)
+│   ├── sub-recipes/         # Reusable sub-recipe YAML fragments
 │   ├── implementation-groups.yaml
 │   ├── implementation.yaml
 │   ├── merge-prs.yaml
@@ -269,6 +273,7 @@ src/autoskillit/
     ├── audit-arch/           ├── audit-cohesion/
     ├── audit-tests/          ├── audit-defense-standards/
     ├── audit-bugs/           ├── audit-friction/
+    ├── validate-audit/
     ├── make-req/             ├── elaborate-phase/
     ├── write-recipe/         ├── migrate-recipes/
     ├── setup-project/        ├── sprint-planner/

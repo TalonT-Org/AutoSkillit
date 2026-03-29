@@ -24,10 +24,11 @@ class TestRunSkillRetryRemoved:
         )
 
     def test_run_skill_retry_not_in_all(self):
-        """run_skill_retry is not in tools_execution.__all__."""
+        """run_skill_retry is not in tools_execution.__all__ (if defined)."""
         import autoskillit.server.tools_execution as module
 
-        assert "run_skill_retry" not in module.__all__
+        all_exports = getattr(module, "__all__", [])
+        assert "run_skill_retry" not in all_exports
 
 
 class TestRunSkillSessionOutcome:

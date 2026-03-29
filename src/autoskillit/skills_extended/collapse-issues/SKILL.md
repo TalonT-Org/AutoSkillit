@@ -7,6 +7,13 @@ description: >
   Closes originals with cross-reference comments. Inverse of issue-splitter.
 triggers:
   - /autoskillit:collapse-issues
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: collapse-issues] Collapsing duplicate GitHub issues...'"
+          once: true
 ---
 
 # collapse-issues Skill

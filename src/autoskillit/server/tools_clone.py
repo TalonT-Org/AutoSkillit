@@ -267,7 +267,7 @@ async def push_to_remote(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "clone"})
+@mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": False})
 @track_response_size("register_clone_status")
 async def register_clone_status(
     clone_path: str,
@@ -318,7 +318,7 @@ async def register_clone_status(
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "clone"})
+@mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": False})
 @track_response_size("batch_cleanup_clones")
 async def batch_cleanup_clones(
     registry_path: str = "",

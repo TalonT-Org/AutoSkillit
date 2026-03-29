@@ -2,6 +2,13 @@
 name: make-arch-diag
 categories: [arch-lens]
 description: Generate architecture diagram for a specific component or system. Prompts user to select which area to document, then creates comprehensive mermaid diagrams.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: make-arch-diag] Generating architecture diagram...'"
+          once: true
 ---
 
 # Make-Arch-Diag: Architecture Diagram Generation

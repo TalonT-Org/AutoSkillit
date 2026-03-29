@@ -45,7 +45,6 @@ _TOKEN_FIELDS = (
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {CliSubtype.UNKNOWN, CliSubtype.EMPTY_OUTPUT, CliSubtype.UNPARSEABLE, CliSubtype.TIMEOUT}
 )
-_FAILURE_SUBTYPES = FAILURE_SUBTYPES  # backward-compat alias
 
 
 class ContentState(StrEnum):
@@ -493,7 +492,7 @@ def _check_session_content(
     if not session.result.strip():
         logger.debug("content_check_failed", reason="empty_result")
         return False
-    if session.subtype in _FAILURE_SUBTYPES:
+    if session.subtype in FAILURE_SUBTYPES:
         logger.debug("content_check_failed", reason="failure_subtype", subtype=session.subtype)
         return False
     if completion_marker:

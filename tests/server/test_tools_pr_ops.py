@@ -16,7 +16,6 @@ from autoskillit.server.tools_pr_ops import (
     get_pr_reviews,
 )
 
-
 # ---------------------------------------------------------------------------
 # Pure helper functions
 # ---------------------------------------------------------------------------
@@ -39,9 +38,7 @@ def test_map_api_reviews_missing_user() -> None:
 def test_map_pr_view_reviews_extracts_author_login() -> None:
     """gh pr view format (author.login) → mapped correctly."""
     data = {
-        "reviews": [
-            {"author": {"login": "bob"}, "state": "CHANGES_REQUESTED", "body": "Fix this"}
-        ]
+        "reviews": [{"author": {"login": "bob"}, "state": "CHANGES_REQUESTED", "body": "Fix this"}]
     }
     result = _map_pr_view_reviews(data)
     assert result == [{"author": "bob", "state": "CHANGES_REQUESTED", "body": "Fix this"}]
@@ -103,13 +100,9 @@ async def test_get_pr_reviews_gate_closed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_get_pr_reviews_with_repo_success(
-    tool_ctx, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_get_pr_reviews_with_repo_success(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
     """repo provided → gh api repos/{repo}/pulls/123/reviews path used."""
-    api_response = json.dumps(
-        [{"user": {"login": "alice"}, "state": "APPROVED", "body": ""}]
-    )
+    api_response = json.dumps([{"user": {"login": "alice"}, "state": "APPROVED", "body": ""}])
     with patch(
         "autoskillit.server.tools_pr_ops._run_subprocess",
         new=AsyncMock(return_value=(0, api_response, "")),
@@ -138,9 +131,7 @@ async def test_get_pr_reviews_without_repo_success(
 
 
 @pytest.mark.anyio
-async def test_get_pr_reviews_gh_failure(
-    tool_ctx, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_get_pr_reviews_gh_failure(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
     """gh returns rc=1 → {"success": False, "error": ...}."""
     with patch(
         "autoskillit.server.tools_pr_ops._run_subprocess",
@@ -162,9 +153,7 @@ async def test_bulk_close_issues_gate_closed(tool_ctx) -> None:
 
 
 @pytest.mark.anyio
-async def test_bulk_close_issues_all_closed(
-    tool_ctx, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_bulk_close_issues_all_closed(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
     """All succeed → {"closed": [1, 2, 3], "failed": []}."""
     with patch(
         "autoskillit.server.tools_pr_ops._run_subprocess",

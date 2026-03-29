@@ -62,7 +62,9 @@ def test_find_returns_none_when_no_match(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_get_list_is_cached_on_identical_mtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_list_is_cached_on_identical_mtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Call _get_list twice with same mtime → list_recipes called once (cache hit)."""
     mock_result = _load_result()
     call_count = {"n": 0}
@@ -81,7 +83,9 @@ def test_get_list_is_cached_on_identical_mtime(tmp_path: Path, monkeypatch: pyte
     assert call_count["n"] == 1
 
 
-def test_get_list_invalidated_on_mtime_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_list_invalidated_on_mtime_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Change mtime between calls → list_recipes called twice (cache miss)."""
     mock_result = _load_result()
     call_count = {"n": 0}
@@ -103,7 +107,9 @@ def test_get_list_invalidated_on_mtime_change(tmp_path: Path, monkeypatch: pytes
     assert call_count["n"] == 2
 
 
-def test_get_list_invalidated_on_project_dir_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_list_invalidated_on_project_dir_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Call with dir_a then dir_b → list_recipes called twice."""
     mock_result = _load_result()
     call_count = {"n": 0}
@@ -132,7 +138,9 @@ def test_get_list_invalidated_on_project_dir_change(tmp_path: Path, monkeypatch:
 # ---------------------------------------------------------------------------
 
 
-def test_load_and_validate_delegates_to_api(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_load_and_validate_delegates_to_api(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """load_and_validate calls _api.load_and_validate with correct args."""
     expected = {"success": True, "recipe": "data"}
     mock_api = MagicMock(return_value=expected)
@@ -151,7 +159,9 @@ def test_load_and_validate_delegates_to_api(monkeypatch: pytest.MonkeyPatch, tmp
     assert call_kwargs.args[0] == "foo"
 
 
-def test_validate_from_path_delegates_to_api(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_validate_from_path_delegates_to_api(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """validate_from_path calls _api.validate_from_path."""
     expected = {"valid": True}
     mock_api = MagicMock(return_value=expected)

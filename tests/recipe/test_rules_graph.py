@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
-from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
+from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultRoute
 
 
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
@@ -58,7 +58,7 @@ def test_cycle_with_only_on_failure_exit_is_warning() -> None:
 
 
 def test_cycle_with_retry_exit_is_clean() -> None:
-    """Cycle where one step has retries>0, tool=run_skill, and on_exhausted outside → no finding."""
+    """Cycle with retries>0, tool=run_skill, and on_exhausted outside cycle → no finding."""
     recipe = _make_recipe(
         {
             "A": RecipeStep(
@@ -194,9 +194,7 @@ def test_push_after_audit_is_clean() -> None:
     """Push only reachable via audit-impl path → no finding."""
     recipe = _make_recipe(
         {
-            "entry": RecipeStep(
-                tool="run_cmd", with_args={"cmd": "echo x"}, on_success="audit"
-            ),
+            "entry": RecipeStep(tool="run_cmd", with_args={"cmd": "echo x"}, on_success="audit"),
             "audit": RecipeStep(
                 tool="run_skill",
                 with_args={
@@ -223,9 +221,7 @@ def test_no_push_steps_is_clean() -> None:
     """Recipe with no push_to_remote → no finding."""
     recipe = _make_recipe(
         {
-            "entry": RecipeStep(
-                tool="run_cmd", with_args={"cmd": "echo x"}, on_success="done"
-            ),
+            "entry": RecipeStep(tool="run_cmd", with_args={"cmd": "echo x"}, on_success="done"),
             "done": RecipeStep(action="stop", message="done"),
         }
     )
@@ -329,9 +325,7 @@ def test_merge_base_context_var_without_push_is_error() -> None:
     """merge_worktree base_branch=${{context.my_branch}}, no push_to_remote → ERROR."""
     recipe = _make_recipe(
         {
-            "entry": RecipeStep(
-                tool="run_cmd", with_args={"cmd": "echo x"}, on_success="merge"
-            ),
+            "entry": RecipeStep(tool="run_cmd", with_args={"cmd": "echo x"}, on_success="merge"),
             "merge": RecipeStep(
                 tool="merge_worktree",
                 with_args={
@@ -354,9 +348,7 @@ def test_merge_base_context_var_with_push_before_is_clean() -> None:
     """push_to_remote for same context var precedes merge_worktree → no finding."""
     recipe = _make_recipe(
         {
-            "entry": RecipeStep(
-                tool="run_cmd", with_args={"cmd": "echo x"}, on_success="push"
-            ),
+            "entry": RecipeStep(tool="run_cmd", with_args={"cmd": "echo x"}, on_success="push"),
             "push": RecipeStep(
                 tool="push_to_remote",
                 with_args={"branch": "${{ context.my_branch }}"},
@@ -384,9 +376,7 @@ def test_merge_base_literal_is_clean() -> None:
     """base_branch='main' (literal) → no finding."""
     recipe = _make_recipe(
         {
-            "entry": RecipeStep(
-                tool="run_cmd", with_args={"cmd": "echo x"}, on_success="merge"
-            ),
+            "entry": RecipeStep(tool="run_cmd", with_args={"cmd": "echo x"}, on_success="merge"),
             "merge": RecipeStep(
                 tool="merge_worktree",
                 with_args={"worktree_path": "/tmp/wt", "base_branch": "main"},

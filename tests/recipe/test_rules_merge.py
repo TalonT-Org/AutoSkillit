@@ -34,9 +34,7 @@ def test_no_merge_worktree_step_is_clean() -> None:
     """Recipe without merge_worktree → no findings."""
     recipe = _make_recipe(
         {
-            "entry": RecipeStep(
-                tool="run_cmd", with_args={"cmd": "echo x"}, on_success="done"
-            ),
+            "entry": RecipeStep(tool="run_cmd", with_args={"cmd": "echo x"}, on_success="done"),
             "done": RecipeStep(action="stop", message="done"),
         }
     )

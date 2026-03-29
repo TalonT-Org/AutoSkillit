@@ -85,9 +85,7 @@ async def test_check_and_migrate_migrated_successfully(tmp_path: Path) -> None:
     mock_match = MagicMock(path=tmp_path / "test.yaml")
     mock_recipe = MagicMock(version="0.1.0")
     mock_engine = MagicMock()
-    mock_engine.migrate_file = AsyncMock(
-        return_value=MigrationResult(success=True, name="test")
-    )
+    mock_engine.migrate_file = AsyncMock(return_value=MigrationResult(success=True, name="test"))
 
     with (
         patch("autoskillit.recipe.find_recipe_by_name", return_value=mock_match),

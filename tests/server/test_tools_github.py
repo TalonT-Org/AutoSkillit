@@ -10,7 +10,6 @@ import pytest
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools_github import fetch_github_issue, get_issue_title
 
-
 # ---------------------------------------------------------------------------
 # fetch_github_issue
 # ---------------------------------------------------------------------------
@@ -49,9 +48,7 @@ async def test_fetch_github_issue_success(tool_ctx, monkeypatch: pytest.MonkeyPa
     tool_ctx.github_client = AsyncMock()
     tool_ctx.github_client.fetch_issue = AsyncMock(return_value=issue_data)
 
-    result = json.loads(
-        await fetch_github_issue("https://github.com/owner/repo/issues/42")
-    )
+    result = json.loads(await fetch_github_issue("https://github.com/owner/repo/issues/42"))
     assert result["success"] is True
     assert result["issue_number"] == 42
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -54,7 +54,7 @@ def _make_skill_result(
 
 
 def test_build_headless_error_response_fields() -> None:
-    """All required fields present: success, status, error, session_id, stderr, subtype, exit_code."""
+    """All required fields present in error response: success, status, error, session_id, etc."""
     result = _make_skill_result(success=False, session_id="abc", subtype="timeout", exit_code=1)
     resp = _build_headless_error_response(result, error="Something failed")
     assert resp["success"] is False
@@ -103,9 +103,7 @@ def test_build_prepare_skill_command_basic() -> None:
 
 def test_build_prepare_skill_command_with_flags() -> None:
     """labels + dry_run + split → all flags in output."""
-    cmd = _build_prepare_skill_command(
-        "T", "B", "owner/repo", ["bug", "needs-triage"], True, True
-    )
+    cmd = _build_prepare_skill_command("T", "B", "owner/repo", ["bug", "needs-triage"], True, True)
     assert "--repo owner/repo" in cmd
     assert "--label bug" in cmd
     assert "--label needs-triage" in cmd
@@ -128,7 +126,7 @@ def test_parse_prepare_result_no_block() -> None:
 
 
 def test_parse_prepare_result_invalid_json() -> None:
-    """Block contains non-JSON → {"success": False, "error": "result block contained invalid JSON"}."""
+    """Block contains non-JSON → error dict with 'result block contained invalid JSON'."""
     text = "---prepare-issue-result---\nnot valid json\n---/prepare-issue-result---\n"
     result = _parse_prepare_result(text)
     assert result == {"success": False, "error": "result block contained invalid JSON"}

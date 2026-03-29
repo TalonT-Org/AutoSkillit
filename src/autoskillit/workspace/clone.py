@@ -26,7 +26,6 @@ from autoskillit.core import GENERATED_FILES, get_logger, is_protected_branch
 logger = get_logger(__name__)
 
 RUNS_DIR = "autoskillit-runs"
-WORKTREES_DIR = "worktrees"
 
 # URL prefixes that unambiguously identify a network remote
 _NETWORK_URL_PREFIXES = ("https://", "http://", "git@", "git://", "ssh://", "file://")

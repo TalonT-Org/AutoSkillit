@@ -11,7 +11,6 @@ from autoskillit.workspace.cleanup import (
 )
 from autoskillit.workspace.clone import (
     RUNS_DIR,
-    WORKTREES_DIR,
     DefaultCloneManager,
     classify_remote_url,
     clone_repo,
@@ -43,6 +42,7 @@ from autoskillit.workspace.skills import (
     detect_project_local_overrides,
 )
 from autoskillit.workspace.worktree import (
+    WORKTREES_DIR,
     list_git_worktrees,
     remove_git_worktree,
     remove_worktree_sidecar,

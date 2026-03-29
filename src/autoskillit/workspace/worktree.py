@@ -13,6 +13,7 @@ from pathlib import Path
 
 from autoskillit.core import CleanupResult, SubprocessRunner
 
+WORKTREES_DIR = "worktrees"
 _SIDECAR_ROOT = (".autoskillit", "temp", "worktrees")
 
 

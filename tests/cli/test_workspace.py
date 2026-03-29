@@ -244,10 +244,11 @@ class TestRunWorkspaceCleanWorktrees:
         )
 
         await run_workspace_clean(dir=str(base), force=True, project_root=project_root)
+        assert len(removed_paths) == 0
         assert recent_wt not in removed_paths
 
     @pytest.mark.anyio
-    async def test_orphaned_worktree_dir_removed_via_filesystem(self, tmp_path, monkeypatch):
+    async def test_orphaned_worktree_dir_removed(self, tmp_path, monkeypatch):
         """A stale directory under worktrees/ not registered in git is still removed."""
         import time
 
@@ -333,6 +334,6 @@ class TestRunWorkspaceCleanWorktrees:
 
 def _make_workspace_cfg():
     """Helper: minimal AutomationConfig with default WorkspaceConfig."""
-    from autoskillit.config import load_config
+    from autoskillit.config.settings import AutomationConfig
 
-    return load_config()
+    return AutomationConfig()

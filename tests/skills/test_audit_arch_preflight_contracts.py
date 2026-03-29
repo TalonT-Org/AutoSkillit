@@ -1,9 +1,6 @@
 from pathlib import Path
 
-SKILL_MD = (
-    Path(__file__).parents[2]
-    / "src/autoskillit/skills_extended/audit-arch/SKILL.md"
-)
+SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/audit-arch/SKILL.md"
 
 
 def test_preflight_checklist_section_exists():

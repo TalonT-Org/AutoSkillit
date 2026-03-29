@@ -223,12 +223,24 @@ These apply across all principles when evaluating architectural decisions:
 
 ## Audit Workflow
 
-1. **Launch parallel subagents** for each principle
-2. **Consolidate findings** by principle and severity
-3. **Cross-reference:** Ensure findings are categorized by the principle they violate, not just where discovered
-4. **Suggest new principle** (optional) - see below
-5. **Write report** to `.autoskillit/temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
-6. **Output summary** to terminal
+1. **Pre-Flight Verification Checklist** — Before reporting any finding, complete the
+   mandatory verification for its category. A finding MUST NOT be reported unless the
+   required verification has been performed.
+
+   | Finding category | Required verification before reporting |
+   |---|---|
+   | **Missing export** (symbol absent from public API) | Use the Read tool to open the relevant `__init__.py`. Verify both `__all__` contents and direct re-export statements. Discard the finding if the symbol is present. |
+   | **Missing decorator** (e.g., `@runtime_checkable`) | Use the Read tool to open the file containing the class definition. Inspect the 3–5 lines directly preceding the `class` keyword. Discard the finding if the decorator is present. |
+   | **Enforcement gap** (no test for a rule or constant) | Use the Grep tool to search `tests/` for the exact symbol or constant name. Discard the finding if a matching test file is found. |
+   | **Code duplication** | Use the Read tool to retrieve the full body of each function. Compare the full signature (parameters, return type) and logic step-by-step. Same-named functions at different abstraction levels are NOT duplicates. Discard if logically distinct. |
+   | **Misplaced file or incorrect import path** | Use the Bash tool to run `git log --oneline -- {file_path}` (substituting the actual path). Inspect commit messages for intentional placement decisions. Discard the finding if a commit explains the placement. |
+
+2. **Launch parallel subagents** for each principle
+3. **Consolidate findings** by principle and severity
+4. **Cross-reference:** Ensure findings are categorized by the principle they violate, not just where discovered
+5. **Suggest new principle** (optional) - see below
+6. **Write report** to `.autoskillit/temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+7. **Output summary** to terminal
 
 ---
 

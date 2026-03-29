@@ -195,7 +195,14 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
     pure-stdlib module that implements the pre-deletion editable install guard, and
     has zero upward imports into config/pipeline/execution layers.
     """
-    _ALLOWED = frozenset({"autoskillit.server._editable_guard"})
+    _ALLOWED = frozenset(
+        {
+            "autoskillit.server._editable_guard",
+            # workspace is L1; git.py delegates worktree removal to the
+            # single L1 implementation rather than inlining subprocess calls.
+            "autoskillit.workspace",
+        }
+    )
     path = SRC / "server" / "git.py"
     violations: list[str] = []
     for mod, in_tc in _parse_imports(path):

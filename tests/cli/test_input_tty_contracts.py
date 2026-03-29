@@ -138,6 +138,8 @@ def test_run_workspace_clean_noninteractive_exits(
 ) -> None:
     """workspace clean prompt must raise SystemExit(1) when not interactive and
     force=False. Requires stale entries to exist so the confirmation input() is reached."""
+    import asyncio
+
     from autoskillit.cli._workspace import run_workspace_clean
 
     runs_dir = tmp_path / "autoskillit-runs"
@@ -148,5 +150,5 @@ def test_run_workspace_clean_noninteractive_exits(
     monkeypatch.setattr("autoskillit.cli._workspace.time.time", lambda: entry_mtime + 20_000)
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
     with pytest.raises(SystemExit) as exc_info:
-        run_workspace_clean(dir=str(tmp_path), force=False)
+        asyncio.run(run_workspace_clean(dir=str(tmp_path), force=False))
     assert exc_info.value.code == 1

@@ -15,7 +15,7 @@ from autoskillit.workspace.worktree import (
 class TestListGitWorktrees:
     """list_git_worktrees(project_root) returns paths of linked worktrees under root."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_returns_linked_worktrees_under_prefix(self, tmp_path):
         """Only worktrees whose paths start with the given prefix are returned."""
         wt_root = tmp_path / "worktrees"
@@ -30,14 +30,14 @@ class TestListGitWorktrees:
         result = await list_git_worktrees(tmp_path, wt_root, runner)
         assert result == [wt_root / "impl-foo-20260101-120000"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_git_failure_returns_empty_list(self, tmp_path):
         """When git worktree list fails, returns empty list without raising."""
         runner = AsyncMock(return_value=MagicMock(returncode=1, stdout="", stderr="fatal"))
         result = await list_git_worktrees(tmp_path, tmp_path / "worktrees", runner)
         assert result == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_excludes_main_worktree(self, tmp_path):
         """Main worktree entry (first in porcelain output) is never in the result."""
         wt_root = tmp_path / "worktrees"
@@ -50,7 +50,7 @@ class TestListGitWorktrees:
 class TestRemoveGitWorktree:
     """remove_git_worktree(worktree_path, main_repo, runner) removes the worktree."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_success_returns_cleanup_result_deleted(self, tmp_path):
         wt = tmp_path / "worktrees" / "impl-foo"
         wt.mkdir(parents=True)
@@ -60,7 +60,7 @@ class TestRemoveGitWorktree:
         assert str(wt) in result.deleted
         assert result.failed == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_git_failure_falls_back_to_shutil_rmtree(self, tmp_path):
         """When git worktree remove fails, falls back to shutil.rmtree for orphaned dirs."""
         wt = tmp_path / "worktrees" / "impl-orphan"
@@ -73,7 +73,7 @@ class TestRemoveGitWorktree:
         assert str(wt) in result.deleted
         assert not wt.exists()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_both_git_and_rmtree_fail_records_failure(self, tmp_path):
         """When both git and shutil fail, failure is recorded, no exception raised."""
         wt = tmp_path / "worktrees" / "impl-locked"
@@ -86,7 +86,7 @@ class TestRemoveGitWorktree:
             result = await remove_git_worktree(wt, tmp_path, runner)
         assert str(wt) in [p for p, _ in result.failed]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_nonexistent_path_is_skipped(self, tmp_path):
         """A path that does not exist is added to skipped, not failed."""
         wt = tmp_path / "worktrees" / "impl-gone"

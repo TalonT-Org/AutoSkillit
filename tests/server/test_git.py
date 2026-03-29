@@ -1,10 +1,13 @@
 """Tests for server/git.py perform_merge()."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from autoskillit.config import AutomationConfig
+from autoskillit.core import CleanupResult
 from autoskillit.core.types import SubprocessResult, TerminationReason, TestResult
-from tests.conftest import StatefulMockTester
+from tests.conftest import MockSubprocessRunner, StatefulMockTester
 
 
 def _make_result(
@@ -482,3 +485,124 @@ async def test_perform_merge_strips_generated_files_before_dirty_check(
     status_idx = next(i for i, c in enumerate(calls) if "--porcelain" in c)
     rebase_idx = next(i for i, c in enumerate(calls) if "rebase" in c and "--autostash" in c)
     assert ls_files_idx < status_idx < rebase_idx
+
+
+def _make_tester() -> StatefulMockTester:
+    """Return a StatefulMockTester with two passing test results (pre- and post-rebase)."""
+    return StatefulMockTester(
+        results=[
+            TestResult(True, "PASS\n= 10 passed =", ""),
+            TestResult(True, "PASS\n= 10 passed =", ""),
+        ]
+    )
+
+
+def _push_full_success_sequence(
+    runner: "MockSubprocessRunner", *, worktree_path: "Path"  # noqa: F821
+) -> None:
+    """Push the git subprocess sequence for a successful merge onto runner.
+
+    Covers all git calls in perform_merge (steps 2-9, 11, 12). The test gate
+    (step 4) is handled by StatefulMockTester, not via the runner.
+    Cleanup steps (remove_git_worktree, branch -D) use the runner default (rc=0).
+    """
+    runner.push(_make_result(0, "/repo/.git/worktrees/impl-test\n"))  # rev-parse --git-dir
+    runner.push(_make_result(0, "impl-test\n"))  # branch --show-current
+    runner.push(_make_result(0, ""))  # git ls-files (generated)
+    runner.push(_make_result(0, ""))  # git status --porcelain
+    runner.push(_make_result(0, ""))  # git fetch
+    runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
+    runner.push(_make_result(0, ""))  # git log --merges
+    runner.push(_make_result(0, ""))  # git rebase
+    runner.push(  # worktree list --porcelain
+        _make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n")
+    )
+    runner.push(_make_result(0, ""))  # git merge --no-ff
+
+
+class TestPerformMergeSidecarCleanup:
+    """perform_merge removes the .autoskillit/temp/worktrees/<name>/ sidecar on success."""
+
+    @pytest.mark.anyio
+    async def test_sidecar_removed_on_successful_merge(self, tmp_path):
+        """After a successful merge, remove_worktree_sidecar is called with the branch name."""
+        from autoskillit.server.git import perform_merge
+
+        wt = tmp_path / "worktrees" / "impl-test"
+        wt.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/impl-test")
+
+        sidecar_calls = []
+        with patch(
+            "autoskillit.server.git.remove_worktree_sidecar",
+            side_effect=lambda proj, name: sidecar_calls.append(name) or CleanupResult(
+                deleted=["s"]
+            ),
+        ):
+            runner = MockSubprocessRunner()
+            _push_full_success_sequence(runner, worktree_path=wt)
+            result = await perform_merge(
+                str(wt),
+                "main",
+                config=AutomationConfig(),
+                runner=runner,
+                tester=_make_tester(),
+            )
+
+        assert result["merge_succeeded"] is True
+        assert "impl-test" in sidecar_calls
+
+    @pytest.mark.anyio
+    async def test_sidecar_cleanup_failure_does_not_block_merge_result(self, tmp_path):
+        """If sidecar removal fails, the merge result is still reported as succeeded."""
+        from autoskillit.server.git import perform_merge
+
+        wt = tmp_path / "worktrees" / "impl-test"
+        wt.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/impl-test")
+
+        with patch(
+            "autoskillit.server.git.remove_worktree_sidecar",
+            return_value=CleanupResult(failed=[("/some/path", "permission denied")]),
+        ):
+            runner = MockSubprocessRunner()
+            _push_full_success_sequence(runner, worktree_path=wt)
+            result = await perform_merge(
+                str(wt),
+                "main",
+                config=AutomationConfig(),
+                runner=runner,
+                tester=_make_tester(),
+            )
+
+        assert result["merge_succeeded"] is True
+
+    @pytest.mark.anyio
+    async def test_uses_remove_git_worktree_from_workspace(self, tmp_path):
+        """perform_merge delegates worktree removal to workspace.worktree.remove_git_worktree."""
+        from autoskillit.server.git import perform_merge
+
+        wt = tmp_path / "worktrees" / "impl-test"
+        wt.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/impl-test")
+
+        remove_calls = []
+
+        async def _fake_remove(path, repo, runner):
+            remove_calls.append(path)
+            return CleanupResult(deleted=[str(path)])
+
+        with patch(
+            "autoskillit.server.git.remove_git_worktree", new=AsyncMock(side_effect=_fake_remove)
+        ):
+            runner = MockSubprocessRunner()
+            _push_full_success_sequence(runner, worktree_path=wt)
+            await perform_merge(
+                str(wt),
+                "main",
+                config=AutomationConfig(),
+                runner=runner,
+                tester=_make_tester(),
+            )
+
+        assert wt in remove_calls

@@ -181,13 +181,15 @@ def _synthesize_from_write_artifacts(
         # Skip if the pattern is already satisfied in the current result.
         if re.search(pattern, session.result):
             continue
-        # Find the first Write/Edit tool_use with an absolute file_path.
-        for tool_use in session.tool_uses:
-            if tool_use.get("name") in {"Write", "Edit"}:
-                fp = tool_use.get("file_path", "")
-                if fp.startswith("/"):
-                    synthesized_lines.append(f"{token_name} = {fp}")
-                    break  # one synthesis per pattern
+        # Collect ALL absolute Write/Edit paths; use the LAST one (final deliverable).
+        # Multi-artifact skills write intermediate files first, final deliverable last.
+        candidate_paths = [
+            t.get("file_path", "")
+            for t in session.tool_uses
+            if t.get("name") in {"Write", "Edit"} and t.get("file_path", "").startswith("/")
+        ]
+        if candidate_paths:
+            synthesized_lines.append(f"{token_name} = {candidate_paths[-1]}")
 
     if not synthesized_lines:
         return None
@@ -546,40 +548,47 @@ def _build_skill_result(
     # Moved earlier: needed by synthesis recovery step before _compute_outcome.
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
 
-    # Recovery check: attempt before _compute_outcome so the recovered session
-    # is the input for outcome computation rather than the original.
-    if completion_marker:
-        recovered = _recover_from_separate_marker(session, completion_marker)
-        if recovered is not None:
-            session = recovered
+    # Recovery is only valid for sessions that completed normally.
+    # For incomplete sessions (UNPARSEABLE, TIMEOUT, etc.), any Write calls were
+    # intermediate artifacts, not final deliverables. Recovery or synthesis on these
+    # sessions would fabricate success evidence for a session that never finished.
+    if session.session_complete:
+        # Recovery check: attempt before _compute_outcome so the recovered session
+        # is the input for outcome computation rather than the original.
+        if completion_marker:
+            recovered = _recover_from_separate_marker(session, completion_marker)
+            if recovered is not None:
+                session = recovered
 
-    # Pattern recovery: when a drain-race occurs on either channel, expected_output_patterns
-    # content may only exist in assistant_messages. Attempt recovery so that _compute_success
-    # sees the block in session.result.
-    if (
-        result.channel_confirmation != ChannelConfirmation.UNMONITORED
-        and expected_output_patterns
-        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
-    ):
-        pattern_recovered = _recover_block_from_assistant_messages(
-            session, expected_output_patterns
-        )
-        if pattern_recovered is not None:
-            session = pattern_recovered
+        # Pattern recovery: when a drain-race occurs on either channel, expected_output_patterns
+        # content may only exist in assistant_messages. Attempt recovery so that _compute_success
+        # sees the block in session.result.
+        if (
+            result.channel_confirmation != ChannelConfirmation.UNMONITORED
+            and expected_output_patterns
+            and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
+        ):
+            pattern_recovered = _recover_block_from_assistant_messages(
+                session, expected_output_patterns
+            )
+            if pattern_recovered is not None:
+                session = pattern_recovered
 
-    # Artifact-aware synthesis: when write evidence exists but the structured output token
-    # is absent, synthesize it from the Write/Edit tool_use file_path. Runs regardless of
-    # channel_confirmation — write evidence is available from all sessions.
-    if (
-        expected_output_patterns
-        and write_call_count >= 1
-        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
-    ):
-        artifact_recovered = _synthesize_from_write_artifacts(
-            session, list(expected_output_patterns), write_call_count
-        )
-        if artifact_recovered is not None:
-            session = artifact_recovered
+        # Artifact-aware synthesis: only for UNMONITORED sessions where
+        # _recover_block_from_assistant_messages is unavailable. For CHANNEL_A/B
+        # sessions, if the pattern was absent from assistant_messages the agent never
+        # emitted it — synthesis would fabricate a token the agent did not produce.
+        if (
+            expected_output_patterns
+            and write_call_count >= 1
+            and result.channel_confirmation == ChannelConfirmation.UNMONITORED
+            and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
+        ):
+            artifact_recovered = _synthesize_from_write_artifacts(
+                session, list(expected_output_patterns), write_call_count
+            )
+            if artifact_recovered is not None:
+                session = artifact_recovered
 
     outcome, retry_reason = _compute_outcome(
         session,

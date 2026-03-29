@@ -1320,6 +1320,63 @@ class TestComputeSuccessChannelBPatterns:
         )
         assert success is False, "Channel B bypass must not skip expected_output_patterns check"
 
+    def test_channel_b_bypass_fails_for_failure_subtype_with_injected_pattern(
+        self,
+    ) -> None:
+        """CHANNEL_B bypass must not return True for failure-subtype sessions.
+
+        Even when synthesis has already run and injected a matching line into
+        session.result, CHANNEL_B bypass must refuse because session.session_complete
+        is False.
+        """
+        from autoskillit.core.types import CliSubtype
+
+        # Simulate: synthesis already ran and injected the line into result
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.UNPARSEABLE,
+            is_error=True,
+            result="plan_path = /cwd/.autoskillit/temp/make-plan/arch_lens_2026.md\n<raw JSONL>",
+            session_id="s1",
+        )
+        success = _compute_success(
+            session=session,
+            returncode=0,
+            termination=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert success is False, "CHANNEL_B bypass must not accept failure-subtype sessions"
+
+
+class TestSessionCompleteProperty:
+    """session_complete property must encode the canonical completion invariant."""
+
+    @pytest.mark.parametrize(
+        "subtype, is_error, expected",
+        [
+            ("success", False, True),
+            ("error_max_turns", False, True),
+            ("error_during_execution", False, True),
+            ("context_exhaustion", False, True),
+            ("interrupted", False, True),
+            ("unknown", True, False),
+            ("empty_output", True, False),
+            ("unparseable", True, False),
+            ("timeout", True, False),
+        ],
+    )
+    def test_session_complete_property_values(
+        self, subtype: str, is_error: bool, expected: bool
+    ) -> None:
+        """session_complete must be True iff not is_error AND subtype not in FAILURE_SUBTYPES."""
+        session = ClaudeSessionResult(
+            subtype=subtype,
+            is_error=is_error,
+            result="",
+            session_id="test",
+        )
+        assert session.session_complete is expected
+
 
 class TestContentStateEnum:
     """ContentState enum exposes the four expected variants."""

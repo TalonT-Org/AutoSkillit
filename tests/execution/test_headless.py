@@ -2671,6 +2671,119 @@ class TestBuildSkillResultChannelBPatternRecovery:
         assert sr.success is True
         assert "---prepare-issue-result---" in sr.result
 
+    def test_synthesis_not_run_for_unparseable_channel_b_with_write_evidence(self) -> None:
+        """CHANNEL_B + UNPARSEABLE + write evidence must not produce success=True.
+
+        Recovery (and CHANNEL_B bypass) must be blocked when session.session_complete
+        is False. Synthesis must not inject the file path into result.
+        """
+        from autoskillit.execution.session import ClaudeSessionResult  # noqa: E402
+
+        tool_use_line = json.dumps(
+            {
+                "type": "tool_use",
+                "id": "t1",
+                "name": "Write",
+                "input": {"file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"},
+            }
+        )
+        # UNPARSEABLE result (no proper result record)
+        raw_stdout = tool_use_line + "\ngarbage ndjson partial"
+
+        sub_result = SubprocessResult(
+            returncode=1,
+            stdout=raw_stdout,
+            stderr="",
+            termination=TerminationReason.COMPLETED,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert sr.success is False
+        assert sr.subtype not in {"success"}
+        assert "arch_lens_selection" not in sr.result
+
+    def test_synthesis_not_run_for_timeout_channel_b_with_write_evidence(self) -> None:
+        """CHANNEL_B + TIMEOUT + write evidence must not produce success=True."""
+        tool_use_line = json.dumps(
+            {
+                "type": "tool_use",
+                "id": "t1",
+                "name": "Write",
+                "input": {"file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"},
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = tool_use_line + "\n" + result_line
+
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert sr.success is False
+        assert "arch_lens_selection" not in sr.result
+
+    def test_synthesis_skipped_for_channel_b_session_complete(self) -> None:
+        """CHANNEL_B + SUCCESS + write evidence but no pattern in assistant_messages.
+
+        Synthesis must NOT fabricate the token — if pattern is absent from
+        assistant_messages, the agent never emitted it.
+        """
+        tool_use_line = json.dumps(
+            {
+                "type": "tool_use",
+                "id": "t1",
+                "name": "Write",
+                "input": {"file_path": "/cwd/.autoskillit/temp/make-plan/task_plan.md"},
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = tool_use_line + "\n" + result_line
+
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.COMPLETED,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert sr.success is False
+        assert "plan_path" not in sr.result
+
 
 class TestBuildSkillResultChannelAPatternRecovery:
     """_build_skill_result must extend pattern recovery to CHANNEL_A wins, not just CHANNEL_B."""
@@ -3058,6 +3171,36 @@ class TestSynthesizeFromWriteArtifacts:
             session, [r"verdict\s*=\s*(GO|NO GO)"], write_call_count=1
         )
         assert result is None
+
+    def test_synthesis_uses_last_write_not_first(self, make_session):
+        """When multiple Write tool_uses exist, synthesis must use the LAST absolute path.
+
+        Multi-artifact skills write intermediate files first, final deliverable last.
+        Synthesis must inject the final deliverable (last path), not the intermediate.
+        """
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_session(
+            result="",
+            tool_uses=[
+                {
+                    "name": "Write",
+                    "id": "t1",
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection.md",
+                },
+                {
+                    "name": "Write",
+                    "id": "t2",
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/task_plan_2026-01-01.md",
+                },
+            ],
+        )
+        result = _synthesize_from_write_artifacts(
+            session, [r"plan_path\s*=\s*/.+"], write_call_count=2
+        )
+        assert result is not None
+        assert "plan_path = /cwd/.autoskillit/temp/make-plan/task_plan_2026-01-01.md" in result.result
+        assert "arch_lens_selection" not in result.result
 
 
 # ---------------------------------------------------------------------------

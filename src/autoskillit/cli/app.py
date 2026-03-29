@@ -356,9 +356,11 @@ def workspace_clean(
     force
         Skip the confirmation prompt and delete stale directories immediately.
     """
+    import asyncio
+
     from autoskillit.cli._workspace import run_workspace_clean  # deferred: avoids scan overhead
 
-    run_workspace_clean(dir=dir, force=force)
+    asyncio.run(run_workspace_clean(dir=dir, force=force))
 
 
 @recipes_app.command(name="list")

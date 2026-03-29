@@ -185,7 +185,9 @@ class TestRunWorkspaceCleanWorktrees:
         wt_root.mkdir()
         stale_wt = wt_root / "impl-foo-20260101-120000"
         stale_wt.mkdir()
-        mtime = time.time() - (6 * 3600)
+        # Capture real time.time before patching to avoid recursion
+        real_time = time.time
+        mtime = real_time() - (6 * 3600)
         os.utime(stale_wt, (mtime, mtime))
 
         project_root = base / "myproject"
@@ -202,7 +204,7 @@ class TestRunWorkspaceCleanWorktrees:
 
         monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
         monkeypatch.setattr("autoskillit.cli._workspace.remove_git_worktree", fake_remove)
-        monkeypatch.setattr("autoskillit.cli._workspace.time.time", lambda: time.time())
+        monkeypatch.setattr("autoskillit.cli._workspace.time.time", real_time)
         monkeypatch.setattr(
             "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
         )
@@ -233,9 +235,10 @@ class TestRunWorkspaceCleanWorktrees:
         async def fake_list(proj, prefix, runner):
             return [recent_wt]
 
+        real_time = time.time
         monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
         monkeypatch.setattr("autoskillit.cli._workspace.remove_git_worktree", fake_remove)
-        monkeypatch.setattr("autoskillit.cli._workspace.time.time", lambda: time.time())
+        monkeypatch.setattr("autoskillit.cli._workspace.time.time", real_time)
         monkeypatch.setattr(
             "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
         )

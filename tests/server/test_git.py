@@ -498,7 +498,9 @@ def _make_tester() -> StatefulMockTester:
 
 
 def _push_full_success_sequence(
-    runner: "MockSubprocessRunner", *, worktree_path: "Path"  # noqa: F821
+    runner: "MockSubprocessRunner",
+    *,
+    worktree_path: "Path",  # noqa: F821
 ) -> None:
     """Push the git subprocess sequence for a successful merge onto runner.
 
@@ -535,15 +537,15 @@ class TestPerformMergeSidecarCleanup:
         sidecar_calls = []
         with patch(
             "autoskillit.server.git.remove_worktree_sidecar",
-            side_effect=lambda proj, name: sidecar_calls.append(name) or CleanupResult(
-                deleted=["s"]
+            side_effect=lambda proj, name: (
+                sidecar_calls.append(name) or CleanupResult(deleted=["s"])
             ),
         ):
             runner = MockSubprocessRunner()
             _push_full_success_sequence(runner, worktree_path=wt)
             result = await perform_merge(
                 str(wt),
-                "main",
+                "dev",
                 config=AutomationConfig(),
                 runner=runner,
                 tester=_make_tester(),
@@ -569,7 +571,7 @@ class TestPerformMergeSidecarCleanup:
             _push_full_success_sequence(runner, worktree_path=wt)
             result = await perform_merge(
                 str(wt),
-                "main",
+                "dev",
                 config=AutomationConfig(),
                 runner=runner,
                 tester=_make_tester(),
@@ -599,7 +601,7 @@ class TestPerformMergeSidecarCleanup:
             _push_full_success_sequence(runner, worktree_path=wt)
             await perform_merge(
                 str(wt),
-                "main",
+                "dev",
                 config=AutomationConfig(),
                 runner=runner,
                 tester=_make_tester(),

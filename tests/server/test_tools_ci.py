@@ -516,3 +516,66 @@ async def test_get_ci_status_handler_passes_workflow(tool_ctx):
 
     call_kwargs = mock_watcher.status.call_args
     assert call_kwargs.kwargs["scope"].workflow == "tests.yml"
+
+
+# ---------------------------------------------------------------------------
+# C9-1: exception boundary — bare raise replaced with structured JSON return
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_watcher_exception_returns_structured_json(tool_ctx):
+    """wait_for_ci returns {success: false, error: ...} when watcher.wait() raises.
+
+    BEFORE fix: bare raise propagates to track_response_size which adds
+    subtype='tool_exception'. AFTER fix: explicit return gives clean JSON.
+    """
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(side_effect=RuntimeError("network timeout"))
+    tool_ctx.ci_watcher = mock_watcher
+
+    with patch(
+        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_proc:
+        proc_inst = AsyncMock()
+        proc_inst.communicate = AsyncMock(return_value=(b"", b""))
+        proc_inst.returncode = 1
+        mock_proc.return_value = proc_inst
+
+        result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+
+    assert result["success"] is False
+    assert "network timeout" in result["error"]
+    assert "subtype" not in result  # no decorator fallback marker
+    assert "exit_code" not in result  # no decorator fallback marker
+
+
+@pytest.mark.anyio
+async def test_wait_for_merge_queue_watcher_exception_returns_structured_json(tool_ctx):
+    """wait_for_merge_queue returns {success: false, error: ...} when watcher.wait() raises.
+
+    BEFORE fix: bare raise propagates to track_response_size decorator.
+    AFTER fix: explicit return gives clean JSON.
+    """
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(side_effect=RuntimeError("connection refused"))
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    with patch(
+        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_proc:
+        proc_inst = AsyncMock()
+        proc_inst.communicate = AsyncMock(return_value=(b"", b""))
+        proc_inst.returncode = 1
+        mock_proc.return_value = proc_inst
+
+        result = json.loads(
+            await wait_for_merge_queue(pr_number=42, target_branch="main", cwd=".")
+        )
+
+    assert result["success"] is False
+    assert "connection refused" in result["error"]
+    assert "subtype" not in result
+    assert "exit_code" not in result

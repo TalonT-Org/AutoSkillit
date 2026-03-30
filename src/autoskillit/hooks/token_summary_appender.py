@@ -118,6 +118,8 @@ def _read_kitchen_id() -> str:
     path = pathlib.Path.cwd() / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return ""
         return str(data.get("kitchen_id") or data.get("pipeline_id", ""))
     except (FileNotFoundError, json.JSONDecodeError, PermissionError, OSError):
         return ""

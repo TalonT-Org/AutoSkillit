@@ -26,9 +26,10 @@ def _run_hook(
     Returns (stdout_output, exit_code).
 
     Args:
-        hook_config_path: Path to a hook config JSON file containing ``pipeline_id``.
-            When provided, patches ``_read_pipeline_id`` to return the ``pipeline_id``
-            value from that file. When absent, ``_read_pipeline_id`` reads from the
+        hook_config_path: Path to a hook config JSON file containing ``kitchen_id``
+            (or legacy ``pipeline_id``).
+            When provided, patches ``_read_kitchen_id`` to return the ``kitchen_id``
+            value from that file. When absent, ``_read_kitchen_id`` reads from the
             real filesystem (returns '' if no file present in the test CWD).
     """
     from autoskillit.hooks.token_summary_appender import main
@@ -48,13 +49,12 @@ def _run_hook(
                 )
             )
         if hook_config_path is not None:
-            pipeline_id = json.loads(hook_config_path.read_text(encoding="utf-8")).get(
-                "pipeline_id", ""
-            )
+            cfg_data = json.loads(hook_config_path.read_text(encoding="utf-8"))
+            kitchen_id = cfg_data.get("kitchen_id") or cfg_data.get("pipeline_id", "")
             stack.enter_context(
                 patch(
-                    "autoskillit.hooks.token_summary_appender._read_pipeline_id",
-                    return_value=pipeline_id,
+                    "autoskillit.hooks.token_summary_appender._read_kitchen_id",
+                    return_value=kitchen_id,
                 )
             )
         try:
@@ -202,7 +202,7 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
             {
                 "dir_name": "session-1",
                 "cwd": "/some/worktree",
-                "pipeline_id": pipeline_id,
+                "kitchen_id": pipeline_id,
                 "step_name": "plan-1",
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -213,7 +213,7 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
             {
                 "dir_name": "session-2",
                 "cwd": "/some/worktree",
-                "pipeline_id": pipeline_id,
+                "kitchen_id": pipeline_id,
                 "step_name": "plan-2",
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -224,7 +224,7 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
             {
                 "dir_name": "session-3",
                 "cwd": "/some/worktree",
-                "pipeline_id": pipeline_id,
+                "kitchen_id": pipeline_id,
                 "step_name": "open-pr",
                 "input_tokens": 500,
                 "output_tokens": 250,
@@ -236,7 +236,7 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
     )
 
     hook_config = tmp_path / ".autoskillit_hook_config.json"
-    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
+    hook_config.write_text(json.dumps({"kitchen_id": pipeline_id}))
 
     pr_url = "https://github.com/owner/repo/pull/42"
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
@@ -290,7 +290,7 @@ def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
             {
                 "dir_name": "session-1",
                 "cwd": "/some/worktree",
-                "pipeline_id": pipeline_id,
+                "kitchen_id": pipeline_id,
                 "step_name": "plan",
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -302,7 +302,7 @@ def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
     )
 
     hook_config = tmp_path / ".autoskillit_hook_config.json"
-    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
+    hook_config.write_text(json.dumps({"kitchen_id": pipeline_id}))
 
     pr_url = "https://github.com/owner/repo/pull/42"
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
@@ -359,7 +359,7 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
             {
                 "dir_name": "session-1",
                 "cwd": "/some/worktree",
-                "pipeline_id": pipeline_id,
+                "kitchen_id": pipeline_id,
                 "step_name": "plan",
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -371,7 +371,7 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
     )
 
     hook_config = tmp_path / ".autoskillit_hook_config.json"
-    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
+    hook_config.write_text(json.dumps({"kitchen_id": pipeline_id}))
 
     pr_url = "https://github.com/owner/repo/pull/42"
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
@@ -414,7 +414,7 @@ def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
             {
                 "dir_name": "s1",
                 "cwd": "/worktrees/impl-fix",
-                "pipeline_id": pipeline_id,
+                "kitchen_id": pipeline_id,
                 "step_name": "implement",
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -426,7 +426,7 @@ def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
     )
 
     hook_config = tmp_path / ".autoskillit_hook_config.json"
-    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
+    hook_config.write_text(json.dumps({"kitchen_id": pipeline_id}))
     pr_url = "https://github.com/owner/repo/pull/42"
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
     view_result = MagicMock(returncode=0, stdout="Existing PR body.")
@@ -455,8 +455,8 @@ def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_tsa_pipeline_id_mismatch_exits_zero(tmp_path: Path) -> None:
-    """Wrong pipeline_id → no sessions found → exits 0, no gh pr edit."""
+def test_tsa_kitchen_id_mismatch_exits_zero(tmp_path: Path) -> None:
+    """Wrong kitchen_id → no sessions found → exits 0, no gh pr edit."""
     log_root = tmp_path / "logs"
     log_root.mkdir()
     _write_sessions(
@@ -465,7 +465,7 @@ def test_tsa_pipeline_id_mismatch_exits_zero(tmp_path: Path) -> None:
             {
                 "dir_name": "s1",
                 "cwd": "/worktree",
-                "pipeline_id": "pipeline-A",
+                "kitchen_id": "kitchen-A",
                 "step_name": "implement",
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -476,7 +476,7 @@ def test_tsa_pipeline_id_mismatch_exits_zero(tmp_path: Path) -> None:
         ],
     )
     hook_config = tmp_path / ".autoskillit_hook_config.json"
-    hook_config.write_text(json.dumps({"pipeline_id": "pipeline-B"}))
+    hook_config.write_text(json.dumps({"kitchen_id": "kitchen-B"}))
     event = _make_run_skill_event("pr_url=https://github.com/owner/repo/pull/99\n%%ORDER_UP%%")
     _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
     assert exit_code == 0
@@ -494,7 +494,7 @@ def test_tsa_gh_pr_edit_stderr_captured(tmp_path: Path) -> None:
             {
                 "dir_name": "s1",
                 "cwd": "/w",
-                "pipeline_id": pipeline_id,
+                "kitchen_id": pipeline_id,
                 "step_name": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
@@ -506,7 +506,7 @@ def test_tsa_gh_pr_edit_stderr_captured(tmp_path: Path) -> None:
     )
 
     hook_config = tmp_path / ".autoskillit_hook_config.json"
-    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
+    hook_config.write_text(json.dumps({"kitchen_id": pipeline_id}))
 
     pr_url = "https://github.com/owner/repo/pull/1"
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
@@ -548,7 +548,7 @@ def test_tsa_gh_pr_view_failure_emits_diagnostic(tmp_path: Path) -> None:
             {
                 "dir_name": "s1",
                 "cwd": "/w",
-                "pipeline_id": pipeline_id,
+                "kitchen_id": pipeline_id,
                 "step_name": "plan",
                 "input_tokens": 100,
                 "output_tokens": 50,
@@ -560,7 +560,7 @@ def test_tsa_gh_pr_view_failure_emits_diagnostic(tmp_path: Path) -> None:
     )
 
     hook_config = tmp_path / ".autoskillit_hook_config.json"
-    hook_config.write_text(json.dumps({"pipeline_id": pipeline_id}))
+    hook_config.write_text(json.dumps({"kitchen_id": pipeline_id}))
 
     pr_url = "https://github.com/owner/repo/pull/2"
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
@@ -596,3 +596,236 @@ def test_tsa_humanize_preserves_decimal() -> None:
     assert _humanize(45.7) == "45.7", (
         "str(int(n)) truncates decimals — must be str(n) to match telemetry_fmt.py"
     )
+
+
+# ---------------------------------------------------------------------------
+# E-1 through E-4: order_id isolation in token_summary_appender
+# ---------------------------------------------------------------------------
+
+
+def _make_run_skill_event_with_order_id(
+    result_text: str = "Done.\n%%ORDER_UP%%", order_id: str = ""
+) -> dict:
+    """Create a double-wrapped PostToolUse event for run_skill with optional order_id."""
+    inner: dict = {"result": result_text, "success": True}
+    if order_id:
+        inner["order_id"] = order_id
+    outer = {"result": json.dumps(inner)}
+    return {
+        "tool_name": "mcp__autoskillit_server__run_skill",
+        "tool_response": json.dumps(outer),
+    }
+
+
+def test_e1_order_id_isolation_multi_issue_session(tmp_path: Path) -> None:
+    """E-1: Three issues sharing kitchen_id; hook with order_id='B' includes only B's sessions."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    kitchen_id = "shared-kitchen"
+
+    (log_root / "sessions.jsonl").write_text(
+        "\n".join(
+            json.dumps(e)
+            for e in [
+                {
+                    "dir_name": "sess-A",
+                    "cwd": "/w",
+                    "kitchen_id": kitchen_id,
+                    "order_id": "issue-A",
+                    "step_name": "plan",
+                },
+                {
+                    "dir_name": "sess-B",
+                    "cwd": "/w",
+                    "kitchen_id": kitchen_id,
+                    "order_id": "issue-B",
+                    "step_name": "implement",
+                },
+                {
+                    "dir_name": "sess-C",
+                    "cwd": "/w",
+                    "kitchen_id": kitchen_id,
+                    "order_id": "issue-C",
+                    "step_name": "review",
+                },
+            ]
+        )
+        + "\n"
+    )
+    for dir_name, step in [("sess-A", "plan"), ("sess-B", "implement"), ("sess-C", "review")]:
+        d = log_root / "sessions" / dir_name
+        d.mkdir(parents=True)
+        (d / "token_usage.json").write_text(
+            json.dumps(
+                {
+                    "step_name": step,
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "timing_seconds": 5.0,
+                    "order_id": dir_name.replace("sess-", "issue-"),
+                }
+            )
+        )
+
+    pr_url = "https://github.com/owner/repo/pull/42"
+    event = _make_run_skill_event_with_order_id(
+        f"pr_url={pr_url}\n%%ORDER_UP%%", order_id="issue-B"
+    )
+    view_result = MagicMock(returncode=0, stdout="Existing PR body.")
+    edit_calls: list = []
+
+    def run_side(args, **kwargs):
+        if "api" in args and "--method" not in args:
+            return view_result
+        if "api" in args and "--method" in args:
+            edit_calls.append(args)
+            return MagicMock(returncode=0)
+        return MagicMock(returncode=0)
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"kitchen_id": kitchen_id}))
+
+    with patch("subprocess.run", side_effect=run_side):
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+
+    assert exit_code == 0
+    assert len(edit_calls) == 1, "gh api PATCH must be called once"
+    body_arg = edit_calls[0][edit_calls[0].index("--raw-field") + 1]
+    body_content = body_arg[len("body=") :]
+    assert "implement" in body_content, "issue-B's step 'implement' must be in table"
+    assert "plan" not in body_content, "issue-A's step 'plan' must NOT be in table"
+    assert "review" not in body_content, "issue-C's step 'review' must NOT be in table"
+
+
+def test_e2_fallback_to_kitchen_id_when_no_order_id(tmp_path: Path) -> None:
+    """E-2: When run_skill result lacks 'order_id', hook falls back to kitchen_id filtering."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    kitchen_id = "my-kitchen"
+
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "sess-1",
+                "cwd": "/w",
+                "kitchen_id": kitchen_id,
+                "step_name": "plan",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 5.0,
+            }
+        ],
+    )
+
+    pr_url = "https://github.com/owner/repo/pull/10"
+    # No order_id in the event
+    event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"kitchen_id": kitchen_id}))
+
+    view_result = MagicMock(returncode=0, stdout="Existing body.")
+    edit_calls: list = []
+
+    def run_side(args, **kwargs):
+        if "api" in args and "--method" not in args:
+            return view_result
+        if "api" in args and "--method" in args:
+            edit_calls.append(args)
+            return MagicMock(returncode=0)
+        return MagicMock(returncode=0)
+
+    with patch("subprocess.run", side_effect=run_side):
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+
+    assert exit_code == 0
+    assert len(edit_calls) == 1, "gh api PATCH must be called when kitchen_id matches (fallback)"
+
+
+def test_e3_backward_compat_sessions_without_order_id_field(tmp_path: Path) -> None:
+    """E-3: Sessions without 'order_id' key are skipped when order_id filter is active."""
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    kitchen_id = "kitchen-xyz"
+
+    # Old session without order_id field
+    (log_root / "sessions.jsonl").write_text(
+        json.dumps(
+            {
+                "dir_name": "old-sess",
+                "cwd": "/w",
+                "kitchen_id": kitchen_id,
+                # No order_id field
+                "step_name": "plan",
+            }
+        )
+        + "\n"
+    )
+    d = log_root / "sessions" / "old-sess"
+    d.mkdir(parents=True)
+    (d / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "step_name": "plan",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": 5.0,
+            }
+        )
+    )
+
+    pr_url = "https://github.com/owner/repo/pull/20"
+    # order_id in event → activates order_id filtering
+    event = _make_run_skill_event_with_order_id(
+        f"pr_url={pr_url}\n%%ORDER_UP%%", order_id="issue-X"
+    )
+
+    hook_config = tmp_path / ".autoskillit_hook_config.json"
+    hook_config.write_text(json.dumps({"kitchen_id": kitchen_id}))
+
+    with patch("subprocess.run") as mock_run:
+        _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
+
+    # No sessions match order_id="issue-X" → exits 0 without calling gh api
+    assert exit_code == 0
+    # No edit call should be made since old sessions don't match the order_id
+    patch_calls = [
+        call for call in mock_run.call_args_list if "--method" in (call[0][0] if call[0] else [])
+    ]
+    assert len(patch_calls) == 0, "Old sessions without order_id should be skipped"
+
+
+def test_e4_kitchen_id_renamed_in_hook_config(tmp_path: Path) -> None:
+    """E-4: _read_kitchen_id reads 'kitchen_id' key; falls back to 'pipeline_id' for old."""
+    from autoskillit.hooks.token_summary_appender import _read_kitchen_id
+
+    # New format
+    cfg_path = tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
+    cfg_path.parent.mkdir(parents=True)
+    cfg_path.write_text(json.dumps({"kitchen_id": "new-kitchen-uuid"}))
+
+    import os
+
+    orig_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        result = _read_kitchen_id()
+    finally:
+        os.chdir(orig_cwd)
+    assert result == "new-kitchen-uuid"
+
+    # Old format fallback
+    cfg_path.write_text(json.dumps({"pipeline_id": "legacy-pipeline-uuid"}))
+    try:
+        os.chdir(tmp_path)
+        result = _read_kitchen_id()
+    finally:
+        os.chdir(orig_cwd)
+    assert result == "legacy-pipeline-uuid"

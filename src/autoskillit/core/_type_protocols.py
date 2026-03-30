@@ -78,7 +78,7 @@ class AuditStore(Protocol):
         *,
         since: str = "",
         cwd_filter: str = "",
-        pipeline_id_filter: str = "",
+        kitchen_id_filter: str = "",
     ) -> int: ...
 
 
@@ -94,11 +94,12 @@ class TokenStore(Protocol):
         start_ts: str = "",
         end_ts: str = "",
         elapsed_seconds: float | None = None,
+        order_id: str = "",
     ) -> None: ...
 
-    def get_report(self) -> list[dict[str, Any]]: ...
+    def get_report(self, *, order_id: str = "") -> list[dict[str, Any]]: ...
 
-    def compute_total(self) -> dict[str, Any]: ...
+    def compute_total(self, *, order_id: str = "") -> dict[str, Any]: ...
 
     def clear(self) -> None: ...
 
@@ -108,7 +109,7 @@ class TokenStore(Protocol):
         *,
         since: str = "",
         cwd_filter: str = "",
-        pipeline_id_filter: str = "",
+        kitchen_id_filter: str = "",
     ) -> int: ...
 
 
@@ -116,11 +117,11 @@ class TokenStore(Protocol):
 class TimingStore(Protocol):
     """Protocol for per-step wall-clock timing accumulation."""
 
-    def record(self, step_name: str, duration_seconds: float) -> None: ...
+    def record(self, step_name: str, duration_seconds: float, *, order_id: str = "") -> None: ...
 
-    def get_report(self) -> list[dict[str, Any]]: ...
+    def get_report(self, *, order_id: str = "") -> list[dict[str, Any]]: ...
 
-    def compute_total(self) -> dict[str, Any]: ...
+    def compute_total(self, *, order_id: str = "") -> dict[str, Any]: ...
 
     def clear(self) -> None: ...
 
@@ -130,7 +131,7 @@ class TimingStore(Protocol):
         *,
         since: str = "",
         cwd_filter: str = "",
-        pipeline_id_filter: str = "",
+        kitchen_id_filter: str = "",
     ) -> int: ...
 
 
@@ -174,7 +175,8 @@ class HeadlessExecutor(Protocol):
         *,
         model: str = "",
         step_name: str = "",
-        pipeline_id: str = "",
+        kitchen_id: str = "",
+        order_id: str = "",
         add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,

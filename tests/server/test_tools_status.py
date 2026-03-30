@@ -917,3 +917,69 @@ async def test_get_token_summary_not_contaminated_by_prior_pipeline(
     )
     assert "rectify" in step_names, "Current pipeline step must appear"
     assert len(step_names) == 1, f"Expected only current pipeline steps, got: {step_names}"
+
+
+class TestOrderIdFilterOnSummaryTools:
+    """Group D: order_id filter params on get_token_summary and get_timing_summary."""
+
+    @pytest.mark.anyio
+    async def test_get_token_summary_order_id_filter_isolates_issue(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        """D-1: get_token_summary(order_id='issue-185') returns only that order's steps."""
+        from autoskillit.server import _state
+
+        monkeypatch.setattr(_state, "_ctx", tool_ctx)
+
+        usage = {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
+        tool_ctx.token_log.record("plan", usage, order_id="issue-185")
+        tool_ctx.token_log.record("implement", usage, order_id="issue-186")
+
+        result = json.loads(await get_token_summary(order_id="issue-185"))
+        step_names = [s["step_name"] for s in result["steps"]]
+        assert "plan" in step_names
+        assert "implement" not in step_names
+
+    @pytest.mark.anyio
+    async def test_get_token_summary_no_order_id_returns_all(self, tool_ctx, monkeypatch) -> None:
+        """D-2: get_token_summary() without order_id returns aggregated data for all orders."""
+        from autoskillit.server import _state
+
+        monkeypatch.setattr(_state, "_ctx", tool_ctx)
+
+        usage = {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
+        tool_ctx.token_log.record("plan", usage, order_id="issue-185")
+        tool_ctx.token_log.record("implement", usage, order_id="issue-186")
+
+        result = json.loads(await get_token_summary())
+        step_names = [s["step_name"] for s in result["steps"]]
+        assert "plan" in step_names
+        assert "implement" in step_names
+
+    @pytest.mark.anyio
+    async def test_get_timing_summary_order_id_filter_isolates_issue(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        """D-3: get_timing_summary(order_id='issue-185') returns only that order's steps."""
+        from autoskillit.server import _state
+        from autoskillit.server.tools_status import get_timing_summary
+
+        monkeypatch.setattr(_state, "_ctx", tool_ctx)
+
+        tool_ctx.timing_log.record("plan", 10.0, order_id="issue-185")
+        tool_ctx.timing_log.record("implement", 20.0, order_id="issue-186")
+
+        result = json.loads(await get_timing_summary(order_id="issue-185"))
+        step_names = [s["step_name"] for s in result["steps"]]
+        assert "plan" in step_names
+        assert "implement" not in step_names

@@ -755,7 +755,8 @@ async def run_headless_core(
     *,
     model: str = "",
     step_name: str = "",
-    pipeline_id: str = "",
+    kitchen_id: str = "",
+    order_id: str = "",
     add_dirs: Sequence[ValidatedAddDir] = (),
     timeout: float | None = None,
     stale_threshold: float | None = None,
@@ -831,7 +832,8 @@ async def run_headless_core(
                     flush_session_log(
                         log_dir=_log_dir,
                         cwd=str(cwd),
-                        pipeline_id=pipeline_id,
+                        kitchen_id=kitchen_id,
+                        order_id=order_id,
                         session_id="",
                         pid=0,
                         skill_command=skill_command,
@@ -878,7 +880,8 @@ async def run_headless_core(
                 flush_session_log(
                     log_dir=ctx.config.linux_tracing.log_dir,
                     cwd=cwd,
-                    pipeline_id=pipeline_id,
+                    kitchen_id=kitchen_id,
+                    order_id=order_id,
                     session_id=skill_result.session_id,
                     pid=result.pid,
                     skill_command=original_skill_command,
@@ -918,6 +921,7 @@ async def run_headless_core(
                     start_ts=result.start_ts,
                     end_ts=result.end_ts,
                     elapsed_seconds=result.elapsed_seconds,
+                    order_id=order_id,
                 )
             except Exception:
                 logger.debug("token_log_record_failed", exc_info=True)
@@ -937,7 +941,8 @@ class DefaultHeadlessExecutor:
         *,
         model: str = "",
         step_name: str = "",
-        pipeline_id: str = "",
+        kitchen_id: str = "",
+        order_id: str = "",
         add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
@@ -953,7 +958,8 @@ class DefaultHeadlessExecutor:
             self._ctx,
             model=model,
             step_name=step_name,
-            pipeline_id=pipeline_id,
+            kitchen_id=kitchen_id,
+            order_id=order_id,
             add_dirs=add_dirs,
             timeout=effective_timeout,
             stale_threshold=effective_stale,

@@ -123,6 +123,43 @@ def test_default_timing_log_satisfies_timing_store_protocol():
     assert isinstance(DefaultTimingLog(), TimingStore)
 
 
+def test_default_token_log_satisfies_token_store_with_order_id():
+    """F-1: DefaultTokenLog satisfies updated TokenStore Protocol (includes order_id params)."""
+    from autoskillit.core import TokenStore
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+
+    log = DefaultTokenLog()
+    assert isinstance(log, TokenStore)
+    # Verify the order_id param is accepted by record/get_report/compute_total
+    log.record(
+        "plan",
+        {
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+        order_id="test-order",
+    )
+    assert log.get_report(order_id="test-order") != []
+    total = log.compute_total(order_id="test-order")
+    assert "input_tokens" in total
+
+
+def test_default_timing_log_satisfies_timing_store_with_order_id():
+    """F-2: DefaultTimingLog satisfies updated TimingStore Protocol (includes order_id params)."""
+    from autoskillit.core import TimingStore
+    from autoskillit.pipeline.timings import DefaultTimingLog
+
+    log = DefaultTimingLog()
+    assert isinstance(log, TimingStore)
+    # Verify the order_id param is accepted by record/get_report/compute_total
+    log.record("plan", 5.0, order_id="test-order")
+    assert log.get_report(order_id="test-order") != []
+    total = log.compute_total(order_id="test-order")
+    assert "total_seconds" in total
+
+
 # ── isinstance checks — Default* classes satisfy protocols ─────────────────────
 
 

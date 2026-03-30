@@ -56,12 +56,14 @@ Parse ARGUMENTS for:
 After parsing arguments, check whether the description is a validated audit report:
 
 1. If `description` is a file path (relative or absolute) pointing to an existing `.md` file,
-   read the first non-blank line of that file.
-2. If that first non-blank line is exactly `validated: true`, set `is_validated_report = true`
-   and record `report_path = description`.
-3. If `description` itself (not a file path) begins with `validated: true` as its first
-   non-blank line, set `is_validated_report = true` and treat `description` as the report
-   content directly.
+   read the first non-blank line of that file. If the file cannot be read (e.g., permission
+   error), skip to case 4 and set `is_validated_report = false`.
+2. If that first non-blank line, after stripping trailing whitespace (including `\r`), is
+   exactly `validated: true`, set `is_validated_report = true` and record
+   `report_path = description`.
+3. If `description` itself (not a file path) begins with `validated: true` (after stripping
+   trailing whitespace) as its first non-blank line, set `is_validated_report = true` and
+   treat `description` as the report content directly.
 4. Otherwise set `is_validated_report = false`.
 
 When `is_validated_report = true`:
@@ -186,11 +188,11 @@ provided (adopting an existing issue) or when `--dry-run` is active.
      blank lines.
    - **Remove** any line that begins with `**Original report:**` (it contains an artifact
      file path the implementer cannot access).
-   - **Remove** any line matching the pattern
-     `*{N} finding(s) contested and excluded — see contested_findings_*.md*`
-     (the reference to the contested findings file and its path).
-   - **Remove** `| **Contested:** {N}` from the `**Findings processed:**` summary line;
-     keep only the Valid and Exception Warranted counts.
+   - **Remove** any line that contains the substring `contested_findings_`
+     (this matches the contested-findings reference line regardless of surrounding formatting).
+   - **Remove** `| **Contested:** {N}` from the `**Findings processed:**` summary line (if
+     present; skip this rule if the Contested column is absent); keep only the Valid and
+     Exception Warranted counts.
    - **Keep** everything else: the H1 title, the `## Validation Status` table,
      the `## Validated Findings` section, and the `## Findings with Exceptions` section.
 4. The resulting body must contain **only** actionable content — validated findings with

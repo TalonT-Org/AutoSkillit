@@ -394,19 +394,19 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# TSA-9: pipeline_id match + CWD mismatch → sessions FOUND → hook appends table
+# TSA-9: kitchen_id match + CWD mismatch → sessions FOUND → hook appends table
 # ---------------------------------------------------------------------------
 
 
-def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
-    """pipeline_id match + CWD mismatch → sessions FOUND → hook appends table.
+def test_tsa_kitchen_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
+    """kitchen_id match + CWD mismatch → sessions FOUND → hook appends table.
 
     Production failure mode: hook fires in orchestrator dir, sessions have worktree CWD.
-    pipeline_id correlation makes CWD irrelevant.
+    kitchen_id correlation makes CWD irrelevant.
     """
     log_root = tmp_path / "logs"
     log_root.mkdir()
-    pipeline_id = "test-pipeline-abc123"
+    kitchen_id = "test-kitchen-abc123"
 
     _write_sessions(
         log_root,
@@ -414,7 +414,7 @@ def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
             {
                 "dir_name": "s1",
                 "cwd": "/worktrees/impl-fix",
-                "kitchen_id": pipeline_id,
+                "kitchen_id": kitchen_id,
                 "step_name": "implement",
                 "input_tokens": 1000,
                 "output_tokens": 500,
@@ -426,7 +426,7 @@ def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
     )
 
     hook_config = tmp_path / ".autoskillit_hook_config.json"
-    hook_config.write_text(json.dumps({"kitchen_id": pipeline_id}))
+    hook_config.write_text(json.dumps({"kitchen_id": kitchen_id}))
     pr_url = "https://github.com/owner/repo/pull/42"
     event = _make_run_skill_event(f"pr_url={pr_url}\n%%ORDER_UP%%")
     view_result = MagicMock(returncode=0, stdout="Existing PR body.")
@@ -447,7 +447,7 @@ def test_tsa_pipeline_id_match_despite_cwd_mismatch(tmp_path: Path) -> None:
             hook_config_path=hook_config,
         )
     assert exit_code == 0
-    assert len(edit_calls) == 1, "gh api PATCH must be called when pipeline_id matches"
+    assert len(edit_calls) == 1, "gh api PATCH must be called when kitchen_id matches"
 
 
 # ---------------------------------------------------------------------------

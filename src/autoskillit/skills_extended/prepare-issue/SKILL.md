@@ -67,7 +67,7 @@ After parsing arguments, check whether the description is a validated audit repo
 When `is_validated_report = true`:
 - In **Step 5**, use the validated report body construction procedure below instead of
   the standard summarization.
-- In **Step 7a**, skip requirement generation entirely.
+- In **Step 7a** (`is_validated_report = true`): skip requirement generation entirely.
 - Set `requirements_generated: false` in the final result block.
 
 ### Step 2: Authenticate

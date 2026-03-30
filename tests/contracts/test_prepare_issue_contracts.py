@@ -218,11 +218,9 @@ def test_prepare_issue_dedup_bypass_with_issue_flag_still_documented():
 def test_prepare_issue_detects_validated_audit_report_input():
     """Skill must document detection of 'validated: true' marker for validated report inputs."""
     text = SKILL_MD.read_text()
-    # The skill must document the detection gate by name
     assert "validated: true" in text, (
         "prepare-issue SKILL.md must document detecting the 'validated: true' marker"
     )
-    # And must name the flag used to gate subsequent behavior
     assert "is_validated_report" in text, (
         "prepare-issue must use 'is_validated_report' flag to gate validated-report behavior"
     )
@@ -235,7 +233,6 @@ def test_prepare_issue_skips_requirements_for_validated_report():
     req_step_pos = text.find("Step 7a")
     assert req_step_pos != -1, "Step 7a must exist in the skill"
     req_step_text = text[req_step_pos : req_step_pos + 600]
-    # Within that step, the validated report skip must be documented
     assert "is_validated_report" in req_step_text, (
         "Step 7a must reference is_validated_report to gate requirements generation"
     )
@@ -248,7 +245,6 @@ def test_prepare_issue_skips_requirements_for_validated_report():
 def test_prepare_issue_excludes_contested_refs_from_validated_report_body():
     """Skill must document removing the contested findings reference line from the issue body."""
     text = SKILL_MD.read_text()
-    # The skill must document stripping the "contested_findings_" reference
     assert "contested_findings_" in text, (
         "Skill must reference 'contested_findings_' in the strip rules for validated report body"
     )
@@ -268,7 +264,6 @@ def test_prepare_issue_strips_artifact_paths_from_validated_report_body():
     validated_pos = text.find("is_validated_report")
     assert validated_pos != -1
     body_section = text[validated_pos:]
-    # The Original report: line carries the artifact path — must be stripped
     assert "Original report" in body_section, (
         "Skill must document removing the 'Original report:' line (artifact path) from the body"
     )

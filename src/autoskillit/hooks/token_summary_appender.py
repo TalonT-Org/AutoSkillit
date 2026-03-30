@@ -110,12 +110,13 @@ def _fmt_duration(seconds: float) -> str:
     return f"{h}h {m}m"
 
 
-def _read_kitchen_id() -> str:
+def _read_kitchen_id(base: pathlib.Path | None = None) -> str:
     """Read kitchen_id from hook_config.json. Returns '' if absent or unset.
 
     Falls back to 'pipeline_id' key for configs written before the rename.
     """
-    path = pathlib.Path.cwd() / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
+    root = base if base is not None else pathlib.Path.cwd()
+    path = root / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):

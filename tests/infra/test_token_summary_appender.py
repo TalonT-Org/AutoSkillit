@@ -811,21 +811,10 @@ def test_e4_kitchen_id_renamed_in_hook_config(tmp_path: Path) -> None:
     cfg_path.parent.mkdir(parents=True)
     cfg_path.write_text(json.dumps({"kitchen_id": "new-kitchen-uuid"}))
 
-    import os
-
-    orig_cwd = os.getcwd()
-    try:
-        os.chdir(tmp_path)
-        result = _read_kitchen_id()
-    finally:
-        os.chdir(orig_cwd)
+    result = _read_kitchen_id(base=tmp_path)
     assert result == "new-kitchen-uuid"
 
     # Old format fallback
     cfg_path.write_text(json.dumps({"pipeline_id": "legacy-pipeline-uuid"}))
-    try:
-        os.chdir(tmp_path)
-        result = _read_kitchen_id()
-    finally:
-        os.chdir(orig_cwd)
+    result = _read_kitchen_id(base=tmp_path)
     assert result == "legacy-pipeline-uuid"

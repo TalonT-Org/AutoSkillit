@@ -116,7 +116,8 @@ cfg_path = pathlib.Path(".autoskillit") / "temp" / ".autoskillit_hook_config.jso
 kitchen_id = ""
 if cfg_path.exists():
     _cfg = json.loads(cfg_path.read_text())
-    kitchen_id = _cfg.get("kitchen_id") or _cfg.get("pipeline_id", "")
+    if isinstance(_cfg, dict):
+        kitchen_id = _cfg.get("kitchen_id") or _cfg.get("pipeline_id", "")
 
 log_root = resolve_log_dir("")
 tl = DefaultTokenLog()

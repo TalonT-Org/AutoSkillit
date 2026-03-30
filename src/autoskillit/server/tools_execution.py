@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import time
-from enum import Enum
 from pathlib import Path
 
 import structlog
@@ -297,14 +296,9 @@ async def run_skill(
                 "autoskillit.run_skill",
                 extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
             )
-        result_json_str = skill_result.to_json()
         if order_id:
-            result_data = json.loads(result_json_str)
-            result_data["order_id"] = order_id
-            result_json_str = json.dumps(
-                result_data, default=lambda o: o.value if isinstance(o, Enum) else str(o)
-            )
-        return result_json_str
+            skill_result.order_id = order_id
+        return skill_result.to_json()
     finally:
         if step_name:
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start, order_id=order_id)

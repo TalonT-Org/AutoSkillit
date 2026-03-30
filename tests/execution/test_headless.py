@@ -2684,7 +2684,7 @@ class TestBuildSkillResultChannelBPatternRecovery:
                 "id": "t1",
                 "name": "Write",
                 "input": {
-                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"  # noqa: E501
                 },
             }
         )
@@ -2717,7 +2717,7 @@ class TestBuildSkillResultChannelBPatternRecovery:
                 "id": "t1",
                 "name": "Write",
                 "input": {
-                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"  # noqa: E501
                 },
             }
         )

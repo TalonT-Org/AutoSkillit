@@ -149,6 +149,7 @@ async def run_skill(
     cwd: str,
     model: str = "",
     step_name: str = "",
+    order_id: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Run a Claude Code headless session with a skill command.
@@ -182,6 +183,9 @@ async def run_skill(
         model: Model to use (e.g. "sonnet", "opus"). Empty string = use config default.
         step_name: Optional YAML step key (e.g. "implement"). When set, token usage is
             accumulated in the server-side token log, grouped by this name.
+        order_id: Optional per-issue/order identifier for token telemetry scoping. When set,
+            token and timing entries are keyed by this value, enabling per-issue isolation
+            in get_token_summary/get_timing_summary and in the token_summary_appender hook.
     """
     if (headless := _require_not_headless("run_skill")) is not None:
         return headless
@@ -277,7 +281,8 @@ async def run_skill(
             model=model,
             add_dirs=skill_add_dirs,
             step_name=step_name,
-            pipeline_id=tool_ctx.pipeline_id,
+            kitchen_id=tool_ctx.kitchen_id,
+            order_id=order_id,
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_spec,
         )
@@ -291,7 +296,9 @@ async def run_skill(
                 "autoskillit.run_skill",
                 extra={"exit_code": skill_result.exit_code, "subtype": skill_result.subtype},
             )
+        if order_id:
+            skill_result.order_id = order_id
         return skill_result.to_json()
     finally:
         if step_name:
-            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start, order_id=order_id)

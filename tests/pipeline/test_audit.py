@@ -297,8 +297,8 @@ class TestIterSessionLogEntries:
         assert paths == []
 
 
-def test_iter_session_log_entries_pipeline_id_filter(tmp_path):
-    """pipeline_id_filter yields only entries with matching pipeline_id."""
+def test_iter_session_log_entries_kitchen_id_filter(tmp_path):
+    """kitchen_id_filter yields only entries with matching kitchen_id."""
     import json
 
     from autoskillit.pipeline.audit import _iter_session_log_entries
@@ -309,7 +309,7 @@ def test_iter_session_log_entries_pipeline_id_filter(tmp_path):
             "dir_name": "a",
             "timestamp": "2026-03-27T08:00:00",
             "cwd": "/work",
-            "pipeline_id": "run-1",
+            "kitchen_id": "run-1",
             "step_name": "plan",
         },
         {
@@ -317,7 +317,7 @@ def test_iter_session_log_entries_pipeline_id_filter(tmp_path):
             "dir_name": "b",
             "timestamp": "2026-03-27T08:01:00",
             "cwd": "/work",
-            "pipeline_id": "run-1",
+            "kitchen_id": "run-1",
             "step_name": "implement",
         },
         {
@@ -325,7 +325,7 @@ def test_iter_session_log_entries_pipeline_id_filter(tmp_path):
             "dir_name": "c",
             "timestamp": "2026-03-27T08:02:00",
             "cwd": "/work",
-            "pipeline_id": "run-2",
+            "kitchen_id": "run-2",
             "step_name": "plan",
         },
     ]
@@ -348,18 +348,69 @@ def test_iter_session_log_entries_pipeline_id_filter(tmp_path):
 
     results = list(
         _iter_session_log_entries(
-            tmp_path, since="", filename="token_usage.json", pipeline_id_filter="run-1"
+            tmp_path, since="", filename="token_usage.json", kitchen_id_filter="run-1"
         )
     )
-    assert len(results) == 2  # 2 sessions with pipeline_id="run-1"
+    assert len(results) == 2  # 2 sessions with kitchen_id="run-1"
 
     # Verify the filter is directional — run-2 has only 1 session
     results_run2 = list(
         _iter_session_log_entries(
-            tmp_path, since="", filename="token_usage.json", pipeline_id_filter="run-2"
+            tmp_path, since="", filename="token_usage.json", kitchen_id_filter="run-2"
         )
     )
     assert len(results_run2) == 1
+
+
+def test_iter_session_log_entries_kitchen_id_backward_compat(tmp_path):
+    """kitchen_id_filter falls back to pipeline_id key in old sessions.jsonl entries."""
+    import json
+
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    # Old-format entries that use pipeline_id key (not kitchen_id)
+    entries = [
+        {
+            "session_id": "old-a",
+            "dir_name": "old-a",
+            "timestamp": "2026-03-27T08:00:00",
+            "cwd": "/work",
+            "pipeline_id": "legacy-run",  # old key
+            "step_name": "plan",
+        },
+        {
+            "session_id": "old-b",
+            "dir_name": "old-b",
+            "timestamp": "2026-03-27T08:01:00",
+            "cwd": "/work",
+            "pipeline_id": "other-run",  # different old key
+            "step_name": "implement",
+        },
+    ]
+    (tmp_path / "sessions.jsonl").write_text("\n".join(json.dumps(e) for e in entries))
+    for e in entries:
+        d = tmp_path / "sessions" / e["dir_name"]
+        d.mkdir(parents=True)
+        (d / "token_usage.json").write_text(
+            json.dumps(
+                {
+                    "step_name": e["step_name"],
+                    "input_tokens": 1,
+                    "output_tokens": 1,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "timing_seconds": 0.5,
+                }
+            )
+        )
+
+    # kitchen_id_filter should find old entries via pipeline_id fallback
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="token_usage.json", kitchen_id_filter="legacy-run"
+        )
+    )
+    assert len(results) == 1
 
 
 class TestValidateFailureRecordDict:

@@ -49,7 +49,7 @@ def _write_hook_config() -> None:
             if cfg.cache_path is not None
             else "~/.claude/autoskillit_quota_cache.json",
         },
-        "pipeline_id": ctx.pipeline_id,
+        "kitchen_id": ctx.kitchen_id,
     }
     hook_cfg_path = _hook_config_path(Path.cwd())
     try:
@@ -65,11 +65,11 @@ async def _open_kitchen_handler() -> None:
 
     ctx = _get_ctx()
     ctx.gate.enable()
-    ctx.pipeline_id = str(uuid4())
+    ctx.kitchen_id = str(uuid4())
     # Store recipe packs — populated from LoadRecipeResult.requires_packs in #524.
     # For now, store empty frozenset to establish the contract.
     ctx.active_recipe_packs = frozenset()
-    logger.info("open_kitchen", gate_state="open", pipeline_id=ctx.pipeline_id)
+    logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
     _write_hook_config()
     await _prime_quota_cache()
 

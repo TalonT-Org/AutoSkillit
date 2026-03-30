@@ -811,7 +811,8 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
             model: str = "",
             step_name: str = "",
             add_dirs=(),
-            pipeline_id: str = "",
+            kitchen_id: str = "",
+            order_id: str = "",
             timeout: float | None = None,
             stale_threshold: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
@@ -856,7 +857,8 @@ async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> Non
             model: str = "",
             step_name: str = "",
             add_dirs=(),
-            pipeline_id: str = "",
+            kitchen_id: str = "",
+            order_id: str = "",
             timeout: float | None = None,
             stale_threshold: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
@@ -939,6 +941,70 @@ async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monk
 
     # The returned ValidatedAddDir is in add_dirs
     assert fake_validated in captured["add_dirs"]
+
+
+@pytest.mark.anyio
+async def test_run_skill_result_includes_order_id_when_passed(tool_ctx, monkeypatch) -> None:
+    """run_skill injects order_id into the result JSON when order_id is non-empty."""
+    import json as _json
+
+    from autoskillit.core import SkillResult
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="done",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    result_json = await run_skill("/test skill", "/tmp", order_id="issue-185")
+    data = _json.loads(result_json)
+    assert data.get("order_id") == "issue-185"
+
+
+@pytest.mark.anyio
+async def test_run_skill_result_no_order_id_field_when_empty(tool_ctx, monkeypatch) -> None:
+    """run_skill does NOT inject order_id into result JSON when order_id is empty."""
+    import json as _json
+
+    from autoskillit.core import SkillResult
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="done",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    result_json = await run_skill("/test skill", "/tmp")  # no order_id
+    data = _json.loads(result_json)
+    assert "order_id" not in data
 
 
 class TestHeadlessGateEnforcement:

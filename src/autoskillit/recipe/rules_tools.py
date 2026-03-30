@@ -12,7 +12,7 @@ _ALL_TOOLS: frozenset[str] = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
 # Intentionally hardcoded — recipe validation runs without a live MCP server.
 _TOOL_PARAMS: dict[str, frozenset[str]] = {
     # --- Execution tools ---
-    "run_skill": frozenset({"skill_command", "cwd", "model", "step_name"}),
+    "run_skill": frozenset({"skill_command", "cwd", "model", "step_name", "order_id"}),
     "run_cmd": frozenset({"cmd", "cwd", "timeout", "step_name"}),
     "run_python": frozenset({"callable", "args", "timeout"}),
     # --- Workspace tools ---

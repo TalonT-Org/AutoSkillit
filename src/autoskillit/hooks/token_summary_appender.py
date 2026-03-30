@@ -110,18 +110,63 @@ def _fmt_duration(seconds: float) -> str:
     return f"{h}h {m}m"
 
 
-def _read_pipeline_id() -> str:
-    """Read pipeline_id from hook_config.json. Returns '' if absent or unset."""
-    path = pathlib.Path.cwd() / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
+def _read_kitchen_id(base: pathlib.Path | None = None) -> str:
+    """Read kitchen_id from hook_config.json. Returns '' if absent or unset.
+
+    Falls back to 'pipeline_id' key for configs written before the rename.
+    """
+    root = base if base is not None else pathlib.Path.cwd()
+    path = root / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return str(data.get("pipeline_id", ""))
+        if not isinstance(data, dict):
+            return ""
+        return str(data.get("kitchen_id") or data.get("pipeline_id", ""))
     except (FileNotFoundError, json.JSONDecodeError, PermissionError, OSError):
         return ""
 
 
-def _load_sessions(log_root: pathlib.Path, pipeline_id: str) -> dict[str, dict[str, Any]]:
-    """Load and aggregate token data from sessions matching pipeline_id.
+def _extract_order_id(tool_name: str, tool_response_raw: str) -> str:
+    """Extract order_id from a PostToolUse run_skill result JSON.
+
+    Replicates the same double-unwrap logic as _extract_pr_url.
+    Returns '' if not found.
+    """
+    try:
+        outer = json.loads(tool_response_raw)
+    except (json.JSONDecodeError, ValueError):
+        return ""
+    if not isinstance(outer, dict):
+        return ""
+
+    inner_dict: dict | None = None
+    if (
+        tool_name.startswith("mcp__")
+        and list(outer.keys()) == ["result"]
+        and isinstance(outer["result"], str)
+    ):
+        try:
+            parsed = json.loads(outer["result"])
+            if isinstance(parsed, dict):
+                inner_dict = parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+    else:
+        inner_dict = outer
+
+    if inner_dict is None:
+        return ""
+    return str(inner_dict.get("order_id", ""))
+
+
+def _load_sessions(
+    log_root: pathlib.Path, kitchen_id: str, *, order_id: str = ""
+) -> dict[str, dict[str, Any]]:
+    """Load and aggregate token data from sessions matching kitchen_id or order_id.
+
+    When order_id is non-empty, filters sessions by order_id for per-issue accuracy.
+    When order_id is empty, falls back to kitchen_id filtering (existing behavior).
+    Sessions missing the 'order_id' key are gracefully skipped when order_id filter is active.
 
     Returns a dict keyed by canonical step name, with aggregated counts.
     Preserves insertion order (Python 3.7+).
@@ -143,8 +188,15 @@ def _load_sessions(log_root: pathlib.Path, pipeline_id: str) -> dict[str, dict[s
         except json.JSONDecodeError:
             continue
 
-        if not pipeline_id or idx.get("pipeline_id") != pipeline_id:
-            continue
+        if order_id:
+            # Per-issue filtering: match on order_id; sessions without order_id are skipped
+            if idx.get("order_id", "") != order_id:
+                continue
+        else:
+            # Fallback: filter by kitchen_id (backward compat)
+            entry_kitchen_id = idx.get("kitchen_id") or idx.get("pipeline_id", "")
+            if not kitchen_id or entry_kitchen_id != kitchen_id:
+                continue
 
         dir_name = idx.get("dir_name", "")
         if not dir_name:
@@ -241,10 +293,11 @@ def main() -> None:
             sys.exit(0)
         owner, repo, pr_number = parts
 
-        pipeline_id = _read_pipeline_id()
+        kitchen_id = _read_kitchen_id()
+        order_id = _extract_order_id(tool_name, tool_response_raw)
         log_root = _log_root()
 
-        aggregated = _load_sessions(log_root, pipeline_id)
+        aggregated = _load_sessions(log_root, kitchen_id, order_id=order_id)
         if not aggregated:
             sys.exit(0)
 

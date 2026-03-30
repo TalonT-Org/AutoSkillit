@@ -69,6 +69,8 @@ class ToolContext:
     merge_queue_watcher:  MergeQueueWatcher — polls GitHub merge queue for a PR
     session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
     skill_resolver:       TargetSkillResolver — resolves skill names to source tier
+    kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry
+                          to the current kitchen session lifetime.
     active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
                           (frozenset() when kitchen open but no recipe loaded; None when closed)
     """
@@ -96,7 +98,7 @@ class ToolContext:
     write_expected_resolver: WriteExpectedResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: TargetSkillResolver | None = field(default=None)
-    pipeline_id: str = field(default="")
+    kitchen_id: str = field(default="")
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
 
     def __post_init__(self) -> None:

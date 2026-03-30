@@ -117,6 +117,13 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     assert data["quota_guard"]["threshold"] == 85.0
     assert data["quota_guard"]["cache_max_age"] == 300
     assert data["quota_guard"]["cache_path"] == "/custom/path.json"
+    # Confirm kitchen_id rename: hook config must contain 'kitchen_id' (not 'pipeline_id')
+    assert "kitchen_id" in data, (
+        "hook config must contain 'kitchen_id' after rename from 'pipeline_id'"
+    )
+    assert isinstance(data["kitchen_id"], str) and data["kitchen_id"], (
+        "kitchen_id must be a non-empty string (UUID set by _open_kitchen_handler)"
+    )
 
 
 # T-CACHE-3

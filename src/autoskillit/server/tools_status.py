@@ -117,7 +117,7 @@ def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> l
 
 @mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
 @track_response_size("get_token_summary")
-async def get_token_summary(clear: bool = False, format: str = "json") -> str:
+async def get_token_summary(clear: bool = False, format: str = "json", order_id: str = "") -> str:
     """Return accumulated run_skill token usage grouped by step name.
 
     Returns JSON with:
@@ -133,14 +133,19 @@ async def get_token_summary(clear: bool = False, format: str = "json") -> str:
         clear: If True, reset the token log after returning current data.
         format: Output format — "json" (default) returns structured JSON,
                 "table" returns a pre-formatted markdown table string.
+        order_id: If non-empty, return only token entries for this specific order/issue.
+                  Empty string (default) returns aggregated data for all orders.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     from autoskillit.server import _get_ctx
 
     ctx = _get_ctx()
-    steps = _merge_wall_clock_seconds(ctx.token_log.get_report(), ctx.timing_log.get_report())
-    total = ctx.token_log.compute_total()
+    steps = _merge_wall_clock_seconds(
+        ctx.token_log.get_report(order_id=order_id),
+        ctx.timing_log.get_report(order_id=order_id),
+    )
+    total = ctx.token_log.compute_total(order_id=order_id)
     mcp_report = ctx.response_log.get_report()
     mcp_total = ctx.response_log.compute_total()
     if clear:
@@ -166,7 +171,7 @@ async def get_token_summary(clear: bool = False, format: str = "json") -> str:
 
 @mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
 @track_response_size("get_timing_summary")
-async def get_timing_summary(clear: bool = False, format: str = "json") -> str:
+async def get_timing_summary(clear: bool = False, format: str = "json", order_id: str = "") -> str:
     """Return accumulated wall-clock timing grouped by step name.
 
     Returns JSON with:
@@ -177,13 +182,15 @@ async def get_timing_summary(clear: bool = False, format: str = "json") -> str:
         clear: If True, reset the timing log after returning current data.
         format: Output format — "json" (default) returns structured JSON,
                 "table" returns a pre-formatted markdown table string.
+        order_id: If non-empty, return only timing entries for this specific order/issue.
+                  Empty string (default) returns aggregated data for all orders.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     from autoskillit.server import _get_ctx
 
-    steps = _get_ctx().timing_log.get_report()
-    total = _get_ctx().timing_log.compute_total()
+    steps = _get_ctx().timing_log.get_report(order_id=order_id)
+    total = _get_ctx().timing_log.compute_total(order_id=order_id)
     if clear:
         _get_ctx().timing_log.clear()
         try:

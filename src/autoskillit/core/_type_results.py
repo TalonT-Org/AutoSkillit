@@ -144,6 +144,7 @@ class SkillResult:
     cli_subtype: str = field(default="")
     write_path_warnings: list[str] = field(default_factory=list)
     write_call_count: int = 0
+    order_id: str = ""
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -163,6 +164,8 @@ class SkillResult:
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path
+        if self.order_id:
+            data["order_id"] = self.order_id
         return json.dumps(data, default=lambda o: o.value if isinstance(o, Enum) else str(o))
 
     @property

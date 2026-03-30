@@ -51,6 +51,25 @@ Parse ARGUMENTS for:
 - `--repo owner/repo` → set `repo = "owner/repo"`
 - Remaining tokens → `description`
 
+### Step 1b: Detect Validated Audit Report
+
+After parsing arguments, check whether the description is a validated audit report:
+
+1. If `description` is a file path (relative or absolute) pointing to an existing `.md` file,
+   read the first non-blank line of that file.
+2. If that first non-blank line is exactly `validated: true`, set `is_validated_report = true`
+   and record `report_path = description`.
+3. If `description` itself (not a file path) begins with `validated: true` as its first
+   non-blank line, set `is_validated_report = true` and treat `description` as the report
+   content directly.
+4. Otherwise set `is_validated_report = false`.
+
+When `is_validated_report = true`:
+- In **Step 5**, use the validated report body construction procedure below instead of
+  the standard summarization.
+- In **Step 7a**, skip requirement generation entirely.
+- Set `requirements_generated: false` in the final result block.
+
 ### Step 2: Authenticate
 
 ```bash
@@ -155,6 +174,31 @@ provided (adopting an existing issue) or when `--dry-run` is active.
 ### Step 5: Create Issue or Adopt Existing
 
 **Creating new:**
+
+**Validated audit report input (`is_validated_report = true`):**
+
+1. Read the full report from `report_path` (or use `description` directly if the content
+   was provided inline rather than as a file path).
+2. Derive the issue title from the report's H1 heading: strip the leading `# ` and use
+   the result verbatim (e.g. `Validated Audit Report — arch (2026-03-28)`).
+3. Construct the issue body by applying all of the following transforms:
+   - **Remove** the `validated: true` front matter line and any immediately following
+     blank lines.
+   - **Remove** any line that begins with `**Original report:**` (it contains an artifact
+     file path the implementer cannot access).
+   - **Remove** any line matching the pattern
+     `*{N} finding(s) contested and excluded — see contested_findings_*.md*`
+     (the reference to the contested findings file and its path).
+   - **Remove** `| **Contested:** {N}` from the `**Findings processed:**` summary line;
+     keep only the Valid and Exception Warranted counts.
+   - **Keep** everything else: the H1 title, the `## Validation Status` table,
+     the `## Validated Findings` section, and the `## Findings with Exceptions` section.
+4. The resulting body must contain **only** actionable content — validated findings with
+   full detail (file:line, verdict, severity, exception notes). No artifact paths. No
+   contested findings content of any kind.
+
+**Standard input (`is_validated_report = false`):**
+
 Derive a concise title (first sentence of description, max 80 chars) and a structured
 body from the full description:
 
@@ -196,6 +240,10 @@ If `confidence == "low"`:
 - If user overrides: record their chosen route/type
 
 ### Step 7a: Requirement Generation (recipe:implementation only)
+
+**Skip entirely when `is_validated_report = true`** — the validated report IS the
+specification. No requirements section will be generated or appended.
+Set `requirements_generated: false` in the result block and proceed directly to Step 8.
 
 Skip if route is `recipe:remediation` — proceed directly to Step 8.
 

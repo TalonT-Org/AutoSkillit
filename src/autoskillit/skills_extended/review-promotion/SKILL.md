@@ -18,7 +18,7 @@ posts the review report as a PR comment.
 ## Arguments
 
 ```
-/review-promotion [integration_branch] [base_branch] [--post-to-pr]
+/autoskillit:review-promotion [integration_branch] [base_branch] [--post-to-pr]
 ```
 
 - `integration_branch` (optional) — source branch to analyze. Defaults to `integration`.

@@ -10,7 +10,6 @@ import re
 
 
 class TestPromoteToMainBundled:
-
     def test_promote_to_main_exists_in_skills_extended(self):
         """promote-to-main must be a bundled skill in skills_extended/ (not just local)."""
         from autoskillit.core.paths import pkg_root
@@ -45,7 +44,8 @@ class TestPromoteToMainBundled:
         phase_headers = re.findall(r"^###\s+Phase\s+\d+", content, re.MULTILINE)
         # Phase 0 counts, so 5 phases = Phase 0..4
         assert len(phase_headers) <= 6, (
-            f"promote-to-main has {len(phase_headers)} phase headers; expected <= 6 (Phases 0-4 + sub-steps)"
+            f"promote-to-main has {len(phase_headers)} phase headers; "
+            f"expected <= 6 (Phases 0-4 + sub-steps)"
         )
 
     def test_promote_to_main_outputs_pr_url_token(self):
@@ -67,7 +67,6 @@ class TestPromoteToMainBundled:
 
 
 class TestReviewPromotionSkill:
-
     def _content(self) -> str:
         from autoskillit.workspace.skills import SkillResolver
 
@@ -123,4 +122,6 @@ class TestReviewPromotionSkill:
     def test_review_promotion_has_subagent_autonomy_grant(self):
         """review-promotion must carry the Subagent Autonomy Grant."""
         content = self._content()
-        assert "Subagent Autonomy Grant" in content or "spawn additional subagents" in content.lower()
+        assert (
+            "Subagent Autonomy Grant" in content or "spawn additional subagents" in content.lower()
+        )

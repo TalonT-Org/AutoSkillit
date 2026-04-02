@@ -18,7 +18,7 @@ and creates a comprehensive promotion PR.
 ## Arguments
 
 ```
-/promote-to-main [integration_branch] [base_branch] [--dry-run]
+/autoskillit:promote-to-main [integration_branch] [base_branch] [--dry-run]
 ```
 
 - `integration_branch` (optional) — source branch to promote. Defaults to `integration`.

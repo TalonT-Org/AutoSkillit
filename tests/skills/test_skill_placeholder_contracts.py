@@ -113,6 +113,21 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("prepare-issue", "title"),
         ("process-issues", "number"),  # per-issue iteration value
         ("process-issues", "recipe"),  # recipe name from manifest
+        # ── promote-to-main ──────────────────────────────────────────────────────────
+        ("promote-to-main", "branch"),  # per-branch loop var in git fetch origin {branch}:{branch}
+        ("promote-to-main", "merge_base_sha"),  # runtime-computed from git merge-base
+        ("promote-to-main", "number"),  # per-issue iteration in gh issue view {number}
+        ("promote-to-main", "pr_title"),  # runtime-computed PR title string
+        ("promote-to-main", "pr_url"),  # runtime-computed PR URL after gh pr create
+        ("promote-to-main", "timestamp"),  # generated timestamp for temp file names
+        # ── review-promotion ─────────────────────────────────────────────────────────
+        (
+            "review-promotion",
+            "changed_files_as_json_array",
+        ),  # JSON array derived from changed_files
+        ("review-promotion", "number"),  # per-PR iteration in gh pr view {number}
+        ("review-promotion", "pr_number"),  # stored from gh pr list output
+        ("review-promotion", "timestamp"),  # generated timestamp for temp file names
         ("triage-issues", "number"),  # per-issue iteration value
         ("triage-issues", "recipe"),  # recipe name from manifest
     }

@@ -76,6 +76,23 @@ git diff --name-only {base_branch}..{integration_branch}
 
 Store as `merge_base_sha` and `changed_files`.
 
+If the `git merge-base` or `git diff` command exits non-zero (e.g., unknown branch name),
+emit a clear error and exit 1:
+
+```
+Error: could not compute divergence point between '{base_branch}' and '{integration_branch}'.
+Check that both branches exist locally or are fetchable.
+```
+
+If `changed_files` is empty after a successful `git diff`, emit:
+
+```
+Error: no changed files found between '{base_branch}' and '{integration_branch}'.
+Verify the branches are not identical and that the correct branch names were supplied.
+```
+
+Then exit 1.
+
 #### Step 0.3: Find PR (only if --post-to-pr)
 
 ```bash

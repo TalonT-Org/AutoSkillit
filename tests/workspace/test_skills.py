@@ -60,6 +60,7 @@ BUNDLED_SKILLS = [
     "pipeline-summary",
     "prepare-issue",
     "process-issues",
+    "promote-to-main",
     "rectify",
     "report-bug",
     "resolve-failures",
@@ -68,6 +69,7 @@ BUNDLED_SKILLS = [
     "retry-worktree",
     "review-pr",
     "review-approach",
+    "review-promotion",
     "setup-project",
     "smoke-task",
     "sous-chef",
@@ -386,11 +388,11 @@ class TestSkillResolver:
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 58
+        assert len(skills) == 60
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 60 public skills (2 Tier-1 + 58 extended)."""
-        assert len(SkillResolver().list_all()) == 60
+        """list_all() returns 62 public skills (2 Tier-1 + 60 extended)."""
+        assert len(SkillResolver().list_all()) == 62
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""

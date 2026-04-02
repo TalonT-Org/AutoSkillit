@@ -72,9 +72,12 @@ Parse optional positional arguments and flags:
 ```bash
 git merge-base {base_branch} {integration_branch}
 git diff --name-only {base_branch}..{integration_branch}
+git diff --name-only --diff-filter=A {base_branch}..{integration_branch}
+git diff --name-only --diff-filter=M {base_branch}..{integration_branch}
 ```
 
-Store as `merge_base_sha` and `changed_files`.
+Store as `merge_base_sha`, `changed_files`, `new_files` (added files), and
+`modified_files` (modified files).
 
 If the `git merge-base` or `git diff` command exits non-zero (e.g., unknown branch name),
 emit a clear error and exit 1:

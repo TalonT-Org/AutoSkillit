@@ -227,8 +227,8 @@ audit-arch, audit-bugs, audit-cohesion, audit-defense-standards, audit-friction,
 close-kitchen, collapse-issues, design-guards, diagnose-ci, dry-walkthrough, elaborate-phase,
 enrich-issues, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
 make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr, open-kitchen, open-pr, pipeline-summary,
-prepare-issue, process-issues, rectify, report-bug, resolve-failures, resolve-merge-conflicts, resolve-review,
-retry-worktree, review-approach, review-pr, setup-project, smoke-task, sprint-planner, triage-issues, validate-audit, verify-diag, write-recipe
+prepare-issue, process-issues, promote-to-main, rectify, report-bug, resolve-failures, resolve-merge-conflicts, resolve-review,
+retry-worktree, review-approach, review-pr, review-promotion, setup-project, smoke-task, sprint-planner, triage-issues, validate-audit, verify-diag, write-recipe
 
 ## Skill Reference Disambiguation
 

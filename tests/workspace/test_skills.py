@@ -43,12 +43,31 @@ BUNDLED_SKILLS = [
     "dry-walkthrough",
     "elaborate-phase",
     "enrich-issues",
+    "exp-lens-benchmark-representativeness",
+    "exp-lens-causal-assumptions",
+    "exp-lens-comparator-construction",
+    "exp-lens-error-budget",
+    "exp-lens-estimand-clarity",
+    "exp-lens-exploratory-confirmatory",
+    "exp-lens-fair-comparison",
+    "exp-lens-governance-risk",
+    "exp-lens-iterative-learning",
+    "exp-lens-measurement-validity",
+    "exp-lens-pipeline-integrity",
+    "exp-lens-randomization-blocking",
+    "exp-lens-reproducibility-artifacts",
+    "exp-lens-sensitivity-robustness",
+    "exp-lens-severity-testing",
+    "exp-lens-unit-interference",
+    "exp-lens-validity-threats",
+    "exp-lens-variance-stability",
     "implement-experiment",
     "implement-worktree",
     "implement-worktree-no-merge",
     "investigate",
     "issue-splitter",
     "make-arch-diag",
+    "make-experiment-diag",
     "make-groups",
     "make-plan",
     "make-req",
@@ -101,6 +120,27 @@ ARCH_LENS_NAMES = [
     "arch-lens-scenarios",
     "arch-lens-state-lifecycle",
     "arch-lens-deployment",
+]
+
+EXP_LENS_NAMES = [
+    "exp-lens-estimand-clarity",
+    "exp-lens-causal-assumptions",
+    "exp-lens-comparator-construction",
+    "exp-lens-pipeline-integrity",
+    "exp-lens-variance-stability",
+    "exp-lens-fair-comparison",
+    "exp-lens-reproducibility-artifacts",
+    "exp-lens-measurement-validity",
+    "exp-lens-sensitivity-robustness",
+    "exp-lens-benchmark-representativeness",
+    "exp-lens-unit-interference",
+    "exp-lens-error-budget",
+    "exp-lens-severity-testing",
+    "exp-lens-randomization-blocking",
+    "exp-lens-validity-threats",
+    "exp-lens-iterative-learning",
+    "exp-lens-exploratory-confirmatory",
+    "exp-lens-governance-risk",
 ]
 
 AUDIT_SKILL_NAMES = [
@@ -385,17 +425,17 @@ class TestSkillResolver:
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
     def test_58_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 63 SKILL.md-carrying directories."""
+        """skills_extended/ contains exactly 82 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 63
+        assert len(skills) == 82
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 65 public skills (2 Tier-1 + 63 extended)."""
-        assert len(SkillResolver().list_all()) == 65
+        """list_all() returns 84 public skills (2 Tier-1 + 82 extended)."""
+        assert len(SkillResolver().list_all()) == 84
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
@@ -518,6 +558,26 @@ class TestSkillCategories:
         info = SkillResolver().resolve("investigate")
         assert info is not None
         assert info.categories == frozenset()
+
+    def test_all_exp_lens_skills_bundled(self) -> None:
+        """All 18 exp-lens skill variants must be resolvable via SkillResolver."""
+        resolver = SkillResolver()
+        for name in EXP_LENS_NAMES:
+            info = resolver.resolve(name)
+            assert info is not None, f"exp-lens skill '{name}' not found in bundled skills"
+            assert info.path.exists(), f"SKILL.md missing for '{name}' at {info.path}"
+
+    def test_all_exp_lens_skills_have_exp_lens_category(self) -> None:
+        resolver = SkillResolver()
+        for name in EXP_LENS_NAMES:
+            info = resolver.resolve(name)
+            assert info is not None
+            assert "exp-lens" in info.categories, f"{name} missing 'exp-lens' category"
+
+    def test_make_experiment_diag_has_exp_lens_category(self) -> None:
+        info = SkillResolver().resolve("make-experiment-diag")
+        assert info is not None
+        assert "exp-lens" in info.categories
 
 
 RESEARCH_SKILL_NAMES = {

@@ -145,6 +145,25 @@ skills:
     - arch-lens-scenarios
     - arch-lens-security
     - arch-lens-state-lifecycle
+    - make-experiment-diag
+    - exp-lens-estimand-clarity
+    - exp-lens-causal-assumptions
+    - exp-lens-comparator-construction
+    - exp-lens-pipeline-integrity
+    - exp-lens-variance-stability
+    - exp-lens-fair-comparison
+    - exp-lens-reproducibility-artifacts
+    - exp-lens-measurement-validity
+    - exp-lens-sensitivity-robustness
+    - exp-lens-benchmark-representativeness
+    - exp-lens-unit-interference
+    - exp-lens-error-budget
+    - exp-lens-severity-testing
+    - exp-lens-randomization-blocking
+    - exp-lens-validity-threats
+    - exp-lens-iterative-learning
+    - exp-lens-exploratory-confirmatory
+    - exp-lens-governance-risk
     - audit-arch
     - audit-cohesion
     - audit-tests

@@ -34,6 +34,8 @@ jobs:
           import tomllib, pathlib
           print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])
           ")
+          [ -n "$CURRENT" ] || { echo "ERROR: version: CURRENT is empty — pyproject.toml may be absent or malformed" >&2; exit 1; }
+          echo "$CURRENT" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "ERROR: version: CURRENT='$CURRENT' is not valid semver" >&2; exit 1; }
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           NEW_MAIN="$MAJOR.$((MINOR + 1)).0"
           NEW_INT="$MAJOR.$((MINOR + 1)).1"

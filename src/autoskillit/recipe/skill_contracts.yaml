@@ -707,6 +707,29 @@ skills:
     - "report_path = /tmp/research/report.md\n%%ORDER_UP%%"
     write_behavior: always
 
+  open-research-pr:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: task
+      type: string
+      required: true
+    - name: report_path
+      type: file_path
+      required: true
+    outputs:
+    - name: pr_url
+      type: string
+    expected_output_patterns:
+    - "pr_url\\s*=\\s*https://github\\.com/.*/pull/\\d+"
+    pattern_examples:
+    - "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
+    write_behavior: always
+
   review-design:
     inputs:
     - name: experiment_plan

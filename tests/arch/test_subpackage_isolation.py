@@ -642,7 +642,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         tools_kitchen, helpers, git, _factory, _state, __init__); each file is a
         thin routing layer. Exempt at 16 files.
       recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
-        (rules_bypass, rules_ci, rules_clone, etc.) for independent testability.
+        (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.
+        Adding rules_packs.py for requires_packs validation brings the count to 28.
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
@@ -666,7 +667,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 17,
-        "recipe": 27,
+        "recipe": 28,
         "execution": 23,
         "core": 15,
         "cli": 15,

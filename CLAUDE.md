@@ -182,6 +182,7 @@ src/autoskillit/
 │   ├── rules_graph.py       #   Semantic rules for step graph reachability and cycles
 │   ├── rules_inputs.py      #   Semantic rules for ingredient/version validation
 │   ├── rules_merge.py       #   Semantic rules for merge_worktree routing completeness
+│   ├── rules_packs.py       #   Semantic rules for unknown pack names in requires_packs (unknown-required-pack)
 │   ├── rules_recipe.py      #   Semantic rules for unknown sub-recipe references (unknown-sub-recipe rule)
 │   ├── rules_skill_content.py #  Semantic rules for SKILL.md bash-block placeholder validation (undefined-bash-placeholder)
 │   ├── rules_skills.py      #   Semantic rules for skill_command resolvability (unknown-skill-command)

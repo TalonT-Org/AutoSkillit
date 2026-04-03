@@ -23,12 +23,12 @@ results are valid findings, not failures.
 ## When to Use
 
 - As the reporting step of the `research` recipe (phase 2)
-- After `/run-experiment` has produced results (or after retry exhaustion)
+- After `/autoskillit:run-experiment` has produced results (or after retry exhaustion)
 
 ## Arguments
 
 ```
-/write-report {worktree_path} {results_path} [--inconclusive]
+/autoskillit:write-report {worktree_path} {results_path} [--inconclusive]
 ```
 
 - `{worktree_path}` — Absolute path to the worktree (required). First path-like

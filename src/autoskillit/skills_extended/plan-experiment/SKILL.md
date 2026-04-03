@@ -31,10 +31,10 @@ one self-contained folder under `research/`.
 ## Arguments
 
 ```
-/plan-experiment {scope_report_path}
+/autoskillit:plan-experiment {scope_report_path}
 ```
 
-`{scope_report_path}` — Absolute path to the scope report produced by `/scope`
+`{scope_report_path}` — Absolute path to the scope report produced by `/autoskillit:scope`
 (required). Scan tokens after the skill name for the first path-like token
 (starts with `/`, `./`, or `.autoskillit/`).
 
@@ -270,7 +270,7 @@ patterns or outcomes would support or refute the hypothesis.}
 ### Step 4 — Write Output
 
 Save the experiment plan to:
-`.autoskillit/temp/plan-experiment/experiment_plan_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+`.autoskillit/temp/plan-experiment/experiment_plan_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After saving, emit the structured output token as the very last line of your
 text output:

@@ -37,7 +37,7 @@ ingredients:
 kitchen_rules:
   - >
     NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
-    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit) from the
+    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit, Agent) from the
     orchestrator. All work is delegated through run_skill.
   - >
     Do NOT auto-merge. The research PR is for human review only.
@@ -72,6 +72,7 @@ steps:
     with:
       cmd: "[ -n '${{ inputs.issue_number }}' ]"
       cwd: "${{ inputs.source_dir }}"
+      step_name: check_phase
     on_success: save_experiment_plan
     on_failure: scope
     note: >
@@ -109,6 +110,7 @@ steps:
         --body-file '${{ context.experiment_plan }}'
         --label research
       cwd: "${{ inputs.source_dir }}"
+      step_name: open_plan_issue
     on_success: phase1_done
     on_failure: escalate_stop
 
@@ -128,6 +130,7 @@ steps:
         gh issue view ${{ inputs.issue_number }}
         --json body -q .body > .autoskillit/temp/experiment-plan.md
       cwd: "${{ inputs.source_dir }}"
+      step_name: save_experiment_plan
     on_success: check_setup_needed
     on_failure: escalate_stop
 
@@ -168,12 +171,11 @@ steps:
         echo "$(git rev-parse --abbrev-ref HEAD)" > ".autoskillit/temp/worktrees/${BRANCH}/base-branch" &&
         mkdir -p "${RESOLVED}/.autoskillit/temp" &&
         cp .autoskillit/temp/experiment-plan.md "${RESOLVED}/.autoskillit/temp/experiment-plan.md" &&
-        echo "worktree_path=${RESOLVED}" &&
-        echo "branch_name=${BRANCH}"
+        echo "worktree_path=${RESOLVED}"
       cwd: "${{ inputs.source_dir }}"
+      step_name: create_worktree
     capture:
       worktree_path: "${{ result.worktree_path }}"
-      branch_name: "${{ result.branch_name }}"
     on_success: decompose_phases
     on_failure: escalate_stop
     note: >
@@ -201,17 +203,20 @@ steps:
   plan_phase:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:make-plan CURRENT_PHASE_FILE"
+      skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
       cwd: "${{ context.worktree_path }}"
       step_name: plan_phase
       group_files: "${{ context.group_files }}"
     capture:
       phase_plan_path: "${{ result.plan_path }}"
+    capture_list:
+      plan_parts: "${{ result.plan_parts }}"
     on_success: implement_phase
     on_failure: escalate_stop
     note: >
-      Plans the current setup phase. Replace CURRENT_PHASE_FILE with the
-      actual path from context.group_files for the current phase.
+      Plans the current setup phase. SETUP PHASES MODE: Replace the task argument
+      in skill_command with the current phase's group file path from context.group_files.
+      Glob plan_dir for *_part_*.md or single plan file.
       ITERATION: Pass the current phase's group file path to make-plan.
 
   implement_phase:
@@ -220,6 +225,8 @@ steps:
       skill_command: "/autoskillit:retry-worktree ${{ context.phase_plan_path }} ${{ context.worktree_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: implement_phase
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
     on_success: next_phase_or_experiment
     on_failure: escalate_stop
     note: >
@@ -316,6 +323,7 @@ steps:
     with:
       cmd: "cd '${{ context.worktree_path }}' && git push -u origin HEAD"
       cwd: "${{ context.worktree_path }}"
+      step_name: push_branch
     on_success: open_research_pr
     on_failure: escalate_stop
 
@@ -329,6 +337,7 @@ steps:
         --body-file '${{ context.report_path }}'
         --base '${{ inputs.base_branch }}'
       cwd: "${{ context.worktree_path }}"
+      step_name: open_research_pr
     on_success: research_complete
     on_failure: escalate_stop
 

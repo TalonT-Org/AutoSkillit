@@ -210,13 +210,14 @@ def test_init_session_cook_session_ignores_disabled_subsets(tmp_path):
 
 def test_init_session_cook_full_skill_set_invariant(tmp_path):
     """T-OVR-014: cook_session=True yields all BUNDLED_EXTENDED skills minus
-    project-local overrides — but never BUNDLED (Tier 1) skills, which are
-    already served by --plugin-dir.
+    project-local overrides and default-disabled pack skills — but never BUNDLED
+    (Tier 1) skills, which are already served by --plugin-dir.
 
-    The cook bypasses subset-disable filtering but NOT channel deduplication.
+    The cook bypasses explicit subset-disable filtering but NOT channel deduplication
+    and NOT default pack gating.
     """
     from autoskillit.config import AutomationConfig, SubsetsConfig
-    from autoskillit.core.types import SkillSource
+    from autoskillit.core.types import PACK_REGISTRY, SkillSource
     from autoskillit.workspace.session_skills import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
@@ -241,10 +242,18 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
 
     resolver = SkillResolver()
     all_skills = resolver.list_all()
-    # Expected: all BUNDLED_EXTENDED skills except project-local overrides
-    expected_names = {s.name for s in all_skills if s.source != SkillSource.BUNDLED} - {
-        "investigate"
-    }
+    # Default-disabled pack tags (e.g. research, exp-lens) are excluded from cook sessions
+    # unless packs.enabled explicitly enables them.
+    default_disabled_tags = frozenset(
+        tag for tag, pack_def in PACK_REGISTRY.items() if not pack_def.default_enabled
+    )
+    # Expected: all BUNDLED_EXTENDED skills except project-local overrides and
+    # skills whose categories are entirely in default-disabled packs.
+    expected_names = {
+        s.name
+        for s in all_skills
+        if s.source != SkillSource.BUNDLED and not (s.categories & default_disabled_tags)
+    } - {"investigate"}
     skills_base = skills_dir / ".claude" / "skills"
     actual_names = {d.name for d in skills_base.iterdir() if d.is_dir()}
     assert actual_names == expected_names, (
@@ -285,8 +294,9 @@ def test_cook_session_excludes_tier1_from_ephemeral_dir(tmp_path):
 
 def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
     """T-OVR-017: Regression guard — cook_session=True still writes all
-    BUNDLED_EXTENDED skills that do NOT have project-local overrides."""
-    from autoskillit.core.types import SkillSource
+    BUNDLED_EXTENDED skills that do NOT have project-local overrides and are
+    not in default-disabled packs."""
+    from autoskillit.core.types import PACK_REGISTRY, SkillSource
     from autoskillit.workspace.session_skills import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
@@ -304,9 +314,14 @@ def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
     skills_dir = mgr.init_session("sess-retain", cook_session=True, project_dir=project_dir)
 
     resolver = SkillResolver()
-    expected = {s.name for s in resolver.list_all() if s.source != SkillSource.BUNDLED} - {
-        "investigate"
-    }
+    default_disabled_tags = frozenset(
+        tag for tag, pack_def in PACK_REGISTRY.items() if not pack_def.default_enabled
+    )
+    expected = {
+        s.name
+        for s in resolver.list_all()
+        if s.source != SkillSource.BUNDLED and not (s.categories & default_disabled_tags)
+    } - {"investigate"}
     skills_base = skills_dir / ".claude" / "skills"
     actual = {d.name for d in skills_base.iterdir() if d.is_dir()}
     missing = expected - actual

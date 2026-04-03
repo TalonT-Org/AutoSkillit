@@ -30,7 +30,7 @@ generate, and what environment to set up. This skill builds all of it.
 ## Arguments
 
 ```
-/implement-experiment {plan_path}
+/autoskillit:implement-experiment {plan_path}
 ```
 
 `{plan_path}` — Absolute path to the experiment plan file (required). Scan
@@ -194,8 +194,9 @@ Follow it.
 Copy the experiment plan into the research folder for reference:
 
 ```bash
-cp "${PLAN_PATH}" "${WORKTREE_PATH}/research/YYYY-MM-DD-{slug}/experiment-plan.md"
-git add research/ && git commit -m "Add experiment plan to research folder"
+RESEARCH_DIR=$(ls -d "${WORKTREE_PATH}"/research/*/ 2>/dev/null | head -1)
+cp "${PLAN_PATH}" "${RESEARCH_DIR}experiment-plan.md"
+git -C "${WORKTREE_PATH}" add research/ && git -C "${WORKTREE_PATH}" commit -m "Add experiment plan to research folder"
 ```
 
 ### Step 6 — Pre-commit Checks
@@ -212,7 +213,7 @@ Output to terminal:
 - **Worktree path:** `${WORKTREE_PATH}`
 - **Branch name:** `${WORKTREE_NAME}`
 - **Base branch:** the branch the worktree was created from
-- **Research folder:** the `research/YYYY-MM-DD-{slug}/` path created
+- **Research folder:** the `research/` subfolder created inside the worktree
 - **Summary:** list of implemented phases and artifacts created
 
 Explicitly state: "Worktree left intact for orchestrator to run experiment and test."

@@ -383,6 +383,7 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
         "greeting",  # delivered via positional CLI arg, not MCP response
         "diagram",  # user sees it in terminal preview; agent doesn't need it
         "kitchen_rules",  # already in the YAML content
+        "requires_packs",  # internal field; used for skill gating, not display
     }
 )
 

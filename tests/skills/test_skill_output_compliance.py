@@ -221,6 +221,11 @@ def test_output_path_tokens_synchronized() -> None:
             "analysis_file",
             "conflict_report_path",
             "recipe_path",
+            # Research recipe skills (added in #504)
+            "scope_report",
+            "experiment_plan",
+            "results_path",
+            "report_path",
         }
     )
 

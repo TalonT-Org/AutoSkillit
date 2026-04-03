@@ -31,7 +31,7 @@ plan, executes what the plan describes, and reports what happened.
 ## Arguments
 
 ```
-/run-experiment {worktree_path} [--adjust]
+/autoskillit:run-experiment {worktree_path} [--adjust]
 ```
 
 - `{worktree_path}` — Absolute path to the worktree containing experiment code
@@ -137,7 +137,7 @@ cd "$WORKTREE_PATH"
 cargo test --features testing --test test_metrics_assess -- assess_accuracy --include-ignored --no-capture
 ```
 
-This writes two files to `.autoskillit/temp/run-experiment/` (relative to the worktree):
+This writes two files to `.autoskillit/temp/run-experiment/` (relative to the current working directory):
 - `accuracy_metrics.json` — machine-readable metrics with per-metric pass/fail status
 - `accuracy_metrics.md` — human-readable summary table
 

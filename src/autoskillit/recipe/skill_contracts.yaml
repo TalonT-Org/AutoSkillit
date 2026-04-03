@@ -631,3 +631,78 @@ skills:
       required: true
     outputs: []
     write_behavior: always
+
+  scope:
+    inputs:
+    - name: research_question
+      type: string
+      required: true
+    outputs:
+    - name: scope_report
+      type: file_path
+    expected_output_patterns:
+    - "scope_report\\s*=\\s*/.+"
+    pattern_examples:
+    - "scope_report = /tmp/scope_report.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  plan-experiment:
+    inputs:
+    - name: scope_report_path
+      type: file_path
+      required: true
+    outputs:
+    - name: experiment_plan
+      type: file_path
+    expected_output_patterns:
+    - "experiment_plan\\s*=\\s*/.+"
+    pattern_examples:
+    - "experiment_plan = /tmp/experiment_plan.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  implement-experiment:
+    inputs:
+    - name: plan_path
+      type: file_path
+      required: true
+    outputs:
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
+    expected_output_patterns:
+    - "worktree_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "worktree_path = /tmp/worktrees/research-20260101-120000\n%%ORDER_UP%%"
+    write_behavior: always
+
+  run-experiment:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    outputs:
+    - name: results_path
+      type: file_path
+    expected_output_patterns:
+    - "results_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "results_path = /tmp/run-experiment/results.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  write-report:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: results_path
+      type: file_path
+      required: true
+    outputs:
+    - name: report_path
+      type: file_path
+    expected_output_patterns:
+    - "report_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "report_path = /tmp/research/report.md\n%%ORDER_UP%%"
+    write_behavior: always

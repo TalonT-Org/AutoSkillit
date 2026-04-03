@@ -27,7 +27,7 @@ research recipe — it informs experiment design without making any code changes
 ## Arguments
 
 ```
-/scope {research_question}
+/autoskillit:scope {research_question}
 ```
 
 `{research_question}` — The technical question or topic to investigate (required).
@@ -153,7 +153,7 @@ current threshold value. Note any gaps where no canonical metric exists.}
 ### Step 3 — Write Output
 
 Save the scope report to:
-`.autoskillit/temp/scope/scope_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+`.autoskillit/temp/scope/scope_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 Where `{topic}` is a snake_case summary of the research question (max 40 chars).
 

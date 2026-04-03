@@ -1899,9 +1899,9 @@ class TestResearchRecipeStructure:
         assert "review_research_pr" in recipe.steps
 
     def test_research_review_step_skip_when_false(self, recipe) -> None:
-        """review_research_pr step must use skip_when_false: review_pr."""
+        """review_research_pr step must use skip_when_false: inputs.review_pr."""
         step = recipe.steps["review_research_pr"]
-        assert step.skip_when_false == "review_pr"
+        assert step.skip_when_false == "inputs.review_pr"
 
     def test_research_review_step_routes_to_complete_on_any_outcome(self, recipe) -> None:
         """review_research_pr must route to research_complete on both success and failure."""

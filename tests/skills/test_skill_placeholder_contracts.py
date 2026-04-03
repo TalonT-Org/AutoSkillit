@@ -67,6 +67,9 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("review-pr", "owner"),
         ("review-pr", "repo"),
         ("review-pr", "pr_number"),
+        ("review-research-pr", "owner"),
+        ("review-research-pr", "repo"),
+        ("review-research-pr", "pr_number"),
         # ── GRAPHQL FIELD NAMES (false positives) ─────────────────────────────────────
         # These appear inside single-quoted GraphQL query strings as JSON field names, not
         # as bash template placeholders. The {identifier} regex matches them spuriously.
@@ -78,6 +81,12 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("review-pr", "verdict"),  # computed verdict string
         ("review-pr", "summary_markdown"),  # computed review summary
         ("review-pr", "escalation_user_mention"),  # prose: "set escalation_user_mention=..."
+        ("review-research-pr", "verdict"),  # computed verdict string
+        ("review-research-pr", "summary_markdown"),  # computed review summary
+        (
+            "review-research-pr",
+            "escalation_user_mention",
+        ),  # prose: "set escalation_user_mention=..."
         ("resolve-review", "comment_id"),  # per-comment REST database ID in the inline-reply loop
         ("resolve-review", "file"),  # per-finding file path from review comments
         ("resolve-merge-conflicts", "file"),  # per-iteration conflicted file path

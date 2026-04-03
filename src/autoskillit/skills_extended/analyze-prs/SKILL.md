@@ -68,10 +68,15 @@ is active on `{base_branch}` with `MERGEABLE` entries.
 
 1. Read pre-fetched merge queue data from disk when available:
    ```bash
-   if [ -n "${merge_queue_data_path:-}" ] && [ -f "$merge_queue_data_path" ]; then
-       QUEUE_ENTRIES="$(cat "$merge_queue_data_path")"
+   if [ -n "${merge_queue_data_path:-}" ]; then
+       if [ -f "$merge_queue_data_path" ]; then
+           QUEUE_ENTRIES="$(cat "$merge_queue_data_path")"
+       else
+           echo "WARNING: merge_queue_data_path='$merge_queue_data_path' provided but file not found — possible misconfiguration. Falling back to no-queue mode."
+           QUEUE_ENTRIES="[]"
+       fi
    else
-       QUEUE_ENTRIES="[]"  # fallback: treat as no queue entries → QUEUE_MODE=false
+       QUEUE_ENTRIES="[]"  # no path provided (standalone invocation) → QUEUE_MODE=false
    fi
    ```
    `QUEUE_ENTRIES` is a JSON array of `{position, state, pr_number, pr_title}` objects,

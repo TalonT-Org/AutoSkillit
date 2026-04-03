@@ -706,3 +706,34 @@ skills:
     pattern_examples:
     - "report_path = /tmp/research/report.md\n%%ORDER_UP%%"
     write_behavior: always
+
+  review-design:
+    inputs:
+    - name: experiment_plan
+      type: file_path
+      required: true
+    outputs:
+    - name: verdict
+      type: string
+      allowed_values: [GO, REVISE, STOP]
+    - name: experiment_type
+      type: string
+    - name: evaluation_dashboard
+      type: file_path
+    - name: revision_guidance
+      type: file_path
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(GO|REVISE|STOP)"
+    - "experiment_type\\s*=\\s*\\S+"
+    write_behavior: always
+
+  resolve-research-review:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs: []
+    write_behavior: always

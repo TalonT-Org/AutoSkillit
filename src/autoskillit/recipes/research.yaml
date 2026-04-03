@@ -1,22 +1,22 @@
 name: research
-autoskillit_version: "0.7.1"
+autoskillit_version: "0.7.5"
 requires_packs: [research]
 description: >
-  Two-phase technical research recipe. Phase 1 scopes a research question
-  and opens an experiment design issue for human review. Phase 2 (resumed
-  with issue_number) implements the experiment, runs it, writes a report
-  to research/, and opens a PR. Supports optional setup phases for complex
-  experiments requiring prerequisite infrastructure. No auto-merge.
-summary: scope > plan > issue > (resume) > [setup?] > implement > experiment > report > open-pr
+  Single-phase technical research recipe. Scopes a research question, plans an
+  experiment, optionally reviews the design, then always decomposes into phases,
+  implements, runs the experiment, writes a report to research/, and opens a PR.
+  Supports a skippable design review loop (bounded by retries: 2) and review
+  resolution routing after PR open. No auto-merge.
+summary: scope > plan > [review?] > worktree > decompose > phases > experiment > report > open-pr
 
 ingredients:
   task:
     description: Research question or topic to investigate
     required: true
-  issue_number:
+  issue_url:
     description: >
-      Approved experiment design issue number. Providing this skips
-      phase 1 (design) and starts phase 2 (execution) directly.
+      Optional URL to an existing GitHub issue describing the research goal.
+      Provided as context to scope and plan_experiment.
     required: false
   source_dir:
     description: Path to the project root
@@ -24,15 +24,14 @@ ingredients:
   base_branch:
     description: Branch to target for the research PR
     default: "main"
-  setup_phases:
+  review_design:
     description: >
-      When 'true', decompose the experiment plan into sequenced setup
-      phases before implementation. Use for complex research requiring
-      prerequisite infrastructure — test harnesses, data generators,
-      plotting scripts, logging, environment setup, etc. Each phase is
-      planned and implemented independently in a shared worktree before
-      the experiment runs.
-    default: "false"
+      When 'true' (the default), run the review-design skill after plan_experiment
+      to validate the experiment plan before execution. Emits a verdict: GO proceeds,
+      REVISE loops back to plan_experiment with revision guidance (bounded by
+      retries: 2), STOP halts the pipeline. When 'false', skip directly to
+      create_worktree.
+    default: "true"
   review_pr:
     description: >
       When 'true', run the review-research-pr skill after the research PR
@@ -43,49 +42,28 @@ ingredients:
 
 kitchen_rules:
   - >
-    NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
-    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit, Agent) from the
-    orchestrator. All work is delegated through run_skill.
-  - >
-    Do NOT auto-merge. The research PR is for human review only.
-    Do NOT use toggle_auto_merge or wait_for_merge_queue.
-  - "The research/ folder is the target for all report output."
-  - >
-    Experiment code in the worktree is disposable — only the report
-    and any reproducible scripts matter for the PR.
-  - >
-    Inconclusive results are valid findings, not failures.
-    Always produce a report regardless of experiment outcome.
+    NEVER use native Claude Code tools from the orchestrator.
+    All work is delegated through run_skill, run_cmd, run_python.
+  - "Do NOT auto-merge. The research PR is for human review only."
+  - "The research/ folder is the target for all permanent output."
+  - "Inconclusive results are valid findings, not failures."
   - "Route to on_failure when a step fails — do not investigate directly."
   - >
-    SETUP PHASES MODE: When setup_phases is true, the worktree is created
-    early and shared across all phases. The make-groups decomposition
-    produces sequenced phases that include both prerequisite infrastructure
-    AND experiment implementation. After all phases complete, proceed
-    directly to run_experiment — do NOT invoke implement-experiment
-    (it would create a duplicate worktree). The experiment plan is copied
-    into the worktree so run-experiment can discover it.
+    DESIGN REVIEW LOOP: review_design validates the plan and may
+    route back to plan_experiment with revision guidance. Bounded by
+    retries: 2 (max 3 review cycles). On exhaustion or failure,
+    proceed to execution with the best available plan — do not stop.
   - >
-    PHASE ITERATION: The agent maintains a phase queue from group_files.
-    For each phase, run make-plan then retry-worktree to implement in the
-    shared worktree. Advance to the next phase only after successful
-    implementation. Track remaining phases in context.group_files to
-    determine next_phase_or_experiment routing.
+    PHASE ITERATION: decompose_phases always runs. The agent maintains
+    a phase queue from group_files. For each phase, run plan_phase then
+    implement_phase. Advance to run_experiment when all phases complete.
+  - >
+    PERMANENT ARTIFACTS: create_worktree commits the experiment plan
+    to research/ and supporting artifacts (scope report, design evaluation)
+    to research/artifacts/. These are permanent records in the PR.
 
 steps:
-  # --- PHASE ROUTER ---
-  check_phase:
-    tool: run_cmd
-    with:
-      cmd: "[ -n '${{ inputs.issue_number }}' ]"
-      cwd: "${{ inputs.source_dir }}"
-      step_name: check_phase
-    on_success: save_experiment_plan
-    on_failure: scope
-    note: >
-      Routes to phase 2 if issue_number is provided, phase 1 otherwise.
-
-  # --- PHASE 1: DESIGN ---
+  # --- DESIGN PHASE ---
   scope:
     tool: run_skill
     with:
@@ -100,73 +78,53 @@ steps:
   plan_experiment:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }}"
+      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: plan_experiment
     capture:
       experiment_plan: "${{ result.experiment_plan }}"
-    on_success: open_plan_issue
+    on_success: review_design
     on_failure: escalate_stop
 
-  open_plan_issue:
-    tool: run_cmd
-    with:
-      cmd: >
-        gh label create research --color "#0075ca" --description "Research experiments" 2>/dev/null || true &&
-        gh issue create
-        --title 'Research: ${{ inputs.task }}'
-        --body-file '${{ context.experiment_plan }}'
-        --label research
-      cwd: "${{ inputs.source_dir }}"
-      step_name: open_plan_issue
-    on_success: phase1_done
-    on_failure: escalate_stop
-
-  phase1_done:
-    action: stop
-    message: >
-      Phase 1 complete. Experiment plan posted as a GitHub issue.
-      Review and approve the plan, then resume this recipe with
-      issue_number set to the approved issue number.
-
-  # --- PHASE 2: EXECUTE ---
-  save_experiment_plan:
-    tool: run_cmd
-    with:
-      cmd: >
-        mkdir -p .autoskillit/temp &&
-        gh issue view ${{ inputs.issue_number }}
-        --json body -q .body > .autoskillit/temp/experiment-plan.md
-      cwd: "${{ inputs.source_dir }}"
-      step_name: save_experiment_plan
-    on_success: check_setup_needed
-    on_failure: escalate_stop
-
-  check_setup_needed:
-    action: route
-    on_result:
-      - when: "${{ inputs.setup_phases }} == true"
-        route: create_worktree
-      - route: implement_experiment
-    note: >
-      Routes to setup phase decomposition if setup_phases is true,
-      otherwise proceeds with single-shot implement-experiment.
-
-  # --- SIMPLE PATH (original behavior) ---
-  implement_experiment:
+  review_design:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:implement-experiment ${{ inputs.source_dir }}/.autoskillit/temp/experiment-plan.md"
+      skill_command: "/autoskillit:review-design ${{ context.experiment_plan }}"
       cwd: "${{ inputs.source_dir }}"
-      step_name: implement
+      step_name: review_design
     capture:
-      worktree_path: "${{ result.worktree_path }}"
-    retries: 0
-    on_context_limit: run_experiment
-    on_success: run_experiment
-    on_failure: escalate_stop
+      verdict: "${{ result.verdict }}"
+      experiment_type: "${{ result.experiment_type }}"
+      evaluation_dashboard: "${{ result.evaluation_dashboard }}"
+      revision_guidance: "${{ result.revision_guidance }}"
+    skip_when_false: inputs.review_design
+    retries: 2
+    on_exhausted: create_worktree
+    on_context_limit: create_worktree
+    on_success: create_worktree
+    on_failure: create_worktree
+    on_result:
+      - when: "${{ result.verdict }} == GO"
+        route: create_worktree
+      - when: "${{ result.verdict }} == REVISE"
+        route: revise_design
+      - when: "${{ result.verdict }} == STOP"
+        route: design_rejected
+      - route: create_worktree
 
-  # --- SETUP PHASES PATH ---
+  revise_design:
+    action: route
+    on_result:
+      - route: plan_experiment
+
+  design_rejected:
+    action: stop
+    message: >
+      Research pipeline halted: experiment design rejected (verdict=STOP).
+      The design has a fundamental flaw that revision cannot address.
+      Check .autoskillit/temp/review-design/ for the evaluation dashboard.
+
+  # --- EXECUTION PHASE ---
   create_worktree:
     tool: run_cmd
     with:
@@ -179,7 +137,14 @@ steps:
         mkdir -p ".autoskillit/temp/worktrees/${BRANCH}" &&
         echo "$(git rev-parse --abbrev-ref HEAD)" > ".autoskillit/temp/worktrees/${BRANCH}/base-branch" &&
         mkdir -p "${RESOLVED}/.autoskillit/temp" &&
-        cp .autoskillit/temp/experiment-plan.md "${RESOLVED}/.autoskillit/temp/experiment-plan.md" &&
+        cp '${{ context.experiment_plan }}' "${RESOLVED}/.autoskillit/temp/experiment-plan.md" &&
+        SLUG=$(printf '%s' '${{ inputs.task }}' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/--*/-/g;s/^-//;s/-$//' | cut -c1-30) &&
+        RESEARCH_DIR="${RESOLVED}/research/$(date +%Y-%m-%d)-${SLUG:-experiment}" &&
+        mkdir -p "${RESEARCH_DIR}/artifacts" &&
+        cp '${{ context.experiment_plan }}' "${RESEARCH_DIR}/experiment-plan.md" &&
+        if [ -f '${{ context.scope_report }}' ]; then cp '${{ context.scope_report }}' "${RESEARCH_DIR}/artifacts/scope-report.md"; fi &&
+        if [ -f '${{ context.evaluation_dashboard }}' ]; then cp '${{ context.evaluation_dashboard }}' "${RESEARCH_DIR}/artifacts/design-evaluation.md"; fi &&
+        cd "${RESOLVED}" && git add research/ && git commit -m "Add experiment plan and scope to research/" &&
         echo "worktree_path=${RESOLVED}"
       cwd: "${{ inputs.source_dir }}"
       step_name: create_worktree
@@ -188,13 +153,14 @@ steps:
     on_success: decompose_phases
     on_failure: escalate_stop
     note: >
-      Creates the shared worktree early and copies the experiment plan into
-      it. All setup phases and experiment implementation share this worktree.
+      Creates the shared worktree and commits the experiment plan and scope report
+      to research/ as permanent artifacts. All phases and experiment implementation
+      share this worktree.
 
   decompose_phases:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:make-groups ${{ inputs.source_dir }}/.autoskillit/temp/experiment-plan.md"
+      skill_command: "/autoskillit:make-groups ${{ context.experiment_plan }}"
       cwd: "${{ context.worktree_path }}"
       step_name: decompose
     capture:
@@ -255,7 +221,7 @@ steps:
       1. If more phases remain in group_files -> route to plan_phase.
       2. If all phases complete -> route to run_experiment.
 
-  # --- SHARED PATH (both simple and setup converge here) ---
+  # --- EXPERIMENT + REPORT PHASE ---
   run_experiment:
     tool: run_skill
     with:
@@ -338,7 +304,7 @@ steps:
   fix_tests:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ inputs.source_dir }}/.autoskillit/temp/experiment-plan.md ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.experiment_plan }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: fix
     on_success: retest
@@ -360,15 +326,11 @@ steps:
     on_success: open_research_pr
     on_failure: escalate_stop
 
+  # --- PR + REVIEW PHASE ---
   open_research_pr:
-    tool: run_cmd
+    tool: run_skill
     with:
-      cmd: >
-        cd '${{ context.worktree_path }}' &&
-        gh pr create
-        --title 'Research: ${{ inputs.task }}'
-        --body-file '${{ context.report_path }}'
-        --base '${{ inputs.base_branch }}'
+      skill_command: "/autoskillit:open-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ inputs.task }}"
       cwd: "${{ context.worktree_path }}"
       step_name: open_research_pr
     on_success: review_research_pr
@@ -384,13 +346,37 @@ steps:
     on_context_limit: research_complete
     on_success: research_complete
     on_failure: research_complete
+    on_result:
+      - when: "${{ result.verdict }} == changes_requested"
+        route: resolve_research_review
+      - when: "${{ result.verdict }} == needs_human"
+        route: research_complete
+      - route: research_complete
     note: >
       Optional research PR review step, gated by the review_pr ingredient.
-      When review_pr is 'false' (default), this step is skipped and the
-      recipe routes directly to research_complete. When 'true', runs
-      review-research-pr which posts inline research quality audit comments
-      and emits a verdict. Routes to research_complete regardless of outcome
-      — research PRs are for human review, not auto-merge.
+      on_result handles verdict-based routing; changes_requested triggers
+      resolve_research_review -> re_push_research. All other verdicts complete.
+
+  resolve_research_review:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-research-review ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: resolve_research_review
+    retries: 2
+    on_exhausted: research_complete
+    on_context_limit: research_complete
+    on_success: re_push_research
+    on_failure: research_complete
+
+  re_push_research:
+    tool: run_cmd
+    with:
+      cmd: "cd '${{ context.worktree_path }}' && git push"
+      cwd: "${{ context.worktree_path }}"
+      step_name: re_push_research
+    on_success: research_complete
+    on_failure: research_complete
 
   research_complete:
     action: stop

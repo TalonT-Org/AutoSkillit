@@ -18,11 +18,12 @@ diagram embedding and structured PR body composition following the open-pr patte
 
 ## Arguments
 
-`/autoskillit:open-research-pr {worktree_path} {base_branch} {task}`
+`/autoskillit:open-research-pr {worktree_path} {base_branch} {task} {report_path}`
 
 - **worktree_path** — Absolute path to the research worktree
 - **base_branch** — Target branch for the PR
 - **task** — Research question or topic (used for PR title)
+- **report_path** — Path to the research report artifact (embedded in PR body)
 
 ## When to Use
 

@@ -721,9 +721,7 @@ skills:
     - name: report_path
       type: file_path
       required: true
-    outputs:
-    - name: pr_url
-      type: string
+    outputs: []
     expected_output_patterns:
     - "pr_url\\s*=\\s*https://github\\.com/.*/pull/\\d+"
     pattern_examples:

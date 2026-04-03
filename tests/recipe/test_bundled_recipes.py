@@ -1904,8 +1904,112 @@ class TestResearchRecipeStructure:
         assert step.skip_when_false == "inputs.review_pr"
 
     def test_research_review_step_routes_to_complete_on_any_outcome(self, recipe) -> None:
-        """review_research_pr routes to research_complete on success, failure, context limit."""
+        """review_research_pr routes to research_complete on failure and context limit."""
         step = recipe.steps["review_research_pr"]
-        assert step.on_success == "research_complete"
         assert step.on_failure == "research_complete"
         assert step.on_context_limit == "research_complete"
+
+    def test_research_no_issue_number_ingredient(self, recipe) -> None:
+        """Removed: issue_number is the phase-2 gate."""
+        assert "issue_number" not in recipe.ingredients
+
+    def test_research_no_setup_phases_ingredient(self, recipe) -> None:
+        """Removed: setup_phases toggle replaced by always-decompose."""
+        assert "setup_phases" not in recipe.ingredients
+
+    def test_research_no_check_phase_step(self, recipe) -> None:
+        assert "check_phase" not in recipe.steps
+
+    def test_research_no_phase1_done_step(self, recipe) -> None:
+        assert "phase1_done" not in recipe.steps
+
+    def test_research_no_open_plan_issue_step(self, recipe) -> None:
+        assert "open_plan_issue" not in recipe.steps
+
+    def test_research_no_save_experiment_plan_step(self, recipe) -> None:
+        assert "save_experiment_plan" not in recipe.steps
+
+    def test_research_no_check_setup_needed_step(self, recipe) -> None:
+        assert "check_setup_needed" not in recipe.steps
+
+    def test_research_no_implement_experiment_step(self, recipe) -> None:
+        assert "implement_experiment" not in recipe.steps
+
+    def test_research_has_issue_url_ingredient(self, recipe) -> None:
+        assert "issue_url" in recipe.ingredients
+        assert not recipe.ingredients["issue_url"].required
+
+    def test_research_has_review_design_ingredient(self, recipe) -> None:
+        assert "review_design" in recipe.ingredients
+        assert recipe.ingredients["review_design"].default == "true"
+
+    def test_research_has_review_design_step(self, recipe) -> None:
+        assert "review_design" in recipe.steps
+
+    def test_review_design_step_skip_when_false(self, recipe) -> None:
+        step = recipe.steps["review_design"]
+        assert step.skip_when_false == "inputs.review_design"
+
+    def test_review_design_step_retries_and_exhausted(self, recipe) -> None:
+        step = recipe.steps["review_design"]
+        assert step.retries == 2
+        assert step.on_exhausted == "create_worktree"
+
+    def test_plan_experiment_routes_to_review_design(self, recipe) -> None:
+        step = recipe.steps["plan_experiment"]
+        assert step.on_success == "review_design"
+
+    def test_review_design_on_result_routing(self, recipe) -> None:
+        """review_design routes GO→create_worktree, REVISE→revise_design, STOP→design_rejected."""
+        step = recipe.steps["review_design"]
+        assert step.on_result is not None
+        routes = {c.when: c.route for c in step.on_result.conditions if c.when}
+        assert any("GO" in (w or "") for w in routes), "Missing GO route"
+        go_route = next(c.route for c in step.on_result.conditions if c.when and "GO" in c.when)
+        assert go_route == "create_worktree"
+        revise_route = next(
+            c.route for c in step.on_result.conditions if c.when and "REVISE" in c.when
+        )
+        assert revise_route == "revise_design"
+        stop_route = next(
+            c.route for c in step.on_result.conditions if c.when and "STOP" in c.when
+        )
+        assert stop_route == "design_rejected"
+
+    def test_has_revise_design_step(self, recipe) -> None:
+        assert "revise_design" in recipe.steps
+
+    def test_has_design_rejected_step(self, recipe) -> None:
+        assert "design_rejected" in recipe.steps
+
+    def test_has_resolve_research_review_step(self, recipe) -> None:
+        step = recipe.steps["resolve_research_review"]
+        assert step.retries == 2
+        assert step.on_exhausted == "research_complete"
+        assert step.on_success == "re_push_research"
+        assert step.on_failure == "research_complete"
+
+    def test_has_re_push_research_step(self, recipe) -> None:
+        assert "re_push_research" in recipe.steps
+
+    def test_review_research_pr_has_on_result_routing(self, recipe) -> None:
+        """review_research_pr routes changes_requested to resolve_research_review."""
+        step = recipe.steps["review_research_pr"]
+        assert step.on_result is not None
+        matching = [
+            c.route for c in step.on_result.conditions if "changes_requested" in (c.when or "")
+        ]
+        assert matching, "No condition with changes_requested"
+        assert matching[0] == "resolve_research_review"
+
+    def test_open_research_pr_is_run_skill(self, recipe) -> None:
+        """open_research_pr changed from run_cmd to run_skill."""
+        step = recipe.steps["open_research_pr"]
+        assert step.tool == "run_skill"
+
+    def test_research_validates_cleanly(self, recipe) -> None:
+        """validate_recipe returns no errors on the simplified recipe."""
+        from autoskillit.recipe.validator import validate_recipe
+
+        errors = validate_recipe(recipe)
+        assert errors == [], f"Validation errors: {errors}"

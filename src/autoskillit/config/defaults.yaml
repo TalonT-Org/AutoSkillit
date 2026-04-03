@@ -189,6 +189,7 @@ skills:
     - merge-pr
     - analyze-prs
     - review-pr
+    - review-research-pr
     - resolve-review
     - implement-worktree-no-merge
     - resolve-failures

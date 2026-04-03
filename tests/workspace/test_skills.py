@@ -89,6 +89,7 @@ BUNDLED_SKILLS = [
     "retry-worktree",
     "review-pr",
     "review-approach",
+    "review-research-pr",
     "run-experiment",
     "scope",
     "setup-project",
@@ -424,18 +425,18 @@ class TestSkillResolver:
         names = {d.name for d in bundled_skills_dir().iterdir() if d.is_dir()}
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
-    def test_58_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 82 SKILL.md-carrying directories."""
+    def test_83_skills_in_skills_extended(self) -> None:
+        """skills_extended/ contains exactly 83 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 82
+        assert len(skills) == 83
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 84 public skills (2 Tier-1 + 82 extended)."""
-        assert len(SkillResolver().list_all()) == 84
+        """list_all() returns 85 public skills (2 Tier-1 + 83 extended)."""
+        assert len(SkillResolver().list_all()) == 85
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
@@ -586,6 +587,7 @@ RESEARCH_SKILL_NAMES = {
     "implement-experiment",
     "run-experiment",
     "write-report",
+    "review-research-pr",
 }
 
 

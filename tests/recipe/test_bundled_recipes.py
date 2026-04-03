@@ -1879,3 +1879,33 @@ def test_re_push_steps_have_force_true(recipe_name: str) -> None:
             f"{step_name} in {recipe_name} must include force='true' — "
             "post-rebase push requires --force-with-lease"
         )
+
+
+class TestResearchRecipeStructure:
+    @pytest.fixture
+    def recipe(self):
+        return load_recipe(builtin_recipes_dir() / "research.yaml")
+
+    def test_research_has_review_pr_ingredient(self, recipe) -> None:
+        """research.yaml must declare a review_pr ingredient with default 'false'."""
+        assert "review_pr" in recipe.ingredients, (
+            "research.yaml must declare a 'review_pr' ingredient to gate the optional "
+            "review-research-pr step"
+        )
+        assert recipe.ingredients["review_pr"].default == "false"
+
+    def test_research_has_review_research_pr_step(self, recipe) -> None:
+        """research.yaml must include a review_research_pr step."""
+        assert "review_research_pr" in recipe.steps
+
+    def test_research_review_step_skip_when_false(self, recipe) -> None:
+        """review_research_pr step must use skip_when_false: inputs.review_pr."""
+        step = recipe.steps["review_research_pr"]
+        assert step.skip_when_false == "inputs.review_pr"
+
+    def test_research_review_step_routes_to_complete_on_any_outcome(self, recipe) -> None:
+        """review_research_pr routes to research_complete on success, failure, context limit."""
+        step = recipe.steps["review_research_pr"]
+        assert step.on_success == "research_complete"
+        assert step.on_failure == "research_complete"
+        assert step.on_context_limit == "research_complete"

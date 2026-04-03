@@ -33,6 +33,13 @@ ingredients:
       planned and implemented independently in a shared worktree before
       the experiment runs.
     default: "false"
+  review_pr:
+    description: >
+      When 'true', run the review-research-pr skill after the research PR
+      is opened. Posts inline review comments on research quality dimensions
+      (methodology, reproducibility, report-quality, etc.) and emits a
+      verdict. Defaults to 'false' — the research PR is for human review.
+    default: "false"
 
 kitchen_rules:
   - >
@@ -364,8 +371,26 @@ steps:
         --base '${{ inputs.base_branch }}'
       cwd: "${{ context.worktree_path }}"
       step_name: open_research_pr
-    on_success: research_complete
+    on_success: review_research_pr
     on_failure: escalate_stop
+
+  review_research_pr:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: review_research_pr
+    skip_when_false: inputs.review_pr
+    on_context_limit: research_complete
+    on_success: research_complete
+    on_failure: research_complete
+    note: >
+      Optional research PR review step, gated by the review_pr ingredient.
+      When review_pr is 'false' (default), this step is skipped and the
+      recipe routes directly to research_complete. When 'true', runs
+      review-research-pr which posts inline research quality audit comments
+      and emits a verdict. Routes to research_complete regardless of outcome
+      — research PRs are for human review, not auto-merge.
 
   research_complete:
     action: stop

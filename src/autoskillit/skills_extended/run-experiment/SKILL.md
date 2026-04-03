@@ -129,7 +129,7 @@ the final conclusions.}
 
 1. Save results to:
    `.autoskillit/temp/run-experiment/results_{topic}_{YYYY-MM-DD_HHMMSS}.md`
-   within the worktree.
+   (relative to the current working directory) within the worktree.
 2. Also save any raw data files (CSV, JSON, logs) to the same directory.
 3. Do NOT `git add` or commit files under `.autoskillit/temp/`. This directory
    is gitignored working space. The files persist on the worktree filesystem

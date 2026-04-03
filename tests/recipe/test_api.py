@@ -98,12 +98,12 @@ def test_load_and_validate_includes_requires_packs(tmp_path):
 
 
 # T4d
-def test_load_recipe_result_requires_packs_empty_for_standard_recipe():
-    """Standard recipes without requires_packs return an empty list."""
+def test_load_recipe_result_requires_packs_absent_for_standard_recipe():
+    """Standard recipes without requires_packs omit the key (matches kitchen_rules pattern)."""
     from autoskillit.recipe._api import load_and_validate
 
     result = load_and_validate(name="implementation", project_dir=None)
-    assert result["requires_packs"] == []
+    assert "requires_packs" not in result
 
 
 # ---------------------------------------------------------------------------

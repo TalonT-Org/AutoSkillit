@@ -205,7 +205,7 @@ steps:
   plan_phase:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:make-plan CURRENT_PHASE_FILE"
+      skill_command: "/autoskillit:make-plan ${{ context.group_files }}"
       cwd: "${{ context.worktree_path }}"
       step_name: plan_phase
       group_files: "${{ context.group_files }}"
@@ -216,11 +216,12 @@ steps:
     on_success: implement_phase
     on_failure: escalate_stop
     note: >
-      Plans the current setup phase. Replace CURRENT_PHASE_FILE in skill_command
-      with the first remaining path from context.group_files — do NOT read the file;
-      pass the path directly to the skill. Glob plan_dir for *_part_*.md or single plan file.
-      ITERATION: After each implement_phase cycle, the first entry in context.group_files
-      has been consumed. Use the next entry as CURRENT_PHASE_FILE for the following iteration.
+      Plans the current setup phase. Replace ${{ context.group_files }} in the
+      skill_command with the FIRST REMAINING phase file path from the list —
+      do NOT pass the entire list. Pass the path directly to the skill (do not read it).
+      Glob plan_dir for *_part_*.md or single plan file.
+      ITERATION: After each implement_phase cycle, advance to the next entry in
+      context.group_files for the following plan_phase iteration.
 
   implement_phase:
     tool: run_skill

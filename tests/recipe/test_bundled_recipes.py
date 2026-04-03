@@ -1959,6 +1959,23 @@ class TestResearchRecipeStructure:
         step = recipe.steps["plan_experiment"]
         assert step.on_success == "review_design"
 
+    def test_review_design_on_result_routing(self, recipe) -> None:
+        """review_design routes GO→create_worktree, REVISE→revise_design, STOP→design_rejected."""
+        step = recipe.steps["review_design"]
+        assert step.on_result is not None
+        routes = {c.when: c.route for c in step.on_result.conditions if c.when}
+        assert any("GO" in (w or "") for w in routes), "Missing GO route"
+        go_route = next(c.route for c in step.on_result.conditions if c.when and "GO" in c.when)
+        assert go_route == "create_worktree"
+        revise_route = next(
+            c.route for c in step.on_result.conditions if c.when and "REVISE" in c.when
+        )
+        assert revise_route == "revise_design"
+        stop_route = next(
+            c.route for c in step.on_result.conditions if c.when and "STOP" in c.when
+        )
+        assert stop_route == "design_rejected"
+
     def test_has_revise_design_step(self, recipe) -> None:
         assert "revise_design" in recipe.steps
 
@@ -1966,17 +1983,24 @@ class TestResearchRecipeStructure:
         assert "design_rejected" in recipe.steps
 
     def test_has_resolve_research_review_step(self, recipe) -> None:
-        assert "resolve_research_review" in recipe.steps
+        step = recipe.steps["resolve_research_review"]
+        assert step.retries == 2
+        assert step.on_exhausted == "research_complete"
+        assert step.on_success == "re_push_research"
+        assert step.on_failure == "research_complete"
 
     def test_has_re_push_research_step(self, recipe) -> None:
         assert "re_push_research" in recipe.steps
 
     def test_review_research_pr_has_on_result_routing(self, recipe) -> None:
-        """review_research_pr uses on_result to route changes_requested."""
+        """review_research_pr routes changes_requested to resolve_research_review."""
         step = recipe.steps["review_research_pr"]
         assert step.on_result is not None
-        routes = {c.when: c.route for c in step.on_result.conditions}
-        assert any("changes_requested" in (w or "") for w in routes)
+        matching = [
+            c.route for c in step.on_result.conditions if "changes_requested" in (c.when or "")
+        ]
+        assert matching, "No condition with changes_requested"
+        assert matching[0] == "resolve_research_review"
 
     def test_open_research_pr_is_run_skill(self, recipe) -> None:
         """open_research_pr changed from run_cmd to run_skill."""

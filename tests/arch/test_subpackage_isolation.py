@@ -1139,12 +1139,12 @@ def test_singleton_exemption_comment_matches_module_constant() -> None:
 
     # Build the expected Python expression from the live constant
     total_seconds = _DISMISS_WINDOW.total_seconds()
-    if total_seconds % 3600 == 0:
-        hours = int(total_seconds // 3600)
-        expected_fragment = f"timedelta(hours={hours})"
-    elif total_seconds % 86400 == 0:
+    if total_seconds % 86400 == 0:
         days = int(total_seconds // 86400)
         expected_fragment = f"timedelta(days={days})"
+    elif total_seconds % 3600 == 0:
+        hours = int(total_seconds // 3600)
+        expected_fragment = f"timedelta(hours={hours})"
     else:
         expected_fragment = repr(_DISMISS_WINDOW)
 

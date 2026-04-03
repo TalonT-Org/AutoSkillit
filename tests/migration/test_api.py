@@ -54,10 +54,7 @@ def test_migration_api_recipe_imports_are_deferred() -> None:
 @pytest.mark.anyio
 async def test_check_and_migrate_recipe_not_found(tmp_path: Path) -> None:
     """Returns {"error": "No recipe named 'x' found"} when find_recipe_by_name → None."""
-    with (
-        patch("autoskillit.recipe.find_recipe_by_name", return_value=None),
-        patch("autoskillit.migration._api.applicable_migrations", return_value=[]),
-    ):
+    with patch("autoskillit.recipe.find_recipe_by_name", return_value=None):
         result = await check_and_migrate("nonexistent", tmp_path, "0.1.0")
 
     assert result == {"error": "No recipe named 'nonexistent' found"}

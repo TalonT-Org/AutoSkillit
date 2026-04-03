@@ -154,6 +154,7 @@ def test_load_and_validate_delegates_to_api(tmp_path: Path) -> None:
     mock_api.assert_called_once()
     call_kwargs = mock_api.call_args
     assert call_kwargs.args[0] == "foo"
+    assert call_kwargs.kwargs["project_dir"] == tmp_path
 
 
 def test_validate_from_path_delegates_to_api(tmp_path: Path) -> None:

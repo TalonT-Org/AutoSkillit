@@ -1305,8 +1305,6 @@ class TestOrderResumeParsing:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """order my-recipe --resume <uuid> passes session_id to launch — REQ-CLI-003."""
-        from unittest.mock import MagicMock, patch
-
         from autoskillit.cli.app import app
 
         monkeypatch.delenv("CLAUDECODE", raising=False)

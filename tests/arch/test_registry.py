@@ -327,7 +327,7 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
             try:
                 parent_source = inspect.getsource(parent_mod)
                 tree = ast.parse(parent_source)
-            except Exception:
+            except (OSError, TypeError, SyntaxError):
                 # Can't inspect source -- conservatively flag as violation.
                 imports_from_this_submod = True
             else:

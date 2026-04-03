@@ -10,9 +10,7 @@ from autoskillit.recipe._api import _build_active_recipe
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.validator import validate_recipe
-
-# Known violations fixed in Parts B and C — excluded from general semantic-error assertions.
-_NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
+from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
 
 
 @pytest.fixture(scope="module")

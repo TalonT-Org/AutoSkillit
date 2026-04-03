@@ -9,6 +9,9 @@ import yaml
 from autoskillit.recipe.io import _parse_step
 from autoskillit.recipe.schema import Recipe
 
+# Known violations fixed in Parts B and C — excluded from general semantic-error assertions.
+NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
+
 # ---------------------------------------------------------------------------
 # Shared helper: recipe workflow factory
 # ---------------------------------------------------------------------------

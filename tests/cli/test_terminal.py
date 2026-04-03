@@ -11,8 +11,6 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.workspace.session_skills import DefaultSessionSkillManager
-
 
 class TestTerminalGuardTTYRestore:
     """terminal_guard() saves and restores termios attrs in all exit paths."""
@@ -286,8 +284,7 @@ class TestCookTerminalGuard:
         fake_skills_dir = tmp_path / "fake-skills"
         fake_skills_dir.mkdir()
         monkeypatch.setattr(
-            DefaultSessionSkillManager,
-            "init_session",
+            "autoskillit.workspace.session_skills.DefaultSessionSkillManager.init_session",
             lambda self, session_id, *, cook_session=False, config=None, project_dir=None: (
                 fake_skills_dir
             ),

@@ -10,9 +10,6 @@ from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 
-# Known violations fixed in Parts B and C — excluded from general semantic-error assertions.
-_NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
-
 
 def _assert_ci_conflict_fix_on_context_limit(recipe) -> None:
     """Shared assertion: ci_conflict_fix must abort via release_issue_failure on context limit."""

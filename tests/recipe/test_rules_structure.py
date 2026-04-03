@@ -20,10 +20,8 @@ from autoskillit.recipe.validator import (
     RuleFinding,
     run_semantic_rules,
 )
+from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
 from tests.recipe.conftest import _make_workflow
-
-# Known violations fixed in Parts B and C — excluded from general semantic-error assertions.
-_NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
 
 # ---------------------------------------------------------------------------
 # Module-level semantic rule tests

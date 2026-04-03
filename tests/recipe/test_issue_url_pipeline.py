@@ -6,11 +6,9 @@ import yaml
 
 from autoskillit.recipe._api import validate_from_path
 from autoskillit.recipe.io import load_recipe
+from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
 
 RECIPES_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
-
-# Known violations fixed in Parts B and C — excluded from general semantic-error assertions.
-_NO_AUTOSKILLIT_IMPORT = "no-autoskillit-import-in-skill-python-block"
 
 
 def _recipe_path(name: str) -> Path:

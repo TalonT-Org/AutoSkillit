@@ -78,17 +78,17 @@ information gaps and produce the best possible experiment plan.
 **Minimum subagents:**
 
 **Subagent A — Measurement Feasibility:**
-> Read `src/metrics.rs` to inventory all canonical metric names, quality
-> dimensions (Accuracy, Parity, Performance), and threshold constants.
-> If `src/metrics.rs` does not exist or is unreadable, treat all dependent
-> variables as "NEW" and flag the missing file in your report.
+> Search the project for any existing metrics infrastructure — files that define
+> canonical metric names, measurement dimensions, quality thresholds, or
+> standardized assessment tooling (e.g., files named `metrics.*`, `benchmark.*`,
+> `evaluation.*`, or any assessment/scoring module). If no dedicated metrics
+> infrastructure exists, treat all dependent variables as "NEW".
 > Cross-reference against the scope report's Metric Context section if present;
-> if the scope report lacks a Metric Context section (e.g., scope ran before
-> this tooling was added), proceed without it and note the gap.
-> For each dependent variable in the research question: verify it has a
-> canonical name in `src/metrics.rs`, or flag it as "NEW" requiring formula,
-> unit, and threshold definition. Report what measurement infrastructure
-> already exists vs. what needs to be built.
+> if absent, proceed without it and note the gap.
+> For each dependent variable in the research question: verify it has an existing
+> measurement mechanism, or flag it as "NEW" requiring formula, unit, and
+> threshold definition. Report what measurement infrastructure already exists
+> vs. what needs to be built.
 
 **Subagent B — Data & Input Feasibility:**
 > Assess what data the experiment needs to operate on. Can it be generated

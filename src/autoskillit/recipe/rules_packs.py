@@ -14,8 +14,10 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 )
 def _check_unknown_required_pack(ctx: ValidationContext) -> list[RuleFinding]:
     findings = []
+    seen_reported: set[str] = set()
     for pack_name in ctx.recipe.requires_packs:
-        if pack_name not in PACK_REGISTRY:
+        if pack_name not in PACK_REGISTRY and pack_name not in seen_reported:
+            seen_reported.add(pack_name)
             findings.append(
                 RuleFinding(
                     rule="unknown-required-pack",

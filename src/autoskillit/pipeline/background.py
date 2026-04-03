@@ -14,7 +14,7 @@ from autoskillit.core import atomic_write, get_logger
 logger = get_logger(__name__)
 
 
-class BackgroundTaskSupervisor:
+class DefaultBackgroundSupervisor:
     """Single entry point for supervised background tasks.
 
     All tasks submitted here are wrapped in exception capture, audit

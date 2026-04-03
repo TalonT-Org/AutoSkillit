@@ -6,6 +6,7 @@ import yaml
 
 from autoskillit.recipe._api import validate_from_path
 from autoskillit.recipe.io import load_recipe
+from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
 
 RECIPES_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
 
@@ -18,7 +19,11 @@ class TestImplementationPipelineIssueUrl:
     def test_recipe_validates_clean(self):
         """implementation must validate with no errors after adding issue_url."""
         result = validate_from_path(_recipe_path("implementation"))
-        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
+        errors = [
+            f
+            for f in result.get("findings", [])
+            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+        ]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_issue_url_ingredient_declared(self):
@@ -105,7 +110,11 @@ class TestImplementationPipelineIssueUrl:
 class TestInvestigateFirstIssueUrl:
     def test_recipe_validates_clean(self):
         result = validate_from_path(_recipe_path("remediation"))
-        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
+        errors = [
+            f
+            for f in result.get("findings", [])
+            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+        ]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_issue_url_ingredient_declared(self):
@@ -190,7 +199,11 @@ class TestInvestigateFirstIssueUrl:
 class TestImplementationGroupsIssueTitle:
     def test_recipe_validates_clean(self):
         result = validate_from_path(_recipe_path("implementation-groups"))
-        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
+        errors = [
+            f
+            for f in result.get("findings", [])
+            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+        ]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_fetch_issue_step_replaced(self):

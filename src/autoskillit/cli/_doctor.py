@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -107,6 +108,69 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     )
 
 
+def _count_hook_registry_drift(settings_path: Path) -> int:
+    """Return count of canonical hook commands not present in deployed settings.json."""
+    from autoskillit.hooks import generate_hooks_json
+
+    canonical = generate_hooks_json()
+    deployed_data = _load_settings_data(settings_path)
+
+    def _extract_cmds(hooks_dict: dict) -> set[str]:
+        return {
+            hook.get("command", "")
+            for event_entries in hooks_dict.values()
+            if isinstance(event_entries, list)
+            for entry in event_entries
+            for hook in entry.get("hooks", [])
+            if hook.get("command", "")
+        }
+
+    canonical_cmds = _extract_cmds(canonical.get("hooks", {}))
+    deployed_cmds = _extract_cmds(deployed_data.get("hooks", {}))
+    return len(canonical_cmds - deployed_cmds)
+
+
+def _check_hook_registry_drift(settings_path: Path) -> DoctorResult:
+    """Compare generate_hooks_json() with what is deployed in settings.json."""
+    n = _count_hook_registry_drift(settings_path)
+    if n > 0:
+        return DoctorResult(
+            severity=Severity.WARNING,
+            check="hook_registry_drift",
+            message=(
+                f"Hook registry has changed since last install. "
+                f"Run 'autoskillit install' to deploy {n} new/changed hook(s)."
+            ),
+        )
+    return DoctorResult(
+        severity=Severity.OK,
+        check="hook_registry_drift",
+        message="Deployed hooks match HOOK_REGISTRY.",
+    )
+
+
+def _check_hook_health(settings_path: Path) -> DoctorResult:
+    """Verify all deployed hook scripts exist on disk for all event types."""
+    data = _load_settings_data(settings_path)
+    broken_hooks: list[str] = []
+    for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
+        for entry in data.get("hooks", {}).get(event_type, []):
+            for hook in entry.get("hooks", []):
+                cmd = hook.get("command", "")
+                parts = cmd.split()
+                if len(parts) >= 2:
+                    script_path = Path(parts[-1])
+                    if not script_path.is_file():
+                        broken_hooks.append(cmd)
+    if broken_hooks:
+        return DoctorResult(
+            severity=Severity.ERROR,
+            check="hook_health",
+            message=f"Hook scripts not found: {', '.join(broken_hooks)}",
+        )
+    return DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible")
+
+
 def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
     """Check that every file in .autoskillit/ is gitignored or in the committed allowlist."""
     from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES, _COMMITTED_BY_DESIGN
@@ -176,6 +240,80 @@ def _check_secret_scanning_hook(project_dir: Path) -> DoctorResult:
             f"({scanners}). Add one to prevent credential leaks."
         )
     return DoctorResult(Severity.ERROR, "secret_scanning_hook", msg)
+
+
+def _check_editable_install_source_exists() -> DoctorResult:
+    """Detect editable autoskillit installs whose source directory no longer exists."""
+    import importlib.metadata as meta
+
+    check_name = "editable_install_source_exists"
+    try:
+        dist = meta.Distribution.from_name("autoskillit")
+    except meta.PackageNotFoundError:
+        return DoctorResult(Severity.OK, check_name, "autoskillit not installed in this env")
+
+    direct_url_text = dist.read_text("direct_url.json")
+    if not direct_url_text:
+        return DoctorResult(Severity.OK, check_name, "Not an editable install")
+
+    try:
+        direct_url = json.loads(direct_url_text)
+    except json.JSONDecodeError:
+        return DoctorResult(Severity.OK, check_name, "direct_url.json unreadable — skipped")
+
+    is_editable = (
+        direct_url.get("dir_info", {}).get("editable") is True
+        or direct_url.get("editable") is True
+    )
+    if not is_editable:
+        return DoctorResult(Severity.OK, check_name, "Not an editable install")
+
+    url = direct_url.get("url", "")
+    src_path = urllib.parse.urlparse(url).path if url.startswith("file://") else ""
+    if not src_path or Path(src_path).exists():
+        return DoctorResult(Severity.OK, check_name, "Editable install source directory exists")
+
+    return DoctorResult(
+        Severity.ERROR,
+        check_name,
+        f"autoskillit is installed from a deleted directory: {src_path}. "
+        f"Fix: uv tool install --force autoskillit && autoskillit install",
+    )
+
+
+def _check_stale_entry_points() -> DoctorResult:
+    """Detect autoskillit binaries on PATH outside ~/.local/bin (stale/poisoned installs)."""
+    import subprocess
+
+    check_name = "stale_entry_points"
+    primary = shutil.which("autoskillit")
+    if not primary:
+        return DoctorResult(Severity.OK, check_name, "autoskillit not found on PATH")
+
+    try:
+        result = subprocess.run(
+            ["which", "-a", "autoskillit"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        all_paths = [p.strip() for p in result.stdout.splitlines() if p.strip()]
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        all_paths = [primary]
+
+    expected_prefix = Path.home() / ".local"
+    stale = [p for p in all_paths if not Path(p).is_relative_to(expected_prefix)]
+    if not stale:
+        return DoctorResult(Severity.OK, check_name, "No stale autoskillit entry points found")
+
+    stale_list = ", ".join(stale)
+    return DoctorResult(
+        Severity.WARNING,
+        check_name,
+        f"Found autoskillit entry point(s) outside ~/.local/bin: {stale_list}. "
+        f"These may be stale editable installs. "
+        f"Fix: uv tool install --force autoskillit && autoskillit install",
+    )
 
 
 def _check_config_layers_for_secrets(
@@ -332,32 +470,14 @@ def run_doctor(*, output_json: bool = False) -> None:
             )
         )
 
-    # Check 6: Hook executability — validates scripts from the canonical registry
-    from autoskillit.hooks import generate_hooks_json
-
-    hooks_data = generate_hooks_json()
-    broken_hooks: list[str] = []
-    for entry in hooks_data.get("hooks", {}).get("PreToolUse", []):
-        for hook in entry.get("hooks", []):
-            cmd = hook.get("command", "")
-            parts = cmd.split()
-            if len(parts) >= 2:
-                script_path = Path(parts[-1])
-                if not script_path.is_file():
-                    broken_hooks.append(cmd)
-    if broken_hooks:
-        results.append(
-            DoctorResult(
-                Severity.ERROR,
-                "hook_health",
-                f"Hook scripts not found: {', '.join(broken_hooks)}",
-            )
-        )
-    else:
-        results.append(DoctorResult(Severity.OK, "hook_health", "All hook scripts accessible"))
+    # Check 6: Hook executability — validates deployed scripts for all event types
+    results.append(_check_hook_health(_claude_settings_path("user")))
 
     # Check 7: Hook registration in settings.json
     results.append(_check_hook_registration(_claude_settings_path("user")))
+
+    # Check 7b: Hook registry drift (structural comparison via generate_hooks_json())
+    results.append(_check_hook_registry_drift(_claude_settings_path("user")))
 
     # Check 8: Script version health
     from autoskillit import __version__
@@ -425,6 +545,12 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 10: Secret scanning hook
     results.append(_check_secret_scanning_hook(Path.cwd()))
+
+    # Check 11: Editable install source directory still exists
+    results.append(_check_editable_install_source_exists())
+
+    # Check 12: No stale autoskillit entry points outside ~/.local/bin
+    results.append(_check_stale_entry_points())
 
     # Output
     if output_json:

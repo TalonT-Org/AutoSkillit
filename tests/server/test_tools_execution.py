@@ -60,14 +60,6 @@ class TestRunSkillPluginDir:
         actual_cwd = tool_ctx.runner.call_args_list[0][1]
         assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
 
-    @pytest.mark.anyio
-    async def test_run_skill_uses_two_hour_timeout(self, tool_ctx):
-        """run_skill uses 7200s timeout (merged from former run_skill_retry)."""
-        from autoskillit.config import AutomationConfig
-
-        cfg = AutomationConfig()
-        assert cfg.run_skill.timeout == 7200
-
 
 class TestCheckDryWalkthrough:
     """Dry-walkthrough gate blocks both /autoskillit:implement-worktree variants."""
@@ -385,14 +377,6 @@ class TestRunSkillEnvPrefix:
         assert cmd[1] == "AUTOSKILLIT_HEADLESS=1"
         assert cmd[2] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=60000"
 
-    @pytest.mark.anyio
-    async def test_run_skill_retry_not_registered(self, tool_ctx):
-        """run_skill_retry is removed — merged into run_skill (same tool, unified timeout)."""
-
-        import autoskillit.server.tools_execution as mod
-
-        assert not hasattr(mod, "run_skill_retry")
-
 
 class TestRunSkillPassesSessionLogDir:
     """run_skill passes session_log_dir derived from cwd."""
@@ -689,13 +673,6 @@ class TestGatedToolObservability:
         result = json.loads(await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx))
         assert result["success"] is False
 
-    @pytest.mark.anyio
-    async def test_run_skill_retry_not_registered(self, tool_ctx, mock_ctx):
-        """run_skill_retry is removed — only run_skill exists."""
-        import autoskillit.server.tools_execution as mod
-
-        assert not hasattr(mod, "run_skill_retry")
-
 
 class TestNotifyHelper:
     """Unit tests for the centralized _notify() notification helper."""
@@ -769,7 +746,8 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_swallows_attribute_error_from_ctx(self):
-        """AttributeError from ctx.info (e.g. _CurrentContext sentinel) is swallowed."""
+        """Contract: must not raise even when ctx.info raises AttributeError
+        (e.g. _CurrentContext sentinel). Test completion is the assertion."""
         from autoskillit.server.helpers import _notify
 
         ctx = AsyncMock()
@@ -779,7 +757,8 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_swallows_runtime_error_from_ctx(self):
-        """RuntimeError from ctx.info (no active MCP session) is swallowed."""
+        """Contract: must not raise even when ctx.info raises RuntimeError
+        (no active MCP session). Test completion is the assertion."""
         from autoskillit.server.helpers import _notify
 
         ctx = AsyncMock()
@@ -788,7 +767,8 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_swallows_key_error_from_ctx(self):
-        """KeyError from FastMCP's stdlib logging path is swallowed."""
+        """Contract: must not raise even when ctx.info raises KeyError
+        (FastMCP stdlib logging path). Test completion is the assertion."""
         from autoskillit.server.helpers import _notify
 
         ctx = AsyncMock()
@@ -831,6 +811,8 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
             model: str = "",
             step_name: str = "",
             add_dirs=(),
+            kitchen_id: str = "",
+            order_id: str = "",
             timeout: float | None = None,
             stale_threshold: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
@@ -875,6 +857,8 @@ async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> Non
             model: str = "",
             step_name: str = "",
             add_dirs=(),
+            kitchen_id: str = "",
+            order_id: str = "",
             timeout: float | None = None,
             stale_threshold: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
@@ -957,6 +941,70 @@ async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monk
 
     # The returned ValidatedAddDir is in add_dirs
     assert fake_validated in captured["add_dirs"]
+
+
+@pytest.mark.anyio
+async def test_run_skill_result_includes_order_id_when_passed(tool_ctx, monkeypatch) -> None:
+    """run_skill injects order_id into the result JSON when order_id is non-empty."""
+    import json as _json
+
+    from autoskillit.core import SkillResult
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="done",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    result_json = await run_skill("/test skill", "/tmp", order_id="issue-185")
+    data = _json.loads(result_json)
+    assert data.get("order_id") == "issue-185"
+
+
+@pytest.mark.anyio
+async def test_run_skill_result_no_order_id_field_when_empty(tool_ctx, monkeypatch) -> None:
+    """run_skill does NOT inject order_id into result JSON when order_id is empty."""
+    import json as _json
+
+    from autoskillit.core import SkillResult
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="done",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    result_json = await run_skill("/test skill", "/tmp")  # no order_id
+    data = _json.loads(result_json)
+    assert "order_id" not in data
 
 
 class TestHeadlessGateEnforcement:
@@ -1115,6 +1163,38 @@ class TestRunHeadlessCoreFlushTelemetry:
         assert calls[0]["step_name"] == "implement"
         assert calls[0]["token_usage"] is not None
         assert calls[0]["timing_seconds"] is not None
+
+    @pytest.mark.anyio
+    async def test_flush_session_log_session_id_matches_returned_skill_result(
+        self, tool_ctx, monkeypatch
+    ):
+        """flush_session_log receives the same session_id as the returned SkillResult."""
+        import autoskillit.execution.session_log as sl_mod
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+
+        calls = []
+
+        def mock_flush(**kwargs):
+            calls.append(kwargs)
+
+        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
+        # Stale result with session_id resolved from Channel B
+        stale_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=12345,
+            session_id="test-uuid-coherence-check",
+        )
+        tool_ctx.runner.push(stale_result)
+        result_json = json.loads(
+            await run_skill("/investigate foo", "/tmp", step_name="implement")
+        )
+        assert len(calls) == 1
+        # flush and returned SkillResult must carry the same session_id
+        assert calls[0]["session_id"] == result_json["session_id"]
+        assert result_json["session_id"] != ""
 
     @pytest.mark.anyio
     async def test_flushes_on_success_when_step_name_set(self, tool_ctx, monkeypatch):

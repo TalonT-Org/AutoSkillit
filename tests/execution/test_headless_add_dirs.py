@@ -26,7 +26,7 @@ def make_ctx(tmp_path):
 
 
 @pytest.mark.anyio
-async def test_run_headless_core_no_add_dir_when_empty(make_ctx):
+async def test_run_headless_core_no_add_dir_when_empty(make_ctx, tmp_path):
     """T-OVR-012: run_headless_core with empty add_dirs emits no --add-dir flags."""
     from autoskillit.execution.headless import run_headless_core
     from tests.conftest import _make_result
@@ -38,7 +38,9 @@ async def test_run_headless_core_no_add_dir_when_empty(make_ctx):
         return _make_result()
 
     ctx = make_ctx(runner=mock_runner)
-    await run_headless_core("/autoskillit:investigate foo", "/tmp/proj", ctx, add_dirs=())
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    await run_headless_core("/autoskillit:investigate foo", str(proj), ctx, add_dirs=())
     assert "--add-dir" not in captured_cmd
 
 
@@ -64,9 +66,11 @@ async def test_run_headless_core_two_add_dirs(make_ctx, tmp_path):
         return _make_result()
 
     ctx = make_ctx(runner=mock_runner)
+    proj = tmp_path / "proj"
+    proj.mkdir()
     await run_headless_core(
         "/autoskillit:investigate foo",
-        "/tmp/proj",
+        str(proj),
         ctx,
         add_dirs=[dir_a, dir_b],
     )
@@ -78,7 +82,7 @@ async def test_run_headless_core_two_add_dirs(make_ctx, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_run_skill_passes_ephemeral_session_dir_as_add_dir(tool_ctx, monkeypatch):
+async def test_raw_skills_extended_excluded_from_run_skill_add_dirs(tool_ctx, monkeypatch):
     """T-OVR-014: run_skill passes ephemeral session dir (not raw skills_extended/) as add_dirs."""
     from autoskillit.core import SkillResult
     from autoskillit.server import _state

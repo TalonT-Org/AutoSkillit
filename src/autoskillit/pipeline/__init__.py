@@ -11,7 +11,7 @@ from autoskillit.pipeline.audit import (
     STDERR_MAX_LEN,
     DefaultAuditLog,
 )
-from autoskillit.pipeline.background import BackgroundTaskSupervisor, write_status
+from autoskillit.pipeline.background import DefaultBackgroundSupervisor, write_status
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.gate import (
     GATED_TOOLS,
@@ -56,7 +56,7 @@ __all__ = [
     # telemetry_fmt
     "TelemetryFormatter",
     # background
-    "BackgroundTaskSupervisor",
+    "DefaultBackgroundSupervisor",
     "write_status",
     # context
     "ToolContext",

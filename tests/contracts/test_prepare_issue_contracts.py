@@ -208,3 +208,62 @@ def test_prepare_issue_dedup_bypass_with_issue_flag_still_documented():
     # Both the interface docs and the step header must reference the bypass
     assert "--issue N" in text and "issue_number" in text
     assert "skip" in text.lower() or "bypass" in text.lower() or "skip if" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# VALIDATED REPORT: Detection and handling tests
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_issue_detects_validated_audit_report_input():
+    """Skill must document detection of 'validated: true' marker for validated report inputs."""
+    text = SKILL_MD.read_text()
+    assert "validated: true" in text, (
+        "prepare-issue SKILL.md must document detecting the 'validated: true' marker"
+    )
+    assert "is_validated_report" in text, (
+        "prepare-issue must use 'is_validated_report' flag to gate validated-report behavior"
+    )
+
+
+def test_prepare_issue_skips_requirements_for_validated_report():
+    """Step 7a must explicitly skip requirements generation when is_validated_report is true."""
+    text = SKILL_MD.read_text()
+    # Find the requirements generation step
+    req_step_pos = text.find("Step 7a")
+    assert req_step_pos != -1, "Step 7a must exist in the skill"
+    req_step_text = text[req_step_pos : req_step_pos + 600]
+    assert "is_validated_report" in req_step_text, (
+        "Step 7a must reference is_validated_report to gate requirements generation"
+    )
+    skip_keywords = ["skip", "Skip"]
+    assert any(kw in req_step_text for kw in skip_keywords), (
+        "Step 7a must document skipping requirements generation for validated reports"
+    )
+
+
+def test_prepare_issue_excludes_contested_refs_from_validated_report_body():
+    """Skill must document removing the contested findings reference line from the issue body."""
+    text = SKILL_MD.read_text()
+    assert "contested_findings_" in text, (
+        "Skill must reference 'contested_findings_' in the strip rules for validated report body"
+    )
+    # Anchor: strip rules must appear after validated report handling is introduced
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1
+    body_section = text[validated_pos:]
+    assert "contested" in body_section.lower(), (
+        "Contested findings exclusion must be documented within the validated report handling"
+        " section"
+    )
+
+
+def test_prepare_issue_strips_artifact_paths_from_validated_report_body():
+    """Skill must document stripping 'Original report:' and artifact paths from issue body."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1
+    body_section = text[validated_pos:]
+    assert "Original report" in body_section, (
+        "Skill must document removing the 'Original report:' line (artifact path) from the body"
+    )

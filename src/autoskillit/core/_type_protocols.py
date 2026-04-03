@@ -15,6 +15,7 @@ from ._type_results import (
     CleanupResult,
     FailureRecord,
     SkillResult,
+    TestResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
 )
@@ -72,7 +73,12 @@ class AuditStore(Protocol):
     def record_success(self, skill_command: str) -> None: ...
 
     def load_from_log_dir(
-        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+        self,
+        log_root: Path,
+        *,
+        since: str = "",
+        cwd_filter: str = "",
+        kitchen_id_filter: str = "",
     ) -> int: ...
 
 
@@ -88,16 +94,22 @@ class TokenStore(Protocol):
         start_ts: str = "",
         end_ts: str = "",
         elapsed_seconds: float | None = None,
+        order_id: str = "",
     ) -> None: ...
 
-    def get_report(self) -> list[dict[str, Any]]: ...
+    def get_report(self, *, order_id: str = "") -> list[dict[str, Any]]: ...
 
-    def compute_total(self) -> dict[str, Any]: ...
+    def compute_total(self, *, order_id: str = "") -> dict[str, Any]: ...
 
     def clear(self) -> None: ...
 
     def load_from_log_dir(
-        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+        self,
+        log_root: Path,
+        *,
+        since: str = "",
+        cwd_filter: str = "",
+        kitchen_id_filter: str = "",
     ) -> int: ...
 
 
@@ -105,16 +117,21 @@ class TokenStore(Protocol):
 class TimingStore(Protocol):
     """Protocol for per-step wall-clock timing accumulation."""
 
-    def record(self, step_name: str, duration_seconds: float) -> None: ...
+    def record(self, step_name: str, duration_seconds: float, *, order_id: str = "") -> None: ...
 
-    def get_report(self) -> list[dict[str, Any]]: ...
+    def get_report(self, *, order_id: str = "") -> list[dict[str, Any]]: ...
 
-    def compute_total(self) -> dict[str, Any]: ...
+    def compute_total(self, *, order_id: str = "") -> dict[str, Any]: ...
 
     def clear(self) -> None: ...
 
     def load_from_log_dir(
-        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+        self,
+        log_root: Path,
+        *,
+        since: str = "",
+        cwd_filter: str = "",
+        kitchen_id_filter: str = "",
     ) -> int: ...
 
 
@@ -139,9 +156,12 @@ class McpResponseStore(Protocol):
 
 @runtime_checkable
 class TestRunner(Protocol):
-    """Protocol for running a test suite and reporting pass/fail."""
+    """Protocol for running a test suite and reporting pass/fail.
 
-    async def run(self, cwd: Path) -> tuple[bool, str]: ...
+    Returns a TestResult with passed, stdout, and stderr from the test run.
+    """
+
+    async def run(self, cwd: Path) -> TestResult: ...
 
 
 @runtime_checkable
@@ -155,6 +175,8 @@ class HeadlessExecutor(Protocol):
         *,
         model: str = "",
         step_name: str = "",
+        kitchen_id: str = "",
+        order_id: str = "",
         add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
@@ -255,6 +277,7 @@ class CloneManager(Protocol):
         *,
         remote_url: str = "",
         protected_branches: list[str] | None = None,
+        force: bool = False,
     ) -> dict[str, str | bool]: ...
 
 
@@ -404,6 +427,7 @@ class SessionSkillManager(Protocol):
         cook_session: bool = False,
         config: Any | None = None,
         project_dir: Path | None = None,
+        recipe_packs: frozenset[str] | None = None,
     ) -> ValidatedAddDir: ...
 
     def activate_tier2(self, session_id: str, skill_name: str) -> bool: ...

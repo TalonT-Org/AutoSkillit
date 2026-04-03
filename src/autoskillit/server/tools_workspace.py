@@ -64,9 +64,9 @@ async def test_check(
     _start = time.monotonic()
     try:
         resolved = os.path.realpath(worktree_path)
-        passed, output = await tool_ctx.tester.run(Path(resolved))
+        test_result = await tool_ctx.tester.run(Path(resolved))
 
-        if not passed:
+        if not test_result.passed:
             await _notify(
                 ctx,
                 "error",
@@ -75,7 +75,13 @@ async def test_check(
                 extra={"worktree": worktree_path},
             )
 
-        return json.dumps({"passed": passed, "output": truncate_text(output)})
+        return json.dumps(
+            {
+                "passed": test_result.passed,
+                "stdout": truncate_text(test_result.stdout),
+                "stderr": truncate_text(test_result.stderr),
+            }
+        )
     finally:
         if step_name:
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

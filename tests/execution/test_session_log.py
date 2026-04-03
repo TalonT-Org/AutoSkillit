@@ -748,3 +748,66 @@ def test_flush_session_log_write_call_count_defaults_to_zero(tmp_path):
     _flush(tmp_path, session_id="wc-default", proc_snapshots=None)
     summary = json.loads((tmp_path / "sessions" / "wc-default" / "summary.json").read_text())
     assert summary["write_call_count"] == 0
+
+
+def test_flush_session_log_writes_kitchen_id(tmp_path):
+    """kitchen_id parameter is written to sessions.jsonl index entry."""
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/some/worktree",
+        kitchen_id="my-pipeline-123",
+        session_id="sess-001",
+        pid=12345,
+        skill_command="/autoskillit:implement",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-03-27T08:00:00",
+        proc_snapshots=None,
+    )
+
+    index = (tmp_path / "sessions.jsonl").read_text()
+    entry = json.loads(index.strip())
+    assert entry["kitchen_id"] == "my-pipeline-123"
+
+
+def test_flush_session_log_writes_order_id_to_index(tmp_path):
+    """order_id is written to sessions.jsonl index entry when provided."""
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/some/worktree",
+        kitchen_id="kitchen-abc",
+        order_id="issue-185",
+        session_id="sess-002",
+        pid=12345,
+        skill_command="/autoskillit:implement",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-03-27T08:00:00",
+        proc_snapshots=None,
+    )
+
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+    assert entry["order_id"] == "issue-185"
+
+
+def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
+    """order_id defaults to empty string when not supplied."""
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/some/worktree",
+        kitchen_id="kitchen-abc",
+        session_id="sess-003",
+        pid=12345,
+        skill_command="/autoskillit:implement",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-03-27T08:00:00",
+        proc_snapshots=None,
+    )
+
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+    assert "order_id" in entry
+    assert entry["order_id"] == ""

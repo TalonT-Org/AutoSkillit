@@ -54,7 +54,7 @@ _OPEN_KITCHEN_GREETINGS: list[str] = [
 ]
 
 
-def _build_orchestrator_prompt(recipe_name: str) -> str:
+def _build_orchestrator_prompt(recipe_name: str, mcp_prefix: str) -> str:
     """Build the --append-system-prompt content for a cook session.
 
     The prompt contains behavioral instructions (routing rules, failure
@@ -71,7 +71,7 @@ def _build_orchestrator_prompt(recipe_name: str) -> str:
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
 FIRST ACTION — before prompting for any inputs:
-0. Call open_kitchen('{recipe_name}') to open the kitchen and load the recipe.
+0. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to open the kitchen and load the recipe.
 1. The response contains a pre-formatted ingredients table
    between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
    Display it verbatim in your response — do not reformat or re-render it.
@@ -115,12 +115,13 @@ FAILURE PREDICATES — when to follow on_failure:
 
 CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
 - When run_skill returns "success: False" AND "needs_retry: true" AND "retry_reason: resume":
-  - If the current step defines an on_context_limit route → follow on_context_limit.
-  - If the current step has NO on_context_limit route → fall through to on_failure.
-  - "retry_reason: resume" means the session hit a context or turn limit with partial
-    progress on disk. on_context_limit (e.g., retry_worktree or test) checks whether
-    partial work was sufficient before re-running from scratch.
-  - NEVER route retry_reason=resume directly to on_failure when on_context_limit exists.
+  - Check "subtype" to discriminate the termination cause:
+    - If subtype=stale: a transient hung process was killed by the watchdog. Retry
+      the step (decrement the retries counter). Do NOT follow on_context_limit.
+      If retries are exhausted, follow on_exhausted.
+    - If subtype≠stale (e.g. context_exhaustion, error_max_turns): follow on_context_limit
+      if defined, fall through to on_failure otherwise. This is the default resume path.
+  - NEVER route retry_reason=resume with subtype=stale to on_context_limit.
 - When run_skill returns "needs_retry: true" AND "retry_reason: drain_race":
   - The infrastructure confirmed session completion (Channel A or B) but stdout was not
     fully flushed before the process was killed. Partial progress was confirmed by the
@@ -164,7 +165,7 @@ ACTION: CONFIRM STEP SEMANTICS:
 """
 
 
-def _build_open_kitchen_prompt() -> str:
+def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     """Build the --append-system-prompt content for an open-kitchen cook session (no recipe)."""
     sous_chef_content = ""
     _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
@@ -173,8 +174,8 @@ def _build_open_kitchen_prompt() -> str:
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
-        "Call the open_kitchen tool to open the AutoSkillit kitchen and gain access to "
-        "all automation tools.\n\n"
+        f"Call the {mcp_prefix}open_kitchen tool to open the AutoSkillit kitchen "
+        "and gain access to all automation tools.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "

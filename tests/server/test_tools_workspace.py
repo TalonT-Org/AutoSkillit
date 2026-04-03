@@ -152,14 +152,14 @@ class TestTestCheck:
 
     @pytest.mark.anyio
     async def test_does_not_expose_summary(self, tool_ctx):
-        """test_check returns passed + output — no summary, no output_file."""
+        """test_check returns passed + stdout + stderr — no summary, no output_file."""
         tool_ctx.runner.push(
             _make_result(0, "= 100 passed =\nTest output saved to: /tmp/out.txt\n", "")
         )
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert "summary" not in result
         assert "output_file" not in result
-        assert set(result.keys()) == {"passed", "output"}
+        assert set(result.keys()) == {"passed", "stdout", "stderr"}
 
     @pytest.mark.anyio
     async def test_cross_validates_error_in_output(self, tool_ctx):
@@ -211,11 +211,11 @@ class TestTestCheck:
         assert result["passed"] is False
 
     @pytest.mark.anyio
-    async def test_cwa_empty_output_fails(self, tool_ctx):
-        """CWA: rc=0 but empty stdout -> passed=False (cannot confirm pass)."""
+    async def test_non_pytest_runner_empty_output_passes(self, tool_ctx):
+        """Non-pytest runner: rc=0, empty stdout, empty stderr -> passed=True (trust exit code)."""
         tool_ctx.runner.push(_make_result(0, "", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
-        assert result["passed"] is False
+        assert result["passed"] is True
 
     @pytest.mark.anyio
     async def test_bare_q_clean_passes(self, tool_ctx):
@@ -260,6 +260,28 @@ class TestTestCheck:
             assert var not in env, (
                 f"{var} must not appear in env passed to subprocess by test_check"
             )
+
+    @pytest.mark.anyio
+    async def test_cargo_nextest_style_passes(self, tool_ctx):
+        """Non-pytest runner: rc=0, stderr-only output -> passed=True, stderr surfaced."""
+        tool_ctx.runner.push(_make_result(0, "", "PASS [0.5s] 5 tests"))
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is True
+        assert "PASS [0.5s] 5 tests" in result["stderr"]
+
+    @pytest.mark.anyio
+    async def test_response_schema_includes_stderr(self, tool_ctx):
+        """test_check response contains passed, stdout, and stderr keys."""
+        tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert set(result.keys()) == {"passed", "stdout", "stderr"}
+
+    @pytest.mark.anyio
+    async def test_pytest_failure_still_detected(self, tool_ctx):
+        """Regression guard: pytest failures are still detected after CWA removal."""
+        tool_ctx.runner.push(_make_result(0, "= 3 failed, 97 passed =\n", ""))
+        result = json.loads(await test_check(worktree_path="/tmp/wt"))
+        assert result["passed"] is False
 
 
 class TestResetGuard:

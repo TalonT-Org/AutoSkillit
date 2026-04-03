@@ -1,4 +1,4 @@
-name: Auto Patch Version Bump
+name: Auto Minor Version Bump on Promotion
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 jobs:
-  bump-and-sync:
+  minor-bump-on-promote:
     permissions:
       contents: write
     if: >
@@ -26,7 +26,7 @@ jobs:
         with:
           uv-version: "0.9.21"
 
-      - name: Compute new patch version
+      - name: Compute new minor version
         id: version
         run: |
           set -euo pipefail
@@ -34,12 +34,16 @@ jobs:
           import tomllib, pathlib
           print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])
           ")
+          [ -n "$CURRENT" ] || { echo "ERROR: version: CURRENT is empty — pyproject.toml may be absent or malformed" >&2; exit 1; }
+          echo "$CURRENT" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "ERROR: version: CURRENT='$CURRENT' is not valid semver" >&2; exit 1; }
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          NEW="$MAJOR.$MINOR.$((PATCH + 1))"
+          NEW_MAIN="$MAJOR.$((MINOR + 1)).0"
+          NEW_INT="$MAJOR.$((MINOR + 1)).1"
           echo "old=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+          echo "new_main=$NEW_MAIN" >> "$GITHUB_OUTPUT"
+          echo "new_int=$NEW_INT" >> "$GITHUB_OUTPUT"
 
-      - name: Update pyproject.toml
+      - name: Update pyproject.toml (main)
         run: |
           python3 - <<'EOF'
           import pathlib, os
@@ -50,9 +54,9 @@ jobs:
           EOF
         env:
           OLD_VERSION: ${{ steps.version.outputs.old }}
-          NEW_VERSION: ${{ steps.version.outputs.new }}
+          NEW_VERSION: ${{ steps.version.outputs.new_main }}
 
-      - name: Update plugin.json
+      - name: Update plugin.json (main)
         run: |
           python3 - <<'EOF'
           import json, pathlib, os
@@ -62,9 +66,9 @@ jobs:
           p.write_text(json.dumps(data, indent=2) + "\n")
           EOF
         env:
-          NEW_VERSION: ${{ steps.version.outputs.new }}
+          NEW_VERSION: ${{ steps.version.outputs.new_main }}
 
-      - name: Regenerate uv.lock
+      - name: Regenerate uv.lock (main)
         run: uv lock
 
       - name: Commit and push version bump to main
@@ -76,74 +80,9 @@ jobs:
           if git diff --cached --quiet; then
             echo "Nothing to commit"
           else
-            git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
+            git commit -m "chore: bump version to ${{ steps.version.outputs.new_main }}"
             git push origin main
           fi
-
-      - name: Allow force-push on integration branch
-        id: allow-force-push
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          set -euo pipefail
-          REPO="${{ github.repository }}"
-          BRANCH="integration"
-          # If integration branch is unprotected, force-push is already permitted
-          if ! PROTECTION=$(gh api "repos/$REPO/branches/$BRANCH/protection" 2>/dev/null); then
-            echo "Branch '$BRANCH' has no protection — force-push permitted by default"
-            exit 0
-          fi
-          # Rebuild protection payload with allow_force_pushes: true
-          PAYLOAD=$(echo "$PROTECTION" | jq '{
-            required_status_checks: (if .required_status_checks then {
-              strict: .required_status_checks.strict,
-              contexts: (.required_status_checks.contexts // [])
-            } else null end),
-            enforce_admins: (.enforce_admins.enabled // false),
-            required_pull_request_reviews: (if .required_pull_request_reviews then {
-              dismiss_stale_reviews: (.required_pull_request_reviews.dismiss_stale_reviews // false),
-              require_code_owner_reviews: (.required_pull_request_reviews.require_code_owner_reviews // false),
-              required_approving_review_count: (.required_pull_request_reviews.required_approving_review_count // 0)
-            } else null end),
-            restrictions: (if .restrictions then {
-              users: [.restrictions.users[].login],
-              teams: [.restrictions.teams[].slug],
-              apps: [.restrictions.apps[].slug]
-            } else null end),
-            allow_force_pushes: true,
-            allow_deletions: (.allow_deletions.enabled // false)
-          }')
-          echo "$PAYLOAD" | gh api "repos/$REPO/branches/$BRANCH/protection" \
-            --method PUT --input -
-          echo "INTEGRATION_PROTECTION_UPDATED=true" >> "$GITHUB_ENV"
-          # Save restore payload (allow_force_pushes: false) as step output
-          RESTORE_PAYLOAD=$(echo "$PROTECTION" | jq -c '{
-            required_status_checks: (if .required_status_checks then {
-              strict: .required_status_checks.strict,
-              contexts: (.required_status_checks.contexts // [])
-            } else null end),
-            enforce_admins: (.enforce_admins.enabled // false),
-            required_pull_request_reviews: (if .required_pull_request_reviews then {
-              dismiss_stale_reviews: (.required_pull_request_reviews.dismiss_stale_reviews // false),
-              require_code_owner_reviews: (.required_pull_request_reviews.require_code_owner_reviews // false),
-              required_approving_review_count: (.required_pull_request_reviews.required_approving_review_count // 0)
-            } else null end),
-            restrictions: (if .restrictions then {
-              users: [.restrictions.users[].login],
-              teams: [.restrictions.teams[].slug],
-              apps: [.restrictions.apps[].slug]
-            } else null end),
-            allow_force_pushes: false,
-            allow_deletions: (.allow_deletions.enabled // false)
-          }')
-          echo "restore_payload=$RESTORE_PAYLOAD" >> "$GITHUB_OUTPUT"
-          echo "Configured integration branch to allow force-push"
-
-      - name: Force-push integration to match main
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          git push --force origin origin/main:refs/heads/integration
 
       - name: Checkout integration branch
         run: |
@@ -151,26 +90,31 @@ jobs:
           git fetch origin integration
           git checkout -B integration origin/integration
 
-      - name: Compute integration patch version
-        id: integration_version
+      - name: Read integration current version
+        id: int_version
         run: |
           set -euo pipefail
           CURRENT=$(python3 -c "
           import tomllib, pathlib
           print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])
           ")
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          NEW="$MAJOR.$MINOR.$((PATCH + 1))"
+          [ -n "$CURRENT" ] || { echo "ERROR: int_version: CURRENT is empty — checkout may have failed or pyproject.toml is absent" >&2; exit 1; }
           echo "old=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "new=$NEW" >> "$GITHUB_OUTPUT"
 
       - name: Update pyproject.toml (integration)
         run: |
           python3 - <<'EOF'
           import pathlib, os, sys
           p = pathlib.Path("pyproject.toml")
-          old_ver = f'version = "{os.environ["OLD_VERSION"]}"'
-          new_ver = f'version = "{os.environ["NEW_VERSION"]}"'
+          old_str = os.environ["OLD_VERSION"]
+          new_str = os.environ["NEW_VERSION"]
+          old_parts = tuple(int(x) for x in old_str.split("."))
+          new_parts = tuple(int(x) for x in new_str.split("."))
+          if new_parts <= old_parts:
+              print(f"ERROR: new_int {new_str!r} would downgrade integration from {old_str!r}", file=sys.stderr)
+              sys.exit(1)
+          old_ver = f'version = "{old_str}"'
+          new_ver = f'version = "{new_str}"'
           old_content = p.read_text()
           new_content = old_content.replace(old_ver, new_ver, 1)
           if new_content == old_content:
@@ -179,8 +123,8 @@ jobs:
           p.write_text(new_content)
           EOF
         env:
-          OLD_VERSION: ${{ steps.integration_version.outputs.old }}
-          NEW_VERSION: ${{ steps.integration_version.outputs.new }}
+          OLD_VERSION: ${{ steps.int_version.outputs.old }}
+          NEW_VERSION: ${{ steps.version.outputs.new_int }}
 
       - name: Update plugin.json (integration)
         run: |
@@ -192,7 +136,7 @@ jobs:
           p.write_text(json.dumps(data, indent=2) + "\n")
           EOF
         env:
-          NEW_VERSION: ${{ steps.integration_version.outputs.new }}
+          NEW_VERSION: ${{ steps.version.outputs.new_int }}
 
       - name: Regenerate uv.lock (integration)
         run: uv lock
@@ -204,21 +148,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Nothing to commit"
           else
-            git commit -m "chore: bump integration version to ${{ steps.integration_version.outputs.new }}"
+            git commit -m "chore: bump integration version to ${{ steps.version.outputs.new_int }}"
             git push origin integration
           fi
-
-      - name: Restore integration branch protection
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          set -euo pipefail
-          if [[ "${INTEGRATION_PROTECTION_UPDATED:-}" != "true" ]]; then
-            exit 0
-          fi
-          REPO="${{ github.repository }}"
-          echo '${{ steps.allow-force-push.outputs.restore_payload }}' | \
-            gh api "repos/$REPO/branches/integration/protection" \
-              --method PUT --input -
-          echo "Restored integration branch protection"

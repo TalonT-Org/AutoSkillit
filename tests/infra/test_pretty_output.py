@@ -17,6 +17,31 @@ from autoskillit.execution.headless import _build_skill_result
 from autoskillit.hooks.pretty_output import _format_response
 from tests.conftest import _make_result
 
+# Realistic recipe YAML that mirrors actual bundled recipes.
+# Must include an `ingredients:` block to reproduce the raw/derived duplication scenario.
+# All formatter tests using `content` should reference this constant.
+REALISTIC_RECIPE_YAML = """\
+name: implementation
+description: Full implementation pipeline
+autoskillit_version: "0.3.0"
+ingredients:
+  task:
+    description: What to implement
+    required: true
+  source_dir:
+    description: Path to source directory
+    default: ""
+  review_approach:
+    description: Run review-approach before planning
+    default: "false"
+kitchen_rules:
+  - Always commit before merging
+steps:
+  implement:
+    tool: run_skill
+    skill_command: /implement
+"""
+
 
 def _run_hook(
     event: dict | None = None,
@@ -1363,6 +1388,26 @@ def test_fmt_load_recipe_field_coverage():
     )
 
 
+def test_fmt_load_recipe_derivation_map_coverage():
+    """Every key/value in _LOAD_RECIPE_CONTENT_DERIVED_FROM must be in _FMT_LOAD_RECIPE_RENDERED.
+    Catches when a new derived field is added without declaring its source relationship."""
+    from autoskillit.hooks.pretty_output import (
+        _FMT_LOAD_RECIPE_RENDERED,
+        _LOAD_RECIPE_CONTENT_DERIVED_FROM,
+    )
+
+    for derived_field, source_field in _LOAD_RECIPE_CONTENT_DERIVED_FROM.items():
+        assert derived_field in _FMT_LOAD_RECIPE_RENDERED, (
+            f"Derived field '{derived_field}' must be in _FMT_LOAD_RECIPE_RENDERED. "
+            f"If it was moved to SUPPRESSED, remove it from _LOAD_RECIPE_CONTENT_DERIVED_FROM."
+        )
+        assert source_field in _FMT_LOAD_RECIPE_RENDERED, (
+            f"Source field '{source_field}' must be in _FMT_LOAD_RECIPE_RENDERED "
+            f"(it is the source for derived field '{derived_field}'). "
+            f"If the source is suppressed, the derivation map entry is stale."
+        )
+
+
 def test_fmt_load_recipe_renders_error():
     """When error is present, it appears in output with cross mark."""
     formatted = _format_response(
@@ -1559,3 +1604,113 @@ def test_unformatted_tool_routes_to_generic_not_named_formatter(tmp_path):
     assert code == 0
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "get_pipeline_report" in text
+
+
+# ---------------------------------------------------------------------------
+# Raw/derived field deduplication: ingredients_table vs content
+# ---------------------------------------------------------------------------
+
+
+def test_fmt_recipe_body_ingredients_not_duplicated_when_table_present():
+    """When ingredients_table is present, ingredient names must not appear
+    in the --- RECIPE --- section. This is the canonical test for the
+    raw/derived field duplication bug."""
+    from autoskillit.hooks.pretty_output import _fmt_recipe_body
+
+    data = {
+        "content": REALISTIC_RECIPE_YAML,
+        "ingredients_table": (
+            "| Name | Description | Default |\n"
+            "| task | What to implement | (required) |\n"
+            "| review_approach | Run review-approach before planning | false |\n"
+        ),
+        "valid": True,
+        "suggestions": [],
+    }
+    result = "\n".join(_fmt_recipe_body(data))
+    assert "--- INGREDIENTS TABLE" in result, (
+        "_fmt_recipe_body did not emit the INGREDIENTS TABLE header — "
+        "deduplication guarantee cannot be tested."
+    )
+    recipe_section = result.split("--- INGREDIENTS TABLE")[0]
+    # Ingredient names must appear ONLY in the table, not in the raw YAML block.
+    # `task:` and `review_approach:` as YAML keys indicate the ingredients: block.
+    assert "review_approach:" not in recipe_section
+    assert "  task:" not in recipe_section
+    # But the steps and kitchen_rules sections should remain in the RECIPE block.
+    assert "implement" in recipe_section
+    assert "kitchen_rules" in recipe_section
+    # And the table section must contain the ingredient data.
+    table_section = result.split("--- INGREDIENTS TABLE")[1]
+    assert "review_approach" in table_section
+    assert "task" in table_section
+
+
+def test_strip_yaml_ingredients_block_removes_ingredients_section():
+    from autoskillit.hooks.pretty_output import _strip_yaml_ingredients_block
+
+    yaml = "name: test\ningredients:\n  task:\n    description: a task\nsteps:\n  do: {}\n"
+    result = _strip_yaml_ingredients_block(yaml)
+    assert "ingredients:" not in result
+    assert "  task:" not in result
+    assert "steps:" in result
+    assert "name: test" in result
+
+
+def test_strip_yaml_ingredients_block_noop_when_no_ingredients_key():
+    from autoskillit.hooks.pretty_output import _strip_yaml_ingredients_block
+
+    yaml = "name: test\nsteps:\n  do: {}\n"
+    result = _strip_yaml_ingredients_block(yaml)
+    assert result == yaml
+
+
+def test_strip_yaml_ingredients_block_at_end_of_file():
+    from autoskillit.hooks.pretty_output import _strip_yaml_ingredients_block
+
+    yaml = "name: test\nsteps:\n  do: {}\ningredients:\n  foo:\n    description: bar\n"
+    result = _strip_yaml_ingredients_block(yaml)
+    assert "ingredients:" not in result
+    assert "steps:" in result
+
+
+def test_strip_yaml_ingredients_block_multiline_description():
+    from autoskillit.hooks.pretty_output import _strip_yaml_ingredients_block
+
+    yaml = (
+        "name: test\n"
+        "ingredients:\n"
+        "  task:\n"
+        "    description: >\n"
+        "      Long description\n"
+        "      spanning multiple lines\n"
+        "    required: true\n"
+        "steps:\n"
+        "  do: {}\n"
+    )
+    result = _strip_yaml_ingredients_block(yaml)
+    assert "ingredients:" not in result
+    assert "steps:" in result
+
+
+def test_fmt_open_kitchen_ingredients_not_duplicated_when_table_present():
+    """open_kitchen routes through _fmt_recipe_body — verify same deduplication applies."""
+    from autoskillit.hooks.pretty_output import _fmt_open_kitchen
+
+    data = {
+        "content": REALISTIC_RECIPE_YAML,
+        "ingredients_table": "| task | What to implement | (required) |",
+        "valid": True,
+        "suggestions": [],
+        "kitchen": "open",
+        "version": "0.6.0",
+    }
+    # _fmt_open_kitchen returns str (not list[str]); no join needed.
+    result = _fmt_open_kitchen(data, pipeline=False)
+    assert "--- INGREDIENTS TABLE" in result, (
+        "_fmt_open_kitchen did not emit the INGREDIENTS TABLE header — "
+        "deduplication guarantee cannot be tested."
+    )
+    recipe_section = result.split("--- INGREDIENTS TABLE")[0]
+    assert "  task:" not in recipe_section
+    assert "review_approach:" not in recipe_section

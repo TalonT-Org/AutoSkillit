@@ -47,3 +47,16 @@ class TestTaskfile:
         assert any("uv sync --check" in cmd for cmd in status_cmds), (
             "status: block must contain a 'uv sync --check' command"
         )
+
+    def test_install_dev_task_exists(self):
+        """TF-6 — install-dev task exists in Taskfile.yml."""
+        data = self._load()
+        assert "install-dev" in data["tasks"], "install-dev task missing from Taskfile.yml"
+
+    def test_install_dev_task_uses_integration_branch(self):
+        """TF-7 — install-dev installs from @integration and runs autoskillit install."""
+        data = self._load()
+        task = data["tasks"]["install-dev"]
+        cmds = " ".join(str(c) for c in task.get("cmds", []))
+        assert "@integration" in cmds, "install-dev must install from @integration branch"
+        assert "autoskillit install" in cmds, "install-dev must run autoskillit install after uv"

@@ -8,8 +8,30 @@ import subprocess
 import uuid
 from pathlib import Path
 
+from autoskillit.cli._terminal import terminal_guard
 
-def cook() -> None:
+
+def _run_cook_session(
+    *,
+    cmd: list[str],
+    env: dict[str, str],
+    _first_run: bool,
+    initial_prompt: str | None,
+    project_dir: Path,
+) -> None:
+    """Run the cook subprocess and gate mark_onboarded on success."""
+    with terminal_guard():
+        result = subprocess.run(cmd, env=env)
+    if result.returncode == 0:
+        if _first_run and initial_prompt is not None:
+            from autoskillit.cli._onboarding import mark_onboarded
+
+            mark_onboarded(project_dir)
+    else:
+        raise SystemExit(result.returncode)
+
+
+def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
@@ -51,12 +73,18 @@ def cook() -> None:
     if confirm in ("n", "no"):
         return
 
-    from autoskillit.cli._onboarding import is_first_run, mark_onboarded, run_onboarding_menu
+    from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.config import load_config
-    from autoskillit.core import configure_logging, pkg_root
+    from autoskillit.core import configure_logging, find_latest_session_id, pkg_root
     from autoskillit.execution import build_interactive_cmd
 
     configure_logging()
+
+    resume_session_id: str | None = None
+    if resume:
+        resume_session_id = session_id or find_latest_session_id()
+        if resume_session_id is None:
+            print("No previous session found. Starting a fresh session.")
 
     project_dir = Path.cwd()
     initial_prompt: str | None = None
@@ -64,23 +92,26 @@ def cook() -> None:
     if _first_run:
         initial_prompt = run_onboarding_menu(project_dir, color=color)
 
-    session_id = uuid.uuid4().hex[:16]
+    session_id_local = uuid.uuid4().hex[:16]
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
+    session_mgr.cleanup_stale()
     config = load_config()
     skills_dir = session_mgr.init_session(
-        session_id, cook_session=True, config=config, project_dir=project_dir
+        session_id_local, cook_session=True, config=config, project_dir=project_dir
     )
 
     cmd = build_interactive_cmd(
-        plugin_dir=pkg_root(), add_dirs=[skills_dir], initial_prompt=initial_prompt
+        plugin_dir=pkg_root(),
+        add_dirs=[skills_dir],
+        initial_prompt=initial_prompt,
+        resume_session_id=resume_session_id,
     ).cmd
     env = {**os.environ}
-    try:
-        result = subprocess.run(cmd, env=env)
-        if result.returncode != 0:
-            raise SystemExit(result.returncode)
-    finally:
-        if _first_run and initial_prompt is not None:
-            mark_onboarded(project_dir)
-        shutil.rmtree(skills_dir, ignore_errors=True)
+    _run_cook_session(
+        cmd=cmd,
+        env=env,
+        _first_run=_first_run,
+        initial_prompt=initial_prompt,
+        project_dir=project_dir,
+    )

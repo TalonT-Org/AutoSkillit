@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
+from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, PRFetchState
 
 
 def _make_watcher() -> DefaultMergeQueueWatcher:
@@ -24,7 +24,8 @@ def _queue_state(
     pr_node_id: str = "PR_kwDO_test",
     in_queue: bool = False,
     queue_state: str | None = None,
-) -> dict:
+    checks_state: str | None = None,
+) -> PRFetchState:
     return {
         "merged": merged,
         "state": state,
@@ -33,6 +34,7 @@ def _queue_state(
         "pr_node_id": pr_node_id,
         "in_queue": in_queue,
         "queue_state": queue_state,
+        "checks_state": checks_state,
     }
 
 
@@ -618,3 +620,186 @@ class TestMergeQueueReliability:
         )
         assert result["success"] is True
         assert result["pr_state"] == "merged"
+
+
+class TestPendingCIGuard:
+    """Tests for the pending-CI guard that prevents false ejection when checks are running."""
+
+    @pytest.mark.anyio
+    async def test_continues_polling_when_checks_pending_and_not_in_queue(self):
+        """Core bug: auto-merge + BLOCKED + PENDING checks must keep polling, not eject."""
+        watcher = _make_watcher()
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 4:
+                return _queue_state(
+                    merged=False,
+                    in_queue=False,
+                    auto_merge_enabled_at=datetime.now(UTC),
+                    merge_state_status="BLOCKED",
+                    checks_state="PENDING",
+                )
+            return _queue_state(merged=True)
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(pr_number=1, target_branch="main", repo="owner/repo")
+
+        assert result["success"] is True
+        assert result["pr_state"] == "merged"
+        assert call_count >= 4
+
+    @pytest.mark.anyio
+    async def test_continues_polling_when_checks_expected_and_not_in_queue(self):
+        """EXPECTED means 'check not yet started' — same as PENDING: keep polling."""
+        watcher = _make_watcher()
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                return _queue_state(
+                    in_queue=False,
+                    auto_merge_enabled_at=datetime.now(UTC),
+                    merge_state_status="BLOCKED",
+                    checks_state="EXPECTED",
+                )
+            return _queue_state(merged=True)
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(pr_number=1, target_branch="main", repo="owner/repo")
+
+        assert result["success"] is True
+        assert result["pr_state"] == "merged"
+        assert call_count >= 3
+
+    @pytest.mark.anyio
+    async def test_returns_ejected_when_checks_terminal_and_not_in_queue(self):
+        """checks_state=SUCCESS + not in queue → genuine ejection (guard must not block it)."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(
+                in_queue=False,
+                auto_merge_enabled_at=None,
+                merge_state_status="BLOCKED",
+                checks_state="SUCCESS",
+            )
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(pr_number=1, target_branch="main", repo="owner/repo")
+
+        assert result["success"] is False
+        assert result["pr_state"] == "ejected"
+
+    @pytest.mark.anyio
+    async def test_returns_ejected_when_no_status_checks_configured(self):
+        """checks_state=None (no required checks) → ejected; unchanged for repos without CI."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(
+                in_queue=False,
+                merge_state_status="BLOCKED",
+                checks_state=None,
+            )
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(pr_number=1, target_branch="main", repo="owner/repo")
+
+        assert result["success"] is False
+        assert result["pr_state"] == "ejected"
+
+    @pytest.mark.anyio
+    async def test_fetch_extracts_checks_state_from_graphql_response(self):
+        """_fetch_pr_and_queue_state must extract statusCheckRollup.state into checks_state."""
+        watcher = _make_watcher()
+
+        async def _mock_post(url, *, json, headers=None, **_kw):
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "repository": {
+                            "pullRequest": {
+                                "id": "PR_kwDO_test",
+                                "merged": False,
+                                "state": "OPEN",
+                                "mergeStateStatus": "BLOCKED",
+                                "autoMergeRequest": {"enabledAt": "2026-03-26T12:00:00Z"},
+                                "statusCheckRollup": {"state": "PENDING"},
+                            },
+                            "mergeQueue": {"entries": {"nodes": []}},
+                        }
+                    }
+                },
+                request=httpx.Request("POST", url),
+            )
+
+        watcher._client.post = _mock_post  # type: ignore[method-assign]
+        state = await watcher._fetch_pr_and_queue_state(1, "owner", "repo", "main")
+
+        assert state["checks_state"] == "PENDING"
+        assert state["in_queue"] is False
+        assert state["merged"] is False
+
+    def test_implements_merge_queue_watcher_protocol(self):
+        from autoskillit.core import MergeQueueWatcher
+
+        assert isinstance(_make_watcher(), MergeQueueWatcher)
+
+
+class TestRelatedCoverage:
+    """Coverage for related untested paths found during investigation."""
+
+    @pytest.mark.anyio
+    async def test_returns_ejected_when_unmergeable_in_queue(self):
+        """in_queue=True, queue_state=UNMERGEABLE → ejected immediately."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(in_queue=True, queue_state="UNMERGEABLE")
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(pr_number=1, target_branch="main", repo="owner/repo")
+
+        assert result["success"] is False
+        assert result["pr_state"] == "ejected"
+
+    @pytest.mark.anyio
+    async def test_is_stall_candidate_when_has_hooks(self):
+        """merge_state_status=HAS_HOOKS + auto-merge enabled → stall detection fires."""
+        watcher = _make_watcher()
+        enabled_at = datetime.now(UTC) - timedelta(seconds=120)
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(
+                merged=False,
+                in_queue=False,
+                auto_merge_enabled_at=enabled_at,
+                merge_state_status="HAS_HOOKS",
+            )
+        )
+        watcher._toggle_auto_merge = AsyncMock()  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=1,
+                target_branch="main",
+                repo="owner/repo",
+                stall_grace_period=60,
+                max_stall_retries=1,
+            )
+
+        assert result["pr_state"] == "stalled"
+        assert watcher._toggle_auto_merge.call_count == 1  # type: ignore[union-attr]
+
+    @pytest.mark.anyio
+    async def test_returns_error_when_repo_has_no_slash(self):
+        """repo='noslash' → pr_state='error', no polling."""
+        watcher = _make_watcher()
+        result = await watcher.wait(pr_number=1, target_branch="main", repo="noslash")
+
+        assert result["success"] is False
+        assert result["pr_state"] == "error"
+        assert "Invalid repo format" in result["reason"]

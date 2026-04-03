@@ -59,6 +59,7 @@ _PRINT_EXEMPT = frozenset(
         "_cook.py",
         "_init_helpers.py",
         "_onboarding.py",
+        "_stale_check.py",
         "app.py",
         "_doctor.py",
         "_marketplace.py",
@@ -83,6 +84,7 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
         "remove_clone_guard.py",
         "skill_cmd_check.py",
         "skill_command_guard.py",
+        "token_summary_appender.py",
     }
 )
 

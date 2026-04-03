@@ -67,6 +67,8 @@ def flush_session_log(
     *,
     log_dir: str,
     cwd: str,
+    kitchen_id: str = "",
+    order_id: str = "",
     session_id: str,
     pid: int,
     skill_command: str,
@@ -210,13 +212,20 @@ def flush_session_log(
             "cache_creation_input_tokens": token_usage.get("cache_creation_input_tokens", 0),
             "cache_read_input_tokens": token_usage.get("cache_read_input_tokens", 0),
             "timing_seconds": timing_seconds if timing_seconds is not None else 0.0,
+            "order_id": order_id,
         }
         atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
 
     if step_name and timing_seconds is not None:
         atomic_write(
             session_dir / "step_timing.json",
-            json.dumps({"step_name": step_name, "total_seconds": max(0.0, timing_seconds)}),
+            json.dumps(
+                {
+                    "step_name": step_name,
+                    "total_seconds": max(0.0, timing_seconds),
+                    "order_id": order_id,
+                }
+            ),
         )
 
     if step_name and audit_record is not None:
@@ -228,6 +237,8 @@ def flush_session_log(
         "dir_name": dir_name,
         "timestamp": start_ts,
         "cwd": cwd,
+        "kitchen_id": kitchen_id,
+        "order_id": order_id,
         "claude_code_log": cc_log_str,
         "skill_command": skill_command[:100],
         "success": success,

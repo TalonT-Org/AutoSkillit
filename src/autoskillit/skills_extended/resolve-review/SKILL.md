@@ -2,6 +2,13 @@
 name: resolve-review
 categories: [github]
 description: Fetch PR review comments, run intent validation (ACCEPT/REJECT/DISCUSS) before applying fixes, and post inline replies. MCP-only — used exclusively by recipe orchestration via run_skill after review_pr reports changes_requested or needs_human verdict.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: resolve-review] Resolving PR review comments...'"
+          once: true
 ---
 
 # Resolve Review Skill

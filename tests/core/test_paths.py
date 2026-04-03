@@ -76,6 +76,65 @@ class TestClaudeCodeLogPath:
         assert result == Path.home() / ".claude" / "projects" / "-home-user-my-project"
 
 
+class TestFindLatestSessionId:
+    # REQ-CLI-002
+    def test_returns_most_recent(self, tmp_path: Path) -> None:
+        import os
+        from unittest.mock import patch
+
+        from autoskillit.core.paths import find_latest_session_id
+
+        proj_dir = tmp_path / "projects" / "-home-user-myproject"
+        proj_dir.mkdir(parents=True)
+        older = proj_dir / "aaa111.jsonl"
+        older.write_text("{}")
+        newer = proj_dir / "bbb222.jsonl"
+        newer.write_text("{}")
+        os.utime(older, (1000.0, 1000.0))
+        os.utime(newer, (2000.0, 2000.0))
+
+        with patch("autoskillit.core.paths.claude_code_project_dir", return_value=proj_dir):
+            result = find_latest_session_id("/home/user/myproject")
+        assert result == "bbb222"
+
+    def test_returns_none_empty_dir(self, tmp_path: Path) -> None:
+        from unittest.mock import patch
+
+        from autoskillit.core.paths import find_latest_session_id
+
+        proj_dir = tmp_path / "empty"
+        proj_dir.mkdir()
+        with patch("autoskillit.core.paths.claude_code_project_dir", return_value=proj_dir):
+            result = find_latest_session_id("/home/user/myproject")
+        assert result is None
+
+    def test_returns_none_no_dir(self, tmp_path: Path) -> None:
+        from unittest.mock import patch
+
+        from autoskillit.core.paths import find_latest_session_id
+
+        missing = tmp_path / "nonexistent"
+        with patch("autoskillit.core.paths.claude_code_project_dir", return_value=missing):
+            result = find_latest_session_id("/home/user/myproject")
+        assert result is None
+
+    def test_uses_cwd_when_none(self, tmp_path: Path) -> None:
+        from unittest.mock import patch
+
+        from autoskillit.core.paths import find_latest_session_id
+
+        proj_dir = tmp_path / "projects" / "cwd"
+        proj_dir.mkdir(parents=True)
+        (proj_dir / "ccc333.jsonl").write_text("{}")
+
+        with (
+            patch("autoskillit.core.paths.claude_code_project_dir", return_value=proj_dir),
+            patch("pathlib.Path.cwd", return_value=Path("/fake/cwd")),
+        ):
+            result = find_latest_session_id()  # cwd=None → uses Path.cwd()
+        assert result == "ccc333"
+
+
 class TestPkgRoot:
     def test_pkg_root_matches_importlib_resources(self) -> None:
         """pkg_root() must return the same path as importlib.resources.files('autoskillit')."""

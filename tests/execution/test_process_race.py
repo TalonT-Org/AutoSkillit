@@ -144,3 +144,31 @@ class TestRaceAccumulatorSessionId:
         acc = RaceAccumulator()
         signals = acc.to_race_signals()
         assert signals.stdout_session_id is None
+
+
+class TestSubprocessResultSessionIdResolution:
+    """_resolve_session_id merges all RaceSignals session ID sources correctly."""
+
+    def test_session_id_prefers_stdout_session_id(self) -> None:
+        """stdout_session_id takes priority when available."""
+        from autoskillit.execution.process import _resolve_session_id
+
+        assert _resolve_session_id("stdout-uuid-1234", "ch-b-uuid-5678") == "stdout-uuid-1234"
+
+    def test_session_id_falls_back_to_channel_b(self) -> None:
+        """channel_b_session_id used when stdout_session_id is empty."""
+        from autoskillit.execution.process import _resolve_session_id
+
+        assert _resolve_session_id("", "ch-b-uuid-5678") == "ch-b-uuid-5678"
+
+    def test_session_id_falls_back_to_channel_b_when_none(self) -> None:
+        """channel_b_session_id used when stdout_session_id is None (not yet extracted)."""
+        from autoskillit.execution.process import _resolve_session_id
+
+        assert _resolve_session_id(None, "ch-b-uuid-5678") == "ch-b-uuid-5678"
+
+    def test_session_id_empty_when_both_sources_empty(self) -> None:
+        """Crash/pre-start path: both sources empty → session_id empty."""
+        from autoskillit.execution.process import _resolve_session_id
+
+        assert _resolve_session_id("", "") == ""

@@ -324,45 +324,6 @@ async def test_failed_run_fetches_jobs(httpx_mock):
     assert "/jobs" in str(requests[1].url)
 
 
-# ---------------------------------------------------------------------------
-# DefaultCIWatcher.status
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_status_returns_runs():
-    watcher = DefaultCIWatcher(token="tok")
-    watcher._resolve_repo = AsyncMock(return_value="owner/repo")  # type: ignore[method-assign]
-    watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
-
-    # Use httpx_mock-free approach: mock at lower level
-    with patch.object(
-        watcher,
-        "status",
-        new_callable=AsyncMock,
-        return_value={
-            "runs": [
-                {
-                    "id": 100,
-                    "status": "completed",
-                    "conclusion": "success",
-                    "failed_jobs": [],
-                },
-                {
-                    "id": 101,
-                    "status": "in_progress",
-                    "conclusion": None,
-                    "failed_jobs": [],
-                },
-            ]
-        },
-    ):
-        result = await watcher.status("main", repo="owner/repo")
-    assert len(result["runs"]) == 2
-    assert result["runs"][0]["id"] == 100
-    assert result["runs"][1]["status"] == "in_progress"
-
-
 @pytest.mark.anyio
 async def test_status_by_run_id(httpx_mock):
     # Response 1: run status

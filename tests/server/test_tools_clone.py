@@ -185,6 +185,26 @@ class TestPushToRemoteTool:
         assert result.get("success") is False
         assert "error" in result
 
+    @pytest.mark.anyio
+    async def test_push_to_remote_mcp_handler_passes_force_true_to_clone_mgr(self, tool_ctx):
+        """T3: push_to_remote MCP handler converts force='true' to bool True for clone_mgr."""
+        mock_mgr = MagicMock()
+        mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
+        tool_ctx.clone_mgr = mock_mgr
+        await push_to_remote(clone_path="/clone", source_dir="/src", branch="main", force="true")
+        _args, kwargs = mock_mgr.push_to_remote.call_args
+        assert kwargs.get("force") is True
+
+    @pytest.mark.anyio
+    async def test_push_to_remote_mcp_handler_default_force_false(self, tool_ctx):
+        """T4: push_to_remote MCP handler defaults to force=False when not supplied."""
+        mock_mgr = MagicMock()
+        mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
+        tool_ctx.clone_mgr = mock_mgr
+        await push_to_remote(clone_path="/clone", source_dir="/src", branch="main")
+        _args, kwargs = mock_mgr.push_to_remote.call_args
+        assert kwargs.get("force") is False
+
 
 class TestCloneRepoTiming:
     """clone_repo records wall-clock timing when step_name is provided."""

@@ -8,13 +8,28 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypedDict
 
 import httpx
 
 from autoskillit.core import get_logger
+from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
+
+
+class PRFetchState(TypedDict):
+    """Typed contract for _fetch_pr_and_queue_state return value."""
+
+    merged: bool
+    state: str
+    merge_state_status: str
+    auto_merge_enabled_at: datetime | None
+    pr_node_id: str
+    in_queue: bool
+    queue_state: str | None
+    checks_state: str | None  # statusCheckRollup.state; None = no checks configured
+
 
 _GRAPHQL_ENDPOINT = "https://api.github.com/graphql"
 
@@ -28,6 +43,9 @@ query GetPRAndQueueState($owner: String!, $repo: String!, $prNumber: Int!, $bran
       mergeStateStatus
       autoMergeRequest {
         enabledAt
+      }
+      statusCheckRollup {
+        state
       }
     }
     mergeQueue(branch: $branch) {
@@ -70,14 +88,8 @@ class DefaultMergeQueueWatcher:
     """
 
     def __init__(self, token: str | None) -> None:
-        headers: dict[str, str] = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
         self._client = httpx.AsyncClient(
-            headers=headers,
+            headers=github_headers(token),
             limits=httpx.Limits(keepalive_expiry=60),
             timeout=30.0,
         )
@@ -186,6 +198,7 @@ class DefaultMergeQueueWatcher:
             is_stall_candidate = enabled_at is not None and merge_status in {"CLEAN", "HAS_HOOKS"}
 
             if is_stall_candidate:
+                assert enabled_at is not None  # guaranteed by is_stall_candidate
                 stall_duration = max(0.0, (now - enabled_at).total_seconds())
 
                 if stall_duration < stall_grace_period:
@@ -218,7 +231,13 @@ class DefaultMergeQueueWatcher:
                     f"PR #{pr_number} stall unresolved after {max_stall_retries} toggle attempts",
                 )
 
-            # Confirmed absent, not a stall candidate — genuine ejection
+            # D6: checks_state guard — CI still running, PR not yet eligible for queue
+            if state["checks_state"] in {"PENDING", "EXPECTED"}:
+                await asyncio.sleep(poll_interval)
+                continue
+
+            # Positive confirmation: checks are terminal (SUCCESS/FAILURE/ERROR) or absent (None).
+            # PR confirmed not in queue, not merged, checks not pending → genuine ejection.
             return _make_result(
                 False,
                 "ejected",
@@ -234,7 +253,7 @@ class DefaultMergeQueueWatcher:
 
     async def _fetch_pr_and_queue_state(
         self, pr_number: int, owner: str, repo: str, target_branch: str
-    ) -> dict[str, Any]:
+    ) -> PRFetchState:
         """Single GraphQL round-trip returning PR state and merge queue entries."""
         variables = {
             "owner": owner,
@@ -272,16 +291,20 @@ class DefaultMergeQueueWatcher:
                     f"Unexpected autoMergeRequest.enabledAt format: {enabled_at_raw!r}"
                 ) from e
 
+        checks_rollup = pr.get("statusCheckRollup") or {}
+        checks_state: str | None = checks_rollup.get("state")
+
         queue_entry = next((n for n in nodes if n["pullRequest"]["number"] == pr_number), None)
-        return {
-            "merged": pr["merged"],
-            "state": pr["state"],
-            "merge_state_status": pr.get("mergeStateStatus", "UNKNOWN"),
-            "auto_merge_enabled_at": enabled_at,
-            "pr_node_id": pr["id"],
-            "in_queue": queue_entry is not None,
-            "queue_state": queue_entry["state"] if queue_entry else None,
-        }
+        return PRFetchState(
+            merged=pr["merged"],
+            state=pr["state"],
+            merge_state_status=pr.get("mergeStateStatus", "UNKNOWN"),
+            auto_merge_enabled_at=enabled_at,
+            pr_node_id=pr["id"],
+            in_queue=queue_entry is not None,
+            queue_state=queue_entry["state"] if queue_entry else None,
+            checks_state=checks_state,
+        )
 
     async def toggle(
         self,

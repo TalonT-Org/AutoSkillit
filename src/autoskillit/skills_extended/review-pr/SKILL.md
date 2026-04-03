@@ -2,6 +2,13 @@
 name: review-pr
 categories: [github]
 description: Automated diff-scoped PR code review using parallel audit subagents. Posts inline GitHub review comments and submits a summary verdict. Use after a PR is opened to gate CI on review approval.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: review-pr] Reviewing pull request...'"
+          once: true
 ---
 
 # Review PR Skill
@@ -12,10 +19,12 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 
 ## Arguments
 
-`/autoskillit:review-pr <feature-branch> <base-branch>`
+`/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>]`
 
 - **feature-branch** — The feature branch containing the changes to review
 - **base-branch** — The base branch the PR targets (e.g., "main")
+- **annotated_diff_path** (optional) — absolute path to a pre-computed annotated diff file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
+- **hunk_ranges_path** (optional) — absolute path to a pre-computed hunk ranges JSON file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
 
 ## When to Use
 
@@ -100,29 +109,22 @@ Save the diff to `.autoskillit/temp/review-pr/diff_{pr_number}.txt`. (relative t
 
 ### Step 2.7: Deterministic Diff Annotation
 
-Run the following via Bash to produce the annotated diff and `VALID_LINE_RANGES`.
-This is deterministic — do not parse `@@` headers yourself.
+Read pre-computed annotated diff and hunk ranges from disk when available:
 
 ```bash
-python3 -c "
-from autoskillit.execution.diff_annotator import parse_hunk_ranges, annotate_diff
-import json, pathlib
-diff = pathlib.Path('${DIFF_PATH}').read_text()
-annotated = annotate_diff(diff)
-pathlib.Path('${ANNOTATED_DIFF_PATH}').write_text(annotated)
-ranges = parse_hunk_ranges(diff)
-pathlib.Path('${RANGES_PATH}').write_text(json.dumps(ranges))
-print(f'Annotated {len(ranges)} files, wrote ${ANNOTATED_DIFF_PATH} and ${RANGES_PATH}')
-"
+ANNOTATED_DIFF=""
+VALID_LINE_RANGES="{}"
+if [ -n "${annotated_diff_path:-}" ] && [ -f "$annotated_diff_path" ]; then
+    ANNOTATED_DIFF="$(cat "$annotated_diff_path")"
+fi
+if [ -n "${hunk_ranges_path:-}" ] && [ -f "$hunk_ranges_path" ]; then
+    VALID_LINE_RANGES="$(cat "$hunk_ranges_path")"
+fi
 ```
 
-Where:
-- `DIFF_PATH` is `.autoskillit/temp/review-pr/diff_{pr_number}.txt` (saved in Step 2)
-- `ANNOTATED_DIFF_PATH` is `.autoskillit/temp/review-pr/annotated_diff_{pr_number}.txt`
-- `RANGES_PATH` is `.autoskillit/temp/review-pr/ranges_{pr_number}.json`
-
-`VALID_LINE_RANGES` is now a JSON file on disk. Load it in Step 4 for filtering.
-If the diff is empty or the Python invocation fails, leave `VALID_LINE_RANGES` empty (no filtering).
+`VALID_LINE_RANGES` is a JSON mapping file paths to valid hunk line ranges. Load it in Step 4
+for filtering. If `annotated_diff_path` or `hunk_ranges_path` are absent, leave
+`ANNOTATED_DIFF` and `VALID_LINE_RANGES` empty (no filtering).
 
 ### Step 2.5: Deletion Context Pre-Computation
 

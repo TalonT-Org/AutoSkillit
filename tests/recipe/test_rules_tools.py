@@ -1,5 +1,8 @@
 """Tests for the unknown-tool semantic rule."""
 
+import importlib
+import inspect as _inspect
+
 import pytest
 
 from autoskillit.core import Severity
@@ -257,3 +260,113 @@ def test_wait_for_ci_rejects_poll_interval() -> None:
     findings = run_semantic_rules(recipe)
     dead = [f for f in findings if f.rule == "dead-with-param"]
     assert dead, "phantom param 'poll_interval' must trigger dead-with-param on wait_for_ci"
+
+
+# ---------------------------------------------------------------------------
+# rebase-then-push-requires-force rule tests (T6, T7)
+# ---------------------------------------------------------------------------
+
+
+def _make_rebase_then_push_recipe(force: str | None = None) -> Recipe:
+    """Two-step recipe: resolve-merge-conflicts → push_to_remote."""
+    push_args: dict[str, str] = {"clone_path": "x", "remote_url": "r", "branch": "b"}
+    if force is not None:
+        push_args["force"] = force
+    return Recipe(
+        name="test-recipe",
+        description="Test rebase-then-push rule.",
+        version="0.2.0",
+        kitchen_rules="Use run_skill only.",
+        steps={
+            "step_a": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:resolve-merge-conflicts worktree plan base"
+                },
+                on_success="step_b",
+            ),
+            "step_b": RecipeStep(
+                tool="push_to_remote",
+                with_args=push_args,
+            ),
+        },
+    )
+
+
+def test_rebase_then_push_without_force_raises_error() -> None:
+    """T6: push_to_remote after resolve-merge-conflicts without force=true is an ERROR."""
+    recipe = _make_rebase_then_push_recipe(force=None)
+    findings = run_semantic_rules(recipe)
+    errors = [
+        f
+        for f in findings
+        if f.rule == "rebase-then-push-requires-force" and f.severity == Severity.ERROR
+    ]
+    assert errors, "Expected ERROR finding for rebase-then-push-requires-force"
+    assert any(f.step_name == "step_b" for f in errors)
+
+
+def test_rebase_then_push_with_force_true_passes_validation() -> None:
+    """T7: push_to_remote after resolve-merge-conflicts with force='true' passes."""
+    recipe = _make_rebase_then_push_recipe(force="true")
+    findings = run_semantic_rules(recipe)
+    errors = [f for f in findings if f.rule == "rebase-then-push-requires-force"]
+    assert not errors, "force='true' must not trigger rebase-then-push-requires-force"
+
+
+# ---------------------------------------------------------------------------
+# _TOOL_PARAMS sync test (T8)
+# ---------------------------------------------------------------------------
+
+_SERVER_TOOL_MODULES = [
+    "autoskillit.server.tools_ci",
+    "autoskillit.server.tools_clone",
+    "autoskillit.server.tools_execution",
+    "autoskillit.server.tools_git",
+    "autoskillit.server.tools_recipe",
+    "autoskillit.server.tools_status",
+    "autoskillit.server.tools_github",
+    "autoskillit.server.tools_issue_lifecycle",
+    "autoskillit.server.tools_pr_ops",
+    "autoskillit.server.tools_workspace",
+]
+
+_FRAMEWORK_PARAMS = frozenset({"ctx"})
+
+
+def _build_handler_map() -> dict[str, object]:
+    handler_map: dict[str, object] = {}
+    for mod_name in _SERVER_TOOL_MODULES:
+        mod = importlib.import_module(mod_name)
+        for name, obj in _inspect.getmembers(mod):
+            if _inspect.iscoroutinefunction(obj) and not name.startswith("_"):
+                handler_map[name] = obj
+    return handler_map
+
+
+def test_tool_params_matches_mcp_handler_signatures() -> None:
+    """T8: _TOOL_PARAMS keys match actual MCP handler signatures — drift fails CI."""
+    from autoskillit.recipe.rules_tools import _TOOL_PARAMS
+
+    handler_map = _build_handler_map()
+    mismatches: list[str] = []
+
+    for tool_name, expected_params in _TOOL_PARAMS.items():
+        if tool_name not in handler_map:
+            mismatches.append(f"{tool_name}: handler not found in server modules")
+            continue
+        handler = handler_map[tool_name]
+        sig = _inspect.signature(handler)
+        actual_params = frozenset(name for name in sig.parameters if name not in _FRAMEWORK_PARAMS)
+        if actual_params != expected_params:
+            missing = expected_params - actual_params
+            extra = actual_params - expected_params
+            mismatches.append(
+                f"{tool_name}: _TOOL_PARAMS={sorted(expected_params)} "
+                f"handler={sorted(actual_params)} "
+                f"(missing={sorted(missing)}, extra={sorted(extra)})"
+            )
+
+    assert not mismatches, (
+        "_TOOL_PARAMS is out of sync with MCP handler signatures:\n" + "\n".join(mismatches)
+    )

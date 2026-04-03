@@ -1,6 +1,13 @@
 ---
 name: smoke-task
 description: Execute an arbitrary prose task as a headless Claude session. For smoke-test pipeline use only.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: smoke-task] Executing smoke task...'"
+          once: true
 ---
 
 # Smoke Task Skill

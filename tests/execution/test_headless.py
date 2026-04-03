@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.config import AutomationConfig, ModelConfig
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     ChannelConfirmation,
@@ -17,7 +16,6 @@ from autoskillit.execution.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
     _build_skill_result,
     _extract_worktree_path,
-    _resolve_model,
     _scan_jsonl_write_paths,
 )
 from tests.conftest import _make_result, _make_timeout_result
@@ -70,9 +68,24 @@ def _context_exhausted_session_json() -> str:
     )
 
 
-def _sr(returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT):
+def _sr(
+    returncode=0,
+    stdout="",
+    stderr="",
+    termination=TerminationReason.NATURAL_EXIT,
+    session_id: str = "",
+    channel_b_session_id: str = "",
+):
     """Build a minimal SubprocessResult for _build_skill_result tests."""
-    return SubprocessResult(returncode, stdout, stderr, termination, pid=12345)
+    return SubprocessResult(
+        returncode,
+        stdout,
+        stderr,
+        termination,
+        pid=12345,
+        session_id=session_id,
+        channel_b_session_id=channel_b_session_id,
+    )
 
 
 class TestSessionLogDir:
@@ -172,6 +185,50 @@ class TestSessionLogDir:
         assert _session_log_dir(cwd) == claude_code_project_dir(cwd)
 
 
+class TestResolveSessionId:
+    """Unit tests for _resolve_skill_session_id — the session UUID resolution helper."""
+
+    def test_prefers_session_session_id(self):
+        """stdout-parsed session_id is preferred over Channel B when both present."""
+        from autoskillit.execution.headless import _resolve_skill_session_id
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        session = ClaudeSessionResult(
+            session_id="from-stdout", subtype="success", is_error=False, result="", errors=[]
+        )
+        result = _sr(channel_b_session_id="from-channel-b")
+        assert _resolve_skill_session_id(session, result) == "from-stdout"
+
+    def test_falls_back_to_channel_b_when_session_empty(self):
+        """Channel B UUID is used when stdout-parsed session_id is empty."""
+        from autoskillit.execution.headless import _resolve_skill_session_id
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        session = ClaudeSessionResult(
+            session_id="", subtype="success", is_error=False, result="", errors=[]
+        )
+        result = _sr(channel_b_session_id="from-channel-b")
+        assert _resolve_skill_session_id(session, result) == "from-channel-b"
+
+    def test_returns_empty_when_both_empty(self):
+        """Returns empty string when neither source has a session ID."""
+        from autoskillit.execution.headless import _resolve_skill_session_id
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        session = ClaudeSessionResult(
+            session_id="", subtype="success", is_error=False, result="", errors=[]
+        )
+        result = _sr(channel_b_session_id="")
+        assert _resolve_skill_session_id(session, result) == ""
+
+    def test_handles_none_session(self):
+        """When session is None, falls back to Channel B UUID."""
+        from autoskillit.execution.headless import _resolve_skill_session_id
+
+        result = _sr(channel_b_session_id="from-channel-b")
+        assert _resolve_skill_session_id(None, result) == "from-channel-b"
+
+
 class TestBuildSkillResult:
     """Coverage for _build_skill_result — the primary output-routing function."""
 
@@ -228,6 +285,94 @@ class TestBuildSkillResult:
         )
         assert skill.success is False
         assert skill.needs_retry is True
+
+    def test_build_skill_result_stale_path_uses_channel_b_session_id(self):
+        """_build_skill_result must populate session_id from Channel B on stale path."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        result = SubprocessResult(
+            returncode=1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=12345,
+            channel_b_session_id="b077addc-926d-4869-b27a-7465a4c0fda4",
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="ORDER_UP",
+            skill_command="/autoskillit:review-approach",
+            audit=None,
+            expected_output_patterns=[],
+            cwd="/tmp",
+        )
+        assert skill_result.session_id == "b077addc-926d-4869-b27a-7465a4c0fda4"
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
+
+    def test_build_skill_result_timeout_empty_stdout_uses_channel_b_session_id(self):
+        """_build_skill_result must use Channel B session_id on TIMED_OUT with empty stdout."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        result = SubprocessResult(
+            returncode=1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+            channel_b_session_id="c1ee2a00-1234-5678-abcd-deadbeefcafe",
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="ORDER_UP",
+            skill_command="/autoskillit:implement-worktree",
+            audit=None,
+            expected_output_patterns=[],
+            cwd="/tmp",
+        )
+        assert skill_result.session_id == "c1ee2a00-1234-5678-abcd-deadbeefcafe"
+        assert skill_result.success is False
+
+    def test_build_skill_result_prefers_stdout_session_id_over_channel_b(self):
+        """stdout-parsed session_id takes precedence over Channel B UUID."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        stdout_session = "aaaaaaaa-0000-0000-0000-000000000001"
+        channel_b_uuid = "bbbbbbbb-0000-0000-0000-000000000002"
+        stdout = (
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "session_id": stdout_session,
+                    "result": "ORDER_UP\n",
+                    "is_error": False,
+                }
+            )
+            + "\n"
+        )
+        result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_b_session_id=channel_b_uuid,
+        )
+        skill_result = _build_skill_result(
+            result,
+            completion_marker="ORDER_UP",
+            skill_command="/autoskillit:smoke-task",
+            audit=None,
+            expected_output_patterns=[],
+            cwd="/tmp",
+        )
+        assert skill_result.session_id == stdout_session  # NOT channel_b_uuid
+
+    def test_make_result_exposes_channel_b_session_id(self):
+        """_make_result must accept channel_b_session_id to enable Channel B path tests."""
+        result = _make_result(channel_b_session_id="test-uuid-123")
+        assert result.channel_b_session_id == "test-uuid-123"
 
 
 class TestRecoverFromSeparateMarker:
@@ -643,7 +788,7 @@ class TestStalenessReturnsNeedsRetry:
     """Stale SubprocessResult triggers needs_retry response."""
 
     def test_staleness_returns_needs_retry(self):
-        """A stale result produces needs_retry=True, retry_reason='resume'."""
+        """A stale result produces needs_retry=True, retry_reason='stale'."""
         stale_result = SubprocessResult(
             returncode=-1,
             stdout="",
@@ -653,7 +798,7 @@ class TestStalenessReturnsNeedsRetry:
         )
         response = json.loads(_build_skill_result(stale_result).to_json())
         assert response["needs_retry"] is True
-        assert response["retry_reason"] == "resume"
+        assert response["retry_reason"] == "stale"
         assert response["subtype"] == "stale"
         assert response["success"] is False
 
@@ -1622,38 +1767,6 @@ class TestMarkerCrossValidation:
         assert result.success is False
 
 
-class TestResolveModel:
-    """Tests for _resolve_model resolution chain."""
-
-    @pytest.fixture(autouse=True)
-    def _set_config(self, tool_ctx):
-        self._tool_ctx = tool_ctx
-
-    def _set_model_config(self, default=None, override=None):
-        cfg = AutomationConfig(model=ModelConfig(default=default, override=override))
-        self._tool_ctx.config = cfg
-
-    # MOD_R1
-    def test_resolve_model_override_wins(self):
-        self._set_model_config(override="haiku")
-        assert _resolve_model("sonnet", self._tool_ctx.config) == "haiku"
-
-    # MOD_R2
-    def test_resolve_model_step_model(self):
-        self._set_model_config()
-        assert _resolve_model("sonnet", self._tool_ctx.config) == "sonnet"
-
-    # MOD_R3
-    def test_resolve_model_config_default(self):
-        self._set_model_config(default="haiku")
-        assert _resolve_model("", self._tool_ctx.config) == "haiku"
-
-    # MOD_R4
-    def test_resolve_model_nothing_set(self):
-        self._set_model_config()
-        assert _resolve_model("", self._tool_ctx.config) is None
-
-
 class TestBuildSkillResultTokenUsage:
     """token_usage field in _build_skill_result output."""
 
@@ -1957,7 +2070,9 @@ class TestCrashSessionLog:
     """flush_session_log is called with success=False when runner raises."""
 
     @pytest.mark.anyio
-    async def test_crash_session_log_written_when_runner_raises(self, monkeypatch, tool_ctx):
+    async def test_crash_session_log_written_when_runner_raises(
+        self, monkeypatch, tool_ctx, tmp_path
+    ):
         """flush_session_log is called with CRASHED termination_reason when runner raises."""
         from autoskillit.execution.headless import run_headless_core
 
@@ -1974,7 +2089,7 @@ class TestCrashSessionLog:
         tool_ctx.runner = raising_runner  # type: ignore[assignment]
 
         with pytest.raises(RuntimeError, match="simulated crash"):
-            await run_headless_core("/investigate test", cwd="/tmp", ctx=tool_ctx)
+            await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
 
         crash_calls = [f for f in flushed if f.get("termination_reason") == "CRASHED"]
         assert len(crash_calls) >= 1
@@ -1995,7 +2110,7 @@ class TestRetryBudgetEnforcement:
             exit_code=-1,
             subtype="stale",
             needs_retry=True,
-            retry_reason="resume",
+            retry_reason="stale",
             stderr="",
         )
 
@@ -2018,7 +2133,7 @@ class TestRetryBudgetEnforcement:
             max_consecutive_retries=3,
         )
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.STALE
 
     def test_budget_at_threshold_overrides_needs_retry_to_false(self) -> None:
         """At exactly max_consecutive_retries prior failures: needs_retry is overridden."""
@@ -2043,7 +2158,7 @@ class TestRetryBudgetEnforcement:
             max_consecutive_retries=3,
         )
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.STALE
 
     def test_budget_other_skill_command_not_counted(self) -> None:
         """Consecutive failures for a different skill_command don't exhaust this skill's budget."""
@@ -2056,7 +2171,7 @@ class TestRetryBudgetEnforcement:
             max_consecutive_retries=3,
         )
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.STALE
 
     def test_budget_applies_to_normal_path_context_exhaustion(self) -> None:
         """Budget applies to the normal path (not just stale), e.g. context exhaustion."""
@@ -2556,6 +2671,124 @@ class TestBuildSkillResultChannelBPatternRecovery:
         assert sr.success is True
         assert "---prepare-issue-result---" in sr.result
 
+    def test_synthesis_not_run_for_unparseable_channel_b_with_write_evidence(self) -> None:
+        """CHANNEL_B + UNPARSEABLE + write evidence must not produce success=True.
+
+        Recovery (and CHANNEL_B bypass) must be blocked when session.session_complete
+        is False. Synthesis must not inject the file path into result.
+        """
+
+        tool_use_line = json.dumps(
+            {
+                "type": "tool_use",
+                "id": "t1",
+                "name": "Write",
+                "input": {
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"  # noqa: E501
+                },
+            }
+        )
+        # UNPARSEABLE result (no proper result record)
+        raw_stdout = tool_use_line + "\ngarbage ndjson partial"
+
+        sub_result = SubprocessResult(
+            returncode=1,
+            stdout=raw_stdout,
+            stderr="",
+            termination=TerminationReason.COMPLETED,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert sr.success is False
+        assert sr.subtype not in {"success"}
+        # Synthesis must not have injected the structured token (raw NDJSON may contain
+        # the file path string, but the plan_path = ... assignment must be absent)
+        assert "plan_path =" not in sr.result
+
+    def test_synthesis_not_run_for_timeout_channel_b_with_write_evidence(self) -> None:
+        """CHANNEL_B + TIMEOUT + write evidence must not produce success=True."""
+        tool_use_line = json.dumps(
+            {
+                "type": "tool_use",
+                "id": "t1",
+                "name": "Write",
+                "input": {
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"  # noqa: E501
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = tool_use_line + "\n" + result_line
+
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert sr.success is False
+        assert "arch_lens_selection" not in sr.result
+
+    def test_synthesis_skipped_for_channel_b_session_complete(self) -> None:
+        """CHANNEL_B + SUCCESS + write evidence but no pattern in assistant_messages.
+
+        Synthesis must NOT fabricate the token — if pattern is absent from
+        assistant_messages, the agent never emitted it.
+        """
+        tool_use_line = json.dumps(
+            {
+                "type": "tool_use",
+                "id": "t1",
+                "name": "Write",
+                "input": {"file_path": "/cwd/.autoskillit/temp/make-plan/task_plan.md"},
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = tool_use_line + "\n" + result_line
+
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.COMPLETED,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        sr = _build_skill_result(
+            sub_result,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert sr.success is False
+        assert "plan_path" not in sr.result
+
 
 class TestBuildSkillResultChannelAPatternRecovery:
     """_build_skill_result must extend pattern recovery to CHANNEL_A wins, not just CHANNEL_B."""
@@ -2944,6 +3177,38 @@ class TestSynthesizeFromWriteArtifacts:
         )
         assert result is None
 
+    def test_synthesis_uses_last_write_not_first(self, make_session):
+        """When multiple Write tool_uses exist, synthesis must use the LAST absolute path.
+
+        Multi-artifact skills write intermediate files first, final deliverable last.
+        Synthesis must inject the final deliverable (last path), not the intermediate.
+        """
+        from autoskillit.execution.headless import _synthesize_from_write_artifacts
+
+        session = make_session(
+            result="",
+            tool_uses=[
+                {
+                    "name": "Write",
+                    "id": "t1",
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection.md",
+                },
+                {
+                    "name": "Write",
+                    "id": "t2",
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/task_plan_2026-01-01.md",
+                },
+            ],
+        )
+        result = _synthesize_from_write_artifacts(
+            session, [r"plan_path\s*=\s*/.+"], write_call_count=2
+        )
+        assert result is not None
+        assert (
+            "plan_path = /cwd/.autoskillit/temp/make-plan/task_plan_2026-01-01.md" in result.result
+        )
+        assert "arch_lens_selection" not in result.result
+
 
 # ---------------------------------------------------------------------------
 # T3: _build_skill_result integration — CONTRACT_RECOVERY gate
@@ -3014,7 +3279,7 @@ def make_build_skill_result_kwargs():
                         exit_code=-1,
                         subtype="stale",
                         needs_retry=True,
-                        retry_reason="resume",
+                        retry_reason="stale",
                         stderr="",
                     )
                 )
@@ -3106,3 +3371,74 @@ class TestContractRecoveryGate:
         sr = _build_skill_result(**kwargs)
         assert sr.needs_retry is False
         assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED
+
+
+class TestBuildSkillResultSessionIdFromSubprocess:
+    """_build_skill_result propagates result.session_id on all paths."""
+
+    def test_stale_path_session_id_from_subprocess_result(self) -> None:
+        """Stale path: SkillResult.session_id == result.session_id (not hardcoded '')."""
+        result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=1,
+            session_id="real-uuid-from-channel-b",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "real-uuid-from-channel-b"
+
+    def test_timeout_empty_stdout_session_id_from_subprocess_result(self) -> None:
+        """TIMED_OUT with empty stdout: SkillResult.session_id == result.session_id."""
+        result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=1,
+            session_id="real-uuid-from-channel-b",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "real-uuid-from-channel-b"
+
+    def test_channel_a_session_id_takes_precedence(self) -> None:
+        """When stdout has a result record with session_id, it wins over result.session_id."""
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "result": "done",
+                "session_id": "stdout-uuid",
+                "is_error": False,
+            }
+        )
+        result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            session_id="ch-b-uuid",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "stdout-uuid"
+
+    def test_context_exhaustion_session_id_from_subprocess_result(self) -> None:
+        """Context-exhaustion (no result record): uses result.session_id as fallback."""
+        partial_assistant_stdout = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "Doing work..."}]},
+            }
+        )
+        result = SubprocessResult(
+            returncode=1,
+            stdout=partial_assistant_stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            session_id="ch-b-uuid-5678",
+        )
+        sr = _build_skill_result(result)
+        assert sr.session_id == "ch-b-uuid-5678"

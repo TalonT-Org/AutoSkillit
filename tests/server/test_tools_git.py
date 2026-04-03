@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import structlog.testing
 
 from autoskillit.config import AutomationConfig, ClassifyFixConfig
+from autoskillit.core import CleanupResult
 from autoskillit.core.types import MergeFailedStep, MergeState, RestartScope
 from autoskillit.server.tools_git import (
     check_pr_mergeable,
@@ -134,6 +136,7 @@ class TestMergeWorktree:
             _make_result(0, "/repo/.git/worktrees/wt\n", "")
         )  # rev-parse --git-dir
         tool_ctx.runner.push(_make_result(0, "impl-branch\n", ""))  # branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git ls-files (pre-dirty-tree check)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
         tool_ctx.runner.push(_make_result(1, "FAIL\n= 3 failed, 97 passed =", ""))  # test-check
         result = json.loads(await merge_worktree(str(wt), "dev"))
@@ -270,7 +273,7 @@ class TestMergeWorktreeCleanupReporting:
 
     @pytest.mark.anyio
     async def test_reports_worktree_remove_failure(self, tool_ctx, tmp_path):
-        """3a: worktree_removed reflects actual git worktree remove result."""
+        """3a: worktree_removed reflects actual worktree removal result."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
@@ -295,11 +298,14 @@ class TestMergeWorktreeCleanupReporting:
             )
         )  # worktree list
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
-        tool_ctx.runner.push(
-            _make_result(1, "", "error: untracked files")
-        )  # worktree remove FAILS
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
-        result = json.loads(await merge_worktree(str(wt), "dev"))
+        with patch(
+            "autoskillit.server.git.remove_git_worktree",
+            new=AsyncMock(
+                return_value=CleanupResult(failed=[(str(wt), "error: untracked files")])
+            ),
+        ):
+            result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
         assert result["cleanup_succeeded"] is False
         assert result["worktree_removed"] is False
@@ -384,12 +390,17 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
         )
         tool_ctx.runner.push(_make_result(0, "", ""))  # merge
-        tool_ctx.runner.push(
-            _make_result(1, "", "error: untracked files")
-        )  # worktree remove FAILS
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
 
-        with structlog.testing.capture_logs() as logs:
+        with (
+            patch(
+                "autoskillit.server.git.remove_git_worktree",
+                new=AsyncMock(
+                    return_value=CleanupResult(failed=[(str(wt), "error: untracked files")])
+                ),
+            ),
+            structlog.testing.capture_logs() as logs,
+        ):
             result = json.loads(await merge_worktree(str(wt), "dev"))
 
         assert result["merge_succeeded"] is True

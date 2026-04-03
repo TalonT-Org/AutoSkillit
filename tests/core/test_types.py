@@ -28,14 +28,9 @@ def test_retry_reason_values():
         RetryReason.DRAIN_RACE,
         RetryReason.PATH_CONTAMINATION,
         RetryReason.CONTRACT_RECOVERY,
+        RetryReason.STALE,
     }
     assert RetryReason.NONE.value == "none"
-
-
-def test_contract_recovery_retry_reason_exists():
-    """CONTRACT_RECOVERY must be a member of RetryReason."""
-    assert hasattr(RetryReason, "CONTRACT_RECOVERY")
-    assert RetryReason.CONTRACT_RECOVERY == "contract_recovery"
 
 
 def test_merge_failed_step_values():
@@ -53,6 +48,7 @@ def test_merge_failed_step_values():
         MergeFailedStep.GENERATED_FILE_CLEANUP,
         MergeFailedStep.POST_REBASE_TEST_GATE,
         MergeFailedStep.MERGE,
+        MergeFailedStep.EDITABLE_INSTALL_GUARD,
     }
 
 
@@ -68,12 +64,8 @@ def test_merge_state_values():
         MergeState.WORKTREE_DIRTY_MID_OPERATION,
         MergeState.MAIN_REPO_MERGE_ABORTED,
         MergeState.MAIN_REPO_DIRTY_ABORT_FAILED,
+        MergeState.MERGE_SUCCEEDED_CLEANUP_BLOCKED,
     }
-
-
-def test_merge_state_has_base_branch_not_published() -> None:
-    """MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED exists with correct value."""
-    assert MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED == "worktree_intact_base_not_published"
 
 
 def test_restart_scope_values():

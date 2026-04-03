@@ -4,6 +4,13 @@ categories: [github]
 description: Create a GitHub PR for a completed implementation, with auto-selected arch-lens
   diagrams embedded in the PR body. Use after pipeline implementation when open_pr mode is
   enabled.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: open-pr] Opening pull request...'"
+          once: true
 ---
 
 # Open PR
@@ -63,37 +70,6 @@ If base_branch == "stable" AND feature_branch != "main":
         Stable branch policy: only integration PRs from main are permitted.
         Tip: Open a PR to 'integration' first, then promote via the integration pipeline.
     Exit with code 1.
-
-### Step 0b: Retrieve Token Summary from Session Logs
-
-Determine the pipeline working directory and self-retrieve token telemetry from disk.
-This replaces the previous note-based protocol that required the orchestrator to pre-stage
-the summary file.
-
-```bash
-export PIPELINE_CWD="$(pwd)"
-mkdir -p .autoskillit/temp/open-pr
-python3 - <<'EOF' > .autoskillit/temp/open-pr/token_summary.md 2>/dev/null || true
-import sys, os
-from autoskillit.pipeline.tokens import DefaultTokenLog
-from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
-from autoskillit.execution.session_log import resolve_log_dir
-
-log_root = resolve_log_dir("")
-tl = DefaultTokenLog()
-n = tl.load_from_log_dir(log_root, cwd_filter=os.environ.get("PIPELINE_CWD", ""))
-if n == 0:
-    sys.exit(0)
-steps = tl.get_report()
-total = tl.compute_total()
-print(TelemetryFormatter.format_token_table(steps, total))
-EOF
-```
-
-- If `.autoskillit/temp/open-pr/token_summary.md` is non-empty, set `TOKEN_SUMMARY_CONTENT` to its
-  contents and embed it in the PR body under `## Token Usage Summary`.
-- If empty or absent (standalone invocation, no pipeline sessions in this cwd), omit the
-  section — graceful degradation with no error.
 
 ### Step 1: Parse Arguments
 
@@ -307,11 +283,6 @@ Closes #{closing_issue}
 
 Plan file: `{plan_path}`
 
-{If TOKEN_SUMMARY_CONTENT is non-empty (set by Step 0b):}
-## Token Usage Summary
-
-{TOKEN_SUMMARY_CONTENT}
-
 🤖 Generated with [Claude Code](https://claude.com/claude-code) via AutoSkillit
 ```
 
@@ -366,11 +337,6 @@ Plan files:
 - `{plan_path_1}`
 - `{plan_path_2}`
 
-{If TOKEN_SUMMARY_CONTENT is non-empty (set by Step 0b):}
-## Token Usage Summary
-
-{TOKEN_SUMMARY_CONTENT}
-
 🤖 Generated with [Claude Code](https://claude.com/claude-code) via AutoSkillit
 ```
 
@@ -399,3 +365,4 @@ Output: `pr_url={url}`
 
 - Always: `pr_url=<url>` (empty string when GitHub unavailable)
 - PR body written to: `.autoskillit/temp/open-pr/pr_body_{timestamp}.md`
+- Token usage summary: appended automatically to the PR body by the `token_summary_appender.py` PostToolUse hook after this skill's result is returned

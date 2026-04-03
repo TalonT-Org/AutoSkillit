@@ -19,7 +19,6 @@ Tests:
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
 
 import pytest
@@ -75,6 +74,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "headless",  # execution/headless.py: _OUTPUT_PATH_TOKENS = _build_path_token_set()
+        "_stale_check",  # cli/_stale_check.py: _DISMISS_WINDOW = timedelta(hours=12)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -525,13 +525,15 @@ def test_cli_is_package() -> None:
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 16 Python files (REQ-DSGN-002).
+    """server/ must not exceed 17 Python files (REQ-DSGN-002).
 
     Limit updated from 14 to 16 after tools_integrations was split into
     tools_github, tools_issue_lifecycle, and tools_pr_ops.
+    Limit updated from 16 to 17 after _editable_guard.py was added as
+    the pre-deletion editable install guard for perform_merge().
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 16, f"server/ has {len(py_files)} files, max is 16"
+    assert len(py_files) <= 17, f"server/ has {len(py_files)} files, max is 17"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
@@ -630,28 +632,6 @@ def test_test_suite_oversized_files_split():
     assert not over, f"Oversized test files remain (run groupE): {over}"
 
 
-def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
-    """tmp_path must contain a .ROOT_DIR-derived hash to prevent cross-worktree collision.
-
-    Fails when pytest is invoked with --basetemp=/dev/shm/pytest-tmp (static path).
-    Passes only when Taskfile.yml derives PYTEST_TMPDIR from .ROOT_DIR via the
-    slim-sprig sha256sum template function.
-    """
-    if sys.platform == "linux":
-        import hashlib
-        import os
-
-        cwd_hash = hashlib.sha256(os.getcwd().encode()).hexdigest()[:8]
-        path_str = str(tmp_path)
-        assert f"pytest-tmp-{cwd_hash}" in path_str, (
-            f"tmp_path ({path_str!r}) does not contain the expected worktree hash "
-            f"'{cwd_hash}'. PYTEST_TMPDIR must be derived from .ROOT_DIR. "
-            f"Expected /dev/shm/pytest-tmp-{cwd_hash} as the base. "
-            "Update Taskfile.yml PYTEST_TMPDIR to use a .ROOT_DIR-derived hash suffix "
-            "(use slim-sprig: {{ substr 0 8 (sha256sum .ROOT_DIR) }})."
-        )
-
-
 def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 
@@ -674,14 +654,23 @@ def test_no_subpackage_exceeds_10_files() -> None:
         Exempt at 15 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
-        core/_terminal_table.py. Exempt at 12 files.
+        core/_terminal_table.py. Also contains _terminal.py — the terminal state
+        management context manager (terminal_guard) for interactive subprocess
+        sessions. _stale_check.py adds the stale-install detection surface.
+        Exempt at 14 files.
+      hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
+        (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
+        file so Claude Code can invoke it directly as a subprocess. Adding
+        session_start_reminder.py for the SessionStart event brings the count to 11.
+        Exempt at 11 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 16,
+        "server": 17,
         "recipe": 27,
         "execution": 23,
         "core": 15,
-        "cli": 12,
+        "cli": 15,
+        "hooks": 12,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
@@ -858,7 +847,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     context_path = AUTOSKILLIT_ROOT / "pipeline" / "context.py"
     context_tree = ast.parse(context_path.read_text())
 
-    EXEMPT = {"plugin_dir", "config"}
+    EXEMPT = {"plugin_dir", "config", "active_recipe_packs"}
     violations: list[str] = []
 
     for node in ast.walk(context_tree):
@@ -1136,3 +1125,31 @@ def test_pipeline_init_no_longer_exports_domain_paths():
 
     assert "DOMAIN_PATHS" not in m.__all__
     assert "partition_files_by_domain" not in m.__all__
+
+
+def test_singleton_exemption_comment_matches_module_constant() -> None:
+    """The _stale_check exemption comment in SINGLETON_ALLOWED_MODULES must
+    accurately reflect the current _DISMISS_WINDOW constant value."""
+
+    from autoskillit.cli._stale_check import _DISMISS_WINDOW
+
+    # Read this test file itself
+    this_file = Path(__file__)
+    content = this_file.read_text(encoding="utf-8")
+
+    # Build the expected Python expression from the live constant
+    total_seconds = _DISMISS_WINDOW.total_seconds()
+    if total_seconds % 86400 == 0:
+        days = int(total_seconds // 86400)
+        expected_fragment = f"timedelta(days={days})"
+    elif total_seconds % 3600 == 0:
+        hours = int(total_seconds // 3600)
+        expected_fragment = f"timedelta(hours={hours})"
+    else:
+        expected_fragment = repr(_DISMISS_WINDOW)
+
+    assert expected_fragment in content, (
+        f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
+        f"Expected to find '{expected_fragment}' (current _DISMISS_WINDOW={_DISMISS_WINDOW!r}). "
+        "Update the inline comment on the '_stale_check' entry."
+    )

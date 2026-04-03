@@ -24,6 +24,8 @@ from autoskillit.core import (
     is_protected_branch,
     truncate_text,
 )
+from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
+from autoskillit.workspace import remove_git_worktree, remove_worktree_sidecar
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -229,14 +231,15 @@ async def perform_merge(
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
             }
-        passed, test_stdout = await tester.run(Path(worktree_path))
-        if not passed:
+        test_result = await tester.run(Path(worktree_path))
+        if not test_result.passed:
             return {
                 "error": "Tests failed in worktree — merge blocked",
                 "failed_step": MergeFailedStep.TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
-                "test_output": test_stdout,
+                "test_stdout": test_result.stdout,
+                "test_stderr": test_result.stderr,
             }
 
     # 5. Fetch
@@ -325,7 +328,8 @@ async def perform_merge(
 
     # 6.5. Post-rebase test gate — re-tests the rebased commits before merging
     if tester is not None and config.safety.test_gate_on_merge:
-        passed, _ = await tester.run(Path(worktree_path))
+        test_result = await tester.run(Path(worktree_path))
+        passed = test_result.passed
         if not passed:
             return {
                 "error": (
@@ -335,6 +339,8 @@ async def perform_merge(
                 "failed_step": MergeFailedStep.POST_REBASE_TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
+                "test_stdout": test_result.stdout,
+                "test_stderr": test_result.stderr,
             }
 
     # 7. Discover main repo path
@@ -380,16 +386,49 @@ async def perform_merge(
             **({"abort_failed": True, "abort_stderr": abort_stderr} if abort_failed else {}),
         }
 
+    # 8.5. Pre-deletion editable install guard
+    poisoned = scan_editable_installs_for_worktree(Path(worktree_path))
+    if poisoned:
+        descriptions = "; ".join(poisoned)
+        logger.error(
+            "merge_worktree_editable_install_guard",
+            worktree_path=worktree_path,
+            poisoned_installs=poisoned,
+        )
+        return {
+            "error": (
+                f"Editable install(s) targeting this worktree detected in system Python: "
+                f"{descriptions}. "
+                f"Remove the editable install first: "
+                f"`uv pip uninstall autoskillit --python <system-python>` "
+                f"then re-run merge_worktree."
+            ),
+            "failed_step": MergeFailedStep.EDITABLE_INSTALL_GUARD,
+            "state": MergeState.MERGE_SUCCEEDED_CLEANUP_BLOCKED,
+            "worktree_path": worktree_path,
+            "merge_succeeded": True,
+            "poisoned_installs": poisoned,
+            "worktree_removed": False,
+            "branch_deleted": False,
+            "cleanup_succeeded": False,
+        }
+
     # 9. Cleanup
-    wt_rc, _, wt_stderr = await _run_git(
-        ["git", "worktree", "remove", "--force", worktree_path], main_repo, 30, runner
-    )
-    if wt_rc != 0:
+    wt_result = await remove_git_worktree(Path(worktree_path), Path(main_repo), runner)
+    wt_rc = 0 if wt_result.success else 1
+    if not wt_result.success:
         logger.warning(
             "merge_worktree_cleanup_failed",
             operation="worktree_remove",
             path=worktree_path,
-            stderr=wt_stderr.strip(),
+            failures=wt_result.failed,
+        )
+
+    sidecar_result = remove_worktree_sidecar(Path(main_repo), worktree_branch)
+    if not sidecar_result.success:
+        logger.warning(
+            "merge_worktree_sidecar_cleanup_failed",
+            failures=sidecar_result.failed,
         )
 
     br_rc, _, br_stderr = await _run_git(

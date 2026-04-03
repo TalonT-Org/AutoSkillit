@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    PACK_REGISTRY,
     ClaudeDirectoryConventions,
+    PackDef,
     SkillSource,
     ValidatedAddDir,
     atomic_write,
@@ -25,7 +27,7 @@ from autoskillit.core import (
 from autoskillit.workspace.skills import SkillInfo, SkillResolver, detect_project_local_overrides
 
 if TYPE_CHECKING:
-    from autoskillit.config.settings import AutomationConfig
+    from autoskillit.config import AutomationConfig
 
 # Candidate ephemeral roots, tried in order.
 # resolve_ephemeral_root() appends tempfile.gettempdir() as the final fallback.
@@ -119,35 +121,52 @@ def _is_skill_disabled(
     return False
 
 
+def _resolve_effective_disabled(
+    explicit_disabled: list[str],
+    pack_registry: dict[str, PackDef],
+    packs_enabled: list[str],
+    recipe_packs: frozenset[str] | None,
+) -> frozenset[str]:
+    """Compute the merged effective disabled set from all visibility sources.
+
+    Formula:
+      effective = (explicit_disabled ∪ default_disabled_packs)
+                − (packs_enabled ∪ recipe_packs)
+
+    Precedence: explicit_disabled always stays — it cannot be overridden by
+    packs_enabled or recipe_packs. Default-disabled packs CAN be overridden.
+    """
+    default_disabled = frozenset(
+        tag for tag, pack_def in pack_registry.items() if not pack_def.default_enabled
+    )
+    enabled = frozenset(packs_enabled) | (recipe_packs or frozenset())
+    # Default-disabled packs that are not explicitly enabled
+    default_disabled_effective = default_disabled - enabled
+    # Explicit disables always survive
+    return frozenset(explicit_disabled) | default_disabled_effective
+
+
 def _should_inject_skill(
     skill_info: SkillInfo,
     *,
-    cook_session: bool,
     overrides: frozenset[str],
-    disabled_subsets: list[str],
-    custom_tags: dict[str, list[str]],
+    effective_disabled: frozenset[str],
+    effective_custom_tags: dict[str, list[str]],
 ) -> bool:
     """Return True if this skill should be written to the ephemeral session dir.
 
-    Three-stage decision model:
-    1. Channel deduplication (unconditional) — BUNDLED skills are already served
-       by --plugin-dir; project-local overrides are already visible via CWD
-       auto-discovery.  These gates run regardless of session mode.
-    2. Cook bypass — cook_session=True skips subset filtering so the cook sees
-       the full extended menu.
-    3. Subset filtering — disabled categories and custom tags.
+    Two-stage decision:
+    1. Channel deduplication (unconditional): BUNDLED skills served via --plugin-dir;
+       project-local overrides visible via CWD auto-discovery.
+    2. Effective disable filtering (already accounts for cook session, packs, recipe).
     """
-    # Channel deduplication — unconditional, regardless of session mode.
-    # BUNDLED skills are already registered via --plugin-dir (Channel 1).
+    # Channel deduplication — unconditional
     if skill_info.source == SkillSource.BUNDLED:
         return False
-    # Project-local overrides are already visible via CWD auto-discovery (Channel 3).
     if skill_info.name in overrides:
         return False
-    # Subset filtering — cook_session bypasses this (the cook sees the full menu).
-    if cook_session:
-        return True
-    if _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
+    # Apply effective filtering
+    if _is_skill_disabled(skill_info, list(effective_disabled), effective_custom_tags):
         return False
     return True
 
@@ -200,6 +219,7 @@ class DefaultSessionSkillManager:
         cook_session: bool = False,
         config: AutomationConfig | None = None,
         project_dir: Path | None = None,
+        recipe_packs: frozenset[str] | None = None,
     ) -> ValidatedAddDir:
         """Create ephemeral skill dir for session_id.
 
@@ -229,13 +249,25 @@ class DefaultSessionSkillManager:
                 logger.warning("Unknown skill names in tier config (ignored): %s", sorted(unknown))
             tier2_skills = frozenset(config.skills.tier2)
 
-        # Extract subset disable info from config (empty by default)
-        if config is None:
-            disabled_subsets: list[str] = []
-            custom_tags: dict[str, list[str]] = {}
+        # Extract subset info based on session mode
+        if cook_session:
+            explicit_disabled: list[str] = []
+            effective_custom_tags: dict[str, list[str]] = {}
+        elif config is None:
+            explicit_disabled = []
+            effective_custom_tags = {}
         else:
-            disabled_subsets = list(config.subsets.disabled)
-            custom_tags = dict(config.subsets.custom_tags)
+            explicit_disabled = list(config.subsets.disabled)
+            effective_custom_tags = dict(config.subsets.custom_tags)
+
+        packs_enabled: list[str] = [] if config is None else list(config.packs.enabled)
+
+        effective_disabled = _resolve_effective_disabled(
+            explicit_disabled=explicit_disabled,
+            pack_registry=PACK_REGISTRY,
+            packs_enabled=packs_enabled,
+            recipe_packs=recipe_packs,
+        )
 
         # Compute project-local overrides (REQ-OVR-001..004)
         overrides: frozenset[str] = (
@@ -249,16 +281,15 @@ class DefaultSessionSkillManager:
         for skill_info in self._provider.list_skills():
             if not _should_inject_skill(
                 skill_info,
-                cook_session=cook_session,
                 overrides=overrides,
-                disabled_subsets=disabled_subsets,
-                custom_tags=custom_tags,
+                effective_disabled=effective_disabled,
+                effective_custom_tags=effective_custom_tags,
             ):
                 if skill_info.source == SkillSource.BUNDLED:
                     _log.debug("init_session_plugin_dir_skip", skill=skill_info.name)
                 elif skill_info.name in overrides:
                     _log.debug("init_session_override_skip", skill=skill_info.name)
-                elif _is_skill_disabled(skill_info, disabled_subsets, custom_tags):
+                else:
                     _log.debug("init_session_subset_skip", skill=skill_info.name)
                 continue
             skill_dir = skills_base / skill_info.name
@@ -291,7 +322,7 @@ class DefaultSessionSkillManager:
         atomic_write(skill_md, updated)
         return True
 
-    def cleanup_stale(self, max_age_seconds: int = 86400) -> int:
+    def cleanup_stale(self, max_age_seconds: int = 259200) -> int:
         """Remove session dirs not accessed within max_age_seconds.
 
         Returns count of removed directories.

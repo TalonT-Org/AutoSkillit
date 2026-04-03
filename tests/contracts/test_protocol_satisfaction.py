@@ -123,6 +123,43 @@ def test_default_timing_log_satisfies_timing_store_protocol():
     assert isinstance(DefaultTimingLog(), TimingStore)
 
 
+def test_default_token_log_satisfies_token_store_with_order_id():
+    """F-1: DefaultTokenLog satisfies updated TokenStore Protocol (includes order_id params)."""
+    from autoskillit.core import TokenStore
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+
+    log = DefaultTokenLog()
+    assert isinstance(log, TokenStore)
+    # Verify the order_id param is accepted by record/get_report/compute_total
+    log.record(
+        "plan",
+        {
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+        order_id="test-order",
+    )
+    assert log.get_report(order_id="test-order") != []
+    total = log.compute_total(order_id="test-order")
+    assert "input_tokens" in total
+
+
+def test_default_timing_log_satisfies_timing_store_with_order_id():
+    """F-2: DefaultTimingLog satisfies updated TimingStore Protocol (includes order_id params)."""
+    from autoskillit.core import TimingStore
+    from autoskillit.pipeline.timings import DefaultTimingLog
+
+    log = DefaultTimingLog()
+    assert isinstance(log, TimingStore)
+    # Verify the order_id param is accepted by record/get_report/compute_total
+    log.record("plan", 5.0, order_id="test-order")
+    assert log.get_report(order_id="test-order") != []
+    total = log.compute_total(order_id="test-order")
+    assert "total_seconds" in total
+
+
 # ── isinstance checks — Default* classes satisfy protocols ─────────────────────
 
 
@@ -164,6 +201,15 @@ def test_default_test_runner_satisfies_test_runner():
     mock_config.test_check.command = ["task", "test-all"]
     mock_config.test_check.timeout = 600
     assert isinstance(DefaultTestRunner(mock_config, MagicMock()), TestRunner)
+
+
+def test_test_runner_return_type_is_test_result() -> None:
+    from typing import get_type_hints
+
+    from autoskillit.core import TestResult, TestRunner
+
+    hints = get_type_hints(TestRunner.run)
+    assert hints["return"] is TestResult
 
 
 def test_default_headless_executor_satisfies_headless_executor():
@@ -422,7 +468,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_005_subprocess_result_field_names(self):
-        """SubprocessResult must have exactly the 11 canonical fields."""
+        """SubprocessResult must have exactly the 12 canonical fields."""
         from autoskillit.core.types import SubprocessResult
 
         fields = {f.name for f in dataclasses.fields(SubprocessResult)}
@@ -435,6 +481,7 @@ class TestGroupDApiContractPreservation:
             "channel_confirmation",
             "proc_snapshots",
             "channel_b_session_id",
+            "session_id",
             "start_ts",
             "end_ts",
             "elapsed_seconds",

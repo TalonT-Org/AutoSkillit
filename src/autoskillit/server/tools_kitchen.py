@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from uuid import uuid4
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -38,7 +39,8 @@ def _write_hook_config() -> None:
     """
     from autoskillit.server import _get_ctx, logger
 
-    cfg = _get_ctx().config.quota_guard
+    ctx = _get_ctx()
+    cfg = ctx.config.quota_guard
     payload = {
         "quota_guard": {
             "threshold": cfg.threshold if cfg.threshold is not None else 90.0,
@@ -46,7 +48,8 @@ def _write_hook_config() -> None:
             "cache_path": cfg.cache_path
             if cfg.cache_path is not None
             else "~/.claude/autoskillit_quota_cache.json",
-        }
+        },
+        "kitchen_id": ctx.kitchen_id,
     }
     hook_cfg_path = _hook_config_path(Path.cwd())
     try:
@@ -60,8 +63,13 @@ async def _open_kitchen_handler() -> None:
     """Set the tools-enabled flag. Extracted for testability."""
     from autoskillit.server import _get_ctx, logger
 
-    _get_ctx().gate.enable()
-    logger.info("open_kitchen", gate_state="open")
+    ctx = _get_ctx()
+    ctx.gate.enable()
+    ctx.kitchen_id = str(uuid4())
+    # Store recipe packs — populated from LoadRecipeResult.requires_packs in #524.
+    # For now, store empty frozenset to establish the contract.
+    ctx.active_recipe_packs = frozenset()
+    logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
     _write_hook_config()
     await _prime_quota_cache()
 
@@ -82,6 +90,7 @@ def _close_kitchen_handler() -> None:
     from autoskillit.server import _get_ctx, logger
 
     _get_ctx().gate.disable()
+    _get_ctx().active_recipe_packs = None
     logger.info("close_kitchen", gate_state="closed")
     hook_cfg_path = _hook_config_path(Path.cwd())
     try:
@@ -150,6 +159,7 @@ async def open_kitchen(
             resolved_defaults=_defaults,
             ingredient_overrides=overrides,
         )
+        tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
         recipe_info = tool_ctx.recipes.find(name, Path.cwd())
         result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
         result["kitchen"] = "open"

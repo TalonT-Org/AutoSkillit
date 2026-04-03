@@ -1,6 +1,13 @@
 ---
 name: migrate-recipes
 description: Apply versioned migration notes to an AutoSkillit recipe. Use when user confirms migration, called by agent or autoskillit migrate CLI, or invoked directly.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: migrate-recipes] Migrating recipe files...'"
+          once: true
 ---
 
 # Migrate Scripts Skill

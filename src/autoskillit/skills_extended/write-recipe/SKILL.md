@@ -1,6 +1,13 @@
 ---
 name: write-recipe
 description: Generate YAML recipes for .autoskillit/recipes/. Use when user says "make script skill", "generate script", "script a workflow", "write a script", "create a script", "new recipe", "write a pipeline", or when loaded by other skills for script formatting.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: write-recipe] Writing recipe...'"
+          once: true
 ---
 
 # Make Script Skill
@@ -221,7 +228,7 @@ close-kitchen, collapse-issues, design-guards, diagnose-ci, dry-walkthrough, ela
 enrich-issues, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
 make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr, open-kitchen, open-pr, pipeline-summary,
 prepare-issue, process-issues, rectify, report-bug, resolve-failures, resolve-merge-conflicts, resolve-review,
-retry-worktree, review-approach, review-pr, setup-project, smoke-task, sprint-planner, triage-issues, verify-diag, write-recipe
+retry-worktree, review-approach, review-pr, setup-project, smoke-task, sprint-planner, triage-issues, validate-audit, verify-diag, write-recipe
 
 ## Skill Reference Disambiguation
 

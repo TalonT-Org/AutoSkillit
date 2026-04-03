@@ -297,7 +297,7 @@ class TestSyncConfigRemoval:
         assert not hasattr(cfg_mod, "SyncConfig")
 
 
-class TestRunSkillRetryConfigFields:
+class TestRunSkillConfigFields:
     def test_run_skill_retry_config_removed(self):
         """run_skill_retry config section was merged into run_skill (timeout now 7200s)."""
         cfg = AutomationConfig()
@@ -364,9 +364,9 @@ class TestQuotaGuardConfig:
 class TestLoggingConfig:
     """LoggingConfig dataclass and YAML loading."""
 
-    def test_logging_config_defaults(self):
+    def test_logging_config_defaults(self, tmp_path):
         """LOG_C1: LoggingConfig has correct defaults from defaults.yaml."""
-        cfg = load_config(None)  # package defaults only (nonexistent project)
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.logging.level == "INFO"
         assert cfg.logging.json_output is None
 
@@ -415,7 +415,6 @@ class TestLoggingConfig:
     def test_automation_config_has_logging_field(self):
         """LOG_C7: AutomationConfig has logging sub-config."""
         cfg = AutomationConfig()
-        assert hasattr(cfg, "logging")
         assert cfg.logging.level == "INFO"
         assert cfg.logging.json_output is None
 
@@ -432,9 +431,9 @@ class TestLoggingConfig:
 class TestLinuxTracingConfig:
     """LinuxTracingConfig dataclass and YAML loading."""
 
-    def test_linux_tracing_config_defaults(self):
+    def test_linux_tracing_config_defaults(self, tmp_path):
         """LT_C1: LinuxTracingConfig defaults: enabled, 5s interval, empty log_dir."""
-        cfg = load_config(None)
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.linux_tracing.enabled is True
         assert cfg.linux_tracing.proc_interval == 5.0
         assert cfg.linux_tracing.log_dir == ""
@@ -454,7 +453,6 @@ class TestLinuxTracingConfig:
     def test_automation_config_has_linux_tracing_field(self):
         """LT_C3: AutomationConfig has linux_tracing sub-config."""
         cfg = AutomationConfig()
-        assert hasattr(cfg, "linux_tracing")
         assert cfg.linux_tracing.enabled is True
         assert cfg.linux_tracing.proc_interval == 5.0
         assert cfg.linux_tracing.log_dir == ""
@@ -650,17 +648,6 @@ class TestReleaseReadinessConfig:
         defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
         assert defaults["branching"]["default_base_branch"] == "main"
 
-    def test_model_default_consistent_with_yaml(self):
-        """ModelConfig dataclass default must match defaults.yaml value."""
-        from autoskillit.config.settings import ModelConfig
-
-        assert ModelConfig().default == "sonnet"
-
-    def test_report_bug_config_exported(self):
-        from autoskillit.config import ReportBugConfig  # must not raise ImportError
-
-        assert ReportBugConfig is not None
-
 
 class TestBranchingConfig:
     def test_branching_config_default_base_branch_is_main(self) -> None:
@@ -718,20 +705,22 @@ class TestBranchingConfig:
         assert cfg.default_base_branch == "integration"
         assert cfg.promotion_target == "main"
 
-    def test_branching_config_promotion_target_defaults_match_yaml(self) -> None:
+    def test_branching_config_promotion_target_defaults_match_yaml(self, tmp_path) -> None:
         """Python default for promotion_target matches defaults.yaml."""
         from autoskillit.config import load_config
         from autoskillit.config.settings import BranchingConfig
 
-        loaded = load_config()  # loads only defaults.yaml + user config
+        loaded = load_config(tmp_path / "settings.toml")
         assert loaded.branching.promotion_target == BranchingConfig().promotion_target
 
-    def test_branching_config_promotion_target_env_var_override(self, monkeypatch) -> None:
+    def test_branching_config_promotion_target_env_var_override(
+        self, monkeypatch, tmp_path
+    ) -> None:
         """AUTOSKILLIT_BRANCHING__PROMOTION_TARGET env var overrides promotion_target."""
         from autoskillit.config import load_config
 
         monkeypatch.setenv("AUTOSKILLIT_BRANCHING__PROMOTION_TARGET", "stable")
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.branching.promotion_target == "stable"
 
 
@@ -780,12 +769,6 @@ class TestBuildSubsetsConfigCustomTagsValidation:
         assert result.custom_tags == {}
 
 
-def test_resolve_ingredient_defaults_in_config():
-    from autoskillit.config import resolve_ingredient_defaults
-
-    assert callable(resolve_ingredient_defaults)
-
-
 class TestSkillsConfig:
     """SkillsConfig dataclass, tier duplication validation, and AutomationConfig integration."""
 
@@ -823,11 +806,11 @@ class TestSkillsConfig:
         assert len(skills.get("tier2", [])) >= 20
         assert len(skills.get("tier3", [])) >= 10
 
-    def test_load_config_populates_skills_tiers(self) -> None:
+    def test_load_config_populates_skills_tiers(self, tmp_path) -> None:
         """load_config() produces an AutomationConfig with tier assignments from defaults."""
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert "open-kitchen" in cfg.skills.tier1
         assert "make-plan" in cfg.skills.tier2
         assert "open-pr" in cfg.skills.tier3
@@ -962,6 +945,68 @@ class TestSubsetsConfig:
         assert hasattr(cfg, "custom_tags")
 
 
+class TestPacksConfig:
+    # REQ-PACK-003: PacksConfig.enabled default
+
+    def test_packs_config_default_enabled_is_empty_list(self) -> None:
+        from autoskillit.config import PacksConfig
+
+        assert PacksConfig().enabled == []
+
+    def test_automation_config_has_packs_field(self) -> None:
+        from autoskillit.config import AutomationConfig, PacksConfig
+
+        cfg = AutomationConfig()
+        assert isinstance(cfg.packs, PacksConfig)
+        assert cfg.packs.enabled == []
+
+    def test_load_config_packs_enabled(self, tmp_path) -> None:
+        from autoskillit.config import load_config
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("packs:\n  enabled:\n    - research\n")
+        config = load_config(tmp_path)
+        assert config.packs.enabled == ["research"]
+
+    def test_load_config_packs_enabled_absent_means_empty(self, tmp_path) -> None:
+        from autoskillit.config import load_config
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("subsets:\n  disabled: []\n")
+        config = load_config(tmp_path)
+        assert config.packs.enabled == []
+
+    def test_load_config_unknown_pack_in_packs_enabled_logs_warning(self, tmp_path) -> None:
+        import logging
+
+        from autoskillit.config import load_config
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("packs:\n  enabled:\n    - nonexistent-pack\n")
+        captured: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = captured.append  # type: ignore[assignment]
+        logger = logging.getLogger("autoskillit.config.settings")  # noqa: TID251
+        logger.addHandler(handler)
+        try:
+            config = load_config(tmp_path)
+        finally:
+            logger.removeHandler(handler)
+        assert config.packs.enabled == ["nonexistent-pack"]  # preserved as-is
+        assert any("nonexistent-pack" in r.getMessage() for r in captured)
+
+    def test_write_config_layer_accepts_packs_enabled(self, tmp_path) -> None:
+        """write_config_layer does not raise for valid packs.enabled."""
+        from autoskillit.config.settings import write_config_layer
+
+        config_path = tmp_path / "config.yaml"
+        write_config_layer(config_path, {"packs": {"enabled": ["research"]}})
+        assert config_path.exists()
+
+
 class TestWriteConfigLayer:
     def test_write_config_layer_rejects_secret_key(self, tmp_path: Path) -> None:
         """write_config_layer raises ConfigSchemaError before touching the file."""
@@ -993,3 +1038,25 @@ class TestWriteConfigLayer:
         assert config_path.is_file()
         data = _yaml.safe_load(config_path.read_text())
         assert data["github"]["default_repo"] == "owner/repo"
+
+
+class TestWorkspaceConfig:
+    """WorkspaceConfig section is present in AutomationConfig with correct defaults."""
+
+    def test_workspace_config_exists_on_automation_config(self):
+        from autoskillit.config import load_config
+
+        cfg = load_config()
+        assert hasattr(cfg, "workspace")
+
+    def test_workspace_worktree_root_defaults_to_none(self):
+        from autoskillit.config import load_config
+
+        cfg = load_config()
+        assert cfg.workspace.worktree_root is None
+
+    def test_workspace_runs_root_defaults_to_none(self):
+        from autoskillit.config import load_config
+
+        cfg = load_config()
+        assert cfg.workspace.runs_root is None

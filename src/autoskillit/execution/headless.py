@@ -181,13 +181,15 @@ def _synthesize_from_write_artifacts(
         # Skip if the pattern is already satisfied in the current result.
         if re.search(pattern, session.result):
             continue
-        # Find the first Write/Edit tool_use with an absolute file_path.
-        for tool_use in session.tool_uses:
-            if tool_use.get("name") in {"Write", "Edit"}:
-                fp = tool_use.get("file_path", "")
-                if fp.startswith("/"):
-                    synthesized_lines.append(f"{token_name} = {fp}")
-                    break  # one synthesis per pattern
+        # Collect ALL absolute Write/Edit paths; use the LAST one (final deliverable).
+        # Multi-artifact skills write intermediate files first, final deliverable last.
+        candidate_paths = [
+            t.get("file_path", "")
+            for t in session.tool_uses
+            if t.get("name") in {"Write", "Edit"} and t.get("file_path", "").startswith("/")
+        ]
+        if candidate_paths:
+            synthesized_lines.append(f"{token_name} = {candidate_paths[-1]}")
 
     if not synthesized_lines:
         return None
@@ -422,6 +424,21 @@ def _apply_budget_guard(
     return sr
 
 
+def _resolve_skill_session_id(
+    session: ClaudeSessionResult | None,
+    result: SubprocessResult,
+) -> str:
+    """Return the best-available Claude session UUID.
+
+    Precedence: stdout-parsed session_id (Channel A) > transport-resolved
+    session_id (process.py) > Channel B JSONL filename stem.
+    Returns "" only when all sources are empty.
+    """
+    if session is not None and session.session_id:
+        return session.session_id
+    return result.session_id or result.channel_b_session_id
+
+
 def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
@@ -474,7 +491,7 @@ def _build_skill_result(
                 return SkillResult(
                     success=True,
                     result=_truncate(stale_session.agent_result),
-                    session_id=stale_session.session_id,
+                    session_id=stale_session.session_id or _resolve_skill_session_id(None, result),
                     subtype="recovered_from_stale",
                     is_error=False,
                     exit_code=stale_returncode,
@@ -489,7 +506,7 @@ def _build_skill_result(
             exit_code=result.returncode if result.returncode is not None else -1,
             subtype="stale",
             needs_retry=True,
-            retry_reason=RetryReason.RESUME,
+            retry_reason=RetryReason.STALE,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
@@ -499,12 +516,12 @@ def _build_skill_result(
                 "Session went stale (no activity for configured threshold). "
                 "Partial progress may have been made. Retry to continue."
             ),
-            session_id="",
+            session_id=_resolve_skill_session_id(None, result),
             subtype="stale",
             is_error=False,
             exit_code=-1,
             needs_retry=True,
-            retry_reason=RetryReason.RESUME,
+            retry_reason=RetryReason.STALE,
             stderr="",
             token_usage=None,
         )
@@ -521,7 +538,7 @@ def _build_skill_result(
                 subtype=CliSubtype.TIMEOUT,
                 is_error=True,
                 result="",
-                session_id="",
+                session_id=_resolve_skill_session_id(None, result),
                 errors=[],
             )
     else:
@@ -531,40 +548,47 @@ def _build_skill_result(
     # Moved earlier: needed by synthesis recovery step before _compute_outcome.
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
 
-    # Recovery check: attempt before _compute_outcome so the recovered session
-    # is the input for outcome computation rather than the original.
-    if completion_marker:
-        recovered = _recover_from_separate_marker(session, completion_marker)
-        if recovered is not None:
-            session = recovered
+    # Recovery is only valid for sessions that completed normally.
+    # For incomplete sessions (UNPARSEABLE, TIMEOUT, etc.), any Write calls were
+    # intermediate artifacts, not final deliverables. Recovery or synthesis on these
+    # sessions would fabricate success evidence for a session that never finished.
+    if session.session_complete:
+        # Recovery check: attempt before _compute_outcome so the recovered session
+        # is the input for outcome computation rather than the original.
+        if completion_marker:
+            recovered = _recover_from_separate_marker(session, completion_marker)
+            if recovered is not None:
+                session = recovered
 
-    # Pattern recovery: when a drain-race occurs on either channel, expected_output_patterns
-    # content may only exist in assistant_messages. Attempt recovery so that _compute_success
-    # sees the block in session.result.
-    if (
-        result.channel_confirmation != ChannelConfirmation.UNMONITORED
-        and expected_output_patterns
-        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
-    ):
-        pattern_recovered = _recover_block_from_assistant_messages(
-            session, expected_output_patterns
-        )
-        if pattern_recovered is not None:
-            session = pattern_recovered
+        # Pattern recovery: when a drain-race occurs on either channel, expected_output_patterns
+        # content may only exist in assistant_messages. Attempt recovery so that _compute_success
+        # sees the block in session.result.
+        if (
+            result.channel_confirmation != ChannelConfirmation.UNMONITORED
+            and expected_output_patterns
+            and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
+        ):
+            pattern_recovered = _recover_block_from_assistant_messages(
+                session, expected_output_patterns
+            )
+            if pattern_recovered is not None:
+                session = pattern_recovered
 
-    # Artifact-aware synthesis: when write evidence exists but the structured output token
-    # is absent, synthesize it from the Write/Edit tool_use file_path. Runs regardless of
-    # channel_confirmation — write evidence is available from all sessions.
-    if (
-        expected_output_patterns
-        and write_call_count >= 1
-        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
-    ):
-        artifact_recovered = _synthesize_from_write_artifacts(
-            session, list(expected_output_patterns), write_call_count
-        )
-        if artifact_recovered is not None:
-            session = artifact_recovered
+        # Artifact-aware synthesis: only for UNMONITORED sessions where
+        # _recover_block_from_assistant_messages is unavailable. For CHANNEL_A/B
+        # sessions, if the pattern was absent from assistant_messages the agent never
+        # emitted it — synthesis would fabricate a token the agent did not produce.
+        if (
+            expected_output_patterns
+            and write_call_count >= 1
+            and result.channel_confirmation == ChannelConfirmation.UNMONITORED
+            and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
+        ):
+            artifact_recovered = _synthesize_from_write_artifacts(
+                session, list(expected_output_patterns), write_call_count
+            )
+            if artifact_recovered is not None:
+                session = artifact_recovered
 
     outcome, retry_reason = _compute_outcome(
         session,
@@ -638,7 +662,7 @@ def _build_skill_result(
         sr = SkillResult(
             success=False,
             result=result_text,
-            session_id=session.session_id,
+            session_id=session.session_id or result.session_id,
             subtype="path_contamination",
             is_error=session.is_error,
             exit_code=returncode,
@@ -655,7 +679,7 @@ def _build_skill_result(
         sr = SkillResult(
             success=success,
             result=result_text,
-            session_id=session.session_id,
+            session_id=session.session_id or result.session_id,
             subtype=normalized_subtype,
             is_error=session.is_error,
             exit_code=returncode,
@@ -731,6 +755,8 @@ async def run_headless_core(
     *,
     model: str = "",
     step_name: str = "",
+    kitchen_id: str = "",
+    order_id: str = "",
     add_dirs: Sequence[ValidatedAddDir] = (),
     timeout: float | None = None,
     stale_threshold: float | None = None,
@@ -806,6 +832,8 @@ async def run_headless_core(
                     flush_session_log(
                         log_dir=_log_dir,
                         cwd=str(cwd),
+                        kitchen_id=kitchen_id,
+                        order_id=order_id,
                         session_id="",
                         pid=0,
                         skill_command=skill_command,
@@ -845,9 +873,6 @@ async def run_headless_core(
         new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
         audit_record = new_audit_records[0] if new_audit_records else None
 
-        # Resolve effective session ID: prefer stdout-parsed, fall back to Channel B discovery
-        effective_session_id = skill_result.session_id or result.channel_b_session_id
-
         if result.proc_snapshots is not None or not skill_result.success or bool(step_name):
             from autoskillit.execution.session_log import flush_session_log
 
@@ -855,7 +880,9 @@ async def run_headless_core(
                 flush_session_log(
                     log_dir=ctx.config.linux_tracing.log_dir,
                     cwd=cwd,
-                    session_id=effective_session_id,
+                    kitchen_id=kitchen_id,
+                    order_id=order_id,
+                    session_id=skill_result.session_id,
                     pid=result.pid,
                     skill_command=original_skill_command,
                     success=skill_result.success,
@@ -894,6 +921,7 @@ async def run_headless_core(
                     start_ts=result.start_ts,
                     end_ts=result.end_ts,
                     elapsed_seconds=result.elapsed_seconds,
+                    order_id=order_id,
                 )
             except Exception:
                 logger.debug("token_log_record_failed", exc_info=True)
@@ -913,6 +941,8 @@ class DefaultHeadlessExecutor:
         *,
         model: str = "",
         step_name: str = "",
+        kitchen_id: str = "",
+        order_id: str = "",
         add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
@@ -928,6 +958,8 @@ class DefaultHeadlessExecutor:
             self._ctx,
             model=model,
             step_name=step_name,
+            kitchen_id=kitchen_id,
+            order_id=order_id,
             add_dirs=add_dirs,
             timeout=effective_timeout,
             stale_threshold=effective_stale,

@@ -71,6 +71,14 @@ github:
   default_repo: null
   in_progress_label: "in-progress"
   staged_label: "staged"
+  allowed_labels:
+    - "bug"
+    - "enhancement"
+    - "in-progress"
+    - "staged"
+    - "autoreported"
+    - "recipe:implementation"
+    - "recipe:remediation"
 
 report_bug:
   timeout: 600
@@ -106,6 +114,9 @@ ci:
 subsets:
   disabled: []
   custom_tags: {}
+
+packs:
+  enabled: []
 
 skills:
   tier1:
@@ -170,3 +181,7 @@ skills:
     - pipeline-summary
     - diagnose-ci
     - verify-diag
+
+workspace:
+  worktree_root: null   # null = auto-resolve to ../worktrees/ relative to project root
+  runs_root: null       # null = auto-resolve to ../autoskillit-runs/ relative to project root

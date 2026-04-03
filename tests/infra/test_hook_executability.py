@@ -21,12 +21,14 @@ from autoskillit.hooks import HOOK_REGISTRY, generate_hooks_json
 def _extract_hook_commands() -> list[str]:
     """Extract all command strings from generate_hooks_json() output."""
     data = generate_hooks_json()
+    hooks = data.get("hooks", {})
     commands: list[str] = []
-    for entry in data.get("hooks", {}).get("PreToolUse", []):
-        for hook in entry.get("hooks", []):
-            cmd = hook.get("command", "")
-            if cmd:
-                commands.append(cmd)
+    for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
+        for entry in hooks.get(event_type, []):
+            for hook in entry.get("hooks", []):
+                cmd = hook.get("command", "")
+                if cmd:
+                    commands.append(cmd)
     return commands
 
 
@@ -54,7 +56,7 @@ def test_hook_registry_matches_generated_hooks_json() -> None:
     generated_pairs: set[tuple[str, str]] = set()
     for event_entries in data.get("hooks", {}).values():
         for entry in event_entries:
-            matcher = entry["matcher"]
+            matcher = entry.get("matcher", "")
             for hook in entry["hooks"]:
                 cmd = hook["command"]
                 script_name = cmd.split("/")[-1]
@@ -68,6 +70,32 @@ def test_hook_registry_matches_generated_hooks_json() -> None:
     assert registry_pairs == generated_pairs
 
 
+def test_hooks_json_on_disk_exists_and_matches() -> None:
+    """hooks.json on disk must exist and match generate_hooks_json() exactly.
+
+    This test fails when the generation step has not been run. It guards
+    against drift between HOOK_REGISTRY and the on-disk plugin manifest.
+    """
+    hooks_json_path = pkg_root() / "hooks" / "hooks.json"
+    assert hooks_json_path.exists(), (
+        "src/autoskillit/hooks/hooks.json is missing. "
+        'Run: uv run python -c "'
+        "from autoskillit.hooks import generate_hooks_json; "
+        "from autoskillit.core.io import atomic_write; "
+        "from autoskillit.core.paths import pkg_root; "
+        "import json; "
+        "atomic_write(pkg_root() / 'hooks' / 'hooks.json', "
+        "json.dumps(generate_hooks_json(), indent=2) + chr(10))"
+        '"'
+    )
+    on_disk = json.loads(hooks_json_path.read_text())
+    expected = generate_hooks_json()
+    assert on_disk == expected, (
+        "hooks.json on disk does not match generate_hooks_json(). "
+        "Re-run the generation command to regenerate."
+    )
+
+
 def test_hook_registry_scripts_exist_on_disk() -> None:
     """Every script referenced in HOOK_REGISTRY must exist as a file in hooks/."""
     hooks_dir = pkg_root() / "hooks"
@@ -75,3 +103,17 @@ def test_hook_registry_scripts_exist_on_disk() -> None:
         for script in hook_def.scripts:
             script_path = hooks_dir / script
             assert script_path.is_file(), f"Registry script not found on disk: {script_path}"
+
+
+# REQ-HOOK-001
+def test_hook_registry_has_session_start_entry() -> None:
+    session_start_entries = [h for h in HOOK_REGISTRY if h.event_type == "SessionStart"]
+    assert session_start_entries, "HOOK_REGISTRY must contain a SessionStart entry"
+
+
+def test_generate_hooks_json_session_start_no_matcher() -> None:
+    result = generate_hooks_json()
+    session_start_entries = result["hooks"].get("SessionStart", [])
+    assert session_start_entries, "hooks.json must include SessionStart"
+    for entry in session_start_entries:
+        assert "matcher" not in entry, "SessionStart entries must not have a matcher key"

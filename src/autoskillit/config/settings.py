@@ -135,6 +135,33 @@ class GitHubConfig:
     default_repo: str | None = None
     in_progress_label: str = "in-progress"
     staged_label: str = "staged"
+    allowed_labels: list[str] = field(default_factory=list)
+
+    def check_label_allowed(self, label: str) -> str | None:
+        """Return None if label is permitted, or an error message string if not.
+
+        When allowed_labels is empty, all labels are permitted (unrestricted/opt-out mode).
+        """
+        if not self.allowed_labels:
+            return None
+        if label not in self.allowed_labels:
+            allowed_sorted = sorted(self.allowed_labels)
+            return (
+                f"Label '{label}' is not in the configured allowed labels. "
+                f"Allowed: {allowed_sorted}. "
+                f"Add '{label}' to github.allowed_labels in your config to permit it."
+            )
+        return None
+
+    def check_labels_allowed(self, labels: list[str]) -> str | None:
+        """Return None if all labels are permitted, or an error message for the first violation.
+
+        When allowed_labels is empty, all labels are permitted (unrestricted/opt-out mode).
+        """
+        for label in labels:
+            if err := self.check_label_allowed(label):
+                return err
+        return None
 
 
 @dataclass
@@ -195,6 +222,17 @@ class SubsetsConfig:
     custom_tags: dict[str, list[str]] = field(default_factory=dict)
 
 
+@dataclass
+class PacksConfig:
+    enabled: list[str] = field(default_factory=list)
+
+
+@dataclass
+class WorkspaceConfig:
+    worktree_root: str | None = None  # null = auto-resolve to ../worktrees/
+    runs_root: str | None = None  # null = auto-resolve to ../autoskillit-runs/
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -229,6 +267,8 @@ class AutomationConfig:
     ci: CIConfig = field(default_factory=CIConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
+    packs: PacksConfig = field(default_factory=PacksConfig)
+    workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -266,6 +306,8 @@ class AutomationConfig:
         ci = sec("ci")
         sk = sec("skills")
         _sub = sec("subsets")
+        pk = sec("packs")
+        ws_raw = sec("workspace")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -287,6 +329,7 @@ class AutomationConfig:
         _br = _field_defaults(BranchingConfig)
         _ci = _field_defaults(CIConfig)
         _sk = _field_defaults(SkillsConfig)
+        _wsc = _field_defaults(WorkspaceConfig)
 
         return cls(
             test_check=TestCheckConfig(
@@ -353,6 +396,7 @@ class AutomationConfig:
                 default_repo=val(gh, "default_repo", _gh["default_repo"]) or None,
                 in_progress_label=str(val(gh, "in_progress_label", _gh["in_progress_label"])),
                 staged_label=str(val(gh, "staged_label", _gh["staged_label"])),
+                allowed_labels=list(val(gh, "allowed_labels", _gh["allowed_labels"])),
             ),
             report_bug=ReportBugConfig(
                 timeout=int(val(rb, "timeout", _rb["timeout"])),
@@ -395,6 +439,11 @@ class AutomationConfig:
                 tier3=list(val(sk, "tier3", _sk["tier3"])),
             ),
             subsets=_build_subsets_config(_sub),
+            packs=_build_packs_config(pk),
+            workspace=WorkspaceConfig(
+                worktree_root=val(ws_raw, "worktree_root", _wsc["worktree_root"]) or None,
+                runs_root=val(ws_raw, "runs_root", _wsc["runs_root"]) or None,
+            ),
         )
 
 
@@ -521,6 +570,20 @@ def _build_subsets_config(raw: dict[str, Any]) -> SubsetsConfig:
                 tag,
             )
     return SubsetsConfig(disabled=disabled, custom_tags=custom_tags)
+
+
+def _build_packs_config(raw: dict[str, Any]) -> PacksConfig:
+    """Parse packs section, warning on unknown pack names."""
+    from autoskillit.core import PACK_REGISTRY
+
+    enabled = list(raw.get("enabled", []))
+    for pack_name in enabled:
+        if pack_name not in PACK_REGISTRY:
+            _logger.warning(
+                "Unknown pack name %r in packs.enabled (not in PACK_REGISTRY)",
+                pack_name,
+            )
+    return PacksConfig(enabled=enabled)
 
 
 def _to_optional_list(value: Any) -> list[str] | None:

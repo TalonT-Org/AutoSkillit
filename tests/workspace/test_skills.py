@@ -43,6 +43,7 @@ BUNDLED_SKILLS = [
     "dry-walkthrough",
     "elaborate-phase",
     "enrich-issues",
+    "implement-experiment",
     "implement-worktree",
     "implement-worktree-no-merge",
     "investigate",
@@ -58,6 +59,7 @@ BUNDLED_SKILLS = [
     "open-kitchen",
     "open-pr",
     "pipeline-summary",
+    "plan-experiment",
     "prepare-issue",
     "process-issues",
     "rectify",
@@ -68,6 +70,8 @@ BUNDLED_SKILLS = [
     "retry-worktree",
     "review-pr",
     "review-approach",
+    "run-experiment",
+    "scope",
     "setup-project",
     "smoke-task",
     "sous-chef",
@@ -76,6 +80,7 @@ BUNDLED_SKILLS = [
     "validate-audit",
     "verify-diag",
     "write-recipe",
+    "write-report",
 ]
 
 # Internal-only skill documents: injected programmatically, never invocable as slash commands.
@@ -380,17 +385,17 @@ class TestSkillResolver:
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
     def test_58_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 58 SKILL.md-carrying directories."""
+        """skills_extended/ contains exactly 63 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 58
+        assert len(skills) == 63
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 60 public skills (2 Tier-1 + 58 extended)."""
-        assert len(SkillResolver().list_all()) == 60
+        """list_all() returns 65 public skills (2 Tier-1 + 63 extended)."""
+        assert len(SkillResolver().list_all()) == 65
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
@@ -513,3 +518,27 @@ class TestSkillCategories:
         info = SkillResolver().resolve("investigate")
         assert info is not None
         assert info.categories == frozenset()
+
+
+RESEARCH_SKILL_NAMES = {
+    "scope",
+    "plan-experiment",
+    "implement-experiment",
+    "run-experiment",
+    "write-report",
+}
+
+
+def test_research_skills_all_discoverable():
+    names = {s.name for s in SkillResolver().list_all()}
+    assert RESEARCH_SKILL_NAMES.issubset(names)
+
+
+def test_research_skills_have_research_category():
+    resolver = SkillResolver()
+    for name in RESEARCH_SKILL_NAMES:
+        info = resolver.resolve(name)
+        assert info is not None, f"Skill {name!r} not found"
+        assert "research" in info.categories, (
+            f"Skill {name!r} missing 'research' category; got {info.categories}"
+        )

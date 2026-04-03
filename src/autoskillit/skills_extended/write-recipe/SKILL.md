@@ -225,10 +225,11 @@ arch-lens-development, arch-lens-error-resilience, arch-lens-module-dependency, 
 arch-lens-process-flow, arch-lens-repository-access, arch-lens-scenarios, arch-lens-security, arch-lens-state-lifecycle,
 audit-arch, audit-bugs, audit-cohesion, audit-defense-standards, audit-friction, audit-impl, audit-tests,
 close-kitchen, collapse-issues, design-guards, diagnose-ci, dry-walkthrough, elaborate-phase,
-enrich-issues, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
+enrich-issues, implement-experiment, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
 make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr, open-kitchen, open-pr, pipeline-summary,
-prepare-issue, process-issues, rectify, report-bug, resolve-failures, resolve-merge-conflicts, resolve-review,
-retry-worktree, review-approach, review-pr, setup-project, smoke-task, sprint-planner, triage-issues, validate-audit, verify-diag, write-recipe
+plan-experiment, prepare-issue, process-issues, rectify, report-bug, resolve-failures, resolve-merge-conflicts, resolve-review,
+retry-worktree, review-approach, review-pr, run-experiment, scope, setup-project, smoke-task, sprint-planner,
+triage-issues, validate-audit, verify-diag, write-recipe, write-report
 
 ## Skill Reference Disambiguation
 

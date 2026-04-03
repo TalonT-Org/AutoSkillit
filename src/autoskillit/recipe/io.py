@@ -168,6 +168,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         kitchen_rules=kitchen_rules,
         version=data.get(AUTOSKILLIT_VERSION_KEY),
         experimental=bool(data.get("experimental", False)),
+        requires_packs=data.get("requires_packs") or [],
     )
 
 

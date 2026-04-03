@@ -4,7 +4,7 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## **1. Core Project Goal**
 
-A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 42 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, register_clone_status, batch_cleanup_clones, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, wait_for_merge_queue, toggle_auto_merge, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events, kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 40 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, 1 tool additionally tagged `headless` (test_check) and revealed in headless sessions via `mcp.enable(tags={'headless'})`, and 2 Free Range tools (open_kitchen, close_kitchen) always visible. Revealed per-session via `open_kitchen` tool, and 66 bundled skills (65 slash commands + 1 internal) registered as `/autoskillit:*` slash commands.
+A Claude Code plugin that orchestrates automated skill-driven workflows using headless sessions. It provides 42 MCP tools (run_cmd, run_python, run_skill, test_check, merge_worktree, reset_test_dir, classify_fix, reset_workspace, read_db, migrate_recipe, clone_repo, remove_clone, push_to_remote, register_clone_status, batch_cleanup_clones, report_bug, prepare_issue, enrich_issues, claim_issue, release_issue, wait_for_ci, wait_for_merge_queue, toggle_auto_merge, create_unique_branch, check_pr_mergeable, write_telemetry_files, get_pr_reviews, bulk_close_issues, set_commit_status, get_quota_events, kitchen_status, list_recipes, load_recipe, validate_recipe, get_pipeline_report, get_token_summary, get_timing_summary, fetch_github_issue, get_issue_title, get_ci_status, open_kitchen, close_kitchen) with 40 tools tagged `kitchen` and hidden at startup via FastMCP v3 `mcp.disable(tags={'kitchen'})`, 1 tool additionally tagged `headless` (test_check) and revealed in headless sessions via `mcp.enable(tags={'headless'})`, and 2 Free Range tools (open_kitchen, close_kitchen) always visible. Revealed per-session via `open_kitchen` tool, and 85 bundled skills (84 slash commands + 1 internal) registered as `/autoskillit:*` slash commands.
 
 ## **2. General Principles**
 
@@ -271,6 +271,7 @@ src/autoskillit/
     ├── dry-walkthrough/      ├── make-groups/
     ├── review-approach/      ├── mermaid/
     ├── make-arch-diag/       ├── arch-lens-*/  (13 skills)
+    ├── make-experiment-diag/ └── exp-lens-*/  (18 skills)
     ├── audit-arch/           ├── audit-cohesion/
     ├── audit-tests/          ├── audit-defense-standards/
     ├── audit-bugs/           ├── audit-friction/

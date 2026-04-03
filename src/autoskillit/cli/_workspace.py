@@ -114,8 +114,23 @@ async def run_workspace_clean(
         fs_worktrees = set()
     all_worktrees = git_worktrees | fs_worktrees
 
-    stale_wts = sorted(p for p in all_worktrees if now - p.stat().st_mtime >= threshold)
-    recent_wts = sorted(p for p in all_worktrees if now - p.stat().st_mtime < threshold)
+    # Filter out stale git-registered paths that no longer exist on disk.
+    def _safe_mtime(p: Path) -> float | None:
+        try:
+            return p.stat().st_mtime
+        except FileNotFoundError:
+            return None
+
+    stale_wts: list[Path] = []
+    recent_wts: list[Path] = []
+    for p in sorted(all_worktrees):
+        mtime = _safe_mtime(p)
+        if mtime is None:
+            continue
+        if now - mtime >= threshold:
+            stale_wts.append(p)
+        else:
+            recent_wts.append(p)
 
     if recent_wts:
         print("Skipped worktrees (modified < 5h ago):")

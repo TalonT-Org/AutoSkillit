@@ -698,7 +698,7 @@ def load_and_validate(
     }
     if _serving_recipe is not None and _serving_recipe.kitchen_rules:
         result["kitchen_rules"] = _serving_recipe.kitchen_rules
-    if _serving_recipe is not None:
+    if _serving_recipe is not None and _serving_recipe.requires_packs:
         result["requires_packs"] = _serving_recipe.requires_packs
     if ing_table:
         result["ingredients_table"] = ing_table

@@ -23,7 +23,11 @@ def _text() -> str:
 def test_review_research_pr_has_research_category() -> None:
     """Frontmatter must declare categories: [research]."""
     text = _text()
-    assert "categories:" in text and "research" in text
+    assert "categories:" in text
+    # Verify 'research' appears on a categories line, not just anywhere in the file
+    assert any("research" in line for line in text.splitlines() if "categories:" in line), (
+        "Frontmatter categories: field must include 'research'"
+    )
 
 
 def test_review_research_pr_has_all_seven_research_lenses() -> None:

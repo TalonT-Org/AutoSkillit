@@ -4,7 +4,7 @@ How AutoSkillit works under the hood.
 
 ## Overview
 
-AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 42 MCP tools and 63 bundled skills, organized into a gated visibility system.
+AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 42 MCP tools and 61 bundled skills, organized into a gated visibility system.
 
 ## Core Concepts
 

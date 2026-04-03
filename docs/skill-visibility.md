@@ -77,7 +77,7 @@ and `/autoskillit:close-kitchen`. Skills in `skills_extended/` are never seen.
    (subset-filtered and override-aware)
 3. Claude Code is launched with `--plugin-dir <ephemeral-dir>` and `--add-dir <cwd>` so
    project-local skills in `.claude/skills/` are also discoverable
-4. All 61 bundled skills appear as `/autoskillit:*` slash commands within the session
+4. All 60 bundled slash-command skills appear as `/autoskillit:*` slash commands within the session
 5. The ephemeral directory is cleaned up when the session ends
 
 ### Order session (`$ autoskillit order`)

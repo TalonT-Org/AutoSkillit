@@ -105,6 +105,7 @@ steps:
     tool: run_cmd
     with:
       cmd: >
+        gh label create research --color "#0075ca" --description "Research experiments" 2>/dev/null || true &&
         gh issue create
         --title 'Research: ${{ inputs.task }}'
         --body-file '${{ context.experiment_plan }}'
@@ -167,6 +168,7 @@ steps:
         WORKTREE_PATH="../worktrees/${BRANCH}" &&
         git worktree add -b "${BRANCH}" "${WORKTREE_PATH}" &&
         RESOLVED="$(cd "${WORKTREE_PATH}" && pwd)" &&
+        case "${RESOLVED}" in /*) ;; *) echo "error: resolved worktree path is not absolute: ${RESOLVED}" >&2; exit 1;; esac &&
         mkdir -p ".autoskillit/temp/worktrees/${BRANCH}" &&
         echo "$(git rev-parse --abbrev-ref HEAD)" > ".autoskillit/temp/worktrees/${BRANCH}/base-branch" &&
         mkdir -p "${RESOLVED}/.autoskillit/temp" &&
@@ -203,7 +205,7 @@ steps:
   plan_phase:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:make-plan ${{ inputs.task }}"
+      skill_command: "/autoskillit:make-plan CURRENT_PHASE_FILE"
       cwd: "${{ context.worktree_path }}"
       step_name: plan_phase
       group_files: "${{ context.group_files }}"
@@ -214,10 +216,11 @@ steps:
     on_success: implement_phase
     on_failure: escalate_stop
     note: >
-      Plans the current setup phase. SETUP PHASES MODE: Replace the task argument
-      in skill_command with the current phase's group file path from context.group_files.
-      Glob plan_dir for *_part_*.md or single plan file.
-      ITERATION: Pass the current phase's group file path to make-plan.
+      Plans the current setup phase. Replace CURRENT_PHASE_FILE in skill_command
+      with the first remaining path from context.group_files — do NOT read the file;
+      pass the path directly to the skill. Glob plan_dir for *_part_*.md or single plan file.
+      ITERATION: After each implement_phase cycle, the first entry in context.group_files
+      has been consumed. Use the next entry as CURRENT_PHASE_FILE for the following iteration.
 
   implement_phase:
     tool: run_skill
@@ -256,7 +259,7 @@ steps:
     retries: 2
     on_success: write_report
     on_failure: adjust_experiment
-    on_exhausted: write_report_inconclusive
+    on_exhausted: ensure_results
 
   adjust_experiment:
     tool: run_skill
@@ -267,7 +270,29 @@ steps:
     capture:
       experiment_results: "${{ result.results_path }}"
     on_success: run_experiment
-    on_failure: write_report_inconclusive
+    on_failure: ensure_results
+
+  ensure_results:
+    tool: run_cmd
+    with:
+      cmd: >
+        RESULTS="${{ context.experiment_results }}" &&
+        if [ -z "${RESULTS}" ]; then
+          RESULTS="${{ context.worktree_path }}/.autoskillit/temp/run-experiment/results-inconclusive.md" &&
+          mkdir -p "$(dirname "${RESULTS}")" &&
+          printf '# Experiment Results\n\n## Status\nINCONCLUSIVE\n\nExperiment did not produce results — retries exhausted or adjustment failed.\n' > "${RESULTS}"
+        fi &&
+        echo "experiment_results=${RESULTS}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: ensure_results
+    capture:
+      experiment_results: "${{ result.experiment_results }}"
+    on_success: write_report_inconclusive
+    on_failure: escalate_stop
+    note: >
+      Ensures context.experiment_results is a valid file path before calling
+      write_report_inconclusive. Creates a minimal placeholder results file when
+      run-experiment never produced output (retries exhausted or adjust failed).
 
   write_report:
     tool: run_skill

@@ -900,3 +900,40 @@ def test_list_recipes_stable_with_project_recipe_added(tmp_path: Path) -> None:
     assert bundled_after == bundled_before, (
         "Adding a project recipe must not shift bundled recipe positions"
     )
+
+
+def test_parse_recipe_reads_requires_packs():
+    from autoskillit.recipe.io import _parse_recipe
+
+    data = {
+        "name": "test",
+        "description": "d",
+        "requires_packs": ["research", "github"],
+    }
+    recipe = _parse_recipe(data)
+    assert recipe.requires_packs == ["research", "github"]
+
+
+def test_parse_recipe_requires_packs_defaults_to_empty():
+    from autoskillit.recipe.io import _parse_recipe
+
+    recipe = _parse_recipe({"name": "test", "description": "d"})
+    assert recipe.requires_packs == []
+
+
+def test_research_recipe_loads_without_error():
+    from autoskillit.core.paths import pkg_root
+    from autoskillit.recipe.io import load_recipe
+
+    path = pkg_root() / "recipes" / "research.yaml"
+    recipe = load_recipe(path)
+    assert recipe.name == "research"
+
+
+def test_research_recipe_declares_requires_packs():
+    from autoskillit.core.paths import pkg_root
+    from autoskillit.recipe.io import load_recipe
+
+    path = pkg_root() / "recipes" / "research.yaml"
+    recipe = load_recipe(path)
+    assert recipe.requires_packs == ["research"]

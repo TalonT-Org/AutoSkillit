@@ -1,0 +1,376 @@
+name: research
+autoskillit_version: "0.7.1"
+requires_packs: [research]
+description: >
+  Two-phase technical research recipe. Phase 1 scopes a research question
+  and opens an experiment design issue for human review. Phase 2 (resumed
+  with issue_number) implements the experiment, runs it, writes a report
+  to research/, and opens a PR. Supports optional setup phases for complex
+  experiments requiring prerequisite infrastructure. No auto-merge.
+summary: scope > plan > issue > (resume) > [setup?] > implement > experiment > report > open-pr
+
+ingredients:
+  task:
+    description: Research question or topic to investigate
+    required: true
+  issue_number:
+    description: >
+      Approved experiment design issue number. Providing this skips
+      phase 1 (design) and starts phase 2 (execution) directly.
+    required: false
+  source_dir:
+    description: Path to the project root
+    required: true
+  base_branch:
+    description: Branch to target for the research PR
+    default: "main"
+  setup_phases:
+    description: >
+      When 'true', decompose the experiment plan into sequenced setup
+      phases before implementation. Use for complex research requiring
+      prerequisite infrastructure — test harnesses, data generators,
+      plotting scripts, logging, environment setup, etc. Each phase is
+      planned and implemented independently in a shared worktree before
+      the experiment runs.
+    default: "false"
+
+kitchen_rules:
+  - >
+    NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Task, Explore, WebFetch, WebSearch, NotebookEdit, Agent) from the
+    orchestrator. All work is delegated through run_skill.
+  - >
+    Do NOT auto-merge. The research PR is for human review only.
+    Do NOT use toggle_auto_merge or wait_for_merge_queue.
+  - "The research/ folder is the target for all report output."
+  - >
+    Experiment code in the worktree is disposable — only the report
+    and any reproducible scripts matter for the PR.
+  - >
+    Inconclusive results are valid findings, not failures.
+    Always produce a report regardless of experiment outcome.
+  - "Route to on_failure when a step fails — do not investigate directly."
+  - >
+    SETUP PHASES MODE: When setup_phases is true, the worktree is created
+    early and shared across all phases. The make-groups decomposition
+    produces sequenced phases that include both prerequisite infrastructure
+    AND experiment implementation. After all phases complete, proceed
+    directly to run_experiment — do NOT invoke implement-experiment
+    (it would create a duplicate worktree). The experiment plan is copied
+    into the worktree so run-experiment can discover it.
+  - >
+    PHASE ITERATION: The agent maintains a phase queue from group_files.
+    For each phase, run make-plan then retry-worktree to implement in the
+    shared worktree. Advance to the next phase only after successful
+    implementation. Track remaining phases in context.group_files to
+    determine next_phase_or_experiment routing.
+
+steps:
+  # --- PHASE ROUTER ---
+  check_phase:
+    tool: run_cmd
+    with:
+      cmd: "[ -n '${{ inputs.issue_number }}' ]"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: check_phase
+    on_success: save_experiment_plan
+    on_failure: scope
+    note: >
+      Routes to phase 2 if issue_number is provided, phase 1 otherwise.
+
+  # --- PHASE 1: DESIGN ---
+  scope:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:scope ${{ inputs.task }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: scope
+    capture:
+      scope_report: "${{ result.scope_report }}"
+    on_success: plan_experiment
+    on_failure: escalate_stop
+
+  plan_experiment:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: plan_experiment
+    capture:
+      experiment_plan: "${{ result.experiment_plan }}"
+    on_success: open_plan_issue
+    on_failure: escalate_stop
+
+  open_plan_issue:
+    tool: run_cmd
+    with:
+      cmd: >
+        gh label create research --color "#0075ca" --description "Research experiments" 2>/dev/null || true &&
+        gh issue create
+        --title 'Research: ${{ inputs.task }}'
+        --body-file '${{ context.experiment_plan }}'
+        --label research
+      cwd: "${{ inputs.source_dir }}"
+      step_name: open_plan_issue
+    on_success: phase1_done
+    on_failure: escalate_stop
+
+  phase1_done:
+    action: stop
+    message: >
+      Phase 1 complete. Experiment plan posted as a GitHub issue.
+      Review and approve the plan, then resume this recipe with
+      issue_number set to the approved issue number.
+
+  # --- PHASE 2: EXECUTE ---
+  save_experiment_plan:
+    tool: run_cmd
+    with:
+      cmd: >
+        mkdir -p .autoskillit/temp &&
+        gh issue view ${{ inputs.issue_number }}
+        --json body -q .body > .autoskillit/temp/experiment-plan.md
+      cwd: "${{ inputs.source_dir }}"
+      step_name: save_experiment_plan
+    on_success: check_setup_needed
+    on_failure: escalate_stop
+
+  check_setup_needed:
+    action: route
+    on_result:
+      - when: "${{ inputs.setup_phases }} == true"
+        route: create_worktree
+      - route: implement_experiment
+    note: >
+      Routes to setup phase decomposition if setup_phases is true,
+      otherwise proceeds with single-shot implement-experiment.
+
+  # --- SIMPLE PATH (original behavior) ---
+  implement_experiment:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:implement-experiment ${{ inputs.source_dir }}/.autoskillit/temp/experiment-plan.md"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: implement
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    retries: 0
+    on_context_limit: run_experiment
+    on_success: run_experiment
+    on_failure: escalate_stop
+
+  # --- SETUP PHASES PATH ---
+  create_worktree:
+    tool: run_cmd
+    with:
+      cmd: >
+        BRANCH="research-$(date +%Y%m%d-%H%M%S)" &&
+        WORKTREE_PATH="../worktrees/${BRANCH}" &&
+        git worktree add -b "${BRANCH}" "${WORKTREE_PATH}" &&
+        RESOLVED="$(cd "${WORKTREE_PATH}" && pwd)" &&
+        case "${RESOLVED}" in /*) ;; *) echo "error: resolved worktree path is not absolute: ${RESOLVED}" >&2; exit 1;; esac &&
+        mkdir -p ".autoskillit/temp/worktrees/${BRANCH}" &&
+        echo "$(git rev-parse --abbrev-ref HEAD)" > ".autoskillit/temp/worktrees/${BRANCH}/base-branch" &&
+        mkdir -p "${RESOLVED}/.autoskillit/temp" &&
+        cp .autoskillit/temp/experiment-plan.md "${RESOLVED}/.autoskillit/temp/experiment-plan.md" &&
+        echo "worktree_path=${RESOLVED}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: create_worktree
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    on_success: decompose_phases
+    on_failure: escalate_stop
+    note: >
+      Creates the shared worktree early and copies the experiment plan into
+      it. All setup phases and experiment implementation share this worktree.
+
+  decompose_phases:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:make-groups ${{ inputs.source_dir }}/.autoskillit/temp/experiment-plan.md"
+      cwd: "${{ context.worktree_path }}"
+      step_name: decompose
+    capture:
+      group_files: "${{ result.group_files }}"
+    on_success: plan_phase
+    on_failure: escalate_stop
+    note: >
+      Decomposes the experiment plan into sequenced phases. Each phase
+      becomes an independently plannable implementation unit. Typical
+      decomposition: infrastructure/logging -> data generators ->
+      plotting/analysis scripts -> experiment implementation.
+      ITERATION: The agent maintains a phase queue from group_files.
+      For each phase, run plan_phase then implement_phase before advancing.
+
+  plan_phase:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:make-plan ${{ context.group_files }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: plan_phase
+      group_files: "${{ context.group_files }}"
+    capture:
+      phase_plan_path: "${{ result.plan_path }}"
+    capture_list:
+      plan_parts: "${{ result.plan_parts }}"
+    on_success: implement_phase
+    on_failure: escalate_stop
+    note: >
+      Plans the current setup phase. Replace ${{ context.group_files }} in the
+      skill_command with the FIRST REMAINING phase file path from the list —
+      do NOT pass the entire list. Pass the path directly to the skill (do not read it).
+      Glob plan_dir for *_part_*.md or single plan file.
+      ITERATION: After each implement_phase cycle, advance to the next entry in
+      context.group_files for the following plan_phase iteration.
+
+  implement_phase:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:retry-worktree ${{ context.phase_plan_path }} ${{ context.worktree_path }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: implement_phase
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+    on_success: next_phase_or_experiment
+    on_failure: escalate_stop
+    note: >
+      Implements the current phase plan in the shared worktree.
+      Uses retry-worktree which implements a plan in an existing worktree.
+
+  next_phase_or_experiment:
+    action: route
+    on_result:
+      - when: "${{ result.next }} == more_phases"
+        route: plan_phase
+      - route: run_experiment
+    note: >
+      Routing step. The agent evaluates remaining phases:
+      1. If more phases remain in group_files -> route to plan_phase.
+      2. If all phases complete -> route to run_experiment.
+
+  # --- SHARED PATH (both simple and setup converge here) ---
+  run_experiment:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:run-experiment ${{ context.worktree_path }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: run_experiment
+    capture:
+      experiment_results: "${{ result.results_path }}"
+    retries: 2
+    on_success: write_report
+    on_failure: adjust_experiment
+    on_exhausted: ensure_results
+
+  adjust_experiment:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:run-experiment ${{ context.worktree_path }} --adjust"
+      cwd: "${{ context.worktree_path }}"
+      step_name: adjust
+    capture:
+      experiment_results: "${{ result.results_path }}"
+    on_success: run_experiment
+    on_failure: ensure_results
+
+  ensure_results:
+    tool: run_cmd
+    with:
+      cmd: >
+        RESULTS="${{ context.experiment_results }}" &&
+        if [ -z "${RESULTS}" ]; then
+          RESULTS="${{ context.worktree_path }}/.autoskillit/temp/run-experiment/results-inconclusive.md" &&
+          mkdir -p "$(dirname "${RESULTS}")" &&
+          printf '# Experiment Results\n\n## Status\nINCONCLUSIVE\n\nExperiment did not produce results — retries exhausted or adjustment failed.\n' > "${RESULTS}"
+        fi &&
+        echo "experiment_results=${RESULTS}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: ensure_results
+    capture:
+      experiment_results: "${{ result.experiment_results }}"
+    on_success: write_report_inconclusive
+    on_failure: escalate_stop
+    note: >
+      Ensures context.experiment_results is a valid file path before calling
+      write_report_inconclusive. Creates a minimal placeholder results file when
+      run-experiment never produced output (retries exhausted or adjust failed).
+
+  write_report:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: write_report
+    capture:
+      report_path: "${{ result.report_path }}"
+    on_success: test
+    on_failure: escalate_stop
+    note: "Writes a conclusive research report to research/ in the worktree."
+
+  write_report_inconclusive:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive"
+      cwd: "${{ context.worktree_path }}"
+      step_name: write_report
+    capture:
+      report_path: "${{ result.report_path }}"
+    on_success: test
+    on_failure: escalate_stop
+    note: >
+      Writes an inconclusive research report. Experiments could not
+      prove or disprove the hypothesis. This is a valid outcome.
+
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: push_branch
+    on_failure: fix_tests
+
+  fix_tests:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ inputs.source_dir }}/.autoskillit/temp/experiment-plan.md ${{ inputs.base_branch }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: fix
+    on_success: retest
+    on_failure: escalate_stop
+
+  retest:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: push_branch
+    on_failure: escalate_stop
+
+  push_branch:
+    tool: run_cmd
+    with:
+      cmd: "cd '${{ context.worktree_path }}' && git push -u origin HEAD"
+      cwd: "${{ context.worktree_path }}"
+      step_name: push_branch
+    on_success: open_research_pr
+    on_failure: escalate_stop
+
+  open_research_pr:
+    tool: run_cmd
+    with:
+      cmd: >
+        cd '${{ context.worktree_path }}' &&
+        gh pr create
+        --title 'Research: ${{ inputs.task }}'
+        --body-file '${{ context.report_path }}'
+        --base '${{ inputs.base_branch }}'
+      cwd: "${{ context.worktree_path }}"
+      step_name: open_research_pr
+    on_success: research_complete
+    on_failure: escalate_stop
+
+  research_complete:
+    action: stop
+    message: "Research complete. Report added to research/ folder and PR opened for review."
+
+  escalate_stop:
+    action: stop
+    message: "Research pipeline failed — human intervention needed. Check the latest step output for details."

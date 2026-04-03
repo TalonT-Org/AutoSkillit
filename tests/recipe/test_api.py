@@ -72,6 +72,40 @@ def test_load_and_validate_omits_kitchen_rules_when_empty(tmp_path):
     assert "kitchen_rules" not in result, "kitchen_rules should be absent when recipe has none"
 
 
+# Minimal recipe YAML with requires_packs
+_RECIPE_WITH_PACKS = """\
+name: test-recipe-with-packs
+description: A test recipe with pack requirements
+autoskillit_version: "0.3.0"
+requires_packs: [research, github]
+steps:
+  stop:
+    action: stop
+    message: "done"
+"""
+
+
+# T4c
+def test_load_and_validate_includes_requires_packs(tmp_path):
+    """Response has top-level 'requires_packs' key with pack names when recipe specifies them."""
+    from autoskillit.recipe._api import load_and_validate
+
+    _setup_project_recipe(tmp_path, "test-recipe-with-packs", _RECIPE_WITH_PACKS)
+    result = load_and_validate("test-recipe-with-packs", project_dir=tmp_path)
+
+    assert "requires_packs" in result, "requires_packs should be present"
+    assert result["requires_packs"] == ["research", "github"]
+
+
+# T4d
+def test_load_recipe_result_requires_packs_absent_for_standard_recipe():
+    """Standard recipes without requires_packs omit the key (matches kitchen_rules pattern)."""
+    from autoskillit.recipe._api import load_and_validate
+
+    result = load_and_validate(name="implementation", project_dir=None)
+    assert "requires_packs" not in result
+
+
 # ---------------------------------------------------------------------------
 # Minimal recipe fixture for cache tests
 # ---------------------------------------------------------------------------

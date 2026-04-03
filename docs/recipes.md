@@ -4,7 +4,7 @@ Recipes are YAML pipeline definitions that automate multi-step workflows. Each r
 
 ## Bundled Recipes
 
-AutoSkillit ships with 5 recipes:
+AutoSkillit ships with 6 recipes:
 
 ### implementation
 
@@ -77,6 +77,26 @@ Consolidate multiple open PRs into a single integration branch and PR.
 |-----------|---------|-------------|
 | `base_branch` | *(auto-detect)* | Branch that all PRs target |
 | `audit` | `true` | Run quality audit on conflict resolutions |
+
+### research
+
+Two-phase technical research recipe. Phase 1 scopes a research question and opens an experiment design issue for human review. Phase 2 implements the experiment, runs it, writes a report to `research/`, and opens a PR.
+
+**Flow:** scope → plan → issue → (resume with issue_number) → [setup?] → implement → run → report → open-pr
+
+**When to use:** When you want to investigate a technical question, benchmark an approach, or run a reproducible experiment. Produces a structured research report in `research/`.
+
+**Key ingredients:**
+
+| Ingredient | Default | Description |
+|-----------|---------|-------------|
+| `task` | *(required)* | Research question or topic to investigate |
+| `issue_number` | *(optional)* | Approved experiment design issue — skips phase 1 when provided |
+| `source_dir` | *(required)* | Path to the project root |
+| `base_branch` | `main` | Branch to target for the research PR |
+| `setup_phases` | `false` | When `true`, decompose experiment into sequenced setup phases |
+
+**Requires pack:** `research` (pack members: `scope`, `plan-experiment`, `implement-experiment`, `run-experiment`, `write-report`)
 
 ### smoke-test
 

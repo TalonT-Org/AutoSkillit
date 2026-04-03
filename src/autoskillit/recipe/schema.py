@@ -97,6 +97,7 @@ class Recipe:
     kitchen_rules: list[str] = field(default_factory=list)
     version: str | None = None
     experimental: bool = False
+    requires_packs: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.name = self.name.strip()

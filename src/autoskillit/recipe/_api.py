@@ -367,11 +367,20 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
             merged_rules.append(rule)
             seen_rules.add(rule)
 
+    # Merge requires_packs: union (parent first, then sub-recipe additions)
+    seen_packs: set[str] = set(parent.requires_packs)
+    merged_packs = list(parent.requires_packs)
+    for pack in sub.requires_packs:
+        if pack not in seen_packs:
+            merged_packs.append(pack)
+            seen_packs.add(pack)
+
     return dataclasses.replace(
         parent,
         steps=new_steps,
         ingredients=merged_ingredients,
         kitchen_rules=merged_rules,
+        requires_packs=merged_packs,
     )
 
 

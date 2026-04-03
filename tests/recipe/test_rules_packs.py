@@ -1,4 +1,5 @@
 """Tests for the unknown-required-pack semantic rule."""
+
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -56,7 +57,6 @@ def test_empty_requires_packs_produces_no_finding():
 def test_all_builtin_packs_pass():
     """Every pack in PACK_REGISTRY is a valid name (no self-flagging)."""
     import autoskillit.recipe  # noqa: F401 -- triggers rule registration
-
     from autoskillit.core import PACK_REGISTRY
 
     recipe = _make_recipe(list(PACK_REGISTRY.keys()))

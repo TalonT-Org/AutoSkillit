@@ -92,8 +92,10 @@ def test_review_research_pr_has_lnnn_markers_in_subagent_prompt() -> None:
 
 def test_review_research_pr_uses_reviews_api() -> None:
     """SKILL.md must prescribe the GitHub Reviews API for inline comment posting."""
+    import re
+
     text = _text()
-    assert "pulls/" in text and "reviews" in text, (
+    assert re.search(r"pulls/[^/\s]+/reviews", text), (
         "review-research-pr/SKILL.md must prescribe the GitHub Reviews API "
         "(/repos/{owner}/{repo}/pulls/{n}/reviews) for inline comment posting."
     )

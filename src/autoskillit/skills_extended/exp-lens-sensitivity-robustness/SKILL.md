@@ -111,7 +111,7 @@ If a diagram adds value, create a simplified flowchart. This is OPTIONAL for thi
 
 ### Step 5: Write Output
 
-Write the analysis to: `.autoskillit/temp/exp-lens-sensitivity-robustness/exp_diag_sensitivity_robustness_{YYYY-MM-DD_HHMMSS}.md`
+Write the analysis to: `.autoskillit/temp/exp-lens-sensitivity-robustness/exp_diag_sensitivity_robustness_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

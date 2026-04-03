@@ -90,7 +90,7 @@ Distinguish: Full factorial / Fractional factorial / One-factor-at-a-time / Adap
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/exp-lens-iterative-learning/exp_diag_iterative_learning_{YYYY-MM-DD_HHMMSS}.md`
+Write the diagram to: `.autoskillit/temp/exp-lens-iterative-learning/exp_diag_iterative_learning_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

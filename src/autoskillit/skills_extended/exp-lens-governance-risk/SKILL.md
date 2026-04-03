@@ -88,7 +88,7 @@ For every deployment decision: Does the experiment provide sufficient evidence? 
 
 ### Step 5: Write Output
 
-Write the output to: `.autoskillit/temp/exp-lens-governance-risk/exp_diag_governance_risk_{YYYY-MM-DD_HHMMSS}.md`
+Write the output to: `.autoskillit/temp/exp-lens-governance-risk/exp_diag_governance_risk_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

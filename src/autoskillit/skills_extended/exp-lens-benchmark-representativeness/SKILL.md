@@ -114,7 +114,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/exp-lens-benchmark-representativeness/exp_diag_benchmark_representativeness_{YYYY-MM-DD_HHMMSS}.md`
+Write the diagram to: `.autoskillit/temp/exp-lens-benchmark-representativeness/exp_diag_benchmark_representativeness_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

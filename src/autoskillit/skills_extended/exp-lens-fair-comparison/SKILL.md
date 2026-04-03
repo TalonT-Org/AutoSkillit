@@ -110,7 +110,7 @@ Use the mermaid skill conventions to create a symmetry diagram with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/exp-lens-fair-comparison/exp_diag_fair_comparison_{YYYY-MM-DD_HHMMSS}.md`
+Write the diagram to: `.autoskillit/temp/exp-lens-fair-comparison/exp_diag_fair_comparison_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

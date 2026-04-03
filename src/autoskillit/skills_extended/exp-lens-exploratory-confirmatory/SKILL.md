@@ -87,7 +87,7 @@ For every reported result: Was the analysis plan fixed pre-outcome? How many alt
 
 ### Step 5: Write Output
 
-Write the output to: `.autoskillit/temp/exp-lens-exploratory-confirmatory/exp_diag_exploratory_confirmatory_{YYYY-MM-DD_HHMMSS}.md`
+Write the output to: `.autoskillit/temp/exp-lens-exploratory-confirmatory/exp_diag_exploratory_confirmatory_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

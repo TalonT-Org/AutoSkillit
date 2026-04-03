@@ -114,7 +114,7 @@ Use the mermaid skill conventions to create a stochasticity diagram with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/exp-lens-variance-stability/exp_diag_variance_stability_{YYYY-MM-DD_HHMMSS}.md`
+Write the diagram to: `.autoskillit/temp/exp-lens-variance-stability/exp_diag_variance_stability_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

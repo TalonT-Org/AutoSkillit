@@ -110,7 +110,7 @@ If a diagram adds value, create a simplified flowchart. This is OPTIONAL for thi
 
 ### Step 5: Write Output
 
-Write the analysis to: `.autoskillit/temp/exp-lens-estimand-clarity/exp_diag_estimand_clarity_{YYYY-MM-DD_HHMMSS}.md`
+Write the analysis to: `.autoskillit/temp/exp-lens-estimand-clarity/exp_diag_estimand_clarity_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

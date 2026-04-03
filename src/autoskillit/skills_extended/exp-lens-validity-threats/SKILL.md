@@ -87,7 +87,7 @@ For every observed difference: list at least 3 alternative explanations, ruling-
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/exp-lens-validity-threats/exp_diag_validity_threats_{YYYY-MM-DD_HHMMSS}.md`
+Write the diagram to: `.autoskillit/temp/exp-lens-validity-threats/exp_diag_validity_threats_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

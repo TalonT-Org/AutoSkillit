@@ -119,7 +119,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/exp-lens-reproducibility-artifacts/exp_diag_reproducibility_artifacts_{YYYY-MM-DD_HHMMSS}.md`
+Write the diagram to: `.autoskillit/temp/exp-lens-reproducibility-artifacts/exp_diag_reproducibility_artifacts_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

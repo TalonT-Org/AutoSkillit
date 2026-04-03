@@ -114,7 +114,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/exp-lens-causal-assumptions/exp_diag_causal_assumptions_{YYYY-MM-DD_HHMMSS}.md`
+Write the diagram to: `.autoskillit/temp/exp-lens-causal-assumptions/exp_diag_causal_assumptions_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

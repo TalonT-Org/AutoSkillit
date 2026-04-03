@@ -119,7 +119,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/exp-lens-pipeline-integrity/exp_diag_pipeline_integrity_{YYYY-MM-DD_HHMMSS}.md`
+Write the diagram to: `.autoskillit/temp/exp-lens-pipeline-integrity/exp_diag_pipeline_integrity_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

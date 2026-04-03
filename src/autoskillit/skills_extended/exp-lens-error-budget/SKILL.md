@@ -95,7 +95,7 @@ If a diagram adds value, show Data → Tests → Thresholds → Conclusions, wit
 
 ### Step 5: Write Output
 
-Write the analysis to: `.autoskillit/temp/exp-lens-error-budget/exp_diag_error_budget_{YYYY-MM-DD_HHMMSS}.md`
+Write the analysis to: `.autoskillit/temp/exp-lens-error-budget/exp_diag_error_budget_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

@@ -90,7 +90,7 @@ For each: Is the comparability mechanism strong enough for the claimed inference
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/exp-lens-randomization-blocking/exp_diag_randomization_blocking_{YYYY-MM-DD_HHMMSS}.md`
+Write the diagram to: `.autoskillit/temp/exp-lens-randomization-blocking/exp_diag_randomization_blocking_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

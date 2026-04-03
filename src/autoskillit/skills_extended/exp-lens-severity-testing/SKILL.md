@@ -93,7 +93,7 @@ Show Claims → HIGH/MEDIUM/LOW severity tests → Severity verdicts.
 
 ### Step 5: Write Output
 
-Write the analysis to: `.autoskillit/temp/exp-lens-severity-testing/exp_diag_severity_testing_{YYYY-MM-DD_HHMMSS}.md`
+Write the analysis to: `.autoskillit/temp/exp-lens-severity-testing/exp_diag_severity_testing_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

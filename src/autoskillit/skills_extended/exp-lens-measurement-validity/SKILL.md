@@ -115,7 +115,7 @@ If including the optional diagram:
 
 ### Step 5: Write Output
 
-Write the output to: `.autoskillit/temp/exp-lens-measurement-validity/exp_diag_measurement_validity_{YYYY-MM-DD_HHMMSS}.md`
+Write the output to: `.autoskillit/temp/exp-lens-measurement-validity/exp_diag_measurement_validity_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

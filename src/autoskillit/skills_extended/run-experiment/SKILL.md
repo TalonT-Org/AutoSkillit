@@ -125,50 +125,7 @@ the final conclusions.}
 {Brief justification for the status}
 ```
 
-### Step 5 — Standardized Metrics Assessment
-
-After collecting experiment-specific results, run the canonical metrics assessment
-CLI to produce standardized JSON and markdown artifacts:
-
-> **Prerequisite:** If `.npz` fixture files have not been generated yet, run `python tests/generate_fixtures.py` first (matching the `#[ignore]` annotation on fixture-dependent tests).
-
-```bash
-cd "$WORKTREE_PATH"
-cargo test --features testing --test test_metrics_assess -- assess_accuracy --include-ignored --no-capture
-```
-
-This writes two files to `.autoskillit/temp/run-experiment/` (relative to the current working directory):
-- `accuracy_metrics.json` — machine-readable metrics with per-metric pass/fail status
-- `accuracy_metrics.md` — human-readable summary table
-
-**If the experiment affects parity** (i.e., it involves `ComputeMode`, SIMD paths,
-scaling behavior, or eigenvector sign normalization), also run:
-
-```bash
-cargo test --features testing --test test_metrics_assess -- assess_parity --include-ignored --no-capture
-```
-
-This writes:
-- `parity_metrics.json`
-- `parity_metrics.md`
-
-**Add a `## Standardized Metrics` section** to the results markdown file (in Step 4's
-template, after `## Recommendation`):
-
-```markdown
-## Standardized Metrics
-
-Accuracy assessment: see `accuracy_metrics.md`
-{If parity run: Parity assessment: see `parity_metrics.md`}
-
-{Inline the summary table from the .md file, or note any failed metrics here.}
-```
-
-If `cargo test` fails (e.g., fixtures not generated), note the failure in the
-`## Standardized Metrics` section and continue — a metrics CLI failure does not
-block result collection.
-
-### Step 6 — Save Results
+### Step 5 — Save Results
 
 1. Save results to:
    `.autoskillit/temp/run-experiment/results_{topic}_{YYYY-MM-DD_HHMMSS}.md`

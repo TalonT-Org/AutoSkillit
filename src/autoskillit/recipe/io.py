@@ -159,6 +159,12 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     if not isinstance(kitchen_rules, list):
         raise ValueError(f"'kitchen_rules' must be a list, got {type(kitchen_rules).__name__!r}")
 
+    requires_packs_raw = data.get("requires_packs") or []
+    if not isinstance(requires_packs_raw, list):
+        raise ValueError(
+            f"'requires_packs' must be a list, got {type(requires_packs_raw).__name__!r}"
+        )
+
     return Recipe(
         name=name,
         description=description,
@@ -168,7 +174,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         kitchen_rules=kitchen_rules,
         version=data.get(AUTOSKILLIT_VERSION_KEY),
         experimental=bool(data.get("experimental", False)),
-        requires_packs=data.get("requires_packs") or [],
+        requires_packs=requires_packs_raw,
     )
 
 

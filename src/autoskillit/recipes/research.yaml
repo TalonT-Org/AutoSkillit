@@ -137,13 +137,17 @@ steps:
         mkdir -p ".autoskillit/temp/worktrees/${BRANCH}" &&
         echo "$(git rev-parse --abbrev-ref HEAD)" > ".autoskillit/temp/worktrees/${BRANCH}/base-branch" &&
         mkdir -p "${RESOLVED}/.autoskillit/temp" &&
-        cp '${{ context.experiment_plan }}' "${RESOLVED}/.autoskillit/temp/experiment-plan.md" &&
-        SLUG=$(printf '%s' '${{ inputs.task }}' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/--*/-/g;s/^-//;s/-$//' | cut -c1-30) &&
+        EXPERIMENT_PLAN="${{ context.experiment_plan }}" &&
+        cp "${EXPERIMENT_PLAN}" "${RESOLVED}/.autoskillit/temp/experiment-plan.md" &&
+        TASK="${{ inputs.task }}" &&
+        SLUG=$(printf '%s' "${TASK}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/--*/-/g;s/^-//;s/-$//' | cut -c1-30) &&
         RESEARCH_DIR="${RESOLVED}/research/$(date +%Y-%m-%d)-${SLUG:-experiment}" &&
         mkdir -p "${RESEARCH_DIR}/artifacts" &&
-        cp '${{ context.experiment_plan }}' "${RESEARCH_DIR}/experiment-plan.md" &&
-        if [ -f '${{ context.scope_report }}' ]; then cp '${{ context.scope_report }}' "${RESEARCH_DIR}/artifacts/scope-report.md"; fi &&
-        if [ -f '${{ context.evaluation_dashboard }}' ]; then cp '${{ context.evaluation_dashboard }}' "${RESEARCH_DIR}/artifacts/design-evaluation.md"; fi &&
+        cp "${EXPERIMENT_PLAN}" "${RESEARCH_DIR}/experiment-plan.md" &&
+        SCOPE_REPORT="${{ context.scope_report }}" &&
+        EVAL_DASHBOARD="${{ context.evaluation_dashboard }}" &&
+        if [ -n "${SCOPE_REPORT}" ] && [ -f "${SCOPE_REPORT}" ]; then cp "${SCOPE_REPORT}" "${RESEARCH_DIR}/artifacts/scope-report.md"; fi &&
+        if [ -n "${EVAL_DASHBOARD}" ] && [ -f "${EVAL_DASHBOARD}" ]; then cp "${EVAL_DASHBOARD}" "${RESEARCH_DIR}/artifacts/design-evaluation.md"; fi &&
         cd "${RESOLVED}" && git add research/ && git commit -m "Add experiment plan and scope to research/" &&
         echo "worktree_path=${RESOLVED}"
       cwd: "${{ inputs.source_dir }}"
@@ -330,7 +334,7 @@ steps:
   open_research_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ inputs.task }} ${{ context.report_path }}"
+      skill_command: "/autoskillit:open-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} \"${{ inputs.task }}\" ${{ context.report_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: open_research_pr
     on_success: review_research_pr

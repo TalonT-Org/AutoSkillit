@@ -29,6 +29,16 @@ recipe calls this skill after `plan_experiment` to gate execution on a quality c
 This skill is bounded by `retries: 2` — on exhaustion the recipe proceeds with the
 best available plan.
 
+## Critical Constraints
+
+**NEVER:**
+- Write output outside `.autoskillit/temp/review-design/`
+- Halt the pipeline for a REVISE verdict — emit the verdict and let the recipe route
+
+**ALWAYS:**
+- Emit `verdict = GO`, `verdict = REVISE`, or `verdict = STOP` on the final output line
+- Write `evaluation_dashboard` and `revision_guidance` as absolute paths when present
+
 ## Output
 
 Emit on the final line of output:

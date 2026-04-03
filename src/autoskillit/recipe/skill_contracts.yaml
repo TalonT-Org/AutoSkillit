@@ -725,6 +725,8 @@ skills:
     expected_output_patterns:
     - "verdict\\s*=\\s*(GO|REVISE|STOP)"
     - "experiment_type\\s*=\\s*\\S+"
+    pattern_examples:
+    - "verdict = GO\nexperiment_type = controlled\nevaluation_dashboard = /tmp/eval.md\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
     write_behavior: always
 
   resolve-research-review:

@@ -42,7 +42,8 @@ ingredients:
 
 kitchen_rules:
   - >
-    NEVER use native Claude Code tools from the orchestrator.
+    NEVER use native Claude Code tools from the orchestrator: Read, Grep, Glob,
+    Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit are ALL forbidden.
     All work is delegated through run_skill, run_cmd, run_python.
   - "Do NOT auto-merge. The research PR is for human review only."
   - "The research/ folder is the target for all permanent output."
@@ -78,7 +79,7 @@ steps:
   plan_experiment:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.revision_guidance }}"
+      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: plan_experiment
     capture:
@@ -101,7 +102,6 @@ steps:
     retries: 2
     on_exhausted: create_worktree
     on_context_limit: create_worktree
-    on_success: create_worktree
     on_failure: create_worktree
     on_result:
       - when: "${{ result.verdict }} == GO"
@@ -330,7 +330,7 @@ steps:
   open_research_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ inputs.task }}"
+      skill_command: "/autoskillit:open-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ inputs.task }} ${{ context.report_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: open_research_pr
     on_success: review_research_pr
@@ -344,7 +344,6 @@ steps:
       step_name: review_research_pr
     skip_when_false: inputs.review_pr
     on_context_limit: research_complete
-    on_success: research_complete
     on_failure: research_complete
     on_result:
       - when: "${{ result.verdict }} == changes_requested"

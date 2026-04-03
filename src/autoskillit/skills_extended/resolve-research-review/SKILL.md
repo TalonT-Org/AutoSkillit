@@ -29,6 +29,16 @@ changes so a follow-up push closes the review cycle.
 Called by the research recipe when `review_research_pr` routes `changes_requested`.
 Bounded by `retries: 2` — on exhaustion routes to `research_complete`.
 
+## Critical Constraints
+
+**NEVER:**
+- Merge or push the branch — the recipe's `re_push_research` step handles push
+- Dismiss review threads without addressing the underlying comment
+
+**ALWAYS:**
+- Commit all fixes before returning control to the orchestrator
+- Read open review threads before making any changes
+
 ## Output
 
 Emit on the final line of output:

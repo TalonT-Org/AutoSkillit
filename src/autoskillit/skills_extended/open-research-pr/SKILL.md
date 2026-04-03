@@ -29,6 +29,16 @@ diagram embedding and structured PR body composition following the open-pr patte
 Called by the research recipe after `push_branch` to open the research PR. Embeds
 experiment design artifacts and structures the PR body for research quality review.
 
+## Critical Constraints
+
+**NEVER:**
+- Auto-merge or approve the PR — research PRs are for human review only
+- Push without a prior `git push -u origin HEAD`
+
+**ALWAYS:**
+- Embed experiment design diagrams and report path in the PR body
+- Emit `pr_url` as an absolute GitHub URL on the final output line
+
 ## Output
 
 Emit on the final line of output:

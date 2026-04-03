@@ -1904,9 +1904,8 @@ class TestResearchRecipeStructure:
         assert step.skip_when_false == "inputs.review_pr"
 
     def test_research_review_step_routes_to_complete_on_any_outcome(self, recipe) -> None:
-        """review_research_pr routes to research_complete on success, failure, context limit."""
+        """review_research_pr routes to research_complete on failure and context limit."""
         step = recipe.steps["review_research_pr"]
-        assert step.on_success == "research_complete"
         assert step.on_failure == "research_complete"
         assert step.on_context_limit == "research_complete"
 

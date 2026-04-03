@@ -226,6 +226,9 @@ def test_output_path_tokens_synchronized() -> None:
             "experiment_plan",
             "results_path",
             "report_path",
+            # review-design skill outputs (added in #593)
+            "evaluation_dashboard",
+            "revision_guidance",
         }
     )
 

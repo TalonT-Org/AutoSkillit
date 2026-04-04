@@ -16,11 +16,11 @@ def _read_skill_md(skill_name: str) -> str:
 
 
 def test_plan_experiment_accepts_revision_guidance_arg():
-    """plan-experiment/SKILL.md must document the optional revision_guidance argument."""
+    """plan-experiment/SKILL.md must document revision_guidance as second optional positional arg."""
     content = _read_skill_md("plan-experiment")
-    assert "revision_guidance" in content, (
-        "plan-experiment/SKILL.md must document the optional second positional "
-        "argument 'revision_guidance' for accepting review-design revision feedback"
+    assert "[{revision_guidance}]" in content, (
+        "plan-experiment/SKILL.md must document 'revision_guidance' as an optional second "
+        "positional argument in the usage line as '[{revision_guidance}]', with path-scanning semantics"
     )
 
 

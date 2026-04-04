@@ -1960,7 +1960,7 @@ class TestResearchRecipeStructure:
         assert step.on_success == "review_design"
 
     def test_review_design_on_result_routing(self, recipe) -> None:
-        """review_design routes GO→create_worktree, REVISE→revise_design, STOP→design_rejected."""
+        """review_design STOP verdict routes to resolve_design_review (not design_rejected)."""
         step = recipe.steps["review_design"]
         assert step.on_result is not None
         routes = {c.when: c.route for c in step.on_result.conditions if c.when}
@@ -1974,7 +1974,7 @@ class TestResearchRecipeStructure:
         stop_route = next(
             c.route for c in step.on_result.conditions if c.when and "STOP" in c.when
         )
-        assert stop_route == "design_rejected"
+        assert stop_route == "resolve_design_review"
 
     def test_has_revise_design_step(self, recipe) -> None:
         assert "revise_design" in recipe.steps
@@ -2010,6 +2010,42 @@ class TestResearchRecipeStructure:
             "Kitchen rule #6 must acknowledge that verdict=STOP is an exception to "
             "'do not stop on exhaustion/failure'. Current language is overbroad and "
             "contradicts the design_rejected routing."
+        )
+
+    def test_has_resolve_design_review_step(self, recipe) -> None:
+        """resolve_design_review step must be present in research.yaml."""
+        assert "resolve_design_review" in recipe.steps
+
+    def test_resolve_design_review_routes_revised_to_revise_design(self, recipe) -> None:
+        """resolve_design_review routes resolution=revised back to revise_design."""
+        step = recipe.steps["resolve_design_review"]
+        assert step.on_result is not None
+        revised_route = next(
+            c.route for c in step.on_result.conditions if c.when and "revised" in c.when
+        )
+        assert revised_route == "revise_design"
+
+    def test_resolve_design_review_routes_failed_to_design_rejected(self, recipe) -> None:
+        """resolve_design_review routes resolution=failed to design_rejected."""
+        step = recipe.steps["resolve_design_review"]
+        assert step.on_result is not None
+        failed_route = next(
+            c.route for c in step.on_result.conditions if c.when and "failed" in c.when
+        )
+        assert failed_route == "design_rejected"
+
+    def test_resolve_design_review_fallbacks_to_design_rejected(self, recipe) -> None:
+        """resolve_design_review routes on_failure and on_context_limit to design_rejected."""
+        step = recipe.steps["resolve_design_review"]
+        assert step.on_failure == "design_rejected"
+        assert step.on_context_limit == "design_rejected"
+
+    def test_resolve_design_review_captures_revision_guidance(self, recipe) -> None:
+        """resolve_design_review must capture revision_guidance for the revise_design loop."""
+        step = recipe.steps["resolve_design_review"]
+        assert "revision_guidance" in step.capture, (
+            "resolve_design_review must capture revision_guidance so revise_design → "
+            "plan_experiment picks up the triage-generated guidance"
         )
 
     def test_has_resolve_research_review_step(self, recipe) -> None:

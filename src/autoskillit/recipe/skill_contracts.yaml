@@ -23,6 +23,27 @@ skills:
     pattern_examples:
     - "diagnosis_path = /tmp/diagnosis.md\n%%ORDER_UP%%"
     write_behavior: always
+  resolve-design-review:
+    inputs:
+    - name: evaluation_dashboard
+      type: file_path
+      required: true
+    - name: experiment_plan
+      type: file_path
+      required: true
+    outputs:
+    - name: resolution
+      type: string
+      allowed_values: [revised, failed]
+    - name: revision_guidance
+      type: file_path
+    expected_output_patterns:
+    - "resolution\\s*=\\s*(revised|failed)"
+    - "resolution\\s*=\\s*revised[\\s\\S]*?revision_guidance\\s*=\\s*/.+"
+    pattern_examples:
+    - "resolution = revised\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
+    - "resolution = failed\n%%ORDER_UP%%"
+    write_behavior: always
   resolve-failures:
     inputs:
     - name: worktree_path

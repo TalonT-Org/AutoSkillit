@@ -119,8 +119,9 @@ def test_skill_contracts_pattern_examples_use_valid_experiment_types() -> None:
     developers writing new skills and create false documentation contracts.
     """
     contracts_text = _CONTRACTS_YAML.read_text()
-    for m in re.finditer(r"experiment_type\s*=\s*(\S+)", contracts_text):
-        value = m.group(1).strip("\n\"'")
+    # Use [^\s\\]+ to stop at backslash, since YAML string literals use \n (two chars)
+    for m in re.finditer(r"experiment_type\s*=\s*([^\s\\]+)", contracts_text):
+        value = m.group(1).strip("\"'")
         assert value in VALID_EXPERIMENT_TYPES, (
             f"skill_contracts.yaml contains invalid experiment_type in pattern_examples: "
             f"{value!r}. Valid values: {sorted(VALID_EXPERIMENT_TYPES)}"

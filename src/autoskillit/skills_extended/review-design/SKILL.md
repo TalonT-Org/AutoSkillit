@@ -146,10 +146,30 @@ Weight tiers: H (High), M (Medium), L (Low), S (SILENT — dimension not spawned
 
 Two subagents run in parallel. Both are always H-weight; severity thresholds are calibrated per experiment_type via the rubric below.
 
+Each L1 subagent receives as explicit inputs:
+- Full plan text
+- `experiment_type` (from Step 1 triage output)
+- Severity calibration rubric (below)
+
+**Severity calibration rubric for L1 dimensions:**
+
+| Dimension                 | causal_inference | benchmark | configuration_study | robustness_audit | exploratory |
+|---------------------------|-----------------|-----------|---------------------|------------------|-------------|
+| estimand_clarity          | critical        | warning   | warning             | warning          | info        |
+| hypothesis_falsifiability | critical        | warning   | warning             | warning          | info        |
+
 - `estimand_clarity` agent: "Can the claim be written as a formal contrast (A vs B on Y in Z)?"
   Reference the exp-lens-estimand-clarity philosophical mode as guidance (do NOT invoke
   the skill — reference its lens question only in the subagent prompt).
+  Use the calibration rubric above to assign severity. For `causal_inference`: absent formal
+  estimand = `critical`. For `benchmark`/`configuration_study`/`robustness_audit`: absent
+  formal estimand = `warning` (informal contrast sufficient). For `exploratory`: absent
+  estimand = `info` (intentionally absent).
 - `hypothesis_falsifiability` agent: "What result would cause the author to conclude H0?"
+  Use the calibration rubric above. For `causal_inference`: unfalsifiable hypothesis =
+  `critical`. For `benchmark`/`configuration_study`/`robustness_audit`: comparison goal
+  without formal H0 = `warning`. For `exploratory`: absent H0/H1 = `info`
+  (pre-registration not required).
 
 Each subagent returns findings in the standard JSON structure (see Finding Format below).
 

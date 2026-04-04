@@ -17,10 +17,11 @@ hooks:
 
 # Resolve Design Review Skill
 
-Triage STOP verdict findings from `review-design`, classify each as
-ADDRESSABLE/STRUCTURAL/DISCUSS using parallel feasibility-validation
-subagents, generate revision guidance for addressable findings, and emit
-routing token to feed back into the revision loop or halt.
+Triage STOP verdict findings from `review-design`, perform feasibility
+analysis to classify each finding as ADDRESSABLE/STRUCTURAL/DISCUSS using
+parallel feasibility-validation subagents, generate revision guidance for
+addressable findings, and emit routing token to feed back into the revision
+loop or halt.
 
 ## Arguments
 
@@ -33,12 +34,12 @@ MCP-only — not user-invocable directly.
 
 ## Critical Constraints
 
-NEVER:
+**NEVER:**
 - Create files outside `.autoskillit/temp/resolve-design-review/`
 - Modify the evaluation dashboard, experiment plan, or any source file
 - Apply fixes — this skill triages fixability only
 
-ALWAYS:
+**ALWAYS:**
 - Exit 0 in all cases — resolution=revised and resolution=failed are both normal outcomes
 - Emit revision_guidance ONLY when resolution=revised
 - Use model: "sonnet" for all subagents
@@ -140,6 +141,9 @@ resolution = failed
 `revision_guidance` is ONLY emitted when resolution = revised.
 
 ## Output
+
+All output files are written to `.autoskillit/temp/resolve-design-review/` relative to
+the current working directory.
 
 ```
 .autoskillit/temp/resolve-design-review/

@@ -174,7 +174,7 @@ Apply `DIMENSION_PATTERN` to each comment body to extract the dimension label.
 
 Save `dimension_groups_{pr}.json` with findings keyed by group.
 
-### Step 3.5: Intent Validation (Parallel Subagents — BEFORE any code changes)
+### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes)
 
 Before applying any fix, validate every critical and warning finding against the actual
 codebase and git history. This analysis phase runs entirely before code changes are made.

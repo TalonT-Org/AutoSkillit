@@ -14,12 +14,7 @@ SKILL_PATH = (
     / "resolve-design-review"
     / "SKILL.md"
 )
-assert SKILL_PATH.exists(), f"SKILL.md not found at {SKILL_PATH}"
 SKILL_TEXT = SKILL_PATH.read_text()
-
-
-def test_skill_file_exists():
-    assert SKILL_PATH.exists()
 
 
 def test_addressable_structural_discuss_classifications():
@@ -75,7 +70,7 @@ def test_analysis_before_guidance_in_workflow():
 def test_exit_zero_always():
     """SKILL.md must state that exit 0 applies to both outcomes."""
     lower = SKILL_TEXT.lower()
-    assert "exit 0" in lower or ("both" in lower and "normal" in lower)
+    assert "exit 0" in lower
 
 
 def test_structured_output_tokens_present():

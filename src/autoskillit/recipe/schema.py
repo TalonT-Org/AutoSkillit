@@ -87,7 +87,7 @@ class RecipeStep:
     gate: str | None = None  # Ingredient name whose value controls lazy loading
     optional_context_refs: list[str] = field(
         default_factory=list
-    )  # Context vars exempt from forward-ref validation (used in cyclic routes)
+    )  # Context variable names that may be referenced before they are captured (cyclic routes)
 
 
 @dataclass

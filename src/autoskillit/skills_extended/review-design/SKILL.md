@@ -1,7 +1,7 @@
 ---
 name: review-design
 categories: [research]
-description: Validate an experiment plan before execution using triage-first, fail-fast dimensional analysis with an adversarial red-team. Emits GO/REVISE/STOP verdict.
+description: Validate an experiment plan before execution using triage-first, fail-fast dimensional analysis with an adversarial red-team. Emits verdict (GO/REVISE/STOP), experiment_type, evaluation_dashboard, and revision_guidance.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -66,11 +66,18 @@ best available plan.
 1. Create `.autoskillit/temp/review-design/` if absent.
 2. Extract `experiment_plan_path` from arguments (first path-like token starting with `/`,
    `./`, or `.autoskillit/`).
-3. Read the plan file. Parse YAML frontmatter using the **backward-compatible two-level
-   fallback**:
+   **Error handling:** If no path-like token is found in the arguments, emit
+   `verdict = STOP` with message "No experiment_plan_path provided" and exit 0 (per
+   the NEVER exit-non-zero constraint).
+3. Read the plan file.
+   **Error handling:** If the file does not exist or is unreadable at the resolved path,
+   emit `verdict = STOP` with message "Plan file not found: {path}" and exit 0.
+   Parse YAML frontmatter using the **backward-compatible two-level fallback**:
    - **Level 1 (frontmatter)**: Read YAML frontmatter between `---` delimiters directly
      (zero LLM tokens). Return present fields and note which are missing.
      Record `source: frontmatter` for each extracted field.
+     **Error handling:** If the YAML between `---` delimiters is malformed, treat all
+     fields as missing and fall through to Level 2 for all fields (graceful degradation).
    - **Level 2 (LLM extraction)**: For each missing field, launch a targeted LLM
      extraction subagent against the corresponding prose section. All extractions are
      independent and run in parallel. Record `source: extracted` for each field from
@@ -100,6 +107,11 @@ Launch one subagent. Receives full plan text plus parsed fields. Returns:
   robustness_audit | exploratory`
 - `dimension_weights`: the complete weight matrix for this plan (H/M/L/S per dimension)
 - `secondary_modifiers`: list of active modifiers with their effects on weights
+
+**Schema validation:** After the subagent returns, verify that `experiment_type` is one of
+the five enumerated values above. If the returned value is unrecognized, default to
+`exploratory` and log a warning — do not silently pass an invalid type into the weight
+matrix lookup, as this would corrupt all subsequent spawning decisions.
 
 **Triage classification rules (first-match):**
 
@@ -148,6 +160,11 @@ If ANY Level 1 subagent returns a finding with `"severity": "critical"`:
 - Do not start the red-team agent
 - Skip directly to Step 7 (Synthesis) with only L1 findings
 - The verdict logic will produce STOP; halt and emit tokens
+
+**Subagent parse failure:** If a Level 1 subagent returns unparseable output (malformed
+JSON, empty response, token-limit truncation), treat it as if it returned one critical
+finding with `message: "L1 subagent did not return parseable findings"`. This ensures
+parse failures trigger the fail-fast gate rather than silently passing it.
 
 ### Step 3: Level 2 + Red-Team (concurrent)
 
@@ -225,7 +242,10 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
    agents are collapsed into one entry.
 3. **Apply verdict logic**:
    ```python
+   # L1 fail-fast path: structural defects that block all further analysis
    stop_triggers = [f for f in critical if f.dimension in {"estimand_clarity", "hypothesis_falsifiability"}]
+   # Red-team STOP path: adversarial critical findings after full analysis (L2–L4)
+   # These fire only when the L1 gate passed; any critical red_team finding is a STOP.
    stop_triggers += [f for f in critical if f.dimension == "red_team"]
 
    if stop_triggers:

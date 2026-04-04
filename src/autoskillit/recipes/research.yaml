@@ -339,8 +339,16 @@ steps:
       step_name: open_research_pr
     capture:
       pr_url: "${{ result.pr_url }}"
-    on_success: review_research_pr
+    on_success: guard_pr_url
     on_failure: escalate_stop
+
+  guard_pr_url:
+    action: route
+    on_result:
+      - when: "${{ context.pr_url }}"
+        route: review_research_pr
+      - route: research_complete
+    note: Guard — skip review if pr_url is empty (graceful degradation from open_research_pr).
 
   review_research_pr:
     tool: run_skill

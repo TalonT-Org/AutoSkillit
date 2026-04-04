@@ -1,12 +1,10 @@
 """Contract tests for review-design SKILL.md behavioral encoding."""
 
 from pathlib import Path
+
 import pytest
 
-SKILL_MD = (
-    Path(__file__).parents[2]
-    / "src/autoskillit/skills_extended/review-design/SKILL.md"
-)
+SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/review-design/SKILL.md"
 
 
 @pytest.fixture(scope="module")
@@ -15,6 +13,7 @@ def skill_text() -> str:
 
 
 # ── Triage classification ──────────────────────────────────────────────────
+
 
 def test_triage_lists_all_five_experiment_types(skill_text):
     """All five first-match triage classes must be named in the SKILL.md."""
@@ -30,6 +29,7 @@ def test_triage_lists_all_five_experiment_types(skill_text):
 
 # ── Dimension weight matrix ────────────────────────────────────────────────
 
+
 def test_dimension_weight_tiers_defined(skill_text):
     """H/M/L/S weight tiers must be defined in the SKILL.md."""
     for tier in ["H", "M", "L", "S"]:
@@ -39,7 +39,11 @@ def test_dimension_weight_tiers_defined(skill_text):
 def test_silent_tier_produces_no_output_contract(skill_text):
     """SILENT (S) dimensions must be explicitly contracted to produce no output."""
     assert "SILENT" in skill_text or "silent" in skill_text.lower()
-    assert "not run" in skill_text.lower() or "not spawned" in skill_text.lower() or "S (" in skill_text
+    assert (
+        "not run" in skill_text.lower()
+        or "not spawned" in skill_text.lower()
+        or "S (" in skill_text
+    )
 
 
 def test_universal_dimensions_always_run(skill_text):
@@ -49,6 +53,7 @@ def test_universal_dimensions_always_run(skill_text):
 
 
 # ── Fail-fast gate ──────────────────────────────────────────────────────────
+
 
 def test_l1_fail_fast_gate_present(skill_text):
     """SKILL.md must encode the L1 fail-fast gate: halt on L1 critical."""
@@ -62,11 +67,12 @@ def test_l1_fail_fast_gate_present(skill_text):
 
 # ── Red-team agent ──────────────────────────────────────────────────────────
 
-def test_red_team_requires_human_contract(skill_text):
-    """Red-team findings must always carry requires_human: true."""
-    assert "requires_human" in skill_text
+
+def test_red_team_requires_decision_contract(skill_text):
+    """Red-team findings must always carry requires_decision: true (project-wide convention)."""
+    assert "requires_decision" in skill_text
     # The contract must state true, not just mention the field
-    assert "requires_human: true" in skill_text or '"requires_human": true' in skill_text
+    assert "requires_decision: true" in skill_text or '"requires_decision": true' in skill_text
 
 
 def test_red_team_universal_challenges_present(skill_text):
@@ -85,6 +91,7 @@ def test_red_team_universal_challenges_present(skill_text):
 
 # ── Backward-compatible parsing ─────────────────────────────────────────────
 
+
 def test_frontmatter_fallback_documented(skill_text):
     """SKILL.md must document the two-level frontmatter parsing fallback."""
     assert "frontmatter" in skill_text.lower()
@@ -93,6 +100,7 @@ def test_frontmatter_fallback_documented(skill_text):
 
 
 # ── Verdict logic ────────────────────────────────────────────────────────────
+
 
 def test_verdict_logic_all_three_outcomes(skill_text):
     """Verdict logic must produce GO, REVISE, and STOP outcomes."""
@@ -117,10 +125,16 @@ def test_verdict_revise_threshold_defined(skill_text):
 
 # ── Dashboard requirements ───────────────────────────────────────────────────
 
+
 def test_dashboard_cannot_assess_section(skill_text):
     """evaluation_dashboard must include a 'Cannot Assess' section with ≥2 items."""
     assert "Cannot Assess" in skill_text
-    assert "≥2" in skill_text or ">= 2" in skill_text or "minimum 2" in skill_text.lower() or "at least 2" in skill_text.lower()
+    assert (
+        "≥2" in skill_text
+        or ">= 2" in skill_text
+        or "minimum 2" in skill_text.lower()
+        or "at least 2" in skill_text.lower()
+    )
 
 
 def test_dashboard_yaml_summary_block(skill_text):
@@ -130,6 +144,7 @@ def test_dashboard_yaml_summary_block(skill_text):
 
 
 # ── Output token format ──────────────────────────────────────────────────────
+
 
 def test_output_tokens_all_four_present(skill_text):
     """All four output tokens must be named in the SKILL.md."""
@@ -142,7 +157,7 @@ def test_revision_guidance_only_on_revise(skill_text):
     assert "revision_guidance" in skill_text
     assert "REVISE" in skill_text
     # The file must couple revision_guidance to REVISE condition
-    lines_with_guidance = [l for l in skill_text.splitlines() if "revision_guidance" in l]
+    lines_with_guidance = [line for line in skill_text.splitlines() if "revision_guidance" in line]
     combined = "\n".join(lines_with_guidance)
     assert "REVISE" in combined or "revise" in combined.lower(), (
         "revision_guidance must be tied to REVISE verdict in its description"

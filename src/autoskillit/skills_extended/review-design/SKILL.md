@@ -55,7 +55,7 @@ best available plan.
     %%ORDER_UP%%
 - `revision_guidance` is written and emitted ONLY when verdict = REVISE
 - `evaluation_dashboard` is ALWAYS written and emitted
-- Red-team agent always sets `requires_human: true` on all its findings
+- Red-team agent always sets `requires_decision: true` on all its findings
 - Halt at Level 1 fail-fast gate: if any Level 1 finding is critical, emit STOP immediately —
   do NOT proceed to Level 2, 3, or 4
 
@@ -174,7 +174,7 @@ red-team agent concurrently — all at the same time without waiting for each ot
   - causal_inference → unblocked backdoor path
   - robustness_audit → unrealistic threat distribution
   - exploratory → HARKing vulnerability
-- ALL red-team findings must set `"requires_human": true` and `"dimension": "red_team"`
+- ALL red-team findings must set `"requires_decision": true` and `"dimension": "red_team"`
 
 ### Step 4: Level 3 (parallel)
 
@@ -214,7 +214,7 @@ Level 3 and Level 4 may run concurrently with the red-team agent (do not block o
 
 After Levels 3 and 4 complete, wait for the red-team agent if still running.
 All red-team findings are merged into the finding pool with their
-`"requires_human": true` flag preserved.
+`"requires_decision": true` flag preserved.
 
 ### Step 7: Synthesis
 
@@ -239,7 +239,7 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
    Must include:
    - Verdict banner and classification summary
    - Dimension scorecard table (dimension → weight → findings count → severity summary)
-   - Adversarial findings section (red-team findings, each marked `requires_human: true`)
+   - Adversarial findings section (red-team findings, each marked `requires_decision: true`)
    - **Cannot Assess** section with at least 2 items (dimensions where evaluation was
      impossible due to absent plan content; minimum 2 entries, e.g.,
      "Randomization mechanism not described — cannot assess unit interference risk",
@@ -289,11 +289,11 @@ All subagents must return findings in this JSON structure:
   "level": 1,
   "severity": "critical | warning | info",
   "message": "{clear, actionable description of the issue}",
-  "requires_human": false
+  "requires_decision": false
 }
 ```
 
-Red-team findings: always `"requires_human": true`, `"dimension": "red_team"`.
+Red-team findings: always `"requires_decision": true`, `"dimension": "red_team"`.
 
 ## Output
 

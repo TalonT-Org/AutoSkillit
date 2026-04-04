@@ -82,7 +82,7 @@ Parse all positional args:
 
 Derive `feature_branch`:
 
-    FEATURE_BRANCH=$(git -C {worktree_path} rev-parse --abbrev-ref HEAD)
+    FEATURE_BRANCH=$(git -C "{worktree_path}" rev-parse --abbrev-ref HEAD)
 
 Create temp directory (relative to the current working directory):
 
@@ -220,8 +220,14 @@ If **not available**: emit `pr_url = ` (empty) and exit 0 (graceful degradation)
 If **available**:
 ```bash
 PR_BODY_PATH=$(ls .autoskillit/temp/open-research-pr/pr_body_*.md 2>/dev/null | tail -1)
+if [ -z "${PR_BODY_PATH}" ]; then
+  echo "No PR body file found — emitting empty pr_url"
+  echo "pr_url = "
+  echo "%%ORDER_UP%%"
+  exit 0
+fi
 gh pr create \
-  --base {base_branch} \
+  --base "{base_branch}" \
   --head {feature_branch} \
   --title "Research: {title extracted from report's first H1 or title field}" \
   --body-file "${PR_BODY_PATH}"

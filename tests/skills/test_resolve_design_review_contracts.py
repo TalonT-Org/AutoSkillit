@@ -3,6 +3,7 @@
 Tests enforce the triage flow, ADDRESSABLE/STRUCTURAL/DISCUSS classification,
 parallel subagents, conditional guidance emission, and structured output tokens.
 """
+
 from pathlib import Path
 
 SKILL_PATH = (

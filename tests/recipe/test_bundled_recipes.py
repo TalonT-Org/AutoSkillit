@@ -1960,7 +1960,7 @@ class TestResearchRecipeStructure:
         assert step.on_success == "review_design"
 
     def test_review_design_on_result_routing(self, recipe) -> None:
-        """review_design routes GO→create_worktree, REVISE→revise_design, STOP→resolve_design_review."""
+        """review_design STOP verdict routes to resolve_design_review (not design_rejected)."""
         step = recipe.steps["review_design"]
         assert step.on_result is not None
         routes = {c.when: c.route for c in step.on_result.conditions if c.when}

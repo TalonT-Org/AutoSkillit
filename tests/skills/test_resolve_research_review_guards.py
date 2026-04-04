@@ -138,7 +138,11 @@ def test_rerun_required_escalates_not_exits() -> None:
     """rerun_required must escalate (not exit non-zero) and NOT add to addressed_thread_ids."""
     text = SKILL_TEXT
     assert "rerun_required" in text
-    rr_idx = text.find("rerun_required")
+    # Search from Step 4 (routing section) to find the ESCALATE block, not the taxonomy list
+    step4_idx = text.find("Step 4")
+    assert step4_idx != -1, "SKILL.md must have Step 4"
+    rr_idx = text.find("rerun_required", step4_idx)
+    assert rr_idx != -1, "Step 4 must mention rerun_required routing"
     context = text[rr_idx : rr_idx + 500].lower()
     assert "escalat" in context, "rerun_required must route to ESCALATE, not be applied as a fix"
     assert "do not" in context or "not add" in context or "not resolve" in context, (

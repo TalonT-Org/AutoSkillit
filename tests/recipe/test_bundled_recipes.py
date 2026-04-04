@@ -1982,6 +1982,36 @@ class TestResearchRecipeStructure:
     def test_has_design_rejected_step(self, recipe) -> None:
         assert "design_rejected" in recipe.steps
 
+    def test_design_rejected_step_is_action_stop(self, recipe) -> None:
+        """design_rejected must halt the pipeline (action=stop) with an explanatory message.
+
+        Regression guard: changing action to 'route' would silently break
+        the hard-halt guarantee for fundamentally flawed designs.
+        """
+        step = recipe.steps["design_rejected"]
+        assert step.action == "stop"
+        assert step.message, "design_rejected must have a non-empty message"
+        assert "STOP" in step.message, (
+            "design_rejected message must reference the STOP verdict for clarity."
+        )
+
+    def test_kitchen_rule_6_acknowledges_stop_verdict_exception(self, recipe) -> None:
+        """Kitchen rule #6 must scope 'do not stop' to exhaustion/failure, not STOP verdict.
+
+        The current blanket 'do not stop' language contradicts the design_rejected
+        hard halt. The rule must explicitly note that verdict=STOP is the sole exception.
+        """
+        rule6 = recipe.kitchen_rules[5]  # 0-indexed; rule #6 is index 5
+        rule6_lower = rule6.lower()
+        assert "stop" in rule6_lower, (
+            "Kitchen rule #6 must reference 'stop' in the verdict exception context."
+        )
+        assert "verdict" in rule6_lower or "exception" in rule6_lower, (
+            "Kitchen rule #6 must acknowledge that verdict=STOP is an exception to "
+            "'do not stop on exhaustion/failure'. Current language is overbroad and "
+            "contradicts the design_rejected routing."
+        )
+
     def test_has_resolve_research_review_step(self, recipe) -> None:
         step = recipe.steps["resolve_research_review"]
         assert step.retries == 2

@@ -1,5 +1,6 @@
 """Contract tests for review-design SKILL.md behavioral encoding."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -181,3 +182,56 @@ def test_revision_guidance_only_on_revise(skill_text):
 def test_order_up_terminator_present(skill_text):
     """%%ORDER_UP%% must be the final terminal marker after token emission."""
     assert "%%ORDER_UP%%" in skill_text
+
+
+# ── Section-scoped helpers ────────────────────────────────────────────────────
+
+
+def skill_text_between(start_heading: str, end_heading: str, text: str) -> str:
+    """Extract SKILL.md text between two headings (start inclusive, end exclusive)."""
+    pattern = re.escape(start_heading) + r".*?(?=" + re.escape(end_heading) + r")"
+    m = re.search(pattern, text, re.DOTALL)
+    assert m, f"Could not find section '{start_heading}' before '{end_heading}' in SKILL.md"
+    return m.group(0)
+
+
+# ── L1 subagent context and severity calibration ──────────────────────────────
+
+
+def test_l1_subagents_receive_experiment_type(skill_text: str) -> None:
+    """L1 subagents must list experiment_type as an explicit input.
+
+    This is the structural contract that makes the false-STOP regression
+    immediately visible: any removal of experiment_type from Step 2 fails here.
+    The bug existed because no such assertion was present in the original suite.
+    """
+    step2_text = skill_text_between("### Step 2", "### Step 3", skill_text)
+    assert "experiment_type" in step2_text, (
+        "Step 2 L1 subagents must explicitly receive experiment_type as input. "
+        "Without it, severity thresholds default to causal_inference standards, "
+        "causing false STOP verdicts on benchmark and exploratory plans."
+    )
+
+
+def test_l1_severity_calibration_rubric_present(skill_text: str) -> None:
+    """Step 2 must contain a severity calibration rubric for L1 dimensions.
+
+    The rubric is the mechanism that prevents false STOP verdicts: it tells
+    the L1 subagent what severity is appropriate per experiment type.
+    """
+    step2_text = skill_text_between("### Step 2", "### Step 3", skill_text)
+    # Rubric must cover the anchoring experiment types
+    assert "causal_inference" in step2_text, (
+        "Step 2 calibration rubric must specify causal_inference severity thresholds."
+    )
+    assert "benchmark" in step2_text, (
+        "Step 2 calibration rubric must specify benchmark severity thresholds."
+    )
+    assert "exploratory" in step2_text, (
+        "Step 2 calibration rubric must specify exploratory severity thresholds."
+    )
+    # The rubric must distinguish critical from warning at minimum
+    step2_lower = step2_text.lower()
+    assert "critical" in step2_lower and "warning" in step2_lower, (
+        "Step 2 must define what constitutes critical vs warning per experiment type."
+    )

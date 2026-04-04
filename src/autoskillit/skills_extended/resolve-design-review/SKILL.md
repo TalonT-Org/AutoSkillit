@@ -50,13 +50,13 @@ MCP-only — not user-invocable directly.
 
 1. Create `.autoskillit/temp/resolve-design-review/` if absent
 2. Parse two positional path arguments: `evaluation_dashboard_path`, `experiment_plan_path`
-   - If missing: emit `resolution=failed`, exit 0
-   - If file not found: emit `resolution=failed`, exit 0
+   - If missing: print `"Error: missing required argument(s) — expected <evaluation_dashboard_path> <experiment_plan_path>"`, then emit `resolution=failed`, exit 0
+   - If file not found: print `"Error: file not found — {missing_path}"`, then emit `resolution=failed`, exit 0
 3. Parse stop-trigger findings from the evaluation dashboard:
    - Locate machine-readable YAML block (`# --- review-design machine summary ---`)
    - Extract critical findings from L1 dimensions (estimand_clarity, hypothesis_falsifiability)
    - Extract red_team critical findings
-   - If no findings parseable: treat all as DISCUSS → emit resolution=revised with generic guidance
+   - If no findings parseable: treat all as DISCUSS → emit resolution=revised with generic guidance; add a `> **Warning:** dashboard could not be parsed — falling back to generic guidance` annotation at the top of the revision_guidance file so the parse failure is visible in pipeline logs
 
 ### Step 1: Feasibility Validation (Parallel Subagents — BEFORE any guidance is written)
 

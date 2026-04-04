@@ -8,6 +8,7 @@ may silently fall through a catch-all condition.
 from __future__ import annotations
 
 from autoskillit.core.types import Severity
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import (
     Recipe,
     RecipeStep,
@@ -126,3 +127,19 @@ def test_unrouted_verdict_value_severity_is_error() -> None:
         assert finding.severity == Severity.ERROR, (
             f"unrouted-verdict-value must be ERROR severity, got {finding.severity}"
         )
+
+
+def test_unrouted_verdict_passes_for_review_design_in_research_recipe() -> None:
+    """The unrouted-verdict-value rule must not fire for review-design in research.yaml.
+
+    All three verdict values (GO, REVISE, STOP) have explicit on_result conditions.
+    This test ensures the rule exercises review-design, not just review-pr.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / "research.yaml")
+    findings = run_semantic_rules(recipe)
+    unrouted = [
+        f
+        for f in findings
+        if f.rule == "unrouted-verdict-value" and f.step_name == "review_design"
+    ]
+    assert not unrouted, f"unrouted-verdict-value fired for review_design step: {unrouted}"

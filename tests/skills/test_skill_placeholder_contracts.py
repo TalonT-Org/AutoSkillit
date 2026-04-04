@@ -90,6 +90,22 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("resolve-review", "comment_id"),  # per-comment REST database ID in the inline-reply loop
         ("resolve-review", "file"),  # per-finding file path from review comments
         ("resolve-merge-conflicts", "file"),  # per-iteration conflicted file path
+        # ── resolve-research-review: same pattern as resolve-review ──────────────────
+        ("resolve-research-review", "owner"),  # GitHub API URL template (gh repo view)
+        ("resolve-research-review", "repo"),  # GitHub API URL template (gh repo view)
+        ("resolve-research-review", "number"),  # PR number from gh pr list output
+        (
+            "resolve-research-review",
+            "comment_id",
+        ),  # per-comment REST database ID in inline-reply loop
+        ("resolve-research-review", "file"),  # per-finding file path from review comments
+        ("resolve-research-review", "databaseId"),  # GraphQL field name (false positive)
+        ("resolve-research-review", "isResolved"),  # GraphQL field name (false positive)
+        ("resolve-research-review", "description"),  # per-commit description derived from finding
+        (
+            "resolve-research-review",
+            "dimension",
+        ),  # per-commit dimension label derived from finding
         # ── PER-ITERATION / LOOP VALUES ──────────────────────────────────────────────
         # Used inside per-issue/per-PR/per-file loops. The prose establishes the loop
         # structure and makes the substitution unambiguous.

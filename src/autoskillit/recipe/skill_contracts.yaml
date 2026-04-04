@@ -709,19 +709,24 @@ skills:
 
   open-research-pr:
     inputs:
+    - name: report_path
+      type: file_path
+      required: true
+    - name: experiment_plan_path
+      type: file_path
+      required: true
     - name: worktree_path
       type: directory_path
       required: true
     - name: base_branch
       type: string
       required: true
-    - name: task
+    - name: closing_issue
       type: string
-      required: true
-    - name: report_path
-      type: file_path
-      required: true
-    outputs: []
+      required: false
+    outputs:
+    - name: pr_url
+      type: string
     expected_output_patterns:
     - "pr_url\\s*=\\s*https://github\\.com/.*/pull/\\d+"
     pattern_examples:

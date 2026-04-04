@@ -284,6 +284,7 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "arch-lens-scenarios": ["diagram_path"],
     "arch-lens-state-lifecycle": ["diagram_path"],
     "arch-lens-deployment": ["diagram_path"],
+    "review-design": ["evaluation_dashboard", "revision_guidance"],
 }
 
 ABSOLUTE_PATH_KEYWORDS = ("absolute", "/abs", "$(pwd)", "$(cd")

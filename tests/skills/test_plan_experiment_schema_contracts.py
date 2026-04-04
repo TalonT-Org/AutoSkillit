@@ -16,11 +16,11 @@ def _read_skill_md(skill_name: str) -> str:
 
 
 def test_plan_experiment_accepts_revision_guidance_arg():
-    """plan-experiment/SKILL.md must document revision_guidance as second optional positional arg."""
+    """plan-experiment/SKILL.md documents revision_guidance as second optional positional arg."""
     content = _read_skill_md("plan-experiment")
     assert "[{revision_guidance}]" in content, (
         "plan-experiment/SKILL.md must document 'revision_guidance' as an optional second "
-        "positional argument in the usage line as '[{revision_guidance}]', with path-scanning semantics"
+        "positional arg in usage line '[{revision_guidance}]', with path-scanning semantics"
     )
 
 
@@ -55,18 +55,21 @@ def test_plan_experiment_documents_all_required_frontmatter_fields():
 
 
 def test_plan_experiment_defines_all_validation_rules():
-    """plan-experiment/SKILL.md must define all 8 validation rules V1–V8."""
+    """plan-experiment/SKILL.md must define all 8 validation rules V1–V8 as labeled entries."""
     content = _read_skill_md("plan-experiment")
     for rule_id in ["V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8"]:
-        assert rule_id in content, f"plan-experiment/SKILL.md missing validation rule {rule_id!r}"
+        assert f"{rule_id}:" in content, (
+            f"plan-experiment/SKILL.md missing validation rule label {rule_id!r} "
+            f"(expected '{rule_id}:' definition format)"
+        )
 
 
 def test_plan_experiment_frontmatter_before_heading():
     """plan-experiment/SKILL.md must specify frontmatter goes before # Experiment Plan: heading."""
     content = _read_skill_md("plan-experiment")
-    assert "before" in content.lower() and "# Experiment Plan" in content, (
-        "plan-experiment/SKILL.md must specify that frontmatter is written "
-        "before the '# Experiment Plan:' heading"
+    assert "BEFORE the # Experiment Plan" in content, (
+        "plan-experiment/SKILL.md must contain the explicit ordering instruction "
+        "'BEFORE the # Experiment Plan' to specify frontmatter precedes the heading"
     )
 
 
@@ -81,14 +84,16 @@ def test_research_recipe_passes_revision_guidance_to_plan_experiment():
 
 
 def test_skill_contracts_plan_experiment_has_revision_guidance_input():
-    """skill_contracts.yaml must register revision_guidance as optional input."""
+    """skill_contracts.yaml must register revision_guidance as optional (required: false) input."""
     import yaml
 
     contracts_path = _repo_root() / "src/autoskillit/recipe/skill_contracts.yaml"
     raw = yaml.safe_load(contracts_path.read_text())
     pe = raw.get("skills", {}).get("plan-experiment", {})
-    input_names = [inp["name"] for inp in pe.get("inputs", [])]
-    assert "revision_guidance" in input_names, (
-        "skill_contracts.yaml plan-experiment must declare 'revision_guidance' "
-        "as an optional input (required: false)"
+    inputs = {inp["name"]: inp for inp in pe.get("inputs", [])}
+    assert "revision_guidance" in inputs, (
+        "skill_contracts.yaml plan-experiment must declare 'revision_guidance' input"
+    )
+    assert inputs["revision_guidance"].get("required") is False, (
+        "skill_contracts.yaml plan-experiment 'revision_guidance' input must have required: false"
     )

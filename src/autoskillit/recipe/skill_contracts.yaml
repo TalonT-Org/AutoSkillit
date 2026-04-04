@@ -747,6 +747,7 @@ skills:
       allowed_values: [GO, REVISE, STOP]
     - name: experiment_type
       type: string
+      allowed_values: [benchmark, configuration_study, causal_inference, robustness_audit, exploratory]
     - name: evaluation_dashboard
       type: file_path
     - name: revision_guidance
@@ -755,7 +756,7 @@ skills:
     - "verdict\\s*=\\s*(GO|REVISE|STOP)"
     - "experiment_type\\s*=\\s*\\S+"
     pattern_examples:
-    - "verdict = GO\nexperiment_type = controlled\nevaluation_dashboard = /tmp/eval.md\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
+    - "verdict = GO\nexperiment_type = benchmark\nevaluation_dashboard = /tmp/eval.md\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
     write_behavior: always
 
   resolve-research-review:

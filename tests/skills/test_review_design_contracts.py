@@ -1,5 +1,6 @@
 """Contract tests for review-design SKILL.md behavioral encoding."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -181,3 +182,115 @@ def test_revision_guidance_only_on_revise(skill_text):
 def test_order_up_terminator_present(skill_text):
     """%%ORDER_UP%% must be the final terminal marker after token emission."""
     assert "%%ORDER_UP%%" in skill_text
+
+
+# ── Section-scoped helpers ────────────────────────────────────────────────────
+
+
+def skill_text_between(start_heading: str, end_heading: str, text: str) -> str:
+    """Extract SKILL.md text between two headings (start inclusive, end exclusive)."""
+    pattern = re.escape(start_heading) + r".*?(?=" + re.escape(end_heading) + r")"
+    m = re.search(pattern, text, re.DOTALL)
+    assert m, f"Could not find section '{start_heading}' before '{end_heading}' in SKILL.md"
+    return m.group(0)
+
+
+# ── L1 subagent context and severity calibration ──────────────────────────────
+
+
+def test_l1_subagents_receive_experiment_type(skill_text: str) -> None:
+    """L1 subagents must list experiment_type as an explicit input.
+
+    This is the structural contract that makes the false-STOP regression
+    immediately visible: any removal of experiment_type from Step 2 fails here.
+    The bug existed because no such assertion was present in the original suite.
+    """
+    step2_text = skill_text_between("### Step 2", "### Step 3", skill_text)
+    assert "experiment_type" in step2_text, (
+        "Step 2 L1 subagents must explicitly receive experiment_type as input. "
+        "Without it, severity thresholds default to causal_inference standards, "
+        "causing false STOP verdicts on benchmark and exploratory plans."
+    )
+
+
+def test_l1_severity_calibration_rubric_present(skill_text: str) -> None:
+    """Step 2 must contain a severity calibration rubric for L1 dimensions.
+
+    The rubric is the mechanism that prevents false STOP verdicts: it tells
+    the L1 subagent what severity is appropriate per experiment type.
+    """
+    step2_text = skill_text_between("### Step 2", "### Step 3", skill_text)
+    # Rubric must cover the anchoring experiment types
+    assert "causal_inference" in step2_text, (
+        "Step 2 calibration rubric must specify causal_inference severity thresholds."
+    )
+    assert "benchmark" in step2_text, (
+        "Step 2 calibration rubric must specify benchmark severity thresholds."
+    )
+    assert "exploratory" in step2_text, (
+        "Step 2 calibration rubric must specify exploratory severity thresholds."
+    )
+    # The rubric must distinguish critical from warning at minimum
+    step2_lower = step2_text.lower()
+    assert "critical" in step2_lower and "warning" in step2_lower, (
+        "Step 2 must define what constitutes critical vs warning per experiment type."
+    )
+
+
+# ── All subagent steps must declare explicit inputs (Part B immunity) ─────────
+
+
+@pytest.mark.parametrize(
+    "step_heading,next_heading",
+    [
+        ("### Step 2", "### Step 3"),
+        ("### Step 3", "### Step 4"),
+        ("### Step 4", "### Step 5"),
+        ("### Step 5", "### Step 6"),
+    ],
+)
+def test_subagent_steps_declare_explicit_inputs(
+    step_heading: str, next_heading: str, skill_text: str
+) -> None:
+    """Every subagent-spawning step must explicitly list its input variables.
+
+    The false-STOP bug at Step 2 existed because there was no assertion
+    requiring explicit input declarations. This parameterized test enforces
+    the pattern for all subagent steps, making omission immediately visible.
+
+    The established pattern (from Step 3 red-team) is:
+      'Receives: <context variables>'
+    or an explicit 'Inputs:' / 'Each ... receives:' block.
+    """
+    step_text = skill_text_between(step_heading, next_heading, skill_text)
+    # Must contain an explicit input declaration using the established pattern
+    assert any(
+        phrase in step_text.lower()
+        for phrase in ["receives:", "inputs:", "each subagent receives", "each ... receives"]
+    ), (
+        f"{step_heading}: subagent-spawning steps must declare explicit inputs. "
+        "Use 'Receives:', 'Inputs:', or 'Each subagent receives:' to list context variables."
+    )
+
+
+@pytest.mark.parametrize(
+    "step_heading,next_heading",
+    [
+        ("### Step 4", "### Step 5"),
+        ("### Step 5", "### Step 6"),
+    ],
+)
+def test_l3_l4_subagents_receive_experiment_type(
+    step_heading: str, next_heading: str, skill_text: str
+) -> None:
+    """L3 and L4 subagents must receive experiment_type to calibrate severity.
+
+    While L3/L4 findings route to REVISE (not STOP), type-agnostic severity
+    calibration is a structural gap. This test enforces experiment_type
+    propagation to all subagent steps.
+    """
+    step_text = skill_text_between(step_heading, next_heading, skill_text)
+    assert "experiment_type" in step_text, (
+        f"{step_heading}: L3/L4 subagents must receive experiment_type. "
+        "Type-agnostic severity calibration is a structural gap."
+    )

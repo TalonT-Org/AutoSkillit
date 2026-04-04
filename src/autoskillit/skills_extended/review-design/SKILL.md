@@ -144,12 +144,32 @@ Weight tiers: H (High), M (Medium), L (Low), S (SILENT — dimension not spawned
 
 ### Step 2: Level 1 Analysis — Fail-Fast (parallel)
 
-Two subagents run in parallel. Both are always H-weight regardless of triage output.
+Two subagents run in parallel. Both are always H-weight; severity thresholds are calibrated per experiment_type via the rubric below.
+
+Each L1 subagent receives as explicit inputs:
+- Full plan text
+- `experiment_type` (from Step 1 triage output)
+- Severity calibration rubric (below)
+
+**Severity calibration rubric for L1 dimensions:**
+
+| Dimension                 | causal_inference | benchmark | configuration_study | robustness_audit | exploratory |
+|---------------------------|-----------------|-----------|---------------------|------------------|-------------|
+| estimand_clarity          | critical        | warning   | warning             | warning          | info        |
+| hypothesis_falsifiability | critical        | warning   | warning             | warning          | info        |
 
 - `estimand_clarity` agent: "Can the claim be written as a formal contrast (A vs B on Y in Z)?"
   Reference the exp-lens-estimand-clarity philosophical mode as guidance (do NOT invoke
   the skill — reference its lens question only in the subagent prompt).
+  Use the calibration rubric above to assign severity. For `causal_inference`: absent formal
+  estimand = `critical`. For `benchmark`/`configuration_study`/`robustness_audit`: absent
+  formal estimand = `warning` (informal contrast sufficient). For `exploratory`: absent
+  estimand = `info` (intentionally absent).
 - `hypothesis_falsifiability` agent: "What result would cause the author to conclude H0?"
+  Use the calibration rubric above. For `causal_inference`: unfalsifiable hypothesis =
+  `critical`. For `benchmark`/`configuration_study`/`robustness_audit`: comparison goal
+  without formal H0 = `warning`. For `exploratory`: absent H0/H1 = `info`
+  (pre-registration not required).
 
 Each subagent returns findings in the standard JSON structure (see Finding Format below).
 
@@ -178,7 +198,9 @@ red-team agent concurrently — all at the same time without waiting for each ot
 - `unit_interference`: "Can treatments spill over between experimental units?"
 
 **Red-team agent** (concurrent with L2 and L4 — does NOT block L3):
-- Receives full plan text and `experiment_type`
+
+Receives: full plan text and `experiment_type` (from Step 1 triage output)
+
 - Five universal challenges (challenge every plan regardless of type):
   1. **Goodhart exploitation** — cheapest way to score well without solving the research question
   2. **Data leakage** — test-set info contaminating training/hyperparameter selection
@@ -195,8 +217,14 @@ red-team agent concurrently — all at the same time without waiting for each ot
 
 ### Step 4: Level 3 (parallel)
 
-Run after Level 2 completes (Level 2 findings may inform statistical planning context).
-Do not wait for the red-team agent before starting Level 3.
+Run after Level 2 completes. Do not wait for the red-team agent before starting Level 3.
+
+Each L3 subagent receives:
+- Full plan text
+- `experiment_type` (from Step 1 triage output) — calibrates expected statistical rigor:
+  `exploratory` plans do not require pre-registered correction procedures; `causal_inference`
+  plans demand formal power analysis and correction pre-specification.
+- L1 and L2 findings summary as context (findings may inform statistical planning relevance)
 
 Three subagents run in parallel:
 - `error_budget`: "Is power analysis present? Are error rates (Type I / Type II) acknowledged?"
@@ -209,6 +237,15 @@ Three subagents run in parallel:
 
 2–4 subagents. Only spawn subagents for dimensions with weight ≥ L in the matrix.
 SILENT (S) dimensions are NOT spawned and NOT mentioned in output.
+
+Each L4 subagent receives:
+- Full plan text
+- `experiment_type` (from Step 1 triage output) — calibrates rigor expectations per dimension:
+  `benchmark` plans have lower ecological validity expectations than `causal_inference` plans
+  by design; `reproducibility_spec` rigor scales with `causal_inference` > `benchmark` >
+  `exploratory`.
+- `dimension_weights` (from Step 1) — provides context on why this dimension was spawned
+  (e.g., H-weight dimensions warrant stricter thresholds than L-weight dimensions)
 
 Level 4 dimensions (spawn when not SILENT):
 - `benchmark_representativeness`: "Does this generalize beyond the specific test bed?"

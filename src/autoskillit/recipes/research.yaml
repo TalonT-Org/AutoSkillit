@@ -54,6 +54,9 @@ kitchen_rules:
     route back to plan_experiment with revision guidance. Bounded by
     retries: 2 (max 3 review cycles). On exhaustion or failure,
     proceed to execution with the best available plan — do not stop.
+    Exception: a STOP verdict signals a fundamental structural flaw that
+    revision cannot address; this routes to design_rejected (pipeline halt)
+    and is intentionally excluded from this fallback.
   - >
     PHASE ITERATION: decompose_phases always runs. The agent maintains
     a phase queue from group_files. For each phase, run plan_phase then

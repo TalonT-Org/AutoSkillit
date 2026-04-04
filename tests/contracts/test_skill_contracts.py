@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -98,3 +99,48 @@ def test_every_skill_with_patterns_has_examples(skills):
         + "\n".join(f"  - {s}" for s in sorted(missing))
         + "\nAdd pattern_examples to skill_contracts.yaml."
     )
+
+
+VALID_EXPERIMENT_TYPES = frozenset(
+    {
+        "benchmark",
+        "configuration_study",
+        "causal_inference",
+        "robustness_audit",
+        "exploratory",
+    }
+)
+
+
+def test_skill_contracts_pattern_examples_use_valid_experiment_types() -> None:
+    """pattern_examples in skill_contracts.yaml must use only valid experiment_type values.
+
+    'controlled' is not a valid experiment type. Invalid examples mislead
+    developers writing new skills and create false documentation contracts.
+    """
+    contracts_text = _CONTRACTS_YAML.read_text()
+    # Use [^\s\\]+ to stop at backslash, since YAML string literals use \n (two chars)
+    for m in re.finditer(r"experiment_type\s*=\s*([^\s\\]+)", contracts_text):
+        value = m.group(1).strip("\"'")
+        assert value in VALID_EXPERIMENT_TYPES, (
+            f"skill_contracts.yaml contains invalid experiment_type in pattern_examples: "
+            f"{value!r}. Valid values: {sorted(VALID_EXPERIMENT_TYPES)}"
+        )
+
+
+def test_review_design_experiment_type_output_has_allowed_values() -> None:
+    """review-design contract must declare allowed_values for experiment_type output.
+
+    Without this constraint, invalid values (e.g. 'controlled') can propagate
+    silently through capture and downstream recipe steps.
+    """
+    contracts = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    review_design = contracts["skills"]["review-design"]
+    outputs = {o["name"]: o for o in review_design["outputs"]}
+    et_output = outputs.get("experiment_type")
+    assert et_output is not None, "review-design must declare experiment_type output"
+    assert "allowed_values" in et_output, (
+        "experiment_type output must have allowed_values constraint. "
+        "Without it, invalid values propagate silently."
+    )
+    assert set(et_output["allowed_values"]) == VALID_EXPERIMENT_TYPES

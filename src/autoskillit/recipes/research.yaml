@@ -335,16 +335,26 @@ steps:
   open_research_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} \"${{ inputs.task }}\" ${{ context.report_path }}"
+      skill_command: "/autoskillit:open-research-pr ${{ context.report_path }} ${{ context.worktree_path }}/.autoskillit/temp/experiment-plan.md ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: open_research_pr
-    on_success: review_research_pr
+    capture:
+      pr_url: "${{ result.pr_url }}"
+    on_success: guard_pr_url
     on_failure: escalate_stop
+
+  guard_pr_url:
+    action: route
+    on_result:
+      - when: "${{ context.pr_url }}"
+        route: review_research_pr
+      - route: research_complete
+    note: Guard — skip review if pr_url is empty (graceful degradation from open_research_pr).
 
   review_research_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: review_research_pr
     skip_when_false: inputs.review_pr

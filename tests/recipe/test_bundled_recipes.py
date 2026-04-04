@@ -2007,6 +2007,32 @@ class TestResearchRecipeStructure:
         step = recipe.steps["open_research_pr"]
         assert step.tool == "run_skill"
 
+    def test_open_research_pr_passes_report_path_first(self, recipe) -> None:
+        """open_research_pr skill_command must pass report_path as first positional arg."""
+        step = recipe.steps["open_research_pr"]
+        cmd = step.with_args["skill_command"]
+        report_idx = cmd.find("report_path")
+        worktree_idx = cmd.find("worktree_path")
+        assert report_idx != -1, "report_path not found in skill_command"
+        assert worktree_idx != -1, "worktree_path not found in skill_command"
+        assert report_idx < worktree_idx, (
+            "report_path must be the first positional arg in open_research_pr skill_command"
+        )
+
+    def test_open_research_pr_passes_experiment_plan_path(self, recipe) -> None:
+        """open_research_pr skill_command must pass experiment_plan_path."""
+        step = recipe.steps["open_research_pr"]
+        cmd = step.with_args["skill_command"]
+        assert "experiment-plan" in cmd or "experiment_plan" in cmd, (
+            "open_research_pr must pass experiment_plan_path to the skill"
+        )
+
+    def test_open_research_pr_captures_pr_url(self, recipe) -> None:
+        """open_research_pr must capture pr_url for downstream use by review_research_pr."""
+        step = recipe.steps["open_research_pr"]
+        assert step.capture is not None, "open_research_pr must declare capture"
+        assert "pr_url" in step.capture, "open_research_pr must capture pr_url"
+
     def test_research_validates_cleanly(self, recipe) -> None:
         """validate_recipe returns no errors on the simplified recipe."""
         from autoskillit.recipe.validator import validate_recipe

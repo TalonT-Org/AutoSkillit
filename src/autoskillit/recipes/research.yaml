@@ -29,8 +29,9 @@ ingredients:
       When 'true' (the default), run the review-design skill after plan_experiment
       to validate the experiment plan before execution. Emits a verdict: GO proceeds,
       REVISE loops back to plan_experiment with revision guidance (bounded by
-      retries: 2), STOP halts the pipeline. When 'false', skip directly to
-      create_worktree.
+      retries: 2), STOP triggers resolve_design_review for triage — addressable
+      findings loop back, structural findings halt the pipeline. When 'false', skip
+      directly to create_worktree.
     default: "true"
   review_pr:
     description: >
@@ -54,9 +55,11 @@ kitchen_rules:
     route back to plan_experiment with revision guidance. Bounded by
     retries: 2 (max 3 review cycles). On exhaustion or failure,
     proceed to execution with the best available plan — do not stop.
-    Exception: a STOP verdict signals a fundamental structural flaw that
-    revision cannot address; this routes to design_rejected (pipeline halt)
-    and is intentionally excluded from this fallback.
+    Exception: a STOP verdict triggers resolve_design_review, which triages
+    each stop-trigger finding as ADDRESSABLE/STRUCTURAL/DISCUSS. If any are
+    ADDRESSABLE or DISCUSS, revision guidance is generated and the plan loops
+    back for revision (via revise_design). If all are STRUCTURAL, the pipeline
+    halts at design_rejected (truly terminal — revision cannot address the flaws).
   - >
     PHASE ITERATION: decompose_phases always runs. The agent maintains
     a phase queue from group_files. For each phase, run plan_phase then
@@ -113,7 +116,7 @@ steps:
       - when: "${{ result.verdict }} == REVISE"
         route: revise_design
       - when: "${{ result.verdict }} == STOP"
-        route: design_rejected
+        route: resolve_design_review
       - route: create_worktree
 
   revise_design:
@@ -121,12 +124,35 @@ steps:
     on_result:
       - route: plan_experiment
 
+  resolve_design_review:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: resolve_design_review
+    capture:
+      revision_guidance: "${{ result.revision_guidance }}"
+    retries: 1
+    on_failure: design_rejected
+    on_context_limit: design_rejected
+    on_result:
+      - when: "${{ result.resolution }} == revised"
+        route: revise_design
+      - when: "${{ result.resolution }} == failed"
+        route: design_rejected
+      - route: design_rejected
+    note: >
+      Triages STOP-verdict findings from review_design. ADDRESSABLE/DISCUSS findings
+      generate revision_guidance and loop back. Only all-STRUCTURAL findings halt at
+      design_rejected.
+
   design_rejected:
     action: stop
     message: >
-      Research pipeline halted: experiment design rejected (verdict=STOP).
-      The design has a fundamental flaw that revision cannot address.
-      Check .autoskillit/temp/review-design/ for the evaluation dashboard.
+      Research pipeline halted: experiment design rejected (verdict=STOP, resolution=failed).
+      All stop-trigger findings are structural — revision cannot address the identified flaws.
+      Check .autoskillit/temp/resolve-design-review/ for the triage report and
+      .autoskillit/temp/review-design/ for the evaluation dashboard.
 
   # --- EXECUTION PHASE ---
   create_worktree:

@@ -39,6 +39,7 @@ skills:
       type: file_path
     expected_output_patterns:
     - "resolution\\s*=\\s*(revised|failed)"
+    - "resolution\\s*=\\s*revised[\\s\\S]*?revision_guidance\\s*=\\s*/.+"
     pattern_examples:
     - "resolution = revised\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
     - "resolution = failed\n%%ORDER_UP%%"

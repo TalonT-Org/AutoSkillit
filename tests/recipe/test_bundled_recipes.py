@@ -2010,7 +2010,7 @@ class TestResearchRecipeStructure:
     def test_open_research_pr_passes_report_path_first(self, recipe) -> None:
         """open_research_pr skill_command must pass report_path as first positional arg."""
         step = recipe.steps["open_research_pr"]
-        cmd = step.with_["skill_command"]
+        cmd = step.with_args["skill_command"]
         # report_path must come before worktree_path in the command
         report_idx = cmd.find("report_path")
         worktree_idx = cmd.find("worktree_path")
@@ -2021,7 +2021,7 @@ class TestResearchRecipeStructure:
     def test_open_research_pr_passes_experiment_plan_path(self, recipe) -> None:
         """open_research_pr skill_command must pass experiment_plan_path."""
         step = recipe.steps["open_research_pr"]
-        cmd = step.with_["skill_command"]
+        cmd = step.with_args["skill_command"]
         assert "experiment-plan" in cmd or "experiment_plan" in cmd, (
             "open_research_pr must pass experiment_plan_path to the skill"
         )

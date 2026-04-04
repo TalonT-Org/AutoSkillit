@@ -345,7 +345,7 @@ steps:
   review_research_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: review_research_pr
     skip_when_false: inputs.review_pr

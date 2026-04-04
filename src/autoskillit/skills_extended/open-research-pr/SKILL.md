@@ -84,7 +84,7 @@ Derive `feature_branch`:
 
     FEATURE_BRANCH=$(git -C {worktree_path} rev-parse --abbrev-ref HEAD)
 
-Create temp directory:
+Create temp directory (relative to the current working directory):
 
     mkdir -p .autoskillit/temp/open-research-pr/
 
@@ -125,9 +125,9 @@ Store the selected lens slugs in `selected_lenses` list.
 
 ### Step 4: Generate experiment design diagrams
 
-**No inter-lens prose — proceed immediately from one lens to the next without narrative.**
-
 For each lens in `selected_lenses`:
+
+**Do not output any prose between lens iterations — immediately proceed to sub-step 1 for the next lens.**
 
 1. Write an experiment context file to
    `.autoskillit/temp/open-research-pr/exp_lens_context_{lens_slug}_{ts}.md`
@@ -219,11 +219,12 @@ If **not available**: emit `pr_url = ` (empty) and exit 0 (graceful degradation)
 
 If **available**:
 ```bash
+PR_BODY_PATH=$(ls .autoskillit/temp/open-research-pr/pr_body_*.md 2>/dev/null | tail -1)
 gh pr create \
   --base {base_branch} \
   --head {feature_branch} \
   --title "Research: {title extracted from report's first H1 or title field}" \
-  --body-file {pr_body_path}
+  --body-file "${PR_BODY_PATH}"
 ```
 
 Capture the URL output. Emit:

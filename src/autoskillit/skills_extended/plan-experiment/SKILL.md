@@ -30,13 +30,16 @@ one self-contained folder under `research/`.
 
 ## Arguments
 
-```
-/autoskillit:plan-experiment {scope_report_path}
-```
+/autoskillit:plan-experiment {scope_report_path} [{revision_guidance}]
 
 `{scope_report_path}` — Absolute path to the scope report produced by `/autoskillit:scope`
 (required). Scan tokens after the skill name for the first path-like token
 (starts with `/`, `./`, or `.autoskillit/`).
+
+`{revision_guidance}` — Optional. Absolute path to revision guidance produced by
+`/autoskillit:review-design` when verdict=REVISE. Scan for the second path-like token.
+When absent or empty (first pass), proceed normally. When present, read it and
+incorporate the feedback before writing the plan.
 
 ## Critical Constraints
 
@@ -48,6 +51,8 @@ one self-contained folder under `research/`.
 - Leave success criteria vague — every criterion must be measurable
 - Omit the environment assessment — always explicitly state whether a custom
   environment is needed or not, and why
+- Omit YAML frontmatter unless a V1–V4 ERROR is triggered — every plan must have frontmatter
+- Write frontmatter after the `# Experiment Plan:` heading — it always goes BEFORE
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -57,17 +62,26 @@ one self-contained folder under `research/`.
 - Reference specific files, functions, and test fixtures from the scope report
 - Plan all artifacts into one self-contained `research/YYYY-MM-DD-{slug}/` folder
 - Include implementation phases that an implementer can follow step by step
+- Write YAML frontmatter between --- delimiters BEFORE the # Experiment Plan: heading
+- Apply all 8 validation rules before writing the frontmatter block
+- Log V1–V4 ERRORs in a ## Frontmatter Validation Errors section instead of writing frontmatter
+- Log V5–V8 WARNINGs as # WARNING: ... YAML comments on the relevant field lines
 
 ## Workflow
 
-### Step 1 — Read Scope Report
+### Step 1 — Read Scope and Revision Guidance
 
-Read the scope report at `{scope_report_path}`. Extract:
-- The research question
-- Known/unknown matrix
-- Proposed investigation directions
-- Success criteria hints
-- External research findings
+Detect and read inputs:
+1. Read the scope report at `{scope_report_path}`. Extract:
+   - The research question
+   - Known/unknown matrix
+   - Proposed investigation directions
+   - Success criteria hints
+   - External research findings
+2. If a second path-like token is present and resolves to an existing file, read
+   `{revision_guidance}`. Extract all revision instructions — these take priority over
+   your initial analysis in Step 2. Note which sections of the plan need rework.
+   When absent or empty, skip this sub-step and proceed normally (first pass).
 
 ### Step 2 — Explore Feasibility
 
@@ -266,6 +280,122 @@ patterns or outcomes would support or refute the hypothesis.}
 ## Estimated Resource Requirements
 {Approximate compute time, disk space, dependencies needed}
 ```
+
+### Step 3a — Extract YAML Frontmatter
+
+After writing the prose plan, extract structured metadata and write the
+complete experiment plan file with YAML frontmatter prepended before the
+`# Experiment Plan:` heading. The final file layout is:
+
+```
+---
+experiment_type: {one of: benchmark, configuration_study, causal_inference, robustness_audit, exploratory}
+
+estimand:
+  treatment: "{the intervention}"     # RECOMMENDED; required when causal_inference
+  outcome: "{the measured effect}"
+  population: "{scope of units}"
+  contrast: "{A vs B vs C}"           # REQUIRED for causal_inference
+
+hypothesis_h0: "{null hypothesis with measurable threshold}"   # REQUIRED
+hypothesis_h1: "{alt hypothesis with measurable threshold}"    # REQUIRED
+
+metrics:                              # REQUIRED, min 1
+  - name: "{metric_name}"
+    unit: "{unit}"
+    canonical_name: "{src/metrics.rs entry or NEW}"
+    collection_method: "{exact command or code path}"
+    threshold: "{success threshold}"
+    direction: "higher_is_better"     # higher_is_better | lower_is_better | target_value
+    primary: true                     # mark exactly one when len(metrics) >= 2
+
+baselines:                            # REQUIRED for benchmark/causal_inference
+  - name: "{comparator name}"
+    version: "{package==version or git SHA}"
+    tuning_budget: "{what tuning was done, or 'default'}"
+
+statistical_plan:                     # REQUIRED unless exploratory
+  test: "{primary statistical test}"
+  alpha: 0.05
+  power_target: 0.80
+  correction_method: "Holm-Bonferroni"   # null | Bonferroni | Holm-Bonferroni | BH
+  sample_size_justification: "{why N is sufficient}"
+  min_detectable_effect: "{MDE in metric units}"
+
+environment:                          # REQUIRED
+  type: "custom"                      # standard | custom
+  spec_path: "research/{slug}/environment.yml"   # required when type=custom
+
+success_criteria:                     # REQUIRED
+  conclusive_positive: "{conditions supporting H1, referencing metrics}"
+  conclusive_negative: "{conditions supporting H0}"
+  inconclusive: "{conditions where no conclusion can be drawn}"
+
+experiment_slug: "{YYYY-MM-DD-slug}"  # optional, derived from directory layout
+---
+
+# Experiment Plan: {title}
+...prose sections unchanged...
+```
+
+Use this prose section ↔ frontmatter mapping to extract fields:
+
+| Prose Section | Frontmatter Field(s) |
+|---------------|---------------------|
+| `## Hypothesis` (H0/H1 bold labels) | `hypothesis_h0`, `hypothesis_h1`, `estimand` |
+| `## Independent Variables` table | `estimand.contrast`, `baselines[]` |
+| `## Dependent Variables (Metrics)` table | `metrics[]` |
+| `## Environment` | `environment` |
+| `## Analysis Plan` | `statistical_plan` |
+| `## Success Criteria` | `success_criteria` |
+| `## Experiment Directory Layout` | `experiment_slug` |
+
+Apply these validation rules in order before writing the frontmatter:
+
+```
+V1: benchmark/causal_inference → len(baselines) >= 1 AND each baseline.version not empty
+    ERROR: "Benchmark/causal_inference experiments require at least one named baseline with a version"
+
+V2: causal_inference → estimand.contrast is not null
+    ERROR: "causal_inference requires estimand with treatment, outcome, and contrast fields"
+
+V3: !exploratory → statistical_plan present AND test not null
+    ERROR: "Non-exploratory experiments require a statistical_plan; use {test: 'none'} to waive"
+
+V4: environment.type=custom → spec_path not null
+    ERROR: "Custom environment requires spec_path pointing to environment.yml"
+
+V5: len(metrics) >= 2 → exactly one metric has primary: true
+    WARNING: "Multiple metrics but no primary designated; H1 threshold ambiguous"
+
+V6: any metric.canonical_name = "NEW"
+    WARNING: "Plan includes NEW metrics not yet in src/metrics.rs"
+
+V7: hypothesis_h1 has no numeric threshold
+    WARNING: "H1 should include a measurable numeric threshold"
+
+V8: success_criteria.conclusive_positive should reference at least one metric.name
+    WARNING: "Success criteria does not reference any declared metric"
+```
+
+- ERRORs (V1–V4): Stop frontmatter generation, append the error message to the plan
+  prose under a `## Frontmatter Validation Errors` section, and save the plan WITHOUT
+  a frontmatter block. Emit the `experiment_plan` token as usual.
+- WARNINGs (V5–V8): Continue; log each as a `# WARNING: ...` YAML comment on the
+  relevant field line.
+
+Field requirements by experiment type:
+
+| Field | benchmark | config_study | causal_inference | robustness_audit | exploratory |
+|-------|-----------|-------------|-----------------|-----------------|-------------|
+| experiment_type | required | required | required | required | required |
+| estimand | recommended | recommended | **required** | recommended | optional |
+| hypothesis_h0/h1 | required | required | required | required | required |
+| metrics | required | required | required | required | required |
+| baselines | **required** | optional | **required** | optional | optional |
+| statistical_plan | required | required | required | required | **waived** |
+| environment | required | required | required | required | required |
+| success_criteria | required | required | required | required | required |
 
 ### Step 4 — Write Output
 

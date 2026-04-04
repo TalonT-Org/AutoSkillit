@@ -79,9 +79,10 @@ steps:
   plan_experiment:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }}"
+      skill_command: "/autoskillit:plan-experiment ${{ context.scope_report }} ${{ context.revision_guidance }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: plan_experiment
+    optional_context_refs: [revision_guidance]
     capture:
       experiment_plan: "${{ result.experiment_plan }}"
     on_success: review_design

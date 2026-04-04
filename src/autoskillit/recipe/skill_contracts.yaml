@@ -651,6 +651,9 @@ skills:
     - name: scope_report_path
       type: file_path
       required: true
+    - name: revision_guidance
+      type: file_path
+      required: false
     outputs:
     - name: experiment_plan
       type: file_path

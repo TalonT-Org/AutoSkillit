@@ -221,7 +221,7 @@ def validate_recipe(recipe: Recipe) -> list[str]:
                         f"Step '{step_name}'.with.{arg_key} references undeclared input '{ref}'."
                     )
             for ref in _CONTEXT_REF_RE.findall(arg_val):
-                if ref not in available_context:
+                if ref not in available_context and ref not in step.optional_context_refs:
                     errors.append(
                         f"Step '{step_name}'.with.{arg_key} references "
                         f"context variable '{ref}' which has not been "

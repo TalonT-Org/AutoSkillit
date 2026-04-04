@@ -85,6 +85,9 @@ class RecipeStep:
     description: str = ""
     sub_recipe: str | None = None  # Name of sub-recipe file (no extension)
     gate: str | None = None  # Ingredient name whose value controls lazy loading
+    optional_context_refs: list[str] = field(
+        default_factory=list
+    )  # Context vars exempt from forward-ref validation (used in cyclic routes)
 
 
 @dataclass

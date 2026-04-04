@@ -123,6 +123,7 @@ _PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
         "description",
         "sub_recipe",
         "gate",
+        "optional_context_refs",
     }
 )
 if _PARSE_STEP_HANDLED_FIELDS != frozenset(RecipeStep.__dataclass_fields__):
@@ -227,6 +228,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         description=data.get("description", ""),
         sub_recipe=data.get("sub_recipe"),
         gate=data.get("gate"),
+        optional_context_refs=data.get("optional_context_refs", []),
     )
 
 

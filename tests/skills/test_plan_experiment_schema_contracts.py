@@ -58,9 +58,7 @@ def test_plan_experiment_defines_all_validation_rules():
     """plan-experiment/SKILL.md must define all 8 validation rules V1–V8."""
     content = _read_skill_md("plan-experiment")
     for rule_id in ["V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8"]:
-        assert rule_id in content, (
-            f"plan-experiment/SKILL.md missing validation rule {rule_id!r}"
-        )
+        assert rule_id in content, f"plan-experiment/SKILL.md missing validation rule {rule_id!r}"
 
 
 def test_plan_experiment_frontmatter_before_heading():
@@ -83,7 +81,7 @@ def test_research_recipe_passes_revision_guidance_to_plan_experiment():
 
 
 def test_skill_contracts_plan_experiment_has_revision_guidance_input():
-    """skill_contracts.yaml must register revision_guidance as optional input for plan-experiment."""
+    """skill_contracts.yaml must register revision_guidance as optional input."""
     import yaml
 
     contracts_path = _repo_root() / "src/autoskillit/recipe/skill_contracts.yaml"

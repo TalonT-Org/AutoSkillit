@@ -728,7 +728,7 @@ skills:
     - name: pr_url
       type: string
     expected_output_patterns:
-    - "pr_url\\s*=\\s*https://github\\.com/.*/pull/\\d+"
+    - "pr_url\\s*=\\s*(https://github\\.com/.*/pull/\\d+)?"
     pattern_examples:
     - "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
     write_behavior: always

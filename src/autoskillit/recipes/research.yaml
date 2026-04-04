@@ -130,6 +130,7 @@ steps:
       skill_command: "/autoskillit:resolve-design-review ${{ context.evaluation_dashboard }} ${{ context.experiment_plan }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: resolve_design_review
+    optional_context_refs: [evaluation_dashboard, experiment_plan]
     capture:
       revision_guidance: "${{ result.revision_guidance }}"
     retries: 1

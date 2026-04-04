@@ -144,7 +144,7 @@ Weight tiers: H (High), M (Medium), L (Low), S (SILENT — dimension not spawned
 
 ### Step 2: Level 1 Analysis — Fail-Fast (parallel)
 
-Two subagents run in parallel. Both are always H-weight regardless of triage output.
+Two subagents run in parallel. Both are always H-weight; severity thresholds are calibrated per experiment_type via the rubric below.
 
 - `estimand_clarity` agent: "Can the claim be written as a formal contrast (A vs B on Y in Z)?"
   Reference the exp-lens-estimand-clarity philosophical mode as guidance (do NOT invoke

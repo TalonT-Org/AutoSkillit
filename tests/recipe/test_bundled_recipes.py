@@ -2011,9 +2011,10 @@ class TestResearchRecipeStructure:
         """open_research_pr skill_command must pass report_path as first positional arg."""
         step = recipe.steps["open_research_pr"]
         cmd = step.with_args["skill_command"]
-        # report_path must come before worktree_path in the command
         report_idx = cmd.find("report_path")
         worktree_idx = cmd.find("worktree_path")
+        assert report_idx != -1, "report_path not found in skill_command"
+        assert worktree_idx != -1, "worktree_path not found in skill_command"
         assert report_idx < worktree_idx, (
             "report_path must be the first positional arg in open_research_pr skill_command"
         )

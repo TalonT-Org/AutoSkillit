@@ -138,6 +138,61 @@ class TestZeroWriteDetection:
         assert sr.subtype == "zero_writes"
         assert sr.retry_reason == RetryReason.ZERO_WRITES
 
+    def test_conditional_already_green_worktree_not_demoted(self) -> None:
+        """resolve-failures conditional + 'fixes_applied = 0' output → success preserved.
+
+        This is the Issue #603 false-positive scenario: worktree is already green,
+        skill emits 'fixes_applied = 0', and the gate must NOT demote to zero_writes.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "Tests are green. fixes_applied = 0\nno changes needed\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"fixes_applied\s*=\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, (
+            "Already-green worktree (fixes_applied = 0) must NOT be demoted to zero_writes. "
+            "The pattern [1-9][0-9]* must not match '0'."
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_conditional_fix_applied_but_no_writes_demoted(self) -> None:
+        """Conditional + 'fixes_applied = 1' + 0 writes → zero_writes (Bash-only fix, no artifact).
+
+        If the skill claims it applied fixes but produced no Edit/Write calls,
+        the gate must fire. This catches the Bash-only fix scenario where the
+        skill forgot to write the fix_log artifact.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "fixes_applied = 1\nfixed: uv.lock stale pin\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"fixes_applied\s*=\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is False
+        assert sr.subtype == "zero_writes"
+        assert sr.retry_reason == RetryReason.ZERO_WRITES
+
 
 class TestWriteCallCountPropagation:
     """write_call_count must be accurately computed and propagated."""

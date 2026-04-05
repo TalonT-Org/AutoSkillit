@@ -614,7 +614,6 @@ ALWAYS_WRITE_SKILLS = {
     "dry-walkthrough",
     "implement-worktree",
     "implement-worktree-no-merge",
-    "resolve-failures",
     "resolve-review",
     "retry-worktree",
     "rectify",
@@ -634,6 +633,40 @@ def test_every_always_write_skill_has_contract(skill_name: str) -> None:
     assert contract is not None, f"Skill '{skill_name}' missing from skill_contracts.yaml"
     assert contract.write_behavior == "always", (
         f"Skill '{skill_name}' expected write_behavior='always', got '{contract.write_behavior}'"
+    )
+
+
+# Skills that write conditionally — write expected only when the completion
+# token indicates actual work was performed.
+CONDITIONAL_WRITE_SKILLS: dict[str, str] = {
+    # skill_name → substring that must appear in write_expected_when patterns
+    "resolve-failures": "fixes_applied",
+    "resolve-merge-conflicts": "conflict_report_path",
+}
+
+
+@pytest.mark.parametrize("skill_name,pattern_substring", sorted(CONDITIONAL_WRITE_SKILLS.items()))
+def test_every_conditional_write_skill_has_correct_contract(
+    skill_name: str, pattern_substring: str
+) -> None:
+    """Skills with legitimate no-write exits must declare write_behavior='conditional'.
+
+    Each conditional skill must have at least one write_expected_when pattern
+    containing the expected token substring. This prevents regression to 'always'.
+    """
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract(skill_name, manifest)
+    assert contract is not None, f"Skill '{skill_name}' missing from skill_contracts.yaml"
+    assert contract.write_behavior == "conditional", (
+        f"Skill '{skill_name}' must use write_behavior='conditional'. "
+        f"It has a legitimate no-write success path. Got: '{contract.write_behavior}'"
+    )
+    assert len(contract.write_expected_when) > 0, (
+        f"Skill '{skill_name}': conditional mode requires non-empty write_expected_when"
+    )
+    assert any(pattern_substring in p for p in contract.write_expected_when), (
+        f"Skill '{skill_name}': write_expected_when must contain a pattern with "
+        f"'{pattern_substring}' (the structured completion token)"
     )
 
 

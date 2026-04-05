@@ -292,8 +292,8 @@ class TestContractMigrationAdapter:
         contracts_dir = recipes_dir / "contracts"
         contracts_dir.mkdir(parents=True)
 
-        # Copy a real bundled recipe so generate_recipe_card has valid input
-        src_recipe = pkg_root() / "recipes" / "smoke-test.yaml"
+        # Copy the project-local smoke-test recipe so generate_recipe_card has valid input
+        src_recipe = Path(__file__).resolve().parent.parent.parent / ".autoskillit" / "recipes" / "smoke-test.yaml"
         shutil.copy2(src_recipe, recipes_dir / "smoke-test.yaml")
 
         contract_path = contracts_dir / "smoke-test.yaml"

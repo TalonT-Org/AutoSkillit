@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -1132,7 +1134,7 @@ class TestSmokeTestStructure:
 
     @pytest.fixture()
     def smoke_yaml(self) -> dict:
-        recipe_path = builtin_recipes_dir() / "smoke-test.yaml"
+        recipe_path = Path(__file__).resolve().parent.parent.parent / ".autoskillit" / "recipes" / "smoke-test.yaml"
         return yaml.safe_load(recipe_path.read_text())
 
     # T_ST1
@@ -1247,8 +1249,13 @@ def test_bundled_recipes_diagrams_dir_exists() -> None:
 
 def test_all_predicate_steps_have_on_failure() -> None:
     """Every tool/python step with on_result.conditions must declare on_failure."""
-    for recipe_name in ["implementation", "remediation", "smoke-test"]:
-        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    paths = {
+        "implementation": builtin_recipes_dir() / "implementation.yaml",
+        "remediation": builtin_recipes_dir() / "remediation.yaml",
+        "smoke-test": Path(__file__).resolve().parent.parent.parent / ".autoskillit" / "recipes" / "smoke-test.yaml",
+    }
+    for recipe_name, recipe_path in paths.items():
+        recipe = load_recipe(recipe_path)
         for step_name, step in recipe.steps.items():
             is_tool = step.tool is not None or step.python is not None
             if is_tool and step.on_result and step.on_result.conditions:
@@ -1267,7 +1274,9 @@ def test_audit_impl_on_failure_routes_to_escalation() -> None:
 
 def test_smoke_check_summary_has_error_escalation() -> None:
     """check_summary must have a result.error condition routing to a non-done step."""
-    recipe = load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+    recipe = load_recipe(
+        Path(__file__).resolve().parent.parent.parent / ".autoskillit" / "recipes" / "smoke-test.yaml"
+    )
     step = recipe.steps["check_summary"]
     error_routes = [
         c.route
@@ -1600,7 +1609,9 @@ class TestBaseBranchDefaults:
 
     def test_smoke_test_base_branch_remains_main(self) -> None:
         """smoke-test.yaml must keep base_branch default 'main' — isolated scratch repo context."""
-        recipe = load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+        recipe = load_recipe(
+            Path(__file__).resolve().parent.parent.parent / ".autoskillit" / "recipes" / "smoke-test.yaml"
+        )
         assert recipe.ingredients["base_branch"].default == "main", (
             "smoke-test.yaml creates a fresh git repo initialized with 'main' — "
             "its base_branch default must stay 'main'"

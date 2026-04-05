@@ -1718,7 +1718,9 @@ def test_recipe_has_no_interactive_cleanup_steps(recipe_name: str) -> None:
     )
 
 
-@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+@pytest.mark.parametrize(
+    "recipe_name", ["implementation", "remediation", "implementation-groups", "merge-prs"]
+)
 def test_recipe_has_unconditional_register_steps(recipe_name: str) -> None:
     """register_clone_success routes to done; register_clone_failure routes to escalate_stop."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")

@@ -269,6 +269,18 @@ run_skill("/autoskillit:merge-pr {pr_number} {complexity}")
 
 Log merge results and proceed to the next batch.
 
+**3d. Batch Clone Cleanup (always, after all batches complete):**
+
+After all batches finish (whether or not `--merge-batch` was used), call:
+
+```
+batch_cleanup_clones()
+```
+
+This reads the shared registry at `.autoskillit/temp/clone-cleanup-registry.json`,
+deletes all clones registered with `status=success` (their pipelines completed cleanly),
+and leaves all `status=error` clones on disk for investigation.
+
 ### Step 4: Write Summary Report
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.

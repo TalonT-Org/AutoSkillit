@@ -1,23 +1,38 @@
-generated_at: '2026-03-03T23:39:44.033912+00:00'
+generated_at: '2026-04-05T02:19:55.997695+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
   investigate:
     inputs:
-    - name: task
+    - name: topic
       type: string
       required: true
-    outputs: []
+    outputs:
+    - name: investigation_path
+      type: file_path
+    expected_output_patterns:
+    - investigation_path\s*=\s*/.+
+    pattern_examples:
+    - 'investigation_path = /tmp/investigation.md
+
+      %%ORDER_UP%%'
   rectify:
     inputs:
     - name: investigation_path
       type: file_path
-      required: false
+      required: true
     outputs:
     - name: plan_path
       type: file_path
     - name: plan_parts
       type: file_path_list
+    expected_output_patterns:
+    - plan_path\s*=\s*/.+
+    pattern_examples:
+    - 'plan_path = /tmp/plan.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
   review-approach:
     inputs:
     - name: plan_path
@@ -26,12 +41,21 @@ skills:
     outputs:
     - name: review_path
       type: file_path
+    expected_output_patterns:
+    - review_path\s*=\s*/.+
+    pattern_examples:
+    - 'review_path = /tmp/review.md
+
+      %%ORDER_UP%%'
   dry-walkthrough:
     inputs:
     - name: plan_path
       type: file_path
       required: true
     outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+    write_behavior: always
   implement-worktree-no-merge:
     inputs:
     - name: plan_path
@@ -42,6 +66,13 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
+    expected_output_patterns:
+    - worktree_path\s*=\s*/.+
+    pattern_examples:
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
+
+      %%ORDER_UP%%'
+    write_behavior: always
   retry-worktree:
     inputs:
     - name: plan_path
@@ -55,6 +86,13 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
+    expected_output_patterns:
+    - worktree_path\s*=\s*/.+
+    pattern_examples:
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
+
+      %%ORDER_UP%%'
+    write_behavior: always
   resolve-failures:
     inputs:
     - name: worktree_path
@@ -67,6 +105,9 @@ skills:
       type: string
       required: true
     outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+    write_behavior: always
   audit-impl:
     inputs:
     - name: plan_path
@@ -83,6 +124,17 @@ skills:
       type: string
     - name: remediation_path
       type: file_path
+    expected_output_patterns:
+    - verdict\s*=\s*(GO|NO GO)
+    pattern_examples:
+    - 'verdict = GO
+
+      %%ORDER_UP%%'
+    - 'verdict = NO GO
+
+      remediation_path = /tmp/remediation.md
+
+      %%ORDER_UP%%'
   make-plan:
     inputs:
     - name: task
@@ -93,65 +145,275 @@ skills:
       type: file_path
     - name: plan_parts
       type: file_path_list
+    expected_output_patterns:
+    - plan_path\s*=\s*/.+
+    pattern_examples:
+    - 'plan_path = /tmp/plan.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
+  open-pr:
+    inputs:
+    - name: plan_paths
+      type: string
+      required: true
+    - name: feature_branch
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: closing_issue
+      type: string
+      required: false
+    outputs: []
+    expected_output_patterns:
+    - https://github\.com/.*/pull/\d+
+    pattern_examples:
+    - 'https://github.com/owner/repo/pull/42
+
+      %%ORDER_UP%%'
+  review-pr:
+    inputs:
+    - name: feature_branch
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: annotated_diff_path
+      type: string
+      required: false
+    - name: hunk_ranges_path
+      type: string
+      required: false
+    outputs:
+    - name: verdict
+      type: string
+    expected_output_patterns:
+    - verdict\s*=\s*(approved|changes_requested|needs_human)
+    pattern_examples:
+    - 'verdict = approved
+
+      %%ORDER_UP%%'
+    - 'verdict = changes_requested
+
+      %%ORDER_UP%%'
+    - 'verdict = needs_human
+
+      %%ORDER_UP%%'
+  resolve-review:
+    inputs:
+    - name: feature_branch
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+    write_behavior: always
+  resolve-merge-conflicts:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs:
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
+    - name: conflict_report_path
+      type: file_path
+    - name: escalation_required
+      type: string
+    - name: escalation_reason
+      type: string
+    expected_output_patterns:
+    - worktree_path\s*=\s*/.+
+    pattern_examples:
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
+
+      %%ORDER_UP%%'
+    write_behavior: conditional
+    write_expected_when:
+    - conflict_report_path\s*=\s*/.+
+  diagnose-ci:
+    inputs:
+    - name: branch
+      type: string
+      required: true
+    - name: run_id
+      type: string
+      required: false
+    - name: ci_failed_jobs
+      type: string
+      required: false
+    outputs:
+    - name: diagnosis_path
+      type: file_path
+    - name: failure_type
+      type: string
+    - name: is_fixable
+      type: string
+    expected_output_patterns:
+    - diagnosis_path\s*=\s*/.+
+    pattern_examples:
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
 dataflow:
+- step: sprint_entry
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - issue_url
+  - open_pr
+  - review_approach
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  required: []
+  produced: []
 - step: clone
   available:
   - audit
+  - auto_merge
   - base_branch
+  - issue_url
   - open_pr
   - review_approach
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   required: []
   produced:
   - work_dir
   - remote_url
-- step: capture_base_sha
-  available:
-  - audit
-  - base_branch
-  - open_pr
-  - remote_url
-  - review_approach
-  - run_name
-  - source_dir
-  - target_dir
-  - task
-  - work_dir
-  required: []
-  produced:
-  - base_sha
 - step: set_merge_target
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - issue_url
   - open_pr
   - remote_url
   - review_approach
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   required: []
   produced:
   - merge_target
-- step: create_branch
+- step: get_issue_title
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - issue_url
   - merge_target
   - open_pr
   - remote_url
   - review_approach
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
+  - work_dir
+  required: []
+  produced:
+  - issue_number
+  - issue_title
+  - issue_slug
+- step: claim_issue
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - remote_url
+  - review_approach
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - work_dir
+  required: []
+  produced:
+  - claimed
+- step: compute_branch
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - claimed
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - remote_url
+  - review_approach
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - work_dir
+  required: []
+  produced:
+  - proposed_branch
+- step: create_branch
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - claimed
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - proposed_branch
+  - remote_url
+  - review_approach
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
   - work_dir
   required: []
   produced:
@@ -159,48 +421,75 @@ dataflow:
 - step: push_merge_target
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - claimed
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
+  - proposed_branch
   - remote_url
   - review_approach
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   required: []
   produced: []
 - step: investigate
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - claimed
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
+  - proposed_branch
   - remote_url
   - review_approach
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
-  required: []
-  produced: []
+  required:
+  - topic
+  produced:
+  - investigation_path
 - step: rectify
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - claimed
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
+  - proposed_branch
   - remote_url
   - review_approach
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   required: []
   produced:
@@ -208,17 +497,26 @@ dataflow:
 - step: review
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - claimed
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remote_url
   - review_approach
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   required: []
   produced:
@@ -226,79 +524,119 @@ dataflow:
 - step: dry_walkthrough
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - claimed
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   required: []
   produced: []
 - step: implement
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - claimed
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   required: []
   produced:
   - implementation_ref
   - worktree_path
+  - branch_name
 - step: retry_worktree
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - branch_name
+  - claimed
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   - worktree_path
   required: []
   produced:
   - implementation_ref
   - worktree_path
+  - branch_name
 - step: test
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - branch_name
+  - claimed
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   - worktree_path
   required: []
@@ -306,19 +644,29 @@ dataflow:
 - step: assess
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - branch_name
+  - claimed
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   - worktree_path
   required: []
@@ -326,19 +674,29 @@ dataflow:
 - step: audit_impl
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - branch_name
+  - claimed
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   - worktree_path
   required: []
@@ -347,20 +705,30 @@ dataflow:
 - step: remediate
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - branch_name
+  - claimed
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   - worktree_path
   required: []
@@ -368,20 +736,30 @@ dataflow:
 - step: make_plan
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - branch_name
+  - claimed
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   - worktree_path
   required: []
@@ -390,20 +768,30 @@ dataflow:
 - step: merge
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - branch_name
+  - claimed
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   - worktree_path
   required: []
@@ -413,21 +801,31 @@ dataflow:
 - step: push
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - branch_name
+  - claimed
   - cleanup_succeeded
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
   - work_dir
   - worktree_path
   required: []
@@ -435,65 +833,1439 @@ dataflow:
 - step: open_pr_step
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - branch_name
+  - claimed
   - cleanup_succeeded
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
+  - work_dir
+  - worktree_path
+  required:
+  - plan_paths
+  - feature_branch
+  produced: []
+- step: extract_pr_number
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - cleanup_succeeded
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - plan_path
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - pr_number
+- step: review_pr
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - cleanup_succeeded
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - work_dir
+  - worktree_path
+  required:
+  - feature_branch
+  produced:
+  - verdict
+- step: resolve_review
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - cleanup_succeeded
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required:
+  - feature_branch
+  produced: []
+- step: re_push_review
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - claimed
+  - cleanup_succeeded
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required: []
   produced: []
-- step: cleanup_success
+- step: ci_watch
   available:
   - audit
+  - auto_merge
   - base_branch
-  - base_sha
+  - branch_name
+  - claimed
   - cleanup_succeeded
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
   - merge_target
   - open_pr
   - plan_path
+  - pr_number
+  - proposed_branch
   - remediation_path
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - ci_conclusion
+  - ci_failed_jobs
+- step: check_merge_queue
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - queue_available
+- step: check_merge_group_trigger
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - merge_group_trigger
+- step: check_auto_merge
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - auto_merge_available
+- step: route_queue_mode
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required: []
   produced: []
-- step: cleanup_failure
+- step: enable_auto_merge
   available:
   - audit
+  - auto_merge
+  - auto_merge_available
   - base_branch
-  - base_sha
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
   - cleanup_succeeded
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
   - merge_target
   - open_pr
   - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
   - remediation_path
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: wait_for_queue
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - queue_pr_state
+- step: reenroll_stalled_pr
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: queue_ejected_fix
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required:
+  - worktree_path
+  produced:
+  - conflict_escalation_required
+- step: re_push_queue_fix
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: reenter_merge_queue
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: direct_merge
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: wait_for_direct_merge
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: direct_merge_conflict_fix
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required:
+  - worktree_path
+  produced:
+  - conflict_escalation_required
+- step: re_push_direct_fix
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: redirect_merge
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: immediate_merge
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: wait_for_immediate_merge
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: immediate_merge_conflict_fix
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required:
+  - worktree_path
+  produced:
+  - conflict_escalation_required
+- step: re_push_immediate_fix
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: remerge_immediate
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: diagnose_ci
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - diagnosis_path
+- step: resolve_ci
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required:
+  - worktree_path
+  produced: []
+- step: re_push
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: detect_ci_conflict
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: ci_conflict_fix
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required:
+  - worktree_path
+  produced:
+  - conflict_escalation_required
+- step: release_issue_timeout
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: release_issue_success
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: release_issue_failure
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: register_clone_success
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
+- step: register_clone_failure
+  available:
+  - audit
+  - auto_merge
+  - auto_merge_available
+  - base_branch
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
+  - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_mode
+  - run_name
+  - source_dir
+  - sprint_mode
+  - task
+  - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required: []
@@ -501,21 +2273,41 @@ dataflow:
 - step: done
   available:
   - audit
+  - auto_merge
+  - auto_merge_available
   - base_branch
-  - base_sha
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
   - merge_target
   - open_pr
   - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required: []
@@ -523,21 +2315,41 @@ dataflow:
 - step: escalate_stop
   available:
   - audit
+  - auto_merge
+  - auto_merge_available
   - base_branch
-  - base_sha
+  - branch_name
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
   - cleanup_succeeded
+  - conflict_escalation_required
+  - diagnosis_path
   - implementation_ref
+  - investigation_path
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_group_trigger
   - merge_target
   - open_pr
   - plan_path
+  - pr_number
+  - proposed_branch
+  - queue_available
+  - queue_pr_state
   - remediation_path
   - remote_url
   - review_approach
   - review_path
+  - run_mode
   - run_name
   - source_dir
-  - target_dir
+  - sprint_mode
   - task
+  - upfront_claimed
+  - verdict
   - work_dir
   - worktree_path
   required: []

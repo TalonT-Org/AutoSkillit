@@ -315,20 +315,23 @@ class TestClaimReleaseGates:
                 f"{name}: release_issue_success must be absent — label stays on success"
             )
 
-    def test_release_issue_success_routes_to_confirm_cleanup(self):
+    def test_release_issue_success_routes_to_register_clone_success(self):
         for name in self.RECIPES_WITH_RELEASE_SUCCESS_STEP:
             data = yaml.safe_load(_recipe_path(name).read_text())
             step = data["steps"]["release_issue_success"]
-            assert step["on_success"] == "check_defer_cleanup", (
-                f"{name}: release_issue_success.on_success should be check_defer_cleanup"
+            assert step["on_success"] == "register_clone_success", (
+                f"{name}: release_issue_success.on_success should be register_clone_success"
             )
 
-    def test_release_issue_failure_routes_to_cleanup_failure(self):
+    def test_release_issue_failure_routes_to_register_clone_failure(self):
         for name in self.RECIPES:
             data = yaml.safe_load(_recipe_path(name).read_text())
             step = data["steps"]["release_issue_failure"]
-            assert step["on_success"] == "check_defer_on_failure", (
-                f"{name}: release_issue_failure.on_success should be check_defer_on_failure"
+            assert step["on_success"] == "register_clone_failure", (
+                f"{name}: release_issue_failure.on_success should be register_clone_failure"
+            )
+            assert step["on_failure"] == "register_clone_failure", (
+                f"{name}: release_issue_failure.on_failure should be register_clone_failure"
             )
 
     def test_ci_watch_on_success_routing(self):

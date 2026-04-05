@@ -1,7 +1,25 @@
-generated_at: '2026-04-05T02:19:55.954339+00:00'
+generated_at: '2026-04-05T02:19:56.037706+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills:
+  make-groups:
+    inputs:
+    - name: source_doc
+      type: file_path
+      required: true
+    outputs:
+    - name: groups_path
+      type: file_path
+    - name: manifest_path
+      type: file_path
+    - name: group_files
+      type: file_path_list
+    expected_output_patterns:
+    - groups_path\s*=\s*/.+
+    pattern_examples:
+    - 'groups_path = /tmp/groups.json
+
+      %%ORDER_UP%%'
   make-plan:
     inputs:
     - name: task
@@ -183,6 +201,31 @@ skills:
     expected_output_patterns: []
     pattern_examples: []
     write_behavior: always
+  diagnose-ci:
+    inputs:
+    - name: branch
+      type: string
+      required: true
+    - name: run_id
+      type: string
+      required: false
+    - name: ci_failed_jobs
+      type: string
+      required: false
+    outputs:
+    - name: diagnosis_path
+      type: file_path
+    - name: failure_type
+      type: string
+    - name: is_fixable
+      type: string
+    expected_output_patterns:
+    - diagnosis_path\s*=\s*/.+
+    pattern_examples:
+    - 'diagnosis_path = /tmp/diagnosis.md
+
+      %%ORDER_UP%%'
+    write_behavior: always
   resolve-merge-conflicts:
     inputs:
     - name: worktree_path
@@ -214,48 +257,7 @@ skills:
     write_behavior: conditional
     write_expected_when:
     - conflict_report_path\s*=\s*/.+
-  diagnose-ci:
-    inputs:
-    - name: branch
-      type: string
-      required: true
-    - name: run_id
-      type: string
-      required: false
-    - name: ci_failed_jobs
-      type: string
-      required: false
-    outputs:
-    - name: diagnosis_path
-      type: file_path
-    - name: failure_type
-      type: string
-    - name: is_fixable
-      type: string
-    expected_output_patterns:
-    - diagnosis_path\s*=\s*/.+
-    pattern_examples:
-    - 'diagnosis_path = /tmp/diagnosis.md
-
-      %%ORDER_UP%%'
-    write_behavior: always
 dataflow:
-- step: sprint_entry
-  available:
-  - audit
-  - auto_merge
-  - base_branch
-  - issue_url
-  - open_pr
-  - review_approach
-  - run_mode
-  - run_name
-  - source_dir
-  - sprint_mode
-  - task
-  - upfront_claimed
-  required: []
-  produced: []
 - step: clone
   available:
   - audit
@@ -264,11 +266,9 @@ dataflow:
   - issue_url
   - open_pr
   - review_approach
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   required: []
   produced:
@@ -283,11 +283,9 @@ dataflow:
   - open_pr
   - remote_url
   - review_approach
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   required: []
@@ -303,11 +301,9 @@ dataflow:
   - open_pr
   - remote_url
   - review_approach
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   required: []
@@ -324,11 +320,9 @@ dataflow:
   - open_pr
   - remote_url
   - review_approach
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   required: []
@@ -350,11 +344,9 @@ dataflow:
   - open_pr
   - remote_url
   - review_approach
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   required: []
@@ -375,11 +367,9 @@ dataflow:
   - open_pr
   - remote_url
   - review_approach
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   required: []
@@ -401,11 +391,9 @@ dataflow:
   - proposed_branch
   - remote_url
   - review_approach
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   required: []
@@ -427,16 +415,14 @@ dataflow:
   - proposed_branch
   - remote_url
   - review_approach
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   required: []
   produced: []
-- step: plan
+- step: group
   available:
   - audit
   - auto_merge
@@ -452,11 +438,34 @@ dataflow:
   - proposed_branch
   - remote_url
   - review_approach
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
+  - upfront_claimed
+  - work_dir
+  required: []
+  produced:
+  - group_files
+- step: plan
+  available:
+  - audit
+  - auto_merge
+  - base_branch
+  - base_sha
+  - claimed
+  - group_files
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - proposed_branch
+  - remote_url
+  - review_approach
+  - run_name
+  - source_dir
+  - source_doc
   - upfront_claimed
   - work_dir
   required: []
@@ -471,6 +480,7 @@ dataflow:
   - base_branch
   - base_sha
   - claimed
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -481,11 +491,9 @@ dataflow:
   - proposed_branch
   - remote_url
   - review_approach
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   required: []
@@ -499,6 +507,7 @@ dataflow:
   - base_branch
   - base_sha
   - claimed
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -510,11 +519,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   required: []
@@ -527,6 +534,7 @@ dataflow:
   - base_branch
   - base_sha
   - claimed
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -538,11 +546,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   required: []
@@ -556,6 +562,7 @@ dataflow:
   - base_branch
   - base_sha
   - claimed
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -567,11 +574,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   - worktree_path
@@ -586,6 +591,7 @@ dataflow:
   - base_branch
   - base_sha
   - claimed
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -597,11 +603,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   - worktree_path
@@ -615,6 +619,7 @@ dataflow:
   - base_branch
   - base_sha
   - claimed
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -626,11 +631,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   - worktree_path
@@ -647,6 +650,7 @@ dataflow:
   - base_sha
   - claimed
   - cleanup_succeeded
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -658,11 +662,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   - worktree_path
@@ -677,6 +679,7 @@ dataflow:
   - base_sha
   - claimed
   - cleanup_succeeded
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -688,11 +691,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   - worktree_path
@@ -707,6 +708,7 @@ dataflow:
   - base_sha
   - claimed
   - cleanup_succeeded
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -718,11 +720,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   - worktree_path
@@ -737,6 +737,7 @@ dataflow:
   - base_sha
   - claimed
   - cleanup_succeeded
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -748,11 +749,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   - worktree_path
@@ -768,6 +767,7 @@ dataflow:
   - base_sha
   - claimed
   - cleanup_succeeded
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -780,11 +780,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   - worktree_path
@@ -799,6 +797,7 @@ dataflow:
   - base_sha
   - claimed
   - cleanup_succeeded
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -811,11 +810,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   - worktree_path
@@ -832,6 +829,7 @@ dataflow:
   - base_sha
   - claimed
   - cleanup_succeeded
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -844,11 +842,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   - worktree_path
@@ -864,6 +860,7 @@ dataflow:
   - base_sha
   - claimed
   - cleanup_succeeded
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -877,11 +874,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - work_dir
   - worktree_path
@@ -898,6 +893,7 @@ dataflow:
   - base_sha
   - claimed
   - cleanup_succeeded
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -911,11 +907,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -932,6 +926,7 @@ dataflow:
   - base_sha
   - claimed
   - cleanup_succeeded
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -945,11 +940,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -965,6 +958,7 @@ dataflow:
   - base_sha
   - claimed
   - cleanup_succeeded
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -978,11 +972,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -991,6 +983,112 @@ dataflow:
   produced:
   - ci_conclusion
   - ci_failed_jobs
+- step: diagnose_ci
+  available:
+  - all_plan_paths
+  - audit
+  - auto_merge
+  - base_branch
+  - base_sha
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - group_files
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_name
+  - source_dir
+  - source_doc
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced:
+  - diagnosis_path
+- step: resolve_ci
+  available:
+  - all_plan_paths
+  - audit
+  - auto_merge
+  - base_branch
+  - base_sha
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - diagnosis_path
+  - group_files
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_name
+  - source_dir
+  - source_doc
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required:
+  - worktree_path
+  produced: []
+- step: re_push
+  available:
+  - all_plan_paths
+  - audit
+  - auto_merge
+  - base_branch
+  - base_sha
+  - ci_conclusion
+  - ci_failed_jobs
+  - claimed
+  - cleanup_succeeded
+  - diagnosis_path
+  - group_files
+  - issue_number
+  - issue_slug
+  - issue_title
+  - issue_url
+  - merge_target
+  - open_pr
+  - plan_path
+  - pr_number
+  - proposed_branch
+  - remediation_path
+  - remote_url
+  - review_approach
+  - review_path
+  - run_name
+  - source_dir
+  - source_doc
+  - upfront_claimed
+  - verdict
+  - work_dir
+  - worktree_path
+  required: []
+  produced: []
 - step: check_merge_queue
   available:
   - all_plan_paths
@@ -1002,6 +1100,8 @@ dataflow:
   - ci_failed_jobs
   - claimed
   - cleanup_succeeded
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1015,11 +1115,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1038,6 +1136,8 @@ dataflow:
   - ci_failed_jobs
   - claimed
   - cleanup_succeeded
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1052,11 +1152,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1075,6 +1173,8 @@ dataflow:
   - ci_failed_jobs
   - claimed
   - cleanup_succeeded
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1090,11 +1190,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1114,6 +1212,8 @@ dataflow:
   - ci_failed_jobs
   - claimed
   - cleanup_succeeded
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1129,11 +1229,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1152,6 +1250,8 @@ dataflow:
   - ci_failed_jobs
   - claimed
   - cleanup_succeeded
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1167,11 +1267,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1190,6 +1288,8 @@ dataflow:
   - ci_failed_jobs
   - claimed
   - cleanup_succeeded
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1205,11 +1305,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1229,6 +1327,8 @@ dataflow:
   - ci_failed_jobs
   - claimed
   - cleanup_succeeded
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1245,11 +1345,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1268,6 +1366,8 @@ dataflow:
   - ci_failed_jobs
   - claimed
   - cleanup_succeeded
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1284,11 +1384,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1310,6 +1408,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1326,11 +1426,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1350,6 +1448,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1366,11 +1466,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1390,6 +1488,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1406,11 +1506,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1430,6 +1528,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1446,11 +1546,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1470,6 +1568,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1486,11 +1586,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1512,6 +1610,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1528,11 +1628,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1552,6 +1650,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1568,11 +1668,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1592,6 +1690,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1608,11 +1708,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1632,6 +1730,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1648,11 +1748,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1672,6 +1770,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1688,11 +1788,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1714,6 +1812,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1730,11 +1830,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1754,6 +1852,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1770,18 +1870,16 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
   - worktree_path
   required: []
   produced: []
-- step: diagnose_ci
+- step: release_issue_timeout
   available:
   - all_plan_paths
   - audit
@@ -1794,6 +1892,8 @@ dataflow:
   - claimed
   - cleanup_succeeded
   - conflict_escalation_required
+  - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1810,95 +1910,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
-  - upfront_claimed
-  - verdict
-  - work_dir
-  - worktree_path
-  required: []
-  produced:
-  - diagnosis_path
-- step: resolve_ci
-  available:
-  - all_plan_paths
-  - audit
-  - auto_merge
-  - auto_merge_available
-  - base_branch
-  - base_sha
-  - ci_conclusion
-  - ci_failed_jobs
-  - claimed
-  - cleanup_succeeded
-  - conflict_escalation_required
-  - diagnosis_path
-  - issue_number
-  - issue_slug
-  - issue_title
-  - issue_url
-  - merge_group_trigger
-  - merge_target
-  - open_pr
-  - plan_path
-  - pr_number
-  - proposed_branch
-  - queue_available
-  - queue_pr_state
-  - remediation_path
-  - remote_url
-  - review_approach
-  - review_path
-  - run_mode
-  - run_name
-  - source_dir
-  - sprint_mode
-  - task
-  - upfront_claimed
-  - verdict
-  - work_dir
-  - worktree_path
-  required:
-  - worktree_path
-  produced: []
-- step: re_push
-  available:
-  - all_plan_paths
-  - audit
-  - auto_merge
-  - auto_merge_available
-  - base_branch
-  - base_sha
-  - ci_conclusion
-  - ci_failed_jobs
-  - claimed
-  - cleanup_succeeded
-  - conflict_escalation_required
-  - diagnosis_path
-  - issue_number
-  - issue_slug
-  - issue_title
-  - issue_url
-  - merge_group_trigger
-  - merge_target
-  - open_pr
-  - plan_path
-  - pr_number
-  - proposed_branch
-  - queue_available
-  - queue_pr_state
-  - remediation_path
-  - remote_url
-  - review_approach
-  - review_path
-  - run_mode
-  - run_name
-  - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1919,6 +1933,7 @@ dataflow:
   - cleanup_succeeded
   - conflict_escalation_required
   - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1935,11 +1950,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -1960,6 +1973,7 @@ dataflow:
   - cleanup_succeeded
   - conflict_escalation_required
   - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -1976,11 +1990,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -2003,6 +2015,7 @@ dataflow:
   - cleanup_succeeded
   - conflict_escalation_required
   - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -2019,52 +2032,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
-  - upfront_claimed
-  - verdict
-  - work_dir
-  - worktree_path
-  required: []
-  produced: []
-- step: release_issue_timeout
-  available:
-  - all_plan_paths
-  - audit
-  - auto_merge
-  - auto_merge_available
-  - base_branch
-  - base_sha
-  - ci_conclusion
-  - ci_failed_jobs
-  - claimed
-  - cleanup_succeeded
-  - conflict_escalation_required
-  - diagnosis_path
-  - issue_number
-  - issue_slug
-  - issue_title
-  - issue_url
-  - merge_group_trigger
-  - merge_target
-  - open_pr
-  - plan_path
-  - pr_number
-  - proposed_branch
-  - queue_available
-  - queue_pr_state
-  - remediation_path
-  - remote_url
-  - review_approach
-  - review_path
-  - run_mode
-  - run_name
-  - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -2085,6 +2055,7 @@ dataflow:
   - cleanup_succeeded
   - conflict_escalation_required
   - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -2101,11 +2072,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -2126,6 +2095,7 @@ dataflow:
   - cleanup_succeeded
   - conflict_escalation_required
   - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -2142,11 +2112,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -2167,6 +2135,7 @@ dataflow:
   - cleanup_succeeded
   - conflict_escalation_required
   - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -2183,11 +2152,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -2208,6 +2175,7 @@ dataflow:
   - cleanup_succeeded
   - conflict_escalation_required
   - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -2224,11 +2192,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir
@@ -2249,6 +2215,7 @@ dataflow:
   - cleanup_succeeded
   - conflict_escalation_required
   - diagnosis_path
+  - group_files
   - issue_number
   - issue_slug
   - issue_title
@@ -2265,11 +2232,9 @@ dataflow:
   - remote_url
   - review_approach
   - review_path
-  - run_mode
   - run_name
   - source_dir
-  - sprint_mode
-  - task
+  - source_doc
   - upfront_claimed
   - verdict
   - work_dir

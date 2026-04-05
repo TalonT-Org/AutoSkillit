@@ -7,6 +7,7 @@ _build_skill_result → SkillResult adjudication boundary.
 
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 import textwrap
@@ -496,8 +497,6 @@ def _result_ndjson(
     session_id: str = "s1",
 ) -> str:
     """Build a minimal NDJSON string with a single type=result record."""
-    import json
-
     return json.dumps(
         {
             "type": "result",
@@ -506,21 +505,6 @@ def _result_ndjson(
             "result": result,
             "session_id": session_id,
             "errors": [],
-        }
-    )
-
-
-def _assistant_content_ndjson(text: str) -> str:
-    """Build an assistant NDJSON record with text content (no type=result)."""
-    import json
-
-    return json.dumps(
-        {
-            "type": "assistant",
-            "message": {
-                "role": "assistant",
-                "content": [{"type": "text", "text": text}],
-            },
         }
     )
 
@@ -651,6 +635,19 @@ class TestRecoverFromSeparateMarker:
 # ---------------------------------------------------------------------------
 # Channel B drain-race recovery — integration through _build_skill_result
 # ---------------------------------------------------------------------------
+
+
+def _assistant_content_ndjson(text: str) -> str:
+    """Build an assistant NDJSON record with text content (no type=result)."""
+    return json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": text}],
+            },
+        }
+    )
 
 
 class TestChannelBDrainRaceRecovery:

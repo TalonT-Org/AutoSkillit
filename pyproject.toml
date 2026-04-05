@@ -46,6 +46,7 @@ dev = [
     "ruff>=0.15.0",
     "import-linter>=2.1",
     "packaging>=25.0",
+    "api-simulator",
 ]
 
 [project.urls]
@@ -223,3 +224,6 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
 ]
+
+[tool.uv.sources]
+api-simulator = { git = "https://github.com/TalonT-Org/api-simulator", branch = "main" }

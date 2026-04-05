@@ -143,7 +143,7 @@ class TestCheckAndSleepIfNeeded:
             cache_path=str(tmp_path / "cache.json"),
         )
 
-        async def mock_fetch(path):
+        async def mock_fetch(path, **kwargs):
             return QuotaStatus(utilization=50.0, resets_at=resets_at)
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
@@ -236,7 +236,7 @@ class TestCheckAndSleepIfNeeded:
             json.dumps({"claudeAiOauth": {"accessToken": "tok", "expiresAt": expires_ms}})
         )
 
-        async def mock_fetch(path):
+        async def mock_fetch(path, **kwargs):
             raise OSError("network down")
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
@@ -301,7 +301,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
             cache_path=str(tmp_path / "cache.json"),
         )
 
-        async def mock_fetch(path):
+        async def mock_fetch(path, **kwargs):
             return QuotaStatus(utilization=90.0, resets_at=None)
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
@@ -377,7 +377,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
             cache_path=str(tmp_path / "cache.json"),
         )
 
-        async def mock_fetch(path):
+        async def mock_fetch(path, **kwargs):
             return QuotaStatus(utilization=90.0, resets_at=None)
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)

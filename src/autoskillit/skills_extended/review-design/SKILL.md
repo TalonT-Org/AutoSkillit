@@ -215,6 +215,22 @@ Receives: full plan text and `experiment_type` (from Step 1 triage output)
   - exploratory → HARKing vulnerability
 - ALL red-team findings must set `"requires_decision": true` and `"dimension": "red_team"`
 
+**Red-team severity calibration rubric:**
+
+| Dimension | causal_inference | benchmark | configuration_study | robustness_audit | exploratory |
+|-----------|-----------------|-----------|---------------------|------------------|-------------|
+| red_team  | critical        | warning   | warning             | warning          | info        |
+
+The red-team agent assigns severity based on the intrinsic quality of each finding.
+After the red-team agent returns, **cap each finding's severity** to the maximum
+allowed by the experiment type using this rubric — identical to how L1 severity
+calibration works. For `causal_inference`: critical red-team findings remain critical
+(STOP-eligible). For `benchmark`/`configuration_study`/`robustness_audit`: critical
+findings are downgraded to `warning` (REVISE-eligible but never STOP). For
+`exploratory`: all red-team findings are capped at `info` (informational only).
+
+This cap is applied in Step 7 before the verdict logic evaluates `stop_triggers`.
+
 ### Step 4: Level 3 (parallel)
 
 Run after Level 2 completes. Do not wait for the red-team agent before starting Level 3.
@@ -277,17 +293,36 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
 1. **Merge all findings** from L1, L2, L3, L4, and red-team into a single list.
 2. **Deduplicate** by `(dimension, section, message)` — identical findings from parallel
    agents are collapsed into one entry.
-3. **Apply verdict logic**:
+3. **Apply red-team severity cap, then verdict logic**:
    ```python
+   # Red-team severity cap: downgrade findings above the type ceiling
+   RT_MAX_SEVERITY = {
+       "causal_inference": "critical",
+       "benchmark": "warning",
+       "configuration_study": "warning",
+       "robustness_audit": "warning",
+       "exploratory": "info",
+   }
+   SEVERITY_RANK = {"info": 0, "warning": 1, "critical": 2}
+   rt_cap = RT_MAX_SEVERITY[experiment_type]
+
+   for f in findings:
+       if f.dimension == "red_team" and SEVERITY_RANK[f.severity] > SEVERITY_RANK[rt_cap]:
+           f.severity = rt_cap  # downgrade before verdict
+
+   # Reclassify after cap
+   critical_findings = [f for f in findings if f.severity == "critical"]
+   warning_findings = [f for f in findings if f.severity == "warning"]
+
    # L1 fail-fast path: structural defects that block all further analysis
-   stop_triggers = [f for f in critical if f.dimension in {"estimand_clarity", "hypothesis_falsifiability"}]
-   # Red-team STOP path: adversarial critical findings after full analysis (L2–L4)
-   # These fire only when the L1 gate passed; any critical red_team finding is a STOP.
-   stop_triggers += [f for f in critical if f.dimension == "red_team"]
+   stop_triggers = [f for f in critical_findings if f.dimension in {"estimand_clarity", "hypothesis_falsifiability"}]
+   # Red-team STOP path: adversarial critical findings after full analysis (L2-L4)
+   # These fire only when the L1 gate passed AND the severity cap still allows critical.
+   stop_triggers += [f for f in critical_findings if f.dimension == "red_team"]
 
    if stop_triggers:
        verdict = "STOP"
-   elif critical_findings or len(warning_findings) >= 3:
+   elif critical or len(warning_findings) >= 3:
        verdict = "REVISE"
    else:
        verdict = "GO"

@@ -82,3 +82,39 @@ def test_structured_output_tokens_present():
 def test_temp_directory_is_resolve_design_review():
     """SKILL.md must use .autoskillit/temp/resolve-design-review/ for output."""
     assert ".autoskillit/temp/resolve-design-review/" in SKILL_TEXT
+
+
+# ── Diminishing-return detection ──────────────────────────────────────────────
+
+
+def test_diminishing_return_detection_present():
+    """SKILL.md must describe diminishing-return detection for finding themes."""
+    lower = SKILL_TEXT.lower()
+    assert "diminishing" in lower or "goalposts" in lower or "theme comparison" in lower, (
+        "resolve-design-review must detect diminishing returns — repeated findings "
+        "that are higher-abstraction restatements of previously addressed concerns."
+    )
+
+
+def test_goalposts_reclassified_as_structural():
+    """Goalposts-moving findings must be reclassified as STRUCTURAL."""
+    lower = SKILL_TEXT.lower()
+    has_goalposts_structural = "goalposts" in lower and "structural" in lower
+    has_diminishing_structural = "diminishing" in lower and "structural" in lower
+    has_reclassify = "reclassif" in lower
+    assert has_goalposts_structural or has_diminishing_structural or has_reclassify, (
+        "Goalposts-moving findings must be reclassified as STRUCTURAL — "
+        "the fix-and-review cycle is not converging on that concern."
+    )
+
+
+def test_revision_guidance_context_input():
+    """SKILL.md must accept prior revision_guidance as context for theme comparison."""
+    lower = SKILL_TEXT.lower()
+    assert "prior" in lower or "previous" in lower, (
+        "resolve-design-review must reference prior revision context "
+        "for diminishing-return detection."
+    )
+    assert "[prior_revision_guidance_path]" in SKILL_TEXT or "optional" in lower, (
+        "Prior revision_guidance must be an optional argument for backward compatibility."
+    )

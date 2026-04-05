@@ -705,6 +705,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
     ),
+    "headless.py": (
+        1050,
+        "REQ-CNST-010-E2: headless session orchestration — Channel B drain-race "
+        "recovery block adds match/case dispatch; splitting would fragment the "
+        "adjudication pipeline across modules",
+    ),
 }
 
 

@@ -338,15 +338,23 @@ def test_red_team_severity_cap_applied_before_verdict(skill_text: str) -> None:
     )
 
 
-def test_benchmark_red_team_cannot_stop(skill_text: str) -> None:
-    """Benchmark experiment type must cap red-team severity at warning (no STOP)."""
+def _parse_rt_rubric(skill_text: str) -> dict[str, str]:
+    """Parse the red-team severity calibration rubric into {experiment_type: severity}."""
     rt_cal_idx = skill_text.lower().find("red-team severity calibration")
     assert rt_cal_idx != -1, "Red-team severity calibration rubric not found"
     rt_section = skill_text[rt_cal_idx : rt_cal_idx + 1000]
-    lines = rt_section.splitlines()
-    benchmark_line = next((ln for ln in lines if "benchmark" in ln.lower() and "|" in ln), None)
-    assert benchmark_line is not None, "Benchmark row not found in red-team calibration rubric"
-    assert "warning" in benchmark_line.lower(), (
+    table_lines = [ln for ln in rt_section.splitlines() if "|" in ln and "---" not in ln]
+    assert len(table_lines) >= 2, "Rubric must have header + data row"
+    headers = [c.strip().lower() for c in table_lines[0].split("|") if c.strip()]
+    values = [c.strip().lower() for c in table_lines[1].split("|") if c.strip()]
+    return dict(zip(headers[1:], values[1:]))
+
+
+def test_benchmark_red_team_cannot_stop(skill_text: str) -> None:
+    """Benchmark experiment type must cap red-team severity at warning (no STOP)."""
+    rubric = _parse_rt_rubric(skill_text)
+    assert "benchmark" in rubric, "Benchmark column not found in red-team calibration rubric"
+    assert rubric["benchmark"] == "warning", (
         "Benchmark red-team severity must be capped at 'warning' — "
         "STOP-eligible red-team findings are unreasonable for benchmarks."
     )
@@ -354,12 +362,10 @@ def test_benchmark_red_team_cannot_stop(skill_text: str) -> None:
 
 def test_causal_inference_red_team_can_stop(skill_text: str) -> None:
     """causal_inference must retain critical as max red-team severity (STOP eligible)."""
-    rt_cal_idx = skill_text.lower().find("red-team severity calibration")
-    assert rt_cal_idx != -1, "Red-team severity calibration rubric not found"
-    rt_section = skill_text[rt_cal_idx : rt_cal_idx + 1000]
-    lines = rt_section.splitlines()
-    causal_line = next((ln for ln in lines if "causal_inference" in ln and "|" in ln), None)
-    assert causal_line is not None, "causal_inference row not found in red-team calibration rubric"
-    assert "critical" in causal_line.lower(), (
+    rubric = _parse_rt_rubric(skill_text)
+    assert "causal_inference" in rubric, (
+        "causal_inference column not found in red-team calibration rubric"
+    )
+    assert rubric["causal_inference"] == "critical", (
         "causal_inference must retain critical as max red-team severity."
     )

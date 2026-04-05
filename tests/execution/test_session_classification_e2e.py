@@ -80,8 +80,46 @@ def _flat_assistant_msg(text: str, output_tokens: int = 0) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Bridge helper: FakeClaudeCLI → SkillResult
+# Bridge helpers: FakeClaudeCLI → SkillResult / raw stdout
 # ---------------------------------------------------------------------------
+
+
+def _run_with_timeout(
+    fake_claude: ClaudeCLI,
+    timeout: float = 3,
+    kill_timeout: float = 5,
+) -> str:
+    """Run fake_claude via Popen with timeout + process-group SIGKILL.
+
+    Installs fake on PATH, spawns claude, reads stdout until timeout, then
+    kills the entire process group (shim + child _runner.py) so no child
+    holds the pipe open.  Returns accumulated stdout — Python's subprocess
+    preserves data between communicate() calls via _fileobj2output, so no
+    output is lost when the first call raises TimeoutExpired.
+    """
+    with fake_claude:  # installs fake on PATH
+        proc = subprocess.Popen(
+            ["claude", "--output-format", "stream-json", "-p", "test"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        try:
+            stdout, _ = proc.communicate(timeout=timeout)
+            return stdout
+        except subprocess.TimeoutExpired:
+            # Kill the entire process group — the shim spawns _runner.py
+            # as a child; killing only the shim leaves the child holding
+            # the pipe open, causing communicate() to block forever.
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            try:
+                stdout, _ = proc.communicate(timeout=kill_timeout)
+            except subprocess.TimeoutExpired:
+                # Process group did not exit within kill_timeout after SIGKILL;
+                # return whatever was accumulated before the first timeout.
+                stdout = ""
+            return stdout
 
 
 def _classify(
@@ -250,23 +288,7 @@ class TestProcessBehaviorSimulation:
         fake_claude.add_message(_result_msg("completed work"))
         fake_claude.hang_after_result()
 
-        with fake_claude:  # installs fake on PATH
-            proc = subprocess.Popen(
-                ["claude", "--output-format", "stream-json", "-p", "test"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                start_new_session=True,
-            )
-            try:
-                stdout, _ = proc.communicate(timeout=3)
-            except subprocess.TimeoutExpired:
-                # Kill the entire process group — the shim spawns _runner.py
-                # as a child; killing only the shim leaves the child holding
-                # the pipe open, causing communicate() to block forever.
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                stdout, _ = proc.communicate(timeout=5)
-
+        stdout = _run_with_timeout(fake_claude)
         session = parse_session_result(stdout)
         assert session.subtype == CliSubtype.SUCCESS
         assert "completed work" in session.result

@@ -794,5 +794,12 @@ skills:
     - name: base_branch
       type: string
       required: true
-    outputs: []
+    outputs:
+    - name: needs_rerun
+      type: string
+    expected_output_patterns:
+    - "needs_rerun\\s*=\\s*(true|false)"
+    pattern_examples:
+    - "needs_rerun = true\n%%ORDER_UP%%"
+    - "needs_rerun = false\n%%ORDER_UP%%"
     write_behavior: always

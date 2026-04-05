@@ -194,3 +194,28 @@ def test_valid_write_behavior_no_findings_on_bundled_recipes() -> None:
             f"write-behavior-consistency fired on {recipe_path.name}: "
             + "; ".join(f.message for f in wb_findings)
         )
+
+
+# ---------------------------------------------------------------------------
+# always-has-no-write-exit rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_always_write_skill_with_documented_no_write_exit_flagged() -> None:
+    """Phrase set for always-has-no-write-exit rule is populated with expected patterns.
+
+    Verifies that the frozenset contains phrases covering the known no-write exit
+    patterns (e.g. 'may be 0' from resolve-failures, graceful degradation from
+    resolve-review). An empty or incomplete set would silently miss all bugs.
+    """
+    from autoskillit.recipe.rules_contracts import _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES
+
+    # Verify the phrase set is populated (not empty — would miss all bugs)
+    assert len(_ALWAYS_WITH_NO_WRITE_EXIT_PHRASES) > 0
+    assert any("may be 0" in p for p in _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES), (
+        "Must detect 'may be 0' — the exact phrase in resolve-failures Step 4 "
+        "that the investigation identified as the no-write exit signal"
+    )
+    assert any(
+        "graceful" in p.lower() or "skip" in p.lower() for p in _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES
+    ), "Must detect graceful degradation phrases — the exact pattern in resolve-review Step 1"

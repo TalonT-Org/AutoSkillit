@@ -230,6 +230,66 @@ def test_write_expected_resolver_conditional_skill() -> None:
     assert len(spec.expected_when) > 0
 
 
+def test_write_expected_resolver_for_resolve_failures_returns_conditional() -> None:
+    """resolve-failures must declare write_behavior='conditional', not 'always'.
+
+    This test captures Issue #603: the skill has a legitimate no-write success
+    path when the worktree is already green (0 fix iterations needed).
+    'always' mode demotes that success unconditionally to zero_writes.
+    """
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.write_expected_resolver is not None
+    spec = ctx.write_expected_resolver(
+        "/autoskillit:resolve-failures /tmp/wt .autoskillit/temp/plan.md main"
+    )
+    assert spec.mode == "conditional", (
+        f"resolve-failures must use 'conditional' write_behavior, got '{spec.mode}'. "
+        "The skill exits with 0 writes when the worktree is already green."
+    )
+    assert len(spec.expected_when) > 0, (
+        "conditional mode requires at least one write_expected_when pattern"
+    )
+    assert any("fixes_applied" in p for p in spec.expected_when), (
+        "Pattern must gate on the fixes_applied token emitted by resolve-failures Step 4"
+    )
+
+
+def test_write_expected_resolver_for_retry_worktree_returns_conditional() -> None:
+    """retry-worktree must declare write_behavior='conditional'.
+
+    When called on a worktree where all phases are already complete,
+    the skill produces no Edit/Write calls — 'always' mode demotes it to zero_writes.
+    """
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.write_expected_resolver is not None
+    spec = ctx.write_expected_resolver(
+        "/autoskillit:retry-worktree .autoskillit/temp/plan.md /tmp/wt"
+    )
+    assert spec.mode == "conditional", (
+        f"retry-worktree must use 'conditional' write_behavior, got '{spec.mode}'. "
+        "The skill exits with 0 new writes when all plan phases are already complete."
+    )
+    assert len(spec.expected_when) > 0
+    assert any("phases_implemented" in p for p in spec.expected_when)
+
+
+def test_write_expected_resolver_for_resolve_review_returns_conditional() -> None:
+    """resolve-review must declare write_behavior='conditional'.
+
+    When no PR is found (graceful degradation, Step 1 exit), the skill exits
+    0 with no files written — 'always' mode demotes it to zero_writes.
+    """
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.write_expected_resolver is not None
+    spec = ctx.write_expected_resolver("/autoskillit:resolve-review feature-branch main")
+    assert spec.mode == "conditional", (
+        f"resolve-review must use 'conditional' write_behavior, got '{spec.mode}'. "
+        "The skill exits with 0 writes when no PR is found (graceful degradation)."
+    )
+    assert len(spec.expected_when) > 0
+    assert any("fixes_applied" in p for p in spec.expected_when)
+
+
 def test_cook_and_factory_session_skill_manager_ctor_args_in_sync() -> None:
     """Sync test: _cook.py and _factory.py must call DefaultSessionSkillManager
     with the same number of positional arguments.

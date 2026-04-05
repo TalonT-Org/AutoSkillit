@@ -379,11 +379,35 @@ Save full report to:
 - Analysis report: `.autoskillit/temp/resolve-review/analysis_{pr_number}_{ts}.md` (written before code changes)
 - Final report: `.autoskillit/temp/resolve-review/report_{pr_number}_{ts}.md`
 
+Then emit the structured output token on its own line (required for the
+`write_behavior: conditional` contract gate):
+
+> **IMPORTANT:** Emit the token as **literal plain text with no markdown
+> formatting**. Do not wrap in bold or italic.
+
+```
+fixes_applied = {accept_count - skipped_in_fix_phase}
+```
+
+Where `{accept_count - skipped_in_fix_phase}` is the number of ACCEPT findings
+where code changes were actually committed (skipped stale/missing-file findings
+are excluded). This is already reported in the text summary as "Fixes applied: N".
+
+The Step 1 graceful degradation exit must NOT emit this token — no `fixes_applied =`
+line when skipping due to no PR found.
+
 Exit 0.
 
 ## Output
 
-No structured output tokens are emitted. The recipe's `resolve_review` step has no
-`capture:` block — success/failure drives routing, not captured values.
+When a PR is processed, the following structured output token is emitted:
+
+```
+fixes_applied = {N}
+```
+
+Where `{N}` is the count of ACCEPT findings where code changes were committed.
+
+When no PR is found (graceful degradation), no structured tokens are emitted.
 
 Summary written to: `.autoskillit/temp/resolve-review/report_{pr_number}_{ts}.md` (relative to the current working directory)

@@ -146,12 +146,15 @@ Only explore systems related to the **remaining** phases. Do NOT re-explore alre
 
 **All commands must run from `{WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
 
+Initialize a counter before iterating: `PHASES_IMPLEMENTED=0`
+
 For each remaining/incomplete phase:
 1. Announce phase objective and files to modify
 2. Implement changes
 3. Run per-phase verification if plan specifies it
 4. Commit per phase if possible
-5. Report phase completion
+5. Increment the counter: `PHASES_IMPLEMENTED=$((PHASES_IMPLEMENTED + 1))`
+6. Report phase completion
 
 Where practical, delegate test updates to subagents to keep main conversation context lean.
 
@@ -193,7 +196,11 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${CURRENT_BRANCH}
+phases_implemented = ${PHASES_IMPLEMENTED}
 ```
+
+Where `PHASES_IMPLEMENTED` is the count from Step 3. If Step 3 was skipped entirely
+(all phases already complete), emit `phases_implemented = 0`.
 
 ### Step 6.5: Reset Code Index to Original Project (REQUIRED)
 

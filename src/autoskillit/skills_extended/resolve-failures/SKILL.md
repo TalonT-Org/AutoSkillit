@@ -121,20 +121,34 @@ affect git operations, which always use `git -C {worktree_path}` explicitly.
 2. Apply targeted fixes
 3. If the project has pre-commit hooks, run `pre-commit run --all-files` and
    stage any auto-fixed files before committing. Commit each fix: `fix: {what was wrong and why}`
-4. Re-run: `cd {worktree_path} && {test_command}`
-5. Green → Step 4; Red and < 3 iterations → repeat; Red and >= 3 → Step 5
+4. Write a fix log entry to `.autoskillit/temp/resolve-failures/` to satisfy
+   the write_behavior contract (generates an Edit/Write call that proves work was done):
+   - Path: `.autoskillit/temp/resolve-failures/fix_log_{iteration}_{ts}.md`
+   - Content: iteration number, files changed, commit SHA, brief description
+5. Re-run: `cd {worktree_path} && {test_command}`
+6. Green → Step 4; Red and < 3 iterations → repeat; Red and >= 3 → Step 5
 
 ### Step 4: Report Success
 
 Tests are green. Report success and exit — do NOT merge.
 
 Output to terminal:
-- Total fix iterations performed (may be 0 if tests were already passing on re-run)
 - Summary of what was fixed (or "no changes needed")
 - Worktree path (left intact for orchestrator's merge gate)
 
-Return control to the orchestrator. The `merge_worktree` MCP tool will be
-called by the recipe pipeline, not by this skill.
+Then emit the structured output token on its own line so the pipeline's
+`write_behavior: conditional` contract can evaluate it:
+
+> **IMPORTANT:** Emit the token as **literal plain text with no markdown
+> formatting**. The gate performs a regex match — decorators cause match failure.
+
+```
+fixes_applied = {N}
+```
+
+Where `{N}` is the total number of fix iterations performed (0 if tests were
+already passing, ≥1 if fixes were applied). Return control to the orchestrator.
+The `merge_worktree` MCP tool will be called by the recipe pipeline.
 
 ### Step 5: Report Failure
 - Total fix iterations attempted

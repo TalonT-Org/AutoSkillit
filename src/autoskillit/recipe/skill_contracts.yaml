@@ -56,7 +56,9 @@ skills:
       type: string
       required: true
     outputs: []
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - "fixes_applied\\s*=\\s*[1-9][0-9]*"
   resolve-merge-conflicts:
     inputs:
     - name: worktree_path

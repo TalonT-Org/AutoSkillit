@@ -281,8 +281,6 @@ This reads the shared registry at `.autoskillit/temp/clone-cleanup-registry.json
 deletes all clones registered with `status=success` (their pipelines completed cleanly),
 and leaves all `status=error` clones on disk for investigation.
 
-One call. One registry. No prompt. Done.
-
 ### Step 4: Write Summary Report
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.

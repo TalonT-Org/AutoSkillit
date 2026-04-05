@@ -88,6 +88,7 @@ def flush_session_log(
     cli_subtype: str = "",
     write_path_warnings: list[str] | None = None,
     write_call_count: int = 0,
+    clone_contamination_reverted: bool = False,
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -199,6 +200,7 @@ def flush_session_log(
         "termination_reason": termination_reason,
         "write_path_warnings": effective_write_path_warnings,
         "write_call_count": write_call_count,
+        "clone_contamination_reverted": clone_contamination_reverted,
     }
     summary_path = session_dir / "summary.json"
     atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")

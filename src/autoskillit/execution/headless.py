@@ -34,8 +34,14 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     claude_code_project_dir,
     get_logger,
+    is_git_worktree,
     load_yaml,
     pkg_root,
+)
+from autoskillit.execution.clone_guard import (
+    check_and_revert_clone_contamination,
+    is_worktree_skill,
+    snapshot_clone_state,
 )
 from autoskillit.execution.commands import build_full_headless_cmd
 from autoskillit.execution.process import _marker_is_standalone
@@ -807,6 +813,11 @@ async def run_headless_core(
         _start_ts = datetime.now(UTC).isoformat()
         _start_mono = time.monotonic()
 
+        # Clone contamination guard: snapshot before worktree-skill sessions
+        _clone_snapshot = None
+        if is_worktree_skill(original_skill_command) and not is_git_worktree(Path(cwd)):
+            _clone_snapshot = await snapshot_clone_state(cwd, runner)
+
         _result: SubprocessResult | None = None
         try:
             _result = await runner(
@@ -863,6 +874,18 @@ async def run_headless_core(
             write_behavior=write_behavior,
         )
 
+        # Clone contamination guard: detect and revert if session failed without worktree
+        _clone_reverted = False
+        if _clone_snapshot is not None:
+            skill_result, _clone_reverted = await check_and_revert_clone_contamination(
+                _clone_snapshot,
+                skill_result,
+                cwd,
+                runner,
+                ctx.audit,
+                skill_command=original_skill_command,
+            )
+
         # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
         # brackets in run_managed_async. Never re-derive from ISO strings (backward-clock risk).
         timing_seconds: float = result.elapsed_seconds
@@ -899,6 +922,7 @@ async def run_headless_core(
                     audit_record=audit_record,
                     write_path_warnings=skill_result.write_path_warnings,
                     write_call_count=skill_result.write_call_count,
+                    clone_contamination_reverted=_clone_reverted,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)

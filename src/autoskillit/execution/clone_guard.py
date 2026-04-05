@@ -149,17 +149,24 @@ async def revert_contamination(
         direct_commits=report.direct_commits,
         uncommitted_file_count=len(report.uncommitted_files),
     )
-    await runner(
+    reset_result = await runner(
         ["git", "reset", "--hard", snapshot.head_sha],
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )
-    await runner(
+    clean_result = await runner(
         ["git", "clean", "-fd"],
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )
-    return dataclasses.replace(report, reverted=True)
+    reverted = reset_result.returncode == 0 and clean_result.returncode == 0
+    if not reverted:
+        logger.warning(
+            "revert_contamination_failed",
+            reset_rc=reset_result.returncode,
+            clean_rc=clean_result.returncode,
+        )
+    return dataclasses.replace(report, reverted=reverted)
 
 
 async def check_and_revert_clone_contamination(

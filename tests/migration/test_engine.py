@@ -24,6 +24,8 @@ from autoskillit.migration.engine import (
 )
 from autoskillit.migration.loader import MigrationChange, MigrationNote
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -293,12 +295,8 @@ class TestContractMigrationAdapter:
         contracts_dir.mkdir(parents=True)
 
         # Copy the project-local smoke-test recipe so generate_recipe_card has valid input
-        src_recipe = (
-            Path(__file__).resolve().parent.parent.parent
-            / ".autoskillit"
-            / "recipes"
-            / "smoke-test.yaml"
-        )
+        src_recipe = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
+        assert src_recipe.exists(), f"smoke-test source missing: {src_recipe}"
         shutil.copy2(src_recipe, recipes_dir / "smoke-test.yaml")
 
         contract_path = contracts_dir / "smoke-test.yaml"

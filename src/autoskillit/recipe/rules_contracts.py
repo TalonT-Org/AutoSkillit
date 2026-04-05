@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re as _re
 
-from autoskillit.core import Severity
+from autoskillit.core import Severity, pkg_root
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     get_skill_contract,
@@ -270,8 +270,6 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
     the skill can legitimately succeed with zero writes. If found, the skill
     must use 'conditional' write_behavior instead.
     """
-    from autoskillit.core import pkg_root
-
     findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
 

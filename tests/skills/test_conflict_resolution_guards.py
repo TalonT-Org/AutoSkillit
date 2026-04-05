@@ -379,6 +379,54 @@ def test_resolve_merge_conflicts_remote_variable_is_defined(skill_md: str) -> No
     )
 
 
+def test_resolve_merge_conflicts_has_manifest_validation_step(skill_md: str) -> None:
+    """SKILL.md must document language-aware manifest validation after pre-commit (Step 5a)."""
+    assert "cargo metadata" in skill_md or "manifest validation" in skill_md.lower(), (
+        "resolve-merge-conflicts SKILL.md must include language-aware manifest validation "
+        "(Step 5a) covering at minimum 'cargo metadata --no-deps' for Rust projects"
+    )
+    assert "Step 5a" in skill_md, "Manifest validation must be documented as Step 5a in SKILL.md"
+
+
+def test_resolve_merge_conflicts_has_duplicate_key_scan(skill_md: str) -> None:
+    """SKILL.md must document duplicate key scanning in TOML/JSON manifests (Step 5b)."""
+    assert "Step 5b" in skill_md, (
+        "Duplicate key scanning must be documented as Step 5b in SKILL.md"
+    )
+    assert "duplicate" in skill_md.lower(), (
+        "SKILL.md must use the word 'duplicate' to describe the key scan"
+    )
+
+
+def test_resolve_merge_conflicts_manifest_failure_escalates(skill_md: str) -> None:
+    """SKILL.md must escalate (not auto-fix) when manifest validation fails."""
+    step_5a_idx = skill_md.find("Step 5a")
+    step_5b_idx = skill_md.find("Step 5b", step_5a_idx)
+    step_5a_section = (
+        skill_md[step_5a_idx:step_5b_idx] if step_5b_idx != -1 else skill_md[step_5a_idx:]
+    )
+    assert "escalation_required" in step_5a_section, (
+        "Step 5a must escalate (emit escalation_required=true) on manifest validation failure; "
+        "auto-fixing broken manifests is out of scope for this skill"
+    )
+
+
+def test_resolve_merge_conflicts_manifest_validation_covers_rust(skill_md: str) -> None:
+    """SKILL.md manifest validation must cover Rust (cargo metadata --no-deps)."""
+    assert "cargo metadata" in skill_md, (
+        "resolve-merge-conflicts Step 5a must include 'cargo metadata --no-deps' "
+        "as the Rust manifest validation command — this is a fast parse-only check (<1s)"
+    )
+
+
+def test_resolve_merge_conflicts_manifest_validation_covers_python(skill_md: str) -> None:
+    """SKILL.md manifest validation must cover Python (tomllib or uv lock --check)."""
+    assert "tomllib" in skill_md or "uv lock --check" in skill_md, (
+        "resolve-merge-conflicts Step 5a must include Python manifest validation "
+        "via tomllib.load() or 'uv lock --check'"
+    )
+
+
 def test_resolve_merge_conflicts_no_hardcoded_origin(skill_md: str) -> None:
     """SKILL.md must not use literal 'origin' as remote in git fetch/rebase/show/log/rev-parse."""
     bash_blocks = re.findall(r"```bash\s*\n(.*?)```", skill_md, re.DOTALL)

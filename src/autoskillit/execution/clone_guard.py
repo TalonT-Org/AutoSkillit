@@ -98,13 +98,19 @@ async def detect_contamination(
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )
-    post_sha = head_result.stdout.strip() if head_result.returncode == 0 else ""
+    if head_result.returncode != 0:
+        logger.debug("detect_contamination_rev_parse_failed", returncode=head_result.returncode)
+        return None
+    post_sha = head_result.stdout.strip()
 
     status_result = await runner(
         ["git", "status", "--porcelain"],
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )
+    if status_result.returncode != 0:
+        logger.debug("detect_contamination_status_failed", returncode=status_result.returncode)
+        return None
     status_lines = [line for line in status_result.stdout.splitlines() if line.strip()]
 
     direct_commits = bool(post_sha and post_sha != snapshot.head_sha)

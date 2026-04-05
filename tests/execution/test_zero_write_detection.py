@@ -193,7 +193,6 @@ class TestZeroWriteDetection:
         assert sr.subtype == "zero_writes"
         assert sr.retry_reason == RetryReason.ZERO_WRITES
 
-
     def test_conditional_all_phases_done_not_demoted(self) -> None:
         """retry-worktree with 'phases_implemented = 0' output → success preserved.
 

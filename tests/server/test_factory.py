@@ -281,9 +281,7 @@ def test_write_expected_resolver_for_resolve_review_returns_conditional() -> Non
     """
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver(
-        "/autoskillit:resolve-review feature-branch main"
-    )
+    spec = ctx.write_expected_resolver("/autoskillit:resolve-review feature-branch main")
     assert spec.mode == "conditional", (
         f"resolve-review must use 'conditional' write_behavior, got '{spec.mode}'. "
         "The skill exits with 0 writes when no PR is found (graceful degradation)."

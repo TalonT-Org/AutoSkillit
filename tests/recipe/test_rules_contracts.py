@@ -217,8 +217,5 @@ def test_always_write_skill_with_documented_no_write_exit_flagged() -> None:
         "that the investigation identified as the no-write exit signal"
     )
     assert any(
-        "graceful" in p.lower() or "skip" in p.lower()
-        for p in _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES
-    ), (
-        "Must detect graceful degradation phrases — the exact pattern in resolve-review Step 1"
-    )
+        "graceful" in p.lower() or "skip" in p.lower() for p in _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES
+    ), "Must detect graceful degradation phrases — the exact pattern in resolve-review Step 1"

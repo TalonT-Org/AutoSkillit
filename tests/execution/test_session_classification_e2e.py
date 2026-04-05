@@ -7,12 +7,13 @@ using api-simulator's fake_claude fixture to produce realistic subprocess output
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 from collections.abc import Sequence
 
-import pytest
-
 from api_simulator.claude import ClaudeCLI
+
 from autoskillit.core.types import (
     RetryReason,
     SkillResult,
@@ -22,7 +23,6 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.execution.session import CliSubtype, parse_session_result
-
 
 # ---------------------------------------------------------------------------
 # NDJSON message factories
@@ -156,9 +156,7 @@ class TestNdjsonStreamRobustness:
 
     def test_api_retry_exhaustion_no_result(self, fake_claude: ClaudeCLI) -> None:
         """Exhausted retries suppress all subsequent messages — no result record."""
-        fake_claude.inject_api_retry(
-            at_message=0, error_status=529, attempts=10, exhaust=True
-        )
+        fake_claude.inject_api_retry(at_message=0, error_status=529, attempts=10, exhaust=True)
         fake_claude.add_message(_result_msg())  # unreachable due to exhaust=True
 
         skill = _classify(fake_claude)
@@ -258,12 +256,16 @@ class TestProcessBehaviorSimulation:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                start_new_session=True,
             )
             try:
                 stdout, _ = proc.communicate(timeout=3)
             except subprocess.TimeoutExpired:
-                proc.kill()
-                stdout, _ = proc.communicate()
+                # Kill the entire process group — the shim spawns _runner.py
+                # as a child; killing only the shim leaves the child holding
+                # the pipe open, causing communicate() to block forever.
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                stdout, _ = proc.communicate(timeout=5)
 
         session = parse_session_result(stdout)
         assert session.subtype == CliSubtype.SUCCESS

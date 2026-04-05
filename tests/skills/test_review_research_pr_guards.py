@@ -99,3 +99,27 @@ def test_review_research_pr_uses_reviews_api() -> None:
         "review-research-pr/SKILL.md must prescribe the GitHub Reviews API "
         "(/repos/{owner}/{repo}/pulls/{n}/reviews) for inline comment posting."
     )
+
+
+def test_data_scope_dimension_exists() -> None:
+    """data-scope must be listed as a review dimension."""
+    assert "data-scope" in _text(), (
+        "review-research-pr/SKILL.md must include 'data-scope' as an audit dimension"
+    )
+
+
+def test_eight_review_dimensions() -> None:
+    """All 8 research audit dimensions must appear in SKILL.md."""
+    text = _text()
+    dimensions = [
+        "methodology",
+        "reproducibility",
+        "report-quality",
+        "statistical-rigor",
+        "isolation",
+        "data-integrity",
+        "slop",
+        "data-scope",
+    ]
+    for dim in dimensions:
+        assert dim in text, f"review-research-pr/SKILL.md missing dimension: {dim!r}"

@@ -1,13 +1,15 @@
 name: research
 autoskillit_version: "0.7.5"
-requires_packs: [research]
+requires_packs: [research, exp-lens]
 description: >
   Single-phase technical research recipe. Scopes a research question, plans an
   experiment, optionally reviews the design, then always decomposes into phases,
   implements, runs the experiment, writes a report to research/, and opens a PR.
-  Supports a skippable design review loop (bounded by retries: 2) and review
-  resolution routing after PR open. No auto-merge.
-summary: scope > plan > [review?] > worktree > decompose > phases > experiment > report > open-pr
+  Supports a skippable design review loop (bounded by retries: 2), review
+  resolution routing after PR open, and a post-review re-validation loop that
+  re-runs affected benchmarks when resolve-research-review produces rerun_required
+  escalations. No auto-merge.
+summary: scope > plan > [review?] > worktree > decompose > phases > experiment > report > open-pr > [review? > resolve > [re-run?] > push]
 
 ingredients:
   task:
@@ -407,11 +409,70 @@ steps:
       skill_command: "/autoskillit:resolve-research-review ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: resolve_research_review
+    capture:
+      needs_rerun: "${{ result.needs_rerun }}"
     retries: 2
     on_exhausted: research_complete
     on_context_limit: research_complete
-    on_success: re_push_research
+    on_success: check_escalations
     on_failure: research_complete
+
+  check_escalations:
+    action: route
+    on_result:
+      - when: "${{ context.needs_rerun }} == true"
+        route: re_run_experiment
+      - route: re_push_research
+    note: >
+      Escalation consumer. Reads the captured needs_rerun token from
+      resolve_research_review. When rerun_required escalations exist, routes
+      to re-validation loop. When only design_flaw escalations exist (or none),
+      routes directly to push — design_flaw escalations are already posted as
+      inline PR comments by the resolve skill.
+
+  re_run_experiment:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:run-experiment ${{ context.worktree_path }} --adjust"
+      cwd: "${{ context.worktree_path }}"
+      step_name: re_run_experiment
+    capture:
+      experiment_results: "${{ result.results_path }}"
+    on_success: re_write_report
+    on_failure: re_push_research
+    on_context_limit: re_push_research
+    note: >
+      Targeted re-run of affected benchmarks after review resolution applied
+      code fixes. Uses --adjust to read previous results and re-run only what
+      changed. Captures the updated results_path so re_write_report uses the
+      new results. on_failure falls through to push as best-effort — the code
+      fixes from resolve are already committed and should still be pushed.
+
+  re_write_report:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: re_write_report
+    on_success: re_test
+    on_failure: re_push_research
+    on_context_limit: re_push_research
+    note: >
+      Re-generate the research report with updated benchmark results from the
+      re-validation run. Passes context.experiment_results which was updated
+      by re_run_experiment to point to the new results file. Falls through to
+      push on failure.
+
+  re_test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: re_push_research
+    on_failure: re_push_research
+    note: >
+      Post-revalidation test gate. Both pass and fail route to push —
+      the re-validation results should be pushed regardless so the PR
+      reflects the current state of the code and measurements.
 
   re_push_research:
     tool: run_cmd

@@ -36,7 +36,7 @@ from autoskillit.server.tools_workspace import test_check
 test_check.__test__ = False  # type: ignore[attr-defined]
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-SMOKE_SCRIPT = builtin_recipes_dir() / "smoke-test.yaml"
+SMOKE_SCRIPT = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
 
 _TOOL_MAP = {
     "run_cmd": run_cmd,
@@ -194,7 +194,7 @@ class SmokeExecutor:
 def smoke_recipe():
     from autoskillit.recipe.io import load_recipe as _load_recipe
 
-    return _load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+    return _load_recipe(SMOKE_SCRIPT)
 
 
 @pytest.fixture()
@@ -204,11 +204,16 @@ def smoke_script_path() -> Path:
 
 @pytest.fixture()
 def smoke_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Create a temp project dir for smoke tests.
+    """Create a temp project dir with smoke-test as a project-local recipe.
 
-    Bundled recipes (including smoke-test) are discovered via recipe_parser,
-    so no recipe files need to be copied into the project dir.
+    smoke-test is a project-local recipe (not bundled), so it must be copied
+    into the temp dir's .autoskillit/recipes/ for discovery via list_recipes().
     """
+    import shutil
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    shutil.copy2(SMOKE_SCRIPT, recipes_dir / "smoke-test.yaml")
     monkeypatch.chdir(tmp_path)
     return tmp_path
 
@@ -403,6 +408,31 @@ class TestSmokeScriptValidation:
         pipeline = yaml.safe_load(SMOKE_SCRIPT.read_text())
         assess_cmd = pipeline["steps"]["assess"]["with"]["skill_command"]
         assert "bug_report.json" in assess_cmd
+
+    def test_smoke_test_not_in_bundled_dir(self) -> None:
+        """smoke-test.yaml must not exist in the bundled recipes directory."""
+        assert not (builtin_recipes_dir() / "smoke-test.yaml").exists()
+
+    def test_smoke_test_exists_in_project_local(self) -> None:
+        """smoke-test.yaml must exist in the project-local recipes directory."""
+        assert SMOKE_SCRIPT.exists()
+
+    async def test_smoke_test_source_is_project(self, smoke_project: Path) -> None:
+        """smoke-test must be listed with source PROJECT, not BUILTIN."""
+        result = json.loads(await list_recipes())
+        smoke = next(r for r in result["recipes"] if r["name"] == "smoke-test")
+        assert smoke["source"] == "project"
+
+    async def test_smoke_test_invisible_from_external_project(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """smoke-test must NOT appear in list_recipes from a project without it."""
+        bare_dir = tmp_path / "external"
+        bare_dir.mkdir()
+        monkeypatch.chdir(bare_dir)
+        result = json.loads(await list_recipes())
+        names = [r["name"] for r in result["recipes"]]
+        assert "smoke-test" not in names
 
 
 def test_smoke_commit_dirty_step_exists(smoke_recipe) -> None:

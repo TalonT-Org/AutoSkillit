@@ -82,12 +82,12 @@ class TelemetryFormatter:
 
         total_in = h(total.get("input_tokens", 0))
         total_out = h(total.get("output_tokens", 0))
-        total_cached_rd = h(total.get("cache_read_input_tokens", 0))
-        total_cached_wr = h(total.get("cache_creation_input_tokens", 0))
+        total_cache_rd = h(total.get("cache_read_input_tokens", 0))
+        total_cache_wr = h(total.get("cache_creation_input_tokens", 0))
         total_time = total.get("total_elapsed_seconds", 0.0)
         lines.append(
-            f"| **Total** | {total_in} | {total_out} | {total_cached_rd}"
-            f" | {total_cached_wr} | | {fmt_dur(total_time)} |"
+            f"| **Total** | {total_in} | {total_out} | {total_cache_rd}"
+            f" | {total_cache_wr} | | {fmt_dur(total_time)} |"
         )
         return "\n".join(lines)
 

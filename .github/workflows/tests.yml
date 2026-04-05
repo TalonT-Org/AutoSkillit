@@ -72,6 +72,9 @@ jobs:
           echo "task: $(task --version)"
           uv run python --version
 
+      - name: Configure git auth for private deps
+        run: git config --global url."https://${{ secrets.GH_USER }}:${{ secrets.GH_PAT }}@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
+
       - name: Install dependencies
         run: uv sync --locked --extra dev
 

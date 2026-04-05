@@ -1791,11 +1791,11 @@ class TestResearchRecipeStructure:
         step = recipe.steps["review_research_pr"]
         assert step.skip_when_false == "inputs.review_pr"
 
-    def test_research_review_step_routes_to_complete_on_any_outcome(self, recipe) -> None:
-        """review_research_pr routes to research_complete on failure and context limit."""
+    def test_research_review_step_routes_to_begin_archival_on_any_outcome(self, recipe) -> None:
+        """review_research_pr routes to begin_archival on failure and context limit."""
         step = recipe.steps["review_research_pr"]
-        assert step.on_failure == "research_complete"
-        assert step.on_context_limit == "research_complete"
+        assert step.on_failure == "begin_archival"
+        assert step.on_context_limit == "begin_archival"
 
     def test_research_no_issue_number_ingredient(self, recipe) -> None:
         """Removed: issue_number is the phase-2 gate."""
@@ -1939,9 +1939,9 @@ class TestResearchRecipeStructure:
     def test_has_resolve_research_review_step(self, recipe) -> None:
         step = recipe.steps["resolve_research_review"]
         assert step.retries == 2
-        assert step.on_exhausted == "research_complete"
+        assert step.on_exhausted == "begin_archival"
         assert step.on_success == "check_escalations"
-        assert step.on_failure == "research_complete"
+        assert step.on_failure == "begin_archival"
 
     def test_has_re_push_research_step(self, recipe) -> None:
         assert "re_push_research" in recipe.steps
@@ -2049,9 +2049,135 @@ class TestResearchRecipeStructure:
         assert step.tool == "test_check"
         assert step.on_success == "re_push_research"
 
-    def test_revalidation_loop_all_paths_reach_research_complete(self, recipe) -> None:
-        """Every path from check_escalations reaches research_complete."""
+    def test_revalidation_loop_all_paths_reach_begin_archival(self, recipe) -> None:
+        """Every path from check_escalations reaches begin_archival."""
         for step_name in ("re_run_experiment", "re_write_report", "re_test"):
             step = recipe.steps[step_name]
-            assert step.on_failure in ("research_complete", "re_push_research")
-        assert recipe.steps["re_push_research"].on_success == "research_complete"
+            assert step.on_failure in ("begin_archival", "re_push_research")
+        assert recipe.steps["re_push_research"].on_success == "begin_archival"
+
+    # --- Archival phase tests ---
+
+    def test_archival_begin_archival_step_exists(self, recipe) -> None:
+        """begin_archival must be a route step gating archival on pr_url."""
+        assert "begin_archival" in recipe.steps
+        step = recipe.steps["begin_archival"]
+        assert step.action == "route"
+
+    def test_archival_begin_archival_routes_to_capture(self, recipe) -> None:
+        """begin_archival routes to capture_experiment_branch when pr_url is truthy."""
+        step = recipe.steps["begin_archival"]
+        assert step.on_result is not None
+        conditions = step.on_result.conditions
+        truthy_route = next((c for c in conditions if c.when and "pr_url" in c.when), None)
+        assert truthy_route is not None
+        assert truthy_route.route == "capture_experiment_branch"
+
+    def test_archival_begin_archival_default_to_complete(self, recipe) -> None:
+        """begin_archival default route goes to research_complete."""
+        step = recipe.steps["begin_archival"]
+        conditions = step.on_result.conditions
+        default = next((c for c in conditions if not c.when), None)
+        assert default is not None
+        assert default.route == "research_complete"
+
+    def test_archival_capture_experiment_branch_step(self, recipe) -> None:
+        """capture_experiment_branch captures experiment_branch from git rev-parse."""
+        assert "capture_experiment_branch" in recipe.steps
+        step = recipe.steps["capture_experiment_branch"]
+        assert step.tool == "run_cmd"
+        assert "experiment_branch" in step.capture
+        assert step.on_success == "create_artifact_branch"
+        assert step.on_failure == "research_complete"
+
+    def test_archival_create_artifact_branch_step(self, recipe) -> None:
+        """create_artifact_branch creates temp worktree and captures artifact_branch."""
+        assert "create_artifact_branch" in recipe.steps
+        step = recipe.steps["create_artifact_branch"]
+        assert step.tool == "run_cmd"
+        assert "artifact_branch" in step.capture
+        assert step.on_success == "open_artifact_pr"
+        assert step.on_failure == "research_complete"
+
+    def test_archival_create_artifact_branch_uses_research_checkout(self, recipe) -> None:
+        """create_artifact_branch must use git checkout <branch> -- research/ pattern."""
+        step = recipe.steps["create_artifact_branch"]
+        cmd = step.with_args["cmd"]
+        assert "research/" in cmd, "Must checkout research/ directory from experiment branch"
+        assert "worktree add" in cmd, "Must create a temporary worktree"
+
+    def test_archival_open_artifact_pr_step(self, recipe) -> None:
+        """open_artifact_pr creates the artifact-only PR and captures artifact_pr_url."""
+        assert "open_artifact_pr" in recipe.steps
+        step = recipe.steps["open_artifact_pr"]
+        assert step.tool == "run_cmd"
+        assert "artifact_pr_url" in step.capture
+        assert step.on_success == "tag_experiment_branch"
+        assert step.on_failure == "research_complete"
+
+    def test_archival_tag_experiment_branch_step(self, recipe) -> None:
+        """tag_experiment_branch creates annotated archive tag and captures archive_tag."""
+        assert "tag_experiment_branch" in recipe.steps
+        step = recipe.steps["tag_experiment_branch"]
+        assert step.tool == "run_cmd"
+        assert "archive_tag" in step.capture
+        assert step.on_success == "close_experiment_pr"
+        assert step.on_failure == "research_complete"
+
+    def test_archival_tag_uses_archive_prefix(self, recipe) -> None:
+        """Tag name must use archive/research/ prefix convention."""
+        step = recipe.steps["tag_experiment_branch"]
+        cmd = step.with_args["cmd"]
+        assert "archive/research/" in cmd
+
+    def test_archival_close_experiment_pr_step(self, recipe) -> None:
+        """close_experiment_pr closes the original PR and routes to research_complete."""
+        assert "close_experiment_pr" in recipe.steps
+        step = recipe.steps["close_experiment_pr"]
+        assert step.tool == "run_cmd"
+        assert step.on_success == "research_complete"
+        assert step.on_failure == "research_complete"
+
+    def test_archival_close_pr_references_artifact_and_tag(self, recipe) -> None:
+        """close_experiment_pr comment must reference both artifact PR and archive tag."""
+        step = recipe.steps["close_experiment_pr"]
+        cmd = step.with_args["cmd"]
+        assert "artifact_pr_url" in cmd, "Must reference artifact PR URL"
+        assert "archive_tag" in cmd, "Must reference archive tag"
+
+    def test_archival_graceful_degradation(self, recipe) -> None:
+        """Every archival step must route on_failure to research_complete."""
+        archival_steps = [
+            "capture_experiment_branch",
+            "create_artifact_branch",
+            "open_artifact_pr",
+            "tag_experiment_branch",
+            "close_experiment_pr",
+        ]
+        for name in archival_steps:
+            step = recipe.steps[name]
+            assert step.on_failure == "research_complete", (
+                f"{name}.on_failure must be research_complete for graceful degradation"
+            )
+
+    def test_review_research_pr_routes_to_begin_archival(self, recipe) -> None:
+        """review_research_pr non-changes verdicts and failures route to begin_archival."""
+        step = recipe.steps["review_research_pr"]
+        assert step.on_failure == "begin_archival"
+        assert step.on_context_limit == "begin_archival"
+        # Default on_result route
+        conditions = step.on_result.conditions
+        default = next((c for c in conditions if not c.when), None)
+        assert default.route == "begin_archival"
+
+    def test_resolve_research_review_routes_to_begin_archival(self, recipe) -> None:
+        """resolve_research_review exhaustion and failure route to begin_archival."""
+        step = recipe.steps["resolve_research_review"]
+        assert step.on_exhausted == "begin_archival"
+        assert step.on_failure == "begin_archival"
+
+    def test_re_push_research_routes_to_begin_archival(self, recipe) -> None:
+        """re_push_research routes to begin_archival (was research_complete)."""
+        step = recipe.steps["re_push_research"]
+        assert step.on_success == "begin_archival"
+        assert step.on_failure == "begin_archival"

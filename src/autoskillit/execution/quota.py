@@ -19,6 +19,8 @@ from autoskillit.core import atomic_write, get_logger
 
 _log = get_logger(__name__)
 
+_DEFAULT_BASE_URL: str = "https://api.anthropic.com"
+
 
 @dataclass
 class QuotaStatus:
@@ -78,11 +80,12 @@ def _write_cache(cache_path: str, status: QuotaStatus) -> None:
 async def _fetch_quota(
     credentials_path: str,
     *,
-    base_url: str = "https://api.anthropic.com",
+    base_url: str = _DEFAULT_BASE_URL,
+    _httpx_timeout: float = 10,
 ) -> QuotaStatus:
     """Fetch 5-hour utilization from Anthropic quota API."""
     token = _read_credentials(credentials_path)
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with httpx.AsyncClient(timeout=_httpx_timeout) as client:
         resp = await client.get(
             f"{base_url}/api/oauth/usage",
             headers={
@@ -106,7 +109,8 @@ async def _fetch_quota(
 async def check_and_sleep_if_needed(
     config: Any,
     *,
-    base_url: str = "https://api.anthropic.com",
+    base_url: str = _DEFAULT_BASE_URL,
+    _httpx_timeout: float = 10,
 ) -> dict:
     """Check quota utilization. Returns metadata indicating whether a sleep is needed.
 
@@ -132,7 +136,9 @@ async def check_and_sleep_if_needed(
     try:
         status = _read_cache(config.cache_path, config.cache_max_age)
         if status is None:
-            status = await _fetch_quota(config.credentials_path, base_url=base_url)
+            status = await _fetch_quota(
+                config.credentials_path, base_url=base_url, _httpx_timeout=_httpx_timeout
+            )
             _write_cache(config.cache_path, status)
 
         if status.utilization < config.threshold:
@@ -159,7 +165,9 @@ async def check_and_sleep_if_needed(
             }
 
         # Re-fetch for accurate resets_at before returning sleep metadata
-        status = await _fetch_quota(config.credentials_path, base_url=base_url)
+        status = await _fetch_quota(
+            config.credentials_path, base_url=base_url, _httpx_timeout=_httpx_timeout
+        )
         _write_cache(config.cache_path, status)
 
         if status.resets_at is None:

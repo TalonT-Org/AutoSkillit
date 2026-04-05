@@ -294,3 +294,80 @@ def test_l3_l4_subagents_receive_experiment_type(
         f"{step_heading}: L3/L4 subagents must receive experiment_type. "
         "Type-agnostic severity calibration is a structural gap."
     )
+
+
+# ── Red-team severity calibration ─────────────────────────────────────────────
+
+
+def test_red_team_severity_calibration_rubric_present(skill_text: str) -> None:
+    """Red-team dimension must have a severity calibration rubric by experiment type.
+
+    Without this rubric, any critical red-team finding triggers STOP regardless
+    of experiment type, creating an unresolvable loop for benchmarks.
+    """
+    rt_cal_idx = skill_text.lower().find("red-team severity calibration")
+    assert rt_cal_idx != -1, (
+        "Red-team severity calibration rubric not found in SKILL.md. "
+        "Without it, any critical red-team finding triggers STOP regardless "
+        "of experiment type."
+    )
+    rt_section = skill_text[rt_cal_idx : rt_cal_idx + 1000]
+    for exp_type in ["causal_inference", "benchmark", "exploratory"]:
+        assert exp_type in rt_section, (
+            f"Red-team calibration rubric must specify {exp_type} severity cap."
+        )
+
+
+def test_red_team_severity_cap_applied_before_verdict(skill_text: str) -> None:
+    """Severity cap must be applied BEFORE building stop_triggers in verdict logic.
+
+    Without this ordering, red-team criticals bypass the cap and still trigger STOP.
+    """
+    step7_text = skill_text_between("### Step 7", "### Step 8", skill_text)
+    cap_idx = step7_text.find("rt_cap")
+    stop_idx = step7_text.find('f.dimension == "red_team"')
+    assert cap_idx != -1, (
+        "Step 7 verdict logic must reference rt_cap for red-team severity capping."
+    )
+    assert stop_idx != -1, (
+        "Step 7 verdict logic must reference red_team dimension in stop_triggers."
+    )
+    assert cap_idx < stop_idx, (
+        "rt_cap must be applied BEFORE the red_team stop_triggers line — "
+        "otherwise the cap has no effect on STOP eligibility."
+    )
+
+
+def test_benchmark_red_team_cannot_stop(skill_text: str) -> None:
+    """Benchmark experiment type must cap red-team severity at warning (no STOP)."""
+    rt_cal_idx = skill_text.lower().find("red-team severity calibration")
+    assert rt_cal_idx != -1, "Red-team severity calibration rubric not found"
+    rt_section = skill_text[rt_cal_idx : rt_cal_idx + 1000]
+    lines = rt_section.splitlines()
+    benchmark_line = next(
+        (l for l in lines if "benchmark" in l.lower() and "|" in l), None
+    )
+    assert benchmark_line is not None, (
+        "Benchmark row not found in red-team calibration rubric"
+    )
+    assert "warning" in benchmark_line.lower(), (
+        "Benchmark red-team severity must be capped at 'warning' — "
+        "STOP-eligible red-team findings are unreasonable for benchmarks."
+    )
+
+
+def test_causal_inference_red_team_can_stop(skill_text: str) -> None:
+    """causal_inference must retain critical as max red-team severity (STOP eligible)."""
+    rt_cal_idx = skill_text.lower().find("red-team severity calibration")
+    assert rt_cal_idx != -1, "Red-team severity calibration rubric not found"
+    rt_section = skill_text[rt_cal_idx : rt_cal_idx + 1000]
+    lines = rt_section.splitlines()
+    causal_line = next(
+        (l for l in lines if "causal_inference" in l and "|" in l), None
+    )
+    assert causal_line is not None, (
+        "causal_inference row not found in red-team calibration rubric"
+    )
+    assert "critical" in causal_line.lower(), (
+        "causal_inference must retain critical as max red-team severity."
+    )

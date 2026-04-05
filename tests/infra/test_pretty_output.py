@@ -1270,6 +1270,33 @@ def test_hook_token_summary_output_equivalent_to_canonical():
     )
 
 
+def test_fmt_run_skill_interactive_shows_four_token_fields():
+    """_fmt_run_skill interactive mode shows all 4 token fields."""
+    data = {
+        "success": True,
+        "subtype": "COMPLETED",
+        "exit_code": 0,
+        "needs_retry": False,
+        "result": "done",
+        "token_usage": {
+            "input_tokens": 5000,
+            "output_tokens": 3000,
+            "cache_read_input_tokens": 200000,
+            "cache_creation_input_tokens": 8000,
+        },
+    }
+    rendered = _format_response(
+        "mcp__plugin_autoskillit_autoskillit__run_skill",
+        json.dumps({"result": json.dumps(data)}),
+        pipeline=False,
+    )
+    assert rendered is not None
+    assert "tokens_uncached:" in rendered
+    assert "tokens_out:" in rendered
+    assert "tokens_cache_read:" in rendered
+    assert "tokens_cache_write:" in rendered
+
+
 # ---------------------------------------------------------------------------
 # Timing summary dedicated formatter
 # ---------------------------------------------------------------------------

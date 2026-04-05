@@ -242,36 +242,40 @@ def _format_table(aggregated: dict[str, dict[str, Any]]) -> str:
     lines = [
         "## Token Usage Summary",
         "",
-        "| Step | input | output | cached | count | time |",
-        "|------|-------|--------|--------|-------|------|",
+        "| Step | uncached | output | cache_read | cache_write | count | time |",
+        "|------|----------|--------|------------|-------------|-------|------|",
     ]
 
     total_input = 0
     total_output = 0
-    total_cached = 0
+    total_cache_rd = 0
+    total_cache_wr = 0
     total_time = 0.0
 
     for entry in aggregated.values():
         name = entry["step_name"]
         inp = entry["input_tokens"]
         out = entry["output_tokens"]
-        cached = entry["cache_read_input_tokens"] + entry["cache_creation_input_tokens"]
+        cache_rd = entry["cache_read_input_tokens"]
+        cache_wr = entry["cache_creation_input_tokens"]
         count = entry["invocation_count"]
         elapsed = entry["elapsed_seconds"]
 
         lines.append(
-            f"| {name} | {_humanize(inp)} | {_humanize(out)} | {_humanize(cached)}"
-            f" | {count} | {_fmt_duration(elapsed)} |"
+            f"| {name} | {_humanize(inp)} | {_humanize(out)} | {_humanize(cache_rd)}"
+            f" | {_humanize(cache_wr)} | {count} | {_fmt_duration(elapsed)} |"
         )
 
         total_input += inp
         total_output += out
-        total_cached += cached
+        total_cache_rd += cache_rd
+        total_cache_wr += cache_wr
         total_time += elapsed
 
     lines.append(
         f"| **Total** | {_humanize(total_input)} | {_humanize(total_output)}"
-        f" | {_humanize(total_cached)} | | {_fmt_duration(total_time)} |"
+        f" | {_humanize(total_cache_rd)} | {_humanize(total_cache_wr)}"
+        f" | | {_fmt_duration(total_time)} |"
     )
 
     return "\n".join(lines)

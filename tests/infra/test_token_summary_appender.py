@@ -271,6 +271,10 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
     assert "open-pr" in body_content
     # Total row
     assert "**Total**" in body_content
+    # 4-column token headers
+    assert "uncached" in body_content
+    assert "cache_read" in body_content
+    assert "cache_write" in body_content
 
 
 # ---------------------------------------------------------------------------

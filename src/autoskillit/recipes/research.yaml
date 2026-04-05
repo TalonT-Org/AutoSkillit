@@ -562,8 +562,7 @@ steps:
         --head "${ARTIFACT}"
         --base '${{ inputs.base_branch }}'
         --title "Research artifacts: ${EXPERIMENT}"
-        --body "${PR_BODY}"
-        --json url --jq '.url') &&
+        --body "${PR_BODY}") &&
         echo "artifact_pr_url=${PR_URL}"
       cwd: "${{ context.worktree_path }}"
       step_name: open_artifact_pr

@@ -806,7 +806,7 @@ class TestRelatedCoverage:
 
 
 class TestEjectionEnrichment:
-    """Tests for Gap 2: enriched ejection response with CI failure cause."""
+    """Tests ejection response enrichment with CI failure cause."""
 
     @pytest.mark.anyio
     async def test_ejected_ci_failure_when_checks_state_is_failure(self):
@@ -897,6 +897,39 @@ class TestEjectionEnrichment:
         result = await watcher.wait(
             pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
         )
+        assert result["success"] is False
+        assert result["pr_state"] == "ejected_ci_failure"
+        assert result.get("ejection_cause") == "ci_failure"
+
+    @pytest.mark.anyio
+    async def test_ejected_ci_failure_after_in_queue_to_not_in_queue_transition(self):
+        """in_queue=True on first poll, then in_queue=False+FAILURE → ejected_ci_failure."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[
+                _queue_state(in_queue=True, checks_state=None),
+                _queue_state(
+                    in_queue=False,
+                    checks_state="FAILURE",
+                    merge_state_status="BLOCKED",
+                    auto_merge_enabled_at=None,
+                ),
+                _queue_state(
+                    in_queue=False,
+                    checks_state="FAILURE",
+                    merge_state_status="BLOCKED",
+                    auto_merge_enabled_at=None,
+                ),
+            ]
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                not_in_queue_confirmation_cycles=2,
+            )
         assert result["success"] is False
         assert result["pr_state"] == "ejected_ci_failure"
         assert result.get("ejection_cause") == "ci_failure"

@@ -63,8 +63,8 @@ incorporate the feedback before writing the plan.
 - Plan all artifacts into one self-contained `research/YYYY-MM-DD-{slug}/` folder
 - Include implementation phases that an implementer can follow step by step
 - Write YAML frontmatter between --- delimiters BEFORE the # Experiment Plan: heading
-- Apply all 8 validation rules before writing the frontmatter block
-- Log V1–V4 ERRORs in a ## Frontmatter Validation Errors section instead of writing frontmatter
+- Apply all 9 validation rules before writing the frontmatter block
+- Log V1–V4, V9 ERRORs in a ## Frontmatter Validation Errors section instead of writing frontmatter
 - Log V5–V8 WARNINGs as # WARNING: ... YAML comments on the relevant field lines
 
 ## Workflow
@@ -109,6 +109,13 @@ information gaps and produce the best possible experiment plan.
 > synthetically? Does it need to be constructed with specific properties?
 > Are there existing datasets or fixtures that can be reused? What
 > generators or construction scripts would need to be written?
+>
+> **Research Task Directive Compliance:** When the research task directive or issue
+> specifies using particular data (e.g., "use MERFISH data", "benchmark on real-world
+> datasets"), the Data Manifest MUST include acquisition steps for that data. The plan
+> must NOT assume the data will already be present — especially in worktrees where
+> gitignored directories are empty. If the directive specifies data that requires
+> download or generation, include the exact commands in the `acquisition` field.
 
 **Subagent C — Environment Assessment:**
 > Determine whether the experiment can run with the project's existing
@@ -331,6 +338,21 @@ success_criteria:                     # REQUIRED
   conclusive_negative: "{conditions supporting H0}"
   inconclusive: "{conditions where no conclusion can be drawn}"
 
+data_manifest:                        # REQUIRED — one entry per hypothesis (or shared)
+  - hypothesis: [H1, H2]             # which hypotheses consume this data
+    source_type: synthetic            # synthetic | fixture | external | gitignored
+    description: "Gaussian blobs, 10K-100K points"
+    acquisition: "generate in-script via sklearn.datasets"
+    location: null                    # null for in-script generation
+    verification: "non-empty ndarray with shape[0] >= 1000"
+  # - hypothesis: [H5]
+  #   source_type: external
+  #   description: "MERFISH spatial transcriptomics subset"
+  #   acquisition: "python tests/visual_eval/generate_merfish_subset.py --n 100000"
+  #   location: "temp/merfish_100k/"
+  #   verification: "directory exists with >= 1 .parquet file, total size > 10MB"
+  #   depends_on: "python tests/visual_eval/download_merfish.py"
+
 experiment_slug: "{YYYY-MM-DD-slug}"  # optional, derived from directory layout
 ---
 
@@ -349,6 +371,22 @@ Use this prose section ↔ frontmatter mapping to extract fields:
 | `## Analysis Plan` | `statistical_plan` |
 | `## Success Criteria` | `success_criteria` |
 | `## Experiment Directory Layout` | `experiment_slug` |
+| `## Inputs and Data` | `data_manifest[]` |
+
+### data_manifest (required)
+
+A list of data source entries, one per hypothesis (or shared across hypotheses). Each entry:
+
+**Field definitions:**
+| Field | Required | Description |
+|-------|----------|-------------|
+| `hypothesis` | yes | List of hypothesis IDs that consume this data |
+| `source_type` | yes | One of: `synthetic`, `fixture`, `external`, `gitignored` |
+| `description` | yes | Human-readable description of the data |
+| `acquisition` | yes | Exact command or method to produce/retrieve the data |
+| `location` | no | Filesystem path where data will reside (null for in-script) |
+| `verification` | yes | How to confirm the data is present and valid |
+| `depends_on` | no | Prerequisite acquisition step (e.g., download before subset) |
 
 Apply these validation rules in order before writing the frontmatter:
 
@@ -376,9 +414,16 @@ V7: hypothesis_h1 has no numeric threshold
 
 V8: success_criteria.conclusive_positive should reference at least one metric.name
     WARNING: "Success criteria does not reference any declared metric"
+
+V9: data_manifest completeness
+    ERROR if:
+    - Any hypothesis referenced in `success_criteria` has no entry in `data_manifest`
+    - Any entry with `source_type: external` or `source_type: gitignored` lacks a non-null `location`
+    - Any entry with `source_type: external` lacks a `depends_on` or explicit download command in `acquisition`
+    ERROR: "Data Manifest incomplete: {specific missing field or hypothesis}"
 ```
 
-- ERRORs (V1–V4): Stop frontmatter generation, append the error message to the plan
+- ERRORs (V1–V4, V9): Stop frontmatter generation, append the error message to the plan
   prose under a `## Frontmatter Validation Errors` section, and save the plan WITHOUT
   a frontmatter block. Emit the `experiment_plan` token as usual.
 - WARNINGs (V5–V8): Continue; log each as a `# WARNING: ...` YAML comment on the
@@ -396,6 +441,7 @@ Field requirements by experiment type:
 | statistical_plan | required | required | required | required | **waived** |
 | environment | required | required | required | required | required |
 | success_criteria | required | required | required | required | required |
+| data_manifest | required | required | required | required | required |
 
 ### Step 4 — Write Output
 

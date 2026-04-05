@@ -82,6 +82,40 @@ Launch subagents (model: "sonnet") if needed to investigate the experiment
 setup, resolve dependencies, or research how to use specific tools mentioned
 in the plan.
 
+### Data Manifest Verification (mandatory)
+
+Before executing any hypothesis:
+
+1. **Read the Data Manifest** from the experiment plan's YAML frontmatter
+   (`data_manifest` field). If no frontmatter or no `data_manifest` field exists,
+   log a warning and proceed with best-effort artifact checks.
+
+2. **For each `data_manifest` entry**, verify:
+   - If `location` is specified: the path exists and is non-empty
+   - If `verification` criteria are specified: evaluate them (e.g., file count, size)
+   - If `acquisition` command is specified and data is missing: attempt to run
+     the acquisition command. If it fails, mark the entry as BLOCKED.
+
+3. **Produce a data readiness table:**
+   ```
+   | Hypothesis | Source Type | Location | Status |
+   |------------|-------------|----------|--------|
+   | H1, H2     | synthetic   | in-script | READY  |
+   | H5         | external    | temp/merfish_100k/ | BLOCKED — directory empty |
+   ```
+
+4. **If any entry the plan said would be acquired is BLOCKED:**
+   - Do NOT silently degrade to N/A
+   - Emit the structured output token `blocked_hypotheses` listing all blocked entries
+   - Set the results file `## Status` to `FAILED`
+   - Exit with a clear error message: "Pre-flight blocked: planned data for {hypotheses}
+     is unavailable. Data Manifest declared acquisition via {method} but verification
+     failed."
+
+This replaces the current behavior of silently marking missing-data hypotheses as N/A.
+When the plan declared acquisition steps for data and those steps did not produce the
+data, this is a pipeline failure — not a graceful degradation.
+
 ### Step 3 — Execute Experiment
 
 Run the experiment as described in the plan. The experiment could be anything:
@@ -147,6 +181,18 @@ text output:
 ```
 results_path = {absolute_path_to_results_file}
 ```
+
+**When pre-flight blocks hypotheses due to missing planned data:**
+
+```
+blocked_hypotheses = H5: MERFISH data missing at temp/merfish_100k/ (acquisition: generate_merfish_subset.py --n 100000)
+```
+
+This token is emitted ONLY when the pre-flight gate fails due to data declared in the
+Data Manifest being unavailable. It is NOT emitted during normal execution.
+
+When `blocked_hypotheses` is emitted, `results_path` still points to the results file
+with `## Status: FAILED`.
 
 ## Adjust Mode (--adjust)
 

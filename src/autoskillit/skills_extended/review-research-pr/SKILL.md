@@ -130,7 +130,7 @@ findings in JSON format:
   {
     "file": "path/to/file.py",
     "line": 42,
-    "dimension": "methodology|reproducibility|report-quality|statistical-rigor|isolation|data-integrity|slop",
+    "dimension": "methodology|reproducibility|report-quality|statistical-rigor|isolation|data-integrity|slop|data-scope",
     "severity": "critical|warning|info",
     "message": "Description of the finding",
     "requires_decision": false
@@ -170,7 +170,25 @@ findings in JSON format:
    Check for: commented-out code, TODO without issue refs, over-verbose docstrings,
    dead code, backward-compat stubs left by the LLM.
 
-Subagent prompt template (all 7 dimensions):
+8. **data-scope** — Data scope coverage and qualification.
+   Checks whether the experiment's data coverage matches the research task directive:
+   - **Scope coverage**: Did the experiment use the data types specified in the research
+     task directive? If the directive said "use MERFISH data" but all benchmarks ran on
+     synthetic data only, this is a finding.
+   - **Qualification**: Are domain-specific claims (e.g., "Reduces MERFISH evaluation
+     wall-clock by X%") qualified with actual data provenance? Claims derived from
+     synthetic data must state this explicitly.
+   - **Data Scope Statement**: Does the Executive Summary contain a Data Scope Statement?
+     If not, this is a finding.
+   - **Hypothesis gate alignment**: Do GO/NO-GO recommendations reference the correct
+     pre-specified gate thresholds, or were thresholds silently substituted?
+
+   **Severity guidance:**
+   - `requires_decision: true` when all benchmarks used synthetic data for a domain-specific project
+   - Standard finding when Data Scope Statement is missing or incomplete
+   - Standard finding when claims are unqualified
+
+Subagent prompt template (all 8 dimensions):
 
 > You are reviewing a GitHub PR diff for [{dimension}] issues only.
 > Scope: examine only the diff content provided. Do not fetch or read files outside the diff.

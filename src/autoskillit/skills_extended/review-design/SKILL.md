@@ -139,6 +139,7 @@ matrix lookup, as this would corrupt all subsequent spawning decisions.
 | ecological_validity | M | L | L | H | M |
 | measurement_alignment | M | M | M | H | M |
 | resource_proportionality | L | L | L | L | L |
+| data_acquisition | M | M | M | H | M |
 
 Weight tiers: H (High), M (Medium), L (Low), S (SILENT — dimension not spawned, not mentioned).
 
@@ -268,6 +269,26 @@ Level 4 dimensions (spawn when not SILENT):
 - `ecological_validity`: "Do test conditions match the intended deployment context?"
 - `measurement_alignment`: "Do the metrics actually measure what the research question claims?"
 - `reproducibility_spec`: "Could an independent party reproduce this experiment?"
+- `data_acquisition`: "Does the plan include a complete data acquisition strategy?"
+
+#### `data_acquisition` — Data Acquisition Completeness
+
+Validates that the experiment plan includes a complete data acquisition strategy:
+
+1. **Hypothesis coverage**: Every hypothesis in `success_criteria` has at least one
+   `data_manifest` entry specifying its data source.
+2. **External source readiness**: Every entry with `source_type: external` has an
+   explicit acquisition command and a verification criterion.
+3. **Gitignored path handling**: Every entry with `source_type: gitignored` has an
+   acquisition/generation step — gitignored paths are empty in fresh worktrees.
+4. **Dependency ordering**: If entry A's `depends_on` references entry B's acquisition,
+   B must be listed before A (or the dependency chain must be acyclic).
+5. **Directive compliance**: If the research task directive specifies particular data,
+   the `data_manifest` must include acquisition steps for that data.
+
+**Findings format:**
+- STOP if: a hypothesis has no data source at all, or directive-specified data has no acquisition step
+- REVISE if: an external source lacks verification criteria, or gitignored path handling is unclear
 
 Level 3 and Level 4 may run concurrently with the red-team agent (do not block on red-team).
 

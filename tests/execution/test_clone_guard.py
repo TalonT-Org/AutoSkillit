@@ -117,6 +117,17 @@ async def test_snapshot_clone_state_returns_none_on_failure():
 
 
 # ---------------------------------------------------------------------------
+# T4b: snapshot_clone_state returns None when stdout is empty after rc=0
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_snapshot_clone_state_returns_none_on_empty_stdout():
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="", returncode=0))
+    snapshot = await snapshot_clone_state("/tmp/clone", runner)
+    assert snapshot is None
+
+
+# ---------------------------------------------------------------------------
 # T5: detect_contamination — uncommitted changes
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
@@ -193,8 +204,31 @@ async def test_revert_uncommitted_only():
     result = await revert_contamination(snapshot, report, "/tmp/clone", runner)
     assert result.reverted
     cmds = [call[0] for call in runner.call_args_list]
+    assert len(cmds) == 2
     assert ["git", "reset", "--hard", "abc123"] in cmds
     assert ["git", "clean", "-fd"] in cmds
+
+
+# ---------------------------------------------------------------------------
+# T9b: revert_contamination — git commands fail → reverted=False
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_revert_contamination_returns_false_when_git_fails():
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(returncode=128))  # git reset --hard fails
+    runner.push(_git_result(returncode=0))  # git clean succeeds (still reverted=False)
+    snapshot = CloneSnapshot(head_sha="abc123")
+    from autoskillit.execution.clone_guard import ContaminationReport
+
+    report = ContaminationReport(
+        pre_sha="abc123",
+        post_sha="def456",
+        uncommitted_files=[],
+        direct_commits=True,
+        reverted=False,
+    )
+    result = await revert_contamination(snapshot, report, "/tmp/clone", runner)
+    assert not result.reverted
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +263,9 @@ async def test_guard_full_flow_contamination_detected():
     # detect_contamination: rev-parse HEAD (moved), status (dirty)
     runner.push(_git_result(stdout="def456\n"))
     runner.push(_git_result(stdout=" M file.py\n"))
-    # revert_contamination: reset, clean (defaults are rc=0)
+    # revert_contamination: reset --hard, clean -fd
+    runner.push(_git_result())
+    runner.push(_git_result())
 
     snapshot = CloneSnapshot(head_sha="abc123")
     skill_result = _make_skill_result(success=False, worktree_path=None)
@@ -244,6 +280,7 @@ async def test_guard_full_flow_contamination_detected():
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
     )
     assert reverted
+    assert len(runner.call_args_list) == 4  # 2 detect + 2 revert
     assert len(audit.get_report()) == 1
     record = audit.get_report()[0]
     assert record.subtype == "clone_contamination"

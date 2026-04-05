@@ -75,12 +75,16 @@ def _write_cache(cache_path: str, status: QuotaStatus) -> None:
         _log.warning("quota cache write failed", path=cache_path, error=str(exc))
 
 
-async def _fetch_quota(credentials_path: str) -> QuotaStatus:
+async def _fetch_quota(
+    credentials_path: str,
+    *,
+    base_url: str = "https://api.anthropic.com",
+) -> QuotaStatus:
     """Fetch 5-hour utilization from Anthropic quota API."""
     token = _read_credentials(credentials_path)
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(
-            "https://api.anthropic.com/api/oauth/usage",
+            f"{base_url}/api/oauth/usage",
             headers={
                 "Authorization": f"Bearer {token}",
                 "anthropic-beta": "oauth-2025-04-20",
@@ -99,7 +103,11 @@ async def _fetch_quota(credentials_path: str) -> QuotaStatus:
     )
 
 
-async def check_and_sleep_if_needed(config: Any) -> dict:
+async def check_and_sleep_if_needed(
+    config: Any,
+    *,
+    base_url: str = "https://api.anthropic.com",
+) -> dict:
     """Check quota utilization. Returns metadata indicating whether a sleep is needed.
 
     Does NOT sleep. The caller is responsible for sleeping (e.g. via run_cmd).
@@ -124,7 +132,7 @@ async def check_and_sleep_if_needed(config: Any) -> dict:
     try:
         status = _read_cache(config.cache_path, config.cache_max_age)
         if status is None:
-            status = await _fetch_quota(config.credentials_path)
+            status = await _fetch_quota(config.credentials_path, base_url=base_url)
             _write_cache(config.cache_path, status)
 
         if status.utilization < config.threshold:
@@ -151,7 +159,7 @@ async def check_and_sleep_if_needed(config: Any) -> dict:
             }
 
         # Re-fetch for accurate resets_at before returning sleep metadata
-        status = await _fetch_quota(config.credentials_path)
+        status = await _fetch_quota(config.credentials_path, base_url=base_url)
         _write_cache(config.cache_path, status)
 
         if status.resets_at is None:

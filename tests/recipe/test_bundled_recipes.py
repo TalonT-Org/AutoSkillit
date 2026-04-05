@@ -1134,7 +1134,12 @@ class TestSmokeTestStructure:
 
     @pytest.fixture()
     def smoke_yaml(self) -> dict:
-        recipe_path = Path(__file__).resolve().parent.parent.parent / ".autoskillit" / "recipes" / "smoke-test.yaml"
+        recipe_path = (
+            Path(__file__).resolve().parent.parent.parent
+            / ".autoskillit"
+            / "recipes"
+            / "smoke-test.yaml"
+        )
         return yaml.safe_load(recipe_path.read_text())
 
     # T_ST1
@@ -1252,7 +1257,10 @@ def test_all_predicate_steps_have_on_failure() -> None:
     paths = {
         "implementation": builtin_recipes_dir() / "implementation.yaml",
         "remediation": builtin_recipes_dir() / "remediation.yaml",
-        "smoke-test": Path(__file__).resolve().parent.parent.parent / ".autoskillit" / "recipes" / "smoke-test.yaml",
+        "smoke-test": Path(__file__).resolve().parent.parent.parent
+        / ".autoskillit"
+        / "recipes"
+        / "smoke-test.yaml",
     }
     for recipe_name, recipe_path in paths.items():
         recipe = load_recipe(recipe_path)
@@ -1275,7 +1283,10 @@ def test_audit_impl_on_failure_routes_to_escalation() -> None:
 def test_smoke_check_summary_has_error_escalation() -> None:
     """check_summary must have a result.error condition routing to a non-done step."""
     recipe = load_recipe(
-        Path(__file__).resolve().parent.parent.parent / ".autoskillit" / "recipes" / "smoke-test.yaml"
+        Path(__file__).resolve().parent.parent.parent
+        / ".autoskillit"
+        / "recipes"
+        / "smoke-test.yaml"
     )
     step = recipe.steps["check_summary"]
     error_routes = [
@@ -1610,7 +1621,10 @@ class TestBaseBranchDefaults:
     def test_smoke_test_base_branch_remains_main(self) -> None:
         """smoke-test.yaml must keep base_branch default 'main' — isolated scratch repo context."""
         recipe = load_recipe(
-            Path(__file__).resolve().parent.parent.parent / ".autoskillit" / "recipes" / "smoke-test.yaml"
+            Path(__file__).resolve().parent.parent.parent
+            / ".autoskillit"
+            / "recipes"
+            / "smoke-test.yaml"
         )
         assert recipe.ingredients["base_branch"].default == "main", (
             "smoke-test.yaml creates a fresh git repo initialized with 'main' — "

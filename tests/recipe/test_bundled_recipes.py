@@ -1775,9 +1775,9 @@ def test_no_bare_temp_paths_in_bundled_recipe_notes() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("recipe_name", [
-    "implementation", "remediation", "implementation-groups", "merge-prs"
-])
+@pytest.mark.parametrize(
+    "recipe_name", ["implementation", "remediation", "implementation-groups", "merge-prs"]
+)
 def test_recipe_has_no_defer_cleanup_ingredient(recipe_name: str) -> None:
     """Recipes must not declare 'defer_cleanup' — that design is removed."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
@@ -1786,9 +1786,9 @@ def test_recipe_has_no_defer_cleanup_ingredient(recipe_name: str) -> None:
     )
 
 
-@pytest.mark.parametrize("recipe_name", [
-    "implementation", "remediation", "implementation-groups", "merge-prs"
-])
+@pytest.mark.parametrize(
+    "recipe_name", ["implementation", "remediation", "implementation-groups", "merge-prs"]
+)
 def test_recipe_has_no_registry_path_ingredient(recipe_name: str) -> None:
     """Recipes must not declare 'registry_path' — replaced by a well-known default."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
@@ -1797,9 +1797,9 @@ def test_recipe_has_no_registry_path_ingredient(recipe_name: str) -> None:
     )
 
 
-@pytest.mark.parametrize("recipe_name", [
-    "implementation", "remediation", "implementation-groups", "merge-prs"
-])
+@pytest.mark.parametrize(
+    "recipe_name", ["implementation", "remediation", "implementation-groups", "merge-prs"]
+)
 def test_recipe_has_no_interactive_cleanup_steps(recipe_name: str) -> None:
     """Recipes must not have confirm_cleanup or delete_clone — these blocked unattended runs."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
@@ -1811,9 +1811,7 @@ def test_recipe_has_no_interactive_cleanup_steps(recipe_name: str) -> None:
     )
 
 
-@pytest.mark.parametrize("recipe_name", [
-    "implementation", "remediation", "implementation-groups"
-])
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
 def test_recipe_has_unconditional_register_steps(recipe_name: str) -> None:
     """register_clone_success routes to done; register_clone_failure routes to escalate_stop."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")

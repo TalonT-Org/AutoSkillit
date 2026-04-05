@@ -123,6 +123,11 @@ async def wait_for_ci(
             cwd=cwd,
         )
 
+        # Include head_sha used for this CI check so orchestrators can verify
+        # CI results correspond to the current HEAD after a force-push.
+        if scope.head_sha:
+            result = {**result, "head_sha": scope.head_sha}
+
         conclusion = result.get("conclusion", "unknown")
         level = "info" if conclusion == "success" else "error"
         await _notify(

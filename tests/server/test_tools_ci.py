@@ -578,4 +578,55 @@ async def test_wait_for_merge_queue_watcher_exception_returns_structured_json(to
     assert result["success"] is False
     assert "connection refused" in result["error"]
     assert "subtype" not in result
+
+
+# ---------------------------------------------------------------------------
+# wait_for_ci head_sha enrichment (Gap 5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_includes_head_sha_in_result(tool_ctx):
+    """wait_for_ci result includes head_sha when git rev-parse HEAD succeeds."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+    )
+    tool_ctx.ci_watcher = mock_watcher
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=0,
+            stdout="deadbeef1234\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
+
+    result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+
+    assert result["head_sha"] == "deadbeef1234"
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_omits_head_sha_when_git_fails(tool_ctx):
+    """wait_for_ci result omits head_sha when git rev-parse fails."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+    )
+    tool_ctx.ci_watcher = mock_watcher
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=128,
+            stdout="",
+            stderr="fatal: not a git repository",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
+
+    result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+
+    assert "head_sha" not in result
     assert "exit_code" not in result

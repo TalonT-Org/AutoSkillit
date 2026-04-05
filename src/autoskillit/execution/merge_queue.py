@@ -148,13 +148,18 @@ class DefaultMergeQueueWatcher:
         stall_retries_attempted: int = 0
         not_in_queue_cycles: int = 0
 
-        def _make_result(success: bool, pr_state: str, reason: str) -> dict[str, Any]:
-            return {
+        def _make_result(
+            success: bool, pr_state: str, reason: str, ejection_cause: str = ""
+        ) -> dict[str, Any]:
+            result: dict[str, Any] = {
                 "success": success,
                 "pr_state": pr_state,
                 "reason": reason,
                 "stall_retries_attempted": stall_retries_attempted,
             }
+            if ejection_cause:
+                result["ejection_cause"] = ejection_cause
+            return result
 
         while time.monotonic() < deadline:
             try:
@@ -172,6 +177,13 @@ class DefaultMergeQueueWatcher:
 
             # Terminal: closed without merge
             if state["state"] == "CLOSED":
+                if state["checks_state"] in ("FAILURE", "ERROR"):
+                    return _make_result(
+                        False,
+                        "ejected_ci_failure",
+                        "PR was closed without merging — CI checks had failed",
+                        ejection_cause="ci_failure",
+                    )
                 return _make_result(False, "ejected", "PR was closed without merging")
 
             # In queue
@@ -238,6 +250,13 @@ class DefaultMergeQueueWatcher:
 
             # Positive confirmation: checks are terminal (SUCCESS/FAILURE/ERROR) or absent (None).
             # PR confirmed not in queue, not merged, checks not pending → genuine ejection.
+            if state["checks_state"] in ("FAILURE", "ERROR"):
+                return _make_result(
+                    False,
+                    "ejected_ci_failure",
+                    "PR was ejected from merge queue — CI checks failed on merge-group commit",
+                    ejection_cause="ci_failure",
+                )
             return _make_result(
                 False,
                 "ejected",

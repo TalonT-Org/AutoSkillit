@@ -13,11 +13,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from autoskillit.execution.quota import QuotaStatus, _fetch_quota, check_and_sleep_if_needed
+from autoskillit.execution.quota import check_and_sleep_if_needed
 
 pytestmark = pytest.mark.anyio
-
-# ── Fixtures ────────────────────────────────────────────────────────────
 
 QUOTA_ENDPOINT = "/api/oauth/usage"
 
@@ -58,11 +56,8 @@ def _reset_mock(mock_http_server):
     mock_http_server.reset()
 
 
-# ── Test 1: Normal utilization + header verification ────────────────────
-
-
 async def test_normal_utilization_returns_status_and_sends_correct_headers(
-    mock_http_server, credentials
+    mock_http_server, quota_config
 ):
     mock_http_server.register(
         "GET",
@@ -75,17 +70,16 @@ async def test_normal_utilization_returns_status_and_sends_correct_headers(
         },
     )
 
-    status = await _fetch_quota(credentials, base_url=mock_http_server.url)
+    result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
 
-    assert status == QuotaStatus(utilization=50.0, resets_at=datetime(2026, 4, 5, tzinfo=UTC))
+    assert result["should_sleep"] is False
+    assert result["utilization"] == 50.0
+    assert result["resets_at"] == "2026-04-05T00:00:00+00:00"
 
     requests = mock_http_server.get_requests("GET", QUOTA_ENDPOINT)
     assert len(requests) == 1
     assert requests[0].headers["authorization"] == "Bearer test-token-abc123"
     assert requests[0].headers["anthropic-beta"] == "oauth-2025-04-20"
-
-
-# ── Test 2: Above threshold triggers double-fetch ───────────────────────
 
 
 async def test_above_threshold_triggers_double_fetch(mock_http_server, quota_config):
@@ -106,9 +100,6 @@ async def test_above_threshold_triggers_double_fetch(mock_http_server, quota_con
     assert mock_http_server.request_count("GET", QUOTA_ENDPOINT) == 2
 
 
-# ── Test 3: resets_at null blocks with fallback ─────────────────────────
-
-
 async def test_resets_at_null_blocks_with_fallback(mock_http_server, quota_config):
     mock_http_server.register(
         "GET",
@@ -124,9 +115,6 @@ async def test_resets_at_null_blocks_with_fallback(mock_http_server, quota_confi
     assert mock_http_server.request_count("GET", QUOTA_ENDPOINT) == 1
 
 
-# ── Test 4: HTTP 429 fails open ─────────────────────────────────────────
-
-
 async def test_http_429_fails_open(mock_http_server, quota_config):
     mock_http_server.register("GET", QUOTA_ENDPOINT, status=429)
 
@@ -134,9 +122,6 @@ async def test_http_429_fails_open(mock_http_server, quota_config):
 
     assert result["should_sleep"] is False
     assert "error" in result
-
-
-# ── Test 5: HTTP 503 fails open ─────────────────────────────────────────
 
 
 async def test_http_503_fails_open(mock_http_server, quota_config):
@@ -148,22 +133,18 @@ async def test_http_503_fails_open(mock_http_server, quota_config):
     assert "error" in result
 
 
-# ── Test 6: Network timeout fails open ──────────────────────────────────
-
-
 async def test_network_timeout_fails_open(mock_http_server, quota_config):
-    mock_http_server.register("GET", QUOTA_ENDPOINT, json={}, delay_seconds=15)
+    mock_http_server.register("GET", QUOTA_ENDPOINT, json={}, delay_seconds=0.5)
 
-    result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
+    result = await check_and_sleep_if_needed(
+        quota_config, base_url=mock_http_server.url, _httpx_timeout=0.1
+    )
 
     assert result["should_sleep"] is False
     assert "error" in result
 
 
-# ── Test 7: Z suffix in resets_at parsed correctly ──────────────────────
-
-
-async def test_z_suffix_resets_at_parsed_correctly(mock_http_server, credentials):
+async def test_z_suffix_resets_at_parsed_correctly(mock_http_server, quota_config):
     mock_http_server.register(
         "GET",
         QUOTA_ENDPOINT,
@@ -175,6 +156,6 @@ async def test_z_suffix_resets_at_parsed_correctly(mock_http_server, credentials
         },
     )
 
-    status = await _fetch_quota(credentials, base_url=mock_http_server.url)
+    result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
 
-    assert status.resets_at == datetime(2026, 4, 5, tzinfo=UTC)
+    assert result["resets_at"] == "2026-04-05T00:00:00+00:00"

@@ -526,7 +526,9 @@ steps:
         SLUG=$(printf '%s' "${EXPERIMENT_BRANCH}" | sed 's/^research-//') &&
         ARTIFACT_BRANCH="research-artifacts-${SLUG}" &&
         ARTIFACT_DIR="$(mktemp -d)" &&
+        trap 'git -C "${{ context.worktree_path }}" worktree remove "${ARTIFACT_DIR}" --force 2>/dev/null; rm -rf "${ARTIFACT_DIR}"' EXIT &&
         git -C '${{ context.worktree_path }}' fetch origin '${{ inputs.base_branch }}' &&
+        (git -C '${{ context.worktree_path }}' branch -D "${ARTIFACT_BRANCH}" 2>/dev/null || true) &&
         git -C '${{ context.worktree_path }}' worktree add "${ARTIFACT_DIR}" -b "${ARTIFACT_BRANCH}" "origin/${{ inputs.base_branch }}" &&
         git -C "${ARTIFACT_DIR}" checkout "${EXPERIMENT_BRANCH}" -- research/ &&
         cd "${ARTIFACT_DIR}" &&

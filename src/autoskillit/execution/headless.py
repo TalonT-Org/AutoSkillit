@@ -60,18 +60,17 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# Subtypes eligible for Channel B drain-race recovery.
+#
+# These are the failure subtypes that can arise when Claude Code defers ``type=result``
+# until all background agents finish.  The deferred record is never flushed if the
+# process tree is killed after Channel B fires on the session JSONL marker.
+#
+# TIMEOUT is excluded — it indicates a genuine time limit breach, not a drain-race.
+# UNKNOWN is excluded — it indicates unrecognised CLI behaviour, not a missing record.
 _CHANNEL_B_RECOVERABLE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {CliSubtype.UNPARSEABLE, CliSubtype.EMPTY_OUTPUT}
 )
-"""Subtypes eligible for Channel B drain-race recovery.
-
-These are the failure subtypes that can arise when Claude Code defers ``type=result``
-until all background agents finish.  The deferred record is never flushed if the
-process tree is killed after Channel B fires on the session JSONL marker.
-
-TIMEOUT is excluded — it indicates a genuine time limit breach, not a drain-race.
-UNKNOWN is excluded — it indicates unrecognised CLI behaviour, not a missing record.
-"""
 
 
 def _session_log_dir(cwd: str) -> Path:

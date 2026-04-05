@@ -1298,6 +1298,33 @@ def test_fmt_run_skill_interactive_shows_four_token_fields():
     assert "tokens_cache_write:" in rendered
 
 
+def test_fmt_run_skill_suppresses_zero_cache_fields():
+    """_fmt_run_skill suppresses tokens_cache_read and tokens_cache_write when both are 0."""
+    data = {
+        "success": True,
+        "subtype": "COMPLETED",
+        "exit_code": 0,
+        "needs_retry": False,
+        "result": "done",
+        "token_usage": {
+            "input_tokens": 5000,
+            "output_tokens": 3000,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+        },
+    }
+    rendered = _format_response(
+        "mcp__plugin_autoskillit_autoskillit__run_skill",
+        json.dumps({"result": json.dumps(data)}),
+        pipeline=False,
+    )
+    assert rendered is not None
+    assert "tokens_uncached:" in rendered
+    assert "tokens_out:" in rendered
+    assert "tokens_cache_read:" not in rendered
+    assert "tokens_cache_write:" not in rendered
+
+
 # ---------------------------------------------------------------------------
 # Timing summary dedicated formatter
 # ---------------------------------------------------------------------------

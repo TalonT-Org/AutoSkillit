@@ -803,3 +803,100 @@ class TestRelatedCoverage:
         assert result["success"] is False
         assert result["pr_state"] == "error"
         assert "Invalid repo format" in result["reason"]
+
+
+class TestEjectionEnrichment:
+    """Tests for Gap 2: enriched ejection response with CI failure cause."""
+
+    @pytest.mark.anyio
+    async def test_ejected_ci_failure_when_checks_state_is_failure(self):
+        """When checks_state=FAILURE, wait() returns pr_state='ejected_ci_failure'."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(
+                merged=False,
+                in_queue=False,
+                checks_state="FAILURE",
+                merge_state_status="BLOCKED",
+                auto_merge_enabled_at=None,
+            )
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                not_in_queue_confirmation_cycles=2,
+            )
+        assert result["success"] is False
+        assert result["pr_state"] == "ejected_ci_failure"
+        assert result.get("ejection_cause") == "ci_failure"
+
+    @pytest.mark.anyio
+    async def test_ejected_when_checks_state_is_none(self):
+        """When checks_state=None at ejection, pr_state='ejected' with no ejection_cause."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(
+                merged=False,
+                in_queue=False,
+                checks_state=None,
+                merge_state_status="BLOCKED",
+                auto_merge_enabled_at=None,
+            )
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                not_in_queue_confirmation_cycles=2,
+            )
+        assert result["success"] is False
+        assert result["pr_state"] == "ejected"
+        assert "ejection_cause" not in result
+
+    @pytest.mark.anyio
+    async def test_ejected_when_checks_state_is_success(self):
+        """When checks_state=SUCCESS at ejection, pr_state='ejected' (no enrichment)."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(
+                merged=False,
+                in_queue=False,
+                checks_state="SUCCESS",
+                merge_state_status="BLOCKED",
+                auto_merge_enabled_at=None,
+            )
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                not_in_queue_confirmation_cycles=2,
+            )
+        assert result["success"] is False
+        assert result["pr_state"] == "ejected"
+        assert "ejection_cause" not in result
+
+    @pytest.mark.anyio
+    async def test_ejected_ci_failure_on_closed_pr_with_failure_checks(self):
+        """CLOSED state with checks_state=FAILURE → ejected_ci_failure."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(
+                state="CLOSED",
+                merged=False,
+                checks_state="FAILURE",
+            )
+        )
+        result = await watcher.wait(
+            pr_number=42, target_branch="main", repo="owner/repo", poll_interval=1
+        )
+        assert result["success"] is False
+        assert result["pr_state"] == "ejected_ci_failure"
+        assert result.get("ejection_cause") == "ci_failure"

@@ -244,7 +244,7 @@ class TestRecipeTools:
         names = {r["name"] for r in result["recipes"]}
         assert "implementation" in names
         assert "remediation" in names
-        assert "smoke-test" in names
+        assert "smoke-test" not in names
 
     # SS9
     @pytest.mark.anyio

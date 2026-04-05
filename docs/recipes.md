@@ -4,7 +4,7 @@ Recipes are YAML pipeline definitions that automate multi-step workflows. Each r
 
 ## Bundled Recipes
 
-AutoSkillit ships with 6 recipes:
+AutoSkillit ships with 5 recipes:
 
 ### implementation
 
@@ -97,12 +97,6 @@ Two-phase technical research recipe. Phase 1 scopes a research question and open
 | `setup_phases` | `false` | When `true`, decompose experiment into sequenced setup phases |
 
 **Requires pack:** `research` (pack members: `scope`, `plan-experiment`, `implement-experiment`, `run-experiment`, `write-report`)
-
-### smoke-test
-
-Integration self-test of the orchestration engine. Creates a local bare repo and exercises the full pipeline with stub skills.
-
-**When to use:** Internal testing only. Verifies that step routing, tool dispatch, capture/context threading, retry logic, and merge mechanics all work correctly.
 
 ## Project Recipes
 

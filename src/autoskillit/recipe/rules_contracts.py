@@ -229,3 +229,91 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
                 )
 
     return findings
+
+
+# ---------------------------------------------------------------------------
+# always-has-no-write-exit: detect annotation mismatches
+# ---------------------------------------------------------------------------
+
+# Phrases in SKILL.md text that indicate a documented no-write success exit.
+# Any skill with write_behavior='always' whose SKILL.md contains one of these
+# phrases likely has a mismatched annotation and should use 'conditional' instead.
+_ALWAYS_WITH_NO_WRITE_EXIT_PHRASES: frozenset[str] = frozenset(
+    {
+        "may be 0",  # resolve-failures: "may be 0 if tests were already passing"
+        "nothing to do",
+        "no changes needed",
+        "already green",
+        "graceful degradation",  # resolve-review: "graceful degradation — do not fail"
+        r"skip.*step",  # conditional path language
+        "exit 0",  # graceful early exit
+        r"if no.*found",
+        r"if.*unavailable",
+        "already complete",
+        "all phases",
+    }
+)
+
+
+@semantic_rule(
+    name="always-has-no-write-exit",
+    description=(
+        "Flag write_behavior='always' on skills whose SKILL.md documents a "
+        "legitimate no-write success path"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]:
+    """Detect contract annotation mismatches: 'always' on skills with documented no-write exits.
+
+    Reads each 'always' skill's SKILL.md and searches for phrases indicating
+    the skill can legitimately succeed with zero writes. If found, the skill
+    must use 'conditional' write_behavior instead.
+    """
+    from autoskillit.core.paths import pkg_root
+
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+
+        skill_cmd = step.with_args.get("skill_command", "")
+        if "${{" in skill_cmd:
+            continue
+
+        skill_name = resolve_skill_name(skill_cmd)
+        if not skill_name:
+            continue
+
+        contract = get_skill_contract(skill_name, manifest)
+        if contract is None or contract.write_behavior != "always":
+            continue
+
+        # Locate the skill's SKILL.md
+        for skills_dir in ("skills", "skills_extended"):
+            skill_md = pkg_root() / skills_dir / skill_name / "SKILL.md"
+            if skill_md.exists():
+                content = skill_md.read_text(encoding="utf-8").lower()
+                for phrase in _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES:
+                    if _re.search(phrase, content):
+                        findings.append(
+                            RuleFinding(
+                                rule="always-has-no-write-exit",
+                                severity=Severity.ERROR,
+                                step_name=step_name,
+                                message=(
+                                    f"Skill '{skill_name}' declares write_behavior='always' "
+                                    f"but its SKILL.md contains phrase matching '{phrase}', "
+                                    f"suggesting a legitimate no-write success path. "
+                                    f"Change to write_behavior='conditional' with a "
+                                    f"write_expected_when pattern tied to a structured "
+                                    f"completion token."
+                                ),
+                            )
+                        )
+                        break  # one finding per step is enough
+                break
+
+    return findings

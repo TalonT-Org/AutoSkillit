@@ -97,7 +97,9 @@ skills:
       type: string
       required: true
     outputs: []
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - "fixes_applied\\s*=\\s*[1-9][0-9]*"
   dry-walkthrough:
     inputs:
     - name: plan_path
@@ -239,8 +241,10 @@ skills:
     expected_output_patterns:
     - "worktree_path\\s*=\\s*/.+"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
-    write_behavior: always
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\nbranch_name = feature/123\nphases_implemented = 2\n%%ORDER_UP%%"
+    write_behavior: conditional
+    write_expected_when:
+    - "phases_implemented\\s*=\\s*[1-9][0-9]*"
   review-approach:
     inputs:
     - name: plan_path

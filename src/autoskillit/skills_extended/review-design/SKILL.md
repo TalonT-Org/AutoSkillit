@@ -41,6 +41,8 @@ best available plan.
   at fail-fast gate)
 - Spawn SILENT (S) dimension subagents — they are not run and not mentioned in output
 - Exit non-zero — GO, REVISE, and STOP are all normal outcomes (exit 0 in all cases)
+- Include code snippets, shell commands, or specific tool invocations in findings or revision guidance — findings describe gaps and risks, not implementation instructions
+- Prescribe HOW to fix an issue — findings must describe WHAT is lacking or at risk; the fix is the plan author's responsibility
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -142,6 +144,37 @@ matrix lookup, as this would corrupt all subsequent spawning decisions.
 | data_acquisition | M | M | M | H | M |
 
 Weight tiers: H (High), M (Medium), L (Low), S (SILENT — dimension not spawned, not mentioned).
+
+### Subagent Evaluation Scope (applies to ALL dimension subagents)
+
+**Include this instruction block in every dimension subagent prompt.**
+
+Every finding must describe WHAT is lacking or at risk in the experimental design.
+Never prescribe HOW to fix it — the fix is the plan author's responsibility.
+
+- GOOD: "The plan does not address how implementation correctness will be verified before measurement"
+- BAD: "The plan must contain apply_phase1_changes.sh with inline Python that greps for function ordering"
+
+- GOOD: "The step-timing instrumentation could introduce inter-iteration contamination if reset ordering is incorrect"
+- BAD: "step_timing::reset() uses Ordering::Relaxed — change to Ordering::Release"
+
+Findings must never include:
+- Code snippets or shell commands as required plan content
+- Specific tool invocations, package versions, or file paths as mandated fixes
+- Implementation-level instructions (these belong in implementation phases, not design review)
+
+**Design scope boundary:**
+
+Evaluate the experimental DESIGN: hypotheses, metrics, statistical methodology,
+controlled variables, threats to validity, data acquisition strategy, reproducibility specification.
+
+Do NOT evaluate:
+- Correctness of implementation code snippets included as illustrative examples in the plan
+- Shell script syntax, path accuracy, or command correctness in plan examples
+- Package version pinning, compile-time constants, or infrastructure code correctness
+
+If a code snippet in the plan reveals a design-level concern (e.g., the metric definition
+contradicts the hypothesis), flag the design concern, not the code bug.
 
 ### Step 2: Level 1 Analysis — Fail-Fast (parallel)
 
@@ -335,6 +368,18 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
    critical_findings = [f for f in findings if f.severity == "critical"]
    warning_findings = [f for f in findings if f.severity == "warning"]
 
+   # Count active (non-SILENT) dimensions spawned across Steps 2-6.
+   # Includes all L1, L2, L3, L4 dimensions that were spawned (weight >= L)
+   # plus red-team. SILENT dimensions were not spawned and are not counted.
+   active_dimensions = count_of_spawned_dimensions  # tracked from Steps 2-6
+
+   # Proportional warning threshold: each active dimension gets a budget of 5
+   # warnings before the plan is flagged for revision.
+   # Calibration: spectral-init v6 had 0 criticals, 32 warnings across ~7 dims
+   # (= 4.6/dim) and was deemed "substantively sound" — this must be a GO.
+   WARNING_BUDGET_PER_DIM = 5
+   warning_threshold = active_dimensions * WARNING_BUDGET_PER_DIM
+
    # L1 fail-fast path: structural defects that block all further analysis
    stop_triggers = [f for f in critical_findings if f.dimension in {"estimand_clarity", "hypothesis_falsifiability"}]
    # Red-team STOP path: adversarial critical findings after full analysis (L2-L4)
@@ -343,7 +388,7 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
 
    if stop_triggers:
        verdict = "STOP"
-   elif critical or len(warning_findings) >= 3:
+   elif critical_findings or len(warning_findings) >= warning_threshold:
        verdict = "REVISE"
    else:
        verdict = "GO"
@@ -366,15 +411,19 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
      critical_count: {n}
      warning_count: {n}
      red_team_count: {n}
+     active_dimensions: {n}
+     warning_threshold: {n}
      ```
    The YAML summary block enables downstream recipe steps to parse verdict and counts
    without re-reading prose.
 5. **Write `revision_guidance_{slug}_{YYYY-MM-DD_HHMMSS}.md`** — written ONLY when
    verdict = REVISE. Must include:
-   - Required revisions: critical findings with concrete, actionable fix descriptions
-   - Recommended revisions: warning findings
-   - Red-team findings with mitigation options
-   The `revision_guidance` path is passed back to `plan-experiment` in the recipe loop.
+   - Required revisions: critical findings with gap and risk descriptions (not implementation instructions)
+   - Recommended revisions: warning findings with gap and risk descriptions
+   - Red-team findings with risk descriptions and decision points
+   Revision guidance describes WHAT needs to change in the experimental design,
+   never HOW to implement the change. The `revision_guidance` path is passed back
+   to `plan-experiment` in the recipe loop.
 
 ### Step 8: Emit Output Tokens
 
@@ -401,7 +450,7 @@ All subagents must return findings in this JSON structure:
   "dimension": "estimand_clarity",
   "level": 1,
   "severity": "critical | warning | info",
-  "message": "{clear, actionable description of the issue}",
+  "message": "{describes what is lacking or at risk — never prescribes how to fix}",
   "requires_decision": false
 }
 ```

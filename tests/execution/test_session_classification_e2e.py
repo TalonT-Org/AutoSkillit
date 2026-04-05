@@ -163,7 +163,7 @@ class TestNdjsonStreamRobustness:
 
         assert skill.success is False
         assert skill.is_error is True
-        assert skill.subtype in {"empty_output", "unparseable"}
+        assert skill.subtype == "unparseable"
         assert skill.exit_code != 0
 
 

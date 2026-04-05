@@ -38,22 +38,6 @@ ingredients:
     description: "Set to 'true' when process-issues has already claimed this issue upfront. Allows claim_issue defense step to pass through without aborting."
     default: "false"
     hidden: true
-  defer_cleanup:
-    description: >-
-      When 'true', skip per-pipeline interactive cleanup and register this clone
-      in the shared registry for batch deletion after all parallel pipelines
-      complete. Set to 'true' on every parallel instance; leave 'false' for
-      sequential single-pipeline runs.
-    default: "false"
-    hidden: true
-  registry_path:
-    description: >-
-      Absolute path to the shared clone cleanup registry file. Required when
-      defer_cleanup=true. Must be identical across all parallel pipeline runs in
-      the same batch (use a fixed path like
-      /path/to/project/.autoskillit/temp/clone-cleanup-registry.json).
-    default: ""
-    hidden: true
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -360,7 +344,7 @@ steps:
       By default (open_pr=true), merge_target is the feature branch named from run_name.
       When open_pr=false, merge_target equals base_branch — merges go directly to base.
       test_gate failures route to fix (resolve-failures) for recovery;
-      all other failures route to cleanup_failure.
+      all other failures route to release_issue_failure.
 
   push:
     tool: push_to_remote
@@ -376,7 +360,7 @@ steps:
       By default (open_pr=true), this pushes the feature branch; when open_pr=false, pushes base_branch.
       Uses the pre-resolved remote_url captured at clone time, preserving clone isolation.
       On success, routes to open_pr_step (which opens the PR by default; skipped when open_pr=false).
-      On failure, cleanup_failure still removes the clone.
+      On failure, release_issue_failure registers the clone and escalates.
 
   fix:
     tool: run_skill
@@ -595,7 +579,7 @@ steps:
       (context.work_dir) has the feature branch (context.merge_target) checked out.
       The skill commits fixes and exits without merging; the orchestrator re-pushes
       via re_push. Retries up to 2 times (3 total attempts) before exhausting
-      to cleanup_failure.
+      to release_issue_failure.
 
   re_push:
     tool: push_to_remote
@@ -609,7 +593,7 @@ steps:
     note: >
       Pushes the CI-fixed feature branch back to the remote after resolve_ci succeeds.
       Routes back to ci_watch to verify the fix resolves CI. On push failure, escalates
-      via cleanup_failure.
+      via release_issue_failure.
 
   check_merge_queue:
     tool: run_cmd
@@ -700,7 +684,7 @@ steps:
     action: route
     on_result:
       - when: "${{ inputs.auto_merge }} != 'true'"
-        route: confirm_cleanup
+        route: register_clone_success
       - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true"
         route: enable_auto_merge
       - when: "${{ context.auto_merge_available }} == true"
@@ -715,11 +699,11 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "enable_auto_merge"
     on_success: wait_for_queue
-    on_failure: confirm_cleanup
+    on_failure: register_clone_success
     skip_when_false: "inputs.open_pr"
     note: >
       Submits the PR to the merge queue. On failure (PR not mergeable, already merged),
-      degrades to confirm_cleanup.
+      degrades to register_clone_success.
 
   wait_for_queue:
     tool: wait_for_merge_queue
@@ -745,7 +729,7 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Waits up to 15 minutes for the PR to merge through the queue.
-      merged → release_issue_success to transition issue state then confirm_cleanup.
+      merged → release_issue_success to transition issue state then register_clone_success.
       ejected → conflict fix cycle then re-enter.
       stalled → lightweight re-enrollment (disable then re-enable auto-merge).
       timeout → release_issue_timeout (release claim without staged label; merge unconfirmed).
@@ -814,12 +798,12 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "direct_merge"
     on_success: wait_for_direct_merge
-    on_failure: confirm_cleanup
+    on_failure: register_clone_success
     skip_when_false: "inputs.open_pr"
     note: >
       Enables GitHub native auto-merge for direct merge (no merge queue). GitHub
       merges automatically once all required checks pass. On failure (PR already
-      merged, not mergeable), degrades gracefully to confirm_cleanup.
+      merged, not mergeable), degrades gracefully to register_clone_success.
 
   wait_for_direct_merge:
     tool: run_cmd
@@ -900,13 +884,13 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "immediate_merge"
     on_success: wait_for_immediate_merge
-    on_failure: confirm_cleanup
+    on_failure: register_clone_success
     skip_when_false: "inputs.open_pr"
     note: >
       Merges the PR immediately using plain --squash when autoMergeAllowed=false.
       Unlike direct_merge, no --auto flag is used — GitHub executes the merge
       synchronously rather than queueing it for when checks pass. On failure
-      (conflict or not-mergeable error from GitHub), degrades to confirm_cleanup.
+      (conflict or not-mergeable error from GitHub), degrades to register_clone_success.
 
   wait_for_immediate_merge:
     tool: run_cmd
@@ -990,13 +974,13 @@ steps:
     skip_when_false: inputs.issue_url
     with:
       issue_url: ${{ inputs.issue_url }}
-    on_success: check_defer_cleanup
-    on_failure: check_defer_cleanup
+    on_success: register_clone_success
+    on_failure: register_clone_success
     note: >
       Called when wait_for_merge_queue times out or errors. Releases the in-progress
       claim without passing target_branch, so the staged label is not applied. The
       merge is unconfirmed; a human must verify queue state independently.
-      Routes to confirm_cleanup so the pipeline completes cleanly.
+      Routes to register_clone_success so the pipeline completes cleanly.
 
   detect_ci_conflict:
     tool: run_cmd
@@ -1047,13 +1031,13 @@ steps:
     with:
       issue_url: ${{ inputs.issue_url }}
       target_branch: ${{ inputs.base_branch }}
-    on_success: check_defer_cleanup
-    on_failure: check_defer_cleanup
+    on_success: register_clone_success
+    on_failure: register_clone_success
     note: >
       Called on the success path after PR merge is confirmed.
       Passes target_branch so release_issue can determine whether to apply the
       staged label (non-default target) or just remove in-progress (default target).
-      optional=true ensures pipeline still reaches confirm_cleanup if this step errors.
+      optional=true ensures pipeline still reaches register_clone_success if this step errors.
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"
@@ -1062,90 +1046,28 @@ steps:
     skip_when_false: inputs.issue_url
     with:
       issue_url: ${{ inputs.issue_url }}
-    on_success: check_defer_on_failure
-    on_failure: check_defer_on_failure
+    on_success: register_clone_failure
+    on_failure: register_clone_failure
 
-  check_defer_cleanup:
-    description: "Route to deferred or immediate cleanup on success path"
-    tool: run_python
-    with:
-      callable: "autoskillit.smoke_utils.check_cleanup_mode"
-      defer_cleanup: "${{ inputs.defer_cleanup }}"
-    on_result:
-      - when: "result.deferred == 'true'"
-        route: register_success_deferred
-      - route: confirm_cleanup
-    on_failure: confirm_cleanup
-
-  register_success_deferred:
-    description: "Register clone as cleanup candidate (deferred batch cleanup mode)"
+  register_clone_success:
+    description: "Register clone as cleanup candidate for batch deletion"
     tool: register_clone_status
     with:
       clone_path: "${{ context.work_dir }}"
       status: "success"
-      registry_path: "${{ inputs.registry_path }}"
-      step_name: register_success_deferred
+      step_name: register_clone_success
     on_success: done
     on_failure: done
 
-  check_defer_on_failure:
-    description: "Route to deferred or immediate cleanup on failure path"
-    tool: run_python
-    with:
-      callable: "autoskillit.smoke_utils.check_cleanup_mode"
-      defer_cleanup: "${{ inputs.defer_cleanup }}"
-    on_result:
-      - when: "result.deferred == 'true'"
-        route: register_error_deferred
-      - route: cleanup_failure
-    on_failure: cleanup_failure
-
-  register_error_deferred:
-    description: "Register clone as preserved (error pipeline — deferred mode)"
+  register_clone_failure:
+    description: "Register clone as preserved (error pipeline)"
     tool: register_clone_status
     with:
       clone_path: "${{ context.work_dir }}"
       status: "error"
-      registry_path: "${{ inputs.registry_path }}"
-      step_name: register_error_deferred
+      step_name: register_clone_failure
     on_success: escalate_stop
     on_failure: escalate_stop
-
-  confirm_cleanup:
-    action: confirm
-    message: >-
-      Implementation-groups pipeline succeeded! The clone at ${{ context.work_dir }} is preserved.
-      Delete it now? Keeping it lets you resume any session from this pipeline run.
-      Type yes to delete or no to keep.
-    on_success: delete_clone
-    on_failure: done
-    note: >-
-      User confirmation gate — preserves clone by default. On yes: delete_clone removes it.
-      On no: done is reached immediately, clone stays on disk.
-
-  delete_clone:
-    tool: remove_clone
-    with:
-      clone_path: "${{ context.work_dir }}"
-      keep: "false"
-      step_name: delete_clone
-    on_success: done
-    on_failure: done
-    note: >-
-      Reached only after user explicitly confirms cleanup. Sync-check hook gates deletion —
-      removal approved only when branch is pushed.
-
-  cleanup_failure:
-    tool: remove_clone
-    with:
-      clone_path: "${{ context.work_dir }}"
-      keep: "true"
-    on_success: escalate_stop
-    on_failure: escalate_stop
-    note: >
-      Clone preservation step — keep=true means the clone is never
-      auto-removed on failure. Remove manually: rm -rf {clone_path}.
-      Always routes to escalate_stop.
 
   done:
     action: stop
@@ -1155,24 +1077,3 @@ steps:
     action: stop
     message: "Pipeline failed — human intervention needed. Check the worktree and plan for details."
 
-  batch_confirm_cleanup:
-    action: confirm
-    message: >-
-      All parallel pipelines complete. Delete all registered successful clones?
-      Error pipeline clones will be preserved for investigation.
-      Type yes to delete or no to keep all.
-    note: >-
-      ORCHESTRATOR: Run this step ONCE after ALL parallel pipeline instances have
-      reached 'done' or 'escalate_stop'. Do NOT run per-pipeline instance.
-      Only applicable when run_mode=parallel and defer_cleanup=true.
-    on_success: batch_delete_clones
-    on_failure: done
-
-  batch_delete_clones:
-    description: "Delete all registered successful clones in one batch operation"
-    tool: batch_cleanup_clones
-    with:
-      registry_path: "${{ inputs.registry_path }}"
-      step_name: batch_delete_clones
-    on_success: done
-    on_failure: done

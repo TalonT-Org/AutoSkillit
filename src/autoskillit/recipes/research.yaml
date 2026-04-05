@@ -8,8 +8,11 @@ description: >
   Supports a skippable design review loop (bounded by retries: 2), review
   resolution routing after PR open, and a post-review re-validation loop that
   re-runs affected benchmarks when resolve-research-review produces rerun_required
-  escalations. No auto-merge.
-summary: scope > plan > [review?] > worktree > decompose > phases > experiment > report > open-pr > [review? > resolve > [re-run?] > push]
+  escalations. After the final push (or when review completes), an archival
+  phase separates research artifacts from experimental code: opens a clean
+  artifact-only PR, tags the experiment branch, and closes the original PR.
+  No auto-merge.
+summary: scope > plan > [review?] > worktree > decompose > phases > experiment > report > open-pr > [review? > resolve > [re-run?] > push] > archive
 
 ingredients:
   task:
@@ -70,6 +73,12 @@ kitchen_rules:
     PERMANENT ARTIFACTS: create_worktree commits the experiment plan
     to research/ and supporting artifacts (scope report, design evaluation)
     to research/artifacts/. These are permanent records in the PR.
+  - >
+    ARCHIVAL PHASE: After all review and re-validation cycles complete,
+    the pipeline extracts research/ into a clean artifact PR, tags the full
+    experiment branch under archive/research/, and closes the original PR.
+    Every archival step degrades gracefully — failures route to
+    research_complete without blocking the pipeline.
 
 steps:
   # --- DESIGN PHASE ---
@@ -390,18 +399,19 @@ steps:
       cwd: "${{ context.worktree_path }}"
       step_name: review_research_pr
     skip_when_false: inputs.review_pr
-    on_context_limit: research_complete
-    on_failure: research_complete
+    on_context_limit: begin_archival
+    on_failure: begin_archival
     on_result:
       - when: "${{ result.verdict }} == changes_requested"
         route: resolve_research_review
       - when: "${{ result.verdict }} == needs_human"
-        route: research_complete
-      - route: research_complete
+        route: begin_archival
+      - route: begin_archival
     note: >
       Optional research PR review step, gated by the review_pr ingredient.
       on_result handles verdict-based routing; changes_requested triggers
-      resolve_research_review -> re_push_research. All other verdicts complete.
+      resolve_research_review -> re_push_research. All other verdicts and
+      failures route to begin_archival for artifact extraction.
 
   resolve_research_review:
     tool: run_skill
@@ -412,10 +422,10 @@ steps:
     capture:
       needs_rerun: "${{ result.needs_rerun }}"
     retries: 2
-    on_exhausted: research_complete
-    on_context_limit: research_complete
+    on_exhausted: begin_archival
+    on_context_limit: begin_archival
     on_success: check_escalations
-    on_failure: research_complete
+    on_failure: begin_archival
 
   check_escalations:
     action: route
@@ -482,8 +492,126 @@ steps:
       cmd: "cd '${{ context.worktree_path }}' && git push"
       cwd: "${{ context.worktree_path }}"
       step_name: re_push_research
+    on_success: begin_archival
+    on_failure: begin_archival
+
+  # --- ARCHIVAL PHASE ---
+  begin_archival:
+    action: route
+    on_result:
+      - when: "${{ context.pr_url }}"
+        route: capture_experiment_branch
+      - route: research_complete
+    note: >
+      Gate step for the archival phase. Routes to artifact extraction when
+      a research PR exists, otherwise skips directly to completion. All paths
+      from review/resolve/re-push converge here.
+
+  capture_experiment_branch:
+    tool: run_cmd
+    with:
+      cmd: "git -C '${{ context.worktree_path }}' rev-parse --abbrev-ref HEAD"
+      cwd: "${{ context.worktree_path }}"
+      step_name: capture_experiment_branch
+    capture:
+      experiment_branch: "${{ result.stdout | trim }}"
+    on_success: create_artifact_branch
+    on_failure: research_complete
+
+  create_artifact_branch:
+    tool: run_cmd
+    with:
+      cmd: >
+        EXPERIMENT_BRANCH="${{ context.experiment_branch }}" &&
+        SLUG=$(printf '%s' "${EXPERIMENT_BRANCH}" | sed 's/^research-//') &&
+        ARTIFACT_BRANCH="research-artifacts-${SLUG}" &&
+        ARTIFACT_DIR="$(mktemp -d)" &&
+        trap 'git -C "${{ context.worktree_path }}" worktree remove "${ARTIFACT_DIR}" --force 2>/dev/null; rm -rf "${ARTIFACT_DIR}"' EXIT &&
+        git -C '${{ context.worktree_path }}' fetch origin '${{ inputs.base_branch }}' &&
+        (git -C '${{ context.worktree_path }}' branch -D "${ARTIFACT_BRANCH}" 2>/dev/null || true) &&
+        git -C '${{ context.worktree_path }}' worktree add "${ARTIFACT_DIR}" -b "${ARTIFACT_BRANCH}" "origin/${{ inputs.base_branch }}" &&
+        git -C "${ARTIFACT_DIR}" checkout "${EXPERIMENT_BRANCH}" -- research/ &&
+        cd "${ARTIFACT_DIR}" &&
+        git add research/ &&
+        git commit -m "Add research artifacts: ${SLUG}" &&
+        git push -u origin "${ARTIFACT_BRANCH}" &&
+        cd - > /dev/null &&
+        git -C '${{ context.worktree_path }}' worktree remove "${ARTIFACT_DIR}" --force &&
+        echo "artifact_branch=${ARTIFACT_BRANCH}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: create_artifact_branch
+    capture:
+      artifact_branch: "${{ result.artifact_branch }}"
+    on_success: open_artifact_pr
+    on_failure: research_complete
+    note: >
+      Creates a temporary worktree from the base branch, checks out only the
+      research/ directory from the experiment branch, commits and pushes, then
+      removes the temporary worktree. Produces a single clean commit with zero
+      production code changes.
+
+  open_artifact_pr:
+    tool: run_cmd
+    with:
+      cmd: >
+        EXPERIMENT="${{ context.experiment_branch }}" &&
+        ARTIFACT="${{ context.artifact_branch }}" &&
+        ORIG_PR="${{ context.pr_url }}" &&
+        PR_BODY=$(printf '## Research Artifacts\n\nCherry-picked from experiment branch `%s`.\n\nOriginal experiment PR: %s\n\nContains only files under `research/` — zero production code changes.' "${EXPERIMENT}" "${ORIG_PR}") &&
+        PR_URL=$(gh pr create
+        --head "${ARTIFACT}"
+        --base '${{ inputs.base_branch }}'
+        --title "Research artifacts: ${EXPERIMENT}"
+        --body "${PR_BODY}") &&
+        echo "artifact_pr_url=${PR_URL}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: open_artifact_pr
+    capture:
+      artifact_pr_url: "${{ result.artifact_pr_url }}"
+    on_success: tag_experiment_branch
+    on_failure: research_complete
+    note: >
+      Opens a PR containing only the research/ directory. The PR body references
+      the original experiment PR. This PR is safe to merge — no production code.
+
+  tag_experiment_branch:
+    tool: run_cmd
+    with:
+      cmd: >
+        TAG="archive/research/${{ context.experiment_branch }}" &&
+        ARTIFACT_PR="${{ context.artifact_pr_url }}" &&
+        git -C '${{ context.worktree_path }}' tag -a "${TAG}" '${{ context.experiment_branch }}'
+        -m "Research experiment: ${{ context.experiment_branch }}. Report merged via artifact PR ${ARTIFACT_PR}. Variant code preserved here for reference." &&
+        git -C '${{ context.worktree_path }}' push origin "${TAG}" &&
+        echo "archive_tag=${TAG}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: tag_experiment_branch
+    capture:
+      archive_tag: "${{ result.archive_tag }}"
+    on_success: close_experiment_pr
+    on_failure: research_complete
+    note: >
+      Creates an annotated tag preserving the full experiment branch (including
+      all variant code, benchmark scaffolding, etc.) under archive/research/.
+      Pushed to remote before any branch cleanup can occur.
+
+  close_experiment_pr:
+    tool: run_cmd
+    with:
+      cmd: >
+        ARTIFACT_PR="${{ context.artifact_pr_url }}" &&
+        ARCHIVE_TAG="${{ context.archive_tag }}" &&
+        CLOSE_BODY=$(printf '## Archived\n\nThis PR contained both research artifacts and experimental code.\n\n**Research record merged via:** %s\n**Full experiment branch preserved at:** `%s`\n\nThe artifact PR contains only files under `research/` (reports, scripts, results). The archive tag preserves the full experiment branch including variant code for reference.\n\nTo restore the full experiment: `git checkout %s`' "${ARTIFACT_PR}" "${ARCHIVE_TAG}" "${ARCHIVE_TAG}") &&
+        gh pr close '${{ context.pr_url }}' --comment "${CLOSE_BODY}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: close_experiment_pr
     on_success: research_complete
     on_failure: research_complete
+    note: >
+      Closes the original experiment PR with a structured comment linking to
+      the artifact PR (where research/ was merged) and the archive tag (where
+      the full experiment branch is preserved). Both success and failure route
+      to research_complete — closing the PR is best-effort.
 
   research_complete:
     action: stop

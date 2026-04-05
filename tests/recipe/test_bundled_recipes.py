@@ -1730,6 +1730,7 @@ def test_recipe_has_unconditional_register_steps(recipe_name: str) -> None:
     f = recipe.steps["register_clone_failure"]
     assert s.on_success == "done"
     assert f.on_success == "escalate_stop"
+    assert f.on_failure == "escalate_stop"
     assert "check_defer_cleanup" not in recipe.steps
     assert "check_defer_on_failure" not in recipe.steps
 

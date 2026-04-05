@@ -454,6 +454,8 @@ steps:
       skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
       cwd: "${{ context.worktree_path }}"
       step_name: re_write_report
+    capture:
+      report_path: "${{ result.report_path }}"
     on_success: re_test
     on_failure: re_push_research
     on_context_limit: re_push_research

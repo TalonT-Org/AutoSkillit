@@ -245,7 +245,7 @@ def test_compact_kv_four_token_prefixes() -> None:
     assert "total_cache_read:" in result
     assert "total_cache_write:" in result
     assert "in:" not in result
-    assert "cached:" not in result
+    assert " cached:" not in result
     assert "total_in:" not in result
     assert "total_cached:" not in result
 

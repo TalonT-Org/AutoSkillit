@@ -376,13 +376,14 @@ def test_format_get_token_summary_compact():
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "token_summary" in text
-    # Assert specific compact line format: name xN [in:Xk out:Xk cached:XM t:Xs]
-    assert "investigate x1 [in:45.2k out:12.8k cached:1.2M t:0.0s]" in text
-    assert "make_plan x2 [in:30.0k out:8.0k cached:500.0k t:0.0s]" in text
-    assert "implement x1 [in:60.0k out:15.0k cached:2.0M t:0.0s]" in text
-    assert "total_in:" in text
+    # Assert specific compact line format: name xN [uc:Xk out:Xk cr:XM cw:XM t:Xs]
+    assert "investigate x1 [uc:45.2k out:12.8k cr:1.2M cw:0 t:0.0s]" in text
+    assert "make_plan x2 [uc:30.0k out:8.0k cr:0 cw:500.0k t:0.0s]" in text
+    assert "implement x1 [uc:60.0k out:15.0k cr:2.0M cw:0 t:0.0s]" in text
+    assert "total_uncached:" in text
     assert "total_out:" in text
-    assert "total_cached:" in text
+    assert "total_cache_read:" in text
+    assert "total_cache_write:" in text
 
 
 # PHK-16

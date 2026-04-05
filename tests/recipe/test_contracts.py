@@ -614,8 +614,6 @@ ALWAYS_WRITE_SKILLS = {
     "dry-walkthrough",
     "implement-worktree",
     "implement-worktree-no-merge",
-    "resolve-review",
-    "retry-worktree",
     "rectify",
     "make-plan",
     "report-bug",
@@ -642,6 +640,8 @@ CONDITIONAL_WRITE_SKILLS: dict[str, str] = {
     # skill_name → substring that must appear in write_expected_when patterns
     "resolve-failures": "fixes_applied",
     "resolve-merge-conflicts": "conflict_report_path",
+    "resolve-review": "fixes_applied",
+    "retry-worktree": "phases_implemented",
 }
 
 

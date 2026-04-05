@@ -194,6 +194,64 @@ class TestZeroWriteDetection:
         assert sr.retry_reason == RetryReason.ZERO_WRITES
 
 
+    def test_conditional_all_phases_done_not_demoted(self) -> None:
+        """retry-worktree with 'phases_implemented = 0' output → success preserved.
+
+        When called on a worktree where all phases are already complete,
+        retry-worktree emits 'phases_implemented = 0' and the gate must NOT fire.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": (
+                "worktree_path = /tmp/wt\nbranch_name = feature/123\n"
+                "phases_implemented = 0\nAll phases already complete.\n%%ORDER_UP%%"
+            ),
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:retry-worktree /tmp/plan.md /tmp/wt",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"phases_implemented\s*=\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, (
+            "All-phases-done worktree (phases_implemented = 0) must NOT be demoted to zero_writes."
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_conditional_no_pr_found_not_demoted(self) -> None:
+        """resolve-review graceful degradation (no PR found) → success preserved.
+
+        When no PR is found, resolve-review exits 0 with no writes and no
+        fixes_applied token. The conditional gate must not fire (no match → write not expected).
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "No PR found or gh unavailable — skipping review resolution\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-review feature-branch main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"fixes_applied\s*=\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, (
+            "No-PR graceful degradation (no fixes_applied token) must NOT be demoted."
+        )
+        assert sr.subtype != "zero_writes"
+
+
 class TestWriteCallCountPropagation:
     """write_call_count must be accurately computed and propagated."""
 

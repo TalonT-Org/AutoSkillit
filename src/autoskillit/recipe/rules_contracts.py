@@ -281,17 +281,17 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
         if "${{" in skill_cmd:
             continue
 
-        skill_name = resolve_skill_name(skill_cmd)
-        if not skill_name:
+        name = resolve_skill_name(skill_cmd)
+        if not name:
             continue
 
-        contract = get_skill_contract(skill_name, manifest)
+        contract = get_skill_contract(name, manifest)
         if contract is None or contract.write_behavior != "always":
             continue
 
         # Locate the skill's SKILL.md
         for skills_dir in ("skills", "skills_extended"):
-            skill_md = pkg_root() / skills_dir / skill_name / "SKILL.md"
+            skill_md = pkg_root() / skills_dir / name / "SKILL.md"
             if skill_md.exists():
                 try:
                     content = skill_md.read_text(encoding="utf-8").lower()
@@ -305,7 +305,7 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
                                 severity=Severity.ERROR,
                                 step_name=step_name,
                                 message=(
-                                    f"Skill '{skill_name}' declares write_behavior='always' "
+                                    f"Skill '{name}' declares write_behavior='always' "
                                     f"but its SKILL.md contains phrase matching '{phrase}', "
                                     f"suggesting a legitimate no-write success path. "
                                     f"Change to write_behavior='conditional' with a "

@@ -38,6 +38,7 @@ class RetryReason(StrEnum):
     CONTRACT_RECOVERY = (
         "contract_recovery"  # marker present + write evidence — omission not structural
     )
+    CLONE_CONTAMINATION = "clone_contamination"
 
 
 class MergeFailedStep(StrEnum):

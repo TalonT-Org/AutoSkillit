@@ -47,7 +47,7 @@ class TestRunSkillSessionOutcome:
             }
         )
         tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is True
         assert result["retry_reason"] == RetryReason.RESUME
 
@@ -64,7 +64,7 @@ class TestRunSkillSessionOutcome:
             }
         )
         tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is True
         assert result["retry_reason"] == RetryReason.RESUME
 
@@ -88,7 +88,7 @@ class TestRunSkillSessionOutcome:
         )
         stdout = assistant + "\n" + result_record
         tool_ctx.runner.push(_make_result(0, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is False
         assert result["retry_reason"] == RetryReason.NONE
 
@@ -105,14 +105,14 @@ class TestRunSkillSessionOutcome:
             }
         )
         tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is False
 
     @pytest.mark.anyio
     async def test_unparseable_stdout_not_retriable(self, tool_ctx):
         """Non-JSON stdout -> needs_retry=False."""
         tool_ctx.runner.push(_make_result(1, "crash dump", "segfault"))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is False
 
 
@@ -149,7 +149,7 @@ class TestRunSkillAgentResult:
             }
         )
         tool_ctx.runner.push(_make_result(0, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["result"] == "Done."
 
 

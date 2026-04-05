@@ -415,12 +415,13 @@ class TestSmokeScriptValidation:
 
     def test_smoke_test_exists_in_project_local(self) -> None:
         """smoke-test.yaml must exist in the project-local recipes directory."""
-        assert SMOKE_SCRIPT.exists()
+        assert SMOKE_SCRIPT.exists(), f"Expected smoke-test at {SMOKE_SCRIPT}"
 
     async def test_smoke_test_source_is_project(self, smoke_project: Path) -> None:
         """smoke-test must be listed with source PROJECT, not BUILTIN."""
         result = json.loads(await list_recipes())
-        smoke = next(r for r in result["recipes"] if r["name"] == "smoke-test")
+        smoke = next((r for r in result["recipes"] if r["name"] == "smoke-test"), None)
+        assert smoke is not None, "smoke-test not found in list_recipes output"
         assert smoke["source"] == "project"
 
     async def test_smoke_test_invisible_from_external_project(

@@ -12,9 +12,10 @@ from autoskillit.core import TerminalColumn, _render_terminal_table
 
 _TOKEN_COLUMNS = (
     TerminalColumn("STEP", max_width=40, align="<"),
-    TerminalColumn("INPUT", max_width=10, align=">"),
+    TerminalColumn("UNCACHED", max_width=10, align=">"),
     TerminalColumn("OUTPUT", max_width=10, align=">"),
-    TerminalColumn("CACHED", max_width=10, align=">"),
+    TerminalColumn("CACHE_RD", max_width=10, align=">"),
+    TerminalColumn("CACHE_WR", max_width=10, align=">"),
     TerminalColumn("COUNT", max_width=7, align=">"),
     TerminalColumn("TIME", max_width=8, align=">"),
 )
@@ -64,28 +65,29 @@ class TelemetryFormatter:
         lines = [
             "## Token Usage Summary",
             "",
-            "| Step | input | output | cached | count | time |",
-            "|------|-------|--------|--------|-------|------|",
+            "| Step | uncached | output | cache_read | cache_write | count | time |",
+            "|------|----------|--------|------------|-------------|-------|------|",
         ]
         for step in steps:
             name = step.get("step_name", "?")
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
-            cached = h(
-                step.get("cache_read_input_tokens", 0) + step.get("cache_creation_input_tokens", 0)
-            )
+            cache_rd = h(step.get("cache_read_input_tokens", 0))
+            cache_wr = h(step.get("cache_creation_input_tokens", 0))
             count = step.get("invocation_count", 1)
             wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
-            lines.append(f"| {name} | {inp} | {out} | {cached} | {count} | {fmt_dur(wc)} |")
+            lines.append(
+                f"| {name} | {inp} | {out} | {cache_rd} | {cache_wr} | {count} | {fmt_dur(wc)} |"
+            )
 
         total_in = h(total.get("input_tokens", 0))
         total_out = h(total.get("output_tokens", 0))
-        total_cached = h(
-            total.get("cache_read_input_tokens", 0) + total.get("cache_creation_input_tokens", 0)
-        )
+        total_cache_rd = h(total.get("cache_read_input_tokens", 0))
+        total_cache_wr = h(total.get("cache_creation_input_tokens", 0))
         total_time = total.get("total_elapsed_seconds", 0.0)
         lines.append(
-            f"| **Total** | {total_in} | {total_out} | {total_cached} | | {fmt_dur(total_time)} |"
+            f"| **Total** | {total_in} | {total_out} | {total_cache_rd}"
+            f" | {total_cache_wr} | | {fmt_dur(total_time)} |"
         )
         return "\n".join(lines)
 
@@ -116,17 +118,15 @@ class TelemetryFormatter:
         h = TelemetryFormatter._humanize
         fmt_dur = TelemetryFormatter._fmt_duration
 
-        rows: list[tuple[str, str, str, str, str, str]] = []
+        rows: list[tuple[str, str, str, str, str, str, str]] = []
         for step in steps:
             rows.append(
                 (
                     step.get("step_name", "?"),
                     h(step.get("input_tokens", 0)),
                     h(step.get("output_tokens", 0)),
-                    h(
-                        step.get("cache_read_input_tokens", 0)
-                        + step.get("cache_creation_input_tokens", 0)
-                    ),
+                    h(step.get("cache_read_input_tokens", 0)),
+                    h(step.get("cache_creation_input_tokens", 0)),
                     str(step.get("invocation_count", 1)),
                     fmt_dur(step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))),
                 )
@@ -136,10 +136,8 @@ class TelemetryFormatter:
             "Total",
             h(total.get("input_tokens", 0)),
             h(total.get("output_tokens", 0)),
-            h(
-                total.get("cache_read_input_tokens", 0)
-                + total.get("cache_creation_input_tokens", 0)
-            ),
+            h(total.get("cache_read_input_tokens", 0)),
+            h(total.get("cache_creation_input_tokens", 0)),
             "",
             fmt_dur(total.get("total_elapsed_seconds", 0.0)),
         )
@@ -177,19 +175,18 @@ class TelemetryFormatter:
             count = step.get("invocation_count", 1)
             inp = h(step.get("input_tokens", 0))
             out = h(step.get("output_tokens", 0))
-            cached = h(
-                step.get("cache_read_input_tokens", 0) + step.get("cache_creation_input_tokens", 0)
-            )
+            cache_rd = h(step.get("cache_read_input_tokens", 0))
+            cache_wr = h(step.get("cache_creation_input_tokens", 0))
             wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
-            lines.append(f"{name} x{count} [in:{inp} out:{out} cached:{cached} t:{wc:.1f}s]")
+            lines.append(
+                f"{name} x{count} [uc:{inp} out:{out} cr:{cache_rd} cw:{cache_wr} t:{wc:.1f}s]"
+            )
         if total:
             lines.append("")
-            lines.append(f"total_in: {h(total.get('input_tokens', 0))}")
+            lines.append(f"total_uncached: {h(total.get('input_tokens', 0))}")
             lines.append(f"total_out: {h(total.get('output_tokens', 0))}")
-            cache_tokens = total.get("cache_read_input_tokens", 0) + total.get(
-                "cache_creation_input_tokens", 0
-            )
-            lines.append(f"total_cached: {h(cache_tokens)}")
+            lines.append(f"total_cache_read: {h(total.get('cache_read_input_tokens', 0))}")
+            lines.append(f"total_cache_write: {h(total.get('cache_creation_input_tokens', 0))}")
         if mcp_responses:
             mcp_total = mcp_responses.get("total", {})
             if mcp_total:

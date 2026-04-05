@@ -114,11 +114,14 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     token_usage = data.get("token_usage")
     if isinstance(token_usage, dict):
         lines.append("")
-        lines.append(f"tokens_in: {_fmt_tokens(token_usage.get('input_tokens'))}")
+        lines.append(f"tokens_uncached: {_fmt_tokens(token_usage.get('input_tokens'))}")
         lines.append(f"tokens_out: {_fmt_tokens(token_usage.get('output_tokens'))}")
         cr = token_usage.get("cache_read_input_tokens", 0)
         if cr:
-            lines.append(f"tokens_cached: {_fmt_tokens(cr)}")
+            lines.append(f"tokens_cache_read: {_fmt_tokens(cr)}")
+        cw = token_usage.get("cache_creation_input_tokens", 0)
+        if cw:
+            lines.append(f"tokens_cache_write: {_fmt_tokens(cw)}")
     result = data.get("result", "")
     if result:
         lines.extend(["", "### Result", result])
@@ -252,20 +255,21 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
         count = step.get("invocation_count", 1)
         inp = _fmt_tokens(step.get("input_tokens", 0))
         out = _fmt_tokens(step.get("output_tokens", 0))
-        cached = _fmt_tokens(
-            step.get("cache_read_input_tokens", 0) + step.get("cache_creation_input_tokens", 0)
-        )
+        cache_rd = _fmt_tokens(step.get("cache_read_input_tokens", 0))
+        cache_wr = _fmt_tokens(step.get("cache_creation_input_tokens", 0))
         wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
-        lines.append(f"{name} x{count} [in:{inp} out:{out} cached:{cached} t:{wc:.1f}s]")
+        lines.append(
+            f"{name} x{count} [uc:{inp} out:{out} cr:{cache_rd} cw:{cache_wr} t:{wc:.1f}s]"
+        )
     total = data.get("total", {})
     if total:
         lines.append("")
-        lines.append(f"total_in: {_fmt_tokens(total.get('input_tokens', 0))}")
+        lines.append(f"total_uncached: {_fmt_tokens(total.get('input_tokens', 0))}")
         lines.append(f"total_out: {_fmt_tokens(total.get('output_tokens', 0))}")
-        cache_tokens = total.get("cache_read_input_tokens", 0) + total.get(
-            "cache_creation_input_tokens", 0
+        lines.append(f"total_cache_read: {_fmt_tokens(total.get('cache_read_input_tokens', 0))}")
+        lines.append(
+            f"total_cache_write: {_fmt_tokens(total.get('cache_creation_input_tokens', 0))}"
         )
-        lines.append(f"total_cached: {_fmt_tokens(cache_tokens)}")
     mcp = data.get("mcp_responses", {})
     mcp_total = mcp.get("total", {})
     if mcp_total:

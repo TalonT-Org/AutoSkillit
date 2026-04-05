@@ -376,13 +376,14 @@ def test_format_get_token_summary_compact():
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "token_summary" in text
-    # Assert specific compact line format: name xN [in:Xk out:Xk cached:XM t:Xs]
-    assert "investigate x1 [in:45.2k out:12.8k cached:1.2M t:0.0s]" in text
-    assert "make_plan x2 [in:30.0k out:8.0k cached:500.0k t:0.0s]" in text
-    assert "implement x1 [in:60.0k out:15.0k cached:2.0M t:0.0s]" in text
-    assert "total_in:" in text
+    # Assert specific compact line format: name xN [uc:Xk out:Xk cr:XM cw:XM t:Xs]
+    assert "investigate x1 [uc:45.2k out:12.8k cr:1.2M cw:0 t:0.0s]" in text
+    assert "make_plan x2 [uc:30.0k out:8.0k cr:0 cw:500.0k t:0.0s]" in text
+    assert "implement x1 [uc:60.0k out:15.0k cr:2.0M cw:0 t:0.0s]" in text
+    assert "total_uncached:" in text
     assert "total_out:" in text
-    assert "total_cached:" in text
+    assert "total_cache_read:" in text
+    assert "total_cache_write:" in text
 
 
 # PHK-16
@@ -1268,6 +1269,60 @@ def test_hook_token_summary_output_equivalent_to_canonical():
         f"Hook and canonical formatter produce different output:\n"
         f"HOOK:\n{hook_output}\n\nCANONICAL:\n{canonical_output}"
     )
+
+
+def test_fmt_run_skill_interactive_shows_four_token_fields():
+    """_fmt_run_skill interactive mode shows all 4 token fields."""
+    data = {
+        "success": True,
+        "subtype": "COMPLETED",
+        "exit_code": 0,
+        "needs_retry": False,
+        "result": "done",
+        "token_usage": {
+            "input_tokens": 5000,
+            "output_tokens": 3000,
+            "cache_read_input_tokens": 200000,
+            "cache_creation_input_tokens": 8000,
+        },
+    }
+    rendered = _format_response(
+        "mcp__plugin_autoskillit_autoskillit__run_skill",
+        json.dumps({"result": json.dumps(data)}),
+        pipeline=False,
+    )
+    assert rendered is not None
+    assert "tokens_uncached:" in rendered
+    assert "tokens_out:" in rendered
+    assert "tokens_cache_read:" in rendered
+    assert "tokens_cache_write:" in rendered
+
+
+def test_fmt_run_skill_suppresses_zero_cache_fields():
+    """_fmt_run_skill suppresses tokens_cache_read and tokens_cache_write when both are 0."""
+    data = {
+        "success": True,
+        "subtype": "COMPLETED",
+        "exit_code": 0,
+        "needs_retry": False,
+        "result": "done",
+        "token_usage": {
+            "input_tokens": 5000,
+            "output_tokens": 3000,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+        },
+    }
+    rendered = _format_response(
+        "mcp__plugin_autoskillit_autoskillit__run_skill",
+        json.dumps({"result": json.dumps(data)}),
+        pipeline=False,
+    )
+    assert rendered is not None
+    assert "tokens_uncached:" in rendered
+    assert "tokens_out:" in rendered
+    assert "tokens_cache_read:" not in rendered
+    assert "tokens_cache_write:" not in rendered
 
 
 # ---------------------------------------------------------------------------

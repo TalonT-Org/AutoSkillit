@@ -57,6 +57,9 @@ class TestFormatTokenTable:
         result = TelemetryFormatter.format_token_table(_STEPS, _TOTAL)
         assert "| Step |" in result
         assert "|---" in result
+        assert "| uncached |" in result
+        assert "| cache_read |" in result
+        assert "| cache_write |" in result
         assert "- input_tokens:" not in result
         assert "# Token Summary" not in result
 
@@ -121,10 +124,10 @@ class TestFormatTokenTable:
             [
                 "## Token Usage Summary",
                 "",
-                "| Step | input | output | cached | count | time |",
-                "|------|-------|--------|--------|-------|------|",
-                "| plan | 1.0k | 500 | 300 | 1 | 46s |",
-                "| **Total** | 1.0k | 500 | 300 | | 46s |",
+                "| Step | uncached | output | cache_read | cache_write | count | time |",
+                "|------|----------|--------|------------|-------------|-------|------|",
+                "| plan | 1.0k | 500 | 200 | 100 | 1 | 46s |",
+                "| **Total** | 1.0k | 500 | 200 | 100 | | 46s |",
             ]
         )
         assert result == expected
@@ -224,6 +227,29 @@ def test_format_timing_table_terminal_output_has_leading_indent() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_terminal_table_has_four_token_columns() -> None:
+    """Terminal table must show UNCACHED, CACHE_RD, CACHE_WR column headers."""
+    result = TelemetryFormatter.format_token_table_terminal(_STEPS, _TOTAL)
+    assert "UNCACHED" in result
+    assert "CACHE_RD" in result
+    assert "CACHE_WR" in result
+
+
+def test_compact_kv_four_token_prefixes() -> None:
+    """Compact KV format must use uc:, cr:, cw: prefixes and split totals."""
+    result = TelemetryFormatter.format_compact_kv(_STEPS, _TOTAL)
+    assert "uc:" in result
+    assert "cr:" in result
+    assert "cw:" in result
+    assert "total_uncached:" in result
+    assert "total_cache_read:" in result
+    assert "total_cache_write:" in result
+    assert "in:" not in result
+    assert " cached:" not in result
+    assert "total_in:" not in result
+    assert "total_cached:" not in result
+
+
 class TestFormatCompactKv:
     def test_produces_compact_lines(self) -> None:
         result = TelemetryFormatter.format_compact_kv(_STEPS, _TOTAL)
@@ -233,14 +259,15 @@ class TestFormatCompactKv:
 
     def test_includes_humanized_tokens(self) -> None:
         result = TelemetryFormatter.format_compact_kv(_STEPS, _TOTAL)
-        assert "in:7.0k" in result
+        assert "uc:7.0k" in result
         assert "out:5.9k" in result
 
     def test_includes_total_lines(self) -> None:
         result = TelemetryFormatter.format_compact_kv(_STEPS, _TOTAL)
-        assert "total_in:" in result
+        assert "total_uncached:" in result
         assert "total_out:" in result
-        assert "total_cached:" in result
+        assert "total_cache_read:" in result
+        assert "total_cache_write:" in result
 
     def test_prefers_wall_clock_seconds(self) -> None:
         result = TelemetryFormatter.format_compact_kv(_STEPS, _TOTAL)

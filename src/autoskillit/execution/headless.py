@@ -60,6 +60,19 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_CHANNEL_B_RECOVERABLE_SUBTYPES: frozenset[CliSubtype] = frozenset(
+    {CliSubtype.UNPARSEABLE, CliSubtype.EMPTY_OUTPUT}
+)
+"""Subtypes eligible for Channel B drain-race recovery.
+
+These are the failure subtypes that can arise when Claude Code defers ``type=result``
+until all background agents finish.  The deferred record is never flushed if the
+process tree is killed after Channel B fires on the session JSONL marker.
+
+TIMEOUT is excluded — it indicates a genuine time limit breach, not a drain-race.
+UNKNOWN is excluded — it indicates unrecognised CLI behaviour, not a missing record.
+"""
+
 
 def _session_log_dir(cwd: str) -> Path:
     """Derive Claude Code session log directory from project cwd."""
@@ -547,6 +560,38 @@ def _build_skill_result(
 
     # Moved earlier: needed by synthesis recovery step before _compute_outcome.
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
+
+    # ── Channel B drain-race recovery ──────────────────────────────────────
+    # When Channel B confirmed completion but stdout never received the
+    # type=result record (UNPARSEABLE / EMPTY_OUTPUT), the session completed
+    # but Claude Code deferred type=result until all background agents finished.
+    # If we killed the process tree after Channel B fired, the deferred record
+    # was never flushed to stdout.
+    #
+    # assistant_messages are accumulated from stdout NDJSON records of type
+    # "assistant" — these are written BEFORE the deferred type=result. If the
+    # completion marker is standalone in assistant_messages with substantive
+    # content, reconstruct the result and promote the session so downstream
+    # recovery paths and the Channel B bypass in _compute_success operate on
+    # valid state.
+    if (
+        result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        and session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES
+        and completion_marker
+    ):
+        cb_recovered = _recover_from_separate_marker(session, completion_marker)
+        if cb_recovered is not None:
+            original_subtype = session.subtype
+            session = dataclasses.replace(
+                cb_recovered,
+                subtype=CliSubtype.SUCCESS,
+                is_error=False,
+            )
+            logger.warning(
+                "channel_b_drain_race_recovery",
+                original_subtype=str(original_subtype),
+                assistant_message_count=len(session.assistant_messages),
+            )
 
     # Recovery is only valid for sessions that completed normally.
     # For incomplete sessions (UNPARSEABLE, TIMEOUT, etc.), any Write calls were

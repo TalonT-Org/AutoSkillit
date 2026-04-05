@@ -504,6 +504,15 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                     "skill_command", ""
                 ):
                     continue
+                # Exempt write-report report_path captures in terminal re-validation steps:
+                # when report_path is captured from write-report but no downstream step
+                # references it (e.g. re_write_report in a post-review re-validation loop
+                # that routes directly to test then push), the capture satisfies the
+                # implicit-handoff contract for observability — not downstream threading.
+                if cap_key == "report_path" and "write-report" in step.with_args.get(
+                    "skill_command", ""
+                ):
+                    continue
                 warnings.append(
                     DataFlowWarning(
                         code="DEAD_OUTPUT",

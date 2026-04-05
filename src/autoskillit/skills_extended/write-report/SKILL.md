@@ -109,6 +109,24 @@ The report structure:
 
 ## Executive Summary
 
+### Data Scope Statement (mandatory — include at start of Executive Summary)
+
+Every report must begin the Executive Summary with a Data Scope Statement:
+
+> **Data Scope:** All benchmarks were conducted on {comma-separated list of data types
+> used, e.g., "synthetic Gaussian blobs (10K–100K points)"}. {Domain target} data was
+> {present and used | absent — all results derive from synthetic data | partial — only
+> {subset} was available}.
+
+**Rules:**
+- If ALL benchmarks used ONLY synthetic data and the research task was domain-specific:
+  state this explicitly. Do not claim domain-specific performance improvements derived
+  from synthetic data without this qualifier.
+- If some hypotheses were marked N/A or BLOCKED due to missing data: state which
+  hypotheses were affected and why.
+- Read the experiment plan's `data_manifest` (if available) to determine what data was
+  planned vs. what was actually used.
+
 {2-3 paragraph overview: what was investigated, key methodology, headline
 finding, and recommendation. Written last, placed first.}
 
@@ -139,6 +157,24 @@ enough detail for independent reproduction.}
 format best represents the measurements. No interpretation in this
 section — just facts.}
 
+### Metrics Provenance Check (mandatory before including any metrics)
+
+Before including data from any `*_metrics.json` file:
+
+1. **Check generation timestamp**: The file's modification time must be within the
+   current experiment's execution window. If the file predates the experiment run,
+   it is stale.
+2. **Check content relevance**: Verify the metrics file's contents relate to the
+   hypotheses under test. If a metrics file contains data from a different subsystem
+   or experiment, it is irrelevant.
+3. **Disposition:**
+   - **Current and relevant**: Include normally.
+   - **Stale**: Disclose in the report: "Note: {filename} predates the current
+     experiment run and was not regenerated. Excluded from analysis."
+   - **Irrelevant**: Disclose: "Note: {filename} contains {description of actual
+     contents} which is unrelated to the hypotheses under test. Excluded."
+   - **NEVER** silently drop a metrics file. Always disclose the reason for exclusion.
+
 ### Standardized Metrics
 
 {Include this section when `*_metrics.json` files are present in
@@ -155,6 +191,22 @@ and whether it is within acceptable range for the experiment's scope.}
 
 {Notable patterns, anomalies, unexpected behaviors discovered during
 the experiment.}
+
+### Gate Enforcement (mandatory for all hypothesis results)
+
+When reporting on pre-specified hypothesis gates:
+
+1. **Use the gate threshold from the experiment plan**, not a different hypothesis's
+   threshold. Each hypothesis has its own pre-specified success criterion — do not
+   conflate them.
+2. **When a gate is NOT met**: State this as a failure. Example: "H6 targeted ≥3×
+   speedup at n=100K. Measured: 2.04× at n=50K (estimated ~1.95× at n=100K). **FAIL.**"
+3. **When recommending GO**: The GO recommendation must reference the specific gate(s)
+   that were met and their measured values. A GO on H1 (which has a ≥1.5× threshold)
+   does not satisfy H6 (which has a ≥3× threshold).
+4. **NEVER** silently substitute one hypothesis's threshold for another. If H6's gate
+   is not met, H6 is a FAIL regardless of whether H1's lower threshold was met by the
+   same measurement.
 
 ## Analysis
 

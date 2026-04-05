@@ -1940,7 +1940,7 @@ class TestResearchRecipeStructure:
         step = recipe.steps["resolve_research_review"]
         assert step.retries == 2
         assert step.on_exhausted == "research_complete"
-        assert step.on_success == "re_push_research"
+        assert step.on_success == "check_escalations"
         assert step.on_failure == "research_complete"
 
     def test_has_re_push_research_step(self, recipe) -> None:
@@ -1993,3 +1993,65 @@ class TestResearchRecipeStructure:
 
         errors = validate_recipe(recipe)
         assert errors == [], f"Validation errors: {errors}"
+
+    def test_requires_packs_includes_exp_lens(self, recipe) -> None:
+        assert "exp-lens" in recipe.requires_packs
+        assert "research" in recipe.requires_packs
+
+    def test_resolve_research_review_captures_needs_rerun(self, recipe) -> None:
+        step = recipe.steps["resolve_research_review"]
+        assert "needs_rerun" in step.capture
+        assert "result.needs_rerun" in step.capture["needs_rerun"]
+
+    def test_resolve_research_review_routes_to_check_escalations(self, recipe) -> None:
+        step = recipe.steps["resolve_research_review"]
+        assert step.on_success == "check_escalations"
+
+    def test_check_escalations_step_exists(self, recipe) -> None:
+        assert "check_escalations" in recipe.steps
+        step = recipe.steps["check_escalations"]
+        assert step.action == "route"
+
+    def test_check_escalations_routes_rerun_on_needs_rerun(self, recipe) -> None:
+        step = recipe.steps["check_escalations"]
+        assert step.on_result is not None
+        conditions = step.on_result.conditions
+        rerun_route = next(
+            (c for c in conditions if c.when and "needs_rerun" in c.when and "true" in c.when),
+            None,
+        )
+        assert rerun_route is not None
+        assert rerun_route.route == "re_run_experiment"
+
+    def test_check_escalations_default_routes_to_push(self, recipe) -> None:
+        step = recipe.steps["check_escalations"]
+        conditions = step.on_result.conditions
+        default = next((c for c in conditions if not c.when), None)
+        assert default is not None
+        assert default.route == "re_push_research"
+
+    def test_re_run_experiment_step(self, recipe) -> None:
+        assert "re_run_experiment" in recipe.steps
+        step = recipe.steps["re_run_experiment"]
+        assert step.tool == "run_skill"
+        assert "--adjust" in step.with_args.get("skill_command", "")
+        assert step.on_success == "re_write_report"
+
+    def test_re_write_report_step(self, recipe) -> None:
+        assert "re_write_report" in recipe.steps
+        step = recipe.steps["re_write_report"]
+        assert step.tool == "run_skill"
+        assert step.on_success == "re_test"
+
+    def test_re_test_step(self, recipe) -> None:
+        assert "re_test" in recipe.steps
+        step = recipe.steps["re_test"]
+        assert step.tool == "test_check"
+        assert step.on_success == "re_push_research"
+
+    def test_revalidation_loop_all_paths_reach_research_complete(self, recipe) -> None:
+        """Every path from check_escalations reaches research_complete."""
+        for step_name in ("re_run_experiment", "re_write_report", "re_test"):
+            step = recipe.steps[step_name]
+            assert step.on_failure in ("research_complete", "re_push_research")
+        assert recipe.steps["re_push_research"].on_success == "research_complete"

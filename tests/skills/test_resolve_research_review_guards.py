@@ -322,3 +322,9 @@ def test_dimension_groups_file_documented() -> None:
     assert "dimension_groups_" in text or "dimension_groups" in text, (
         "SKILL.md must document dimension_groups_{pr}.json temp file"
     )
+
+
+def test_needs_rerun_structured_output_documented() -> None:
+    text = SKILL_PATH.read_text()
+    assert "needs_rerun" in text
+    assert "needs_rerun = " in text  # emit instruction format

@@ -391,9 +391,37 @@ Exit 0.
 └── report_{pr}_{ts}.md
 ```
 
+## Structured Output
+
+After completing all thread processing (addressed + escalated), emit a single structured
+output token:
+
+```
+needs_rerun = {true|false}
+```
+
+- **`true`**: At least one finding was classified as `rerun_required` in the escalation
+  records (i.e., the fix changes code that affects measurement — benchmark code, analysis
+  scripts, normalization logic — and results must be re-validated).
+- **`false`**: No `rerun_required` escalations exist. May still have `design_flaw`
+  escalations (these are informational and do not require re-running benchmarks).
+
+**Determination logic:** After writing `escalation_records_{pr}.json`, check whether any
+entry has `"strategy": "rerun_required"`. If yes → `true`. If no entries or all entries
+are `design_flaw` → `false`.
+
+This token is mandatory. The recipe captures it to route between re-validation
+(re-run affected benchmarks) and direct push.
+
 ## Output
 
-No structured output tokens are emitted. Exit code drives recipe routing
-(on_success → re_push_research, on_failure → research_complete).
+Emit the structured output token as the very last line before `%%ORDER_UP%%`:
+
+> **IMPORTANT:** Emit the token as **literal plain text with no code fences, no markdown formatting**. The recipe capture system reads raw stdout.
+
+```
+needs_rerun = {true|false}
+%%ORDER_UP%%
+```
 
 Summary: `.autoskillit/temp/resolve-research-review/report_{pr}_{ts}.md` (relative to the current working directory)

@@ -130,12 +130,60 @@ def test_verdict_stop_on_l1_critical(skill_text):
     )
 
 
-def test_verdict_revise_threshold_defined(skill_text):
-    """REVISE threshold (≥3 warnings or any non-L1 critical) must be present."""
-    assert "REVISE" in skill_text
-    # Assert the precise threshold expression, not just the digit 3
-    assert ">= 3" in skill_text or "len(warning_findings) >= 3" in skill_text, (
-        "REVISE threshold must be encoded as '>= 3' or 'len(warning_findings) >= 3'"
+def test_verdict_proportional_warning_threshold(skill_text):
+    """REVISE threshold must use proportional formula, not a static count."""
+    assert "WARNING_BUDGET_PER_DIM" in skill_text, (
+        "Verdict logic must define WARNING_BUDGET_PER_DIM constant"
+    )
+    assert "active_dimensions" in skill_text, (
+        "Verdict logic must compute active_dimensions from spawned non-SILENT dimensions"
+    )
+    assert "warning_threshold" in skill_text, (
+        "Verdict logic must compute warning_threshold from active_dimensions * WARNING_BUDGET_PER_DIM"
+    )
+    # The old static threshold must be gone
+    assert "len(warning_findings) >= 3" not in skill_text, (
+        "Static >= 3 threshold must be replaced with proportional formula"
+    )
+
+
+def test_evaluative_not_prescriptive_constraint(skill_text):
+    """Findings must describe WHAT is lacking, never HOW to fix it."""
+    text_lower = skill_text.lower()
+    assert "what is lacking" in text_lower or "what is at risk" in text_lower, (
+        "SKILL.md must require findings to describe WHAT is lacking or at risk"
+    )
+    assert "never prescribe how" in text_lower or "never how to fix" in text_lower, (
+        "SKILL.md must prohibit prescriptive findings"
+    )
+
+
+def test_findings_exclude_code_snippets_constraint(skill_text):
+    """Findings must never include code snippets or shell commands."""
+    text_lower = skill_text.lower()
+    assert "code snippets" in text_lower and (
+        "never" in text_lower or "must not" in text_lower or "do not" in text_lower
+    ), "SKILL.md must prohibit code snippets in findings"
+
+
+def test_design_scope_boundary_present(skill_text):
+    """Dimension subagents must be scoped to experimental design, not code review."""
+    text_lower = skill_text.lower()
+    assert "experimental design" in text_lower or "design scope" in text_lower, (
+        "SKILL.md must establish a design scope boundary for dimension subagents"
+    )
+    assert "do not evaluate" in text_lower and "implementation code" in text_lower, (
+        "SKILL.md must exclude implementation code correctness from scope"
+    )
+
+
+def test_dashboard_yaml_includes_threshold_fields(skill_text):
+    """Machine-readable YAML summary must include active_dimensions and warning_threshold."""
+    assert "active_dimensions:" in skill_text, (
+        "Dashboard YAML summary must include active_dimensions field"
+    )
+    assert "warning_threshold:" in skill_text, (
+        "Dashboard YAML summary must include warning_threshold field"
     )
 
 

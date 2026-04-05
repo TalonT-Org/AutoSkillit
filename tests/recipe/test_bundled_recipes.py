@@ -2182,3 +2182,58 @@ class TestResearchRecipeStructure:
         step = recipe.steps["re_push_research"]
         assert step.on_success == "begin_archival"
         assert step.on_failure == "begin_archival"
+
+    def test_create_worktree_copies_review_cycle_artifacts(self, recipe) -> None:
+        """create_worktree must copy review-design dashboards and revision guidance."""
+        step = recipe.steps["create_worktree"]
+        cmd = step.with_args["cmd"]
+        assert "review-cycles" in cmd, (
+            "create_worktree must create artifacts/review-cycles/ subdirectory"
+        )
+        assert "evaluation_dashboard" in cmd and "review-cycles" in cmd, (
+            "create_worktree must copy evaluation dashboards to review-cycles/"
+        )
+        assert "revision_guidance" in cmd and "review-cycles" in cmd, (
+            "create_worktree must copy revision guidance to review-cycles/"
+        )
+
+    def test_create_worktree_copies_plan_version_artifacts(self, recipe) -> None:
+        """create_worktree must copy intermediate plan versions."""
+        step = recipe.steps["create_worktree"]
+        cmd = step.with_args["cmd"]
+        assert "plan-versions" in cmd, (
+            "create_worktree must create artifacts/plan-versions/ subdirectory"
+        )
+        assert "experiment_plan" in cmd and "plan-versions" in cmd, (
+            "create_worktree must copy plan versions to plan-versions/"
+        )
+
+    def test_commit_research_artifacts_step_exists(self, recipe) -> None:
+        """A commit_research_artifacts step must exist to capture phase artifacts."""
+        assert "commit_research_artifacts" in recipe.steps, (
+            "research.yaml must have a commit_research_artifacts step for phase artifacts"
+        )
+        step = recipe.steps["commit_research_artifacts"]
+        cmd = step.with_args["cmd"]
+        assert "phase-groups" in cmd, "Must copy make-groups output"
+        assert "phase-plans" in cmd, "Must copy make-plan output"
+
+    def test_test_routes_to_commit_research_artifacts(self, recipe) -> None:
+        """test step must route to commit_research_artifacts, not directly to push_branch."""
+        step = recipe.steps["test"]
+        assert step.on_success == "commit_research_artifacts", (
+            "test.on_success must be commit_research_artifacts to capture phase artifacts before push"
+        )
+
+    def test_retest_routes_to_commit_research_artifacts(self, recipe) -> None:
+        """retest step must route to commit_research_artifacts, not directly to push_branch."""
+        step = recipe.steps["retest"]
+        assert step.on_success == "commit_research_artifacts", (
+            "retest.on_success must be commit_research_artifacts to capture phase artifacts before push"
+        )
+
+    def test_commit_research_artifacts_routes_to_push_branch(self, recipe) -> None:
+        """commit_research_artifacts must route to push_branch on both success and failure."""
+        step = recipe.steps["commit_research_artifacts"]
+        assert step.on_success == "push_branch"
+        assert step.on_failure == "push_branch"

@@ -330,6 +330,9 @@ class TestClaimReleaseGates:
             assert step["on_success"] == "register_clone_failure", (
                 f"{name}: release_issue_failure.on_success should be register_clone_failure"
             )
+            assert step["on_failure"] == "register_clone_failure", (
+                f"{name}: release_issue_failure.on_failure should be register_clone_failure"
+            )
 
     def test_ci_watch_on_success_routing(self):
         expected = {

@@ -813,7 +813,6 @@ async def run_headless_core(
         _start_ts = datetime.now(UTC).isoformat()
         _start_mono = time.monotonic()
 
-        # Clone contamination guard: snapshot before worktree-skill sessions
         _clone_snapshot = None
         if is_worktree_skill(original_skill_command) and not is_git_worktree(Path(cwd)):
             _clone_snapshot = await snapshot_clone_state(cwd, runner)
@@ -874,7 +873,6 @@ async def run_headless_core(
             write_behavior=write_behavior,
         )
 
-        # Clone contamination guard: detect and revert if session failed without worktree
         _clone_reverted = False
         if _clone_snapshot is not None:
             skill_result, _clone_reverted = await check_and_revert_clone_contamination(

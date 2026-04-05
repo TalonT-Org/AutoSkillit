@@ -139,7 +139,8 @@ def test_verdict_proportional_warning_threshold(skill_text):
         "Verdict logic must compute active_dimensions from spawned non-SILENT dimensions"
     )
     assert "warning_threshold" in skill_text, (
-        "Verdict logic must compute warning_threshold from active_dimensions * WARNING_BUDGET_PER_DIM"
+        "Verdict logic must compute warning_threshold from active_dimensions"
+        " * WARNING_BUDGET_PER_DIM"
     )
     # The old static threshold must be gone
     assert "len(warning_findings) >= 3" not in skill_text, (

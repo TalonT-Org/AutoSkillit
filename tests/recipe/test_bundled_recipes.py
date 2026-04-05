@@ -2222,14 +2222,16 @@ class TestResearchRecipeStructure:
         """test step must route to commit_research_artifacts, not directly to push_branch."""
         step = recipe.steps["test"]
         assert step.on_success == "commit_research_artifacts", (
-            "test.on_success must be commit_research_artifacts to capture phase artifacts before push"
+            "test.on_success must be commit_research_artifacts to capture phase artifacts"
+            " before push"
         )
 
     def test_retest_routes_to_commit_research_artifacts(self, recipe) -> None:
         """retest step must route to commit_research_artifacts, not directly to push_branch."""
         step = recipe.steps["retest"]
         assert step.on_success == "commit_research_artifacts", (
-            "retest.on_success must be commit_research_artifacts to capture phase artifacts before push"
+            "retest.on_success must be commit_research_artifacts to capture phase artifacts"
+            " before push"
         )
 
     def test_commit_research_artifacts_routes_to_push_branch(self, recipe) -> None:

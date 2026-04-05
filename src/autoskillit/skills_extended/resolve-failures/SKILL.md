@@ -121,8 +121,9 @@ affect git operations, which always use `git -C {worktree_path}` explicitly.
 2. Apply targeted fixes
 3. If the project has pre-commit hooks, run `pre-commit run --all-files` and
    stage any auto-fixed files before committing. Commit each fix: `fix: {what was wrong and why}`
-4. Write a fix log entry to `.autoskillit/temp/resolve-failures/` to satisfy
-   the write_behavior contract (generates an Edit/Write call that proves work was done):
+4. Write a fix log entry to `.autoskillit/temp/resolve-failures/` (relative to
+   the current working directory) to satisfy the write_behavior contract
+   (generates an Edit/Write call that proves work was done):
    - Path: `.autoskillit/temp/resolve-failures/fix_log_{iteration}_{ts}.md`
    - Content: iteration number, files changed, commit SHA, brief description
 5. Re-run: `cd {worktree_path} && {test_command}`

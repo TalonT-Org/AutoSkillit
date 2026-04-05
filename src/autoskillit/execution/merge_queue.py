@@ -177,7 +177,7 @@ class DefaultMergeQueueWatcher:
 
             # Terminal: closed without merge
             if state["state"] == "CLOSED":
-                if state["checks_state"] == "FAILURE":
+                if state["checks_state"] in ("FAILURE", "ERROR"):
                     return _make_result(
                         False,
                         "ejected_ci_failure",
@@ -250,7 +250,7 @@ class DefaultMergeQueueWatcher:
 
             # Positive confirmation: checks are terminal (SUCCESS/FAILURE/ERROR) or absent (None).
             # PR confirmed not in queue, not merged, checks not pending → genuine ejection.
-            if state["checks_state"] == "FAILURE":
+            if state["checks_state"] in ("FAILURE", "ERROR"):
                 return _make_result(
                     False,
                     "ejected_ci_failure",

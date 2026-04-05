@@ -77,9 +77,7 @@ async def test_normal_utilization_returns_status_and_sends_correct_headers(
 
     status = await _fetch_quota(credentials, base_url=mock_http_server.url)
 
-    assert status == QuotaStatus(
-        utilization=50.0, resets_at=datetime(2026, 4, 5, tzinfo=UTC)
-    )
+    assert status == QuotaStatus(utilization=50.0, resets_at=datetime(2026, 4, 5, tzinfo=UTC))
 
     requests = mock_http_server.get_requests("GET", QUOTA_ENDPOINT)
     assert len(requests) == 1

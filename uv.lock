@@ -46,6 +46,11 @@ wheels = [
 ]
 
 [[package]]
+name = "api-simulator"
+version = "0.1.0"
+source = { git = "https://github.com/TalonT-Org/api-simulator?branch=main#5576a53e9f56bb1174a43c7b23703ccef6af1a8b" }
+
+[[package]]
 name = "attrs"
 version = "25.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -85,6 +90,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "api-simulator" },
     { name = "import-linter" },
     { name = "packaging" },
     { name = "pytest" },
@@ -98,6 +104,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.6.0" },
+    { name = "api-simulator", marker = "extra == 'dev'", git = "https://github.com/TalonT-Org/api-simulator?branch=main" },
     { name = "cyclopts", specifier = ">=4.0" },
     { name = "dynaconf", specifier = ">=3.2.12,<4.0" },
     { name = "fastmcp", specifier = ">=3.1.1,<4.0" },

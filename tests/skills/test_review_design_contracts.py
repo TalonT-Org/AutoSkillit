@@ -299,6 +299,26 @@ def test_l3_l4_subagents_receive_experiment_type(
 # ── Red-team severity calibration ─────────────────────────────────────────────
 
 
+def _parse_rt_rubric(skill_text: str) -> dict[str, str]:
+    """Parse the red-team severity calibration rubric into {experiment_type: severity}."""
+    rt_cal_idx = skill_text.lower().find("red-team severity calibration")
+    assert rt_cal_idx != -1, "Red-team severity calibration rubric not found"
+    next_section_idx = skill_text.find("\n###", rt_cal_idx)
+    rt_section = (
+        skill_text[rt_cal_idx:]
+        if next_section_idx == -1
+        else skill_text[rt_cal_idx:next_section_idx]
+    )
+    table_lines = [ln for ln in rt_section.splitlines() if "|" in ln and "---" not in ln]
+    assert len(table_lines) == 2, "Rubric must have exactly one header row and one data row"
+    headers = [c.strip().lower() for c in table_lines[0].split("|") if c.strip()]
+    values = [c.strip().lower() for c in table_lines[1].split("|") if c.strip()]
+    assert len(headers) == len(values), (
+        f"Rubric table header/value count mismatch: {len(headers)} headers vs {len(values)} values"
+    )
+    return dict(zip(headers, values))
+
+
 def test_red_team_severity_calibration_rubric_present(skill_text: str) -> None:
     """Red-team dimension must have a severity calibration rubric by experiment type.
 
@@ -311,7 +331,12 @@ def test_red_team_severity_calibration_rubric_present(skill_text: str) -> None:
         "Without it, any critical red-team finding triggers STOP regardless "
         "of experiment type."
     )
-    rt_section = skill_text[rt_cal_idx : rt_cal_idx + 1000]
+    next_section_idx = skill_text.find("\n###", rt_cal_idx)
+    rt_section = (
+        skill_text[rt_cal_idx:]
+        if next_section_idx == -1
+        else skill_text[rt_cal_idx:next_section_idx]
+    )
     for exp_type in ["causal_inference", "benchmark", "exploratory"]:
         assert exp_type in rt_section, (
             f"Red-team calibration rubric must specify {exp_type} severity cap."
@@ -336,18 +361,6 @@ def test_red_team_severity_cap_applied_before_verdict(skill_text: str) -> None:
         "rt_cap must be applied BEFORE the red_team stop_triggers line — "
         "otherwise the cap has no effect on STOP eligibility."
     )
-
-
-def _parse_rt_rubric(skill_text: str) -> dict[str, str]:
-    """Parse the red-team severity calibration rubric into {experiment_type: severity}."""
-    rt_cal_idx = skill_text.lower().find("red-team severity calibration")
-    assert rt_cal_idx != -1, "Red-team severity calibration rubric not found"
-    rt_section = skill_text[rt_cal_idx : rt_cal_idx + 1000]
-    table_lines = [ln for ln in rt_section.splitlines() if "|" in ln and "---" not in ln]
-    assert len(table_lines) >= 2, "Rubric must have header + data row"
-    headers = [c.strip().lower() for c in table_lines[0].split("|") if c.strip()]
-    values = [c.strip().lower() for c in table_lines[1].split("|") if c.strip()]
-    return dict(zip(headers[1:], values[1:]))
 
 
 def test_benchmark_red_team_cannot_stop(skill_text: str) -> None:

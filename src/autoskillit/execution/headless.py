@@ -633,9 +633,7 @@ def _build_skill_result(
     if completion_marker:
         result_text = result_text.replace(completion_marker, "").strip()
 
-    extracted_worktree_path: str | None = None
-    if needs_retry:
-        extracted_worktree_path = _extract_worktree_path(session.assistant_messages)
+    extracted_worktree_path = _extract_worktree_path(session.assistant_messages)
 
     # Path contamination detection
     path_contamination: str | None = None

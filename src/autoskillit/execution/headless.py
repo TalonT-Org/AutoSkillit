@@ -18,7 +18,7 @@ import time
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 import structlog
 
@@ -574,24 +574,31 @@ def _build_skill_result(
     # content, reconstruct the result and promote the session so downstream
     # recovery paths and the Channel B bypass in _compute_success operate on
     # valid state.
-    if (
-        result.channel_confirmation == ChannelConfirmation.CHANNEL_B
-        and session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES
-        and completion_marker
-    ):
-        cb_recovered = _recover_from_separate_marker(session, completion_marker)
-        if cb_recovered is not None:
-            original_subtype = session.subtype
-            session = dataclasses.replace(
-                cb_recovered,
-                subtype=CliSubtype.SUCCESS,
-                is_error=False,
-            )
-            logger.warning(
-                "channel_b_drain_race_recovery",
-                original_subtype=str(original_subtype),
-                assistant_message_count=len(session.assistant_messages),
-            )
+    match result.channel_confirmation:
+        case ChannelConfirmation.CHANNEL_B if (
+            session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES and completion_marker
+        ):
+            cb_recovered = _recover_from_separate_marker(session, completion_marker)
+            if cb_recovered is not None:
+                original_subtype = session.subtype
+                session = dataclasses.replace(
+                    cb_recovered,
+                    subtype=CliSubtype.SUCCESS,
+                    is_error=False,
+                )
+                logger.warning(
+                    "channel_b_drain_race_recovery",
+                    original_subtype=str(original_subtype),
+                    assistant_message_count=len(session.assistant_messages),
+                )
+        case (
+            ChannelConfirmation.CHANNEL_B
+            | ChannelConfirmation.CHANNEL_A
+            | ChannelConfirmation.UNMONITORED
+        ):
+            pass  # no drain-race recovery applicable
+        case _ as _unreachable_cc:
+            assert_never(_unreachable_cc)
 
     # Recovery is only valid for sessions that completed normally.
     # For incomplete sessions (UNPARSEABLE, TIMEOUT, etc.), any Write calls were

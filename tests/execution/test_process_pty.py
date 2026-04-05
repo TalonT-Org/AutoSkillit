@@ -695,7 +695,9 @@ class TestChannelBDrainRaceRecovery:
         """CHANNEL_B + UNPARSEABLE + marker absent from assistant_messages → not rescued.
 
         When Channel B fired but assistant_messages don't contain the marker as a
-        standalone line, recovery must not fire — falls to DRAIN_RACE retry.
+        standalone line, recovery must not fire.  The session remains UNPARSEABLE
+        (is_error=True) which the dead-end guard classifies as SESSION_ERROR —
+        a terminal failure, not a retriable DRAIN_RACE.
         """
         stdout = _assistant_content_ndjson("Working on the task...")
         result = SubprocessResult(
@@ -711,10 +713,10 @@ class TestChannelBDrainRaceRecovery:
             completion_marker="%%ORDER_UP%%",
             skill_command="/test",
             audit=None,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
         )
         assert skill_result.success is False
-        assert skill_result.needs_retry is True
-        assert skill_result.retry_reason == RetryReason.DRAIN_RACE
+        assert skill_result.needs_retry is False
 
     def test_channel_b_drain_race_recovery_empty_output(
         self, monkeypatch: pytest.MonkeyPatch
@@ -812,6 +814,7 @@ class TestChannelBDrainRaceRecovery:
             completion_marker="%%ORDER_UP%%",
             skill_command="/test",
             audit=None,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
         )
         assert skill_result.success is False
 

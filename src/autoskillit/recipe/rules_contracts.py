@@ -245,9 +245,9 @@ _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES: frozenset[str] = frozenset(
         "no changes needed",
         "already green",
         "graceful degradation",  # resolve-review: "graceful degradation — do not fail"
-        r"skip.*step",  # conditional path language
+        r"\bskip\b.{0,30}\bstep\b",  # conditional path language
         "exit 0",  # graceful early exit
-        r"if no.*found",
+        r"\bif no\b.{0,30}\bfound\b",
         r"if.*unavailable",
         "already complete",
         "all phases",

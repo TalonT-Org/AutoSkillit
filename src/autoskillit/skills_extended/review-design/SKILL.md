@@ -311,14 +311,14 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
            f.severity = rt_cap  # downgrade before verdict
 
    # Reclassify after cap
-   critical = [f for f in findings if f.severity == "critical"]
+   critical_findings = [f for f in findings if f.severity == "critical"]
    warning_findings = [f for f in findings if f.severity == "warning"]
 
    # L1 fail-fast path: structural defects that block all further analysis
-   stop_triggers = [f for f in critical if f.dimension in {"estimand_clarity", "hypothesis_falsifiability"}]
+   stop_triggers = [f for f in critical_findings if f.dimension in {"estimand_clarity", "hypothesis_falsifiability"}]
    # Red-team STOP path: adversarial critical findings after full analysis (L2-L4)
    # These fire only when the L1 gate passed AND the severity cap still allows critical.
-   stop_triggers += [f for f in critical if f.dimension == "red_team"]
+   stop_triggers += [f for f in critical_findings if f.dimension == "red_team"]
 
    if stop_triggers:
        verdict = "STOP"

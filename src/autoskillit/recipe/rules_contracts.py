@@ -293,7 +293,10 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
         for skills_dir in ("skills", "skills_extended"):
             skill_md = pkg_root() / skills_dir / skill_name / "SKILL.md"
             if skill_md.exists():
-                content = skill_md.read_text(encoding="utf-8").lower()
+                try:
+                    content = skill_md.read_text(encoding="utf-8").lower()
+                except (OSError, UnicodeDecodeError):
+                    break
                 for phrase in _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES:
                     if _re.search(phrase, content):
                         findings.append(

@@ -48,7 +48,7 @@ wheels = [
 [[package]]
 name = "api-simulator"
 version = "0.1.0"
-source = { git = "https://github.com/TalonT-Org/api-simulator?branch=main#5576a53e9f56bb1174a43c7b23703ccef6af1a8b" }
+source = { git = "https://github.com/TalonT-Org/api-simulator?branch=main#41bed890a837de84dc40893692357cf08f360ddc" }
 
 [[package]]
 name = "attrs"

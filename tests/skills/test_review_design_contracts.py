@@ -344,12 +344,8 @@ def test_benchmark_red_team_cannot_stop(skill_text: str) -> None:
     assert rt_cal_idx != -1, "Red-team severity calibration rubric not found"
     rt_section = skill_text[rt_cal_idx : rt_cal_idx + 1000]
     lines = rt_section.splitlines()
-    benchmark_line = next(
-        (l for l in lines if "benchmark" in l.lower() and "|" in l), None
-    )
-    assert benchmark_line is not None, (
-        "Benchmark row not found in red-team calibration rubric"
-    )
+    benchmark_line = next((ln for ln in lines if "benchmark" in ln.lower() and "|" in ln), None)
+    assert benchmark_line is not None, "Benchmark row not found in red-team calibration rubric"
     assert "warning" in benchmark_line.lower(), (
         "Benchmark red-team severity must be capped at 'warning' — "
         "STOP-eligible red-team findings are unreasonable for benchmarks."
@@ -362,12 +358,8 @@ def test_causal_inference_red_team_can_stop(skill_text: str) -> None:
     assert rt_cal_idx != -1, "Red-team severity calibration rubric not found"
     rt_section = skill_text[rt_cal_idx : rt_cal_idx + 1000]
     lines = rt_section.splitlines()
-    causal_line = next(
-        (l for l in lines if "causal_inference" in l and "|" in l), None
-    )
-    assert causal_line is not None, (
-        "causal_inference row not found in red-team calibration rubric"
-    )
+    causal_line = next((ln for ln in lines if "causal_inference" in ln and "|" in ln), None)
+    assert causal_line is not None, "causal_inference row not found in red-team calibration rubric"
     assert "critical" in causal_line.lower(), (
         "causal_inference must retain critical as max red-team severity."
     )

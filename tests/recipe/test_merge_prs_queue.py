@@ -473,13 +473,13 @@ def test_route_queue_mode_auto_merge_condition_first(any_recipe) -> None:
     assert auto_merge_idx < queue_available_idx
 
 
-def test_auto_merge_false_routes_to_confirm_cleanup(any_recipe) -> None:
+def test_auto_merge_false_routes_to_register_clone_success(any_recipe) -> None:
     step = any_recipe.steps["route_queue_mode"]
     auto_merge_cond = next(
         c for c in step.on_result.conditions if c.when and "auto_merge" in c.when
     )
     assert auto_merge_cond.when == "${{ inputs.auto_merge }} != 'true'"
-    assert auto_merge_cond.route == "confirm_cleanup"
+    assert auto_merge_cond.route == "register_clone_success"
 
 
 # ---------------------------------------------------------------------------
@@ -506,9 +506,9 @@ def test_direct_merge_routes_to_wait_for_direct_merge(any_recipe) -> None:
     assert step.on_success == "wait_for_direct_merge"
 
 
-def test_direct_merge_failure_routes_to_confirm_cleanup(any_recipe) -> None:
+def test_direct_merge_failure_routes_to_register_clone_success(any_recipe) -> None:
     step = any_recipe.steps["direct_merge"]
-    assert step.on_failure == "confirm_cleanup"
+    assert step.on_failure == "register_clone_success"
 
 
 def test_wait_for_direct_merge_step_exists(any_recipe) -> None:
@@ -653,9 +653,9 @@ def test_immediate_merge_routes_to_wait_for_immediate_merge(any_recipe) -> None:
     assert step.on_success == "wait_for_immediate_merge"
 
 
-def test_immediate_merge_failure_routes_to_confirm_cleanup(any_recipe) -> None:
+def test_immediate_merge_failure_routes_to_register_clone_success(any_recipe) -> None:
     step = any_recipe.steps["immediate_merge"]
-    assert step.on_failure == "confirm_cleanup"
+    assert step.on_failure == "register_clone_success"
 
 
 def test_wait_for_immediate_merge_step_exists(any_recipe) -> None:

@@ -1775,85 +1775,56 @@ def test_no_bare_temp_paths_in_bundled_recipe_notes() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_implementation_groups_has_defer_cleanup_ingredient() -> None:
-    """implementation-groups.yaml declares 'defer_cleanup' ingredient with default 'false'."""
-    recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
-    assert "defer_cleanup" in recipe.ingredients, (
-        "implementation-groups.yaml must declare a 'defer_cleanup' ingredient"
-    )
-    assert recipe.ingredients["defer_cleanup"].default == "false", (
-        "defer_cleanup default must be 'false'"
-    )
-
-
-def test_implementation_has_defer_cleanup_ingredient() -> None:
-    """implementation.yaml declares 'defer_cleanup' ingredient."""
-    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
-    assert "defer_cleanup" in recipe.ingredients, (
-        "implementation.yaml must declare a 'defer_cleanup' ingredient"
-    )
-    assert recipe.ingredients["defer_cleanup"].default == "false", (
-        "defer_cleanup default must be 'false'"
+@pytest.mark.parametrize("recipe_name", [
+    "implementation", "remediation", "implementation-groups", "merge-prs"
+])
+def test_recipe_has_no_defer_cleanup_ingredient(recipe_name: str) -> None:
+    """Recipes must not declare 'defer_cleanup' — that design is removed."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    assert "defer_cleanup" not in recipe.ingredients, (
+        f"{recipe_name}.yaml must not declare 'defer_cleanup'"
     )
 
 
-def test_remediation_has_defer_cleanup_ingredient() -> None:
-    """remediation.yaml declares 'defer_cleanup' ingredient."""
-    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
-    assert "defer_cleanup" in recipe.ingredients, (
-        "remediation.yaml must declare a 'defer_cleanup' ingredient"
-    )
-    assert recipe.ingredients["defer_cleanup"].default == "false", (
-        "defer_cleanup default must be 'false'"
-    )
-
-
-def test_check_defer_cleanup_step_routes_to_register_or_confirm() -> None:
-    """check_defer_cleanup routes to register_success_deferred or confirm_cleanup."""
-    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
-    assert "check_defer_cleanup" in recipe.steps, (
-        "implementation.yaml must have a 'check_defer_cleanup' step"
-    )
-    step = recipe.steps["check_defer_cleanup"]
-    assert step.on_result is not None, "check_defer_cleanup must declare on_result"
-    conds = step.on_result.conditions
-    routes = {c.route for c in conds}
-    assert "register_success_deferred" in routes, (
-        "check_defer_cleanup on_result must route to 'register_success_deferred'"
-    )
-    fallthrough_routes = [c.route for c in conds if c.when is None]
-    assert fallthrough_routes == ["confirm_cleanup"], (
-        "check_defer_cleanup fallthrough (when=None) must route to 'confirm_cleanup'"
-    )
-    assert step.on_failure == "confirm_cleanup", (
-        "check_defer_cleanup on_failure must route to 'confirm_cleanup'"
+@pytest.mark.parametrize("recipe_name", [
+    "implementation", "remediation", "implementation-groups", "merge-prs"
+])
+def test_recipe_has_no_registry_path_ingredient(recipe_name: str) -> None:
+    """Recipes must not declare 'registry_path' — replaced by a well-known default."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    assert "registry_path" not in recipe.ingredients, (
+        f"{recipe_name}.yaml must not declare 'registry_path'"
     )
 
 
-def test_register_success_deferred_routes_to_done() -> None:
-    """register_success_deferred routes on_success and on_failure to done."""
-    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
-    assert "register_success_deferred" in recipe.steps, (
-        "implementation.yaml must have a 'register_success_deferred' step"
+@pytest.mark.parametrize("recipe_name", [
+    "implementation", "remediation", "implementation-groups", "merge-prs"
+])
+def test_recipe_has_no_interactive_cleanup_steps(recipe_name: str) -> None:
+    """Recipes must not have confirm_cleanup or delete_clone — these blocked unattended runs."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    assert "confirm_cleanup" not in recipe.steps, (
+        f"{recipe_name}.yaml must not have 'confirm_cleanup' step"
     )
-    step = recipe.steps["register_success_deferred"]
-    assert step.on_success == "done", "register_success_deferred.on_success must route to 'done'"
-    assert step.on_failure == "done", "register_success_deferred.on_failure must route to 'done'"
+    assert "delete_clone" not in recipe.steps, (
+        f"{recipe_name}.yaml must not have 'delete_clone' step"
+    )
 
 
-def test_register_error_deferred_routes_to_escalate_stop() -> None:
-    """register_error_deferred routes on_success and on_failure to escalate_stop."""
-    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
-    assert "register_error_deferred" in recipe.steps, (
-        "implementation.yaml must have a 'register_error_deferred' step"
-    )
-    step = recipe.steps["register_error_deferred"]
-    assert step.on_success == "escalate_stop", (
-        "register_error_deferred.on_success must route to 'escalate_stop'"
-    )
-    assert step.on_failure == "escalate_stop", (
-        "register_error_deferred.on_failure must route to 'escalate_stop'"
-    )
+@pytest.mark.parametrize("recipe_name", [
+    "implementation", "remediation", "implementation-groups"
+])
+def test_recipe_has_unconditional_register_steps(recipe_name: str) -> None:
+    """register_clone_success routes to done; register_clone_failure routes to escalate_stop."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    assert "register_clone_success" in recipe.steps
+    assert "register_clone_failure" in recipe.steps
+    s = recipe.steps["register_clone_success"]
+    f = recipe.steps["register_clone_failure"]
+    assert s.on_success == "done"
+    assert f.on_success == "escalate_stop"
+    assert "check_defer_cleanup" not in recipe.steps
+    assert "check_defer_on_failure" not in recipe.steps
 
 
 @pytest.mark.parametrize(

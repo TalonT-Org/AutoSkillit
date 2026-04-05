@@ -25,7 +25,7 @@ loop or halt.
 
 ## Arguments
 
-`/autoskillit:resolve-design-review <evaluation_dashboard_path> <experiment_plan_path>`
+`/autoskillit:resolve-design-review <evaluation_dashboard_path> <experiment_plan_path> [prior_revision_guidance_path]`
 
 ## When to Use
 
@@ -52,7 +52,10 @@ MCP-only — not user-invocable directly.
 2. Parse two positional path arguments: `evaluation_dashboard_path`, `experiment_plan_path`
    - If missing: print `"Error: missing required argument(s) — expected <evaluation_dashboard_path> <experiment_plan_path>"`, then emit `resolution=failed`, exit 0
    - If file not found: print `"Error: file not found — {missing_path}"`, then emit `resolution=failed`, exit 0
-3. Parse stop-trigger findings from the evaluation dashboard:
+3. Parse optional third argument: `prior_revision_guidance_path`
+   - If present and file exists: read prior revision guidance for theme comparison
+   - If absent or file not found: skip diminishing-return detection (first-round behavior)
+4. Parse stop-trigger findings from the evaluation dashboard:
    - Locate machine-readable YAML block (`# --- review-design machine summary ---`)
    - Extract critical findings from L1 dimensions (estimand_clarity, hypothesis_falsifiability)
    - Extract red_team critical findings
@@ -89,6 +92,35 @@ BEFORE any guidance is generated. Report must include summary banner:
 Triage complete (BEFORE any guidance written)
 ADDRESSABLE: N | STRUCTURAL: N | DISCUSS: N
 ```
+
+### Step 1.5: Diminishing-Return Detection (only when prior_revision_guidance_path provided)
+
+When prior revision guidance is available, compare the current ADDRESSABLE findings
+against the themes in the prior round's revision guidance to detect goalposts-moving.
+
+A finding is **goalposts-moving** when:
+- The prior guidance addressed a specific concern at scope X (e.g., "add n=100K")
+- The current finding raises the same concern at scope X+1 (e.g., "n=100K doesn't prove n=250K")
+- The pattern is: the plan improved to satisfy the prior concern, but the reviewer
+  raised the bar on the same theme
+
+Detection heuristic — launch one subagent (model: "sonnet") per ADDRESSABLE finding.
+Each subagent receives: current finding + all prior guidance entries. It returns:
+
+```json
+{
+  "goalposts_moving": true|false,
+  "prior_theme_match": "the specific prior guidance entry this finding escalates",
+  "escalation_pattern": "brief description of how the bar was raised"
+}
+```
+
+When `goalposts_moving: true`, reclassify the finding from ADDRESSABLE to STRUCTURAL
+with annotation: `"reclassified: goalposts-moving (prior theme: {prior_theme_match})"`.
+This ensures the fix-and-review cycle terminates for concerns that are not converging.
+
+Fallback: if no prior_revision_guidance_path is provided, skip this step entirely
+(preserves current first-round behavior unchanged).
 
 ### Step 2: Apply Resolution Logic
 

@@ -259,17 +259,4 @@ Where `{url}` is the absolute GitHub PR URL, or an empty string when GitHub is u
 
 ## Diagram Styling Reference
 
-Use the canonical 9-class mermaid classDef palette for all diagrams. Any freehand or
-fallback diagram generation **must** apply these definitions so nodes are styled correctly:
-
-```
-classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
-classDef stateNode fill:#004d40,stroke:#4db6ac,stroke-width:2px,color:#fff;
-classDef handler fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#fff;
-classDef phase fill:#6a1b9a,stroke:#ba68c8,stroke-width:2px,color:#fff;
-classDef output fill:#00695c,stroke:#4db6ac,stroke-width:2px,color:#fff;
-classDef integration fill:#c62828,stroke:#ef9a9a,stroke-width:2px,color:#fff;
-classDef newComponent fill:#2e7d32,stroke:#81c784,stroke-width:2px,color:#fff;
-classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
-classDef gap fill:#ff6f00,stroke:#ffa726,stroke-width:2px,color:#000;
-```
+Using ONLY classDef styles from the mermaid skill (no invented colors).

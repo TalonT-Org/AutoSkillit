@@ -1274,6 +1274,25 @@ def test_audit_impl_on_failure_routes_to_escalation() -> None:
     assert rem.steps["audit_impl"].on_failure == "escalate_stop"
 
 
+@pytest.mark.parametrize(
+    "recipe_name,yaml_name",
+    [
+        ("implementation", "implementation.yaml"),
+        ("remediation", "remediation.yaml"),
+        ("merge-prs", "merge-prs.yaml"),
+        ("implementation-groups", "implementation-groups.yaml"),
+    ],
+)
+def test_audit_ingredient_defaults_to_false(recipe_name: str, yaml_name: str) -> None:
+    """audit must default to 'false' (OFF) in all recipes — opt-in, not opt-out."""
+    recipe = load_recipe(builtin_recipes_dir() / yaml_name)
+    audit_ing = recipe.ingredients.get("audit")
+    assert audit_ing is not None, f"{recipe_name}: 'audit' ingredient not found"
+    assert audit_ing.default == "false", (
+        f"{recipe_name}: audit.default must be 'false' (OFF by default), got {audit_ing.default!r}"
+    )
+
+
 def test_smoke_check_summary_has_error_escalation() -> None:
     """check_summary must have a result.error condition routing to a non-done step."""
     recipe = load_recipe(SMOKE_RECIPE)

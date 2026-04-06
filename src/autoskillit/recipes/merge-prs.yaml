@@ -17,7 +17,7 @@ ingredients:
     default: ""
   audit:
     description: Post-merge quality gate
-    default: "true"
+    default: "false"
   plans_dir:
     description: Plan files for audit
     default: ".autoskillit/temp/merge-prs"

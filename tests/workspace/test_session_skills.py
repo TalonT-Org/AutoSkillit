@@ -543,12 +543,13 @@ class TestActivateDepsResolution:
         from autoskillit.workspace.skills import SkillInfo
 
         session_id = "test-pack-deps"
+        gate = "disable-model-invocation: true"
         # Parent skill with pack dep
         _write_skill_md(
             tmp_path,
             session_id,
             "make-plan",
-            "---\nname: make-plan\nactivate_deps: [arch-lens]\ndisable-model-invocation: true\n---\n# Plan",
+            f"---\nname: make-plan\nactivate_deps: [arch-lens]\n{gate}\n---\n# Plan",
         )
         # Three arch-lens skills
         for name in ["arch-lens-a", "arch-lens-b", "arch-lens-c"]:
@@ -556,7 +557,7 @@ class TestActivateDepsResolution:
                 tmp_path,
                 session_id,
                 name,
-                f"---\nname: {name}\ncategories: [arch-lens]\ndisable-model-invocation: true\n---\n# Lens",
+                f"---\nname: {name}\ncategories: [arch-lens]\n{gate}\n---\n# Lens",
             )
 
         provider = MagicMock()
@@ -592,11 +593,12 @@ class TestActivateDepsResolution:
         from unittest.mock import MagicMock
 
         session_id = "test-individual-dep"
+        gate = "disable-model-invocation: true"
         _write_skill_md(
             tmp_path,
             session_id,
             "parent-skill",
-            "---\nname: parent-skill\nactivate_deps: [mermaid]\ndisable-model-invocation: true\n---\n# Parent",
+            f"---\nname: parent-skill\nactivate_deps: [mermaid]\n{gate}\n---\n# Parent",
         )
         _write_skill_md(
             tmp_path,
@@ -621,17 +623,21 @@ class TestActivateDepsResolution:
         from autoskillit.workspace.skills import SkillInfo
 
         session_id = "test-two-level"
+        gate = "disable-model-invocation: true"
         _write_skill_md(
             tmp_path,
             session_id,
             "make-plan",
-            "---\nname: make-plan\nactivate_deps: [arch-lens]\ndisable-model-invocation: true\n---\n# Plan",
+            f"---\nname: make-plan\nactivate_deps: [arch-lens]\n{gate}\n---\n# Plan",
         )
         _write_skill_md(
             tmp_path,
             session_id,
             "arch-lens-x",
-            "---\nname: arch-lens-x\ncategories: [arch-lens]\nactivate_deps: [mermaid]\ndisable-model-invocation: true\n---\n# Lens",
+            (
+                f"---\nname: arch-lens-x\ncategories: [arch-lens]\n"
+                f"activate_deps: [mermaid]\n{gate}\n---\n# Lens"
+            ),
         )
         _write_skill_md(
             tmp_path,
@@ -666,17 +672,18 @@ class TestActivateDepsResolution:
         from unittest.mock import MagicMock
 
         session_id = "test-circular"
+        gate = "disable-model-invocation: true"
         _write_skill_md(
             tmp_path,
             session_id,
             "skill-a",
-            "---\nname: skill-a\nactivate_deps: [skill-b]\ndisable-model-invocation: true\n---\n# A",
+            f"---\nname: skill-a\nactivate_deps: [skill-b]\n{gate}\n---\n# A",
         )
         _write_skill_md(
             tmp_path,
             session_id,
             "skill-b",
-            "---\nname: skill-b\nactivate_deps: [skill-a]\ndisable-model-invocation: true\n---\n# B",
+            f"---\nname: skill-b\nactivate_deps: [skill-a]\n{gate}\n---\n# B",
         )
 
         provider = MagicMock()
@@ -721,11 +728,12 @@ class TestActivateDepsResolution:
         from unittest.mock import MagicMock
 
         session_id = "test-absent-pack"
+        gate = "disable-model-invocation: true"
         _write_skill_md(
             tmp_path,
             session_id,
             "parent-skill",
-            "---\nname: parent-skill\nactivate_deps: [exp-lens]\ndisable-model-invocation: true\n---\n# Parent",
+            f"---\nname: parent-skill\nactivate_deps: [exp-lens]\n{gate}\n---\n# Parent",
         )
 
         provider = MagicMock()

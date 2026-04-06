@@ -172,14 +172,19 @@ def test_quota_check_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
 def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypatch):
     """AUTOSKILLIT_QUOTA_CACHE env var must take precedence over hook config cache_path.
 
-    Backward-compat regression test: env var path must still win even when hook config is present.
+    Regression test: env var path must win even when a hook config is present at the
+    canonical path (.autoskillit/temp/.autoskillit_hook_config.json). Writing different
+    utilization values to each cache confirms which source the hook actually reads.
     """
     monkeypatch.chdir(tmp_path)
+    # env-var cache: high utilization → should deny if env var wins
     correct_cache = tmp_path / "correct_cache.json"
     _write_cache(correct_cache, utilization=95.0)
-    wrong_cache = tmp_path / "wrong_cache.json"  # not written — should not be read
+    # hook-config cache: low utilization → would approve if hook config wins
+    wrong_cache = tmp_path / "wrong_cache.json"
+    _write_cache(wrong_cache, utilization=50.0)
     _write_hook_config(
-        tmp_path / "temp" / ".autoskillit_hook_config.json",
+        tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json",
         threshold=85.0,
         cache_max_age=300,
         cache_path=str(wrong_cache),
@@ -187,6 +192,7 @@ def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypa
     monkeypatch.setenv("AUTOSKILLIT_QUOTA_CACHE", str(correct_cache))
     out, _ = _run_hook(event={"tool_name": "run_skill"})
     data = json.loads(out)
+    # env var must win: deny because correct_cache has utilization=95.0
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 

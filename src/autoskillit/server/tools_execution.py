@@ -303,6 +303,13 @@ async def run_skill(
             )
         if order_id:
             skill_result.order_id = order_id
+        from autoskillit.server.helpers import _refresh_quota_cache  # noqa: PLC0415
+
+        if tool_ctx.background is not None:
+            tool_ctx.background.submit(
+                _refresh_quota_cache(tool_ctx.config.quota_guard),
+                label="quota_post_run_refresh",
+            )
         return skill_result.to_json()
     finally:
         if step_name:

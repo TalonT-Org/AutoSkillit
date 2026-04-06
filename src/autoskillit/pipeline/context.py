@@ -24,6 +24,7 @@ from autoskillit.core import (
     MergeQueueWatcher,
     MigrationService,
     OutputPatternResolver,
+    QuotaRefreshTask,
     RecipeRepository,
     SessionSkillManager,
     SubprocessRunner,
@@ -100,6 +101,7 @@ class ToolContext:
     skill_resolver: TargetSkillResolver | None = field(default=None)
     kitchen_id: str = field(default="")
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
+    quota_refresh_task: QuotaRefreshTask | None = field(default=None)
 
     def __post_init__(self) -> None:
         if self.background is None:

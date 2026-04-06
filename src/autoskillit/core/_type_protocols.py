@@ -41,6 +41,7 @@ __all__ = [
     "SessionSkillManager",
     "TargetSkillResolver",
     "BackgroundSupervisor",
+    "QuotaRefreshTask",
 ]
 
 
@@ -459,3 +460,15 @@ class BackgroundSupervisor(Protocol):
     ) -> Any: ...
 
     async def drain(self) -> None: ...
+
+
+@runtime_checkable
+class QuotaRefreshTask(Protocol):
+    """Protocol for a cancellable background task handle.
+
+    Satisfied by asyncio.Task — used to type the kitchen-scoped quota
+    refresh task stored in ToolContext without leaking asyncio.Task into the
+    core layer.
+    """
+
+    def cancel(self, msg: Any = None) -> bool: ...

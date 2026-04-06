@@ -360,6 +360,26 @@ class TestQuotaGuardConfig:
         # Unspecified fields keep defaults
         assert config.quota_guard.buffer_seconds == 60
 
+    def test_quota_guard_config_has_cache_refresh_interval(self):
+        """QG_C3: QuotaGuardConfig has cache_refresh_interval defaulting to 240."""
+        from autoskillit.config.settings import QuotaGuardConfig
+
+        config = QuotaGuardConfig()
+        assert config.cache_refresh_interval == 240
+
+    def test_defaults_yaml_has_cache_refresh_interval(self):
+        """QG_C4: defaults.yaml defines quota_guard.cache_refresh_interval < cache_max_age."""
+        from autoskillit.core.paths import pkg_root
+
+        defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
+        assert "cache_refresh_interval" in defaults["quota_guard"]
+        interval = defaults["quota_guard"]["cache_refresh_interval"]
+        max_age = defaults["quota_guard"]["cache_max_age"]
+        assert interval < max_age, (
+            f"cache_refresh_interval ({interval}) must be < cache_max_age ({max_age}); "
+            "otherwise the loop arrives after the cache has already expired"
+        )
+
 
 class TestLoggingConfig:
     """LoggingConfig dataclass and YAML loading."""

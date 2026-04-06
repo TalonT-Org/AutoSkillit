@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.config.settings import QuotaGuardConfig
+
 
 class TestReadCredentials:
     def test_reads_access_token(self, tmp_path):
@@ -439,3 +441,52 @@ class TestIntegration:
         out = buf.getvalue()
         data = json.loads(out)
         assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+class TestRefreshQuotaCache:
+    """Tests for _refresh_quota_cache: unconditional fetch-and-write behavior."""
+
+    @pytest.mark.anyio
+    async def test_refresh_quota_cache_fetches_even_when_cache_is_fresh(
+        self, tmp_path, monkeypatch
+    ):
+        """_refresh_quota_cache calls _fetch_quota unconditionally, even if cache is fresh."""
+        from autoskillit.execution.quota import QuotaStatus, _refresh_quota_cache
+
+        fresh_cache = tmp_path / "cache.json"
+        # Write a 10-second-old cache (well within 300s max_age)
+        fresh_cache.write_text(
+            json.dumps(
+                {
+                    "fetched_at": (datetime.now(UTC) - timedelta(seconds=10)).isoformat(),
+                    "five_hour": {"utilization": 0.3, "resets_at": None},
+                }
+            )
+        )
+        fetch_called = []
+
+        async def fake_fetch(credentials_path, **kwargs):
+            fetch_called.append(True)
+            return QuotaStatus(utilization=0.35, resets_at=None)
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
+        config = QuotaGuardConfig(cache_path=str(fresh_cache))
+        await _refresh_quota_cache(config)
+        assert len(fetch_called) == 1  # must have fetched even though cache was fresh
+
+    @pytest.mark.anyio
+    async def test_refresh_quota_cache_writes_new_cache(self, tmp_path, monkeypatch):
+        """_refresh_quota_cache writes a new cache file after fetching."""
+        from autoskillit.execution.quota import QuotaStatus, _refresh_quota_cache
+
+        cache_path = tmp_path / "cache.json"
+
+        async def fake_fetch(credentials_path, **kwargs):
+            return QuotaStatus(utilization=0.5, resets_at=None)
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
+        config = QuotaGuardConfig(cache_path=str(cache_path))
+        await _refresh_quota_cache(config)
+        assert cache_path.exists()
+        data = json.loads(cache_path.read_text())
+        assert data["five_hour"]["utilization"] == pytest.approx(0.5)

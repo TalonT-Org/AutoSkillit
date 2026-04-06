@@ -56,7 +56,7 @@ Query the global session index:
 ```bash
 jq -r 'select(.success == false)' \
   ~/.local/share/autoskillit/logs/sessions.jsonl \
-  | jq -r 'select(.cwd // "" | startswith("{worktree_path}"))' \
+  | jq -r --arg worktree_path "{worktree_path}" 'select(.cwd // "" | startswith($worktree_path))' \
   | tail -n 1
 ```
 

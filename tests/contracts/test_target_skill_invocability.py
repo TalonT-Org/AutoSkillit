@@ -152,11 +152,11 @@ class TestDepSkillsNotGatedAfterActivation:
 
         # Check mermaid is ungated
         mermaid_md = skills_base / "mermaid" / "SKILL.md"
-        if mermaid_md.exists():
-            content = mermaid_md.read_text()
-            assert "disable-model-invocation: true" not in content, (
-                "mermaid should be ungated via transitive dependency from make-plan"
-            )
+        assert mermaid_md.exists(), "mermaid skill dir should exist after init_session"
+        content = mermaid_md.read_text()
+        assert "disable-model-invocation: true" not in content, (
+            "mermaid should be ungated via transitive dependency from make-plan"
+        )
 
 
 class TestAllRecipeSkillCommandsInvocable:

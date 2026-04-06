@@ -269,7 +269,7 @@ async def run_skill(
 
         # Activate the target skill and its declared dependencies
         if target_name:
-            tool_ctx.session_skill_manager.activate_tier2(session_id, target_name)
+            tool_ctx.session_skill_manager.activate_skill_deps(session_id, target_name)
     try:
         skill_add_dirs.append(validate_add_dir(Path(cwd)))
     except LayoutError:

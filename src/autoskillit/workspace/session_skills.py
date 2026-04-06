@@ -322,7 +322,7 @@ class DefaultSessionSkillManager:
             atomic_write(skill_dir / "SKILL.md", content)
         return ValidatedAddDir(path=str(session_skills_dir))
 
-    def activate_tier2(self, session_id: str, skill_name: str) -> bool:
+    def activate_skill_deps(self, session_id: str, skill_name: str) -> bool:
         """Remove disable-model-invocation from a skill and its declared dependencies.
 
         Reads ``activate_deps`` from the target skill's frontmatter and transitively

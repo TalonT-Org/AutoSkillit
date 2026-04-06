@@ -945,7 +945,7 @@ async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monk
 
 @pytest.mark.anyio
 async def test_run_skill_activates_deps_for_tier3_target(tool_ctx, monkeypatch) -> None:
-    """run_skill calls activate_tier2 even when target is tier3 (not in tier2 list)."""
+    """run_skill calls activate_skill_deps even when target is tier3 (not in tier2 list)."""
     from unittest.mock import MagicMock
 
     from autoskillit.core import SkillResult, ValidatedAddDir
@@ -983,8 +983,8 @@ async def test_run_skill_activates_deps_for_tier3_target(tool_ctx, monkeypatch) 
     # Use a tier3 skill name
     await run_skill("/open-pr", "/tmp")
 
-    # activate_tier2 must have been called regardless of tier
-    mock_ssm.activate_tier2.assert_called_once()
+    # activate_skill_deps must have been called regardless of tier
+    mock_ssm.activate_skill_deps.assert_called_once()
 
 
 @pytest.mark.anyio

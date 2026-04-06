@@ -1,6 +1,6 @@
 """Contract: the target skill of a run_skill call must be invocable after session setup.
 
-Verifies that the invocation chain (init_session → activate_tier2 → resolve namespace)
+Verifies that the invocation chain (init_session → activate_skill_deps → resolve namespace)
 leaves the target skill invocable and all other Tier 2 skills gated.
 """
 
@@ -42,7 +42,7 @@ def _make_session(
     )
     tier2 = frozenset(config.skills.tier2)
     if target_skill in tier2:
-        mgr.activate_tier2(session_id, target_skill)
+        mgr.activate_skill_deps(session_id, target_skill)
     return mgr, session_id, str(tmp_path)
 
 
@@ -135,7 +135,7 @@ class TestDepSkillsNotGatedAfterActivation:
         mgr = DefaultSessionSkillManager(provider, tmp_path)
         session_id = "test-dep-activation"
         mgr.init_session(session_id, cook_session=False, config=config)
-        mgr.activate_tier2(session_id, "make-plan")
+        mgr.activate_skill_deps(session_id, "make-plan")
 
         skills_base = tmp_path / session_id / ".claude" / "skills"
         # Check arch-lens skills are ungated
@@ -202,12 +202,12 @@ class TestAllRecipeSkillCommandsInvocable:
                         f"'{resolved}' (should use /autoskillit: namespace)"
                     )
 
-                # Verify activation: after init_session + activate_tier2, target is invocable
+                # Verify activation: after init_session + activate_skill_deps, target is invocable
                 session_id = f"test-{yaml_path.stem}-{step_name}"
                 mgr = DefaultSessionSkillManager(provider, tmp_path)
                 mgr.init_session(session_id, cook_session=False, config=config)
                 if name in tier2:
-                    mgr.activate_tier2(session_id, name)
+                    mgr.activate_skill_deps(session_id, name)
                 skill_md_path = tmp_path / session_id / ".claude" / "skills" / name / "SKILL.md"
                 if skill_md_path.exists():
                     content = skill_md_path.read_text()

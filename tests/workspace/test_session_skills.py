@@ -126,7 +126,7 @@ def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
     assert fm.get("disable-model-invocation") is not True
 
 
-def test_activate_tier2_removes_flag(tmp_path: Path) -> None:
+def test_activate_skill_deps_removes_flag(tmp_path: Path) -> None:
     from autoskillit.config.settings import AutomationConfig, SkillsConfig
 
     provider = SkillsDirectoryProvider()
@@ -139,7 +139,7 @@ def test_activate_tier2_removes_flag(tmp_path: Path) -> None:
         )
     )
     mgr.init_session("session-toggle", cook_session=False, config=config)
-    result = mgr.activate_tier2("session-toggle", "mermaid")
+    result = mgr.activate_skill_deps("session-toggle", "mermaid")
     assert result is True
     mermaid_md = tmp_path / "session-toggle" / ".claude" / "skills" / "mermaid" / "SKILL.md"
     content = mermaid_md.read_text()
@@ -515,7 +515,7 @@ class TestParseActivateDeps:
         assert _parse_activate_deps(content) == []
 
 
-# ── Tests: activate_tier2 transitive dependency resolution ──────────────────
+# ── Tests: activate_skill_deps transitive dependency resolution ──────────────────
 
 
 def _write_skill_md(base: Path, session_id: str, skill_name: str, content: str) -> Path:
@@ -535,7 +535,7 @@ def _is_gated(base: Path, session_id: str, skill_name: str) -> bool:
 
 
 class TestActivateDepsResolution:
-    def test_activate_tier2_resolves_pack_deps(self, tmp_path: Path) -> None:
+    def test_activate_skill_deps_resolves_pack_deps(self, tmp_path: Path) -> None:
         """Activating a skill with activate_deps: [arch-lens] ungates all arch-lens skills."""
         from unittest.mock import MagicMock
 
@@ -582,13 +582,13 @@ class TestActivateDepsResolution:
         resolver.resolve.side_effect = resolve_fn
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-        result = mgr.activate_tier2(session_id, "make-plan")
+        result = mgr.activate_skill_deps(session_id, "make-plan")
         assert result is True
         assert not _is_gated(tmp_path, session_id, "make-plan")
         for name in ["arch-lens-a", "arch-lens-b", "arch-lens-c"]:
             assert not _is_gated(tmp_path, session_id, name), f"{name} should be ungated"
 
-    def test_activate_tier2_resolves_individual_skill_dep(self, tmp_path: Path) -> None:
+    def test_activate_skill_deps_resolves_individual_skill_dep(self, tmp_path: Path) -> None:
         """Activating a skill with activate_deps: [mermaid] ungates mermaid specifically."""
         from unittest.mock import MagicMock
 
@@ -611,11 +611,11 @@ class TestActivateDepsResolution:
         provider.resolver.resolve.return_value = None
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-        result = mgr.activate_tier2(session_id, "parent-skill")
+        result = mgr.activate_skill_deps(session_id, "parent-skill")
         assert result is True
         assert not _is_gated(tmp_path, session_id, "mermaid")
 
-    def test_activate_tier2_resolves_two_level_transitive(self, tmp_path: Path) -> None:
+    def test_activate_skill_deps_resolves_two_level_transitive(self, tmp_path: Path) -> None:
         """make-plan -> arch-lens-* -> mermaid: all three levels get ungated."""
         from unittest.mock import MagicMock
 
@@ -662,12 +662,12 @@ class TestActivateDepsResolution:
         resolver.resolve.side_effect = resolve_fn
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-        mgr.activate_tier2(session_id, "make-plan")
+        mgr.activate_skill_deps(session_id, "make-plan")
         assert not _is_gated(tmp_path, session_id, "make-plan")
         assert not _is_gated(tmp_path, session_id, "arch-lens-x")
         assert not _is_gated(tmp_path, session_id, "mermaid")
 
-    def test_activate_tier2_handles_circular_deps(self, tmp_path: Path) -> None:
+    def test_activate_skill_deps_handles_circular_deps(self, tmp_path: Path) -> None:
         """Circular activate_deps do not cause infinite recursion."""
         from unittest.mock import MagicMock
 
@@ -690,7 +690,7 @@ class TestActivateDepsResolution:
         provider.resolver.resolve.return_value = None
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-        result = mgr.activate_tier2(session_id, "skill-a")
+        result = mgr.activate_skill_deps(session_id, "skill-a")
         assert result is True
         assert not _is_gated(tmp_path, session_id, "skill-a")
         assert not _is_gated(tmp_path, session_id, "skill-b")
@@ -719,7 +719,7 @@ class TestActivateDepsResolution:
         provider.resolver.resolve.return_value = None
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-        result = mgr.activate_tier2(session_id, "open-pr")
+        result = mgr.activate_skill_deps(session_id, "open-pr")
         assert result is True
         assert not _is_gated(tmp_path, session_id, "mermaid")
 
@@ -740,6 +740,6 @@ class TestActivateDepsResolution:
         provider.resolver.resolve.return_value = None
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-        result = mgr.activate_tier2(session_id, "parent-skill")
+        result = mgr.activate_skill_deps(session_id, "parent-skill")
         assert result is True
         assert not _is_gated(tmp_path, session_id, "parent-skill")

@@ -1,5 +1,25 @@
 version: 0.1.0
 skills:
+  troubleshoot-experiment:
+    inputs:
+    - name: worktree_path
+      type: string
+      required: true
+    - name: step_name
+      type: string
+      required: true
+    outputs:
+    - name: diagnosis_path
+      type: file_path
+    - name: failure_type
+      type: string
+    - name: is_fixable
+      type: string
+    expected_output_patterns:
+    - "is_fixable\\s*=\\s*(true|false)"
+    pattern_examples:
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = stale_timeout\nis_fixable = true\n%%ORDER_UP%%"
+    write_behavior: always
   diagnose-ci:
     inputs:
     - name: branch

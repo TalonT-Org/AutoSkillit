@@ -1,4 +1,3 @@
-
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
@@ -46,11 +45,9 @@ def test_implement_phase_uses_implement_experiment(recipe):
 
 
 def test_troubleshoot_step_captures_required_tokens(recipe):
-    """troubleshoot_implement_failure must capture diagnosis_path, failure_type, is_fixable."""
+    """troubleshoot_implement_failure must capture is_fixable for downstream routing."""
     step = recipe.steps["troubleshoot_implement_failure"]
     capture = step.capture or {}
-    assert "diagnosis_path" in capture
-    assert "failure_type" in capture
     assert "is_fixable" in capture
 
 

@@ -61,7 +61,7 @@ from autoskillit.execution.process import (
 )
 from autoskillit.execution.quota import (
     QuotaStatus,
-    _refresh_quota_cache,
+    _refresh_quota_cache,  # noqa: F401 — imported for re-export via server.helpers; not in __all__
     check_and_sleep_if_needed,
 )
 from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE, resolve_remote_repo
@@ -96,7 +96,6 @@ __all__ = [
     "run_managed_sync",
     # quota
     "QuotaStatus",
-    "_refresh_quota_cache",
     "check_and_sleep_if_needed",
     # session
     "ClaudeSessionResult",

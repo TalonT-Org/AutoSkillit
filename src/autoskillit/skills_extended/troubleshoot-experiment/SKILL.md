@@ -89,13 +89,12 @@ Apply this decision table in priority order (stop at the first match):
 | Priority | Condition | `failure_type` | `is_fixable` |
 |----------|-----------|----------------|--------------|
 | 1 | `termination_reason == "context_limit"` | `context_exhaustion` | `true` |
-| 2 | `termination_reason == "stale"` AND `write_call_count == 0` | `stale_timeout` | `true` |
-| 3 | `termination_reason == "stale"` AND `write_call_count > 0` | `stale_timeout` | `true` |
-| 4 | `exit_code != 0` AND logs contain build/compile error keywords (`SyntaxError`, `ModuleNotFoundError`, `ImportError`, `error: command`) | `build_failure` | `true` |
-| 5 | `blocked_hypotheses` token present in run-experiment results OR results file contains `## Status: FAILED` with data acquisition errors | `data_missing` | `true` |
-| 6 | Logs contain environment/infra keywords (`Permission denied`, `No such file or directory` for system paths, `Connection refused`) | `environment_error` | `false` |
-| 7 | `anomaly_count > 0` AND any anomaly `kind` in `["oom_critical", "zombie_persistent"]` | `environment_error` | `false` |
-| 8 | All other cases | `unknown` | `false` |
+| 2 | `termination_reason == "stale"` | `stale_timeout` | `true` |
+| 3 | `exit_code != 0` AND logs contain build/compile error keywords (`SyntaxError`, `ModuleNotFoundError`, `ImportError`, `error: command`) | `build_failure` | `true` |
+| 4 | `blocked_hypotheses` token present in run-experiment results OR results file contains `## Status: FAILED` with data acquisition errors | `data_missing` | `true` |
+| 5 | Logs contain environment/infra keywords (`Permission denied`, `No such file or directory` for system paths, `Connection refused`) | `environment_error` | `false` |
+| 6 | `anomaly_count > 0` AND any anomaly `kind` in `["oom_critical", "zombie_persistent"]` | `environment_error` | `false` |
+| 7 | All other cases | `unknown` | `false` |
 
 ### Step 5: Write Diagnosis Report
 

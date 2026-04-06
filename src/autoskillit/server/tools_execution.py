@@ -303,7 +303,7 @@ async def run_skill(
             )
         if order_id:
             skill_result.order_id = order_id
-        from autoskillit.execution import _refresh_quota_cache  # noqa: PLC0415
+        from autoskillit.server.helpers import _refresh_quota_cache  # noqa: PLC0415
 
         if tool_ctx.background is not None:
             tool_ctx.background.submit(

@@ -143,6 +143,7 @@ def make_context(
         merge_queue_watcher=DefaultMergeQueueWatcher(token=github_token),
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
+        quota_refresh_task=None,
     )
 
     def _resolve_output_patterns(skill_command: str) -> list[str]:

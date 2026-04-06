@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -19,6 +18,7 @@ from autoskillit.core import (
     get_logger,
     pkg_root,
 )
+from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _apply_triage_gate,
@@ -74,9 +74,9 @@ async def _open_kitchen_handler() -> None:
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
     _write_hook_config()
     await _prime_quota_cache()
-    ctx.quota_refresh_task = asyncio.create_task(
+    ctx.quota_refresh_task = create_background_task(
         _quota_refresh_loop(ctx.config.quota_guard),
-        name="quota_refresh_loop",
+        label="quota_refresh_loop",
     )
 
 

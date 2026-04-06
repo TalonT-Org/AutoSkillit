@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
 from autoskillit.execution import (
+    _refresh_quota_cache,  # noqa: F401 — re-exported for tools_execution.py; patched by tests
     resolve_log_dir,  # noqa: F401 — used by tools_github.py, tools_status.py
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
@@ -502,8 +503,6 @@ async def _quota_refresh_loop(config: Any) -> None:
     loop tick will still be fresh when the next tick fires. The hook never sees a stale
     cache as long as this loop is running.
     """
-    from autoskillit.execution import _refresh_quota_cache
-
     while True:
         await asyncio.sleep(config.cache_refresh_interval)
         try:

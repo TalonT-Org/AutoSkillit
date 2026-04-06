@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import dataclasses
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -497,3 +499,57 @@ def test_close_kitchen_clears_active_recipe_packs(tmp_path, monkeypatch):
             _close_kitchen_handler()
 
     assert mock_ctx.active_recipe_packs is None
+
+
+# T-REFRESH-1
+@pytest.mark.anyio
+async def test_open_kitchen_starts_quota_refresh_task(tmp_path, monkeypatch):
+    """After _open_kitchen_handler(), ctx.quota_refresh_task is a running asyncio.Task."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+
+    async def instant_loop(config):
+        await asyncio.sleep(0)
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools_kitchen._quota_refresh_loop", instant_loop
+                    ):
+                        from autoskillit.server.tools_kitchen import _open_kitchen_handler
+
+                        await _open_kitchen_handler()
+
+    assert mock_ctx.quota_refresh_task is not None
+    assert isinstance(mock_ctx.quota_refresh_task, asyncio.Task)
+    mock_ctx.quota_refresh_task.cancel()
+
+
+# T-REFRESH-2
+def test_close_kitchen_cancels_quota_refresh_task(tmp_path, monkeypatch):
+    """_close_kitchen_handler cancels ctx.quota_refresh_task and sets it to None."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_task = MagicMock(spec=asyncio.Task)
+    mock_ctx.quota_refresh_task = mock_task
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools_kitchen import _close_kitchen_handler
+
+            _close_kitchen_handler()
+
+    mock_task.cancel.assert_called_once()
+    assert mock_ctx.quota_refresh_task is None
+
+
+# T-REFRESH-3
+def test_tool_context_has_quota_refresh_task_field():
+    """ToolContext must have a quota_refresh_task field defaulting to None."""
+    from autoskillit.pipeline.context import ToolContext
+
+    fields = {f.name: f for f in dataclasses.fields(ToolContext)}
+    assert "quota_refresh_task" in fields
+    assert fields["quota_refresh_task"].default is None

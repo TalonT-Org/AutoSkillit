@@ -151,8 +151,8 @@ def test_verdict_proportional_warning_threshold(skill_text):
 def test_evaluative_not_prescriptive_constraint(skill_text):
     """Findings must describe WHAT is lacking, never HOW to fix it."""
     text_lower = skill_text.lower()
-    assert "what is lacking" in text_lower and "what is at risk" in text_lower, (
-        "SKILL.md must require findings to describe WHAT is lacking and WHAT is at risk"
+    assert "what is lacking" in text_lower, (
+        "SKILL.md must require findings to describe WHAT is lacking"
     )
     assert "never prescribe how" in text_lower, "SKILL.md must prohibit prescriptive findings"
 

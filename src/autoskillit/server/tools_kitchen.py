@@ -74,6 +74,8 @@ async def _open_kitchen_handler() -> None:
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
     _write_hook_config()
     await _prime_quota_cache()
+    if ctx.quota_refresh_task is not None:
+        ctx.quota_refresh_task.cancel()
     ctx.quota_refresh_task = create_background_task(
         _quota_refresh_loop(ctx.config.quota_guard),
         label="quota_refresh_loop",

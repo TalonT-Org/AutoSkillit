@@ -333,7 +333,7 @@ class DefaultSessionSkillManager:
         Cycle-safe: tracks already-activated skills to prevent infinite recursion.
         """
         for value, label in ((session_id, "session_id"), (skill_name, "skill_name")):
-            if not value or any(c in value for c in (".", "/", "\\", "\x00")):
+            if not value or any(c in value for c in ("/", "\\", "\x00")):
                 raise ValueError(f"Invalid {label}: {value!r}")
             if value in (".", ".."):
                 raise ValueError(f"Invalid {label}: {value!r}")

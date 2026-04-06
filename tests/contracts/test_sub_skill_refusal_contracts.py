@@ -17,7 +17,6 @@ _SUB_SKILL_CALL_PATTERN = re.compile(
     r"/autoskillit:.{0,200}Skill tool|"
     r"LOAD.{0,100}/autoskillit:|"
     r"Load.{0,100}/autoskillit:",
-    re.DOTALL,
 )
 
 # Refusal detection language
@@ -27,10 +26,9 @@ _REFUSAL_SIGNAL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Required action on refusal
+# Required action on refusal — specific phrases unlikely to appear in non-refusal contexts
 _ACTION_SIGNAL_PATTERN = re.compile(
-    r"do NOT|do not|discard|skip|omit|proceed without|log.{0,30}warning|"
-    r"fail.{0,30}clean|abort.{0,20}step",
+    r"proceed without|discard|log.{0,30}warning|fail.{0,30}clean|abort.{0,20}step",
     re.IGNORECASE,
 )
 
@@ -41,7 +39,7 @@ def _find_sub_skill_calling_skills() -> list[tuple[str, Path]]:
         skill_md = skill_dir / "SKILL.md"
         if not skill_md.exists():
             continue
-        text = skill_md.read_text()
+        text = skill_md.read_text(encoding="utf-8")
         if _SUB_SKILL_CALL_PATTERN.search(text):
             results.append((skill_dir.name, skill_md))
     return results
@@ -61,7 +59,7 @@ def test_sub_skill_calling_skill_has_refusal_handler(skill_name: str, skill_md: 
     document what to do when the Skill tool refuses the invocation. New qualifying
     skills without this handler fail CI immediately without requiring code review.
     """
-    text = skill_md.read_text()
+    text = skill_md.read_text(encoding="utf-8")
     has_refusal = bool(_REFUSAL_SIGNAL_PATTERN.search(text))
     has_action = bool(_ACTION_SIGNAL_PATTERN.search(text))
     assert has_refusal, (
@@ -72,7 +70,7 @@ def test_sub_skill_calling_skill_has_refusal_handler(skill_name: str, skill_md: 
     )
     assert has_action, (
         f"{skill_name}/SKILL.md has refusal detection language but no prescribed action. "
-        f"Specify: discard, skip, omit, fail clean, or log warning."
+        f"Specify: proceed without, discard, fail clean, log warning, or abort step."
     )
 
 

@@ -522,13 +522,13 @@ class TestGetQuotaEvents:
             {
                 "ts": "2026-03-10T10:00:00+00:00",
                 "event": "approved",
-                "threshold": 90.0,
+                "threshold": 85.0,
                 "utilization": 50.0,
             },
             {
                 "ts": "2026-03-10T11:00:00+00:00",
                 "event": "blocked",
-                "threshold": 90.0,
+                "threshold": 85.0,
                 "utilization": 92.5,
             },
         ]

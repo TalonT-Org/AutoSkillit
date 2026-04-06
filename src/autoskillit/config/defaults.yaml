@@ -60,7 +60,7 @@ token_usage:
 
 quota_guard:
   enabled: true
-  threshold: 90.0
+  threshold: 85.0
   buffer_seconds: 60
   cache_max_age: 300
   credentials_path: "~/.claude/.credentials.json"

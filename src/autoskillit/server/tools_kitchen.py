@@ -43,7 +43,7 @@ def _write_hook_config() -> None:
     cfg = ctx.config.quota_guard
     payload = {
         "quota_guard": {
-            "threshold": cfg.threshold if cfg.threshold is not None else 90.0,
+            "threshold": cfg.threshold if cfg.threshold is not None else 85.0,
             "cache_max_age": cfg.cache_max_age if cfg.cache_max_age is not None else 300,
             "cache_path": cfg.cache_path
             if cfg.cache_path is not None

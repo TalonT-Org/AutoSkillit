@@ -342,7 +342,7 @@ class TestQuotaGuardConfig:
 
         config = AutomationConfig()
         assert config.quota_guard.enabled is True
-        assert config.quota_guard.threshold == pytest.approx(90.0)
+        assert config.quota_guard.threshold == pytest.approx(85.0)
         assert config.quota_guard.buffer_seconds == 60
         assert config.quota_guard.cache_max_age == 300
 
@@ -352,11 +352,11 @@ class TestQuotaGuardConfig:
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text(
-            yaml.dump({"quota_guard": {"enabled": True, "threshold": 90.0}})
+            yaml.dump({"quota_guard": {"enabled": True, "threshold": 85.0}})
         )
         config = load_config(tmp_path)
         assert config.quota_guard.enabled is True
-        assert config.quota_guard.threshold == pytest.approx(90.0)
+        assert config.quota_guard.threshold == pytest.approx(85.0)
         # Unspecified fields keep defaults
         assert config.quota_guard.buffer_seconds == 60
 

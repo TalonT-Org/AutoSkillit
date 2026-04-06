@@ -132,7 +132,7 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
     """close_kitchen must remove temp/.autoskillit_hook_config.json to prevent stale config."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
-    mock_ctx.config.quota_guard.threshold = 90.0
+    mock_ctx.config.quota_guard.threshold = 85.0
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "~/.claude/quota_cache.json"
 

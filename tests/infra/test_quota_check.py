@@ -159,7 +159,7 @@ def test_quota_check_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
     _write_cache(custom_cache, utilization=95.0)
     _write_hook_config(
         tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json",
-        threshold=90.0,
+        threshold=85.0,
         cache_max_age=300,
         cache_path=str(custom_cache),
     )
@@ -180,7 +180,7 @@ def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypa
     wrong_cache = tmp_path / "wrong_cache.json"  # not written — should not be read
     _write_hook_config(
         tmp_path / "temp" / ".autoskillit_hook_config.json",
-        threshold=90.0,
+        threshold=85.0,
         cache_max_age=300,
         cache_path=str(wrong_cache),
     )
@@ -192,7 +192,7 @@ def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypa
 
 # T-CFG-4
 def test_quota_check_falls_back_to_defaults_without_hook_config(tmp_path, monkeypatch):
-    """Without hook config, hook falls back to hard-coded defaults (threshold=90.0).
+    """Without hook config, hook falls back to hard-coded defaults (threshold=85.0).
 
     Regression test: no regression when kitchen was never opened or hook config was removed.
     """
@@ -217,7 +217,7 @@ def test_quota_event_approved_written_to_log(tmp_path, monkeypatch):
     assert len(events) == 1
     assert events[0]["event"] == "approved"
     assert events[0]["utilization"] == 50.0
-    assert events[0]["threshold"] == 90.0
+    assert events[0]["threshold"] == 85.0
     assert "ts" in events[0]
 
 
@@ -235,7 +235,7 @@ def test_quota_event_blocked_written_to_log(tmp_path, monkeypatch):
     ev = events[0]
     assert ev["event"] == "blocked"
     assert ev["utilization"] == 95.0
-    assert ev["threshold"] == 90.0
+    assert ev["threshold"] == 85.0
     assert isinstance(ev["sleep_seconds"], int)
     assert ev["sleep_seconds"] > 0
     assert "ts" in ev

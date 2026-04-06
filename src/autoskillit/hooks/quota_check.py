@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 _DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
-_DEFAULT_THRESHOLD = 90.0
+_DEFAULT_THRESHOLD = 85.0
 _DEFAULT_CACHE_MAX_AGE = 300  # seconds
 
 HOOK_CONFIG_FILENAME = ".autoskillit_hook_config.json"

@@ -101,6 +101,31 @@ def _remove_disable_model_invocation(content: str) -> str:
     return f"---\n{fm_text}\n---\n{body}"
 
 
+_ACTIVATE_DEPS_PATTERN = re.compile(
+    r"^activate_deps:\s*\[([^\]]*)\]", re.MULTILINE
+)
+
+
+def _parse_activate_deps(content: str) -> list[str]:
+    """Extract activate_deps list from SKILL.md frontmatter.
+
+    Parses ``activate_deps: [item1, item2]`` from YAML frontmatter.
+    Each item is either a PACK_REGISTRY key (pack dependency) or a
+    bare skill name (individual dependency).
+    """
+    m = _FM_PATTERN.match(content)
+    if not m:
+        return []
+    fm_text = m.group(1)
+    match = _ACTIVATE_DEPS_PATTERN.search(fm_text)
+    if not match:
+        return []
+    items = match.group(1).strip()
+    if not items:
+        return []
+    return [item.strip() for item in items.split(",") if item.strip()]
+
+
 def _is_skill_disabled(
     skill_info: SkillInfo,
     disabled: list[str],
@@ -300,27 +325,66 @@ class DefaultSessionSkillManager:
         return ValidatedAddDir(path=str(session_skills_dir))
 
     def activate_tier2(self, session_id: str, skill_name: str) -> bool:
-        """Remove disable-model-invocation from the ephemeral copy of skill_name.
+        """Remove disable-model-invocation from a skill and its declared dependencies.
 
-        Returns True if the file was found and updated, False otherwise.
+        Reads ``activate_deps`` from the target skill's frontmatter and transitively
+        activates all dependencies:
+        - Pack names (keys in PACK_REGISTRY) -> activate all session skills with that category
+        - Skill names -> activate the specific named skill
+
+        Cycle-safe: tracks already-activated skills to prevent infinite recursion.
         """
-        if (
-            not session_id
-            or "\x00" in session_id
-            or "/" in session_id
-            or "\\" in session_id
-            or session_id in (".", "..")
-        ):
-            raise ValueError(f"Invalid session_id: {session_id!r}")
-        if not skill_name or "/" in skill_name or "\\" in skill_name or skill_name in (".", ".."):
-            raise ValueError(f"Invalid skill_name: {skill_name!r}")
+        for value, label in ((session_id, "session_id"), (skill_name, "skill_name")):
+            if not value or any(c in value for c in (".", "/", "\\", "\x00")):
+                raise ValueError(f"Invalid {label}: {value!r}")
+            if value in (".", ".."):
+                raise ValueError(f"Invalid {label}: {value!r}")
+
+        activated: set[str] = set()
+        return self._activate_with_deps(session_id, skill_name, activated)
+
+    def _activate_with_deps(
+        self, session_id: str, skill_name: str, activated: set[str]
+    ) -> bool:
+        """Activate a single skill and recursively activate its dependencies."""
+        if skill_name in activated:
+            return False
+        activated.add(skill_name)
+
         skill_md = self._root / session_id / _SKILLS_SUBDIR / skill_name / "SKILL.md"
         if not skill_md.exists():
             return False
+
         content = skill_md.read_text()
-        updated = _remove_disable_model_invocation(content)
-        atomic_write(skill_md, updated)
+        new_content = _remove_disable_model_invocation(content)
+        if new_content != content:
+            atomic_write(skill_md, new_content)
+
+        deps = _parse_activate_deps(content)
+        for dep in deps:
+            if dep in PACK_REGISTRY:
+                self._activate_pack_deps(session_id, dep, activated)
+            else:
+                self._activate_with_deps(session_id, dep, activated)
+
         return True
+
+    def _activate_pack_deps(
+        self, session_id: str, pack_name: str, activated: set[str]
+    ) -> None:
+        """Activate all session skills whose category matches *pack_name*."""
+        skills_base = self._root / session_id / _SKILLS_SUBDIR
+        if not skills_base.is_dir():
+            return
+        for skill_dir in sorted(skills_base.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            name = skill_dir.name
+            if name in activated:
+                continue
+            info = self._provider.resolver.resolve(name)
+            if info and pack_name in info.categories:
+                self._activate_with_deps(session_id, name, activated)
 
     def cleanup_stale(self, max_age_seconds: int = 259200) -> int:
         """Remove session dirs not accessed within max_age_seconds.

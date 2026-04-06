@@ -32,6 +32,7 @@ from autoskillit.workspace import clone_registry  # noqa: F401 — re-exported f
 if TYPE_CHECKING:
     from fastmcp import Context
 
+    from autoskillit.config import QuotaGuardConfig
     from autoskillit.core import SubprocessResult
 
 logger = get_logger(__name__)
@@ -491,7 +492,7 @@ async def _prime_quota_cache() -> None:
         logger.warning("quota_prime_failed", exc_info=True)
 
 
-async def _quota_refresh_loop(config: Any) -> None:
+async def _quota_refresh_loop(config: QuotaGuardConfig) -> None:
     """Long-running coroutine: refreshes the quota cache every cache_refresh_interval seconds.
 
     Designed to run as a background asyncio.Task for the duration of a kitchen session.

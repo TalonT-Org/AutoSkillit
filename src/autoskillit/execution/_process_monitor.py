@@ -107,7 +107,7 @@ def _has_active_child_processes(pid: int) -> bool:
                     return True
             except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
                 continue
-    except psutil.NoSuchProcess:
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         pass
     return False
 

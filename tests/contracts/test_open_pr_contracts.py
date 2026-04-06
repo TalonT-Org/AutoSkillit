@@ -94,3 +94,34 @@ def test_step2_prose_instructs_suffix_stripping(text):
     assert re.search(r"PART.*ONLY", step2_section), (
         "Step 2 prose must mention stripping the PART X ONLY suffix as a complete phrase"
     )
+
+
+def test_handles_skill_tool_refusal_for_arch_lens(text):
+    """
+    open-pr has the identical gap: arch-lens sub-skills invoked via the Skill tool
+    with no refusal handler. Enforces the same mechanism contract.
+    """
+    refusal_signals = [
+        "disable-model-invocation",
+        "cannot be used",
+        "refused",
+        "Skill tool returns",
+        "Skill tool fails",
+    ]
+    action_signals = [
+        "do not",
+        "do NOT",
+        "discard",
+        "skip",
+        "omit",
+        "proceed without",
+    ]
+    has_refusal = any(s in text for s in refusal_signals)
+    has_action = any(s in text for s in action_signals)
+    assert has_refusal, (
+        "open-pr SKILL.md must document what to do when the Skill tool refuses "
+        "an arch-lens invocation."
+    )
+    assert has_action, (
+        "open-pr SKILL.md must prescribe a concrete action when arch-lens refusal occurs."
+    )

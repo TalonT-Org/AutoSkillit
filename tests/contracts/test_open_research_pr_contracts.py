@@ -87,3 +87,63 @@ def test_output_contract():
     text = SKILL.read_text()
     assert "pr_url" in text
     assert "%%ORDER_UP%%" in text
+
+
+def test_handles_skill_tool_refusal_for_exp_lens():
+    """
+    SKILL.md must document what to do when the Skill tool refuses an exp-lens invocation.
+    Requires language explicitly addressing refusal AND prescribing a concrete action.
+    Vocabulary-only ('graceful', 'unavailable') is insufficient — mechanism is required.
+    """
+    text = SKILL.read_text()
+    refusal_signals = [
+        "disable-model-invocation",
+        "cannot be used",
+        "refused",
+        "Skill tool returns",
+        "Skill tool fails",
+    ]
+    action_signals = [
+        "do not",
+        "do NOT",
+        "discard",
+        "skip",
+        "omit",
+        "proceed without",
+    ]
+    has_refusal = any(s in text for s in refusal_signals)
+    has_action = any(s in text for s in action_signals)
+    assert has_refusal, (
+        "open-research-pr SKILL.md must document what to do when the Skill tool refuses "
+        "an exp-lens invocation. Expected: 'disable-model-invocation', 'cannot be used', "
+        "'refused', or equivalent near the lens invocation step."
+    )
+    assert has_action, (
+        "open-research-pr SKILL.md must prescribe a concrete action on refusal. "
+        "Expected: 'do NOT', 'discard', 'skip', 'omit', or equivalent."
+    )
+
+
+def test_embeds_canonical_classdef_palette():
+    """
+    SKILL.md must embed or reference the canonical 9-class mermaid palette.
+    Without this, any fallback diagram generation uses invented styling.
+    Fails if fewer than 7 of the 9 canonical class names appear in the file.
+    """
+    text = SKILL.read_text()
+    canonical_classes = {
+        "cli",
+        "stateNode",
+        "handler",
+        "phase",
+        "output",
+        "integration",
+        "newComponent",
+        "detector",
+        "gap",
+    }
+    found = {name for name in canonical_classes if name in text}
+    assert len(found) >= 7, (
+        f"open-research-pr SKILL.md must embed the canonical mermaid classDef palette "
+        f"(at least 7 of 9 names). Found only: {sorted(found)}"
+    )

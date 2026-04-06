@@ -71,6 +71,7 @@ For each ```` ```mermaid ```` block, validate:
 **6. Class definition syntax:**
 - `classDef` lines must end with semicolons only if using shorthand
 - `class A,B,C className;` — verify referenced node IDs exist in the diagram
+- Using ONLY classDef styles from the mermaid skill (no invented colors) — flag any non-canonical class names
 
 **7. Node ID rules:**
 - Node IDs must not start with numbers

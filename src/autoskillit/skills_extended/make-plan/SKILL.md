@@ -150,6 +150,8 @@ call is mandatory at the start of every headless session that uses code-index to
 | State Lifecycle | `/autoskillit:arch-lens-state-lifecycle` |
 | Deployment | `/autoskillit:arch-lens-deployment` |
 
+If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, proceed without the architectural diagram.
+
 **5d. Create the diagram following the loaded skill's instructions:**
 - Focus on the PROPOSED changes (use `newComponent` class for new elements)
 - Show how new components integrate with existing architecture

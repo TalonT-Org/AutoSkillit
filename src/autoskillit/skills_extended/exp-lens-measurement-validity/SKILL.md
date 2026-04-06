@@ -37,6 +37,7 @@ hooks:
 - Assess reliability (stability under reruns) and sensitivity (ability to distinguish meaningful differences) for each metric
 - Identify where metric-construct alignment is weak or unsupported by evidence
 - BEFORE creating any optional diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
+- If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Write output to `.autoskillit/temp/exp-lens-measurement-validity/exp_diag_measurement_validity_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):

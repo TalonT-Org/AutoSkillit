@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.contracts.conftest import ACTION_SIGNALS, REFUSAL_SIGNALS
+
 SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
 SKILL = SKILLS_DIR / "open-pr/SKILL.md"
 
@@ -93,4 +95,20 @@ def test_step2_prose_instructs_suffix_stripping(text):
     step2_section = text[step2_idx : step2_idx + 2000]
     assert re.search(r"PART.*ONLY", step2_section), (
         "Step 2 prose must mention stripping the PART X ONLY suffix as a complete phrase"
+    )
+
+
+def test_handles_skill_tool_refusal_for_arch_lens(text):
+    """
+    SKILL.md must document what to do when the Skill tool refuses an arch-lens invocation.
+    Requires refusal detection language AND a prescribed concrete action.
+    """
+    has_refusal = any(s in text for s in REFUSAL_SIGNALS)
+    has_action = any(s in text for s in ACTION_SIGNALS)
+    assert has_refusal, (
+        "open-pr SKILL.md must document what to do when the Skill tool refuses "
+        "an arch-lens invocation."
+    )
+    assert has_action, (
+        "open-pr SKILL.md must prescribe a concrete action when arch-lens refusal occurs."
     )

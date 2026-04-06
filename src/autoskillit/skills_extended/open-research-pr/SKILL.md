@@ -138,6 +138,13 @@ For each lens in `selected_lenses`:
    The lens skill reads the context, runs its analysis, and emits:
    `diagram_path = /absolute/path/to/.autoskillit/temp/exp-lens-{lens_slug}/exp_diag_{lens_slug}_{ts}.md`
 
+   **If the Skill tool returns an error containing "disable-model-invocation" or "cannot be used",
+   do NOT attempt to write a diagram freehand. Discard this lens iteration silently and continue
+   to the next lens_slug. If ALL lens invocations are refused this way, write a diagnostic note
+   to `.autoskillit/temp/open-research-pr/lens_unavailable_{timestamp}.txt` listing which lenses
+   were blocked, set `validated_diagrams = []`, and proceed to Step 5 (the Experiment Design
+   section will be omitted per Step 6 omission rules).**
+
 3. Capture `diagram_path` from the skill's output token. Read the file at that path.
    Extract the mermaid block.
 
@@ -249,3 +256,7 @@ pr_url = {url}
 ```
 
 Where `{url}` is the absolute GitHub PR URL, or an empty string when GitHub is unavailable.
+
+## Diagram Styling Reference
+
+Using ONLY classDef styles from the mermaid skill (no invented colors).

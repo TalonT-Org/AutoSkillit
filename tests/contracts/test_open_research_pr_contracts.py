@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from tests.contracts.conftest import ACTION_SIGNALS, REFUSAL_SIGNALS
+
 SKILL = Path(__file__).parents[2] / "src/autoskillit/skills_extended/open-research-pr/SKILL.md"
 
 
@@ -87,3 +89,22 @@ def test_output_contract():
     text = SKILL.read_text()
     assert "pr_url" in text
     assert "%%ORDER_UP%%" in text
+
+
+def test_handles_skill_tool_refusal_for_exp_lens():
+    """
+    SKILL.md must document what to do when the Skill tool refuses an exp-lens invocation.
+    Requires language explicitly addressing refusal AND prescribing a concrete action.
+    """
+    text = SKILL.read_text()
+    has_refusal = any(s in text for s in REFUSAL_SIGNALS)
+    has_action = any(s in text for s in ACTION_SIGNALS)
+    assert has_refusal, (
+        "open-research-pr SKILL.md must document what to do when the Skill tool refuses "
+        "an exp-lens invocation. Expected: 'disable-model-invocation', 'cannot be used', "
+        "'refused', or equivalent near the lens invocation step."
+    )
+    assert has_action, (
+        "open-research-pr SKILL.md must prescribe a concrete action on refusal. "
+        "Expected: 'do NOT', 'discard', 'skip', 'omit', or equivalent."
+    )

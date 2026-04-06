@@ -17,7 +17,7 @@ Format a workflow into a YAML recipe following the workflow schema.
 ## When to Use
 
 - **Standalone**: User wants to create a new recipe from scratch
-- **Loaded by another skill**: Another skill (e.g., setup-project) loads this via the Skill tool to format a workflow it has already discovered
+- **Loaded by another skill**: Another skill (e.g., setup-project) loads this via the Skill tool to format a workflow it has already discovered.
 
 ## Arguments (standalone mode)
 

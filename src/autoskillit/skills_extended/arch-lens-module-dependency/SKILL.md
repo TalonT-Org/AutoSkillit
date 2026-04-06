@@ -37,6 +37,7 @@ hooks:
 - Flag circular dependencies and violations
 - Calculate fan-in for key modules
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
+- If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - After writing the diagram file, emit the **absolute path** as a structured output
   token immediately before `%%ORDER_UP%%`. Resolve the relative `temp/arch-lens-module-dependency/...`
   save path to absolute by prepending the full CWD:

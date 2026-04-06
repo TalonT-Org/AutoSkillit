@@ -296,7 +296,7 @@ src/autoskillit/
     ├── audit-impl/           ├── smoke-task/
     ├── report-bug/           ├── pipeline-summary/
     ├── diagnose-ci/          ├── verify-diag/
-    └── troubleshoot-experiment/   # diagnoses implement_phase/run_experiment failures
+    └── troubleshoot-experiment/   # diagnoses implement_phase failures
 ```
 
 **Session diagnostics logs** are stored globally at `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Override with `linux_tracing.log_dir` in config. Session directories are named by Claude Code session UUID when available (preferred: parsed from stdout, fallback: discovered from JSONL filename via Channel B). When no session ID is available from either source, directories use `no_session_{timestamp}` naming. Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`.

@@ -38,6 +38,7 @@ hooks:
 - Flag any sequential peeking without a formal stopping rule as a critical defect
 - Evaluate whether the minimum detectable effect is practically meaningful, not just statistically chosen
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
+- If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Write output to `.autoskillit/temp/exp-lens-error-budget/exp_diag_error_budget_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):

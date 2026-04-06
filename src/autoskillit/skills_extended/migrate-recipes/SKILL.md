@@ -51,6 +51,7 @@ The orchestrator provides all context in the prompt:
    - `missing_field`: The field that should be added if absent
 3. If changes are needed, use `/autoskillit:write-recipe` in edit mode:
    - Load the skill: invoke `/autoskillit:write-recipe` via the Skill tool
+   - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, skip the recipe update and log a warning; proceed with remaining validation steps.
    - Provide the current YAML content
    - Describe all needed changes with the `instruction` text and before/after examples
 4. Validate the result with `validate_recipe`

@@ -90,6 +90,8 @@ Based on the user's description, match to the most appropriate lens using the se
 
 Use the Skill tool to load the selected `/autoskillit:exp-lens-{slug}` skill.
 
+If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with the exp-lens analysis. Abort this step and inform the user that the lens skill is unavailable.
+
 ### Step 4: Execute the Loaded Skill
 
 The loaded lens skill takes over and runs its full analysis workflow.

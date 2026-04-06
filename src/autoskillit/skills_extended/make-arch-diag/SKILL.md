@@ -103,6 +103,7 @@ Choose appropriate diagram types:
 ### Step 5: Create Diagrams
 
 Use `/autoskillit:mermaid` skill to create each diagram:
+- Using ONLY classDef styles from the mermaid skill (no invented colors)
 - Follow standard color palette
 - Include legends
 - Add clear labels and descriptions

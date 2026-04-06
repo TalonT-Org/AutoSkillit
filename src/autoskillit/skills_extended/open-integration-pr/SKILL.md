@@ -241,7 +241,13 @@ This diagram is for a Pull Request. Focus the diagram on the areas of the codeba
 **2. Immediately call the Skill tool to load the arch-lens skill** (e.g., `/autoskillit:arch-lens-module-dependency`).
 The loaded skill will read the PR context file written in step 1 above.
 
+**If the Skill tool returns an error containing "disable-model-invocation" or "cannot be used",
+do NOT write a diagram freehand. Discard this lens iteration silently. If ALL arch-lens
+invocations fail this way, set `validated_diagrams = []` (the Architecture Impact section is
+omitted per Step 7 behavior).**
+
 **3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
+Using ONLY classDef styles from the mermaid skill (no invented colors).
 
 The arch-lens skills write their output to `.autoskillit/temp/arch-lens-{lens-name}/` (relative to the current working directory). After each skill
 runs, read the generated markdown file and extract the mermaid code block(s).

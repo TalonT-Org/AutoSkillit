@@ -228,6 +228,7 @@ invocations fail this way, set `validated_diagrams = []` (the Architecture Impac
 omitted per Step 6 behavior).**
 
 **3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
+Using ONLY classDef styles from the mermaid skill (no invented colors).
 
 The arch-lens skills write their output to `.autoskillit/temp/arch-lens-{lens-name}/` (relative to the current working directory). After each skill
 runs, read the generated markdown file and extract the mermaid code block(s).

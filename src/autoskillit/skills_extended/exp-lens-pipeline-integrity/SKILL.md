@@ -37,6 +37,7 @@ hooks:
 - Flag all label-touching feature engineering steps
 - Document pipeline invariants that guard against leakage
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
+- If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Write output to `.autoskillit/temp/exp-lens-pipeline-integrity/exp_diag_pipeline_integrity_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):

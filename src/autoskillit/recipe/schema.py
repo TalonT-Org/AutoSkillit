@@ -88,6 +88,7 @@ class RecipeStep:
     optional_context_refs: list[str] = field(
         default_factory=list
     )  # Context variable names that may be referenced before they are captured (cyclic routes)
+    stale_threshold: int | None = None  # None means use global RunSkillConfig.stale_threshold
 
 
 @dataclass

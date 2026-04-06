@@ -87,6 +87,31 @@ def _has_active_api_connection(pid: int) -> bool:
     return False
 
 
+_CPU_ACTIVE_THRESHOLD: float = 10.0  # percent; evidence of actual computational work
+
+
+def _has_active_child_processes(pid: int) -> bool:
+    """Return True if any child process in the tree exceeds the CPU activity threshold.
+
+    Used by _session_log_monitor to suppress stale-kill when background Bash tasks
+    (launched via run_in_background: true) are actively running despite LLM/API being idle.
+
+    cpu_percent(interval=0) returns usage since the last call per-process; on repeated
+    stale-check cycles this reflects actual sustained activity, not momentary bursts.
+    """
+    try:
+        parent = psutil.Process(pid)
+        for child in parent.children(recursive=True):
+            try:
+                if child.cpu_percent(interval=0) > _CPU_ACTIVE_THRESHOLD:
+                    return True
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+                continue
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        pass
+    return False
+
+
 async def _session_log_monitor(
     session_log_dir: Path,
     completion_marker: str,
@@ -226,6 +251,14 @@ async def _session_log_monitor(
                     last_change = _time.monotonic()
                     logger.warning(
                         "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
+                        "suppressing stale kill (pid=%d)",
+                        elapsed,
+                        pid,
+                    )
+                elif pid is not None and _has_active_child_processes(pid):
+                    last_change = _time.monotonic()
+                    logger.warning(
+                        "JSONL silent for %.0fs but child processes are CPU-active — "
                         "suppressing stale kill (pid=%d)",
                         elapsed,
                         pid,

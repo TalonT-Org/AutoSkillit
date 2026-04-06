@@ -32,6 +32,7 @@ from autoskillit.execution._process_kill import (
 )
 from autoskillit.execution._process_monitor import (
     _has_active_api_connection,
+    _has_active_child_processes,
     _heartbeat,
     _session_log_monitor,
 )
@@ -62,6 +63,7 @@ __all__ = [
     "RaceAccumulator",
     "RaceSignals",
     "_has_active_api_connection",
+    "_has_active_child_processes",
     "_heartbeat",
     "_jsonl_contains_marker",
     "_jsonl_has_record_type",

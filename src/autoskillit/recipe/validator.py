@@ -153,6 +153,14 @@ def validate_recipe(recipe: Recipe) -> list[str]:
                 f"Step '{step_name}'.retries must be a non-negative integer, got {step.retries!r}."
             )
 
+        if step.stale_threshold is not None and (
+            not isinstance(step.stale_threshold, int) or step.stale_threshold <= 0
+        ):
+            errors.append(
+                f"Step {step_name!r}: 'stale_threshold' must be a positive integer "
+                f"when set, got {step.stale_threshold!r}"
+            )
+
         if step.on_result is not None:
             if step.on_success is not None:
                 errors.append(

@@ -373,6 +373,36 @@ class TestValidateRecipe:
         errors = validate_recipe(wf)
         assert errors == []
 
+    def test_validator_rejects_zero_stale_threshold(self) -> None:
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"s": RecipeStep(tool="run_skill", on_success="done", stale_threshold=0)},
+            kitchen_rules=["test"],
+        )
+        errors = validate_recipe(recipe)
+        assert any("stale_threshold" in e for e in errors)
+
+    def test_validator_rejects_negative_stale_threshold(self) -> None:
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"s": RecipeStep(tool="run_skill", on_success="done", stale_threshold=-1)},
+            kitchen_rules=["test"],
+        )
+        errors = validate_recipe(recipe)
+        assert any("stale_threshold" in e for e in errors)
+
+    def test_validator_accepts_positive_stale_threshold(self) -> None:
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"s": RecipeStep(tool="run_skill", on_success="done", stale_threshold=2400)},
+            kitchen_rules=["test"],
+        )
+        errors = validate_recipe(recipe)
+        assert not any("stale_threshold" in e for e in errors)
+
 
 # ---------------------------------------------------------------------------
 # TestDataFlowQuality — migrated from test_recipe_parser.py

@@ -452,6 +452,16 @@ class TestRecipeParser:
         step = _parse_step({"tool": "run_skill"})
         assert step.model is None
 
+    def test_parse_step_reads_stale_threshold(self) -> None:
+        data = {"tool": "run_skill", "stale_threshold": 2400, "on_success": "done"}
+        step = _parse_step(data)
+        assert step.stale_threshold == 2400
+
+    def test_parse_step_stale_threshold_defaults_to_none(self) -> None:
+        data = {"tool": "run_skill", "on_success": "done"}
+        step = _parse_step(data)
+        assert step.stale_threshold is None
+
     # MOD4
     def test_bundled_resolve_failures_steps_use_config_default(self) -> None:
         bd = builtin_recipes_dir()

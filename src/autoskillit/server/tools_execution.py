@@ -150,6 +150,7 @@ async def run_skill(
     model: str = "",
     step_name: str = "",
     order_id: str = "",
+    stale_threshold: int | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Run a Claude Code headless session with a skill command.
@@ -186,6 +187,9 @@ async def run_skill(
         order_id: Optional per-issue/order identifier for token telemetry scoping. When set,
             token and timing entries are keyed by this value, enabling per-issue isolation
             in get_token_summary/get_timing_summary and in the token_summary_appender hook.
+        stale_threshold: Override the staleness kill threshold in seconds. When set on
+            a RecipeStep, the recipe orchestrator passes it here. None uses the global
+            config default (RunSkillConfig.stale_threshold, default 1200s).
     """
     if (headless := _require_not_headless("run_skill")) is not None:
         return headless
@@ -285,6 +289,7 @@ async def run_skill(
             order_id=order_id,
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_spec,
+            stale_threshold=float(stale_threshold) if stale_threshold is not None else None,
         )
         if skill_result.success:
             tool_ctx.audit.record_success(skill_command)

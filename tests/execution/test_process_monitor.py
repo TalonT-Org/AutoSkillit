@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import sys
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import anyio
+import psutil
 import pytest
 
-from autoskillit.core.types import TerminationReason
+from autoskillit.core.types import ChannelBStatus, TerminationReason
 from autoskillit.execution.process import (
     RaceAccumulator,
     _has_active_api_connection,
+    _has_active_child_processes,
     _heartbeat,
     _session_log_monitor,
     _watch_session_log,
@@ -596,6 +598,64 @@ class TestHasActiveApiConnection:
             assert _has_active_api_connection(12345) is True
 
 
+class TestHasActiveChildProcesses:
+    """Unit tests for _has_active_child_processes."""
+
+    def _make_child(self, cpu: float | type[Exception]) -> MagicMock:
+        """Build a mock psutil child process."""
+        child = MagicMock()
+        if isinstance(cpu, type) and issubclass(cpu, Exception):
+            child.cpu_percent.side_effect = cpu(pid=999)
+        else:
+            child.cpu_percent.return_value = cpu
+        return child
+
+    def _patch_children(self, children, monkeypatch, parent_raises=None):
+        mock_proc = MagicMock()
+        if parent_raises:
+            monkeypatch.setattr(
+                "autoskillit.execution._process_monitor.psutil.Process",
+                MagicMock(side_effect=parent_raises(pid=1234)),
+            )
+            return
+        mock_proc.children.return_value = children
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor.psutil.Process",
+            MagicMock(return_value=mock_proc),
+        )
+
+    def test_returns_true_when_child_exceeds_threshold(self, monkeypatch):
+        self._patch_children([self._make_child(15.0)], monkeypatch)
+        assert _has_active_child_processes(1234) is True
+
+    def test_returns_false_when_all_children_below_threshold(self, monkeypatch):
+        children = [self._make_child(0.0), self._make_child(5.0), self._make_child(9.9)]
+        self._patch_children(children, monkeypatch)
+        assert _has_active_child_processes(1234) is False
+
+    def test_returns_false_when_no_children(self, monkeypatch):
+        self._patch_children([], monkeypatch)
+        assert _has_active_child_processes(1234) is False
+
+    def test_returns_false_on_parent_nosuchprocess(self, monkeypatch):
+        self._patch_children([], monkeypatch, parent_raises=psutil.NoSuchProcess)
+        assert _has_active_child_processes(1234) is False
+
+    def test_skips_dead_child_gracefully(self, monkeypatch):
+        children = [self._make_child(psutil.NoSuchProcess), self._make_child(5.0)]
+        self._patch_children(children, monkeypatch)
+        assert _has_active_child_processes(1234) is False
+
+    def test_skips_zombie_child_then_finds_active(self, monkeypatch):
+        children = [self._make_child(psutil.ZombieProcess), self._make_child(20.0)]
+        self._patch_children(children, monkeypatch)
+        assert _has_active_child_processes(1234) is True
+
+    def test_skips_access_denied_gracefully(self, monkeypatch):
+        self._patch_children([self._make_child(psutil.AccessDenied)], monkeypatch)
+        assert _has_active_child_processes(1234) is False
+
+
 class TestSessionLogMonitorStaleSuppressionGate:
     """_session_log_monitor suppresses stale when process has an active port-443 connection."""
 
@@ -716,6 +776,43 @@ class TestSessionLogMonitorStaleSuppressionGate:
         assert warning_in_logs or warning_in_stdout, (
             "Suppression warning must appear in structlog capture or stdout"
         )
+
+    @pytest.mark.anyio
+    async def test_suppresses_stale_when_child_cpu_active_no_api_connection(
+        self, tmp_path, monkeypatch
+    ):
+        """Child CPU activity suppresses stale kill even when no port-443 connection."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10  # wall time — compared against st_ctime in phase 1
+        call_count: dict[str, int] = {"cpu": 0}
+
+        def fake_api_conn(pid):
+            return False  # No port-443 connection
+
+        def fake_child_cpu(pid):
+            call_count["cpu"] += 1
+            return call_count["cpu"] == 1  # True first, False second
+
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor._has_active_api_connection",
+            fake_api_conn,
+        )
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor._has_active_child_processes",
+            fake_child_cpu,
+        )
+        result = await _session_log_monitor(
+            tmp_path,
+            "DONE",
+            stale_threshold=0.05,
+            spawn_time=spawn_time,
+            pid=9999,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+        )
+        assert result.status == ChannelBStatus.STALE
+        assert call_count["cpu"] == 2  # suppressed once, then fired
 
 
 class TestHeartbeatMarkerAwareness:

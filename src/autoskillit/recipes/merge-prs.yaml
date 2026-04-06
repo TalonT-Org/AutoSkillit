@@ -433,6 +433,7 @@ steps:
 
   implement:
     tool: run_skill
+    stale_threshold: 2400
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.pr_plan_path }}"
       cwd: "${{ context.work_dir }}"
@@ -448,6 +449,7 @@ steps:
 
   retry_worktree:
     tool: run_skill
+    stale_threshold: 2400
     with:
       skill_command: "/autoskillit:retry-worktree ${{ context.pr_plan_path }} ${{ context.worktree_path }}"
       cwd: "${{ context.worktree_path }}"

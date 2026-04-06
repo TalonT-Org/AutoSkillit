@@ -101,9 +101,7 @@ def _remove_disable_model_invocation(content: str) -> str:
     return f"---\n{fm_text}\n---\n{body}"
 
 
-_ACTIVATE_DEPS_PATTERN = re.compile(
-    r"^activate_deps:\s*\[([^\]]*)\]", re.MULTILINE
-)
+_ACTIVATE_DEPS_PATTERN = re.compile(r"^activate_deps:\s*\[([^\]]*)\]", re.MULTILINE)
 
 
 def _parse_activate_deps(content: str) -> list[str]:
@@ -343,9 +341,7 @@ class DefaultSessionSkillManager:
         activated: set[str] = set()
         return self._activate_with_deps(session_id, skill_name, activated)
 
-    def _activate_with_deps(
-        self, session_id: str, skill_name: str, activated: set[str]
-    ) -> bool:
+    def _activate_with_deps(self, session_id: str, skill_name: str, activated: set[str]) -> bool:
         """Activate a single skill and recursively activate its dependencies."""
         if skill_name in activated:
             return False
@@ -369,9 +365,7 @@ class DefaultSessionSkillManager:
 
         return True
 
-    def _activate_pack_deps(
-        self, session_id: str, pack_name: str, activated: set[str]
-    ) -> None:
+    def _activate_pack_deps(self, session_id: str, pack_name: str, activated: set[str]) -> None:
         """Activate all session skills whose category matches *pack_name*."""
         skills_base = self._root / session_id / _SKILLS_SUBDIR
         if not skills_base.is_dir():

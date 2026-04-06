@@ -957,9 +957,7 @@ async def test_run_skill_activates_deps_for_tier3_target(tool_ctx, monkeypatch) 
 
     # Set up skill_resolver to produce a resolved name
     mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = MagicMock(
-        source=MagicMock(value="bundled_extended")
-    )
+    mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
     tool_ctx.skill_resolver = mock_resolver
 
     class MockExecutor:

@@ -258,7 +258,6 @@ steps:
       step_name: implement_phase
     capture:
       worktree_path: "${{ result.worktree_path }}"
-      branch_name: "${{ result.branch_name }}"
     on_success: next_phase_or_experiment
     on_failure: troubleshoot_implement_failure
     on_exhausted: run_experiment
@@ -276,8 +275,6 @@ steps:
       cwd: "${{ inputs.source_dir }}"
       step_name: troubleshoot_implement_failure
     capture:
-      diagnosis_path: "${{ result.diagnosis_path }}"
-      failure_type: "${{ result.failure_type }}"
       is_fixable: "${{ result.is_fixable }}"
     on_success: route_implement_failure
     on_failure: escalate_stop

@@ -1,4 +1,3 @@
-from pathlib import Path
 
 import pytest
 
@@ -63,4 +62,6 @@ def test_research_recipe_no_validation_errors(recipe):
     test above but makes the dead-reference intent explicit.
     """
     errors = validate_recipe(recipe)
-    assert not errors, f"research.yaml has validation errors (may include dead step references): {errors}"
+    assert not errors, (
+        f"research.yaml has validation errors (may include dead step references): {errors}"
+    )

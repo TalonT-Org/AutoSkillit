@@ -102,7 +102,7 @@ Apply this decision table in priority order (stop at the first match):
 Create directory `.autoskillit/temp/troubleshoot-experiment/` if it does not exist.
 Write the diagnosis file to:
 
-`.autoskillit/temp/troubleshoot-experiment/diagnosis_{YYYY-MM-DD_HHMMSS}.md`
+`.autoskillit/temp/troubleshoot-experiment/diagnosis_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ```markdown
 # Experiment Failure Diagnosis

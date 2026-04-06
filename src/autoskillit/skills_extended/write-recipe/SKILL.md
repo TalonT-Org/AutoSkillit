@@ -234,7 +234,7 @@ implement-experiment, implement-worktree, implement-worktree-no-merge, investiga
 make-experiment-diag, make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr,
 open-kitchen, open-pr, open-research-pr, pipeline-summary, plan-experiment, prepare-issue, process-issues, rectify, report-bug,
 resolve-design-review, resolve-failures, resolve-merge-conflicts, resolve-research-review, resolve-review, retry-worktree, review-approach, review-design, review-pr, review-research-pr, run-experiment,
-scope, setup-project, smoke-task, sprint-planner, triage-issues, validate-audit, verify-diag, write-recipe, write-report
+scope, setup-project, smoke-task, sprint-planner, triage-issues, troubleshoot-experiment, validate-audit, verify-diag, write-recipe, write-report
 
 ## Skill Reference Disambiguation
 

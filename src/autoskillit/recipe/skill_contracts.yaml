@@ -622,6 +622,240 @@ skills:
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
+  exp-lens-estimand-clarity:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-causal-assumptions:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-comparator-construction:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-pipeline-integrity:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-variance-stability:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-fair-comparison:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-reproducibility-artifacts:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-measurement-validity:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-sensitivity-robustness:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-benchmark-representativeness:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-unit-interference:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-error-budget:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-severity-testing:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-randomization-blocking:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-validity-threats:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-iterative-learning:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-exploratory-confirmatory:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  exp-lens-governance-risk:
+    inputs:
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
   prepare-issue:
     inputs: []
     outputs: []

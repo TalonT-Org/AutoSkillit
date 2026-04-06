@@ -1,6 +1,7 @@
 ---
 name: exp-lens-unit-interference
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create Unit Interference experimental design diagram showing unit hierarchy, cluster structure, shared resources, and SUTVA violation pathways. Causal-Structural lens answering "What is the unit, and can treatments spill over?"
 hooks:
   PreToolUse:

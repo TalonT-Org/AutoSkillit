@@ -1,6 +1,7 @@
 ---
 name: exp-lens-governance-risk
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create a risk register and stakeholder impact assessment for experiments with deployment implications. Governance lens answering "What risks arise from acting on this result?"
 hooks:
   PreToolUse:

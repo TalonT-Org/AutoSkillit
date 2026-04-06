@@ -1,6 +1,7 @@
 ---
 name: arch-lens-error-resilience
 categories: [arch-lens]
+activate_deps: [mermaid]
 description: Create Error/Resilience architecture diagram showing failure handling, recovery mechanisms, and circuit breakers. Diagnostic lens answering "How are failures handled?"
 hooks:
   PreToolUse:

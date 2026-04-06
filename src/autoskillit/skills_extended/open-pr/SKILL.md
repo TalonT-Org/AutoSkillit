@@ -1,6 +1,7 @@
 ---
 name: open-pr
 categories: [github]
+activate_deps: [arch-lens]
 description: Create a GitHub PR for a completed implementation, with auto-selected arch-lens
   diagrams embedded in the PR body. Use after pipeline implementation when open_pr mode is
   enabled.

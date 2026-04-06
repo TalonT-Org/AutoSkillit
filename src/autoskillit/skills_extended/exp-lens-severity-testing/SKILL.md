@@ -1,6 +1,7 @@
 ---
 name: exp-lens-severity-testing
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Analyze severity of experimental tests — adversarial cases, negative controls, falsification tests, easy-pass detection, and confirmatory theater. Falsificationist lens answering "Would this design have caught the error?"
 hooks:
   PreToolUse:

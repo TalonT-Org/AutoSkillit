@@ -1,6 +1,7 @@
 ---
 name: exp-lens-exploratory-confirmatory
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Assess whether analytic decisions were pre-specified or post-hoc and whether exploratory/confirmatory norms are aligned. Boundary lens answering "Is this discovery or test, and are norms aligned?"
 hooks:
   PreToolUse:

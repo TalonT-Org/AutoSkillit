@@ -1,6 +1,7 @@
 ---
 name: arch-lens-c4-container
 categories: [arch-lens]
+activate_deps: [mermaid]
 description: Create C4 Container architecture diagram showing static structure, building blocks, and technology choices. Anatomical lens answering "How is it built?"
 hooks:
   PreToolUse:

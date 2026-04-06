@@ -1,6 +1,7 @@
 ---
 name: exp-lens-reproducibility-artifacts
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create Reproducibility Artifacts experimental design diagram showing run instructions, environment capture, data availability, determinism controls, and audit trail. Transparency lens answering "Could an independent party reproduce this?"
 hooks:
   PreToolUse:

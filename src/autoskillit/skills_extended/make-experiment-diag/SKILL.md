@@ -1,6 +1,7 @@
 ---
 name: make-experiment-diag
 categories: [exp-lens]
+activate_deps: [exp-lens]
 description: Interactive selection of experimental design lens for visualizing experiment methodology. Routes to the appropriate exp-lens-* skill.
 hooks:
   PreToolUse:

@@ -1,6 +1,7 @@
 ---
 name: exp-lens-variance-stability
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create a variance analysis profile assessing whether signals exceed noise and whether results are stable across random seeds. Stability lens answering "Is the signal larger than the noise?"
 hooks:
   PreToolUse:

@@ -267,11 +267,9 @@ async def run_skill(
         )
         skill_add_dirs.append(session_root)
 
-        # Activate the target skill so it's invocable in the headless session
+        # Activate the target skill and its declared dependencies
         if target_name:
-            tier2_skills = frozenset(tool_ctx.config.skills.tier2)
-            if target_name in tier2_skills:
-                tool_ctx.session_skill_manager.activate_tier2(session_id, target_name)
+            tool_ctx.session_skill_manager.activate_skill_deps(session_id, target_name)
     try:
         skill_add_dirs.append(validate_add_dir(Path(cwd)))
     except LayoutError:

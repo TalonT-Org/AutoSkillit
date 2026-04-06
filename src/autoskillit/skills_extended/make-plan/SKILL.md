@@ -1,5 +1,6 @@
 ---
 name: make-plan
+activate_deps: [arch-lens]
 description: Create implementation plans through deep codebase understanding. Use when user asks to create, devise, or write a plan. Leverages subagents to explore approaches, understand systems, and design aligned solutions.
 hooks:
   PreToolUse:

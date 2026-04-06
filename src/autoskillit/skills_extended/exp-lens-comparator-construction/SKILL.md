@@ -1,6 +1,7 @@
 ---
 name: exp-lens-comparator-construction
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create Comparator Construction experimental design analysis assessing whether baselines and controls are fair and relevant. Counterfactual lens answering "Is the comparator fair and relevant?"
 hooks:
   PreToolUse:

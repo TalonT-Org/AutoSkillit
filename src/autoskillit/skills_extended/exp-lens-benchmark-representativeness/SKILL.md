@@ -1,6 +1,7 @@
 ---
 name: exp-lens-benchmark-representativeness
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create Benchmark Representativeness experimental design diagram showing coverage matrix, generalization gaps, and untested regions. Generalizability lens answering "Does this generalize beyond the test bed?"
 hooks:
   PreToolUse:

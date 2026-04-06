@@ -77,6 +77,7 @@ BUNDLED_SKILLS = [
     "open-integration-pr",
     "open-kitchen",
     "open-pr",
+    "open-research-pr",
     "pipeline-summary",
     "plan-experiment",
     "prepare-issue",
@@ -85,10 +86,13 @@ BUNDLED_SKILLS = [
     "report-bug",
     "resolve-failures",
     "resolve-merge-conflicts",
+    "resolve-design-review",
+    "resolve-research-review",
     "resolve-review",
     "retry-worktree",
     "review-pr",
     "review-approach",
+    "review-design",
     "review-research-pr",
     "run-experiment",
     "scope",
@@ -97,6 +101,7 @@ BUNDLED_SKILLS = [
     "sous-chef",
     "sprint-planner",
     "triage-issues",
+    "troubleshoot-experiment",
     "validate-audit",
     "verify-diag",
     "write-recipe",
@@ -588,6 +593,11 @@ RESEARCH_SKILL_NAMES = {
     "run-experiment",
     "write-report",
     "review-research-pr",
+    "open-research-pr",
+    "review-design",
+    "resolve-design-review",
+    "resolve-research-review",
+    "troubleshoot-experiment",
 }
 
 
@@ -604,3 +614,31 @@ def test_research_skills_have_research_category():
         assert "research" in info.categories, (
             f"Skill {name!r} missing 'research' category; got {info.categories}"
         )
+
+
+def test_all_extended_skills_have_tier_assignment():
+    """Every skill in skills_extended/ must be assigned to tier2 or tier3 in defaults.yaml."""
+    from autoskillit.config import load_config
+
+    config = load_config()
+    all_tiers = set(config.skills.tier1) | set(config.skills.tier2) | set(config.skills.tier3)
+    resolver = SkillResolver()
+    extended = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED_EXTENDED}
+    unassigned = extended - all_tiers
+    assert not unassigned, f"Skills missing tier assignment: {sorted(unassigned)}"
+
+
+def test_activate_deps_are_resolvable():
+    """Every activate_deps entry resolves to a known pack or known skill."""
+    from autoskillit.core import PACK_REGISTRY
+    from autoskillit.workspace.session_skills import _parse_activate_deps
+
+    resolver = SkillResolver()
+    all_names = {s.name for s in resolver.list_all()}
+    for skill_info in resolver.list_all():
+        content = skill_info.path.read_text()
+        deps = _parse_activate_deps(content)
+        for dep in deps:
+            assert dep in PACK_REGISTRY or dep in all_names, (
+                f"Skill {skill_info.name!r} has unresolvable activate_dep: {dep!r}"
+            )

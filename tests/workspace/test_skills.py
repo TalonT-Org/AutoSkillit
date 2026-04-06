@@ -618,9 +618,9 @@ def test_research_skills_have_research_category():
 
 def test_all_extended_skills_have_tier_assignment():
     """Every skill in skills_extended/ must be assigned to tier2 or tier3 in defaults.yaml."""
-    from autoskillit.config import AutomationConfig
+    from autoskillit.config import load_config
 
-    config = AutomationConfig()
+    config = load_config()
     all_tiers = set(config.skills.tier1) | set(config.skills.tier2) | set(config.skills.tier3)
     resolver = SkillResolver()
     extended = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED_EXTENDED}

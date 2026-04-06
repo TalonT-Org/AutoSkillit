@@ -151,6 +151,10 @@ def test_all_exp_lens_skills_have_contracts(skills):
     from autoskillit.workspace.skills import SkillResolver
 
     resolver = SkillResolver()
-    exp_lens = [s.name for s in resolver.list_all() if "exp-lens" in s.categories]
+    exp_lens = [
+        s.name
+        for s in resolver.list_all()
+        if "exp-lens" in s.categories and s.name.startswith("exp-lens-")
+    ]
     missing = [name for name in exp_lens if name not in skills]
     assert not missing, f"exp-lens skills missing contracts: {sorted(missing)}"

@@ -49,16 +49,3 @@ def test_troubleshoot_step_captures_required_tokens(recipe):
     step = recipe.steps["troubleshoot_implement_failure"]
     capture = step.capture or {}
     assert "is_fixable" in capture
-
-
-def test_research_recipe_no_validation_errors(recipe):
-    """All routing targets in research.yaml must be valid step names (no dead references).
-
-    Unknown step references are caught by validate_recipe as structural errors — there
-    is no separate semantic rule for them. This test is equivalent to the validation
-    test above but makes the dead-reference intent explicit.
-    """
-    errors = validate_recipe(recipe)
-    assert not errors, (
-        f"research.yaml has validation errors (may include dead step references): {errors}"
-    )

@@ -1,6 +1,7 @@
 ---
 name: exp-lens-randomization-blocking
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create Randomization & Blocking experimental design diagram showing assignment mechanisms, blocking factors, and comparability sources. Design-Structural lens answering "Where does comparability come from?"
 hooks:
   PreToolUse:

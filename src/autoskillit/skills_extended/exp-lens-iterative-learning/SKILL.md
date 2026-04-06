@@ -1,6 +1,7 @@
 ---
 name: exp-lens-iterative-learning
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create Iterative Learning experimental design diagram showing factor space exploration, adaptive allocation, and next-experiment recommendations. Decision-Theoretic lens answering "How does this maximize learning per cost?"
 hooks:
   PreToolUse:

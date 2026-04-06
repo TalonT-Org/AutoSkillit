@@ -1,6 +1,7 @@
 ---
 name: exp-lens-fair-comparison
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create a comparison fairness matrix assessing whether alternatives are evaluated under symmetric constraints. Fairness lens answering "Are alternatives compared under symmetric constraints?"
 hooks:
   PreToolUse:

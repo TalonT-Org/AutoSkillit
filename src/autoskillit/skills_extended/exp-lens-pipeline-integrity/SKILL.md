@@ -1,6 +1,7 @@
 ---
 name: exp-lens-pipeline-integrity
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create Pipeline Integrity experimental design diagram showing data splits, leakage points, preprocessing order, and label contamination. Integrity lens answering "Could data handling create optimistic bias?"
 hooks:
   PreToolUse:

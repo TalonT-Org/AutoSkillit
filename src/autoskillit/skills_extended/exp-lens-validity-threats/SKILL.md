@@ -1,6 +1,7 @@
 ---
 name: exp-lens-validity-threats
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create a validity threat matrix identifying alternative explanations and design mitigations. Adversarial lens answering "What alternative explanations survive?"
 hooks:
   PreToolUse:

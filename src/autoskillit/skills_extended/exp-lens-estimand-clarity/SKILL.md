@@ -1,6 +1,7 @@
 ---
 name: exp-lens-estimand-clarity
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create Estimand Clarity experimental design analysis decomposing the implicit estimand from code vs. explicit claims from prose. Evidential lens answering "What exactly is the claim?"
 hooks:
   PreToolUse:

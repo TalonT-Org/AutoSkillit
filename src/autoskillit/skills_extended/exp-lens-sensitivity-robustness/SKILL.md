@@ -1,6 +1,7 @@
 ---
 name: exp-lens-sensitivity-robustness
 categories: [exp-lens]
+activate_deps: [mermaid]
 description: Create Sensitivity & Robustness experimental design analysis identifying load-bearing analytic choices and untested perturbations. Robustness lens answering "Which assumptions are load-bearing?"
 hooks:
   PreToolUse:

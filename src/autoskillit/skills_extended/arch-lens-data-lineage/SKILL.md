@@ -1,6 +1,7 @@
 ---
 name: arch-lens-data-lineage
 categories: [arch-lens]
+activate_deps: [mermaid]
 description: Create Data Lineage architecture diagram showing information flow, transformations, and storage destinations. Data-centric lens answering "Where is the data?"
 hooks:
   PreToolUse:

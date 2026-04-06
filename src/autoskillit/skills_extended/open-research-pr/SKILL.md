@@ -1,6 +1,7 @@
 ---
 name: open-research-pr
 categories: [research]
+activate_deps: [exp-lens]
 description: Open a GitHub PR for a completed research worktree with experiment design
   diagrams and structured PR body composition. Implements the open-pr pattern for research
   pipelines. See issue #593.

@@ -1,6 +1,7 @@
 ---
 name: arch-lens-operational
 categories: [arch-lens]
+activate_deps: [mermaid]
 description: Create Operational architecture diagram showing CLI workflows, configuration, and observability. Administration lens answering "How is it run and monitored?"
 hooks:
   PreToolUse:

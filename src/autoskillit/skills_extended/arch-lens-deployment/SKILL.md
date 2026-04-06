@@ -1,6 +1,7 @@
 ---
 name: arch-lens-deployment
 categories: [arch-lens]
+activate_deps: [mermaid]
 description: Create Deployment/Physical architecture diagram showing infrastructure topology, process boundaries, and network communication. Physical lens answering "Where does it run?"
 hooks:
   PreToolUse:

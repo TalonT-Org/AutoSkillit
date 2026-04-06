@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.contracts.conftest import ACTION_SIGNALS, REFUSAL_SIGNALS
+
 SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
 SKILL = SKILLS_DIR / "open-pr/SKILL.md"
 
@@ -98,26 +100,11 @@ def test_step2_prose_instructs_suffix_stripping(text):
 
 def test_handles_skill_tool_refusal_for_arch_lens(text):
     """
-    open-pr has the identical gap: arch-lens sub-skills invoked via the Skill tool
-    with no refusal handler. Enforces the same mechanism contract.
+    SKILL.md must document what to do when the Skill tool refuses an arch-lens invocation.
+    Requires refusal detection language AND a prescribed concrete action.
     """
-    refusal_signals = [
-        "disable-model-invocation",
-        "cannot be used",
-        "refused",
-        "Skill tool returns",
-        "Skill tool fails",
-    ]
-    action_signals = [
-        "do not",
-        "do NOT",
-        "discard",
-        "skip",
-        "omit",
-        "proceed without",
-    ]
-    has_refusal = any(s in text for s in refusal_signals)
-    has_action = any(s in text for s in action_signals)
+    has_refusal = any(s in text for s in REFUSAL_SIGNALS)
+    has_action = any(s in text for s in ACTION_SIGNALS)
     assert has_refusal, (
         "open-pr SKILL.md must document what to do when the Skill tool refuses "
         "an arch-lens invocation."

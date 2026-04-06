@@ -44,7 +44,7 @@ ingredients:
     default: ""
   audit:
     description: Post-merge quality gate
-    default: "true"
+    default: "false"
   review_approach:
     description: Research approaches first
     default: "false"

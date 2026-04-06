@@ -3,8 +3,10 @@ Contract: any SKILL.md that generates mermaid diagrams must either embed the can
 9-class palette or explicitly mandate loading the mermaid skill before drawing.
 Parametrized over all qualifying skills — self-updating as skills are added.
 """
+
 import re
 from pathlib import Path
+
 import pytest
 
 _SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
@@ -17,10 +19,19 @@ _MERMAID_GENERATOR_PATTERN = re.compile(
 )
 
 # Canonical class names — at least 7 of 9 must appear
-_CANONICAL_CLASSES = frozenset({
-    "cli", "stateNode", "handler", "phase", "output",
-    "integration", "newComponent", "detector", "gap",
-})
+_CANONICAL_CLASSES = frozenset(
+    {
+        "cli",
+        "stateNode",
+        "handler",
+        "phase",
+        "output",
+        "integration",
+        "newComponent",
+        "detector",
+        "gap",
+    }
+)
 
 # Alternative: explicit mandate to load mermaid skill before drawing
 _MERMAID_LOAD_PATTERN = re.compile(
@@ -51,9 +62,7 @@ _DIAGRAM_SKILLS = _find_diagram_generating_skills()
     _DIAGRAM_SKILLS,
     ids=[s[0] for s in _DIAGRAM_SKILLS],
 )
-def test_diagram_generating_skill_has_palette_or_mermaid_load(
-    skill_name: str, skill_md: Path
-):
+def test_diagram_generating_skill_has_palette_or_mermaid_load(skill_name: str, skill_md: Path):
     """
     Any skill that generates mermaid diagrams must either embed at least 7 of the 9
     canonical class names OR mandate loading the mermaid skill before drawing.

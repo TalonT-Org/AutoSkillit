@@ -3,8 +3,10 @@ Cross-skill contract: every SKILL.md that invokes sub-skills via the Skill tool 
 explicit refusal handling language. Parametrized over all qualifying skills — self-updating
 as new skills are added to skills_extended/.
 """
+
 import re
 from pathlib import Path
+
 import pytest
 
 _SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"

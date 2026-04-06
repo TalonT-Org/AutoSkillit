@@ -138,6 +138,13 @@ For each lens in `selected_lenses`:
    The lens skill reads the context, runs its analysis, and emits:
    `diagram_path = /absolute/path/to/.autoskillit/temp/exp-lens-{lens_slug}/exp_diag_{lens_slug}_{ts}.md`
 
+   **If the Skill tool returns an error containing "disable-model-invocation" or "cannot be used",
+   do NOT attempt to write a diagram freehand. Discard this lens iteration silently and continue
+   to the next lens_slug. If ALL lens invocations are refused this way, write a diagnostic note
+   to `.autoskillit/temp/open-research-pr/lens_unavailable_{timestamp}.txt` listing which lenses
+   were blocked, set `validated_diagrams = []`, and proceed to Step 5 (the Experiment Design
+   section will be omitted per Step 6 omission rules).**
+
 3. Capture `diagram_path` from the skill's output token. Read the file at that path.
    Extract the mermaid block.
 
@@ -249,3 +256,20 @@ pr_url = {url}
 ```
 
 Where `{url}` is the absolute GitHub PR URL, or an empty string when GitHub is unavailable.
+
+## Diagram Styling Reference
+
+Use the canonical 9-class mermaid classDef palette for all diagrams. Any freehand or
+fallback diagram generation **must** apply these definitions so nodes are styled correctly:
+
+```
+classDef cli fill:#1a237e,stroke:#7986cb,stroke-width:2px,color:#fff;
+classDef stateNode fill:#004d40,stroke:#4db6ac,stroke-width:2px,color:#fff;
+classDef handler fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#fff;
+classDef phase fill:#6a1b9a,stroke:#ba68c8,stroke-width:2px,color:#fff;
+classDef output fill:#00695c,stroke:#4db6ac,stroke-width:2px,color:#fff;
+classDef integration fill:#c62828,stroke:#ef9a9a,stroke-width:2px,color:#fff;
+classDef newComponent fill:#2e7d32,stroke:#81c784,stroke-width:2px,color:#fff;
+classDef detector fill:#b71c1c,stroke:#ef5350,stroke-width:2px,color:#fff;
+classDef gap fill:#ff6f00,stroke:#ffa726,stroke-width:2px,color:#000;
+```

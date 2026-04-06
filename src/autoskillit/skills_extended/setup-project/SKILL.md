@@ -173,7 +173,7 @@ begin presenting the next workflow.
        List each conflicting skill name on its own line in the prompt.
      - Record the user's preferences and pass them as context to write-recipe
    - If yes: LOAD `/autoskillit:write-recipe` using the Skill tool to generate the script. The agent already has full context from the exploration phases (workflow name, detected variables like project_dir/work_dir/base_branch, tool call sequence, routing logic) — no explicit parameter passing is needed. write-recipe uses that context directly to produce a clean script.
-   - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, skip recipe generation and prompt the user to create the recipe manually.
+   - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, proceed without recipe generation and prompt the user to create the recipe manually.
    - Explain what a recipe is (discovered via `list_recipes` MCP tool, loaded via `load_recipe`, the agent interprets the YAML and executes the steps), show the generated script content
    - Track the user's approval — do NOT write to disk yet
    - Move to the next candidate workflow

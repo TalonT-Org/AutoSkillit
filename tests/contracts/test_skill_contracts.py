@@ -144,3 +144,13 @@ def test_review_design_experiment_type_output_has_allowed_values() -> None:
         "Without it, invalid values propagate silently."
     )
     assert set(et_output["allowed_values"]) == VALID_EXPERIMENT_TYPES
+
+
+def test_all_exp_lens_skills_have_contracts(skills):
+    """Every exp-lens skill must have an entry in skill_contracts.yaml."""
+    from autoskillit.workspace.skills import SkillResolver
+
+    resolver = SkillResolver()
+    exp_lens = [s.name for s in resolver.list_all() if "exp-lens" in s.categories]
+    missing = [name for name in exp_lens if name not in skills]
+    assert not missing, f"exp-lens skills missing contracts: {sorted(missing)}"

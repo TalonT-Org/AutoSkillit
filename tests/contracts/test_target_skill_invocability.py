@@ -125,6 +125,40 @@ class TestResolvedNamespaceMatchesSkillLocation:
         assert resolved == "Fix the bug"
 
 
+class TestDepSkillsNotGatedAfterActivation:
+    """After activating a target with activate_deps, dependency skills are also ungated."""
+
+    def test_dep_skills_not_gated_after_activation(self, tmp_path: Path) -> None:
+        """After activating make-plan, arch-lens-* and mermaid skills are ungated."""
+        config = load_config()
+        provider = SkillsDirectoryProvider()
+        mgr = DefaultSessionSkillManager(provider, tmp_path)
+        session_id = "test-dep-activation"
+        mgr.init_session(session_id, cook_session=False, config=config)
+        mgr.activate_tier2(session_id, "make-plan")
+
+        skills_base = tmp_path / session_id / ".claude" / "skills"
+        # Check arch-lens skills are ungated
+        for skill_dir in sorted(skills_base.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            name = skill_dir.name
+            if not name.startswith("arch-lens-"):
+                continue
+            content = (skill_dir / "SKILL.md").read_text()
+            assert "disable-model-invocation: true" not in content, (
+                f"arch-lens skill '{name}' should be ungated after activating make-plan"
+            )
+
+        # Check mermaid is ungated
+        mermaid_md = skills_base / "mermaid" / "SKILL.md"
+        if mermaid_md.exists():
+            content = mermaid_md.read_text()
+            assert "disable-model-invocation: true" not in content, (
+                "mermaid should be ungated via transitive dependency from make-plan"
+            )
+
+
 class TestAllRecipeSkillCommandsInvocable:
     """Every run_skill step in bundled recipes must resolve to an invocable form."""
 

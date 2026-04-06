@@ -944,6 +944,52 @@ async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monk
 
 
 @pytest.mark.anyio
+async def test_run_skill_activates_deps_for_tier3_target(tool_ctx, monkeypatch) -> None:
+    """run_skill calls activate_tier2 even when target is tier3 (not in tier2 list)."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import SkillResult, ValidatedAddDir
+
+    fake_validated = ValidatedAddDir(path="/fake/session/dir")
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    tool_ctx.session_skill_manager = mock_ssm
+
+    # Set up skill_resolver to produce a resolved name
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = MagicMock(
+        source=MagicMock(value="bundled_extended")
+    )
+    tool_ctx.skill_resolver = mock_resolver
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    # Use a tier3 skill name
+    await run_skill("/open-pr", "/tmp")
+
+    # activate_tier2 must have been called regardless of tier
+    mock_ssm.activate_tier2.assert_called_once()
+
+
+@pytest.mark.anyio
 async def test_run_skill_result_includes_order_id_when_passed(tool_ctx, monkeypatch) -> None:
     """run_skill injects order_id into the result JSON when order_id is non-empty."""
     import json as _json

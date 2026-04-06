@@ -106,6 +106,27 @@ async def _fetch_quota(
     )
 
 
+async def _refresh_quota_cache(
+    config: Any,
+    *,
+    base_url: str = _DEFAULT_BASE_URL,
+    _httpx_timeout: float = 10.0,
+) -> None:
+    """Fetch fresh quota status and write to cache unconditionally.
+
+    Unlike check_and_sleep_if_needed, this function does NOT read the existing
+    cache first. It always performs a live API call. Intended for use by the
+    periodic background refresh loop, where proactive write-before-expiry is
+    the goal, not avoiding redundant calls.
+
+    Exceptions from _fetch_quota propagate to the caller for supervision.
+    """
+    status = await _fetch_quota(
+        config.credentials_path, base_url=base_url, _httpx_timeout=_httpx_timeout
+    )
+    _write_cache(config.cache_path, status)
+
+
 async def check_and_sleep_if_needed(
     config: Any,
     *,

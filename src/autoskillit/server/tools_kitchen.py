@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -24,6 +25,7 @@ from autoskillit.server.helpers import (
     _find_recipe,
     _hook_config_path,
     _prime_quota_cache,
+    _quota_refresh_loop,
     _require_not_headless,
     track_response_size,
 )
@@ -72,6 +74,10 @@ async def _open_kitchen_handler() -> None:
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
     _write_hook_config()
     await _prime_quota_cache()
+    ctx.quota_refresh_task = asyncio.create_task(
+        _quota_refresh_loop(ctx.config.quota_guard),
+        name="quota_refresh_loop",
+    )
 
 
 async def _redisable_subsets(ctx: Context, disabled: list[str]) -> None:
@@ -89,8 +95,12 @@ def _close_kitchen_handler() -> None:
     """Clear the tools-enabled flag. Extracted for testability."""
     from autoskillit.server import _get_ctx, logger
 
-    _get_ctx().gate.disable()
-    _get_ctx().active_recipe_packs = None
+    ctx = _get_ctx()
+    if ctx.quota_refresh_task is not None:
+        ctx.quota_refresh_task.cancel()
+        ctx.quota_refresh_task = None
+    ctx.gate.disable()
+    ctx.active_recipe_packs = None
     logger.info("close_kitchen", gate_state="closed")
     hook_cfg_path = _hook_config_path(Path.cwd())
     try:

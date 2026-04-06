@@ -488,3 +488,25 @@ async def _prime_quota_cache() -> None:
         await check_and_sleep_if_needed(_get_ctx().config.quota_guard)
     except (OSError, ValueError, RuntimeError):
         logger.warning("quota_prime_failed", exc_info=True)
+
+
+async def _quota_refresh_loop(config: Any) -> None:
+    """Long-running coroutine: refreshes the quota cache every cache_refresh_interval seconds.
+
+    Designed to run as a background asyncio.Task for the duration of a kitchen session.
+    The loop sleeps first, then refreshes — ensuring _prime_quota_cache's initial write
+    is not immediately overwritten. CancelledError from asyncio.sleep propagates
+    uncaught, terminating the loop cleanly when the task is cancelled.
+
+    Guarantee: with cache_refresh_interval < cache_max_age, the cache written by any
+    loop tick will still be fresh when the next tick fires. The hook never sees a stale
+    cache as long as this loop is running.
+    """
+    from autoskillit.execution import _refresh_quota_cache
+
+    while True:
+        await asyncio.sleep(config.cache_refresh_interval)
+        try:
+            await _refresh_quota_cache(config)
+        except Exception as exc:
+            logger.warning("quota_refresh_loop_error", exc_info=True, error=str(exc))

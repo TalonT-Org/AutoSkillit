@@ -125,6 +125,7 @@ class QuotaGuardConfig:
     threshold: float = 85.0
     buffer_seconds: int = 60
     cache_max_age: int = 300
+    cache_refresh_interval: int = 240
     credentials_path: str = "~/.claude/.credentials.json"
     cache_path: str = "~/.claude/autoskillit_quota_cache.json"
 
@@ -388,6 +389,9 @@ class AutomationConfig:
                 threshold=float(val(qg, "threshold", _qg["threshold"])),
                 buffer_seconds=int(val(qg, "buffer_seconds", _qg["buffer_seconds"])),
                 cache_max_age=int(val(qg, "cache_max_age", _qg["cache_max_age"])),
+                cache_refresh_interval=int(
+                    val(qg, "cache_refresh_interval", _qg["cache_refresh_interval"])
+                ),
                 credentials_path=str(val(qg, "credentials_path", _qg["credentials_path"])),
                 cache_path=str(val(qg, "cache_path", _qg["cache_path"])),
             ),

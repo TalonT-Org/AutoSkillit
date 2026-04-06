@@ -803,8 +803,13 @@ class TestSessionLogMonitorStaleSuppressionGate:
             fake_child_cpu,
         )
         result = await _session_log_monitor(
-            tmp_path, "DONE", stale_threshold=0.05, spawn_time=spawn_time, pid=9999,
-            _phase1_poll=0.01, _phase2_poll=0.05,
+            tmp_path,
+            "DONE",
+            stale_threshold=0.05,
+            spawn_time=spawn_time,
+            pid=9999,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
         )
         assert result.status == ChannelBStatus.STALE
         assert call_count["cpu"] == 2  # suppressed once, then fired

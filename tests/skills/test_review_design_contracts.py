@@ -151,20 +151,18 @@ def test_verdict_proportional_warning_threshold(skill_text):
 def test_evaluative_not_prescriptive_constraint(skill_text):
     """Findings must describe WHAT is lacking, never HOW to fix it."""
     text_lower = skill_text.lower()
-    assert "what is lacking" in text_lower or "what is at risk" in text_lower, (
-        "SKILL.md must require findings to describe WHAT is lacking or at risk"
+    assert "what is lacking" in text_lower and "what is at risk" in text_lower, (
+        "SKILL.md must require findings to describe WHAT is lacking and WHAT is at risk"
     )
-    assert "never prescribe how" in text_lower or "never how to fix" in text_lower, (
-        "SKILL.md must prohibit prescriptive findings"
-    )
+    assert "never prescribe how" in text_lower, "SKILL.md must prohibit prescriptive findings"
 
 
 def test_findings_exclude_code_snippets_constraint(skill_text):
     """Findings must never include code snippets or shell commands."""
     text_lower = skill_text.lower()
-    assert "code snippets" in text_lower and (
-        "never" in text_lower or "must not" in text_lower or "do not" in text_lower
-    ), "SKILL.md must prohibit code snippets in findings"
+    assert "findings must never include" in text_lower and "code snippets" in text_lower, (
+        "SKILL.md must prohibit code snippets in findings"
+    )
 
 
 def test_design_scope_boundary_present(skill_text):
@@ -173,8 +171,8 @@ def test_design_scope_boundary_present(skill_text):
     assert "experimental design" in text_lower or "design scope" in text_lower, (
         "SKILL.md must establish a design scope boundary for dimension subagents"
     )
-    assert "do not evaluate" in text_lower and "implementation code" in text_lower, (
-        "SKILL.md must exclude implementation code correctness from scope"
+    assert re.search(r"do not evaluate[^.]*implementation code", text_lower, re.DOTALL), (
+        "SKILL.md must exclude implementation code within the 'do not evaluate' scope block"
     )
 
 

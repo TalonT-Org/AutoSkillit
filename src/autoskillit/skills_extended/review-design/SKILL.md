@@ -368,15 +368,10 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
    critical_findings = [f for f in findings if f.severity == "critical"]
    warning_findings = [f for f in findings if f.severity == "warning"]
 
-   # Count active (non-SILENT) dimensions spawned across Steps 2-6.
-   # Includes all L1, L2, L3, L4 dimensions that were spawned (weight >= L)
-   # plus red-team. SILENT dimensions were not spawned and are not counted.
    active_dimensions = count_of_spawned_dimensions  # tracked from Steps 2-6
 
    # Proportional warning threshold: each active dimension gets a budget of 5
    # warnings before the plan is flagged for revision.
-   # Calibration: spectral-init v6 had 0 criticals, 32 warnings across ~7 dims
-   # (= 4.6/dim) and was deemed "substantively sound" — this must be a GO.
    WARNING_BUDGET_PER_DIM = 5
    warning_threshold = active_dimensions * WARNING_BUDGET_PER_DIM
 

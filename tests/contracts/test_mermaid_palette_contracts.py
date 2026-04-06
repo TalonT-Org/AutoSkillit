@@ -13,7 +13,7 @@ _SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
 
 # Signals that a skill generates mermaid diagrams
 _MERMAID_GENERATOR_PATTERN = re.compile(
-    r"```mermaid|mermaid block|diagram_path|classDef|"
+    r"```mermaid|mermaid block|diagram_path|"
     r"mermaid diagram|generate.{0,30}diagram|create.{0,30}diagram",
     re.IGNORECASE,
 )
@@ -48,7 +48,7 @@ def _find_diagram_generating_skills() -> list[tuple[str, Path]]:
         skill_md = skill_dir / "SKILL.md"
         if not skill_md.exists():
             continue
-        text = skill_md.read_text()
+        text = skill_md.read_text(encoding="utf-8")
         if _MERMAID_GENERATOR_PATTERN.search(text):
             results.append((skill_dir.name, skill_md))
     return results
@@ -68,8 +68,10 @@ def test_diagram_generating_skill_has_palette_or_mermaid_load(skill_name: str, s
     canonical class names OR mandate loading the mermaid skill before drawing.
     Prevents invented class names and unstyled gray diagrams.
     """
-    text = skill_md.read_text()
-    found = {name for name in _CANONICAL_CLASSES if name in text}
+    text = skill_md.read_text(encoding="utf-8")
+    found = {
+        name for name in _CANONICAL_CLASSES if re.search(rf"classDef\s+{re.escape(name)}\b", text)
+    }
     has_palette = len(found) >= 7
     has_mermaid_load = bool(_MERMAID_LOAD_PATTERN.search(text))
     assert has_palette or has_mermaid_load, (

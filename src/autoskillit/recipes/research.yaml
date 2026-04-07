@@ -408,7 +408,19 @@ steps:
           for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done;
           for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done;
           for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done;
-          cd "${{ context.worktree_path }}" && git add research/ && git diff --cached --quiet || git commit -m "Add phase group and plan artifacts to research/";
+          TAR_INPUTS="" &&
+          if [ -d "${RESEARCH_DIR}/artifacts" ]; then TAR_INPUTS="${TAR_INPUTS} artifacts"; fi &&
+          if [ -f "${RESEARCH_DIR}/experiment-plan.md" ]; then TAR_INPUTS="${TAR_INPUTS} experiment-plan.md"; fi &&
+          if [ -n "${TAR_INPUTS}" ]; then
+            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" ${TAR_INPUTS} &&
+            rm -rf "${RESEARCH_DIR}/artifacts" &&
+            if [ -f "${RESEARCH_DIR}/experiment-plan.md" ]; then rm "${RESEARCH_DIR}/experiment-plan.md"; fi;
+          fi &&
+          if [ -f "${RESEARCH_DIR}/report.md" ]; then
+            cp "${RESEARCH_DIR}/report.md" "${RESEARCH_DIR}/README.md" &&
+            rm "${RESEARCH_DIR}/report.md";
+          fi &&
+          cd "${{ context.worktree_path }}" && git add research/ && git diff --cached --quiet || git commit -m "Add compressed research artifacts";
         else
           echo "commit_research_artifacts: no research directory found — artifact commit skipped";
         fi
@@ -417,9 +429,11 @@ steps:
     on_success: push_branch
     on_failure: push_branch
     note: >
-      Copies phase-group and phase-plan artifacts from worktree temp into
-      research/.../artifacts/ for PR provenance. Non-fatal — proceeds to
-      push_branch even if artifact commit fails.
+      Copies phase-group and phase-plan artifacts from worktree temp, then compresses
+      all artifacts (including experiment-plan.md) into artifacts.tar.gz and renames
+      report.md to README.md. The committed directory contains exactly two files:
+      README.md (human-readable conclusions) and artifacts.tar.gz (full artifact tree).
+      Non-fatal — proceeds to push_branch even if artifact commit fails.
 
   push_branch:
     tool: run_cmd
@@ -616,7 +630,7 @@ steps:
         EXPERIMENT="${{ context.experiment_branch }}" &&
         ARTIFACT="${{ context.artifact_branch }}" &&
         ORIG_PR="${{ context.pr_url }}" &&
-        PR_BODY=$(printf '## Research Artifacts\n\nCherry-picked from experiment branch `%s`.\n\nOriginal experiment PR: %s\n\nContains only files under `research/` — zero production code changes.' "${EXPERIMENT}" "${ORIG_PR}") &&
+        PR_BODY=$(printf '## Research Artifacts\n\nFrom experiment branch `%s`.\n\nOriginal experiment PR: %s\n\n### Structure\n\n- **README.md** — Research conclusions (browsable on GitHub)\n- **artifacts.tar.gz** — Full artifact tree (experiment plan, scope report, design evaluation, review cycles, plan versions, phase groups, phase plans)\n\nTo extract the full artifact tree:\n```\ntar xzf artifacts.tar.gz\n```\n\nContains only files under `research/` — zero production code changes.' "${EXPERIMENT}" "${ORIG_PR}") &&
         PR_URL=$(gh pr create
         --head "${ARTIFACT}"
         --base '${{ inputs.base_branch }}'
@@ -630,8 +644,9 @@ steps:
     on_success: tag_experiment_branch
     on_failure: research_complete
     note: >
-      Opens a PR containing only the research/ directory. The PR body references
-      the original experiment PR. This PR is safe to merge — no production code.
+      Opens a PR containing only the research/ directory. The PR body documents
+      the two-file structure (README.md + artifacts.tar.gz) and provides the
+      extraction command. This PR is safe to merge — no production code.
 
   tag_experiment_branch:
     tool: run_cmd

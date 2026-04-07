@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest.skip("api_simulator API change - ticket pending", allow_module_level=True)
+pytest.skip("api_simulator API change — see #643", allow_module_level=True)
 
 import json
 import time

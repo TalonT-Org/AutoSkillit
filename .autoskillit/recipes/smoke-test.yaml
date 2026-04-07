@@ -105,7 +105,7 @@ steps:
   push_branch:
     tool: run_cmd
     with:
-      cmd: "git push -u origin ${{ context.branch_name }}"
+      cmd: "git push -u origin \"${{ context.branch_name }}\""
       cwd: "${{ context.worktree_path }}"
       step_name: "push_branch"
     on_success: create_pr

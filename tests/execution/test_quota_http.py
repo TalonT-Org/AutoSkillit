@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
-from api_simulator._api_simulator_py import PyResponseSpec
+from api_simulator.http import MockResponseSpec as PyResponseSpec
 
 from autoskillit.execution.quota import check_and_sleep_if_needed
 

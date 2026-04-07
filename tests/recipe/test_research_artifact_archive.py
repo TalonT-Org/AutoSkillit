@@ -103,7 +103,7 @@ def test_create_artifact_branch_scopes_checkout(recipe):
     """create_artifact_branch must scope git checkout to the specific experiment subdir."""
     step = recipe.steps["create_artifact_branch"]
     cmd = step.with_args.get("cmd", "")
-    assert "basename" in cmd, (
+    assert "basename" in cmd and "context.research_dir" in cmd, (
         "create_artifact_branch must scope checkout via basename of context.research_dir"
     )
 

@@ -18,6 +18,18 @@ hooks:
 **Primary Question:** "Could data handling create optimistic bias?"
 **Focus:** Data Splits, Leakage Points, Preprocessing Order, Label Contamination, Pipeline Invariants
 
+## Arguments
+
+`/autoskillit:exp-lens-pipeline-integrity [context_path] [experiment_plan_path]`
+
+- **context_path** (optional positional arg 1) — Absolute path to a lens context file
+  containing IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria.
+  If provided, read this file before beginning analysis to obtain structured context.
+  If omitted, discover context by exploring the CWD.
+- **experiment_plan_path** (optional positional arg 2) — Absolute path to the full
+  experiment plan. If provided, read for complete experimental methodology and design.
+  If omitted, locate the experiment plan by exploring the CWD.
+
 ## When to Use
 
 - ML pipeline with train/test splits
@@ -51,6 +63,14 @@ hooks:
 ---
 
 ## Analysis Workflow
+
+### Step 0: Parse optional arguments
+
+If positional arg 1 (context_path) is provided and the file exists, read it to obtain
+IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
+arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
+methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
+exploration for these fields if the context file supplies them.
 
 ### Step 1: Launch Parallel Exploration Subagents
 

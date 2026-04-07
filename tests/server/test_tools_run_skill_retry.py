@@ -11,6 +11,19 @@ from autoskillit.core.types import RetryReason, TerminationReason
 from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
 
+# Deterministic UUID for tests that need to predict the per-invocation marker.
+_DETERMINISTIC_HEX = "a1b2c3d4e5f6a7b890123456"
+_DETERMINISTIC_MARKER = f"%%ORDER_UP::{_DETERMINISTIC_HEX[:8]}%%"
+
+
+class _FixedUUID:
+    hex = _DETERMINISTIC_HEX
+
+
+def _patch_uuid4(monkeypatch):
+    """Monkeypatch uuid4 to return a deterministic value for marker prediction."""
+    monkeypatch.setattr("uuid.uuid4", lambda: _FixedUUID())
+
 
 class TestRunSkillRetryRemoved:
     """run_skill_retry must not exist as a separate MCP tool."""
@@ -69,8 +82,10 @@ class TestRunSkillSessionOutcome:
         assert result["retry_reason"] == RetryReason.RESUME
 
     @pytest.mark.anyio
-    async def test_success_not_retriable(self, tool_ctx):
+    async def test_success_not_retriable(self, tool_ctx, monkeypatch):
         """Normal success -> needs_retry=False."""
+        _patch_uuid4(monkeypatch)
+        marker = _DETERMINISTIC_MARKER
         assistant = json.dumps(
             {
                 "type": "assistant",
@@ -82,7 +97,7 @@ class TestRunSkillSessionOutcome:
                 "type": "result",
                 "subtype": "success",
                 "is_error": False,
-                "result": "Done. %%ORDER_UP%%",
+                "result": f"Done. {marker}",
                 "session_id": "s1",
             }
         )
@@ -187,14 +202,16 @@ class TestRunSkillFields:
     """run_skill includes needs_retry and retry_reason."""
 
     @pytest.mark.anyio
-    async def test_includes_needs_retry_false(self, tool_ctx):
+    async def test_includes_needs_retry_false(self, tool_ctx, monkeypatch):
         """run_skill response includes needs_retry=False on normal success."""
+        _patch_uuid4(monkeypatch)
+        marker = _DETERMINISTIC_MARKER
         stdout = json.dumps(
             {
                 "type": "result",
                 "subtype": "success",
                 "is_error": False,
-                "result": "Done. %%ORDER_UP%%",
+                "result": f"Done. {marker}",
                 "session_id": "s1",
             }
         )

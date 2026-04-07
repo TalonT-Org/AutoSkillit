@@ -421,11 +421,14 @@ steps:
             rm "${RESEARCH_DIR}/report.md";
           fi &&
           cd "${{ context.worktree_path }}" && git add research/ && git diff --cached --quiet || git commit -m "Add compressed research artifacts";
+          echo "report_path=${RESEARCH_DIR}/README.md";
         else
           echo "commit_research_artifacts: no research directory found — artifact commit skipped";
         fi
       cwd: "${{ context.worktree_path }}"
       step_name: commit_research_artifacts
+    capture:
+      report_path: "${{ result.report_path }}"
     on_success: push_branch
     on_failure: push_branch
     note: >
@@ -441,16 +444,49 @@ steps:
       cmd: "cd '${{ context.worktree_path }}' && git push -u origin HEAD"
       cwd: "${{ context.worktree_path }}"
       step_name: push_branch
-    on_success: open_research_pr
+    on_success: prepare_research_pr
     on_failure: escalate_stop
 
   # --- PR + REVIEW PHASE ---
-  open_research_pr:
+  prepare_research_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-research-pr ${{ context.report_path }} ${{ context.worktree_path }}/.autoskillit/temp/experiment-plan.md ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:prepare-research-pr ${{ context.report_path }} ${{ context.experiment_plan }} ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
-      step_name: open_research_pr
+      step_name: prepare_research_pr
+    capture:
+      prep_path: "${{ result.prep_path }}"
+      selected_lenses: "${{ result.selected_lenses }}"
+      lens_context_paths: "${{ result.lens_context_paths }}"
+    on_success: run_experiment_lenses
+    on_failure: escalate_stop
+
+  run_experiment_lenses:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:exp-lens-{slug} {context_path} ${{ context.experiment_plan }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: run_experiment_lenses
+    capture_list:
+      all_diagram_paths: "${{ result.diagram_path }}"
+    on_success: compose_research_pr
+    on_failure: compose_research_pr
+    note: >
+      LENS ITERATION: context.selected_lenses contains comma-separated lens slugs
+      (e.g. "fair-comparison,estimand-clarity"). context.lens_context_paths contains
+      the corresponding comma-separated context file paths. For each lens slug, run:
+        /autoskillit:exp-lens-{slug} {matching_context_path} ${{ context.experiment_plan }}
+      Run all selected lenses in parallel (multiple run_skill calls in a single
+      assistant message). Accumulate each diagram_path value into context.all_diagram_paths
+      using comma separation via capture_list. If a lens fails, continue with remaining
+      lenses — partial diagrams are acceptable (compose_research_pr handles empty lists).
+
+  compose_research_pr:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:compose-research-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: compose_research_pr
     capture:
       pr_url: "${{ result.pr_url }}"
     on_success: guard_pr_url

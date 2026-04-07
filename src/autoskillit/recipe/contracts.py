@@ -123,6 +123,11 @@ def resolve_skill_name(skill_command: str) -> str | None:
     # Reject dynamic names containing template expressions
     if "${{" in name:
         return None
+    # Reject names truncated by a bash-style {placeholder} token immediately
+    # following the match (e.g. "/autoskillit:exp-lens-{slug}" extracts
+    # "exp-lens-" but is dynamic — the true name is resolved at runtime).
+    if match.end() < len(skill_command) and skill_command[match.end()] == "{":
+        return None
     return name
 
 

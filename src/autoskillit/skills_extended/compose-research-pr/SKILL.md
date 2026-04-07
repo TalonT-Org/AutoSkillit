@@ -36,7 +36,9 @@ Does NOT invoke lens skills or other sub-skills.
 - Invoke any sub-skills or slash commands during execution
 - Auto-merge or approve the PR — research PRs are for human review only
 - Fail the pipeline if `gh` is unavailable — emit `pr_url = ` (empty string) and exit 0
-- Create files outside `.autoskillit/temp/compose-research-pr/`
+- Create files outside `.autoskillit/temp/compose-research-pr/` (relative to the current working directory)
+- Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
+  Using ONLY classDef styles from the mermaid skill when composing the PR body.
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations

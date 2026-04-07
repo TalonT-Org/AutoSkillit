@@ -3034,6 +3034,7 @@ class TestOutputPathTokensDerivedFromContracts:
             "plan_parts",
             "plan_path",
             "pr_order_file",
+            "prep_path",
             "recipe_path",
             "remediation_path",
             "report_path",

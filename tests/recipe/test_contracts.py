@@ -81,6 +81,15 @@ def test_resolve_skill_name_dynamic() -> None:
     assert resolve_skill_name("/audit-${{ inputs.audit_type }}") is None
 
 
+def test_resolve_skill_name_bash_placeholder_truncation() -> None:
+    """Skill names truncated by a bash {placeholder} suffix must be treated as dynamic."""
+    from autoskillit.recipe.contracts import resolve_skill_name
+
+    # "/autoskillit:exp-lens-{slug}" — regex extracts "exp-lens-" (stops at {)
+    # but the true name is dynamic; must return None to skip contract validation.
+    assert resolve_skill_name("/autoskillit:exp-lens-{slug} {ctx} ${{ context.plan }}") is None
+
+
 # ---------------------------------------------------------------------------
 # Shared YAML fixtures
 # ---------------------------------------------------------------------------

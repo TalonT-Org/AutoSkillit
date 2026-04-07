@@ -34,7 +34,7 @@ Does NOT invoke any exp-lens skills or create a PR.
 
 **NEVER:**
 - Invoke exp-lens skills — they are run in separate sessions by the recipe orchestrator
-- Create files outside `.autoskillit/temp/prepare-research-pr/`
+- Create files outside `.autoskillit/temp/prepare-research-pr/` (relative to the current working directory)
 - Fail silently — always emit all three output tokens before `%%ORDER_UP%%`
 
 **ALWAYS:**

@@ -532,7 +532,11 @@ steps:
       Optional research PR review step, gated by the review_pr ingredient.
       Verdict captured as review_verdict for deferred routing. All paths
       (skip, success, failure, context-limit) route to audit_claims so both
-      gates complete before any resolution step begins.
+      gates complete before any resolution step begins. When on_context_limit
+      or on_failure fires, the capture block does not execute and
+      context.review_verdict remains absent; the recipe engine treats absent
+      context variables as empty string in comparisons, so downstream
+      route_review_resolve safely falls through to route_claims_resolve.
 
   audit_claims:
     tool: run_skill
@@ -589,7 +593,10 @@ steps:
     note: >
       Routes to resolve_claims_review only when the claims audit found
       changes_requested. All other verdicts (approved, needs_human, empty/skipped)
-      proceed directly to merge_escalations.
+      proceed directly to merge_escalations. When audit_claims is skipped
+      (inputs.audit_claims=false), context.audit_verdict is absent; the recipe
+      engine treats absent variables as empty string, so the condition evaluates
+      false and the fallback route to merge_escalations fires safely.
 
   resolve_claims_review:
     tool: run_skill
@@ -618,7 +625,12 @@ steps:
       re_run_experiment if either review resolution or claims resolution flagged
       a rerun. When only design_flaw escalations exist (or none), routes directly
       to push — design_flaw escalations are already posted as inline PR comments
-      by the resolve skills.
+      by the resolve skills. Both context.review_needs_rerun and
+      context.claims_needs_rerun may be absent if their respective resolution
+      steps were never reached (e.g., no changes_requested verdict on that gate);
+      the recipe engine evaluates absent context variables as empty string, so
+      absent == true is always false and routes safely fall through to
+      re_push_research.
 
   re_run_experiment:
     tool: run_skill

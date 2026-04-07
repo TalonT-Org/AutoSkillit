@@ -1,255 +1,183 @@
 name: smoke-test
-autoskillit_version: "0.3.0"
-description: End-to-end smoke test exercising the full orchestration path — script loading, step routing, tool dispatch, capture/context threading, retry logic, bugfix loop, and merge.
-summary: setup > seed_task > set_feature_branch > create_branch? > investigate > rectify > implement > set_worktree_path > test > merge > check_summary > create_summary? > done (assess/classify loop on failure)
+autoskillit_version: "0.7.31"
+description: >-
+  Lightweight end-to-end sanity check — creates an isolated branch and worktree,
+  implements a trivial micro-task (smoke_canary), runs the full project test suite,
+  opens a GitHub PR, and immediately closes it without merging.
+summary: >-
+  create_branch > create_worktree > setup_worktree > implement_task > test >
+  push_branch > create_pr > close_pr > cleanup > done
 
 ingredients:
   workspace:
-    description: Git repo workspace directory
+    description: >-
+      Path to the git repository workspace. Must have a GitHub remote configured
+      and an authenticated gh CLI available.
     required: true
   base_branch:
-    description: Merge target
+    description: Base branch for the PR target
     default: main
-  collect_on_branch:
-    description: Collect fixes on feature branch
-    default: "true"
-  original_base_branch:
-    description: Original base branch for PR target
-    default: "main"
 
 kitchen_rules:
-  - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
-    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the
-    orchestrator. All work is delegated through run_skill."
-  - "Route to on_failure — never investigate or fix directly from the orchestrator."
+  - >-
+    NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
+    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All file
+    operations are delegated through run_skill or run_cmd.
+  - >-
+    Route to escalate or fail_cleanup on any failure — never investigate or fix
+    directly from the orchestrator. This is a sanity check, not a stress test:
+    no retries, no fix loops.
 
 steps:
-  setup:
-    tool: run_cmd
-    with:
-      cmd: "git init -b main && git commit --allow-empty -m 'initial' && touch .autoskillit-workspace"
-      cwd: "${{ inputs.workspace }}"
-      step_name: "setup"
-    on_success: setup_remote
-    on_failure: escalate
-
-  setup_remote:
-    tool: run_cmd
-    with:
-      cmd: >-
-        REMOTE="${{ inputs.workspace }}-bare.git" &&
-        git init --bare "$REMOTE" &&
-        git remote add origin "$REMOTE" &&
-        printf '%s' "$REMOTE"
-      cwd: "${{ inputs.workspace }}"
-      step_name: "setup_remote"
-    capture:
-      remote_url: "${{ result.stdout }}"
-    on_success: seed_task
-    on_failure: escalate
-    note: >
-      Creates a bare git repo as a local remote and configures origin.
-      Captures remote_url for use by push_feature_branch.
-
-  seed_task:
-    tool: run_cmd
-    with:
-      cmd: "echo 'Create ok.txt with content OK' > task.txt"
-      cwd: "${{ inputs.workspace }}"
-      step_name: "seed_task"
-    on_success: set_feature_branch
-    on_failure: escalate
-
-  set_feature_branch:
-    tool: run_cmd
-    with:
-      cmd: "printf '%s' '${{ inputs.base_branch }}'"
-      cwd: "${{ inputs.workspace }}"
-      step_name: "set_feature_branch"
-    capture:
-      feature_branch: "${{ result.stdout }}"
-    on_success: create_branch
-    on_failure: escalate
-    note: >
-      Unconditionally sets feature_branch to inputs.base_branch as the default.
-      When collect_on_branch=true, the subsequent create_branch step overrides
-      feature_branch by capturing the newly-created branch name. When
-      collect_on_branch=false, create_branch is skipped and this default stands.
-      This eliminates the undefined-context-variable gap in the merge step.
-
   create_branch:
-    tool: run_cmd
+    tool: create_unique_branch
     with:
-      cmd: >-
-        BRANCH="autoskillit-smoke-$(date +%s)" &&
-        git checkout -b "$BRANCH" &&
-        echo '[]' > bug_report.json &&
-        printf '%s' "$BRANCH"
-      cwd: ${{ inputs.workspace }}
+      base_branch_name: "smoke/canary"
+      cwd: "${{ inputs.workspace }}"
       step_name: "create_branch"
     capture:
-      feature_branch: "${{ result.stdout }}"
-    on_success: investigate
+      branch_name: "${{ result.branch_name }}"
+    on_success: create_worktree
     on_failure: escalate
-    optional: true
-    skip_when_false: "inputs.collect_on_branch"
-    note: >
-      Only execute if inputs.collect_on_branch is 'true'. Otherwise skip to investigate.
-      Creates the feature branch, initialises bug_report.json, and overrides
-      context.feature_branch (set to inputs.base_branch by set_feature_branch) with
-      the newly-created branch name for use by the merge step.
+    note: >-
+      Creates a unique smoke/canary[-N] branch (collision-safe via ls-remote).
+      Routes to escalate on failure — no worktree exists yet, nothing to clean up.
 
-  investigate:
-    tool: run_skill
-    with:
-      skill_command: "/autoskillit:smoke-task Create investigation.txt in the current directory with the text 'No critical issues found.' Then output exactly this line on its own: investigation_path=investigation.txt"
-      cwd: "${{ inputs.workspace }}"
-    on_success: rectify
-    on_failure: escalate
-
-  rectify:
-    tool: run_skill
-    with:
-      skill_command: "/autoskillit:smoke-task Create plan.md in the current directory at ${{ inputs.workspace }}/plan.md. The file MUST have this exact first line: Dry-walkthrough verified = TRUE followed by a blank line, then # Plan and Create ok.txt with content OK."
-      cwd: "${{ inputs.workspace }}"
-    on_success: implement
-    on_failure: escalate
-
-  implement:
-    tool: run_skill
-    with:
-      skill_command: "/autoskillit:smoke-task In the git repo at ${{ inputs.workspace }}, run: git worktree add ${{ inputs.workspace }}/.claude/worktrees/smoke-impl -b smoke-impl. Then in that worktree directory, write ok.txt with content OK. Run git add ok.txt && git commit -m 'smoke: add ok.txt'."
-      cwd: "${{ inputs.workspace }}"
-    retries: 2
-    on_success: set_worktree_path
-    on_failure: escalate
-
-  set_worktree_path:
+  create_worktree:
     tool: run_cmd
     with:
-      cmd: "printf '%s' '${{ inputs.workspace }}/.claude/worktrees/smoke-impl'"
+      cmd: >-
+        WORKTREE="${{ inputs.workspace }}/.autoskillit/worktrees/smoke-canary" &&
+        git worktree add "$WORKTREE" "${{ context.branch_name }}" &&
+        printf '%s' "$WORKTREE"
       cwd: "${{ inputs.workspace }}"
-      step_name: "set_worktree_path"
+      step_name: "create_worktree"
     capture:
       worktree_path: "${{ result.stdout }}"
+    on_success: setup_worktree
+    on_failure: fail_cleanup
+    note: >-
+      Creates the worktree at a deterministic path under .autoskillit/worktrees/.
+      Captures worktree_path for all subsequent steps. On failure, routes to
+      fail_cleanup which handles branch deletion even when the worktree was not created.
+
+  setup_worktree:
+    tool: run_cmd
+    with:
+      cmd: "task install-worktree"
+      cwd: "${{ context.worktree_path }}"
+      step_name: "setup_worktree"
+    on_success: implement_task
+    on_failure: fail_cleanup
+
+  implement_task:
+    tool: run_skill
+    with:
+      skill_command: >-
+        /autoskillit:smoke-task In ${{ context.worktree_path }}: (1) open
+        src/autoskillit/smoke_utils.py and append a blank line followed by the
+        function 'def smoke_canary() -> bool:' with body
+        '    """Smoke-test sentinel — always returns True."""' and '    return True';
+        (2) create tests/test_smoke_canary.py containing exactly:
+        'from autoskillit.smoke_utils import smoke_canary' blank line blank line
+        'def test_smoke_canary() -> None:' '    assert smoke_canary() is True';
+        (3) run git add src/autoskillit/smoke_utils.py tests/test_smoke_canary.py;
+        (4) run git commit -m 'smoke: add smoke_canary()'.
+      cwd: "${{ context.worktree_path }}"
     on_success: test
-    on_failure: escalate
+    on_failure: fail_cleanup
+    note: >-
+      REQ-TASK-001 + REQ-TASK-002: Trivial, fully-specified micro-task. No retries —
+      a failure here is an infrastructure signal, not a logic problem.
 
   test:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
-    on_success: push_feature_branch
-    on_failure: assess
+      step_name: "test"
+    on_success: push_branch
+    on_failure: fail_cleanup
+    note: >-
+      REQ-PIPE-002: Runs the full project test suite in the worktree.
+      smoke_canary() is now defined and tests/test_smoke_canary.py passes alongside
+      the existing suite. Routes to fail_cleanup on failure — no retry loop.
 
-  push_feature_branch:
-    tool: push_to_remote
-    with:
-      clone_path: "${{ inputs.workspace }}"
-      remote_url: "${{ context.remote_url }}"
-      branch: "${{ context.feature_branch }}"
-    on_success: merge
-    on_failure: escalate
-    optional: true
-    skip_when_false: "inputs.collect_on_branch"
-    note: >
-      Only execute if collect_on_branch is 'true'.
-      Publishes the feature branch to the local bare remote before merge_worktree.
-      merge_worktree requires the base_branch ref to exist on the remote.
-
-  assess:
-    tool: run_skill
-    with:
-      skill_command: "/autoskillit:smoke-task In the git worktree at ${{ context.worktree_path }}, check what file is expected by the test and create/fix it. Commit any changes. After fixing, append a JSON object to ${{ inputs.workspace }}/bug_report.json with keys: step (string 'test'), error (what failed), fix (what you did), iteration (number). The file contains a JSON array — read it, append your entry, write it back. Then output: fixed=true"
-      cwd: "${{ context.worktree_path }}"
-    retries: 2
-    on_success: test
-    on_failure: classify
-    on_exhausted: classify
-
-  classify:
-    tool: classify_fix
-    with:
-      worktree_path: "${{ context.worktree_path }}"
-      base_branch: "${{ inputs.base_branch }}"
-    on_result:
-      - when: "${{ result.restart_scope }} == full_restart"
-        route: investigate
-      - when: "result.error"
-        route: escalate
-      - route: implement
-    on_failure: escalate
-
-  commit_dirty:
+  push_branch:
     tool: run_cmd
     with:
-      cmd: "git add -A && git commit -m 'chore: commit auto-generated files'"
+      cmd: "git push -u origin ${{ context.branch_name }}"
       cwd: "${{ context.worktree_path }}"
-      step_name: "commit_dirty"
-    on_success: merge
-    on_failure: escalate
+      step_name: "push_branch"
+    on_success: create_pr
+    on_failure: fail_cleanup
 
-  merge:
-    tool: merge_worktree
+  create_pr:
+    tool: run_cmd
     with:
-      worktree_path: "${{ context.worktree_path }}"
-      base_branch: "${{ context.feature_branch }}"
-    capture:
-      cleanup_succeeded: "${{ result.cleanup_succeeded }}"
-    on_result:
-      - when: "result.failed_step == 'dirty_tree'"
-        route: commit_dirty
-      - when: "result.failed_step == 'test_gate'"
-        route: escalate
-      - when: "result.failed_step == 'post_rebase_test_gate'"
-        route: escalate
-      - when: "result.failed_step == 'rebase'"
-        route: escalate
-      - when: "result.error"
-        route: escalate
-      - route: check_summary
-    on_failure: escalate
+      cmd: >-
+        gh pr create
+          --title "smoke: add smoke_canary() [DO NOT MERGE]"
+          --body "Automated smoke-test PR — closed without merging. Safe to ignore."
+          --base "${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: "create_pr"
+    on_success: close_pr
+    on_failure: fail_cleanup
+    note: >-
+      REQ-PIPE-003: Creates the PR. Does not capture the URL because close_pr
+      uses 'gh pr view' on the worktree branch to locate the PR.
 
-  check_summary:
-    python: autoskillit.smoke_utils.check_bug_report_non_empty
+  close_pr:
+    tool: run_cmd
     with:
-      workspace: ${{ inputs.workspace }}
-    on_result:
-      - when: "${{ result.non_empty }} == true"
-        route: create_summary
-      - when: "result.error"
-        route: escalate
-      - route: done
-    on_failure: escalate
-    note: >
-      Only execute if inputs.collect_on_branch is 'true'. Otherwise skip to done.
-      Reads bug_report.json from the workspace. Routes to create_summary when bugs
-      were fixed during the run (non_empty=true), otherwise routes to done.
+      cmd: >-
+        PR_NUM=$(gh pr view --json number --jq .number) &&
+        gh pr close "$PR_NUM" --comment "Smoke test complete. Closing without merge."
+      cwd: "${{ context.worktree_path }}"
+      step_name: "close_pr"
+    on_success: cleanup
+    on_failure: cleanup
+    note: >-
+      REQ-PIPE-004: Closes the PR without merging. Uses gh pr view on the current
+      branch to find the PR number. Routes to cleanup on BOTH success and failure —
+      cleanup is always required (REQ-GUARD-002).
 
-  create_summary:
-    tool: run_skill
+  cleanup:
+    tool: run_cmd
     with:
-      skill_command: "/autoskillit:pipeline-summary ${{ inputs.workspace }}/bug_report.json ${{ context.feature_branch }} ${{ inputs.original_base_branch }} ${{ inputs.workspace }}"
+      cmd: >-
+        git worktree remove "${{ context.worktree_path }}" --force 2>/dev/null || true &&
+        git push origin --delete "${{ context.branch_name }}" 2>/dev/null || true &&
+        git branch -D "${{ context.branch_name }}" 2>/dev/null || true
       cwd: "${{ inputs.workspace }}"
-    capture:
-      summary_path: "${{ result.summary_path }}"
+      step_name: "cleanup"
     on_success: done
+    on_failure: done
+    note: >-
+      REQ-PIPE-005 + REQ-GUARD-002: Best-effort cleanup — worktree remove, remote branch
+      delete, local branch delete. || true guards ensure partial cleanup does not fail
+      the step. Routes to done regardless so cleanup errors do not mask success.
+
+  fail_cleanup:
+    tool: run_cmd
+    with:
+      cmd: >-
+        git worktree remove "${{ context.worktree_path }}" --force 2>/dev/null || true &&
+        git push origin --delete "${{ context.branch_name }}" 2>/dev/null || true &&
+        git branch -D "${{ context.branch_name }}" 2>/dev/null || true
+      cwd: "${{ inputs.workspace }}"
+      step_name: "fail_cleanup"
+    on_success: escalate
     on_failure: escalate
-    on_context_limit: done
-    optional: true
-    skip_when_false: "inputs.collect_on_branch"
-    note: >
-      Skipped when collect_on_branch is 'false' or no bugs were encountered.
-      Terminal reporting step — outputs (summary file, issue URL, PR URL) are written to
-      disk for human use and do not flow into subsequent pipeline steps.
-      The feature branch name passed here should be the actual branch name created
-      in create_branch (the agent tracks this). The skill gracefully handles
-      missing gh CLI by writing a local summary only.
+    note: >-
+      REQ-GUARD-002 (failure path): Same cleanup as 'cleanup' but routes to escalate
+      to preserve failure semantics. context.worktree_path may be empty if create_worktree
+      failed — the || true guards handle this gracefully.
 
   done:
     action: stop
-    message: "Smoke pipeline completed successfully."
+    message: "Smoke test completed successfully — PR created and closed without merging."
 
   escalate:
     action: stop
-    message: "Smoke pipeline failed — check step output for details."
+    message: "Smoke test failed — check step output for details."

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
 from autoskillit.core import SKILL_TOOLS
 from autoskillit.recipe.contracts import load_bundled_manifest
@@ -1124,87 +1123,6 @@ class TestInvestigateFirstStructure:
 
 
 # ---------------------------------------------------------------------------
-# TestSmokeTestStructure
-# ---------------------------------------------------------------------------
-
-
-class TestSmokeTestStructure:
-    """Structural assertions for the smoke-test.yaml recipe steps."""
-
-    @pytest.fixture()
-    def smoke_yaml(self) -> dict:
-        return yaml.safe_load(SMOKE_RECIPE.read_text())
-
-    # T_ST1
-    def test_create_branch_is_run_cmd(self, smoke_yaml: dict) -> None:
-        """create_branch step has tool == "run_cmd" (not action == "route")."""
-        assert smoke_yaml["steps"]["create_branch"]["tool"] == "run_cmd"
-
-    # T_ST2
-    def test_create_branch_captures_feature_branch(self, smoke_yaml: dict) -> None:
-        """create_branch step has capture containing key feature_branch."""
-        assert "feature_branch" in smoke_yaml["steps"]["create_branch"]["capture"]
-
-    # T_ST3
-    def test_check_summary_is_run_python(self, smoke_yaml: dict) -> None:
-        """check_summary step has python discriminator (not action == "route")."""
-        assert (
-            smoke_yaml["steps"]["check_summary"]["python"]
-            == "autoskillit.smoke_utils.check_bug_report_non_empty"
-        )
-
-    # T_ST4
-    def test_check_summary_on_result_routes(self, smoke_yaml: dict) -> None:
-        """check_summary step has on_result with predicate conditions for non_empty.
-
-        v0.3.0 predicate format: on_result is a list of {when, route} dicts.
-        """
-        on_result = smoke_yaml["steps"]["check_summary"]["on_result"]
-        assert isinstance(on_result, list), "on_result must be a predicate conditions list"
-        routes = {c.get("route") for c in on_result}
-        whens = [c.get("when", "") or "" for c in on_result]
-        assert any("non_empty" in w for w in whens), (
-            "check_summary on_result must check result.non_empty"
-        )
-        assert "create_summary" in routes, "check_summary must route to create_summary"
-        assert "done" in routes, "check_summary must have a fallthrough route to done"
-
-    # T_ST5
-    def test_merge_references_context_feature_branch(self, smoke_yaml: dict) -> None:
-        """merge step with_args references context.feature_branch."""
-        base_branch = smoke_yaml["steps"]["merge"]["with"]["base_branch"]
-        assert "context.feature_branch" in base_branch
-
-    # A6
-    def test_smoke_feature_branch_unconditionally_set(self, smoke_yaml: dict) -> None:
-        """A6: feature_branch must be set by a non-optional step before merge."""
-        steps = smoke_yaml["steps"]
-        step_names = list(steps.keys())
-        merge_idx = next(
-            (
-                i
-                for i, name in enumerate(step_names)
-                if steps[name].get("tool") == "merge_worktree"
-            ),
-            None,
-        )
-        assert merge_idx is not None, "merge step not found"
-        unconditional = next(
-            (
-                name
-                for name in step_names[:merge_idx]
-                if "feature_branch" in steps[name].get("capture", {})
-                and not steps[name].get("optional", False)
-            ),
-            None,
-        )
-        assert unconditional is not None, (
-            "feature_branch is only captured by optional create_branch. "
-            "When collect_on_branch=false, merge step receives undefined context.feature_branch."
-        )
-
-
-# ---------------------------------------------------------------------------
 # Contract tests — plan_parts output (D4–D5)
 # ---------------------------------------------------------------------------
 
@@ -1286,21 +1204,6 @@ def test_audit_ingredient_defaults_to_false(recipe_name: str, yaml_name: str) ->
     assert audit_ing is not None, f"{recipe_name}: 'audit' ingredient not found"
     assert audit_ing.default == "false", (
         f"{recipe_name}: audit.default must be 'false' (OFF by default), got {audit_ing.default!r}"
-    )
-
-
-def test_smoke_check_summary_has_error_escalation() -> None:
-    """check_summary must have a result.error condition routing to a non-done step."""
-    recipe = load_recipe(SMOKE_RECIPE)
-    step = recipe.steps["check_summary"]
-    error_routes = [
-        c.route
-        for c in step.on_result.conditions
-        if c.when is not None and "result.error" in c.when
-    ]
-    assert error_routes, "check_summary must have a result.error condition"
-    assert all(r != "done" for r in error_routes), (
-        f"check_summary result.error must not route to done; got {error_routes}"
     )
 
 

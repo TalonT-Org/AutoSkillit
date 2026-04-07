@@ -788,7 +788,7 @@ dataflow:
   - worktree_path
   required: []
   produced: []
-- step: open_pr_step
+- step: compose_pr
   available:
   - all_plan_paths
   - audit

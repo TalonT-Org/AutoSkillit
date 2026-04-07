@@ -191,7 +191,8 @@ skills:
     - write-report
     - validate-audit
   tier3:
-    - open-pr
+    - prepare-pr
+    - compose-pr
     - open-integration-pr
     - merge-pr
     - analyze-prs

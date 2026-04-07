@@ -513,15 +513,25 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                     "skill_command", ""
                 ):
                     continue
-                # Exempt prepare_research_pr note-driven lens iteration captures:
-                # selected_lenses and lens_context_paths are consumed by run_experiment_lenses
-                # via the step's note field. The note instructs the orchestrator to iterate
-                # over selected_lenses values and match them with lens_context_paths paths.
+                # Exempt note-driven lens iteration captures from prepare-research-pr and
+                # prepare-pr: selected_lenses and lens_context_paths are consumed by
+                # run_experiment_lenses / run_arch_lenses via the step's note field.
+                # The note instructs the orchestrator to iterate over selected_lenses
+                # values and match them with lens_context_paths paths.
                 # Static dataflow analysis cannot detect note-driven consumption.
                 if cap_key in (
                     "selected_lenses",
                     "lens_context_paths",
-                ) and "prepare-research-pr" in step.with_args.get("skill_command", ""):
+                ) and any(
+                    s in step.with_args.get("skill_command", "")
+                    for s in ("prepare-research-pr", "prepare-pr")
+                ):
+                    continue
+                # Exempt compose-pr pr_url observability capture: pr_url is the terminal
+                # output of the PR creation flow, captured for pipeline reporting and
+                # post-tool hooks (e.g. token_summary_appender). No downstream recipe
+                # step consumes it — consumption happens outside the recipe pipeline.
+                if cap_key == "pr_url" and "compose-pr" in step.with_args.get("skill_command", ""):
                     continue
                 warnings.append(
                     DataFlowWarning(

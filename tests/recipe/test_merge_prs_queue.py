@@ -214,9 +214,9 @@ def test_implementation_extract_pr_number_exists(impl_recipe) -> None:
     assert step.tool == "run_cmd"
 
 
-def test_implementation_open_pr_step_routes_to_extract_pr_number(impl_recipe) -> None:
-    """open_pr_step.on_success must route to extract_pr_number."""
-    step = impl_recipe.steps["open_pr_step"]
+def test_implementation_compose_pr_routes_to_extract_pr_number(impl_recipe) -> None:
+    """compose_pr.on_success must route to extract_pr_number."""
+    step = impl_recipe.steps["compose_pr"]
     assert step.on_success == "extract_pr_number"
 
 
@@ -362,9 +362,9 @@ def test_remediation_extract_pr_number_exists(remed_recipe) -> None:
     assert step.tool == "run_cmd"
 
 
-def test_remediation_open_pr_step_routes_to_extract_pr_number(remed_recipe) -> None:
-    """open_pr_step.on_success must route to extract_pr_number."""
-    step = remed_recipe.steps["open_pr_step"]
+def test_remediation_compose_pr_routes_to_extract_pr_number(remed_recipe) -> None:
+    """compose_pr.on_success must route to extract_pr_number."""
+    step = remed_recipe.steps["compose_pr"]
     assert step.on_success == "extract_pr_number"
 
 

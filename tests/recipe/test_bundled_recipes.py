@@ -238,17 +238,17 @@ class TestImplementationPipelineStructure:
         )
         assert all(v.severity == Severity.WARNING for v in violations)
 
-    def test_ip_open_pr_step_routes_to_review_pr(self, recipe) -> None:
-        """open_pr_step.on_success routes to extract_pr_number before review_pr."""
-        open_pr_step = recipe.steps["open_pr_step"]
-        assert open_pr_step.on_success == "extract_pr_number", (
-            "open_pr_step must route to extract_pr_number"
+    def test_ip_compose_pr_routes_to_extract_pr_number(self, recipe) -> None:
+        """compose_pr.on_success routes to extract_pr_number before review_pr."""
+        compose_pr = recipe.steps["compose_pr"]
+        assert compose_pr.on_success == "extract_pr_number", (
+            "compose_pr must route to extract_pr_number"
         )
 
-    def test_ip_open_pr_step_has_skip_when_false(self, recipe) -> None:
-        """open_pr_step must declare skip_when_false: inputs.open_pr."""
-        open_pr_step = recipe.steps["open_pr_step"]
-        assert open_pr_step.skip_when_false == "inputs.open_pr"
+    def test_ip_compose_pr_has_skip_when_false(self, recipe) -> None:
+        """compose_pr must declare skip_when_false: inputs.open_pr."""
+        compose_pr = recipe.steps["compose_pr"]
+        assert compose_pr.skip_when_false == "inputs.open_pr"
 
     def test_ip_audit_impl_has_skip_when_false(self, recipe) -> None:
         """audit_impl must declare skip_when_false: inputs.audit."""
@@ -279,14 +279,14 @@ class TestImplementationPipelineStructure:
         cmd = recipe.steps["compute_branch"].with_args["cmd"]
         assert "inputs.run_name" in cmd
 
-    def test_ip_main_push_step_not_reachable_after_open_pr(self, recipe) -> None:
-        """The main `push` step must not be reachable after open_pr_step —
+    def test_ip_main_push_step_not_reachable_after_compose_pr(self, recipe) -> None:
+        """The main `push` step must not be reachable after compose_pr —
         that would be a double-push. The new `re_push` step IS reachable and is correct."""
         from autoskillit.recipe.validator import _build_step_graph
 
         graph = _build_step_graph(recipe)
         visited: set[str] = set()
-        queue = [recipe.steps["open_pr_step"].on_success]
+        queue = [recipe.steps["compose_pr"].on_success]
         while queue:
             current = queue.pop(0)
             if current in visited or current not in recipe.steps:
@@ -294,13 +294,13 @@ class TestImplementationPipelineStructure:
             visited.add(current)
             queue.extend(graph.get(current, []))
         assert "push" not in visited, (
-            "'push' step is reachable after open_pr_step — double-push risk. "
+            "'push' step is reachable after compose_pr — double-push risk. "
             "(re_push is allowed; push is not)"
         )
 
     def test_ip_open_pr_false_path_reaches_push_then_cleanup(self, recipe) -> None:
-        """When open_pr_step is bypassed (open_pr=false), execution must go:
-        audit_impl (GO) → push → [open_pr_step bypassed] → cleanup_success → done.
+        """When compose_pr is bypassed (open_pr=false), execution must go:
+        audit_impl (GO) → push → [compose_pr bypassed] → cleanup_success → done.
         After the fix, audit_impl's GO route points directly to push, so push is
         always reachable from audit_impl's successors."""
         from autoskillit.recipe.validator import _build_step_graph
@@ -323,9 +323,9 @@ class TestImplementationPipelineStructure:
         assert "all_plan_paths" in recipe.steps["plan"].capture
         assert "result.plan_path" in recipe.steps["plan"].capture["all_plan_paths"]
 
-    def test_ip_open_pr_step_references_all_plan_paths(self, recipe) -> None:
-        """open_pr_step must pass all accumulated plan paths, not just the last."""
-        cmd = recipe.steps["open_pr_step"].with_args.get("skill_command", "")
+    def test_ip_prepare_pr_references_all_plan_paths(self, recipe) -> None:
+        """prepare_pr must pass all accumulated plan paths, not just the last."""
+        cmd = recipe.steps["prepare_pr"].with_args.get("skill_command", "")
         assert "context.all_plan_paths" in cmd
         assert "context.plan_path" not in cmd
 
@@ -414,12 +414,10 @@ class TestImplementationPipelineStructure:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_ip_open_pr_step_routes_to_review_pr_ci(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success routes to extract_pr_number before review_pr."""
-        step = recipe.steps["open_pr_step"]
-        assert step.on_success == "extract_pr_number", (
-            "open_pr_step must route to extract_pr_number"
-        )
+    def test_ip_compose_pr_routes_to_extract_pr_number_ci(self, recipe) -> None:
+        """T_CI8: compose_pr.on_success routes to extract_pr_number before review_pr."""
+        step = recipe.steps["compose_pr"]
+        assert step.on_success == "extract_pr_number", "compose_pr must route to extract_pr_number"
 
     def test_ip_ci_watch_routes_failure_to_conflict_gate(self, recipe) -> None:
         """ci_watch.on_failure must route to detect_ci_conflict, not directly to diagnose_ci."""
@@ -495,10 +493,10 @@ class TestImplementationPipelineStructure:
             "a valid verdict — aborting via escalate_stop is correct"
         )
 
-    def test_ip_open_pr_step_has_on_context_limit(self, recipe) -> None:
-        step = recipe.steps["open_pr_step"]
+    def test_ip_compose_pr_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["compose_pr"]
         assert step.on_context_limit == "release_issue_failure", (
-            "open_pr_step is advisory (skip_when_false); on context limit the pipeline "
+            "compose_pr is advisory (skip_when_false); on context limit the pipeline "
             "cannot determine PR state — release the issue via release_issue_failure"
         )
 
@@ -712,11 +710,11 @@ class TestImplementationGroupsStructure:
         assert "pr_number" in step.capture
         assert step.on_success == "annotate_pr_diff"
 
-    def test_ig_open_pr_step_routes_to_extract_pr_number(self, recipe) -> None:
-        """REQ-C7-01: open_pr_step must route to extract_pr_number (not review_pr directly)."""
-        step = recipe.steps["open_pr_step"]
+    def test_ig_compose_pr_routes_to_extract_pr_number(self, recipe) -> None:
+        """REQ-C7-01: compose_pr must route to extract_pr_number (not review_pr directly)."""
+        step = recipe.steps["compose_pr"]
         assert step.on_success == "extract_pr_number", (
-            "open_pr_step must route to extract_pr_number so pr_number is available "
+            "compose_pr must route to extract_pr_number so pr_number is available "
             "for enable_auto_merge and wait_for_queue"
         )
 
@@ -781,10 +779,10 @@ class TestImplementationGroupsStructure:
             "a valid verdict — aborting via escalate_stop is correct"
         )
 
-    def test_ig_open_pr_step_has_on_context_limit(self, recipe) -> None:
-        step = recipe.steps["open_pr_step"]
+    def test_ig_compose_pr_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["compose_pr"]
         assert step.on_context_limit == "release_issue_failure", (
-            "open_pr_step is advisory (skip_when_false); on context limit the pipeline "
+            "compose_pr is advisory (skip_when_false); on context limit the pipeline "
             "cannot determine PR state — release the issue via release_issue_failure"
         )
 
@@ -981,12 +979,10 @@ class TestInvestigateFirstStructure:
         assert "remote_url" in with_args
         assert "context.remote_url" in with_args["remote_url"]
 
-    def test_if_open_pr_step_routes_to_review_pr(self, recipe) -> None:
-        """T_CI8: open_pr_step.on_success routes to extract_pr_number before review_pr."""
-        step = recipe.steps["open_pr_step"]
-        assert step.on_success == "extract_pr_number", (
-            "open_pr_step must route to extract_pr_number"
-        )
+    def test_if_compose_pr_routes_to_extract_pr_number(self, recipe) -> None:
+        """T_CI8: compose_pr.on_success routes to extract_pr_number before review_pr."""
+        step = recipe.steps["compose_pr"]
+        assert step.on_success == "extract_pr_number", "compose_pr must route to extract_pr_number"
 
     def test_if_resolve_review_uses_resolve_review_skill(self, recipe) -> None:
         """T_IF_RR1: resolve_review step must invoke resolve-review, not resolve-failures.
@@ -1116,10 +1112,10 @@ class TestInvestigateFirstStructure:
             "a valid verdict — aborting via escalate_stop is correct"
         )
 
-    def test_if_open_pr_step_has_on_context_limit(self, recipe) -> None:
-        step = recipe.steps["open_pr_step"]
+    def test_if_compose_pr_has_on_context_limit(self, recipe) -> None:
+        step = recipe.steps["compose_pr"]
         assert step.on_context_limit == "release_issue_failure", (
-            "open_pr_step is advisory (skip_when_false); on context limit the pipeline "
+            "compose_pr is advisory (skip_when_false); on context limit the pipeline "
             "cannot determine PR state — release the issue via release_issue_failure"
         )
 
@@ -1377,23 +1373,17 @@ class TestReviewPrRecipeIntegration:
     def recipe(self, request: pytest.FixtureRequest) -> object:
         return load_recipe(builtin_recipes_dir() / request.param)
 
-    def test_open_pr_step_routes_to_review_pr(self, recipe: object) -> None:
-        """T_RP1: open_pr_step.on_success routes per-recipe to the correct next step.
+    def test_compose_pr_routes_to_extract_pr_number(self, recipe: object) -> None:
+        """T_RP1: compose_pr.on_success routes per-recipe to extract_pr_number.
 
         All queue-aware recipes (implementation, remediation, implementation-groups) insert
-        extract_pr_number between open_pr_step and review_pr to capture the PR number for
+        extract_pr_number between compose_pr and review_pr to capture the PR number for
         merge queue support.
         """
-        _expected: dict[str, str] = {
-            "implementation": "extract_pr_number",
-            "remediation": "extract_pr_number",
-            "implementation-groups": "extract_pr_number",
-        }
         recipe_name = recipe.name  # type: ignore[attr-defined]
-        expected = _expected[recipe_name]
-        on_success = recipe.steps["open_pr_step"].on_success  # type: ignore[attr-defined]
-        assert on_success == expected, (
-            f"{recipe_name}: open_pr_step.on_success must be {expected!r}, got {on_success!r}"
+        on_success = recipe.steps["compose_pr"].on_success  # type: ignore[attr-defined]
+        assert on_success == "extract_pr_number", (
+            f"{recipe_name}: compose_pr.on_success must be 'extract_pr_number', got {on_success!r}"
         )
 
     def test_review_pr_step_exists_and_is_run_skill(self, recipe: object) -> None:

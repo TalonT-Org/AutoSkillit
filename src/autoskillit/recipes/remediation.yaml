@@ -18,9 +18,9 @@ kitchen_rules:
     derived from inputs.run_name and context.issue_number (e.g. investigate/42) or
     a date suffix (e.g. investigate/20260304) when no issue is available. All worktree
     merges target the feature branch (context.merge_target), not base_branch
-    directly. The push step publishes the feature branch, then open_pr_step
+    directly. The push step publishes the feature branch, then prepare_pr → run_arch_lenses → compose_pr
     opens a PR to base_branch. When open_pr=false, merges target base_branch
-    directly and open_pr_step is skipped."
+    directly and prepare_pr is skipped."
   - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
     off-limits. Never run any command in source_dir — no git checkout, git
     fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
@@ -137,7 +137,7 @@ steps:
       Runs when inputs.issue_url is non-empty. Skipped otherwise.
       Fetches only the issue title and slug (no body, no comments).
       issue_number is used for feature branch naming and threaded to
-      open_pr_step for "Closes #N" in the PR body.
+      prepare_pr for "Closes #N" in the PR body.
       issue_slug provides a descriptive branch prefix (e.g. fix-merge-conflict-triage).
 
   claim_issue:
@@ -392,35 +392,81 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
-    on_success: open_pr_step
+    on_success: prepare_pr
     on_failure: release_issue_failure
     note: >
       Runs once at the end.
       Pushes merge_target branch from the clone to the upstream remote.
       By default (open_pr=true), this pushes the feature branch; when open_pr=false, pushes base_branch.
       Uses the pre-resolved remote_url captured at clone time, preserving clone isolation.
-      On success, routes to open_pr_step (which opens the PR by default; skipped when open_pr=false).
+      On success, routes to prepare_pr (which opens the PR by default; skipped when open_pr=false).
       On failure, release_issue_failure registers the clone and escalates.
 
-  open_pr_step:
+  prepare_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:prepare-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "open_pr"
+      step_name: "prepare_pr"
       issue_number: "${{ context.issue_number }}"
+    capture:
+      prep_path: "${{ result.prep_path }}"
+      selected_lenses: "${{ result.selected_lenses }}"
+      lens_context_paths: "${{ result.lens_context_paths }}"
+    on_success: run_arch_lenses
+    on_failure: release_issue_failure
+    on_context_limit: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Reads plan, runs git diff, classifies changed files, selects 1–3 arch-lens slugs,
+      writes one PR context file per lens, and writes a PR prep file. Does NOT invoke
+      arch-lens skills. If context.issue_number is a non-empty string, append it as the
+      4th positional argument so prepare-pr fetches requirements from the closing issue.
+
+  run_arch_lenses:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:arch-lens-{slug} {context_path}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "run_arch_lenses"
+    capture_list:
+      all_diagram_paths: "${{ result.diagram_path }}"
+    on_success: compose_pr
+    on_failure: compose_pr
+    on_context_limit: compose_pr
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      LENS ITERATION: context.selected_lenses contains comma-separated arch-lens slugs
+      (e.g. "module-dependency,process-flow"). context.lens_context_paths contains the
+      corresponding comma-separated context file paths (same order as slugs). For each
+      lens slug, run:
+        /autoskillit:arch-lens-{slug} {matching_context_path}
+      Run all selected lenses in parallel (all run_skill calls in a single message).
+      Accumulate each diagram_path value into context.all_diagram_paths via capture_list.
+      If a lens fails, continue with remaining lenses — compose_pr handles empty lists
+      gracefully by omitting the Architecture Impact section.
+
+  compose_pr:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:compose-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.work_dir }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "compose_pr"
+      issue_number: "${{ context.issue_number }}"
+    capture:
+      pr_url: "${{ result.pr_url }}"
     on_success: extract_pr_number
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Runs by default (open_pr=true). Skipped when open_pr=false.
-      The feature branch is already published by the push step that precedes this step.
-      Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
-      and runs gh pr create. The skill gracefully degrades if gh is unavailable.
-      If context.issue_number is a non-empty string, append it as a 4th positional
-      argument so the open-pr skill inserts "Closes #{issue_number}" into the PR body.
+      Reads the PR prep file, validates arch-lens diagrams (must contain ★ or ●),
+      composes the PR body, and runs gh pr create. Degrades gracefully if gh is
+      unavailable (emits pr_url=). If context.issue_number is set, append it as the
+      5th positional argument for Closes #N injection in the PR body.
 
   extract_pr_number:
     tool: run_cmd
@@ -435,7 +481,7 @@ steps:
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Extracts the integer PR number from the feature branch opened by open_pr_step.
+      Extracts the integer PR number from the feature branch opened by compose_pr.
       pr_number is required by the queue finale steps (enable_auto_merge, wait_for_queue).
 
   annotate_pr_diff:
@@ -476,7 +522,7 @@ steps:
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Runs after open_pr_step creates the PR. Invokes the review-pr skill as a
+      Runs after compose_pr creates the PR. Invokes the review-pr skill as a
       headless session to leave inline review comments on the PR. The skill finds
       the open PR by feature branch name (context.merge_target). Captures verdict
       and routes via on_result: changes_requested → resolve_review,

@@ -211,8 +211,8 @@ def test_init_session_cook_session_ignores_disabled_subsets(tmp_path):
     config = AutomationConfig(subsets=SubsetsConfig(disabled=["github"]))
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-cook2", cook_session=True, config=config)
-    assert (skills_dir / ".claude" / "skills" / "open-pr" / "SKILL.md").exists(), (
-        "cook_session=True must include 'open-pr' even when 'github' subset is disabled"
+    assert (skills_dir / ".claude" / "skills" / "compose-pr" / "SKILL.md").exists(), (
+        "cook_session=True must include 'compose-pr' even when 'github' subset is disabled"
     )
 
 

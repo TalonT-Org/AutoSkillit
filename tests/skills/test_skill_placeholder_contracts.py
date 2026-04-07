@@ -123,10 +123,12 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("open-integration-pr", "timestamp"),  # generated timestamp
         ("open-integration-pr", "new_pr_number"),  # newly created integration PR number
         ("open-integration-pr", "new_pr_url"),  # newly created integration PR URL
-        ("open-pr", "plan_path"),  # iterating over plan_paths (singular loop var)
-        ("open-pr", "closing_issue"),  # optional arg declared as [closing_issue]
-        ("open-pr", "task_title"),  # derived from first heading of plan file
-        ("open-pr", "timestamp"),  # generated timestamp for temp file
+        # ── prepare-pr: runtime-computed values ──────────────────────────────────────
+        # task_title: synthesized from plan headings (single or multi-plan subagent)
+        ("prepare-pr", "task_title"),
+        # ── compose-pr: runtime-computed values ──────────────────────────────────────
+        # task_title: extracted from prep file in Step 1
+        ("compose-pr", "task_title"),
         ("pipeline-summary", "bug_count"),  # runtime computed count from audit log
         ("pipeline-summary", "date"),  # runtime computed date string
         ("prepare-issue", "body"),

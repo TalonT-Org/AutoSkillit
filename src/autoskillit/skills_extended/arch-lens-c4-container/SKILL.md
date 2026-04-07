@@ -47,9 +47,29 @@ hooks:
   ```
   This token is MANDATORY — the pipeline cannot proceed without it.
 
+## Arguments
+
+`/autoskillit:arch-lens-c4-container [context_path]`
+
+- **context_path** (optional) — Absolute path to a PR context file containing new files
+  (★-prefixed) and modified files (●-prefixed) from the PR diff. When provided, read
+  this file before beginning analysis and focus the diagram on the architectural areas
+  affected by these specific files. When absent, explore the full CWD.
+
 ---
 
 ## Analysis Workflow
+
+### Step 0: Read PR context (when provided)
+
+If a `context_path` positional argument is present:
+1. Read the file at `context_path`
+2. Extract: new files list (★-prefixed), modified files list (●-prefixed)
+3. Focus Step 1 exploration on the modules/components these files belong to
+4. Apply ★ prefix on diagram nodes representing new files/components
+5. Apply ● prefix on diagram nodes representing modified files/components
+
+If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
 ### Step 1: Launch Parallel Exploration Subagents
 

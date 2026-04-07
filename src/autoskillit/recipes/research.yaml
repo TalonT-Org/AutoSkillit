@@ -198,11 +198,13 @@ steps:
         for f in "${SRC_TEMP}"/plan-experiment/experiment_plan_*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/plan-versions/"; done;
         for f in "${SRC_TEMP}"/resolve-design-review/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/review-cycles/"; done;
         cd "${RESOLVED}" && git add research/ && git commit -m "Add experiment plan and scope to research/" &&
+        echo "research_dir=${RESEARCH_DIR}" &&
         echo "worktree_path=${RESOLVED}"
       cwd: "${{ inputs.source_dir }}"
       step_name: create_worktree
     capture:
       worktree_path: "${{ result.worktree_path }}"
+      research_dir: "${{ result.research_dir }}"
     on_success: decompose_phases
     on_failure: escalate_stop
     note: >
@@ -400,7 +402,7 @@ steps:
     tool: run_cmd
     with:
       cmd: >
-        RESEARCH_DIR=$(find "${{ context.worktree_path }}/research" -maxdepth 1 -type d -name '????-??-??-*' | sort | tail -1) &&
+        RESEARCH_DIR="${{ context.research_dir }}" &&
         if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
           WT_TEMP="${{ context.worktree_path }}/.autoskillit/temp" &&
           mkdir -p "${RESEARCH_DIR}/artifacts/phase-groups" &&
@@ -420,6 +422,12 @@ steps:
             cp "${RESEARCH_DIR}/report.md" "${RESEARCH_DIR}/README.md" &&
             rm "${RESEARCH_DIR}/report.md";
           fi &&
+          [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] || \
+            { echo "ERROR: artifacts.tar.gz not created in ${RESEARCH_DIR}"; exit 1; } &&
+          [ ! -d "${RESEARCH_DIR}/artifacts" ] || \
+            { echo "ERROR: uncompressed artifacts/ still present in ${RESEARCH_DIR}"; exit 1; } &&
+          [ -f "${RESEARCH_DIR}/README.md" ] || \
+            { echo "ERROR: README.md not found in ${RESEARCH_DIR}"; exit 1; } &&
           cd "${{ context.worktree_path }}" && git add research/ && git diff --cached --quiet || git commit -m "Add compressed research artifacts";
           echo "report_path=${RESEARCH_DIR}/README.md";
         else
@@ -639,7 +647,8 @@ steps:
         git -C '${{ context.worktree_path }}' fetch origin '${{ inputs.base_branch }}' &&
         (git -C '${{ context.worktree_path }}' branch -D "${ARTIFACT_BRANCH}" 2>/dev/null || true) &&
         git -C '${{ context.worktree_path }}' worktree add "${ARTIFACT_DIR}" -b "${ARTIFACT_BRANCH}" "origin/${{ inputs.base_branch }}" &&
-        git -C "${ARTIFACT_DIR}" checkout "${EXPERIMENT_BRANCH}" -- research/ &&
+        RESEARCH_SUBDIR="research/$(basename "${{ context.research_dir }}")" &&
+        git -C "${ARTIFACT_DIR}" checkout "${EXPERIMENT_BRANCH}" -- "${RESEARCH_SUBDIR}" &&
         cd "${ARTIFACT_DIR}" &&
         git add research/ &&
         git commit -m "Add research artifacts: ${SLUG}" &&
@@ -666,7 +675,14 @@ steps:
         EXPERIMENT="${{ context.experiment_branch }}" &&
         ARTIFACT="${{ context.artifact_branch }}" &&
         ORIG_PR="${{ context.pr_url }}" &&
-        PR_BODY=$(printf '## Research Artifacts\n\nFrom experiment branch `%s`.\n\nOriginal experiment PR: %s\n\n### Structure\n\n- **README.md** — Research conclusions (browsable on GitHub)\n- **artifacts.tar.gz** — Full artifact tree (experiment plan, scope report, design evaluation, review cycles, plan versions, phase groups, phase plans)\n\nTo extract the full artifact tree:\n```\ntar xzf artifacts.tar.gz\n```\n\nContains only files under `research/` — zero production code changes.' "${EXPERIMENT}" "${ORIG_PR}") &&
+        RESEARCH_SUBDIR="research/$(basename "${{ context.research_dir }}")" &&
+        ARTIFACT_DIR="${{ context.worktree_path }}" &&
+        if [ -f "${ARTIFACT_DIR}/${RESEARCH_SUBDIR}/artifacts.tar.gz" ]; then
+          STRUCT_DETAIL=$'- `artifacts.tar.gz` \xe2\x80\x94 compressed artifact tree\n\nExtract:\n```bash\ntar xzf artifacts.tar.gz\n```';
+        else
+          STRUCT_DETAIL="- \`artifacts/\` — uncompressed artifact tree";
+        fi &&
+        PR_BODY=$(printf '## Research Artifacts\n\nFrom experiment branch `%s`.\n\nOriginal experiment PR: %s\n\n### Structure\n\n- **README.md** — Research conclusions (browsable on GitHub)\n%s\n\nContains only files under `research/` — zero production code changes.' "${EXPERIMENT}" "${ORIG_PR}" "${STRUCT_DETAIL}") &&
         PR_URL=$(gh pr create
         --head "${ARTIFACT}"
         --base '${{ inputs.base_branch }}'

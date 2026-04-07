@@ -33,13 +33,13 @@ def test_prepare_pr_outputs_lens_context_paths():
 def test_prepare_pr_never_invokes_arch_lens():
     """prepare-pr must explicitly state it does NOT invoke arch-lens skills."""
     text = PREPARE_PR.read_text()
-    assert "NOT invoke" in text or "Does NOT" in text or "NEVER" in text
+    assert "NOT invoke arch-lens" in text or "Does NOT invoke any arch-lens" in text
 
 
 def test_prepare_pr_classifies_new_vs_modified():
     """prepare-pr must classify files as new (★) vs modified (●)."""
     text = PREPARE_PR.read_text()
-    assert "★" in text and "●" in text or ("new_files" in text and "modified_files" in text)
+    assert "★" in text and "●" in text
 
 
 def test_compose_pr_outputs_pr_url():
@@ -65,7 +65,7 @@ def test_compose_pr_degrades_gracefully_without_diagrams():
 
 def test_compose_pr_never_invokes_sub_skills():
     text = COMPOSE_PR.read_text()
-    assert "NOT invoke" in text or "Does NOT" in text or "NEVER" in text
+    assert "NOT invoke any sub-skills" in text or "Does NOT invoke sub-skills" in text
 
 
 def test_compose_pr_gh_degrades_gracefully():

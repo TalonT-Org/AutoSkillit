@@ -30,6 +30,19 @@ _SUCCESS_JSON = (
     ' "result": "done", "session_id": "s1"}'
 )
 
+# Deterministic UUID for tests that need to predict the per-invocation marker.
+_DETERMINISTIC_HEX = "a1b2c3d4e5f6a7b890123456"
+_DETERMINISTIC_MARKER = f"%%ORDER_UP::{_DETERMINISTIC_HEX[:8]}%%"
+
+
+class _FixedUUID:
+    hex = _DETERMINISTIC_HEX
+
+
+def _patch_uuid4(monkeypatch):
+    """Monkeypatch uuid4 to return a deterministic value for marker prediction."""
+    monkeypatch.setattr("uuid.uuid4", lambda: _FixedUUID())
+
 
 class TestRunSkillPluginDir:
     """T2: run_skill passes --plugin-dir to the claude command."""
@@ -209,7 +222,7 @@ class TestRunSkillPrefix:
         )
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
-        assert "%%ORDER_UP%%" in cmd[5]
+        assert "%%ORDER_UP::" in cmd[5]
         # cwd must propagate to the subprocess runner
         from pathlib import Path
 
@@ -318,7 +331,7 @@ class TestRunSkillInjectsCompletionDirective:
         # The prompt argument is at index 5
         # (shifted by 3 env tokens: env + AUTOSKILLIT_HEADLESS=1 + delay)
         skill_arg = cmd[5]
-        assert "%%ORDER_UP%%" in skill_arg
+        assert "%%ORDER_UP::" in skill_arg
         assert "ORCHESTRATION DIRECTIVE" in skill_arg
 
     def test_inject_completion_directive_prohibits_standalone_marker(self):
@@ -817,6 +830,7 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
             stale_threshold: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
             write_behavior=None,
+            completion_marker: str = "",
         ) -> SkillResult:
             calls.append((skill_command, cwd))
             return SkillResult(
@@ -863,6 +877,7 @@ async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> Non
             stale_threshold: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
             write_behavior=None,
+            completion_marker: str = "",
         ) -> SkillResult:
             captured["add_dirs"] = add_dirs
             captured["cwd"] = cwd
@@ -1284,23 +1299,52 @@ class TestRunSkillCwdValidation:
         assert tool_ctx.runner.call_args_list == []
 
     @pytest.mark.anyio
-    async def test_run_skill_accepts_empty_cwd(self, tool_ctx):
+    async def test_run_skill_accepts_empty_cwd(self, tool_ctx, monkeypatch):
         """Empty cwd is accepted (some skills have no specific cwd requirement)."""
+        _patch_uuid4(monkeypatch)
+        marker = _DETERMINISTIC_MARKER
         success_json = (
             '{"type": "result", "subtype": "success", "is_error": false,'
-            ' "result": "done %%ORDER_UP%%", "session_id": "s1"}'
+            f' "result": "done {marker}", "session_id": "s1"}}'
         )
         tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
         result = json.loads(await run_skill("/investigate foo", cwd=""))
         assert result["success"] is True
 
     @pytest.mark.anyio
-    async def test_run_skill_accepts_absolute_cwd(self, tool_ctx):
+    async def test_run_skill_accepts_absolute_cwd(self, tool_ctx, monkeypatch):
         """Absolute cwd passes the boundary check and proceeds normally."""
+        _patch_uuid4(monkeypatch)
+        marker = _DETERMINISTIC_MARKER
         success_json = (
             '{"type": "result", "subtype": "success", "is_error": false,'
-            ' "result": "done %%ORDER_UP%%", "session_id": "s1"}'
+            f' "result": "done {marker}", "session_id": "s1"}}'
         )
         tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
         result = json.loads(await run_skill("/investigate foo", cwd="/tmp"))
         assert result["success"] is True
+
+
+class TestRunSkillPerInvocationMarker:
+    """Per-invocation completion markers are unique across run_skill calls."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_markers_are_unique_per_invocation(self, tool_ctx):
+        """Two run_skill calls must generate different completion_marker values."""
+        success_json = (
+            '{"type": "result", "subtype": "success", "is_error": false,'
+            ' "result": "done", "session_id": "s1"}'
+        )
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
+
+        await run_skill("/investigate a", cwd="/tmp")
+        await run_skill("/investigate b", cwd="/tmp")
+
+        calls = tool_ctx.runner.call_args_list
+        assert len(calls) >= 2
+        marker1 = calls[0][3]["completion_marker"]
+        marker2 = calls[1][3]["completion_marker"]
+        assert marker1 != marker2
+        assert "%%ORDER_UP::" in marker1
+        assert "%%ORDER_UP::" in marker2

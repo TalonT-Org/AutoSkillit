@@ -101,6 +101,22 @@ def _remove_disable_model_invocation(content: str) -> str:
     return f"---\n{fm_text}\n---\n{body}"
 
 
+_ORDER_UP_LINE = re.compile(r"^.*%%ORDER_UP%%.*\n?", re.MULTILINE)
+
+
+def _strip_marker_from_body(content: str, marker: str = "%%ORDER_UP%%") -> str:
+    """Remove completion marker lines from SKILL.md body content."""
+    m = _FM_PATTERN.match(content)
+    if not m:
+        return _ORDER_UP_LINE.sub("", content) if marker in content else content
+    fm_text = m.group(1)
+    body = m.group(2)
+    if marker not in body:
+        return content
+    body = _ORDER_UP_LINE.sub("", body)
+    return f"---\n{fm_text}\n---\n{body}"
+
+
 _ACTIVATE_DEPS_PATTERN = re.compile(r"^activate_deps:\s*\[([^\]]*)\]", re.MULTILINE)
 
 
@@ -341,7 +357,9 @@ class DefaultSessionSkillManager:
         activated: set[str] = set()
         return self._activate_with_deps(session_id, skill_name, activated)
 
-    def _activate_with_deps(self, session_id: str, skill_name: str, activated: set[str]) -> bool:
+    def _activate_with_deps(
+        self, session_id: str, skill_name: str, activated: set[str], *, _is_root: bool = True
+    ) -> bool:
         """Activate a single skill and recursively activate its dependencies."""
         if skill_name in activated:
             return False
@@ -353,6 +371,8 @@ class DefaultSessionSkillManager:
 
         content = skill_md.read_text()
         new_content = _remove_disable_model_invocation(content)
+        if not _is_root:
+            new_content = _strip_marker_from_body(new_content)
         if new_content != content:
             atomic_write(skill_md, new_content)
 
@@ -361,7 +381,7 @@ class DefaultSessionSkillManager:
             if dep in PACK_REGISTRY:
                 self._activate_pack_deps(session_id, dep, activated)
             else:
-                self._activate_with_deps(session_id, dep, activated)
+                self._activate_with_deps(session_id, dep, activated, _is_root=False)
 
         return True
 
@@ -378,7 +398,7 @@ class DefaultSessionSkillManager:
                 continue
             info = self._provider.resolver.resolve(name)
             if info and pack_name in info.categories:
-                self._activate_with_deps(session_id, name, activated)
+                self._activate_with_deps(session_id, name, activated, _is_root=False)
 
     def cleanup_stale(self, max_age_seconds: int = 259200) -> int:
         """Remove session dirs not accessed within max_age_seconds.

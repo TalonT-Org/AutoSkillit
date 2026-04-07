@@ -817,6 +817,7 @@ async def run_headless_core(
     stale_threshold: float | None = None,
     expected_output_patterns: Sequence[str] = (),
     write_behavior: WriteBehaviorSpec | None = None,
+    completion_marker: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -824,6 +825,7 @@ async def run_headless_core(
     Accepts explicit ToolContext so this module has no server.py dependency.
     """
     cfg = ctx.config.run_skill
+    effective_marker = completion_marker or cfg.completion_marker
     original_skill_command = skill_command
 
     with structlog.contextvars.bound_contextvars(
@@ -835,7 +837,7 @@ async def run_headless_core(
         cmd = build_full_headless_cmd(
             skill_command,
             cwd=cwd,
-            completion_marker=cfg.completion_marker,
+            completion_marker=effective_marker,
             model=resolved_model,
             plugin_dir=effective_plugin_dir,
             output_format_value=cfg.output_format.value,
@@ -876,7 +878,7 @@ async def run_headless_core(
                 timeout=effective_timeout,
                 pty_mode=True,
                 session_log_dir=_session_log_dir(cwd),
-                completion_marker=cfg.completion_marker,
+                completion_marker=effective_marker,
                 stale_threshold=effective_stale,
                 completion_drain_timeout=cfg.completion_drain_timeout,
                 linux_tracing_config=linux_tracing_cfg,
@@ -916,7 +918,7 @@ async def run_headless_core(
         audit_count_before = len(ctx.audit.get_report())
         skill_result = _build_skill_result(
             result,
-            completion_marker=cfg.completion_marker,
+            completion_marker=effective_marker,
             skill_command=original_skill_command,
             audit=ctx.audit,
             expected_output_patterns=expected_output_patterns,
@@ -1019,6 +1021,7 @@ class DefaultHeadlessExecutor:
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),
         write_behavior: WriteBehaviorSpec | None = None,
+        completion_marker: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -1036,4 +1039,5 @@ class DefaultHeadlessExecutor:
             stale_threshold=effective_stale,
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_behavior,
+            completion_marker=completion_marker,
         )

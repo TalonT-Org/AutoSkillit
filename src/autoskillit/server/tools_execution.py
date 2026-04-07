@@ -255,6 +255,8 @@ async def run_skill(
             skill_command, tool_ctx.skill_resolver
         )
 
+    invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
+
     skill_add_dirs: list[ValidatedAddDir] = []
     if tool_ctx.session_skill_manager is not None:
         session_id = f"headless-{uuid4().hex[:12]}"
@@ -288,6 +290,7 @@ async def run_skill(
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_spec,
             stale_threshold=float(stale_threshold) if stale_threshold is not None else None,
+            completion_marker=invocation_marker,
         )
         if skill_result.success:
             tool_ctx.audit.record_success(skill_command)

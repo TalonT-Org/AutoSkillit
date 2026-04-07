@@ -833,7 +833,7 @@ class TestSkillsConfig:
         cfg = load_config(tmp_path / "settings.toml")
         assert "open-kitchen" in cfg.skills.tier1
         assert "make-plan" in cfg.skills.tier2
-        assert "open-pr" in cfg.skills.tier3
+        assert "compose-pr" in cfg.skills.tier3
 
     def test_skills_config_exported_from_config_package(self) -> None:
         """SkillsConfig is importable from autoskillit.config and has expected fields."""

@@ -80,9 +80,9 @@ def test_process_issues_derives_issue_url(skill_text: str) -> None:
     assert github_url_ref in skill_text or "default_repo" in skill_text
 
 
-def test_open_pr_supports_run_name_title_prefix() -> None:
-    """open-pr must derive [FEATURE]/[FIX] PR title prefix from run_name convention."""
-    content = (bundled_skills_extended_dir() / "open-pr" / "SKILL.md").read_text()
+def test_prepare_pr_supports_run_name_title_prefix() -> None:
+    """prepare-pr must derive [FEATURE]/[FIX] PR title prefix from run_name convention."""
+    content = (bundled_skills_extended_dir() / "prepare-pr" / "SKILL.md").read_text()
     assert "[FEATURE]" in content
     assert "[FIX]" in content
     # Must document the run_name-based convention

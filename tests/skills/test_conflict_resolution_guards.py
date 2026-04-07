@@ -329,12 +329,12 @@ def test_open_integration_pr_embeds_conflict_resolution_decisions():
     )
 
 
-def test_open_pr_embeds_conflict_resolution_decisions():
-    """open-pr SKILL.md must embed Conflict Resolution Decisions section."""
-    skill_md_path = SKILLS_ROOT / "open-pr" / "SKILL.md"
+def test_compose_pr_embeds_conflict_resolution_decisions():
+    """compose-pr SKILL.md must embed Conflict Resolution Decisions section."""
+    skill_md_path = SKILLS_ROOT / "compose-pr" / "SKILL.md"
     text = skill_md_path.read_text()
     assert "Conflict Resolution Decisions" in text, (
-        "open-pr/SKILL.md must describe embedding a "
+        "compose-pr/SKILL.md must describe embedding a "
         "'Conflict Resolution Decisions' section per REQ-PIP-003"
     )
 

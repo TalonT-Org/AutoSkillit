@@ -39,7 +39,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Do Not Add Root Files**: Never create new root files unless explicitly required.
   * **Never commit unless told to do so**
 
-### **3.3. Code Index MCP Usage**
+### **3.5. Code Index MCP Usage**
 
   * **Initialize before use**: Always call `set_project_path` with the project root
     as the first action in any session that will use code-index tools. Without this

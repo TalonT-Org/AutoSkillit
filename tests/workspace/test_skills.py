@@ -431,17 +431,17 @@ class TestSkillResolver:
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
     def test_87_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 89 SKILL.md-carrying directories."""
+        """skills_extended/ contains exactly 90 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 89
+        assert len(skills) == 90
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 91 public skills (2 Tier-1 + 89 extended)."""
-        assert len(SkillResolver().list_all()) == 91
+        """list_all() returns 92 public skills (2 Tier-1 + 90 extended)."""
+        assert len(SkillResolver().list_all()) == 92
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
@@ -517,8 +517,8 @@ class TestSkillCategories:
         info = SkillInfo(name="test", source=SkillSource.BUNDLED, path=Path("/fake/SKILL.md"))
         assert info.categories == frozenset()
 
-    def test_open_pr_skill_has_github_category(self) -> None:
-        info = SkillResolver().resolve("open-pr")
+    def test_compose_pr_skill_has_github_category(self) -> None:
+        info = SkillResolver().resolve("compose-pr")
         assert info is not None
         assert "github" in info.categories
 

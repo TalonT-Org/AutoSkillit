@@ -1,4 +1,5 @@
 """Contract tests for prepare-pr and compose-pr skills."""
+
 from pathlib import Path
 
 SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
@@ -55,7 +56,11 @@ def test_compose_pr_validates_diagrams_with_markers():
 def test_compose_pr_degrades_gracefully_without_diagrams():
     """compose-pr must handle empty diagram list gracefully."""
     text = COMPOSE_PR.read_text()
-    assert "empty" in text.lower() or "no diagrams" in text.lower() or "all_diagram_paths is empty" in text
+    assert (
+        "empty" in text.lower()
+        or "no diagrams" in text.lower()
+        or "all_diagram_paths is empty" in text
+    )
 
 
 def test_compose_pr_never_invokes_sub_skills():

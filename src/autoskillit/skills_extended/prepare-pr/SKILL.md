@@ -56,18 +56,21 @@ Parse positional arguments:
 - arg[5] = `conflict_report_path` (optional — may be absent or empty string)
 
 Derive `feature_branch` (`git rev-parse --abbrev-ref HEAD`).
-Create temp dir:
+Create temp dir (relative to the current working directory):
 ```bash
 mkdir -p .autoskillit/temp/prepare-pr/
+FEATURE_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+ts=$(date +%Y-%m-%d_%H%M%S)
+CLOSING_ISSUE="${4:-}"
 ```
-Generate timestamp `ts` = `$(date +%Y-%m-%d_%H%M%S)`.
+Generate timestamp `ts` from the bash block above.
 
 ### Step 1: Fetch Requirements from Closing Issue
 
 - If `closing_issue` is absent or empty string: skip — set `requirements_section = ""`.
 - Fetch issue body:
   ```bash
-  gh issue view {closing_issue} --json body -q .body
+  gh issue view $CLOSING_ISSUE --json body -q .body
   ```
 - Extract the `## Requirements` section: everything from `## Requirements` to the next
   `## ` heading or end of body, whichever comes first.
@@ -105,9 +108,9 @@ esac
 Run git diff to classify changed files:
 
 ```bash
-git diff --name-only {base_branch}..{feature_branch}
-git diff --diff-filter=A --name-only {base_branch}..{feature_branch}  # new_files
-git diff --diff-filter=M --name-only {base_branch}..{feature_branch}  # modified_files
+git diff --name-only $BASE_BRANCH..$FEATURE_BRANCH
+git diff --diff-filter=A --name-only $BASE_BRANCH..$FEATURE_BRANCH  # new_files
+git diff --diff-filter=M --name-only $BASE_BRANCH..$FEATURE_BRANCH  # modified_files
 ```
 
 Store as separate lists: `new_files` (added, ★) and `modified_files` (modified, ●).
@@ -143,7 +146,7 @@ For each selected slug, write one context file to
 # PR Context — Changed Files
 
 This diagram is for a Pull Request. Focus the diagram on the areas of the codebase
-affected by these changes. Do not create a generic whole-project diagram.
+affected by these changes. Do not produce a generic whole-project view.
 
 ## New files (use ★ prefix on these nodes):
 {list of new_files, or "None"}
@@ -215,7 +218,9 @@ Write PR prep file to `.autoskillit/temp/prepare-pr/pr_prep_{ts}.md`:
 
 ## Output
 
-Emit these structured output tokens (literal plain text, no markdown decoration):
+Emit these structured output tokens (literal plain text, no markdown decoration).
+All output paths are absolute (resolve `.autoskillit/temp/prepare-pr/` relative to
+the current working directory using `$(pwd)`):
 
 ```
 prep_path = /absolute/path/.autoskillit/temp/prepare-pr/pr_prep_{ts}.md

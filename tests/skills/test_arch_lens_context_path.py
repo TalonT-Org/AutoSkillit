@@ -1,12 +1,24 @@
 """Tests that all arch-lens skills have an ## Arguments section and context_path handling."""
+
 from pathlib import Path
+
 import pytest
 
 SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
 ARCH_LENS_SLUGS = [
-    "c4-container", "concurrency", "data-lineage", "deployment", "development",
-    "error-resilience", "module-dependency", "operational", "process-flow",
-    "repository-access", "scenarios", "security", "state-lifecycle",
+    "c4-container",
+    "concurrency",
+    "data-lineage",
+    "deployment",
+    "development",
+    "error-resilience",
+    "module-dependency",
+    "operational",
+    "process-flow",
+    "repository-access",
+    "scenarios",
+    "security",
+    "state-lifecycle",
 ]
 
 

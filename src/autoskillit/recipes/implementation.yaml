@@ -459,6 +459,7 @@ steps:
       all_diagram_paths: "${{ result.diagram_path }}"
     on_success: compose_pr
     on_failure: compose_pr
+    on_context_limit: compose_pr
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >

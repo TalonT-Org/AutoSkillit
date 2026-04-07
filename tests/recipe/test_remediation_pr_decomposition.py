@@ -1,6 +1,8 @@
 """Verify remediation.yaml has the three-step PR decomposition."""
+
 import pytest
-from autoskillit.recipe.io import load_recipe, builtin_recipes_dir
+
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import validate_recipe
 
 RECIPE_PATH = builtin_recipes_dir() / "remediation.yaml"

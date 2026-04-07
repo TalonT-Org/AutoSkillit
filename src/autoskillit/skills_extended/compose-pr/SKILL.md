@@ -39,6 +39,8 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
 - Invoke any sub-skills or slash commands
 - Fail the pipeline if `gh` is unavailable — emit `pr_url = ` (empty) and exit successfully
 - Create files outside `.autoskillit/temp/compose-pr/`
+- Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
+  Using ONLY classDef styles from the mermaid skill (no invented colors).
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations
@@ -60,16 +62,18 @@ Parse positional arguments:
 - arg[4] = `base_branch`
 - arg[5] = `closing_issue` (optional — overrides value in prep file if set)
 
-Derive `feature_branch`:
+Derive `feature_branch` and set shell variables:
 ```bash
-git -C {work_dir} rev-parse --abbrev-ref HEAD
+FEATURE_BRANCH=$(git -C $WORK_DIR rev-parse --abbrev-ref HEAD)
+BASE_BRANCH=$4
 ```
 
-Create temp dir:
+Create temp dir (relative to the current working directory):
 ```bash
 mkdir -p .autoskillit/temp/compose-pr/
+ts=$(date +%Y-%m-%d_%H%M%S)
 ```
-Generate timestamp `ts` = `$(date +%Y-%m-%d_%H%M%S)`.
+Timestamp `ts` is assigned in the bash block above.
 
 ### Step 1: Read PR Prep File
 
@@ -98,7 +102,7 @@ If `all_diagram_paths` is empty or all diagrams fail → `validated_diagrams = [
 
 ### Step 3: Compose PR Body
 
-Write PR body to `.autoskillit/temp/compose-pr/pr_body_{ts}.md`.
+Write PR body to `.autoskillit/temp/compose-pr/pr_body_$ts.md` (using the `ts` variable from Step 0).
 
 #### Single plan format:
 
@@ -205,10 +209,10 @@ If exit code is non-zero:
 
 ```bash
 gh pr create \
-  --base {base_branch} \
-  --head {feature_branch} \
-  --title "{task_title}" \
-  --body-file .autoskillit/temp/compose-pr/pr_body_{ts}.md
+  --base $BASE_BRANCH \
+  --head $FEATURE_BRANCH \
+  --title "$TASK_TITLE" \
+  --body-file .autoskillit/temp/compose-pr/pr_body_$ts.md
 ```
 
 Capture PR URL from stdout.

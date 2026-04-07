@@ -2073,6 +2073,49 @@ class TestResearchRecipeStructure:
         assert "merge_escalations" in recipe.steps
         assert "check_escalations" not in recipe.steps  # replaced
 
+    def test_route_review_resolve_routing_logic(self, recipe) -> None:
+        step = recipe.steps["route_review_resolve"]
+        assert step.action == "route"
+        conditions = step.on_result.conditions
+        # changes_requested → resolve_research_review; else → route_claims_resolve
+        guarded = [c for c in conditions if c.when is not None]
+        default = [c for c in conditions if c.when is None]
+        assert len(guarded) == 1
+        assert "changes_requested" in guarded[0].when
+        assert guarded[0].route == "resolve_research_review"
+        assert len(default) == 1
+        assert default[0].route == "route_claims_resolve"
+
+    def test_route_claims_resolve_routing_logic(self, recipe) -> None:
+        step = recipe.steps["route_claims_resolve"]
+        assert step.action == "route"
+        conditions = step.on_result.conditions
+        # changes_requested → resolve_claims_review; else → merge_escalations
+        guarded = [c for c in conditions if c.when is not None]
+        default = [c for c in conditions if c.when is None]
+        assert len(guarded) == 1
+        assert "changes_requested" in guarded[0].when
+        assert guarded[0].route == "resolve_claims_review"
+        assert len(default) == 1
+        assert default[0].route == "merge_escalations"
+
+    def test_merge_escalations_routing_logic(self, recipe) -> None:
+        step = recipe.steps["merge_escalations"]
+        assert step.action == "route"
+        conditions = step.on_result.conditions
+        # review_needs_rerun == true → re_run_experiment
+        # claims_needs_rerun == true → re_run_experiment
+        # else → re_push_research
+        guarded = [c for c in conditions if c.when is not None]
+        default = [c for c in conditions if c.when is None]
+        assert len(guarded) == 2
+        rerun_routes = {c.route for c in guarded}
+        assert rerun_routes == {"re_run_experiment"}
+        assert any("review_needs_rerun" in c.when for c in guarded)
+        assert any("claims_needs_rerun" in c.when for c in guarded)
+        assert len(default) == 1
+        assert default[0].route == "re_push_research"
+
     def test_resolve_claims_review_step_exists(self, recipe) -> None:
         step = recipe.steps["resolve_claims_review"]
         assert "claims_needs_rerun" in step.capture

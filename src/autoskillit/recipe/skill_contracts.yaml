@@ -1337,6 +1337,7 @@ skills:
     pattern_examples:
     - "verdict = approved\n%%ORDER_UP%%"
     - "verdict = changes_requested\n%%ORDER_UP%%"
+    - "verdict = needs_human\n%%ORDER_UP%%"
     write_behavior: always
 
   audit-claims:
@@ -1359,6 +1360,7 @@ skills:
     pattern_examples:
     - "verdict = approved\n%%ORDER_UP%%"
     - "verdict = changes_requested\n%%ORDER_UP%%"
+    - "verdict = needs_human\n%%ORDER_UP%%"
     write_behavior: always
 
   resolve-claims-review:

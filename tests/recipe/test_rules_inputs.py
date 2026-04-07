@@ -5,6 +5,55 @@ from __future__ import annotations
 import ast
 import pathlib
 
+import pytest
+
+from autoskillit.recipe.io import load_recipe
+from autoskillit.recipe.registry import run_semantic_rules
+from autoskillit.recipe.schema import Recipe, RecipeStep
+
+
+def _make_recipe_with_skill_step(skill_command: str) -> Recipe:
+    """Build a minimal Recipe with a single run_skill step."""
+    step = RecipeStep(
+        tool="run_skill",
+        with_args={"skill_command": skill_command},
+    )
+    return Recipe(
+        name="test-recipe",
+        description="Test recipe for rule validation",
+        steps={"review_step": step},
+    )
+
+
+def test_missing_recommended_input_fires_warning_when_not_passed():
+    """A skill with recommended=True inputs should produce a WARNING
+    when the recipe step's skill_command does not contain `name=` for them."""
+    recipe = _make_recipe_with_skill_step(
+        "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }}"
+    )
+    findings = run_semantic_rules(recipe)
+    rec_findings = [f for f in findings if f.rule == "missing-recommended-input"]
+    assert len(rec_findings) > 0, (
+        "Expected at least one missing-recommended-input WARNING when "
+        "annotated_diff_path= is not in skill_command"
+    )
+    assert all(f.severity.value == "WARNING" for f in rec_findings)
+
+
+def test_missing_recommended_input_passes_when_input_provided():
+    """No WARNING when the step's skill_command contains the recommended input as name=."""
+    recipe = _make_recipe_with_skill_step(
+        "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} "
+        "annotated_diff_path=${{ context.annotated_diff_path }} "
+        "hunk_ranges_path=${{ context.hunk_ranges_path }}"
+    )
+    findings = run_semantic_rules(recipe)
+    rec_findings = [f for f in findings if f.rule == "missing-recommended-input"]
+    assert rec_findings == [], (
+        f"Expected no missing-recommended-input findings when inputs are provided, "
+        f"got: {rec_findings}"
+    )
+
 
 def test_rules_inputs_terminal_targets_match_schema():
     """rules_inputs.py unreachable-step rule uses the same sentinel set as schema."""

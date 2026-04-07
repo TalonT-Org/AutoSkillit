@@ -116,6 +116,14 @@ class TestSmokeScriptValidation:
         names = [r["name"] for r in result["recipes"]]
         assert "smoke-test" not in names
 
+    def test_smoke_recipe_is_ready_to_execute(self) -> None:
+        """Smoke recipe exists, validates, and is project-local."""
+        assert SMOKE_SCRIPT.exists()
+        pipeline = yaml.safe_load(SMOKE_SCRIPT.read_text())
+        assert pipeline["name"] == "smoke-test"
+        assert "create_pr" in pipeline["steps"]
+        assert "close_pr" in pipeline["steps"]
+
 
 # ---------------------------------------------------------------------------
 # New structural tests for rewritten recipe (T_SP_NEW_1 through T_SP_NEW_12)
@@ -242,11 +250,3 @@ class TestSmokePipelineExecution:
     """
 
     pytestmark = pytest.mark.skipif(not os.environ.get("SMOKE_TEST"), reason="SMOKE_TEST not set")
-
-    def test_smoke_recipe_is_ready_to_execute(self) -> None:
-        """Smoke recipe exists, validates, and is project-local."""
-        assert SMOKE_SCRIPT.exists()
-        pipeline = yaml.safe_load(SMOKE_SCRIPT.read_text())
-        assert pipeline["name"] == "smoke-test"
-        assert "create_pr" in pipeline["steps"]
-        assert "close_pr" in pipeline["steps"]

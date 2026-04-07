@@ -33,12 +33,12 @@ Does NOT invoke any exp-lens skills or create a PR.
 ## Critical Constraints
 
 **NEVER:**
-- Invoke any exp-lens skill via the Skill tool — use Agent subagents for all analysis
+- Invoke exp-lens skills — they are run in separate sessions by the recipe orchestrator
 - Create files outside `.autoskillit/temp/prepare-research-pr/`
 - Fail silently — always emit all three output tokens before `%%ORDER_UP%%`
 
 **ALWAYS:**
-- Use Agent subagents (not the Skill tool) for reading and synthesis
+- Use Agent subagents (not slash commands) for reading and synthesis
 - Emit `prep_path`, `selected_lenses`, and `lens_context_paths` before `%%ORDER_UP%%`
 - Write all output paths as absolute paths
 

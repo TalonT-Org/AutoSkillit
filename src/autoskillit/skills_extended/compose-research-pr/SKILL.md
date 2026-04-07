@@ -17,7 +17,7 @@ hooks:
 
 Reads the PR prep file produced by `prepare-research-pr`, validates experiment design
 diagrams, composes a structured PR body, and creates the GitHub PR using `gh pr create`.
-Does NOT invoke any exp-lens skills.
+Does NOT invoke lens skills or other sub-skills.
 
 ## Arguments
 
@@ -33,7 +33,7 @@ Does NOT invoke any exp-lens skills.
 ## Critical Constraints
 
 **NEVER:**
-- Invoke any skill via the Skill tool
+- Invoke any sub-skills or slash commands during execution
 - Auto-merge or approve the PR — research PRs are for human review only
 - Fail the pipeline if `gh` is unavailable — emit `pr_url = ` (empty string) and exit 0
 - Create files outside `.autoskillit/temp/compose-research-pr/`

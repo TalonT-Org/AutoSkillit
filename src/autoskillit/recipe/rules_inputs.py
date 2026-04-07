@@ -141,6 +141,50 @@ def _check_unsatisfied_skill_input(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="missing-recommended-input",
+    description="Skill steps should provide recommended inputs for full-quality output.",
+    severity=Severity.WARNING,
+)
+def _check_missing_recommended_input(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step, _available_context in iter_steps_with_context(wf):
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "") if step.with_args else ""
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if not skill_name:
+            continue
+        contract = get_skill_contract(skill_name, manifest)
+        if not contract:
+            continue
+
+        for inp in contract.inputs:
+            if not inp.recommended or inp.required:
+                continue
+            if f"{inp.name}=" not in skill_cmd:
+                findings.append(
+                    RuleFinding(
+                        rule="missing-recommended-input",
+                        severity=Severity.WARNING,
+                        step_name=step_name,
+                        message=(
+                            f"Step '{step_name}' invokes {skill_name} which recommends "
+                            f"'{inp.name}' for full-quality output, but the step does not "
+                            f"pass it. Add '{inp.name}=${{{{ context.{inp.name} }}}}' to "
+                            f"the skill_command or add a pre-computation step."
+                        ),
+                    )
+                )
+
+    return findings
+
+
+@semantic_rule(
     name="shadowed-required-input",
     description=(
         "A skill step uses inline positional text for an argument that the skill's contract "

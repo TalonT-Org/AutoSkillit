@@ -436,9 +436,11 @@ skills:
     - name: annotated_diff_path
       type: string
       required: false
+      recommended: true
     - name: hunk_ranges_path
       type: string
       required: false
+      recommended: true
     outputs:
     - name: verdict
       type: string

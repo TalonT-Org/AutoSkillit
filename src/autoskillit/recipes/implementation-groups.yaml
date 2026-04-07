@@ -455,7 +455,7 @@ steps:
       step_name: "extract_pr_number"
     capture:
       pr_number: "${{ result.stdout | trim }}"
-    on_success: review_pr
+    on_success: annotate_pr_diff
     on_failure: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -463,10 +463,28 @@ steps:
       Extracts the integer PR number from the feature branch opened by open_pr_step.
       pr_number is required by the queue finale steps (enable_auto_merge, wait_for_queue).
 
+  annotate_pr_diff:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.annotate_pr_diff"
+      pr_number: "${{ context.pr_number }}"
+      cwd: "${{ context.work_dir }}"
+      output_dir: "${{ context.work_dir }}/.autoskillit/temp/review-pr"
+    capture:
+      annotated_diff_path: "${{ result.annotated_diff_path }}"
+      hunk_ranges_path: "${{ result.hunk_ranges_path }}"
+    on_success: review_pr
+    on_failure: review_pr
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Pre-computes annotated diff with [LNNN] markers and hunk ranges JSON for
+      review-pr. On failure, falls through to review_pr which uses empty fallback.
+
   review_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr"
     capture:

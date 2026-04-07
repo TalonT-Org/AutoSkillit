@@ -710,7 +710,7 @@ class TestImplementationGroupsStructure:
         step = recipe.steps["extract_pr_number"]
         assert step.tool == "run_cmd"
         assert "pr_number" in step.capture
-        assert step.on_success == "review_pr"
+        assert step.on_success == "annotate_pr_diff"
 
     def test_ig_open_pr_step_routes_to_extract_pr_number(self, recipe) -> None:
         """REQ-C7-01: open_pr_step must route to extract_pr_number (not review_pr directly)."""
@@ -1622,6 +1622,69 @@ def test_all_advisory_run_skill_steps_have_on_context_limit(recipe_path):
         f"Advisory run_skill steps in {recipe_path.name} missing on_context_limit: "
         f"{violations}. Set on_context_limit to the appropriate skip/recovery step."
     )
+
+
+# ---------------------------------------------------------------------------
+# Cross-recipe review-pr pre-computation tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["implementation", "remediation", "implementation-groups", "merge-prs"],
+)
+def test_review_pr_step_passes_annotated_diff_inputs(recipe_name: str) -> None:
+    """Every review-pr invocation must pass annotated_diff_path= and hunk_ranges_path=
+    in skill_command, or have a reachable annotate_pr_diff predecessor step."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    # Find review-pr steps
+    review_steps = [
+        (name, step)
+        for name, step in recipe.steps.items()
+        if step.tool in SKILL_TOOLS and "review-pr" in step.with_args.get("skill_command", "")
+    ]
+    assert review_steps, f"No review-pr step found in {recipe_name}.yaml"
+    for step_name, step in review_steps:
+        cmd = step.with_args.get("skill_command", "")
+        has_inline = "annotated_diff_path=" in cmd and "hunk_ranges_path=" in cmd
+        has_predecessor = any(
+            s.with_args.get("callable", "") == "autoskillit.smoke_utils.annotate_pr_diff"
+            for s in recipe.steps.values()
+            if s.tool == "run_python"
+        )
+        assert has_inline or has_predecessor, (
+            f"{recipe_name}.yaml: step '{step_name}' invokes review-pr but neither "
+            f"passes annotated_diff_path=/hunk_ranges_path= inline nor has an "
+            f"annotate_pr_diff predecessor step"
+        )
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["implementation", "remediation", "implementation-groups", "merge-prs"],
+)
+def test_annotate_pr_diff_captures_both_paths(recipe_name: str) -> None:
+    """The annotate_pr_diff step must capture annotated_diff_path and hunk_ranges_path."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    annotate_steps = [
+        (name, step)
+        for name, step in recipe.steps.items()
+        if step.tool == "run_python"
+        and step.with_args.get("callable", "") == "autoskillit.smoke_utils.annotate_pr_diff"
+    ]
+    assert annotate_steps, f"No annotate_pr_diff step found in {recipe_name}.yaml"
+    for step_name, step in annotate_steps:
+        assert step.capture is not None, (
+            f"{recipe_name}.yaml: annotate_pr_diff step '{step_name}' has no capture block"
+        )
+        assert "annotated_diff_path" in step.capture, (
+            f"{recipe_name}.yaml: annotate_pr_diff step '{step_name}' must capture "
+            f"annotated_diff_path"
+        )
+        assert "hunk_ranges_path" in step.capture, (
+            f"{recipe_name}.yaml: annotate_pr_diff step '{step_name}' must capture "
+            f"hunk_ranges_path"
+        )
 
 
 # ---------------------------------------------------------------------------

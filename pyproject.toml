@@ -95,6 +95,9 @@ line-length = 99
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "TID251"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/execution/test_session_classification_e2e.py" = ["E402"]
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging.getLogger" = {msg = "Use get_logger() from autoskillit._logging instead."}
 

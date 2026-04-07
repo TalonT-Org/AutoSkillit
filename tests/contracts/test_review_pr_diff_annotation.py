@@ -30,6 +30,32 @@ def test_review_pr_contract_has_hunk_ranges_path() -> None:
     )
 
 
+def test_review_pr_annotated_diff_path_is_recommended() -> None:
+    """The annotated_diff_path input must be marked recommended in skill_contracts.yaml."""
+    from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
+
+    contract = get_skill_contract("review-pr", load_bundled_manifest())
+    assert contract is not None
+    inp = next((i for i in contract.inputs if i.name == "annotated_diff_path"), None)
+    assert inp is not None, "annotated_diff_path input not found in review-pr contract"
+    assert inp.recommended is True, (
+        "annotated_diff_path must be marked recommended=True in skill_contracts.yaml"
+    )
+
+
+def test_review_pr_hunk_ranges_path_is_recommended() -> None:
+    """The hunk_ranges_path input must be marked recommended in skill_contracts.yaml."""
+    from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
+
+    contract = get_skill_contract("review-pr", load_bundled_manifest())
+    assert contract is not None
+    inp = next((i for i in contract.inputs if i.name == "hunk_ranges_path"), None)
+    assert inp is not None, "hunk_ranges_path input not found in review-pr contract"
+    assert inp.recommended is True, (
+        "hunk_ranges_path must be marked recommended=True in skill_contracts.yaml"
+    )
+
+
 def test_review_pr_skill_reads_annotated_diff_from_file() -> None:
     """review-pr SKILL.md must reference annotated_diff_path (no autoskillit import)."""
     skill_text = _SKILL_MD.read_text()

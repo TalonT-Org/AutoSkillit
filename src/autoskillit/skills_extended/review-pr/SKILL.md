@@ -435,6 +435,9 @@ Do not proceed to Step 7. Instead, investigate why zero comments were posted. Ch
 whether the line numbers in your findings match `VALID_LINE_RANGES`. If they do not,
 attempt to map each finding to the nearest valid hunk line before falling back.
 
+**CRITICAL — No Local File Paths in GitHub Output:**
+Never reference local file paths (e.g., `.autoskillit/temp/...`, `summary_*.md`, absolute paths) in the review body, inline comments, or any content posted to GitHub. The summary file is a local audit artifact only — GitHub readers cannot access local filesystem paths. Reference findings by file path and line number within the repository, not by local temp file locations.
+
 ### Step 7: Submit Summary Review
 
 ```bash
@@ -449,6 +452,8 @@ gh pr review {pr_number} --comment --body "AutoSkillit review: uncertain trade-o
 ```
 
 ### Step 8: Write Summary and Emit Verdict
+
+**CRITICAL — Ordering:** Step 8 must execute after Steps 6 and 7. Do not write the summary file before posting inline comments and submitting the review verdict to GitHub. Writing the file first anchors you to treating it as the primary output rather than a local audit artifact.
 
 Save findings summary to `.autoskillit/temp/review-pr/summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
 

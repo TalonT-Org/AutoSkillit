@@ -21,9 +21,9 @@ def test_prepare_research_pr_has_no_skill_tool_sub_invocations():
     content = _read_skill("prepare-research-pr")
     # The skill should NOT instruct the model to use the Skill tool for lens skills.
     # It uses Agent subagents for analysis, NOT Skill tool for exp-lens.
-    assert "exp-lens" not in content or "Skill tool" not in content, (
-        "prepare-research-pr references Skill tool AND exp-lens — this recreates "
-        "the end_turn termination bug"
+    assert "Skill tool" not in content, (
+        "prepare-research-pr must never reference the Skill tool — "
+        "this recreates the end_turn termination bug"
     )
 
 

@@ -7,6 +7,7 @@ import pathlib
 
 import pytest
 
+from autoskillit.core import Severity
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -37,7 +38,7 @@ def test_missing_recommended_input_fires_warning_when_not_passed():
         "Expected at least one missing-recommended-input WARNING when "
         "annotated_diff_path= is not in skill_command"
     )
-    assert all(f.severity.value == "WARNING" for f in rec_findings)
+    assert all(f.severity == Severity.WARNING for f in rec_findings)
 
 
 def test_missing_recommended_input_passes_when_input_provided():

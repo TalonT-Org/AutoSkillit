@@ -408,7 +408,19 @@ steps:
           for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done;
           for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done;
           for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done;
-          cd "${{ context.worktree_path }}" && git add research/ && git diff --cached --quiet || git commit -m "Add phase group and plan artifacts to research/";
+          TAR_INPUTS="" &&
+          if [ -d "${RESEARCH_DIR}/artifacts" ]; then TAR_INPUTS="${TAR_INPUTS} artifacts"; fi &&
+          if [ -f "${RESEARCH_DIR}/experiment-plan.md" ]; then TAR_INPUTS="${TAR_INPUTS} experiment-plan.md"; fi &&
+          if [ -n "${TAR_INPUTS}" ]; then
+            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" ${TAR_INPUTS};
+          fi &&
+          if [ -f "${RESEARCH_DIR}/report.md" ]; then
+            cp "${RESEARCH_DIR}/report.md" "${RESEARCH_DIR}/README.md" &&
+            rm "${RESEARCH_DIR}/report.md";
+          fi &&
+          rm -rf "${RESEARCH_DIR}/artifacts" &&
+          if [ -f "${RESEARCH_DIR}/experiment-plan.md" ]; then rm "${RESEARCH_DIR}/experiment-plan.md"; fi &&
+          cd "${{ context.worktree_path }}" && git add research/ && git diff --cached --quiet || git commit -m "Add compressed research artifacts";
         else
           echo "commit_research_artifacts: no research directory found — artifact commit skipped";
         fi
@@ -417,9 +429,11 @@ steps:
     on_success: push_branch
     on_failure: push_branch
     note: >
-      Copies phase-group and phase-plan artifacts from worktree temp into
-      research/.../artifacts/ for PR provenance. Non-fatal — proceeds to
-      push_branch even if artifact commit fails.
+      Copies phase-group and phase-plan artifacts from worktree temp, then compresses
+      all artifacts (including experiment-plan.md) into artifacts.tar.gz and renames
+      report.md to README.md. The committed directory contains exactly two files:
+      README.md (human-readable conclusions) and artifacts.tar.gz (full artifact tree).
+      Non-fatal — proceeds to push_branch even if artifact commit fails.
 
   push_branch:
     tool: run_cmd

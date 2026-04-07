@@ -710,7 +710,7 @@ class TestImplementationGroupsStructure:
         step = recipe.steps["extract_pr_number"]
         assert step.tool == "run_cmd"
         assert "pr_number" in step.capture
-        assert step.on_success == "review_pr"
+        assert step.on_success == "annotate_pr_diff"
 
     def test_ig_open_pr_step_routes_to_extract_pr_number(self, recipe) -> None:
         """REQ-C7-01: open_pr_step must route to extract_pr_number (not review_pr directly)."""

@@ -412,14 +412,14 @@ steps:
           if [ -d "${RESEARCH_DIR}/artifacts" ]; then TAR_INPUTS="${TAR_INPUTS} artifacts"; fi &&
           if [ -f "${RESEARCH_DIR}/experiment-plan.md" ]; then TAR_INPUTS="${TAR_INPUTS} experiment-plan.md"; fi &&
           if [ -n "${TAR_INPUTS}" ]; then
-            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" ${TAR_INPUTS};
+            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" ${TAR_INPUTS} &&
+            rm -rf "${RESEARCH_DIR}/artifacts" &&
+            if [ -f "${RESEARCH_DIR}/experiment-plan.md" ]; then rm "${RESEARCH_DIR}/experiment-plan.md"; fi;
           fi &&
           if [ -f "${RESEARCH_DIR}/report.md" ]; then
             cp "${RESEARCH_DIR}/report.md" "${RESEARCH_DIR}/README.md" &&
             rm "${RESEARCH_DIR}/report.md";
           fi &&
-          rm -rf "${RESEARCH_DIR}/artifacts" &&
-          if [ -f "${RESEARCH_DIR}/experiment-plan.md" ]; then rm "${RESEARCH_DIR}/experiment-plan.md"; fi &&
           cd "${{ context.worktree_path }}" && git add research/ && git diff --cached --quiet || git commit -m "Add compressed research artifacts";
         else
           echo "commit_research_artifacts: no research directory found — artifact commit skipped";

@@ -642,7 +642,7 @@ steps:
         RESEARCH_SUBDIR="research/$(basename "${{ context.research_dir }}")" &&
         ARTIFACT_DIR="${{ context.worktree_path }}" &&
         if [ -f "${ARTIFACT_DIR}/${RESEARCH_SUBDIR}/artifacts.tar.gz" ]; then
-          STRUCT_DETAIL="- \`artifacts.tar.gz\` — compressed artifact tree\n\nExtract:\n\`\`\`bash\ntar xzf artifacts.tar.gz\n\`\`\`";
+          STRUCT_DETAIL=$'- `artifacts.tar.gz` \xe2\x80\x94 compressed artifact tree\n\nExtract:\n```bash\ntar xzf artifacts.tar.gz\n```';
         else
           STRUCT_DETAIL="- \`artifacts/\` — uncompressed artifact tree";
         fi &&

@@ -67,7 +67,8 @@ Derive `feature_branch`:
 if [ -d "$worktree_path" ]; then
   feature_branch=$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 else
-  feature_branch="$worktree_path"
+  echo "Error: worktree_path '$worktree_path' does not exist or is not a directory" >&2
+  exit 1
 fi
 ```
 
@@ -97,9 +98,9 @@ call is mandatory at the start of every headless session that uses code-index to
 
 Parse `pr_number` from `pr_url` (last path segment).
 
-Get owner/repo:
+Get owner/repo (must run inside the worktree to resolve the correct repository):
 ```bash
-gh repo view --json nameWithOwner -q .nameWithOwner
+gh repo view --json nameWithOwner -q .nameWithOwner -C "$worktree_path"
 ```
 
 If `gh` is unavailable or not authenticated:
@@ -110,7 +111,8 @@ If `gh` is unavailable or not authenticated:
 ### Step 2: Get PR Diff
 
 ```bash
-gh pr diff {pr_number}
+mkdir -p .autoskillit/temp/audit-claims
+gh pr diff {pr_number} > .autoskillit/temp/audit-claims/diff_{pr_number}.txt
 ```
 
 Save the diff to `.autoskillit/temp/audit-claims/diff_{pr_number}.txt` (relative to the
@@ -257,7 +259,9 @@ Build review comment bodies for each critical and warning finding. Use the `line
 
 ```bash
 COMMENTS_JSON=$(jq -n --argjson findings "$FINDINGS" '
-  $findings | map({
+  $findings
+  | map(select(.line != null and (.line | type) == "number" and .line > 0))
+  | map({
     path: .file,
     line: .line,
     side: "RIGHT",
@@ -281,18 +285,32 @@ Event mapping:
 
 **Fallback Tier 1 — Individual Comments (if batch POST fails):**
 
+Track success and failure counts across all individual post attempts:
+
 ```bash
 COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
+tier1_success=0
+tier1_failed=0
 
 # For each finding:
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
+if gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
   --method POST \
   --field path="{finding.file}" \
   --field line={finding.line} \
   --field side="RIGHT" \
   --field commit_id="$COMMIT_ID" \
-  --field body="[{finding.severity}] {finding.dimension}: {finding.message}"
+  --field body="[{finding.severity}] {finding.dimension}: {finding.message}"; then
+  tier1_success=$((tier1_success + 1))
+else
+  tier1_failed=$((tier1_failed + 1))
+  echo "Warning: failed to post individual comment for {finding.file}:{finding.line}" >&2
+fi
+
+echo "Fallback Tier 1: $tier1_success succeeded, $tier1_failed failed"
 ```
+
+Proceed to Fallback Tier 2 only if `tier1_success == 0` (all individual posts failed).
+If at least one post succeeded, skip Tier 2.
 
 **Fallback Tier 2 — DEGRADED: Bullet-List Summary Dump (if all individual posts fail):**
 

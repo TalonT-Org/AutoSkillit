@@ -26,6 +26,9 @@ jobs:
         with:
           uv-version: "0.9.21"
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Compute new minor version
         id: version
         run: |

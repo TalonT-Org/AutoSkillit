@@ -16,7 +16,7 @@ import signal
 import subprocess
 from collections.abc import Sequence
 
-from api_simulator.claude import ClaudeCLI
+from api_simulator.claude import FakeClaudeCLI
 
 from autoskillit.core.types import (
     RetryReason,
@@ -89,7 +89,7 @@ def _flat_assistant_msg(text: str, output_tokens: int = 0) -> dict:
 
 
 def _run_with_timeout(
-    fake_claude: ClaudeCLI,
+    fake_claude: FakeClaudeCLI,
     timeout: float = 3,
     kill_timeout: float = 5,
 ) -> str:
@@ -127,18 +127,18 @@ def _run_with_timeout(
 
 
 def _classify(
-    fake_claude: ClaudeCLI,
+    fake_claude: FakeClaudeCLI,
     termination: TerminationReason = TerminationReason.NATURAL_EXIT,
     completion_marker: str = "",
     expected_output_patterns: Sequence[str] = (),
     write_behavior: WriteBehaviorSpec | None = None,
 ) -> SkillResult:
     """Run fake_claude, parse stdout, classify through _build_skill_result."""
-    proc = fake_claude.run()
+    proc = fake_claude.run([], None)
     sr = SubprocessResult(
         returncode=proc.returncode,
         stdout=proc.stdout,
-        stderr=proc.stderr,
+        stderr="",
         termination=termination,
         pid=0,
     )
@@ -158,7 +158,7 @@ def _classify(
 class TestNdjsonStreamRobustness:
     """Verify the parser gracefully handles non-result NDJSON events."""
 
-    def test_api_retry_events_skipped(self, fake_claude: ClaudeCLI) -> None:
+    def test_api_retry_events_skipped(self, fake_claude: FakeClaudeCLI) -> None:
         """API retry system events before the result record are ignored."""
         fake_claude.inject_api_retry(at_message=0, error_status=529, attempts=3)
         fake_claude.add_message(_result_msg())
@@ -169,7 +169,7 @@ class TestNdjsonStreamRobustness:
         assert skill.subtype == "success"
         assert skill.exit_code == 0
 
-    def test_stream_corruption_skipped(self, fake_claude: ClaudeCLI) -> None:
+    def test_stream_corruption_skipped(self, fake_claude: FakeClaudeCLI) -> None:
         """A corrupted (non-JSON) line mid-stream is skipped; result still parsed."""
         fake_claude.add_message(_assistant_msg())
         fake_claude.add_message(_assistant_msg())  # placeholder to corrupt
@@ -181,7 +181,7 @@ class TestNdjsonStreamRobustness:
         assert skill.success is True
         assert skill.subtype == "success"
 
-    def test_multiple_result_records_last_wins(self, fake_claude: ClaudeCLI) -> None:
+    def test_multiple_result_records_last_wins(self, fake_claude: FakeClaudeCLI) -> None:
         """When multiple result records exist, the last one determines the outcome."""
         fake_claude.add_message(
             _result_msg("first", "success"),
@@ -196,7 +196,7 @@ class TestNdjsonStreamRobustness:
         assert skill.is_error is True
         assert "second" in skill.result
 
-    def test_api_retry_exhaustion_no_result(self, fake_claude: ClaudeCLI) -> None:
+    def test_api_retry_exhaustion_no_result(self, fake_claude: FakeClaudeCLI) -> None:
         """Exhausted retries suppress all subsequent messages — no result record."""
         fake_claude.inject_api_retry(at_message=0, error_status=529, attempts=10, exhaust=True)
         fake_claude.add_message(_result_msg())  # unreachable due to exhaust=True
@@ -217,7 +217,7 @@ class TestNdjsonStreamRobustness:
 class TestContextExhaustionEdgeCases:
     """Verify context-exhaustion detection from different NDJSON shapes."""
 
-    def test_flat_assistant_context_exhaustion(self, fake_claude: ClaudeCLI) -> None:
+    def test_flat_assistant_context_exhaustion(self, fake_claude: FakeClaudeCLI) -> None:
         """Flat assistant record with 'prompt is too long' triggers context exhaustion."""
         fake_claude.add_message(_flat_assistant_msg("prompt is too long"))
 
@@ -228,7 +228,7 @@ class TestContextExhaustionEdgeCases:
         assert skill.needs_retry is True
         assert skill.retry_reason == RetryReason.RESUME
 
-    def test_result_errors_context_exhaustion(self, fake_claude: ClaudeCLI) -> None:
+    def test_result_errors_context_exhaustion(self, fake_claude: FakeClaudeCLI) -> None:
         """Result record with 'prompt is too long' in errors triggers context exhaustion."""
         fake_claude.add_message(
             _result_msg(
@@ -254,7 +254,7 @@ class TestContextExhaustionEdgeCases:
 class TestKillBoundaryScenarios:
     """Verify classification at truncation and interrupt boundaries."""
 
-    def test_truncated_stream_mid_write(self, fake_claude: ClaudeCLI) -> None:
+    def test_truncated_stream_mid_write(self, fake_claude: FakeClaudeCLI) -> None:
         """Truncation after message index 1 exits with code 1 — classified as failure."""
         fake_claude.add_message(_assistant_msg())
         fake_claude.add_message(_result_msg())
@@ -267,7 +267,7 @@ class TestKillBoundaryScenarios:
         assert skill.success is False
         assert skill.exit_code != 0
 
-    def test_interrupted_nonzero_exit_no_retry(self, fake_claude: ClaudeCLI) -> None:
+    def test_interrupted_nonzero_exit_no_retry(self, fake_claude: FakeClaudeCLI) -> None:
         """Interrupted subtype + nonzero exit → failure without retry."""
         fake_claude.add_message(_result_msg(subtype="interrupted"))
         fake_claude.set_exit_code(1)
@@ -287,7 +287,7 @@ class TestKillBoundaryScenarios:
 class TestProcessBehaviorSimulation:
     """Verify classification with realistic process behaviors (hang, mid-exit)."""
 
-    def test_hang_after_result_emits_output(self, fake_claude: ClaudeCLI) -> None:
+    def test_hang_after_result_emits_output(self, fake_claude: FakeClaudeCLI) -> None:
         """Result record is emitted to stdout before the process hangs."""
         fake_claude.add_message(_result_msg("completed work"))
         fake_claude.hang_after_result()
@@ -297,14 +297,14 @@ class TestProcessBehaviorSimulation:
         assert session.subtype == CliSubtype.SUCCESS
         assert "completed work" in session.result
 
-    def test_inject_exit_mid_stream(self, fake_claude: ClaudeCLI) -> None:
+    def test_inject_exit_mid_stream(self, fake_claude: FakeClaudeCLI) -> None:
         """inject_exit after message 1 captures the result but exits with code 2."""
         fake_claude.add_message(_assistant_msg())
         fake_claude.add_message(_result_msg("mid-stream"))
         fake_claude.add_message(_assistant_msg())
         fake_claude.inject_exit(1, code=2)
 
-        proc = fake_claude.run()
+        proc = fake_claude.run([], None)
         assert proc.returncode == 2
 
         # Result at index 1 was emitted before exit
@@ -315,7 +315,7 @@ class TestProcessBehaviorSimulation:
         sr = SubprocessResult(
             returncode=proc.returncode,
             stdout=proc.stdout,
-            stderr=proc.stderr,
+            stderr="",
             termination=TerminationReason.NATURAL_EXIT,
             pid=0,
         )

@@ -49,3 +49,68 @@ def test_troubleshoot_step_captures_required_tokens(recipe):
     step = recipe.steps["troubleshoot_implement_failure"]
     capture = step.capture or {}
     assert "is_fixable" in capture
+
+
+def test_research_recipe_has_three_pr_prep_steps(recipe):
+    """open_research_pr is replaced by three decomposed steps."""
+    step_names = list(recipe.steps.keys())
+    assert "open_research_pr" not in step_names
+    assert "prepare_research_pr" in step_names
+    assert "run_experiment_lenses" in step_names
+    assert "compose_research_pr" in step_names
+
+
+def test_push_branch_routes_to_prepare_research_pr(recipe):
+    """push_branch.on_success must route to prepare_research_pr."""
+    step = recipe.steps["push_branch"]
+    assert step.on_success == "prepare_research_pr"
+
+
+def test_prepare_research_pr_routes_to_run_experiment_lenses(recipe):
+    """prepare_research_pr.on_success must route to run_experiment_lenses."""
+    step = recipe.steps["prepare_research_pr"]
+    assert step.on_success == "run_experiment_lenses"
+
+
+def test_run_experiment_lenses_routes_to_compose_on_success(recipe):
+    """run_experiment_lenses.on_success routes to compose_research_pr."""
+    step = recipe.steps["run_experiment_lenses"]
+    assert step.on_success == "compose_research_pr"
+
+
+def test_run_experiment_lenses_routes_to_compose_on_failure(recipe):
+    """run_experiment_lenses.on_failure routes to compose_research_pr (partial diagrams OK)."""
+    step = recipe.steps["run_experiment_lenses"]
+    assert step.on_failure == "compose_research_pr"
+
+
+def test_compose_research_pr_routes_to_guard_pr_url(recipe):
+    """compose_research_pr.on_success routes to guard_pr_url."""
+    step = recipe.steps["compose_research_pr"]
+    assert step.on_success == "guard_pr_url"
+
+
+def test_prepare_research_pr_captures_prep_path(recipe):
+    """prepare_research_pr must capture prep_path for compose step."""
+    step = recipe.steps["prepare_research_pr"]
+    assert "prep_path" in (step.capture or {})
+
+
+def test_prepare_research_pr_uses_context_experiment_plan(recipe):
+    """prepare_research_pr must pass ${{ context.experiment_plan }}, not a hardcoded path."""
+    step = recipe.steps["prepare_research_pr"]
+    skill_cmd = step.with_args.get("skill_command", "")
+    assert "context.experiment_plan" in skill_cmd
+    assert ".autoskillit/temp/experiment-plan.md" not in skill_cmd
+
+
+def test_run_experiment_lenses_has_capture_list_for_diagram_paths(recipe):
+    """run_experiment_lenses accumulates diagram paths via capture_list."""
+    step = recipe.steps["run_experiment_lenses"]
+    assert "all_diagram_paths" in (step.capture_list or {})
+
+
+def test_commit_research_artifacts_captures_report_path(recipe):
+    """commit_research_artifacts must emit and capture the post-rename report path."""
+    step = recipe.steps["commit_research_artifacts"]
+    assert "report_path" in (step.capture or {})

@@ -158,3 +158,20 @@ def test_all_exp_lens_skills_have_contracts(skills):
     ]
     missing = [name for name in exp_lens if name not in skills]
     assert not missing, f"exp-lens skills missing contracts: {sorted(missing)}"
+
+
+def test_skill_contracts_yaml_includes_prepare_research_pr(skills):
+    """prepare-research-pr must be registered with prep_path output pattern."""
+    _assert_skill_has_patterns(skills, "prepare-research-pr", r"prep_path\s*=\s*/.+")
+
+
+def test_skill_contracts_yaml_includes_compose_research_pr(skills):
+    """compose-research-pr must be registered with pr_url output pattern."""
+    _assert_skill_has_patterns(
+        skills, "compose-research-pr", r"pr_url\s*=\s*(https://github\.com/.*/pull/\d+)?"
+    )
+
+
+def test_skill_contracts_yaml_open_research_pr_removed(skills):
+    """open-research-pr must no longer be registered — it has been retired."""
+    assert "open-research-pr" not in skills

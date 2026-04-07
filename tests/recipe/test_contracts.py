@@ -521,7 +521,8 @@ FILE_PRODUCING_SKILLS_WITH_CONTRACTS: list[str] = [
     "triage-issues",
     "analyze-prs",
     "merge-pr",
-    "open-pr",
+    "prepare-pr",
+    "compose-pr",
     "open-integration-pr",
     "implement-worktree",
     "implement-worktree-no-merge",
@@ -561,9 +562,9 @@ def test_file_producing_skill_has_output_patterns(skill_name: str) -> None:
 def test_generate_recipe_card_includes_output_patterns(tmp_path: Path) -> None:
     """Recipe card serialization must preserve expected_output_patterns."""
     manifest = load_bundled_manifest()
-    contract = get_skill_contract("open-pr", manifest)
+    contract = get_skill_contract("compose-pr", manifest)
     assert contract is not None
-    assert contract.expected_output_patterns, "Precondition: open-pr must have patterns"
+    assert contract.expected_output_patterns, "Precondition: compose-pr must have patterns"
 
     from autoskillit.core.paths import pkg_root
 
@@ -575,14 +576,13 @@ def test_generate_recipe_card_includes_output_patterns(tmp_path: Path) -> None:
     recipes_dir.mkdir()
     card = generate_recipe_card(recipe_path, recipes_dir)
     card_skills = card.get("skills", {})
-    open_pr_card = card_skills.get("open-pr")
-    if open_pr_card is None:
-        pytest.skip("open-pr not used in implementation recipe")
+    compose_pr_card = card_skills.get("compose-pr")
+    assert compose_pr_card is not None, "compose-pr must be used in implementation recipe"
 
-    assert "expected_output_patterns" in open_pr_card, (
+    assert "expected_output_patterns" in compose_pr_card, (
         "generate_recipe_card() must include expected_output_patterns"
     )
-    assert open_pr_card["expected_output_patterns"], (
+    assert compose_pr_card["expected_output_patterns"], (
         "expected_output_patterns must be non-empty in the card"
     )
 

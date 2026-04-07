@@ -43,7 +43,7 @@ def test_subset_disabled_skill_finding() -> None:
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.registry import run_semantic_rules
 
-    recipe = _make_skill_recipe("/autoskillit:open-pr")
+    recipe = _make_skill_recipe("/autoskillit:prepare-pr")
     ctx = make_validation_context(recipe, disabled_subsets=frozenset({"github"}))
     findings = run_semantic_rules(ctx)
     disabled = [f for f in findings if f.rule == "subset-disabled-skill"]
@@ -108,7 +108,7 @@ def test_disabled_subset_skill_vs_unknown_skill() -> None:
     from autoskillit.recipe.registry import run_semantic_rules
 
     # A known skill in disabled subset → subset-disabled-skill, not unknown-skill-command
-    recipe_disabled = _make_skill_recipe("/autoskillit:open-pr")
+    recipe_disabled = _make_skill_recipe("/autoskillit:prepare-pr")
     ctx1 = make_validation_context(recipe_disabled, disabled_subsets=frozenset({"github"}))
     findings1 = run_semantic_rules(ctx1)
     rule_names1 = {f.rule for f in findings1}

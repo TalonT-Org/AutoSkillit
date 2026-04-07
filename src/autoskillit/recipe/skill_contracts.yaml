@@ -382,6 +382,65 @@ skills:
     pattern_examples:
     - "https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
 
+  prepare-pr:
+    inputs:
+    - name: plan_paths
+      type: string
+      required: true
+    - name: run_name
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: closing_issue
+      type: string
+      required: false
+    - name: conflict_report_path
+      type: file_path
+      required: false
+    outputs:
+    - name: prep_path
+      type: file_path
+    - name: selected_lenses
+      type: string
+    - name: lens_context_paths
+      type: string
+    expected_output_patterns:
+    - "prep_path\\s*=\\s*/.+"
+    - "selected_lenses\\s*=\\s*\\S+"
+    - "lens_context_paths\\s*=\\s*/.+"
+    pattern_examples:
+    - "prep_path = /abs/path/pr_prep_2026-04-07_120000.md\nselected_lenses = module-dependency,process-flow\nlens_context_paths = /abs/ctx1.md,/abs/ctx2.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  compose-pr:
+    inputs:
+    - name: prep_path
+      type: file_path
+      required: true
+    - name: all_diagram_paths
+      type: string
+      required: true
+    - name: work_dir
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: closing_issue
+      type: string
+      required: false
+    outputs:
+    - name: pr_url
+      type: string
+    expected_output_patterns:
+    - "pr_url\\s*=\\s*(https://github\\.com/.*/pull/\\d+)?"
+    pattern_examples:
+    - "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
+    - "pr_url = \n%%ORDER_UP%%"
+    write_behavior: always
+
   open-integration-pr:
     inputs:
     - name: integration_branch

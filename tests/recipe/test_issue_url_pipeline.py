@@ -72,11 +72,11 @@ class TestImplementationPipelineIssueUrl:
         assert any("issue_url" in str(v) for v in skill_step_with.values())
         assert not any("issue_content" in str(v) for v in skill_step_with.values())
 
-    def test_issue_number_referenced_in_open_pr_step(self):
-        """open_pr_step must reference context.issue_number in with: for dataflow tracking."""
+    def test_issue_number_referenced_in_prepare_pr_step(self):
+        """prepare_pr must reference context.issue_number in with: for dataflow tracking."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
-        openpr_with = data["steps"]["open_pr_step"].get("with", {})
-        assert any("issue_number" in str(v) for v in openpr_with.values())
+        prepare_pr_with = data["steps"]["prepare_pr"].get("with", {})
+        assert any("issue_number" in str(v) for v in prepare_pr_with.values())
 
     def test_no_dead_output_for_issue_number(self):
         """issue_number captured by get_issue_title must not be a dead output."""
@@ -162,10 +162,10 @@ class TestInvestigateFirstIssueUrl:
         assert any("issue_url" in str(v) for v in skill_step_with.values())
         assert not any("issue_content" in str(v) for v in skill_step_with.values())
 
-    def test_issue_number_referenced_in_open_pr_step(self):
+    def test_issue_number_referenced_in_prepare_pr_step(self):
         data = yaml.safe_load(_recipe_path("remediation").read_text())
-        openpr_with = data["steps"]["open_pr_step"].get("with", {})
-        assert any("issue_number" in str(v) for v in openpr_with.values())
+        prepare_pr_with = data["steps"]["prepare_pr"].get("with", {})
+        assert any("issue_number" in str(v) for v in prepare_pr_with.values())
 
     def test_no_dead_output_for_issue_number(self):
         """issue_number captured by get_issue_title must not be a dead output."""
@@ -241,9 +241,9 @@ class TestImplementationGroupsIssueTitle:
         }
         assert "issue_content" not in all_captures
 
-    def test_open_pr_step_still_references_issue_number(self):
+    def test_prepare_pr_step_still_references_issue_number(self):
         data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
-        step = data["steps"]["open_pr_step"]
+        step = data["steps"]["prepare_pr"]
         assert "context.issue_number" in str(step)
 
 

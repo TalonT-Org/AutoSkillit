@@ -5,10 +5,7 @@ from __future__ import annotations
 import ast
 import pathlib
 
-import pytest
-
 from autoskillit.core import Severity
-from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
 

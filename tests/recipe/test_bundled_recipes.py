@@ -1641,8 +1641,7 @@ def test_review_pr_step_passes_annotated_diff_inputs(recipe_name: str) -> None:
     review_steps = [
         (name, step)
         for name, step in recipe.steps.items()
-        if step.tool in SKILL_TOOLS
-        and "review-pr" in step.with_args.get("skill_command", "")
+        if step.tool in SKILL_TOOLS and "review-pr" in step.with_args.get("skill_command", "")
     ]
     assert review_steps, f"No review-pr step found in {recipe_name}.yaml"
     for step_name, step in review_steps:

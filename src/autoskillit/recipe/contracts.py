@@ -43,6 +43,7 @@ class SkillInput:
     name: str
     type: str
     required: bool
+    recommended: bool = False
 
 
 @dataclasses.dataclass
@@ -136,6 +137,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
             name=inp["name"],
             type=inp["type"],
             required=inp.get("required", False),
+            recommended=inp.get("recommended", False),
         )
         for inp in skill_data.get("inputs", [])
     ]
@@ -266,7 +268,12 @@ def generate_recipe_card(
                 if contract:
                     skill_entry: dict[str, Any] = {
                         "inputs": [
-                            {"name": i.name, "type": i.type, "required": i.required}
+                            {
+                                "name": i.name,
+                                "type": i.type,
+                                "required": i.required,
+                                "recommended": i.recommended,
+                            }
                             for i in contract.inputs
                         ],
                         "outputs": [{"name": o.name, "type": o.type} for o in contract.outputs],

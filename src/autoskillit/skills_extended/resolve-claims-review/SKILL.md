@@ -53,6 +53,19 @@ Called by the research recipe when `audit_claims` routes `changes_requested` via
 - Gracefully degrade (exit 0, report skip) if `gh` is unavailable or no PR is found
 - Report a structured summary including escalation count
 
+## Configuration
+
+The skill reads the `claims_review` namespace from `.autoskillit/config.yaml`:
+
+```yaml
+claims_review:
+  validation_command: null      # command to validate research artifacts after fixes; null = skip validation
+  validation_timeout: 120       # seconds before treating validation as a failure
+```
+
+This namespace is not in `defaults.yaml` (it has no global default value); if absent, the
+skill uses the in-code defaults shown above.
+
 ## Workflow
 
 Read `claims_review.validation_command` (default: `null`) and
@@ -64,7 +77,11 @@ Parse two positional arguments: `worktree_path` and `base_branch`.
 
 Derive `feature_branch` via:
 ```bash
-feature_branch=$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD)
+feature_branch=$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+if [ -z "$feature_branch" ]; then
+  echo "Error: could not determine feature_branch from '$worktree_path'" >&2
+  exit 1
+fi
 ```
 
 Read config:
@@ -79,13 +96,38 @@ validation_timeout = cr_cfg.get("validation_timeout", 120)
 If either positional arg is missing, abort with:
 `"Usage: /autoskillit:resolve-claims-review <worktree_path> <base_branch>"`
 
+### Step 0.5 — Code-Index Initialization (required before any code-index tool call)
+
+Call `set_project_path` with the repo root where this skill was invoked (not a worktree path):
+
+```
+mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
+```
+
+Code-index tools require **project-relative paths**. Always use paths like:
+
+    src/mypackage/core/module.py
+
+NOT absolute paths like:
+
+    /path/to/project/src/mypackage/core/module.py
+
+Agents launched via `run_skill` inherit no code-index state from the parent session — this
+call is mandatory at the start of every headless session that uses code-index tools.
+
 ### Step 1: Find the Open PR
 
 ```bash
 PR_LIST_OUTPUT=$(gh pr list --head "$feature_branch" --base "$base_branch" \
-  --json number,url -q '.[0] | "\(.number) \(.url)"')
+  --json number,url -q '.[0] | "\(.number) \(.url)"' 2>/dev/null || echo "")
 PR_NUMBER=$(echo "$PR_LIST_OUTPUT" | awk '{print $1}')
 PR_URL=$(echo "$PR_LIST_OUTPUT" | awk '{print $2}')
+
+# Graceful degradation: .[0] returns null when no PR matches; PR_NUMBER will be empty
+if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+  echo "No PR found or gh unavailable — skipping claims review resolution"
+  exit 0
+fi
 ```
 
 Get owner/repo:
@@ -212,7 +254,11 @@ group. Each subagent receives:
 - `rerun_required` — fix requires re-running experiment to generate supporting data
 - `design_flaw` — fundamental scope/methodology issue; cannot fix with citation alone
 
-**Fallback:** If a subagent fails, classify all comments in that group as `DISCUSS`.
+**Fallback:** If a subagent fails or times out, discard any partial output from that
+subagent (partial JSON must not be used — using partial output risks silently demoting
+ACCEPT findings to DISCUSS without surfacing the data loss). Classify all comments in the
+failed group as `DISCUSS` and log the failure with the error message, domain group name,
+and affected comment IDs.
 
 Merge results into `classification_map: dict[comment_id, verdict_entry]`.
 Save `classification_map_{pr}.json`.
@@ -268,8 +314,10 @@ if validation_command is None:
     validation_status = "SKIPPED"
 else:
     # Run with retry logic (max 3 iterations)
+    # Timeout expiration is treated as failure and counts toward the iteration limit.
     for iteration in range(1, 4):
         result = run(validation_command, timeout=validation_timeout)
+        # returncode non-zero OR timeout (TimeoutExpired) both count as failure.
         if result.returncode == 0:
             validation_status = "PASS"
             break

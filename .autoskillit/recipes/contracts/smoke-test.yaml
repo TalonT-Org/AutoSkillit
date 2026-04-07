@@ -1,149 +1,91 @@
-generated_at: '2026-02-25T05:37:09.868627+00:00'
+generated_at: '2026-04-07T22:20:02.227203+00:00'
 bundled_manifest_version: 0.1.0
-skill_hashes:
-  pipeline-summary: sha256:08d8a65e195c48a4508e18682560a7d76cb9cabdc13ecc259a17ca895aadff1c
-skills:
-  pipeline-summary:
-    inputs:
-    - name: bug_report_path
-      type: file_path
-      required: true
-    - name: feature_branch
-      type: string
-      required: true
-    - name: target_branch
-      type: string
-      required: true
-    - name: workspace
-      type: directory_path
-      required: true
-    outputs:
-    - name: summary_path
-      type: file_path
-    - name: issue_url
-      type: string
-    - name: pr_url
-      type: string
+skill_hashes: {}
+skills: {}
 dataflow:
-- step: setup
-  available:
-  - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - workspace
-  required: []
-  produced: []
-- step: seed_task
-  available:
-  - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - workspace
-  required: []
-  produced: []
 - step: create_branch
   available:
   - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - workspace
-  required: []
-  produced: []
-- step: investigate
-  available:
-  - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - workspace
-  required: []
-  produced: []
-- step: rectify
-  available:
-  - base_branch
-  - collect_on_branch
-  - original_base_branch
   - workspace
   required: []
   produced:
-  - plan_path
-- step: implement
+  - branch_name
+- step: create_worktree
   available:
   - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - plan_path
+  - branch_name
   - workspace
   required: []
   produced:
   - worktree_path
+- step: setup_worktree
+  available:
+  - base_branch
+  - branch_name
+  - workspace
+  - worktree_path
+  required: []
+  produced: []
+- step: implement_task
+  available:
+  - base_branch
+  - branch_name
+  - workspace
+  - worktree_path
+  required: []
+  produced: []
 - step: test
   available:
   - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - plan_path
+  - branch_name
   - workspace
   - worktree_path
   required: []
   produced: []
-- step: assess
+- step: push_branch
   available:
   - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - plan_path
+  - branch_name
   - workspace
   - worktree_path
   required: []
   produced: []
-- step: classify
+- step: create_pr
   available:
   - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - plan_path
+  - branch_name
   - workspace
   - worktree_path
   required: []
   produced: []
-- step: merge
+- step: close_pr
   available:
   - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - plan_path
+  - branch_name
   - workspace
   - worktree_path
   required: []
   produced: []
-- step: check_summary
+- step: cleanup
   available:
   - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - plan_path
+  - branch_name
   - workspace
   - worktree_path
   required: []
   produced: []
-- step: create_summary
+- step: fail_cleanup
   available:
   - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - plan_path
+  - branch_name
   - workspace
   - worktree_path
   required: []
-  produced:
-  - summary_path
+  produced: []
 - step: done
   available:
   - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - plan_path
-  - summary_path
+  - branch_name
   - workspace
   - worktree_path
   required: []
@@ -151,10 +93,7 @@ dataflow:
 - step: escalate
   available:
   - base_branch
-  - collect_on_branch
-  - original_base_branch
-  - plan_path
-  - summary_path
+  - branch_name
   - workspace
   - worktree_path
   required: []

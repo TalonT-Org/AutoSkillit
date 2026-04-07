@@ -15,7 +15,7 @@ _RAW_RESULT_FIELDS = {"stdout", "stderr", "exit_code"}
 
 # Matches find ... | sort ... | (tail|head) patterns that indicate a step is
 # re-discovering a path that should have been captured by an upstream step.
-_FIND_HEURISTIC_RE = re.compile(r"\bfind\b.+\|\s*sort\b.+\|\s*(tail|head)\b", re.DOTALL)
+_FIND_HEURISTIC_RE = re.compile(r"\bfind\b.+\|\s*sort\b.+\|\s*(tail|head)\b")
 
 
 @semantic_rule(

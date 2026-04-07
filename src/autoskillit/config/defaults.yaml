@@ -215,6 +215,8 @@ skills:
     - resolve-design-review
     - resolve-research-review
     - troubleshoot-experiment
+    - audit-claims
+    - resolve-claims-review
 
 workspace:
   worktree_root: null   # null = auto-resolve to ../worktrees/ relative to project root

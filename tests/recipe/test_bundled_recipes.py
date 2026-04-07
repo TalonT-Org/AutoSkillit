@@ -1863,12 +1863,6 @@ class TestResearchRecipeStructure:
         step = recipe.steps["review_research_pr"]
         assert step.skip_when_false == "inputs.review_pr"
 
-    def test_research_review_step_routes_to_begin_archival_on_any_outcome(self, recipe) -> None:
-        """review_research_pr routes to begin_archival on failure and context limit."""
-        step = recipe.steps["review_research_pr"]
-        assert step.on_failure == "begin_archival"
-        assert step.on_context_limit == "begin_archival"
-
     def test_research_no_issue_number_ingredient(self, recipe) -> None:
         """Removed: issue_number is the phase-2 gate."""
         assert "issue_number" not in recipe.ingredients
@@ -2011,22 +2005,12 @@ class TestResearchRecipeStructure:
     def test_has_resolve_research_review_step(self, recipe) -> None:
         step = recipe.steps["resolve_research_review"]
         assert step.retries == 2
-        assert step.on_exhausted == "begin_archival"
-        assert step.on_success == "check_escalations"
-        assert step.on_failure == "begin_archival"
+        assert step.on_exhausted == "route_claims_resolve"
+        assert step.on_success == "route_claims_resolve"
+        assert step.on_failure == "route_claims_resolve"
 
     def test_has_re_push_research_step(self, recipe) -> None:
         assert "re_push_research" in recipe.steps
-
-    def test_review_research_pr_has_on_result_routing(self, recipe) -> None:
-        """review_research_pr routes changes_requested to resolve_research_review."""
-        step = recipe.steps["review_research_pr"]
-        assert step.on_result is not None
-        matching = [
-            c.route for c in step.on_result.conditions if "changes_requested" in (c.when or "")
-        ]
-        assert matching, "No condition with changes_requested"
-        assert matching[0] == "resolve_research_review"
 
     def test_research_validates_cleanly(self, recipe) -> None:
         """validate_recipe returns no errors on the simplified recipe."""
@@ -2038,38 +2022,6 @@ class TestResearchRecipeStructure:
     def test_requires_packs_includes_exp_lens(self, recipe) -> None:
         assert "exp-lens" in recipe.requires_packs
         assert "research" in recipe.requires_packs
-
-    def test_resolve_research_review_captures_needs_rerun(self, recipe) -> None:
-        step = recipe.steps["resolve_research_review"]
-        assert "needs_rerun" in step.capture
-        assert "result.needs_rerun" in step.capture["needs_rerun"]
-
-    def test_resolve_research_review_routes_to_check_escalations(self, recipe) -> None:
-        step = recipe.steps["resolve_research_review"]
-        assert step.on_success == "check_escalations"
-
-    def test_check_escalations_step_exists(self, recipe) -> None:
-        assert "check_escalations" in recipe.steps
-        step = recipe.steps["check_escalations"]
-        assert step.action == "route"
-
-    def test_check_escalations_routes_rerun_on_needs_rerun(self, recipe) -> None:
-        step = recipe.steps["check_escalations"]
-        assert step.on_result is not None
-        conditions = step.on_result.conditions
-        rerun_route = next(
-            (c for c in conditions if c.when and "needs_rerun" in c.when and "true" in c.when),
-            None,
-        )
-        assert rerun_route is not None
-        assert rerun_route.route == "re_run_experiment"
-
-    def test_check_escalations_default_routes_to_push(self, recipe) -> None:
-        step = recipe.steps["check_escalations"]
-        conditions = step.on_result.conditions
-        default = next((c for c in conditions if not c.when), None)
-        assert default is not None
-        assert default.route == "re_push_research"
 
     def test_re_run_experiment_step(self, recipe) -> None:
         assert "re_run_experiment" in recipe.steps
@@ -2091,11 +2043,50 @@ class TestResearchRecipeStructure:
         assert step.on_success == "re_push_research"
 
     def test_revalidation_loop_all_paths_reach_begin_archival(self, recipe) -> None:
-        """Every path from check_escalations reaches begin_archival."""
+        """Every path from merge_escalations reaches begin_archival."""
         for step_name in ("re_run_experiment", "re_write_report", "re_test"):
             step = recipe.steps[step_name]
             assert step.on_failure in ("begin_archival", "re_push_research")
         assert recipe.steps["re_push_research"].on_success == "begin_archival"
+
+    def test_audit_claims_ingredient_default_false(self, recipe) -> None:
+        assert "audit_claims" in recipe.ingredients
+        assert recipe.ingredients["audit_claims"].required is False
+        assert recipe.ingredients["audit_claims"].default == "false"
+
+    def test_review_research_pr_captures_review_verdict(self, recipe) -> None:
+        step = recipe.steps["review_research_pr"]
+        assert "review_verdict" in step.capture
+        assert "verdict" not in step.capture  # old key must be gone
+
+    def test_audit_claims_step_routes_to_route_review_resolve(self, recipe) -> None:
+        step = recipe.steps["audit_claims"]
+        assert step.tool == "run_skill"
+        assert "audit_claims" in step.skip_when_false
+        # all on_result routes point to route_review_resolve
+        routes = {c.route for c in step.on_result.conditions}
+        assert routes == {"route_review_resolve"}
+
+    def test_new_routing_steps_exist(self, recipe) -> None:
+        assert "route_review_resolve" in recipe.steps
+        assert "route_claims_resolve" in recipe.steps
+        assert "merge_escalations" in recipe.steps
+        assert "check_escalations" not in recipe.steps  # replaced
+
+    def test_resolve_claims_review_step_exists(self, recipe) -> None:
+        step = recipe.steps["resolve_claims_review"]
+        assert "claims_needs_rerun" in step.capture
+
+    def test_resolve_research_review_captures_review_needs_rerun(self, recipe) -> None:
+        step = recipe.steps["resolve_research_review"]
+        assert "review_needs_rerun" in step.capture
+        assert "needs_rerun" not in step.capture  # old key must be gone
+
+    def test_research_recipe_validates_cleanly_with_new_steps(self, recipe) -> None:
+        from autoskillit.recipe.validator import validate_recipe
+
+        errors = validate_recipe(recipe)
+        assert errors == [], f"Validation errors: {errors}"
 
     # --- Archival phase tests ---
 

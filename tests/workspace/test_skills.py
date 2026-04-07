@@ -31,6 +31,7 @@ BUNDLED_SKILLS = [
     "arch-lens-state-lifecycle",
     "audit-arch",
     "audit-bugs",
+    "audit-claims",
     "audit-cohesion",
     "audit-defense-standards",
     "audit-friction",
@@ -84,9 +85,10 @@ BUNDLED_SKILLS = [
     "process-issues",
     "rectify",
     "report-bug",
+    "resolve-claims-review",
+    "resolve-design-review",
     "resolve-failures",
     "resolve-merge-conflicts",
-    "resolve-design-review",
     "resolve-research-review",
     "resolve-review",
     "retry-worktree",
@@ -431,17 +433,17 @@ class TestSkillResolver:
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
     def test_90_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 90 SKILL.md-carrying directories."""
+        """skills_extended/ contains exactly 92 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 90
+        assert len(skills) == 92
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 92 public skills (2 Tier-1 + 90 extended)."""
-        assert len(SkillResolver().list_all()) == 92
+        """list_all() returns 94 public skills (2 Tier-1 + 92 extended)."""
+        assert len(SkillResolver().list_all()) == 94
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
@@ -599,6 +601,8 @@ RESEARCH_SKILL_NAMES = {
     "resolve-design-review",
     "resolve-research-review",
     "troubleshoot-experiment",
+    "audit-claims",
+    "resolve-claims-review",
 }
 
 
@@ -643,3 +647,25 @@ def test_activate_deps_are_resolvable():
             assert dep in PACK_REGISTRY or dep in all_names, (
                 f"Skill {skill_info.name!r} has unresolvable activate_dep: {dep!r}"
             )
+
+
+def test_audit_claims_and_resolve_claims_review_in_tier3() -> None:
+    from autoskillit.config import load_config
+
+    config = load_config()
+    assert "audit-claims" in config.skills.tier3
+    assert "resolve-claims-review" in config.skills.tier3
+
+
+def test_audit_claims_skill_md_exists() -> None:
+    resolver = SkillResolver()
+    info = resolver.resolve("audit-claims")
+    assert info is not None, "audit-claims skill not found"
+    assert info.path.exists(), f"SKILL.md missing at {info.path}"
+
+
+def test_resolve_claims_review_skill_md_exists() -> None:
+    resolver = SkillResolver()
+    info = resolver.resolve("resolve-claims-review")
+    assert info is not None, "resolve-claims-review skill not found"
+    assert info.path.exists(), f"SKILL.md missing at {info.path}"

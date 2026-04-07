@@ -47,7 +47,7 @@ steps:
     tool: run_cmd
     with:
       cmd: >-
-        WORKTREE="${{ inputs.workspace }}/.autoskillit/worktrees/smoke-canary" &&
+        WORKTREE="${{ inputs.workspace }}/.autoskillit/worktrees/$(echo "${{ context.branch_name }}" | tr '/' '-')" &&
         git worktree add "$WORKTREE" "${{ context.branch_name }}" &&
         printf '%s' "$WORKTREE"
       cwd: "${{ inputs.workspace }}"

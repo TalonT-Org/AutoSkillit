@@ -106,6 +106,22 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
             "resolve-research-review",
             "dimension",
         ),  # per-commit dimension label derived from finding
+        # ── audit-claims: mirrors review-research-pr pattern ─────────────────────────
+        ("audit-claims", "owner"),  # GitHub API URL template (gh repo view)
+        ("audit-claims", "repo"),  # GitHub API URL template (gh repo view)
+        ("audit-claims", "pr_number"),  # PR number from argument
+        ("audit-claims", "verdict"),  # computed verdict string
+        ("audit-claims", "summary_markdown"),  # computed review summary
+        # ── resolve-claims-review: mirrors resolve-research-review pattern ────────────
+        ("resolve-claims-review", "owner"),  # GitHub API URL template (gh repo view)
+        ("resolve-claims-review", "repo"),  # GitHub API URL template (gh repo view)
+        ("resolve-claims-review", "number"),  # PR number from gh pr list output
+        ("resolve-claims-review", "comment_id"),  # per-comment REST database ID
+        ("resolve-claims-review", "file"),  # per-finding file path from review comments
+        ("resolve-claims-review", "databaseId"),  # GraphQL field name (false positive)
+        ("resolve-claims-review", "isResolved"),  # GraphQL field name (false positive)
+        ("resolve-claims-review", "description"),  # per-commit description derived from finding
+        ("resolve-claims-review", "dimension"),  # per-commit dimension label derived from finding
         # ── PER-ITERATION / LOOP VALUES ──────────────────────────────────────────────
         # Used inside per-issue/per-PR/per-file loops. The prose establishes the loop
         # structure and makes the substitution unambiguous.

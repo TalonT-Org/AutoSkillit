@@ -2192,23 +2192,6 @@ class TestResearchRecipeStructure:
                 f"{name}.on_failure must be research_complete for graceful degradation"
             )
 
-    def test_review_research_pr_routes_to_begin_archival(self, recipe) -> None:
-        """review_research_pr non-changes verdicts and failures route to begin_archival."""
-        step = recipe.steps["review_research_pr"]
-        assert step.on_failure == "begin_archival"
-        assert step.on_context_limit == "begin_archival"
-        # Default on_result route
-        conditions = step.on_result.conditions
-        default = next((c for c in conditions if not c.when), None)
-        assert default is not None
-        assert default.route == "begin_archival"
-
-    def test_resolve_research_review_routes_to_begin_archival(self, recipe) -> None:
-        """resolve_research_review exhaustion and failure route to begin_archival."""
-        step = recipe.steps["resolve_research_review"]
-        assert step.on_exhausted == "begin_archival"
-        assert step.on_failure == "begin_archival"
-
     def test_re_push_research_routes_to_begin_archival(self, recipe) -> None:
         """re_push_research routes to begin_archival."""
         step = recipe.steps["re_push_research"]

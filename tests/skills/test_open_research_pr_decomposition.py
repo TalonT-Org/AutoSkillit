@@ -30,7 +30,10 @@ def test_prepare_research_pr_has_no_skill_tool_sub_invocations():
 def test_compose_research_pr_has_no_skill_tool_sub_invocations():
     """compose-research-pr must never invoke sub-skills via the Skill tool."""
     content = _read_skill("compose-research-pr")
-    assert "Skill tool" not in content or "exp-lens" not in content
+    assert "Skill tool" not in content, (
+        "compose-research-pr must never reference the Skill tool — "
+        "this recreates the end_turn termination bug"
+    )
 
 
 def test_prepare_research_pr_skill_exists():

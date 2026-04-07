@@ -10,6 +10,7 @@ _logger = get_logger(__name__)
 from autoskillit.recipe import rules_bypass as _rules_bypass  # noqa: E402 F401
 from autoskillit.recipe import rules_ci as _rules_ci  # noqa: E402 F401
 from autoskillit.recipe import rules_clone as _rules_clone  # noqa: E402 F401
+from autoskillit.recipe import rules_cmd as _rules_cmd  # noqa: E402 F401
 from autoskillit.recipe import rules_contracts as _rules_contracts  # noqa: E402 F401
 from autoskillit.recipe import rules_dataflow as _rules_dataflow  # noqa: E402 F401
 from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401

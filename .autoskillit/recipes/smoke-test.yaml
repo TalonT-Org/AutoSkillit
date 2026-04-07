@@ -5,7 +5,7 @@ description: >-
   implements a trivial micro-task (smoke_canary), runs the full project test suite,
   opens a GitHub PR, and immediately closes it without merging.
 summary: >-
-  create_branch > create_worktree > setup_worktree > implement_task > test >
+  create_branch > create_worktree > setup_worktree > implement_task > run_tests >
   push_branch > create_pr > close_pr > cleanup > done
 
 ingredients:
@@ -84,17 +84,17 @@ steps:
         (3) run git add src/autoskillit/smoke_utils.py tests/test_smoke_canary.py;
         (4) run git commit -m 'smoke: add smoke_canary()'.
       cwd: "${{ context.worktree_path }}"
-    on_success: test
+    on_success: run_tests
     on_failure: fail_cleanup
     note: >-
       REQ-TASK-001 + REQ-TASK-002: Trivial, fully-specified micro-task. No retries —
       a failure here is an infrastructure signal, not a logic problem.
 
-  test:
+  run_tests:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
-      step_name: "test"
+      step_name: "run_tests"
     on_success: push_branch
     on_failure: fail_cleanup
     note: >-

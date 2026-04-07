@@ -138,7 +138,7 @@ def test_required_lifecycle_steps_present(smoke_recipe) -> None:
         "create_worktree",
         "setup_worktree",
         "implement_task",
-        "test",
+        "run_tests",
         "push_branch",
         "create_pr",
         "close_pr",
@@ -219,7 +219,7 @@ def test_fail_cleanup_routes_to_escalate(smoke_recipe) -> None:
 # T_SP_NEW_10
 def test_test_step_routes_to_fail_cleanup_on_failure(smoke_recipe) -> None:
     """REQ-GUARD-002: test failure must clean up before escalating."""
-    step = smoke_recipe.steps["test"]
+    step = smoke_recipe.steps["run_tests"]
     assert step.on_failure == "fail_cleanup"
 
 

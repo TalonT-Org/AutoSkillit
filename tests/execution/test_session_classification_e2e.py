@@ -138,7 +138,7 @@ def _classify(
     sr = SubprocessResult(
         returncode=proc.returncode,
         stdout=proc.stdout,
-        stderr="",
+        stderr=proc.stderr,
         termination=termination,
         pid=0,
     )
@@ -315,7 +315,7 @@ class TestProcessBehaviorSimulation:
         sr = SubprocessResult(
             returncode=proc.returncode,
             stdout=proc.stdout,
-            stderr="",
+            stderr=proc.stderr,
             termination=TerminationReason.NATURAL_EXIT,
             pid=0,
         )

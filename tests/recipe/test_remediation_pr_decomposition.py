@@ -41,6 +41,25 @@ def test_compose_pr_routes_to_extract_pr_number(recipe):
     assert step.on_success == "extract_pr_number"
 
 
+def test_prepare_pr_captures_three_context_vars(recipe):
+    step = recipe.steps["prepare_pr"]
+    capture = step.capture or {}
+    assert "prep_path" in capture
+    assert "selected_lenses" in capture
+    assert "lens_context_paths" in capture
+
+
+def test_run_arch_lenses_uses_capture_list(recipe):
+    step = recipe.steps["run_arch_lenses"]
+    assert step.capture_list is not None
+    assert "all_diagram_paths" in (step.capture_list or {})
+
+
+def test_compose_pr_captures_pr_url(recipe):
+    step = recipe.steps["compose_pr"]
+    assert "pr_url" in (step.capture or {})
+
+
 def test_remediation_recipe_validates_after_decomposition(recipe):
     errors = validate_recipe(recipe)
     assert not errors, f"Validation errors: {errors}"

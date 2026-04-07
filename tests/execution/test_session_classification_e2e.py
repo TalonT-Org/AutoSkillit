@@ -84,7 +84,7 @@ def _flat_assistant_msg(text: str, output_tokens: int = 0) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Bridge helpers: FakeFakeClaudeCLI → SkillResult / raw stdout
+# Bridge helpers: FakeClaudeCLI → SkillResult / raw stdout
 # ---------------------------------------------------------------------------
 
 

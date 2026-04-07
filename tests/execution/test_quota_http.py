@@ -6,14 +6,17 @@ They complement the unit tests in test_quota.py which mock at the function level
 
 from __future__ import annotations
 
-import pytest
-
-pytest.skip("api_simulator API change — see #643", allow_module_level=True)
-
 import json
 import time
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+
+import pytest
+from api_simulator._api_simulator_py import PyResponseSpec
+
+from autoskillit.execution.quota import check_and_sleep_if_needed
+
+pytestmark = pytest.mark.anyio
 
 QUOTA_ENDPOINT = "/api/oauth/usage"
 
@@ -60,12 +63,14 @@ async def test_normal_utilization_returns_status_and_sends_correct_headers(
     mock_http_server.register(
         "GET",
         QUOTA_ENDPOINT,
-        json={
-            "five_hour": {
-                "utilization": 50.0,
-                "resets_at": "2026-04-05T00:00:00+00:00",
+        PyResponseSpec(
+            body={
+                "five_hour": {
+                    "utilization": 50.0,
+                    "resets_at": "2026-04-05T00:00:00+00:00",
+                }
             }
-        },
+        ),
     )
 
     result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
@@ -76,8 +81,8 @@ async def test_normal_utilization_returns_status_and_sends_correct_headers(
 
     requests = mock_http_server.get_requests("GET", QUOTA_ENDPOINT)
     assert len(requests) == 1
-    assert requests[0].headers["authorization"] == "Bearer test-token-abc123"
-    assert requests[0].headers["anthropic-beta"] == "oauth-2025-04-20"
+    assert requests[0]["headers"]["authorization"] == "Bearer test-token-abc123"
+    assert requests[0]["headers"]["anthropic-beta"] == "oauth-2025-04-20"
 
 
 async def test_above_threshold_triggers_double_fetch(mock_http_server, quota_config):
@@ -85,9 +90,9 @@ async def test_above_threshold_triggers_double_fetch(mock_http_server, quota_con
     mock_http_server.register_sequence(
         "GET",
         QUOTA_ENDPOINT,
-        responses=[
-            {"json": {"five_hour": {"utilization": 95.0, "resets_at": resets_at}}},
-            {"json": {"five_hour": {"utilization": 95.0, "resets_at": resets_at}}},
+        [
+            PyResponseSpec(body={"five_hour": {"utilization": 95.0, "resets_at": resets_at}}),
+            PyResponseSpec(body={"five_hour": {"utilization": 95.0, "resets_at": resets_at}}),
         ],
     )
 
@@ -102,7 +107,7 @@ async def test_resets_at_null_blocks_with_fallback(mock_http_server, quota_confi
     mock_http_server.register(
         "GET",
         QUOTA_ENDPOINT,
-        json={"five_hour": {"utilization": 95.0, "resets_at": None}},
+        PyResponseSpec(body={"five_hour": {"utilization": 95.0, "resets_at": None}}),
     )
 
     result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
@@ -114,7 +119,7 @@ async def test_resets_at_null_blocks_with_fallback(mock_http_server, quota_confi
 
 
 async def test_http_429_fails_open(mock_http_server, quota_config):
-    mock_http_server.register("GET", QUOTA_ENDPOINT, status=429)
+    mock_http_server.register("GET", QUOTA_ENDPOINT, PyResponseSpec(status=429))
 
     result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
 
@@ -123,7 +128,7 @@ async def test_http_429_fails_open(mock_http_server, quota_config):
 
 
 async def test_http_503_fails_open(mock_http_server, quota_config):
-    mock_http_server.register("GET", QUOTA_ENDPOINT, status=503)
+    mock_http_server.register("GET", QUOTA_ENDPOINT, PyResponseSpec(status=503))
 
     result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
 
@@ -132,7 +137,7 @@ async def test_http_503_fails_open(mock_http_server, quota_config):
 
 
 async def test_network_timeout_fails_open(mock_http_server, quota_config):
-    mock_http_server.register("GET", QUOTA_ENDPOINT, json={}, delay_seconds=0.5)
+    mock_http_server.register("GET", QUOTA_ENDPOINT, PyResponseSpec(body={}, delay_ms=500))
 
     result = await check_and_sleep_if_needed(
         quota_config, base_url=mock_http_server.url, _httpx_timeout=0.1
@@ -146,12 +151,14 @@ async def test_z_suffix_resets_at_parsed_correctly(mock_http_server, quota_confi
     mock_http_server.register(
         "GET",
         QUOTA_ENDPOINT,
-        json={
-            "five_hour": {
-                "utilization": 50.0,
-                "resets_at": "2026-04-05T00:00:00Z",
+        PyResponseSpec(
+            body={
+                "five_hour": {
+                    "utilization": 50.0,
+                    "resets_at": "2026-04-05T00:00:00Z",
+                }
             }
-        },
+        ),
     )
 
     result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)

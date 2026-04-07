@@ -3448,3 +3448,17 @@ class TestBuildSkillResultSessionIdFromSubprocess:
         )
         sr = _build_skill_result(result)
         assert sr.session_id == "ch-b-uuid-5678"
+
+
+class TestHeadlessExecutorCompletionMarker:
+    """Protocol conformance: DefaultHeadlessExecutor.run accepts completion_marker."""
+
+    def test_headless_executor_accepts_completion_marker(self) -> None:
+        import inspect
+
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+        sig = inspect.signature(DefaultHeadlessExecutor.run)
+        assert "completion_marker" in sig.parameters
+        param = sig.parameters["completion_marker"]
+        assert param.default == ""

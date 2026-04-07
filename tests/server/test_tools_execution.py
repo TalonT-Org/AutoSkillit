@@ -1304,3 +1304,28 @@ class TestRunSkillCwdValidation:
         tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
         result = json.loads(await run_skill("/investigate foo", cwd="/tmp"))
         assert result["success"] is True
+
+
+class TestRunSkillPerInvocationMarker:
+    """Per-invocation completion markers are unique across run_skill calls."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_markers_are_unique_per_invocation(self, tool_ctx):
+        """Two run_skill calls must generate different completion_marker values."""
+        success_json = (
+            '{"type": "result", "subtype": "success", "is_error": false,'
+            ' "result": "done", "session_id": "s1"}'
+        )
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
+
+        await run_skill("/investigate a", cwd="/tmp")
+        await run_skill("/investigate b", cwd="/tmp")
+
+        calls = tool_ctx.runner.call_args_list
+        assert len(calls) >= 2
+        marker1 = calls[0][3]["completion_marker"]
+        marker2 = calls[1][3]["completion_marker"]
+        assert marker1 != marker2
+        assert "%%ORDER_UP::" in marker1
+        assert "%%ORDER_UP::" in marker2

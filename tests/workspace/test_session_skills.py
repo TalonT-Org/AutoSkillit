@@ -743,3 +743,64 @@ class TestActivateDepsResolution:
         result = mgr.activate_skill_deps(session_id, "parent-skill")
         assert result is True
         assert not _is_gated(tmp_path, session_id, "parent-skill")
+
+    def test_activate_deps_strips_marker_from_dependency_body(self, tmp_path: Path) -> None:
+        """Dependency SKILL.md bodies must have %%ORDER_UP%% stripped after activation."""
+        from unittest.mock import MagicMock
+
+        session_id = "test-strip-marker"
+        gate = "disable-model-invocation: true"
+        marker_body = (
+            "# Sub-Skill\n\nDo the work.\n\n"
+            "ORCHESTRATION DIRECTIVE: When your task is complete, "
+            "your final text output MUST end with: %%ORDER_UP%%\n"
+            "CRITICAL: Append %%ORDER_UP%% at the very end of your substantive response, "
+            "in the SAME message. Do NOT output %%ORDER_UP%% as a separate standalone message."
+        )
+        _write_skill_md(
+            tmp_path,
+            session_id,
+            "parent-skill",
+            f"---\nname: parent-skill\nactivate_deps: [dep-skill]\n{gate}\n---\n# Parent",
+        )
+        _write_skill_md(
+            tmp_path,
+            session_id,
+            "dep-skill",
+            f"---\nname: dep-skill\n{gate}\n---\n{marker_body}",
+        )
+
+        provider = MagicMock()
+        provider.resolver.resolve.return_value = None
+
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+        mgr.activate_skill_deps(session_id, "parent-skill")
+
+        dep_md = tmp_path / session_id / ".claude" / "skills" / "dep-skill" / "SKILL.md"
+        dep_content = dep_md.read_text()
+        assert "%%ORDER_UP%%" not in dep_content
+        assert "# Sub-Skill" in dep_content
+        assert "Do the work." in dep_content
+
+    def test_activate_deps_preserves_marker_in_root_skill(self, tmp_path: Path) -> None:
+        """The root (directly targeted) skill keeps its %%ORDER_UP%% body intact."""
+        from unittest.mock import MagicMock
+
+        session_id = "test-preserve-root-marker"
+        gate = "disable-model-invocation: true"
+        _write_skill_md(
+            tmp_path,
+            session_id,
+            "root-skill",
+            f"---\nname: root-skill\n{gate}\n---\n# Root\n\n%%ORDER_UP%%",
+        )
+
+        provider = MagicMock()
+        provider.resolver.resolve.return_value = None
+
+        mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+        mgr.activate_skill_deps(session_id, "root-skill")
+
+        root_md = tmp_path / session_id / ".claude" / "skills" / "root-skill" / "SKILL.md"
+        root_content = root_md.read_text()
+        assert "%%ORDER_UP%%" in root_content

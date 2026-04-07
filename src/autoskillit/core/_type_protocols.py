@@ -183,6 +183,7 @@ class HeadlessExecutor(Protocol):
         stale_threshold: float | None = None,
         expected_output_patterns: Sequence[str] = (),
         write_behavior: WriteBehaviorSpec | None = None,
+        completion_marker: str = "",
     ) -> SkillResult: ...
 
 

@@ -132,6 +132,7 @@ steps:
     with:
       cmd: >-
         PR_NUM=$(gh pr view --json number --jq .number) &&
+        [ -n "$PR_NUM" ] &&
         gh pr close "$PR_NUM" --comment "Smoke test complete. Closing without merge."
       cwd: "${{ context.worktree_path }}"
       step_name: "close_pr"

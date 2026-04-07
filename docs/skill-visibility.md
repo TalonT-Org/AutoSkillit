@@ -2,7 +2,7 @@
 
 ## Overview
 
-AutoSkillit's 93 bundled skills are organized into three tiers that control when and where
+AutoSkillit's 92 bundled skills are organized into three tiers that control when and where
 they appear as slash commands. The tier system is orthogonal to subset categories — you can
 disable a subset across all tiers simultaneously, or reclassify individual skills between
 tiers. See [Subset Categories](subset-categories.md) for subset configuration.

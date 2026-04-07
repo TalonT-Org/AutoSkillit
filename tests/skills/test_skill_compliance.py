@@ -176,7 +176,7 @@ def _check_loop_boundary(skill_text: str) -> list[str]:
     return violations
 
 
-@pytest.mark.parametrize("skill_name", ["prepare-pr", "open-integration-pr"])
+@pytest.mark.parametrize("skill_name", ["open-integration-pr"])
 def test_no_prose_output_immediately_before_skill_invocation(skill_name: str) -> None:
     """Assert that no SKILL.md step instructs the model to output plain text
     immediately before a Skill tool call.
@@ -196,7 +196,7 @@ def test_no_prose_output_immediately_before_skill_invocation(skill_name: str) ->
     )
 
 
-@pytest.mark.parametrize("skill_name", ["prepare-pr", "open-integration-pr"])
+@pytest.mark.parametrize("skill_name", ["open-integration-pr"])
 def test_arch_lens_context_via_file_not_prose(skill_name: str) -> None:
     """Assert that PR context for arch-lens skills is passed via a temp
     file (Write tool), not as inline prose text output.

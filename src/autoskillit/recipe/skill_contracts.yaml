@@ -1317,6 +1317,70 @@ skills:
     - "verdict = GO\nexperiment_type = benchmark\nevaluation_dashboard = /tmp/eval.md\nrevision_guidance = /tmp/guidance.md\n%%ORDER_UP%%"
     write_behavior: always
 
+  review-research-pr:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: pr_url
+      type: string
+      required: true
+    outputs:
+    - name: verdict
+      type: string
+      allowed_values: [approved, changes_requested, needs_human]
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(approved|changes_requested|needs_human)"
+    pattern_examples:
+    - "verdict = approved\n%%ORDER_UP%%"
+    - "verdict = changes_requested\n%%ORDER_UP%%"
+    - "verdict = needs_human\n%%ORDER_UP%%"
+    write_behavior: always
+
+  audit-claims:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: pr_url
+      type: string
+      required: true
+    outputs:
+    - name: verdict
+      type: string
+      allowed_values: [approved, changes_requested, needs_human]
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(approved|changes_requested|needs_human)"
+    pattern_examples:
+    - "verdict = approved\n%%ORDER_UP%%"
+    - "verdict = changes_requested\n%%ORDER_UP%%"
+    - "verdict = needs_human\n%%ORDER_UP%%"
+    write_behavior: always
+
+  resolve-claims-review:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs:
+    - name: needs_rerun
+      type: string
+    expected_output_patterns:
+    - "needs_rerun\\s*=\\s*(true|false)"
+    pattern_examples:
+    - "needs_rerun = true\n%%ORDER_UP%%"
+    - "needs_rerun = false\n%%ORDER_UP%%"
+    write_behavior: always
+
   resolve-research-review:
     inputs:
     - name: worktree_path

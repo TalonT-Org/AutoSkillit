@@ -45,6 +45,13 @@ ingredients:
       (methodology, reproducibility, report-quality, etc.) and emits a
       verdict. Defaults to 'false' — the research PR is for human review.
     default: "false"
+  audit_claims:
+    required: false
+    default: "false"
+    description: >
+      When 'true', run audit-claims after review_research_pr to verify citation
+      integrity and claim backing in the research report. Emits a verdict that
+      routes to resolve-claims-review when changes are needed.
 
 kitchen_rules:
   - >
@@ -514,20 +521,54 @@ steps:
       skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: review_research_pr
+    capture:
+      review_verdict: "${{ result.verdict }}"
     skip_when_false: inputs.review_pr
-    on_context_limit: begin_archival
-    on_failure: begin_archival
+    on_context_limit: audit_claims
+    on_failure: audit_claims
     on_result:
-      - when: "${{ result.verdict }} == changes_requested"
-        route: resolve_research_review
-      - when: "${{ result.verdict }} == needs_human"
-        route: begin_archival
-      - route: begin_archival
+      - route: audit_claims
     note: >
       Optional research PR review step, gated by the review_pr ingredient.
-      on_result handles verdict-based routing; changes_requested triggers
-      resolve_research_review -> re_push_research. All other verdicts and
-      failures route to begin_archival for artifact extraction.
+      Verdict captured as review_verdict for deferred routing. All paths
+      (skip, success, failure, context-limit) route to audit_claims so both
+      gates complete before any resolution step begins. When on_context_limit
+      or on_failure fires, the capture block does not execute and
+      context.review_verdict remains absent; the recipe engine treats absent
+      context variables as empty string in comparisons, so downstream
+      route_review_resolve safely falls through to route_claims_resolve.
+
+  audit_claims:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:audit-claims ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: audit_claims
+    capture:
+      audit_verdict: "${{ result.verdict }}"
+    skip_when_false: inputs.audit_claims
+    retries: 1
+    on_exhausted: route_review_resolve
+    on_context_limit: route_review_resolve
+    on_failure: route_review_resolve
+    on_result:
+      - route: route_review_resolve
+    note: >
+      Optional citation-integrity gate, gated by the audit_claims ingredient.
+      Runs after review_research_pr regardless of that step's verdict.
+      All paths (skip, success, failure) route to route_review_resolve so both
+      gates complete before resolution.
+
+  route_review_resolve:
+    action: route
+    on_result:
+      - when: "${{ context.review_verdict }} == changes_requested"
+        route: resolve_research_review
+      - route: route_claims_resolve
+    note: >
+      Routes to resolve_research_review only when the PR review found
+      changes_requested. All other verdicts (approved, needs_human, empty/skipped)
+      proceed directly to route_claims_resolve.
 
   resolve_research_review:
     tool: run_skill
@@ -536,25 +577,60 @@ steps:
       cwd: "${{ context.worktree_path }}"
       step_name: resolve_research_review
     capture:
-      needs_rerun: "${{ result.needs_rerun }}"
+      review_needs_rerun: "${{ result.needs_rerun }}"
     retries: 2
-    on_exhausted: begin_archival
-    on_context_limit: begin_archival
-    on_success: check_escalations
-    on_failure: begin_archival
+    on_exhausted: route_claims_resolve
+    on_context_limit: route_claims_resolve
+    on_success: route_claims_resolve
+    on_failure: route_claims_resolve
 
-  check_escalations:
+  route_claims_resolve:
     action: route
     on_result:
-      - when: "${{ context.needs_rerun }} == true"
+      - when: "${{ context.audit_verdict }} == changes_requested"
+        route: resolve_claims_review
+      - route: merge_escalations
+    note: >
+      Routes to resolve_claims_review only when the claims audit found
+      changes_requested. All other verdicts (approved, needs_human, empty/skipped)
+      proceed directly to merge_escalations. When audit_claims is skipped
+      (inputs.audit_claims=false), context.audit_verdict is absent; the recipe
+      engine treats absent variables as empty string, so the condition evaluates
+      false and the fallback route to merge_escalations fires safely.
+
+  resolve_claims_review:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:resolve-claims-review ${{ context.worktree_path }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: resolve_claims_review
+    capture:
+      claims_needs_rerun: "${{ result.needs_rerun }}"
+    retries: 2
+    on_exhausted: merge_escalations
+    on_context_limit: merge_escalations
+    on_success: merge_escalations
+    on_failure: merge_escalations
+
+  merge_escalations:
+    action: route
+    on_result:
+      - when: "${{ context.review_needs_rerun }} == true"
+        route: re_run_experiment
+      - when: "${{ context.claims_needs_rerun }} == true"
         route: re_run_experiment
       - route: re_push_research
     note: >
-      Escalation consumer. Reads the captured needs_rerun token from
-      resolve_research_review. When rerun_required escalations exist, routes
-      to re-validation loop. When only design_flaw escalations exist (or none),
-      routes directly to push — design_flaw escalations are already posted as
-      inline PR comments by the resolve skill.
+      Merged escalation consumer replacing check_escalations. Triggers a single
+      re_run_experiment if either review resolution or claims resolution flagged
+      a rerun. When only design_flaw escalations exist (or none), routes directly
+      to push — design_flaw escalations are already posted as inline PR comments
+      by the resolve skills. Both context.review_needs_rerun and
+      context.claims_needs_rerun may be absent if their respective resolution
+      steps were never reached (e.g., no changes_requested verdict on that gate);
+      the recipe engine evaluates absent context variables as empty string, so
+      absent == true is always false and routes safely fall through to
+      re_push_research.
 
   re_run_experiment:
     tool: run_skill

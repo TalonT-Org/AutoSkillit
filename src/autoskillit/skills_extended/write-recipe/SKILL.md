@@ -224,7 +224,7 @@ analyze-prs, arch-lens-c4-container, arch-lens-concurrency, arch-lens-data-linea
 arch-lens-development, arch-lens-error-resilience, arch-lens-module-dependency, arch-lens-operational,
 arch-lens-process-flow, arch-lens-repository-access, arch-lens-scenarios, arch-lens-security, arch-lens-state-lifecycle,
 audit-arch, audit-bugs, audit-cohesion, audit-defense-standards, audit-friction, audit-impl, audit-tests,
-close-kitchen, collapse-issues, design-guards, diagnose-ci, dry-walkthrough, elaborate-phase,
+close-kitchen, collapse-issues, compose-research-pr, design-guards, diagnose-ci, dry-walkthrough, elaborate-phase,
 enrich-issues, exp-lens-benchmark-representativeness, exp-lens-causal-assumptions, exp-lens-comparator-construction,
 exp-lens-error-budget, exp-lens-estimand-clarity, exp-lens-exploratory-confirmatory, exp-lens-fair-comparison,
 exp-lens-governance-risk, exp-lens-iterative-learning, exp-lens-measurement-validity, exp-lens-pipeline-integrity,
@@ -232,7 +232,7 @@ exp-lens-randomization-blocking, exp-lens-reproducibility-artifacts, exp-lens-se
 exp-lens-severity-testing, exp-lens-unit-interference, exp-lens-validity-threats, exp-lens-variance-stability,
 implement-experiment, implement-worktree, implement-worktree-no-merge, investigate, issue-splitter, make-arch-diag,
 make-experiment-diag, make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr,
-open-kitchen, open-pr, open-research-pr, pipeline-summary, plan-experiment, prepare-issue, process-issues, rectify, report-bug,
+open-kitchen, open-pr, pipeline-summary, plan-experiment, prepare-issue, prepare-research-pr, process-issues, rectify, report-bug,
 resolve-design-review, resolve-failures, resolve-merge-conflicts, resolve-research-review, resolve-review, retry-worktree, review-approach, review-design, review-pr, review-research-pr, run-experiment,
 scope, setup-project, smoke-task, sprint-planner, triage-issues, troubleshoot-experiment, validate-audit, verify-diag, write-recipe, write-report
 

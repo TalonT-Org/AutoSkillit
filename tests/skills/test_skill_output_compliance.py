@@ -229,6 +229,8 @@ def test_output_path_tokens_synchronized() -> None:
             # review-design skill outputs (added in #593)
             "evaluation_dashboard",
             "revision_guidance",
+            # prepare-research-pr output (decomposed research-PR flow)
+            "prep_path",
         }
     )
 

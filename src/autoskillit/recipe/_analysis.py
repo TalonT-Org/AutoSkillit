@@ -513,6 +513,16 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                     "skill_command", ""
                 ):
                     continue
+                # Exempt prepare_research_pr note-driven lens iteration captures:
+                # selected_lenses and lens_context_paths are consumed by run_experiment_lenses
+                # via the step's note field. The note instructs the orchestrator to iterate
+                # over selected_lenses values and match them with lens_context_paths paths.
+                # Static dataflow analysis cannot detect note-driven consumption.
+                if cap_key in (
+                    "selected_lenses",
+                    "lens_context_paths",
+                ) and "prepare-research-pr" in step.with_args.get("skill_command", ""):
+                    continue
                 warnings.append(
                     DataFlowWarning(
                         code="DEAD_OUTPUT",

@@ -208,7 +208,8 @@ skills:
     - pipeline-summary
     - diagnose-ci
     - verify-diag
-    - open-research-pr
+    - prepare-research-pr
+    - compose-research-pr
     - review-design
     - resolve-design-review
     - resolve-research-review

@@ -27,14 +27,18 @@ _SKILL_TOKEN_RE = re.compile(r"/autoskillit:(\S+)")
 
 
 def _has_dynamic_skill_name(skill_cmd: str) -> bool:
-    """Return True if the skill name portion contains template expressions."""
+    """Return True if the skill name portion contains template expressions.
+
+    Handles both ``${{ }}`` Jinja-style expressions and bare ``{placeholder}``
+    orchestrator-level template tokens (e.g. ``exp-lens-{slug}``).
+    """
     m = _SKILL_TOKEN_RE.search(skill_cmd)
     if not m:
         return False
     token = m.group(1)
     first_space = token.find(" ")
     name_part = token[:first_space] if first_space >= 0 else token
-    return "${{" in name_part
+    return "${{" in name_part or "{" in name_part
 
 
 @semantic_rule(

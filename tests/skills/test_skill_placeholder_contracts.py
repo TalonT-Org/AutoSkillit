@@ -140,6 +140,11 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("process-issues", "recipe"),  # recipe name from manifest
         ("triage-issues", "number"),  # per-issue iteration value
         ("triage-issues", "recipe"),  # recipe name from manifest
+        # ── compose-research-pr: runtime-computed values ──────────────────────────────
+        # title: extracted from prep file by Agent subagent in Step 1
+        # pr_body_path: path to PR body file written in Step 3, used in Step 5
+        ("compose-research-pr", "title"),
+        ("compose-research-pr", "pr_body_path"),
     }
 )
 

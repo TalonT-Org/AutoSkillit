@@ -7,15 +7,13 @@ They complement the unit tests in test_quota.py which mock at the function level
 from __future__ import annotations
 
 import pytest
+
 pytest.skip("api_simulator API change - ticket pending", allow_module_level=True)
 
 import json
 import time
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-
-import pytest
-pytest.skip("api_simulator API change - ticket pending", allow_module_level=True)
 
 QUOTA_ENDPOINT = "/api/oauth/usage"
 

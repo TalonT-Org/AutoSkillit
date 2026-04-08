@@ -233,6 +233,7 @@ src/autoskillit/
 │   ├── hooks.json           #   Plugin hook registration (auto-discovered by Claude Code)
 │   ├── branch_protection_guard.py #  PreToolUse hook — denies merge_worktree/push_to_remote targeting protected branches
 │   ├── quota_check.py       #   Quota guard hook — blocks run_skill when threshold exceeded
+│   ├── quota_post_check.py  #   PostToolUse hook — appends quota warning to run_skill output when utilization exceeds threshold
 │   ├── remove_clone_guard.py #  Remove-clone guard — denies remove_clone calls with keep != "true"
 │   ├── skill_cmd_check.py   #   PreToolUse hook — validates skill_command path argument format
 │   ├── skill_command_guard.py #  PreToolUse hook — blocks run_skill with non-slash skill_command

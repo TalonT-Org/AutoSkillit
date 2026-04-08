@@ -64,12 +64,7 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         event_type="PostToolUse",
         matcher=r"mcp__.*autoskillit.*__run_skill.*",
-        scripts=["token_summary_appender.py"],
-    ),
-    HookDef(
-        event_type="PostToolUse",
-        matcher=r"mcp__.*autoskillit.*__run_skill.*",
-        scripts=["quota_post_check.py"],
+        scripts=["token_summary_appender.py", "quota_post_check.py"],
     ),
     HookDef(
         event_type="SessionStart",

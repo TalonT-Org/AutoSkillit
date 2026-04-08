@@ -207,7 +207,10 @@ def test_settings_json_matches_hook_registry_after_install(tmp_path, monkeypatch
     data = json.loads(settings_path.read_text())
     for hook_def in HOOK_REGISTRY:
         event_entries = data.get("hooks", {}).get(hook_def.event_type, [])
-        matching = [e for e in event_entries if e.get("matcher") == hook_def.matcher]
+        if hook_def.event_type == "SessionStart":
+            matching = [e for e in event_entries if "matcher" not in e]
+        else:
+            matching = [e for e in event_entries if e.get("matcher") == hook_def.matcher]
         assert len(matching) == 1, (
             f"Expected exactly 1 {hook_def.event_type} entry for matcher "
             f"{hook_def.matcher!r}, got {len(matching)}"
@@ -285,3 +288,22 @@ def test_sync_hooks_to_settings_is_idempotent(tmp_path):
     assert len(posttooluse) == posttooluse_count, (
         f"Duplicate entries after evict+sync twice: {len(posttooluse)} PostToolUse entries"
     )
+
+
+# T-CROSS-1
+def test_sync_hooks_to_settings_session_start_no_matcher(tmp_path):
+    """sync_hooks_to_settings() must not emit 'matcher' key for SessionStart entries."""
+    from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
+
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text('{"hooks": {}}')
+    _evict_stale_autoskillit_hooks(settings)
+    sync_hooks_to_settings(settings)
+    data = json.loads(settings.read_text())
+    session_start_entries = data.get("hooks", {}).get("SessionStart", [])
+    assert session_start_entries, "Expected at least one SessionStart entry"
+    for entry in session_start_entries:
+        assert "matcher" not in entry, (
+            f"SessionStart entry must not have 'matcher' key, got: {entry}"
+        )

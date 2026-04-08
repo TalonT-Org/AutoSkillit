@@ -553,3 +553,82 @@ def test_tool_context_has_quota_refresh_task_field():
     fields = {f.name: f for f in dataclasses.fields(ToolContext)}
     assert "quota_refresh_task" in fields
     assert fields["quota_refresh_task"].default is None
+
+
+# T-KITCHEN-1
+@pytest.mark.anyio
+async def test_open_kitchen_warns_on_orphaned_hooks(tmp_path, monkeypatch):
+    """When settings.json contains a hook not in HOOK_REGISTRY, open_kitchen()
+    must include a drift warning in its response."""
+    from autoskillit.hook_registry import HookDriftResult
+
+    settings_dir = tmp_path / ".claude"
+    settings_dir.mkdir()
+    (settings_dir / "settings.json").write_text("{}")
+
+    monkeypatch.setattr(
+        "autoskillit.hook_registry._claude_settings_path",
+        lambda scope: settings_dir / "settings.json",
+    )
+    monkeypatch.setattr(
+        "autoskillit.hook_registry._count_hook_registry_drift",
+        lambda _: HookDriftResult(missing=0, orphaned=1),
+    )
+    monkeypatch.setattr(
+        "autoskillit.hook_registry.find_broken_hook_scripts",
+        lambda _: [],
+    )
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result = await open_kitchen(ctx=mock_ctx)
+
+    assert (
+        "orphan" in result.lower() or "drift" in result.lower() or "install" in result.lower()
+    ), "open_kitchen() must include a hook drift warning when orphaned > 0"
+
+
+# T-KITCHEN-2
+@pytest.mark.anyio
+async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch):
+    """When hook scripts are absent from disk, open_kitchen() must warn."""
+    from autoskillit.hook_registry import HookDriftResult
+
+    settings_dir = tmp_path / ".claude"
+    settings_dir.mkdir()
+    (settings_dir / "settings.json").write_text("{}")
+
+    monkeypatch.setattr(
+        "autoskillit.hook_registry._claude_settings_path",
+        lambda scope: settings_dir / "settings.json",
+    )
+    monkeypatch.setattr(
+        "autoskillit.hook_registry.find_broken_hook_scripts",
+        lambda _: ["python3 /missing/status_health_guard.py"],
+    )
+    monkeypatch.setattr(
+        "autoskillit.hook_registry._count_hook_registry_drift",
+        lambda _: HookDriftResult(missing=0, orphaned=0),
+    )
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result = await open_kitchen(ctx=mock_ctx)
+
+    assert "Hook scripts not found" in result, (
+        "open_kitchen() must include the exact _build_hook_diagnostic_warning phrase"
+    )

@@ -55,3 +55,12 @@ def test_all_session_start_hook_scripts_are_registered() -> None:
     }
     for script in session_scripts:
         assert (HOOKS_DIR / script).exists(), f"SessionStart script not found: {script}"
+
+
+# T-GUARD-2
+def test_generated_file_write_guard_registered() -> None:
+    """generated_file_write_guard.py must be registered in HOOK_REGISTRY."""
+    all_scripts = {s for h in HOOK_REGISTRY for s in h.scripts}
+    assert "generated_file_write_guard.py" in all_scripts, (
+        "generated_file_write_guard.py must be registered in HOOK_REGISTRY"
+    )

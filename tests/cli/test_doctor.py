@@ -1104,3 +1104,59 @@ def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
         "hook_health must report non-OK when a PostToolUse hook script is missing"
     )
     assert "token_summary_appender" in result.message or "PostToolUse" in result.message
+
+
+# T-DRIFT-1: _count_hook_registry_drift() detects orphaned hooks
+def test_count_hook_registry_drift_detects_orphaned_hooks(tmp_path: Path) -> None:
+    """deployed − canonical must be counted and returned.
+    Orphaned hooks are the fatal failure mode (ENOENT on every tool call).
+    """
+    from autoskillit.cli._doctor import _count_hook_registry_drift
+
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    ghost_cmd = "python3 /path/to/status_health_guard.py"
+    data = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "mcp__.*autoskillit.*__run_skill.*",
+                    "hooks": [{"type": "command", "command": ghost_cmd}],
+                }
+            ]
+        }
+    }
+    settings.write_text(json.dumps(data))
+    result = _count_hook_registry_drift(settings)
+    assert hasattr(result, "orphaned"), (
+        "_count_hook_registry_drift must return a result with 'orphaned' field"
+    )
+    assert result.orphaned >= 1, f"Expected orphaned >= 1 for ghost entry, got {result.orphaned}"
+
+
+# T-DRIFT-2: _check_hook_registry_drift() returns ERROR for orphaned hooks
+def test_check_hook_registry_drift_error_on_orphaned_hooks(tmp_path: Path) -> None:
+    from autoskillit.cli._doctor import _check_hook_registry_drift
+    from autoskillit.core import Severity
+
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    ghost_cmd = "python3 /path/to/status_health_guard.py"
+    data = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "mcp__.*autoskillit.*__run_skill.*",
+                    "hooks": [{"type": "command", "command": ghost_cmd}],
+                }
+            ]
+        }
+    }
+    settings.write_text(json.dumps(data))
+    result = _check_hook_registry_drift(settings)
+    assert result.severity == Severity.ERROR, (
+        f"Orphaned hooks must produce ERROR severity, got {result.severity}"
+    )
+    assert "status_health_guard.py" in result.message, (
+        "Error message must name the orphaned script(s)"
+    )

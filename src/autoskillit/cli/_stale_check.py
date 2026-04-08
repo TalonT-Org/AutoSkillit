@@ -314,16 +314,23 @@ def run_stale_check(home: Path | None = None) -> None:
                 _write_dismiss_state(_home, state)
 
     # Hook drift check
-    from autoskillit.cli._doctor import _count_hook_registry_drift
+    from autoskillit.cli import _count_hook_registry_drift
 
     settings_path = _claude_settings_path("user")
-    n_drift = _count_hook_registry_drift(settings_path)
-    if n_drift > 0 and not _is_dismissed(state, "hooks", None):
-        print(
-            f"\n{n_drift} new/changed hook(s) detected since last install.",
-            flush=True,
-        )
-        answer = input("Run 'autoskillit install' to sync hooks? [Y/n] ").strip().lower()
+    drift = _count_hook_registry_drift(settings_path)
+    if (drift.missing > 0 or drift.orphaned > 0) and not _is_dismissed(state, "hooks", None):
+        if drift.orphaned > 0:
+            prompt_msg = (
+                f"\n\u26a0\ufe0f  {drift.orphaned} orphaned hook entry(ies) in settings.json "
+                f"will block tool calls with ENOENT. Run 'autoskillit install'? [Y/n] "
+            )
+        else:
+            prompt_msg = (
+                f"\n{drift.missing} new/changed hook(s) detected since last install.\n"
+                f"Run 'autoskillit install' to sync hooks? [Y/n] "
+            )
+        print(prompt_msg, end="", flush=True)
+        answer = input("").strip().lower()
         if answer in ("", "y", "yes"):
             with terminal_guard():
                 subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)

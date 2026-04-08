@@ -117,3 +117,39 @@ def test_generate_hooks_json_session_start_no_matcher() -> None:
     assert session_start_entries, "hooks.json must include SessionStart"
     for entry in session_start_entries:
         assert "matcher" not in entry, "SessionStart entries must not have a matcher key"
+
+
+# T-CROSS-2
+def test_generate_hooks_json_and_sync_produce_equivalent_entries(tmp_path) -> None:
+    """Both generation paths must produce structurally identical hook entries
+    for every event type. Verifies that _build_hook_entry() is shared,
+    preventing path A/B divergence.
+    """
+    from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
+
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text('{"hooks": {}}')
+    _evict_stale_autoskillit_hooks(settings)
+    sync_hooks_to_settings(settings)
+    deployed = json.loads(settings.read_text())
+
+    canonical = generate_hooks_json()
+
+    for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
+        canonical_entries = canonical.get("hooks", {}).get(event_type, [])
+        deployed_entries = deployed.get("hooks", {}).get(event_type, [])
+        assert len(canonical_entries) == len(deployed_entries), (
+            f"{event_type}: canonical has {len(canonical_entries)} entries, "
+            f"deployed has {len(deployed_entries)}"
+        )
+        for i, (c_entry, d_entry) in enumerate(zip(canonical_entries, deployed_entries)):
+            assert set(c_entry.keys()) == set(d_entry.keys()), (
+                f"{event_type}[{i}]: key mismatch. "
+                f"canonical keys={set(c_entry.keys())}, "
+                f"deployed keys={set(d_entry.keys())}"
+            )
+            if "matcher" in c_entry:
+                assert c_entry["matcher"] == d_entry["matcher"], (
+                    f"{event_type}[{i}]: matcher mismatch"
+                )

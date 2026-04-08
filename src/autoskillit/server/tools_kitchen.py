@@ -22,6 +22,7 @@ from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _apply_triage_gate,
+    _build_hook_diagnostic_warning,
     _find_recipe,
     _hook_config_path,
     _prime_quota_cache,
@@ -176,6 +177,9 @@ async def open_kitchen(
         result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
         result["kitchen"] = "open"
         result["version"] = __version__
+        warning = _build_hook_diagnostic_warning()
+        if warning:
+            result["hook_warning"] = warning.strip()
         return json.dumps(result)
 
     text = (
@@ -203,6 +207,10 @@ async def open_kitchen(
             "`.autoskillit/scripts/` still exists. Run `autoskillit upgrade` in this directory\n"
             "to migrate automatically, or ask me to do it for you."
         )
+
+    warning = _build_hook_diagnostic_warning()
+    if warning:
+        text += warning
 
     return text
 

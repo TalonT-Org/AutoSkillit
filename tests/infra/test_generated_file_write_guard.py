@@ -23,7 +23,7 @@ def _run_guard(event: dict) -> dict | None:
 
 
 def test_write_guard_denies_hooks_json_write():
-    event = {"tool_name": "Write", "tool_input": {"file_path": "/any/path/hooks.json"}}
+    event = {"tool_name": "Write", "tool_input": {"file_path": "/any/path/hooks/hooks.json"}}
     output = _run_guard(event)
     assert output is not None
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -37,10 +37,17 @@ def test_write_guard_denies_settings_json_write():
 
 
 def test_write_guard_denies_edit_targeting_hooks_json():
-    event = {"tool_name": "Edit", "tool_input": {"file_path": "/any/path/hooks.json"}}
+    event = {"tool_name": "Edit", "tool_input": {"file_path": "/any/path/hooks/hooks.json"}}
     output = _run_guard(event)
     assert output is not None
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_write_guard_allows_unrelated_hooks_json():
+    """Ensure files like 'my-hooks.json' are not false-positive denied."""
+    event = {"tool_name": "Write", "tool_input": {"file_path": "/repo/my-hooks.json"}}
+    output = _run_guard(event)
+    assert output is None, "Unrelated *hooks.json file must not be denied"
 
 
 def test_write_guard_allows_other_files():

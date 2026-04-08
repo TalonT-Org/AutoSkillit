@@ -10,7 +10,7 @@ import json
 import os
 import sys
 
-_GENERATED_FILE_SUFFIXES = ("hooks.json", ".claude/settings.json")
+_GENERATED_FILE_SUFFIXES = ("/hooks/hooks.json", ".claude/settings.json")
 
 
 def main() -> None:

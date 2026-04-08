@@ -287,3 +287,40 @@ closed due to a stale base):
   and `immediate_merge_conflict_fix` has full diagnostic access.
 - **NEVER abandon a pipeline** because merge failed — route through the conflict
   recovery cycle until the PR merges or escalation is required.
+
+---
+
+## QUOTA WAIT PROTOCOL — MANDATORY
+
+When quota-related events occur during pipeline execution:
+
+### PreToolUse Denial (run_skill blocked)
+
+When a `run_skill` call is DENIED by the quota guard hook:
+
+1. This is a **temporary** block — NOT a permanent error, NOT a pipeline failure.
+2. The deny message contains a `run_cmd` sleep command with the required duration.
+3. **MANDATORY**: Execute the sleep command via `run_cmd` immediately.
+4. After the sleep completes, retry the **exact same** `run_skill` call with
+   identical arguments (`skill_command`, `cwd`, `model`, `step_name`).
+5. Do NOT follow `on_failure`. Do NOT report to the user. Do NOT skip the step.
+6. Before executing, state aloud: "Quota denied. Sleeping N seconds, then retrying."
+
+### Post-Execution Warning (quota high after run_skill)
+
+When `run_skill` output contains `--- QUOTA WARNING ---`:
+
+1. The warning contains a `run_cmd` sleep command.
+2. **MANDATORY**: Execute the sleep command via `run_cmd` BEFORE calling the next
+   `run_skill` (whether it is the next pipeline step or a retry).
+3. After sleeping, proceed normally with the next step.
+4. Before executing, state aloud: "Quota warning. Sleeping N seconds before next step."
+
+### Key Rules
+
+- Quota denials are **always temporary**. The API quota resets on a rolling 5-hour window.
+- A denied `run_skill` has **zero side effects** — no partial state, no worktree changes.
+  Retrying with the same arguments is always safe.
+- Multiple consecutive denials may occur if the sleep duration was underestimated.
+  Keep sleeping and retrying until the call succeeds.
+- NEVER use `AskUserQuestion` for quota events — they are fully automated.

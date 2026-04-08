@@ -139,6 +139,19 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
 - When run_skill returns "needs_retry: true" AND "retry_reason: early_stop" or "zero_writes":
   - These are not context limit conditions. Fall through to on_failure.
 
+QUOTA DENIAL ROUTING — run_skill only (check BEFORE on_failure):
+- When a PreToolUse hook DENIES run_skill with "QUOTA WAIT REQUIRED":
+  - This is a TEMPORARY block. The API quota resets on a rolling window.
+  - The deny message contains a run_cmd sleep command. Execute it immediately.
+  - After the sleep completes, retry the EXACT same run_skill call (same arguments).
+  - NEVER treat a quota denial as a permanent failure or pipeline-stopping error.
+  - NEVER report quota denials to the user — handle them silently and automatically.
+  - Before executing the sleep, state aloud: "Quota denied. Sleeping N seconds, then retrying."
+- When run_skill output contains "--- QUOTA WARNING ---":
+  - A post-execution quota check detected high utilization.
+  - The warning contains a run_cmd sleep command. Execute it BEFORE the next run_skill call.
+  - After sleeping, proceed normally with the next pipeline step.
+
 TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
 - Tool-level failure (run_skill returns "success: False"): Follow on_failure. This fires
   BEFORE any result object exists. on_result conditions are NOT evaluated.

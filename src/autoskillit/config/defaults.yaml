@@ -111,6 +111,7 @@ branching:
 
 ci:
   workflow: null  # Workflow filename to filter CI runs, e.g. "tests.yml"
+  event: null     # Trigger event to filter CI runs, e.g. "push"
 
 subsets:
   disabled: []

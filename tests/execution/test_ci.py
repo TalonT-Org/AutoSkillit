@@ -25,6 +25,7 @@ def _run(
     status: str = "completed",
     conclusion: str = "success",
     head_sha: str = "abc123",
+    event: str = "push",
     updated_at: str | None = None,
 ) -> dict:
     """Build a mock workflow run dict."""
@@ -33,6 +34,7 @@ def _run(
         "status": status,
         "conclusion": conclusion,
         "head_sha": head_sha,
+        "event": event,
         "updated_at": updated_at or _NOW.isoformat(),
     }
 
@@ -339,6 +341,36 @@ async def test_status_by_run_id(httpx_mock):
     assert len(result["runs"]) == 1
     assert result["runs"][0]["conclusion"] == "failure"
     assert result["runs"][0]["failed_jobs"] == ["deploy"]
+
+
+# ---------------------------------------------------------------------------
+# Event discrimination — regression test for issue #662
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_event_filtering_selects_correct_event():
+    """With scope.event='push', a passing pull_request run must not mask a failing push run.
+
+    This is the core regression test for GitHub issue #662.
+    """
+    watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            _run(run_id=1, conclusion="success", event="pull_request"),
+            _run(run_id=2, conclusion="failure", event="push"),
+        ]
+    )
+    watcher._fetch_failed_jobs = AsyncMock(return_value=["test"])  # type: ignore[method-assign]
+
+    result = await watcher.wait(
+        "main",
+        repo="owner/repo",
+        scope=CIRunScope(event="push"),
+        timeout_seconds=60,
+    )
+    assert result["conclusion"] == "failure"  # push run, not pull_request
+    assert result["run_id"] == 2
 
 
 # ---------------------------------------------------------------------------

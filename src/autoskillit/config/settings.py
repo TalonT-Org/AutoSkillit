@@ -202,6 +202,7 @@ class BranchingConfig:
 @dataclass
 class CIConfig:
     workflow: str | None = None
+    event: str | None = None
 
 
 @dataclass
@@ -436,6 +437,7 @@ class AutomationConfig:
             ),
             ci=CIConfig(
                 workflow=val(ci, "workflow", _ci["workflow"]) or None,
+                event=val(ci, "event", _ci["event"]) or None,
             ),
             skills=SkillsConfig(
                 tier1=list(val(sk, "tier1", _sk["tier1"])),

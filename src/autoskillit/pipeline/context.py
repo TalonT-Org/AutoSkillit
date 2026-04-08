@@ -111,4 +111,4 @@ class ToolContext:
     def default_ci_scope(self) -> CIRunScope:
         """Build the default CI scope from config. Used by handlers as fallback when
         the caller does not supply a workflow argument."""
-        return CIRunScope(workflow=self.config.ci.workflow)
+        return CIRunScope(workflow=self.config.ci.workflow, event=self.config.ci.event)

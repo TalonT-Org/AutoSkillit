@@ -33,6 +33,7 @@ async def wait_for_ci(
     remote_url: str = "",
     head_sha: str | None = None,
     workflow: str | None = None,
+    event: str | None = None,
     timeout_seconds: int = 300,
     cwd: str = ".",
     step_name: str = "",
@@ -54,6 +55,8 @@ async def wait_for_ci(
                   HEAD in cwd.
         workflow: Workflow filename to filter runs (e.g. "tests.yml"). If
                   omitted, falls back to the project-level ci.workflow config.
+        event: GitHub trigger event to filter runs (e.g. "push", "pull_request").
+               If omitted, falls back to the project-level ci.event config.
         timeout_seconds: Maximum time to wait (default 300s).
         cwd: Working directory for git operations.
         step_name: Optional YAML step key for wall-clock timing accumulation.
@@ -97,6 +100,7 @@ async def wait_for_ci(
     scope = CIRunScope(
         workflow=workflow or tool_ctx.default_ci_scope.workflow,
         head_sha=head_sha,
+        event=event or tool_ctx.default_ci_scope.event,
     )
 
     resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
@@ -233,6 +237,7 @@ async def get_ci_status(
     run_id: int | None = None,
     repo: str | None = None,
     workflow: str | None = None,
+    event: str | None = None,
     cwd: str = ".",
 ) -> str:
     """Return current CI status for a branch or specific run without waiting.
@@ -243,6 +248,8 @@ async def get_ci_status(
         repo: GitHub owner/repo. If omitted, inferred from git remote in cwd.
         workflow: Workflow filename to filter runs (e.g. "tests.yml"). If
                   omitted, falls back to the project-level ci.workflow config.
+        event: GitHub trigger event to filter runs (e.g. "push", "pull_request").
+               If omitted, falls back to the project-level ci.event config.
         cwd: Working directory for git operations.
 
     Returns:
@@ -259,7 +266,10 @@ async def get_ci_status(
     if branch is None and run_id is None:
         return json.dumps({"runs": [], "error": "Provide branch or run_id"})
 
-    scope = CIRunScope(workflow=workflow or tool_ctx.default_ci_scope.workflow)
+    scope = CIRunScope(
+        workflow=workflow or tool_ctx.default_ci_scope.workflow,
+        event=event or tool_ctx.default_ci_scope.event,
+    )
 
     result = await tool_ctx.ci_watcher.status(
         branch or "",

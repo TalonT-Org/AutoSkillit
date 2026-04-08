@@ -146,7 +146,7 @@ def test_qpc7_warning_preserves_result_summary(tmp_path):
     out, _ = _run_hook(event=event, cache_path=cache)
     data = json.loads(out)
     output = data["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "success" in output.lower() or "True" in output
+    assert "success: True" in output
     assert "plan written" in output
 
 

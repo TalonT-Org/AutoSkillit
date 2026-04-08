@@ -569,11 +569,11 @@ async def test_open_kitchen_warns_on_orphaned_hooks(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     monkeypatch.setattr(
-        "autoskillit.cli._doctor._count_hook_registry_drift",
+        "autoskillit.cli._count_hook_registry_drift",
         lambda _: HookDriftResult(missing=0, orphaned=1),
     )
     monkeypatch.setattr(
-        "autoskillit.cli._doctor._check_hook_health",
+        "autoskillit.cli._check_hook_health",
         lambda _: DoctorResult(Severity.OK, "hook_health", "ok"),
     )
 
@@ -606,13 +606,13 @@ async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)
 
     monkeypatch.setattr(
-        "autoskillit.cli._doctor._check_hook_health",
+        "autoskillit.cli._check_hook_health",
         lambda _: DoctorResult(
             Severity.ERROR, "hook_health", "Hook scripts not found: status_health_guard.py"
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.cli._doctor._count_hook_registry_drift",
+        "autoskillit.cli._count_hook_registry_drift",
         lambda _: HookDriftResult(missing=0, orphaned=0),
     )
 

@@ -518,12 +518,12 @@ def _build_hook_diagnostic_warning() -> str | None:
     Only reads; never writes or modifies state. Returns None when all hooks are healthy
     or when settings.json does not yet exist (nothing to validate).
     """
-    from autoskillit.cli._doctor import (
+    from autoskillit.cli import (
         _check_hook_health,
+        _claude_settings_path,
         _count_hook_registry_drift,
     )
-    from autoskillit.cli._hooks import _claude_settings_path
-    from autoskillit.core.types import Severity
+    from autoskillit.core import Severity
 
     settings_path = _claude_settings_path("project")
     if not settings_path.exists():

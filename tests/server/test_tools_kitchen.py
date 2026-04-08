@@ -627,6 +627,6 @@ async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch)
 
                     result = await open_kitchen(ctx=mock_ctx)
 
-    assert "hook" in result.lower() and (
-        "missing" in result.lower() or "not found" in result.lower() or "install" in result.lower()
-    ), "open_kitchen() must warn when hook scripts are absent from disk"
+    assert "Hook scripts not found" in result, (
+        "open_kitchen() must include the exact _build_hook_diagnostic_warning phrase"
+    )

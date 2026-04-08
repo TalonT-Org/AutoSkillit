@@ -272,7 +272,7 @@ async def test_completed_runs_omits_event_when_none(httpx_mock):
             lookback_seconds=300,
         )
     req = httpx_mock.get_requests()[0]
-    assert "event" not in str(req.url)
+    assert "event" not in httpx.URL(str(req.url)).params
 
 
 @pytest.mark.anyio

@@ -367,3 +367,11 @@ def test_open_kitchen_prompt_uses_fully_qualified_tool_name(mcp_prefix: str) -> 
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=mcp_prefix)
     assert f"{mcp_prefix}open_kitchen" in prompt
+
+
+def test_orchestrator_prompt_contains_quota_routing():
+    """_build_orchestrator_prompt output includes QUOTA DENIAL ROUTING section."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
+    assert "QUOTA DENIAL ROUTING" in prompt

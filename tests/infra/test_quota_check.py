@@ -64,8 +64,19 @@ def test_deny_message_contains_sleep_seconds(tmp_path):
     out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     data = json.loads(out)
     reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "Sleep" in reason
-    assert "seconds" in reason
+    assert "Sleeping" in reason
+    assert "time.sleep" in reason
+
+
+def test_deny_message_contains_echo_repeat(tmp_path):
+    """Updated PreToolUse deny message includes echo/repeat instruction."""
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=90.0)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    data = json.loads(out)
+    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "Before executing, state aloud:" in reason
+    assert "QUOTA WAIT REQUIRED" in reason
 
 
 def test_approve_when_utilization_below_threshold(tmp_path):

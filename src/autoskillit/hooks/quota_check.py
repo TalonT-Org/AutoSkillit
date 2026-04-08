@@ -176,9 +176,14 @@ def main(*, cache_path_override: str | None = None) -> None:
                         "hookEventName": "PreToolUse",
                         "permissionDecision": "deny",
                         "permissionDecisionReason": (
-                            f"Quota threshold exceeded. Sleep {n} seconds then retry. "
-                            f'Call run_cmd with: python3 -c "import time; time.sleep({n})" '
-                            f"timeout={n + 30}"
+                            f"QUOTA WAIT REQUIRED (temporary — NOT a permanent error). "
+                            f"Utilization: {utilization:.0f}% (threshold: {threshold:.0f}%). "
+                            f"MANDATORY ACTION: Call run_cmd with: "
+                            f'python3 -c "import time; time.sleep({n})" timeout={n + 30} — '
+                            f"then retry the SAME run_skill call with identical arguments. "
+                            f"Before executing, state aloud: "
+                            f"'Quota exceeded at {utilization:.0f}%. "
+                            f"Sleeping {n}s, then retrying.'"
                         ),
                     }
                 }

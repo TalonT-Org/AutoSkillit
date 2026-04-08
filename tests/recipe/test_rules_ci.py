@@ -280,6 +280,44 @@ def test_wait_for_ci_with_event_is_clean() -> None:
     assert event_findings == []
 
 
+def test_get_ci_status_without_event_is_warning() -> None:
+    """get_ci_status step with no event param should trigger ci-missing-event-scope."""
+    recipe = _make_recipe(
+        {
+            "ci": RecipeStep(
+                tool="get_ci_status",
+                with_args={"branch": "main"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    event_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
+    assert len(event_findings) == 1
+    assert event_findings[0].severity == Severity.WARNING
+    assert "get_ci_status" in event_findings[0].message
+
+
+def test_get_ci_status_with_event_is_clean() -> None:
+    """get_ci_status step with event param should not trigger ci-missing-event-scope."""
+    recipe = _make_recipe(
+        {
+            "ci": RecipeStep(
+                tool="get_ci_status",
+                with_args={"branch": "main", "event": "push"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    event_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
+    assert event_findings == []
+
+
 # ---------------------------------------------------------------------------
 # ci-hardcoded-workflow rule tests
 # ---------------------------------------------------------------------------

@@ -143,15 +143,18 @@ def _check_ci_failure_conflict_gate(ctx: ValidationContext) -> list[RuleFinding]
     return findings
 
 
+_CI_EVENT_SCOPE_TOOLS = {"wait_for_ci", "get_ci_status"}
+
+
 @semantic_rule(
     name="ci-missing-event-scope",
-    description="wait_for_ci step without event parameter risks cross-event confusion",
+    description="CI tool step without event parameter risks cross-event confusion",
     severity=Severity.WARNING,
 )
 def _check_ci_missing_event_scope(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
-        if step.tool != "wait_for_ci":
+        if step.tool not in _CI_EVENT_SCOPE_TOOLS:
             continue
         if "event" not in (step.with_args or {}):
             findings.append(
@@ -160,7 +163,7 @@ def _check_ci_missing_event_scope(ctx: ValidationContext) -> list[RuleFinding]:
                     severity=Severity.WARNING,
                     step_name=step_name,
                     message=(
-                        f"Step '{step_name}' calls wait_for_ci without an 'event' parameter. "
+                        f"Step '{step_name}' calls {step.tool} without an 'event' parameter. "
                         f"Without event filtering, a passing pull_request run can mask a "
                         f"failing push run. Add event: 'push' (or the appropriate trigger "
                         f"event) to the step's with_args, or set ci.event in project config."

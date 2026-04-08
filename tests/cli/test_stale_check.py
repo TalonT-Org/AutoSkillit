@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.cli._doctor import HookDriftResult
+from autoskillit.hook_registry import HookDriftResult
 
 
 # SC-1: dev mode via ~/.autoskillit/dev marker

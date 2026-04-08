@@ -14,7 +14,7 @@ SKILL_PATH = (
     / "resolve-claims-review"
     / "SKILL.md"
 )
-SKILL_TEXT = SKILL_PATH.read_text()
+SKILL_TEXT = SKILL_PATH.read_text() if SKILL_PATH.exists() else ""
 
 
 def test_skill_path_exists() -> None:
@@ -24,7 +24,13 @@ def test_skill_path_exists() -> None:
 
 def test_fix_strategies_defined() -> None:
     """All five fix strategies must be defined."""
-    for strategy in ["add_citation", "qualify_claim", "remove_claim", "rerun_required", "design_flaw"]:
+    for strategy in [
+        "add_citation",
+        "qualify_claim",
+        "remove_claim",
+        "rerun_required",
+        "design_flaw",
+    ]:
         assert strategy in SKILL_TEXT, f"SKILL.md must define fix strategy '{strategy}'"
 
 
@@ -74,9 +80,9 @@ def test_rerun_required_covers_protocol_deviations() -> None:
     so_idx = text.find("## Structured Output")
     assert so_idx != -1, "SKILL.md must have Structured Output section"
     so_section = text[so_idx:]
-    assert "protocol deviation" in so_section.lower() or "execution diverged" in so_section.lower(), (
-        "rerun_required structured output description must reference protocol deviations"
-    )
+    assert (
+        "protocol deviation" in so_section.lower() or "execution diverged" in so_section.lower()
+    ), "rerun_required structured output description must reference protocol deviations"
 
 
 def test_needs_rerun_structured_output_documented() -> None:

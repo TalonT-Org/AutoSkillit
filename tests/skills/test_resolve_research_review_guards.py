@@ -15,7 +15,7 @@ SKILL_PATH = (
     / "resolve-research-review"
     / "SKILL.md"
 )
-SKILL_TEXT = SKILL_PATH.read_text()
+SKILL_TEXT = SKILL_PATH.read_text() if SKILL_PATH.exists() else ""
 
 
 def test_skill_path_exists() -> None:

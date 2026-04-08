@@ -328,3 +328,59 @@ def test_needs_rerun_structured_output_documented() -> None:
     text = SKILL_PATH.read_text()
     assert "needs_rerun" in text
     assert "needs_rerun = " in text  # emit instruction format
+
+
+# --- Protocol deviation and invalid statistics classification rules ---
+
+
+def test_protocol_deviation_rule_present() -> None:
+    """SKILL.md must contain a protocol deviation classification rule mapping to rerun_required."""
+    text = SKILL_TEXT.lower()
+    assert "protocol deviation" in text, (
+        "SKILL.md must define a protocol deviation classification rule"
+    )
+    # Find the protocol deviation section and verify it references rerun_required
+    pd_idx = text.find("protocol deviation")
+    context = SKILL_TEXT[pd_idx : pd_idx + 600]
+    assert "rerun_required" in context, (
+        "Protocol deviation rule must map to rerun_required strategy"
+    )
+
+
+def test_invalid_statistics_rule_present() -> None:
+    """SKILL.md must contain an invalid statistics rule mapping to rerun_required."""
+    text = SKILL_TEXT.lower()
+    assert "wrong unit of analysis" in text or "invalid statistic" in text, (
+        "SKILL.md must define an invalid statistics classification rule"
+    )
+    # Find the invalid statistics section and verify it references rerun_required
+    for needle in ["wrong unit of analysis", "invalid statistic"]:
+        idx = text.find(needle)
+        if idx != -1:
+            context = SKILL_TEXT[idx : idx + 600]
+            assert "rerun_required" in context, (
+                "Invalid statistics rule must map to rerun_required strategy"
+            )
+            break
+
+
+def test_protocol_deviation_allows_justified_exception() -> None:
+    """Protocol deviation rule must allow justified exceptions (not blanket rerun)."""
+    text = SKILL_TEXT.lower()
+    pd_idx = text.find("protocol deviation")
+    assert pd_idx != -1
+    context = text[pd_idx : pd_idx + 1000]
+    assert "justified" in context or "justification" in context or "rationale" in context, (
+        "Protocol deviation rule must allow justified exceptions"
+    )
+
+
+def test_rerun_required_covers_protocol_deviations() -> None:
+    """Structured output description for rerun_required must cover protocol deviations."""
+    text = SKILL_TEXT
+    so_idx = text.find("## Structured Output")
+    assert so_idx != -1, "SKILL.md must have Structured Output section"
+    so_section = text[so_idx:]
+    assert (
+        "protocol deviation" in so_section.lower() or "execution diverged" in so_section.lower()
+    ), "rerun_required structured output description must reference protocol deviations"

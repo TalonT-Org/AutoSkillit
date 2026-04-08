@@ -421,21 +421,23 @@ steps:
             cp "${RESEARCH_DIR}/report.md" "${RESEARCH_DIR}/README.md" &&
             rm "${RESEARCH_DIR}/report.md";
           fi &&
-          TAR_INPUTS=$(ls -1 "${RESEARCH_DIR}" | grep -vE '^(README\.md|artifacts\.tar\.gz)$' | tr '\n' ' ') &&
-          if [ -n "${TAR_INPUTS}" ]; then
-            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" ${TAR_INPUTS} &&
-            for item in ${TAR_INPUTS}; do rm -rf "${RESEARCH_DIR}/${item}"; done;
+          mapfile -t TAR_ITEMS < <(ls -1 "${RESEARCH_DIR}" | grep -vE '^(README\.md|artifacts\.tar\.gz)$') &&
+          if [ ${#TAR_ITEMS[@]} -gt 0 ]; then
+            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" "${TAR_ITEMS[@]}" &&
+            for item in "${TAR_ITEMS[@]}"; do rm -rf "${RESEARCH_DIR}/${item}"; done;
           fi &&
           if [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] && [ -f "${RESEARCH_DIR}/README.md" ]; then
-            { echo ""; echo "## Archive Manifest"; echo ""; echo "Contents of \`artifacts.tar.gz\`:"; echo ""; echo '```'; tar tzf "${RESEARCH_DIR}/artifacts.tar.gz" | sort; echo '```'; } >> "${RESEARCH_DIR}/README.md";
+            MANIFEST=$(tar tzf "${RESEARCH_DIR}/artifacts.tar.gz" | sort) &&
+            { echo ""; echo "## Archive Manifest"; echo ""; echo "Contents of \`artifacts.tar.gz\`:"; echo ""; echo '```'; echo "${MANIFEST}"; echo '```'; } >> "${RESEARCH_DIR}/README.md";
           fi &&
           [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] || \
             { echo "ERROR: artifacts.tar.gz not created in ${RESEARCH_DIR}"; exit 1; } &&
-          [ ! -d "${RESEARCH_DIR}/artifacts" ] || \
-            { echo "ERROR: uncompressed artifacts/ still present in ${RESEARCH_DIR}"; exit 1; } &&
+          LEFTOVERS=$(ls -1 "${RESEARCH_DIR}" | grep -vE '^(README\.md|artifacts\.tar\.gz)$') &&
+          [ -z "${LEFTOVERS}" ] || \
+            { echo "ERROR: uncompressed entries still present in ${RESEARCH_DIR}: ${LEFTOVERS}"; exit 1; } &&
           [ -f "${RESEARCH_DIR}/README.md" ] || \
             { echo "ERROR: README.md not found in ${RESEARCH_DIR}"; exit 1; } &&
-          cd "${{ context.worktree_path }}" && git add research/ && { git diff --cached --quiet || git commit -m "Add compressed research artifacts"; };
+          cd "${{ context.worktree_path }}" && git add "${RESEARCH_DIR}" && { git diff --cached --quiet || git commit -m "Add compressed research artifacts"; };
           echo "report_path=${RESEARCH_DIR}/README.md";
         else
           echo "commit_research_artifacts: no research directory found — artifact commit skipped";

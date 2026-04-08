@@ -159,10 +159,10 @@ def test_run_stale_check_writes_dismiss_on_no(
     monkeypatch.setattr(autoskillit, "__version__", "0.5.0")
     monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "0.9.0")
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
-    import autoskillit.cli._doctor as _doctor
+    import autoskillit.cli as _cli
 
     monkeypatch.setattr(
-        _doctor, "_count_hook_registry_drift", lambda p: HookDriftResult(missing=0, orphaned=0)
+        _cli, "_count_hook_registry_drift", lambda p: HookDriftResult(missing=0, orphaned=0)
     )
     from autoskillit.cli._stale_check import _read_dismiss_state
 
@@ -192,10 +192,10 @@ def test_run_stale_check_binary_update_y_path_injects_guard_env(
     monkeypatch.setattr(autoskillit, "__version__", "0.1.0")
     monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "9.9.9")
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
-    import autoskillit.cli._doctor as _doctor
+    import autoskillit.cli as _cli
 
     monkeypatch.setattr(
-        _doctor, "_count_hook_registry_drift", lambda p: HookDriftResult(missing=0, orphaned=0)
+        _cli, "_count_hook_registry_drift", lambda p: HookDriftResult(missing=0, orphaned=0)
     )
 
     mock_run = MagicMock(return_value=subprocess.CompletedProcess([], 0))
@@ -229,10 +229,10 @@ def test_run_stale_check_hook_drift_y_path_injects_guard_env(
     monkeypatch.setattr(fake_stdout, "isatty", lambda: True)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: None)
-    import autoskillit.cli._doctor as _doctor
+    import autoskillit.cli as _cli
 
     monkeypatch.setattr(
-        _doctor, "_count_hook_registry_drift", lambda p: HookDriftResult(missing=3, orphaned=0)
+        _cli, "_count_hook_registry_drift", lambda p: HookDriftResult(missing=3, orphaned=0)
     )
     monkeypatch.setattr(_sc, "_is_dismissed", lambda *a, **kw: False)
 

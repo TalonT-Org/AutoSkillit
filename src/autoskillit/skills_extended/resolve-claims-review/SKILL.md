@@ -254,6 +254,29 @@ group. Each subagent receives:
 - `rerun_required` — fix requires re-running experiment to generate supporting data
 - `design_flaw` — fundamental scope/methodology issue; cannot fix with citation alone
 
+**Protocol deviation rule (`rerun_required`):**
+When a claim depends on experimental results, and the experiment plan specifies a
+replication count, sample size, or other methodological parameter that the actual
+execution did not follow, classify as `rerun_required` if the deviation materially
+undermines the evidence supporting the claim. Qualifying the claim with hedging
+language (`qualify_claim`) does not constitute remediation when the underlying data
+is statistically invalid — the claim needs new supporting data, not softer language.
+
+Exception — justified deviations: If the research report provides a substantive
+rationale for why the conclusions remain valid despite the methodological difference,
+and that rationale withstands scrutiny, then `qualify_claim` or `remove_claim` may
+be appropriate. The key test is: **does this deviation materially undermine the
+evidence cited in support of the claim?**
+
+**Invalid statistics rule (`rerun_required`):**
+When a finding identifies confidence intervals, p-values, or significance claims
+cited as evidence for a claim, and those statistics are computed from the wrong unit
+of analysis (e.g., within-run iterations treated as independent replicates), classify
+as `rerun_required` if the invalid statistics remain in the report. Classification
+as `remove_claim` applies if the claim and its invalid statistical evidence are both
+fully removed. Classification as `qualify_claim` applies only if the statistical
+artifacts are fully removed and the claim is restated without statistical backing.
+
 **Fallback:** If a subagent fails or times out, discard any partial output from that
 subagent (partial JSON must not be used — using partial output risks silently demoting
 ACCEPT findings to DISCUSS without surfacing the data loss). Classify all comments in the
@@ -449,7 +472,11 @@ needs_rerun = {true|false}
 ```
 
 - **`true`**: At least one finding was classified as `rerun_required` in the escalation
-  records (i.e., the fix requires re-running the experiment to generate supporting data).
+  records. This includes: (a) fixes requiring re-running the experiment to generate
+  supporting data, (b) protocol deviations where the experiment execution diverged from
+  the plan in ways that materially undermine the report's claims, or (c) invalid
+  statistical analyses (e.g., CIs from the wrong unit of analysis) that remain cited
+  as evidence for claims.
 - **`false`**: No `rerun_required` escalations exist. May still have `design_flaw`
   escalations (these are informational and do not require re-running benchmarks).
 

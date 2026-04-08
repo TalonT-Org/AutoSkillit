@@ -216,6 +216,34 @@ group. Each subagent receives:
 - `rerun_required` — fix requires re-running the experiment; cannot be applied in-place
 - `design_flaw` — fundamental design issue that cannot be fixed without redesign
 
+**Protocol deviation rule (`rerun_required`):**
+When the experiment plan specifies a replication count, sample size, or other
+methodological parameter, and the actual execution deviated from that specification
+in a way that materially undermines the evidence supporting the report's claims,
+classify as `rerun_required` — not `report_edit`. Adding a caveat about inadequate
+replication does not constitute remediation when the deviation invalidates the
+statistical basis for the claims (e.g., running R=1 instead of planned R=3 means
+confidence intervals are computed from within-run iterations rather than between-run
+replicates — a different unit of analysis entirely).
+
+Exception — justified deviations: If the research report provides a substantive
+rationale for why the conclusions remain valid despite the methodological difference,
+and that rationale withstands scrutiny (not just acknowledging the limitation), then
+the classification may remain `report_edit`. Minor deviations that would not
+reasonably change the experiment's conclusions (e.g., R=4 instead of R=5 with large
+effect size) can also remain `report_edit` with an appropriate caveat. The key test
+is: **does this deviation materially undermine the evidence supporting the claims?**
+
+**Invalid statistics rule (`rerun_required`):**
+When a finding identifies confidence intervals, p-values, or significance claims
+computed from the wrong unit of analysis (e.g., within-run iterations treated as
+independent replicates, or pseudoreplication), and those statistical artifacts are
+retained in the report in any form (tables, figures, inline references), classify
+as `rerun_required`. Classification as `report_edit` applies only if the invalid
+statistical artifacts are **fully removed** from the report and replaced with
+appropriately qualified point estimates or narrative descriptions that make no
+statistical claims.
+
 **Fallback:** If a subagent fails, classify all comments in that group as `DISCUSS`.
 
 Merge results into `classification_map: dict[comment_id, verdict_entry]`.
@@ -401,8 +429,11 @@ needs_rerun = {true|false}
 ```
 
 - **`true`**: At least one finding was classified as `rerun_required` in the escalation
-  records (i.e., the fix changes code that affects measurement — benchmark code, analysis
-  scripts, normalization logic — and results must be re-validated).
+  records. This includes: (a) fixes that change code affecting measurement (benchmark
+  code, analysis scripts, normalization logic) requiring result re-validation,
+  (b) protocol deviations where the experiment execution diverged from the plan in ways
+  that materially undermine the report's claims, or (c) invalid statistical analyses
+  (e.g., CIs from the wrong unit of analysis) that remain in the report.
 - **`false`**: No `rerun_required` escalations exist. May still have `design_flaw`
   escalations (these are informational and do not require re-running benchmarks).
 

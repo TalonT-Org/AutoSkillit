@@ -1112,7 +1112,6 @@ def test_count_hook_registry_drift_detects_orphaned_hooks(tmp_path: Path) -> Non
     Orphaned hooks are the fatal failure mode (ENOENT on every tool call).
     """
     from autoskillit.cli._doctor import _count_hook_registry_drift
-    from autoskillit.core import Severity
 
     settings = tmp_path / ".claude" / "settings.json"
     settings.parent.mkdir()
@@ -1132,9 +1131,7 @@ def test_count_hook_registry_drift_detects_orphaned_hooks(tmp_path: Path) -> Non
     assert hasattr(result, "orphaned"), (
         "_count_hook_registry_drift must return a result with 'orphaned' field"
     )
-    assert result.orphaned >= 1, (
-        f"Expected orphaned >= 1 for ghost entry, got {result.orphaned}"
-    )
+    assert result.orphaned >= 1, f"Expected orphaned >= 1 for ghost entry, got {result.orphaned}"
 
 
 # T-DRIFT-2: _check_hook_registry_drift() returns ERROR for orphaned hooks

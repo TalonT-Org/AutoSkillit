@@ -229,8 +229,18 @@ def test_qpc12_registered_in_hook_registry():
     assert "quota_post_check.py" in post_tool_scripts
 
 
-# T18: Non-run_skill tools do not trigger post-check
-def test_qpc18_only_run_skill_matcher():
+# T13: Fail-open on malformed stdin
+def test_qpc13_failopen_on_malformed_stdin(tmp_path):
+    """PostToolUse hook exits silently when stdin is not valid JSON."""
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=90.0)
+    out, exit_code = _run_hook(raw_stdin="not-json-garbage", cache_path=cache)
+    assert out.strip() == ""
+    assert exit_code == 0
+
+
+# T14: Non-run_skill tools do not trigger post-check
+def test_qpc14_only_run_skill_matcher():
     """The hook_registry PostToolUse entry for quota_post_check matches only run_skill."""
     import re
 
@@ -244,13 +254,3 @@ def test_qpc18_only_run_skill_matcher():
     assert re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_skill")
     assert not re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_cmd")
     assert not re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__kitchen_status")
-
-
-# T17: Fail-open on malformed stdin
-def test_qpc17_failopen_on_malformed_stdin(tmp_path):
-    """PostToolUse hook exits silently when stdin is not valid JSON."""
-    cache = tmp_path / "quota_cache.json"
-    _write_cache(cache, utilization=90.0)
-    out, exit_code = _run_hook(raw_stdin="not-json-garbage", cache_path=cache)
-    assert out.strip() == ""
-    assert exit_code == 0

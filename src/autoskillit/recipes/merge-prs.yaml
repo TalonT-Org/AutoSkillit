@@ -514,7 +514,7 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.worktree_branch_name }}"
-      workflow: "tests.yml"
+      event: "push"
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
     on_success: merge_conflict_pr
@@ -875,7 +875,7 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.integration_branch }}"
-      workflow: "tests.yml"
+      event: "push"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       pr_url: "${{ context.pr_url }}"
@@ -891,7 +891,7 @@ steps:
   diagnose_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:diagnose-ci ${{ context.integration_branch }} - - tests.yml"
+      skill_command: "/autoskillit:diagnose-ci ${{ context.integration_branch }} - - - push"
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
     capture:

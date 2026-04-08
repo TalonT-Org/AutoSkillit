@@ -141,3 +141,58 @@ def _check_ci_failure_conflict_gate(ctx: ValidationContext) -> list[RuleFinding]
                 )
             )
     return findings
+
+
+@semantic_rule(
+    name="ci-missing-event-scope",
+    description="wait_for_ci step without event parameter risks cross-event confusion",
+    severity=Severity.WARNING,
+)
+def _check_ci_missing_event_scope(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        if "event" not in (step.with_args or {}):
+            findings.append(
+                RuleFinding(
+                    rule="ci-missing-event-scope",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls wait_for_ci without an 'event' parameter. "
+                        f"Without event filtering, a passing pull_request run can mask a "
+                        f"failing push run. Add event: 'push' (or the appropriate trigger "
+                        f"event) to the step's with_args, or set ci.event in project config."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="ci-hardcoded-workflow",
+    description="wait_for_ci step with hardcoded workflow bypasses config fallback",
+    severity=Severity.WARNING,
+)
+def _check_ci_hardcoded_workflow(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_ci":
+            continue
+        workflow = (step.with_args or {}).get("workflow")
+        if isinstance(workflow, str) and not workflow.startswith("${{"):
+            findings.append(
+                RuleFinding(
+                    rule="ci-hardcoded-workflow",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' hardcodes workflow: '{workflow}'. "
+                        f"Remove the workflow parameter to use the project-level "
+                        f"ci.workflow config default, or use '${{{{ inputs.workflow }}}}' "
+                        f"to parameterize it via recipe ingredients."
+                    ),
+                )
+            )
+    return findings

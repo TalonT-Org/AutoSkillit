@@ -19,7 +19,7 @@ before routing to `resolve-failures`.
 ## Invocation
 
 ```
-/autoskillit:diagnose-ci {branch} [run_id] [ci_failed_jobs] [workflow]
+/autoskillit:diagnose-ci {branch} [run_id] [ci_failed_jobs] [workflow] [event]
 ```
 
 **Positional args:**
@@ -27,6 +27,7 @@ before routing to `resolve-failures`.
 - `run_id` (optional) — specific workflow run ID; if absent, discover from `gh run list`
 - `ci_failed_jobs` (optional) — JSON array of failed job names from `wait_for_ci`, used to scope log fetching
 - `workflow` (optional) — workflow filename (e.g. `tests.yml`); if provided, scopes `gh run list` to that workflow only; use `-` to skip
+- `event` (optional) — GitHub Actions trigger event (e.g. `push`, `pull_request`); if provided, scopes `gh run list` to that event only; use `-` to skip
 
 ## Critical Constraints
 
@@ -51,14 +52,25 @@ mcp__code-index__set_project_path(path=<cwd>)
 
 ### Step 2: Discover Run ID (if not provided)
 
-If `run_id` is not provided as an argument (or is `-`):
+If `run_id` is not provided as an argument (or is `-`), construct the `gh run list` command
+with any provided filters:
+
 ```bash
+# Base command (always used):
 gh run list --branch {branch} --limit 1 --json databaseId,status,conclusion
+
+# If workflow is provided and is not `-`, add:
+  --workflow {workflow}
+
+# If event is provided and is not `-`, add:
+  --event {event}
 ```
-If `workflow` is provided and is not `-`:
+
+Example with both filters:
 ```bash
-gh run list --branch {branch} --workflow {workflow} --limit 1 --json databaseId,status,conclusion
+gh run list --branch {branch} --workflow {workflow} --event {event} --limit 1 --json databaseId,status,conclusion
 ```
+
 Parse the JSON to extract `databaseId` as `run_id`.
 
 If `gh` is unavailable or the command fails, skip to Step 5 (write minimal diagnosis).

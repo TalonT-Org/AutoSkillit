@@ -58,7 +58,7 @@ def test_cycle_with_only_on_failure_exit_is_warning() -> None:
 
 
 def test_cycle_with_retry_exit_is_clean() -> None:
-    """Cycle with retries>0, tool=run_skill, and on_exhausted outside cycle → no finding."""
+    """Cycle where retrying step's success path stays in cycle → WARNING (outer loop unbounded)."""
     recipe = _make_recipe(
         {
             "A": RecipeStep(
@@ -74,7 +74,47 @@ def test_cycle_with_retry_exit_is_clean() -> None:
     )
     findings = run_semantic_rules(recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
-    assert cycle_findings == []
+    assert len(cycle_findings) == 1
+    assert cycle_findings[0].severity == Severity.WARNING
+
+
+def test_cycle_with_retry_exit_but_success_reenters_is_warning() -> None:
+    """A→B(retries=2, on_exhausted=done)→C→A: B exits on exhaustion but
+    success path C→A re-enters the cycle. Must produce WARNING."""
+    recipe = _make_recipe(
+        {
+            "A": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "timeout_seconds": 300},
+                on_success="B",
+                on_failure="B",
+            ),
+            "B": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:resolve-failures /tmp", "cwd": "/tmp"},
+                retries=2,
+                on_exhausted="done",
+                on_success="C",
+                on_failure="done",
+            ),
+            "C": RecipeStep(
+                tool="push_to_remote",
+                with_args={
+                    "clone_path": "/tmp",
+                    "remote_url": "https://github.com/o/r.git",
+                    "branch": "b",
+                },
+                on_success="A",  # RE-ENTERS THE CYCLE
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
+    assert len(cycle_findings) >= 1
+    # Must be WARNING (has conditional exit but no outer bound)
+    assert any(f.severity == Severity.WARNING for f in cycle_findings)
 
 
 def test_no_cycle_is_clean() -> None:

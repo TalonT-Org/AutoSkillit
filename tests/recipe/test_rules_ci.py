@@ -236,3 +236,87 @@ def test_ci_failure_no_on_failure_skips_rule() -> None:
     findings = run_semantic_rules(wf)
     names = [f.rule for f in findings]
     assert "ci-failure-missing-conflict-gate" not in names
+
+
+# ---------------------------------------------------------------------------
+# ci-missing-event-scope rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_wait_for_ci_without_event_is_warning() -> None:
+    """wait_for_ci step with no event param should trigger ci-missing-event-scope."""
+    recipe = _make_recipe(
+        {
+            "ci": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "workflow": "tests.yml", "timeout_seconds": 300},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    event_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
+    assert len(event_findings) == 1
+    assert event_findings[0].severity == Severity.WARNING
+
+
+def test_wait_for_ci_with_event_is_clean() -> None:
+    """wait_for_ci step with event param should not trigger ci-missing-event-scope."""
+    recipe = _make_recipe(
+        {
+            "ci": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "event": "push", "timeout_seconds": 300},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    event_findings = [f for f in findings if f.rule == "ci-missing-event-scope"]
+    assert event_findings == []
+
+
+# ---------------------------------------------------------------------------
+# ci-hardcoded-workflow rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_wait_for_ci_hardcoded_workflow_is_warning() -> None:
+    """wait_for_ci with literal workflow value should trigger ci-hardcoded-workflow."""
+    recipe = _make_recipe(
+        {
+            "ci": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "workflow": "tests.yml", "timeout_seconds": 300},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    wf_findings = [f for f in findings if f.rule == "ci-hardcoded-workflow"]
+    assert len(wf_findings) == 1
+    assert wf_findings[0].severity == Severity.WARNING
+
+
+def test_wait_for_ci_no_workflow_is_clean() -> None:
+    """wait_for_ci without workflow param (uses config fallback) is clean."""
+    recipe = _make_recipe(
+        {
+            "ci": RecipeStep(
+                tool="wait_for_ci",
+                with_args={"branch": "main", "timeout_seconds": 300},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    wf_findings = [f for f in findings if f.rule == "ci-hardcoded-workflow"]
+    assert wf_findings == []

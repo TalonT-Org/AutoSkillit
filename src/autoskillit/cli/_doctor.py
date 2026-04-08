@@ -7,31 +7,15 @@ import shutil
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
 
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
 from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
 from autoskillit.core import _ROOT_GITIGNORE_ENTRIES, Severity
-from autoskillit.hook_registry import HOOK_REGISTRY
-from autoskillit.hooks import generate_hooks_json
-
-
-class HookDriftResult(NamedTuple):
-    """Bidirectional hook drift counts."""
-
-    missing: int  # canonical − deployed (hooks not yet deployed)
-    orphaned: int  # deployed − canonical (ghost hooks, fatal ENOENT risk)
-
-
-def _extract_cmds(hooks_dict: dict) -> set[str]:
-    return {
-        hook.get("command", "")
-        for event_entries in hooks_dict.values()
-        if isinstance(event_entries, list)
-        for entry in event_entries
-        for hook in entry.get("hooks", [])
-        if hook.get("command", "")
-    }
+from autoskillit.hook_registry import (
+    HOOK_REGISTRY,
+    _count_hook_registry_drift,
+    find_broken_hook_scripts,
+)
 
 
 @dataclass
@@ -128,28 +112,12 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     )
 
 
-def _count_hook_registry_drift(settings_path: Path) -> HookDriftResult:
-    """Return bidirectional hook drift counts between canonical and deployed settings.json."""
-    canonical = generate_hooks_json()
-    deployed_data = _load_settings_data(settings_path)
-    canonical_cmds = _extract_cmds(canonical.get("hooks", {}))
-    deployed_cmds = _extract_cmds(deployed_data.get("hooks", {}))
-    return HookDriftResult(
-        missing=len(canonical_cmds - deployed_cmds),
-        orphaned=len(deployed_cmds - canonical_cmds),
-    )
-
-
 def _check_hook_registry_drift(settings_path: Path) -> DoctorResult:
     """Compare generate_hooks_json() with what is deployed in settings.json."""
     result = _count_hook_registry_drift(settings_path)
     if result.orphaned > 0:
-        canonical_cmds = _extract_cmds(generate_hooks_json().get("hooks", {}))
-        deployed_cmds = _extract_cmds(_load_settings_data(settings_path).get("hooks", {}))
         ghost_scripts = sorted(
-            Path(cmd.split()[-1]).name
-            for cmd in (deployed_cmds - canonical_cmds)
-            if len(cmd.split()) >= 2
+            Path(cmd.split()[-1]).name for cmd in result.orphaned_cmds if len(cmd.split()) >= 2
         )
         return DoctorResult(
             Severity.ERROR,
@@ -177,17 +145,7 @@ def _check_hook_registry_drift(settings_path: Path) -> DoctorResult:
 
 def _check_hook_health(settings_path: Path) -> DoctorResult:
     """Verify all deployed hook scripts exist on disk for all event types."""
-    data = _load_settings_data(settings_path)
-    broken_hooks: list[str] = []
-    for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
-        for entry in data.get("hooks", {}).get(event_type, []):
-            for hook in entry.get("hooks", []):
-                cmd = hook.get("command", "")
-                parts = cmd.split()
-                if len(parts) >= 2:
-                    script_path = Path(parts[-1])
-                    if not script_path.is_file():
-                        broken_hooks.append(cmd)
+    broken_hooks = find_broken_hook_scripts(settings_path)
     if broken_hooks:
         return DoctorResult(
             severity=Severity.ERROR,

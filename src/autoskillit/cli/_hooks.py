@@ -6,18 +6,12 @@ import json
 from pathlib import Path
 
 from autoskillit.core import atomic_write, pkg_root
-from autoskillit.hook_registry import _build_hook_entry
+from autoskillit.hook_registry import (
+    _build_hook_entry,
+    _claude_settings_path,  # noqa: F401 — re-exported; cli/__init__ + _stale_check + _init_helpers import from here
+    _load_settings_data,
+)
 from autoskillit.hooks import HOOK_REGISTRY
-
-
-def _load_settings_data(settings_path: Path) -> dict:
-    """Read and parse settings.json; return empty dict on any error."""
-    if settings_path.exists():
-        try:
-            return json.loads(settings_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            pass
-    return {}
 
 
 def _write_settings_data(settings_path: Path, data: dict) -> None:
@@ -75,10 +69,3 @@ def sync_hooks_to_settings(settings_path: Path) -> None:
         ]
         event_list.append(_build_hook_entry(hook_def, hooks_list))
     _write_settings_data(settings_path, data)
-
-
-def _claude_settings_path(scope: str) -> Path:
-    """Return the Claude Code settings.json path for the given scope."""
-    if scope == "user":
-        return Path.home() / ".claude" / "settings.json"
-    return Path.cwd() / ".claude" / "settings.json"

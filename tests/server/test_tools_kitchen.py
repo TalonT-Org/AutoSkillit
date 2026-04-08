@@ -560,21 +560,23 @@ def test_tool_context_has_quota_refresh_task_field():
 async def test_open_kitchen_warns_on_orphaned_hooks(tmp_path, monkeypatch):
     """When settings.json contains a hook not in HOOK_REGISTRY, open_kitchen()
     must include a drift warning in its response."""
-    from autoskillit.cli._doctor import DoctorResult, HookDriftResult
-    from autoskillit.core.types import Severity
+    from autoskillit.hook_registry import HookDriftResult
 
     settings_dir = tmp_path / ".claude"
     settings_dir.mkdir()
     (settings_dir / "settings.json").write_text("{}")
-    monkeypatch.chdir(tmp_path)
 
     monkeypatch.setattr(
-        "autoskillit.cli._count_hook_registry_drift",
+        "autoskillit.hook_registry._claude_settings_path",
+        lambda scope: settings_dir / "settings.json",
+    )
+    monkeypatch.setattr(
+        "autoskillit.hook_registry._count_hook_registry_drift",
         lambda _: HookDriftResult(missing=0, orphaned=1),
     )
     monkeypatch.setattr(
-        "autoskillit.cli._check_hook_health",
-        lambda _: DoctorResult(Severity.OK, "hook_health", "ok"),
+        "autoskillit.hook_registry.find_broken_hook_scripts",
+        lambda _: [],
     )
 
     mock_ctx = _make_mock_ctx()
@@ -597,22 +599,22 @@ async def test_open_kitchen_warns_on_orphaned_hooks(tmp_path, monkeypatch):
 @pytest.mark.anyio
 async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch):
     """When hook scripts are absent from disk, open_kitchen() must warn."""
-    from autoskillit.cli._doctor import DoctorResult, HookDriftResult
-    from autoskillit.core.types import Severity
+    from autoskillit.hook_registry import HookDriftResult
 
     settings_dir = tmp_path / ".claude"
     settings_dir.mkdir()
     (settings_dir / "settings.json").write_text("{}")
-    monkeypatch.chdir(tmp_path)
 
     monkeypatch.setattr(
-        "autoskillit.cli._check_hook_health",
-        lambda _: DoctorResult(
-            Severity.ERROR, "hook_health", "Hook scripts not found: status_health_guard.py"
-        ),
+        "autoskillit.hook_registry._claude_settings_path",
+        lambda scope: settings_dir / "settings.json",
     )
     monkeypatch.setattr(
-        "autoskillit.cli._count_hook_registry_drift",
+        "autoskillit.hook_registry.find_broken_hook_scripts",
+        lambda _: ["python3 /missing/status_health_guard.py"],
+    )
+    monkeypatch.setattr(
+        "autoskillit.hook_registry._count_hook_registry_drift",
         lambda _: HookDriftResult(missing=0, orphaned=0),
     )
 

@@ -12,7 +12,6 @@ from pathlib import Path  # noqa: F401 — tests patch autoskillit.cli.Path.home
 from autoskillit.cli._cook import cook
 from autoskillit.cli._doctor import (
     DoctorResult,
-    HookDriftResult,
     _check_hook_health,
     _count_hook_registry_drift,
 )
@@ -49,6 +48,7 @@ from autoskillit.cli.app import (
     workspace_clean,
     workspace_init,
 )
+from autoskillit.hook_registry import HookDriftResult
 
 __all__ = [
     "_OPEN_KITCHEN_CHOICE",

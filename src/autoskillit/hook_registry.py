@@ -6,8 +6,10 @@ derive from this registry.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
-from typing import Literal
+from pathlib import Path
+from typing import Literal, NamedTuple
 
 from autoskillit.core import pkg_root
 
@@ -102,3 +104,75 @@ def generate_hooks_json() -> dict:
             _build_hook_entry(hook_def, hook_commands)
         )
     return {"hooks": by_event}
+
+
+# ---------------------------------------------------------------------------
+# Hook diagnostic utilities — shared between cli/ and server/ (both L3).
+# Placed here (package root, L0-accessible) to avoid L3-to-L3 peer imports.
+# ---------------------------------------------------------------------------
+
+
+def _claude_settings_path(scope: str) -> Path:
+    """Return the Claude Code settings.json path for the given scope."""
+    if scope == "user":
+        return Path.home() / ".claude" / "settings.json"
+    return Path.cwd() / ".claude" / "settings.json"
+
+
+def _load_settings_data(settings_path: Path) -> dict:
+    """Read and parse settings.json; return empty dict on any error."""
+    if settings_path.exists():
+        try:
+            return json.loads(settings_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            pass
+    return {}
+
+
+def _extract_cmds(hooks_dict: dict) -> set[str]:
+    """Extract the set of hook command strings from a hooks dict."""
+    return {
+        hook.get("command", "")
+        for event_entries in hooks_dict.values()
+        if isinstance(event_entries, list)
+        for entry in event_entries
+        for hook in entry.get("hooks", [])
+        if hook.get("command", "")
+    }
+
+
+class HookDriftResult(NamedTuple):
+    """Bidirectional hook drift counts."""
+
+    missing: int  # canonical − deployed (hooks not yet deployed)
+    orphaned: int  # deployed − canonical (ghost hooks, fatal ENOENT risk)
+    orphaned_cmds: frozenset[str] = frozenset()
+
+
+def _count_hook_registry_drift(settings_path: Path) -> HookDriftResult:
+    """Return bidirectional hook drift counts between canonical and deployed settings.json."""
+    canonical = generate_hooks_json()
+    deployed_data = _load_settings_data(settings_path)
+    canonical_cmds = _extract_cmds(canonical.get("hooks", {}))
+    deployed_cmds = _extract_cmds(deployed_data.get("hooks", {}))
+    orphaned = deployed_cmds - canonical_cmds
+    return HookDriftResult(
+        missing=len(canonical_cmds - deployed_cmds),
+        orphaned=len(orphaned),
+        orphaned_cmds=frozenset(orphaned),
+    )
+
+
+def find_broken_hook_scripts(settings_path: Path) -> list[str]:
+    """Return list of hook commands whose script files do not exist on disk."""
+    data = _load_settings_data(settings_path)
+    broken: list[str] = []
+    for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
+        for entry in data.get("hooks", {}).get(event_type, []):
+            for hook in entry.get("hooks", []):
+                cmd = hook.get("command", "")
+                parts = cmd.split()
+                if len(parts) >= 2:
+                    if not Path(parts[-1]).is_file():
+                        broken.append(cmd)
+    return broken

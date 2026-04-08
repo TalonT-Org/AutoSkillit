@@ -518,23 +518,22 @@ def _build_hook_diagnostic_warning() -> str | None:
     Only reads; never writes or modifies state. Returns None when all hooks are healthy
     or when settings.json does not yet exist (nothing to validate).
     """
-    from autoskillit.cli import (
-        _check_hook_health,
+    from autoskillit.hook_registry import (
         _claude_settings_path,
         _count_hook_registry_drift,
+        find_broken_hook_scripts,
     )
-    from autoskillit.core import Severity
 
-    settings_path = _claude_settings_path("project")
+    settings_path = _claude_settings_path("user")
     if not settings_path.exists():
         return None
 
-    health = _check_hook_health(settings_path)
+    broken = find_broken_hook_scripts(settings_path)
     drift = _count_hook_registry_drift(settings_path)
 
-    issues = []
-    if health.severity == Severity.ERROR:
-        issues.append(f"Hook scripts not found: {health.message}")
+    issues: list[str] = []
+    if broken:
+        issues.append(f"Hook scripts not found: {', '.join(broken)}")
     if drift.orphaned > 0:
         issues.append(
             f"{drift.orphaned} orphaned hook entry(ies) in settings.json are not in "

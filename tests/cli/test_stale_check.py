@@ -11,6 +11,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from autoskillit.cli._doctor import HookDriftResult
+
 
 # SC-1: dev mode via ~/.autoskillit/dev marker
 def test_is_dev_mode_home_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -159,7 +161,9 @@ def test_run_stale_check_writes_dismiss_on_no(
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
     import autoskillit.cli._doctor as _doctor
 
-    monkeypatch.setattr(_doctor, "_count_hook_registry_drift", lambda p: 0)
+    monkeypatch.setattr(
+        _doctor, "_count_hook_registry_drift", lambda p: HookDriftResult(missing=0, orphaned=0)
+    )
     from autoskillit.cli._stale_check import _read_dismiss_state
 
     _sc.run_stale_check(home=tmp_path)
@@ -190,7 +194,9 @@ def test_run_stale_check_binary_update_y_path_injects_guard_env(
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
     import autoskillit.cli._doctor as _doctor
 
-    monkeypatch.setattr(_doctor, "_count_hook_registry_drift", lambda p: 0)
+    monkeypatch.setattr(
+        _doctor, "_count_hook_registry_drift", lambda p: HookDriftResult(missing=0, orphaned=0)
+    )
 
     mock_run = MagicMock(return_value=subprocess.CompletedProcess([], 0))
     monkeypatch.setattr(_sc.subprocess, "run", mock_run)
@@ -225,7 +231,9 @@ def test_run_stale_check_hook_drift_y_path_injects_guard_env(
     monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: None)
     import autoskillit.cli._doctor as _doctor
 
-    monkeypatch.setattr(_doctor, "_count_hook_registry_drift", lambda p: 3)
+    monkeypatch.setattr(
+        _doctor, "_count_hook_registry_drift", lambda p: HookDriftResult(missing=3, orphaned=0)
+    )
     monkeypatch.setattr(_sc, "_is_dismissed", lambda *a, **kw: False)
 
     mock_run = MagicMock(return_value=subprocess.CompletedProcess([], 0))
@@ -327,7 +335,7 @@ def test_run_stale_check_hooks_n_path_writes_dismiss(
     monkeypatch.setattr(_sc, "_write_dismiss_state", lambda home, state: written.update(state))
     monkeypatch.setattr(
         "autoskillit.cli._doctor._count_hook_registry_drift",
-        lambda settings_path: 2,
+        lambda settings_path: HookDriftResult(missing=2, orphaned=0),
     )
     monkeypatch.setattr("builtins.input", lambda _: "n")
 

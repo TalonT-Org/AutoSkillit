@@ -207,7 +207,10 @@ def test_settings_json_matches_hook_registry_after_install(tmp_path, monkeypatch
     data = json.loads(settings_path.read_text())
     for hook_def in HOOK_REGISTRY:
         event_entries = data.get("hooks", {}).get(hook_def.event_type, [])
-        matching = [e for e in event_entries if e.get("matcher") == hook_def.matcher]
+        if hook_def.event_type == "SessionStart":
+            matching = [e for e in event_entries if "matcher" not in e]
+        else:
+            matching = [e for e in event_entries if e.get("matcher") == hook_def.matcher]
         assert len(matching) == 1, (
             f"Expected exactly 1 {hook_def.event_type} entry for matcher "
             f"{hook_def.matcher!r}, got {len(matching)}"

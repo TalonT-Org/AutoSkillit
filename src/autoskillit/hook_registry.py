@@ -73,6 +73,18 @@ HOOK_REGISTRY: list[HookDef] = [
 ]
 
 
+def _build_hook_entry(hook_def: HookDef, hook_commands: list[dict]) -> dict:
+    """Build the per-entry dict for a hook definition.
+
+    SessionStart entries omit the 'matcher' key; all others include it.
+    This is the single authoritative formatter for both hooks.json and
+    settings.json generation.
+    """
+    if hook_def.event_type == "SessionStart":
+        return {"hooks": hook_commands}
+    return {"matcher": hook_def.matcher, "hooks": hook_commands}
+
+
 def generate_hooks_json() -> dict:
     """Generate the hooks.json structure from HOOK_REGISTRY using absolute paths."""
     hooks_dir = pkg_root() / "hooks"
@@ -82,10 +94,7 @@ def generate_hooks_json() -> dict:
             {"type": "command", "command": f"python3 {hooks_dir / script}"}
             for script in hook_def.scripts
         ]
-        entry: dict[str, object]
-        if hook_def.event_type == "SessionStart":
-            entry = {"hooks": hook_commands}
-        else:
-            entry = {"matcher": hook_def.matcher, "hooks": hook_commands}
-        by_event.setdefault(hook_def.event_type, []).append(entry)
+        by_event.setdefault(hook_def.event_type, []).append(
+            _build_hook_entry(hook_def, hook_commands)
+        )
     return {"hooks": by_event}

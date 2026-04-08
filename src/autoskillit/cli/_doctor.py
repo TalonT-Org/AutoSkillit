@@ -7,11 +7,31 @@ import shutil
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
 from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
 from autoskillit.core import _ROOT_GITIGNORE_ENTRIES, Severity
 from autoskillit.hook_registry import HOOK_REGISTRY
+from autoskillit.hooks import generate_hooks_json
+
+
+class HookDriftResult(NamedTuple):
+    """Bidirectional hook drift counts."""
+
+    missing: int  # canonical − deployed (hooks not yet deployed)
+    orphaned: int  # deployed − canonical (ghost hooks, fatal ENOENT risk)
+
+
+def _extract_cmds(hooks_dict: dict) -> set[str]:
+    return {
+        hook.get("command", "")
+        for event_entries in hooks_dict.values()
+        if isinstance(event_entries, list)
+        for entry in event_entries
+        for hook in entry.get("hooks", [])
+        if hook.get("command", "")
+    }
 
 
 @dataclass
@@ -108,38 +128,44 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     )
 
 
-def _count_hook_registry_drift(settings_path: Path) -> int:
-    """Return count of canonical hook commands not present in deployed settings.json."""
-    from autoskillit.hooks import generate_hooks_json
-
+def _count_hook_registry_drift(settings_path: Path) -> HookDriftResult:
+    """Return bidirectional hook drift counts between canonical and deployed settings.json."""
     canonical = generate_hooks_json()
     deployed_data = _load_settings_data(settings_path)
-
-    def _extract_cmds(hooks_dict: dict) -> set[str]:
-        return {
-            hook.get("command", "")
-            for event_entries in hooks_dict.values()
-            if isinstance(event_entries, list)
-            for entry in event_entries
-            for hook in entry.get("hooks", [])
-            if hook.get("command", "")
-        }
-
     canonical_cmds = _extract_cmds(canonical.get("hooks", {}))
     deployed_cmds = _extract_cmds(deployed_data.get("hooks", {}))
-    return len(canonical_cmds - deployed_cmds)
+    return HookDriftResult(
+        missing=len(canonical_cmds - deployed_cmds),
+        orphaned=len(deployed_cmds - canonical_cmds),
+    )
 
 
 def _check_hook_registry_drift(settings_path: Path) -> DoctorResult:
     """Compare generate_hooks_json() with what is deployed in settings.json."""
-    n = _count_hook_registry_drift(settings_path)
-    if n > 0:
+    result = _count_hook_registry_drift(settings_path)
+    if result.orphaned > 0:
+        canonical_cmds = _extract_cmds(generate_hooks_json().get("hooks", {}))
+        deployed_cmds = _extract_cmds(_load_settings_data(settings_path).get("hooks", {}))
+        ghost_scripts = sorted(
+            Path(cmd.split()[-1]).name
+            for cmd in (deployed_cmds - canonical_cmds)
+            if len(cmd.split()) >= 2
+        )
+        return DoctorResult(
+            Severity.ERROR,
+            "hook_registry_drift",
+            f"Orphaned hook entries detected: {', '.join(ghost_scripts)}. "
+            f"These scripts are missing from HOOK_REGISTRY but present in "
+            f"settings.json — every matching tool call will be denied with ENOENT. "
+            f"Run 'autoskillit install' to regenerate hooks.",
+        )
+    if result.missing > 0:
         return DoctorResult(
             severity=Severity.WARNING,
             check="hook_registry_drift",
             message=(
                 f"Hook registry has changed since last install. "
-                f"Run 'autoskillit install' to deploy {n} new/changed hook(s)."
+                f"Run 'autoskillit install' to deploy {result.missing} new/changed hook(s)."
             ),
         )
     return DoctorResult(

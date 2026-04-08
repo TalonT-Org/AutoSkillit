@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from autoskillit.core import atomic_write, pkg_root
+from autoskillit.hook_registry import _build_hook_entry
 from autoskillit.hooks import HOOK_REGISTRY
 
 
@@ -72,7 +73,7 @@ def sync_hooks_to_settings(settings_path: Path) -> None:
             {"type": "command", "command": f"python3 {hooks_dir / script}"}
             for script in hook_def.scripts
         ]
-        event_list.append({"matcher": hook_def.matcher, "hooks": hooks_list})
+        event_list.append(_build_hook_entry(hook_def, hooks_list))
     _write_settings_data(settings_path, data)
 
 

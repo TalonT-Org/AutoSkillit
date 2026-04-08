@@ -417,25 +417,27 @@ steps:
           for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done;
           for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done;
           for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done;
-          TAR_INPUTS="" &&
-          if [ -d "${RESEARCH_DIR}/artifacts" ]; then TAR_INPUTS="${TAR_INPUTS} artifacts"; fi &&
-          if [ -f "${RESEARCH_DIR}/experiment-plan.md" ]; then TAR_INPUTS="${TAR_INPUTS} experiment-plan.md"; fi &&
-          if [ -n "${TAR_INPUTS}" ]; then
-            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" ${TAR_INPUTS} &&
-            rm -rf "${RESEARCH_DIR}/artifacts" &&
-            if [ -f "${RESEARCH_DIR}/experiment-plan.md" ]; then rm "${RESEARCH_DIR}/experiment-plan.md"; fi;
-          fi &&
           if [ -f "${RESEARCH_DIR}/report.md" ]; then
             cp "${RESEARCH_DIR}/report.md" "${RESEARCH_DIR}/README.md" &&
             rm "${RESEARCH_DIR}/report.md";
           fi &&
+          mapfile -t TAR_ITEMS < <(ls -1 "${RESEARCH_DIR}" | grep -vE '^(README\.md|artifacts\.tar\.gz)$') &&
+          if [ ${#TAR_ITEMS[@]} -gt 0 ]; then
+            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" "${TAR_ITEMS[@]}" &&
+            for item in "${TAR_ITEMS[@]}"; do rm -rf "${RESEARCH_DIR}/${item}"; done;
+          fi &&
+          if [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] && [ -f "${RESEARCH_DIR}/README.md" ]; then
+            MANIFEST=$(tar tzf "${RESEARCH_DIR}/artifacts.tar.gz" | sort) &&
+            { echo ""; echo "## Archive Manifest"; echo ""; echo "Contents of \`artifacts.tar.gz\`:"; echo ""; echo '```'; echo "${MANIFEST}"; echo '```'; } >> "${RESEARCH_DIR}/README.md";
+          fi &&
           [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] || \
             { echo "ERROR: artifacts.tar.gz not created in ${RESEARCH_DIR}"; exit 1; } &&
-          [ ! -d "${RESEARCH_DIR}/artifacts" ] || \
-            { echo "ERROR: uncompressed artifacts/ still present in ${RESEARCH_DIR}"; exit 1; } &&
+          LEFTOVERS=$(ls -1 "${RESEARCH_DIR}" | grep -vE '^(README\.md|artifacts\.tar\.gz)$') &&
+          [ -z "${LEFTOVERS}" ] || \
+            { echo "ERROR: uncompressed entries still present in ${RESEARCH_DIR}: ${LEFTOVERS}"; exit 1; } &&
           [ -f "${RESEARCH_DIR}/README.md" ] || \
             { echo "ERROR: README.md not found in ${RESEARCH_DIR}"; exit 1; } &&
-          cd "${{ context.worktree_path }}" && git add research/ && git diff --cached --quiet || git commit -m "Add compressed research artifacts";
+          cd "${{ context.worktree_path }}" && git add "${RESEARCH_DIR}" && { git diff --cached --quiet || git commit -m "Add compressed research artifacts"; };
           echo "report_path=${RESEARCH_DIR}/README.md";
         else
           echo "commit_research_artifacts: no research directory found — artifact commit skipped";
@@ -447,11 +449,14 @@ steps:
     on_success: push_branch
     on_failure: push_branch
     note: >
-      Copies phase-group and phase-plan artifacts from worktree temp, then compresses
-      all artifacts (including experiment-plan.md) into artifacts.tar.gz and renames
-      report.md to README.md. The committed directory contains exactly two files:
-      README.md (human-readable conclusions) and artifacts.tar.gz (full artifact tree).
-      Non-fatal — proceeds to push_branch even if artifact commit fails.
+      Copies phase-group and phase-plan artifacts from worktree temp, renames
+      report.md to README.md, then archives all remaining entries (artifacts/,
+      experiment-plan.md, data/, results/, scripts/, and any other experiment
+      outputs) into artifacts.tar.gz. Generates an archive manifest appended to
+      README.md. The committed directory contains exactly two files: README.md
+      (human-readable conclusions with manifest) and artifacts.tar.gz (full
+      artifact tree). Non-fatal — proceeds to push_branch even if artifact
+      commit fails.
 
   push_branch:
     tool: run_cmd

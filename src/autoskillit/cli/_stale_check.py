@@ -314,7 +314,7 @@ def run_stale_check(home: Path | None = None) -> None:
                 _write_dismiss_state(_home, state)
 
     # Hook drift check
-    from autoskillit.cli._doctor import _count_hook_registry_drift
+    from autoskillit.cli import _count_hook_registry_drift
 
     settings_path = _claude_settings_path("user")
     drift = _count_hook_registry_drift(settings_path)

@@ -334,7 +334,7 @@ def test_run_stale_check_hooks_n_path_writes_dismiss(
     written: dict[str, object] = {}
     monkeypatch.setattr(_sc, "_write_dismiss_state", lambda home, state: written.update(state))
     monkeypatch.setattr(
-        "autoskillit.cli._doctor._count_hook_registry_drift",
+        "autoskillit.cli._count_hook_registry_drift",
         lambda settings_path: HookDriftResult(missing=2, orphaned=0),
     )
     monkeypatch.setattr("builtins.input", lambda _: "n")

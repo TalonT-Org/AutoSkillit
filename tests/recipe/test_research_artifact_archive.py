@@ -132,7 +132,6 @@ def test_commit_research_artifacts_dynamic_tar_inputs(recipe):
     cmd = step.with_args.get("cmd", "")
     assert "ls -1" in cmd, "TAR_INPUTS must use ls -1 for dynamic collection"
     assert "grep -vE" in cmd, "TAR_INPUTS must exclude README.md and artifacts.tar.gz via grep"
-    # Old hardcoded pattern must be gone
     assert 'if [ -d "${RESEARCH_DIR}/artifacts" ]; then TAR_INPUTS' not in cmd, (
         "Hardcoded TAR_INPUTS conditionals must be replaced by dynamic ls"
     )

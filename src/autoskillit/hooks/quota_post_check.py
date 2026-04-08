@@ -50,7 +50,7 @@ def _read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
         if age > max_age:
             return None  # stale
         return data
-    except (json.JSONDecodeError, KeyError, ValueError, OSError):
+    except (json.JSONDecodeError, KeyError, ValueError, OSError, TypeError):
         return None
 
 
@@ -83,11 +83,11 @@ def _write_quota_log_event(event: dict, log_dir: Path | None) -> None:
         pass
 
 
-def _extract_run_skill_result(tool_response: str) -> str:
+def _extract_run_skill_result(tool_response: str | dict) -> str:
     """Extract a compact summary from the run_skill double-wrapped JSON response."""
     try:
         outer = json.loads(tool_response) if isinstance(tool_response, str) else tool_response
-        if isinstance(outer, dict) and list(outer.keys()) == ["result"]:
+        if isinstance(outer, dict) and "result" in outer:
             inner_str = outer["result"]
             if isinstance(inner_str, str):
                 try:
@@ -110,13 +110,14 @@ def main(*, cache_path_override: str | None = None) -> None:
     try:
         raw = sys.stdin.read()
         event = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        sys.exit(0)
     except Exception:
         sys.exit(0)
 
+    if not isinstance(event, dict):
+        sys.exit(0)
+
     tool_name = event.get("tool_name", "")
-    tool_response = event.get("tool_response", "")
+    tool_response = event.get("tool_response") or ""
 
     hook_config = _read_hook_config()
     threshold = hook_config.get("threshold", _DEFAULT_THRESHOLD)

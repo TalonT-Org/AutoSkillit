@@ -70,7 +70,7 @@ def _run_hook(
 
 # T1: PostToolUse quota warning emitted when over threshold
 def test_qpc1_emits_warning_when_over_threshold(tmp_path):
-    """PostToolUse hook emits updatedMCPToolOutput with quota warning when utilization >= threshold."""
+    """PostToolUse hook emits updatedMCPToolOutput with quota warning."""
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=90.0)
     event = _build_event()
@@ -95,9 +95,7 @@ def test_qpc2_silent_when_under_threshold(tmp_path):
 def test_qpc3_silent_on_missing_cache(tmp_path):
     """PostToolUse hook exits silently when cache file does not exist."""
     event = _build_event()
-    out, _ = _run_hook(
-        event=event, cache_path=tmp_path / "nonexistent.json"
-    )
+    out, _ = _run_hook(event=event, cache_path=tmp_path / "nonexistent.json")
     assert out.strip() == ""
 
 
@@ -162,8 +160,7 @@ def test_qpc8_warning_event_written_to_log(tmp_path, monkeypatch):
     event = _build_event()
     _run_hook(event=event, cache_path=cache)
     events = [
-        json.loads(line)
-        for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
     ]
     assert len(events) == 1
     assert events[0]["event"] == "post_check_warning"
@@ -179,8 +176,7 @@ def test_qpc9_pass_event_written_to_log(tmp_path, monkeypatch):
     event = _build_event()
     _run_hook(event=event, cache_path=cache)
     events = [
-        json.loads(line)
-        for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
     ]
     assert len(events) == 1
     assert events[0]["event"] == "post_check_pass"
@@ -228,10 +224,7 @@ def test_qpc12_registered_in_hook_registry():
     from autoskillit.hook_registry import HOOK_REGISTRY
 
     post_tool_scripts = [
-        s
-        for h in HOOK_REGISTRY
-        if h.event_type == "PostToolUse"
-        for s in h.scripts
+        s for h in HOOK_REGISTRY if h.event_type == "PostToolUse" for s in h.scripts
     ]
     assert "quota_post_check.py" in post_tool_scripts
 
@@ -250,9 +243,7 @@ def test_qpc18_only_run_skill_matcher():
     )
     assert re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_skill")
     assert not re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_cmd")
-    assert not re.match(
-        entry.matcher, "mcp__plugin_autoskillit_autoskillit__kitchen_status"
-    )
+    assert not re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__kitchen_status")
 
 
 # T17: Fail-open on malformed stdin

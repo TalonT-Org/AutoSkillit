@@ -182,7 +182,8 @@ def main(*, cache_path_override: str | None = None) -> None:
                             f'python3 -c "import time; time.sleep({n})" timeout={n + 30} — '
                             f"then retry the SAME run_skill call with identical arguments. "
                             f"Before executing, state aloud: "
-                            f"'Quota exceeded at {utilization:.0f}%. Sleeping {n}s, then retrying.'"
+                            f"'Quota exceeded at {utilization:.0f}%. "
+                            f"Sleeping {n}s, then retrying.'"
                         ),
                     }
                 }

@@ -124,3 +124,52 @@ def test_research_recipe_validates_with_new_rules(recipe):
     findings = run_semantic_rules(recipe)
     errors_only = [f for f in findings if f.severity.value == "error"]
     assert not errors_only, [f.message for f in errors_only]
+
+
+def test_commit_research_artifacts_dynamic_tar_inputs(recipe):
+    """TAR_INPUTS must be built dynamically via ls, not hardcoded conditionals."""
+    step = recipe.steps["commit_research_artifacts"]
+    cmd = step.with_args.get("cmd", "")
+    assert "ls -1" in cmd, "TAR_INPUTS must use ls -1 for dynamic collection"
+    assert "grep -vE" in cmd, "TAR_INPUTS must exclude README.md and artifacts.tar.gz via grep"
+    # Old hardcoded pattern must be gone
+    assert 'if [ -d "${RESEARCH_DIR}/artifacts" ]; then TAR_INPUTS' not in cmd, (
+        "Hardcoded TAR_INPUTS conditionals must be replaced by dynamic ls"
+    )
+
+
+def test_commit_research_artifacts_generates_manifest(recipe):
+    """commit_research_artifacts must generate an archive manifest."""
+    step = recipe.steps["commit_research_artifacts"]
+    cmd = step.with_args.get("cmd", "")
+    assert "tar tzf" in cmd, "Must list archive contents for manifest generation"
+    assert "Archive Manifest" in cmd, "Manifest section header must appear in cmd"
+
+
+def test_commit_research_artifacts_manifest_appended_to_readme(recipe):
+    """Manifest must be appended to README.md (not overwrite)."""
+    step = recipe.steps["commit_research_artifacts"]
+    cmd = step.with_args.get("cmd", "")
+    assert ">> " in cmd and "README.md" in cmd, "Manifest must be appended (>>) to README.md"
+
+
+def test_commit_research_artifacts_cleanup_loop(recipe):
+    """Archived items must be removed via a loop, not hardcoded file names."""
+    step = recipe.steps["commit_research_artifacts"]
+    cmd = step.with_args.get("cmd", "")
+    assert "for item in" in cmd and "rm -rf" in cmd, (
+        "Cleanup must iterate TAR_INPUTS and rm -rf each item"
+    )
+
+
+def test_commit_research_artifacts_rename_before_archive(recipe):
+    """report.md -> README.md rename must happen BEFORE tar czf (so README.md is excluded)."""
+    step = recipe.steps["commit_research_artifacts"]
+    cmd = step.with_args.get("cmd", "")
+    rename_pos = cmd.find('cp "${RESEARCH_DIR}/report.md"')
+    tar_pos = cmd.find("tar czf")
+    assert rename_pos != -1, "report.md -> README.md rename must be present"
+    assert tar_pos != -1, "tar czf must be present"
+    assert rename_pos < tar_pos, (
+        "report.md rename must appear before tar czf so README.md is excluded from archive"
+    )

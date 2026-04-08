@@ -211,12 +211,14 @@ async def test_wait_for_ci_passes_event_to_scope(tool_ctx):
     """wait_for_ci must propagate event param into CIRunScope."""
     captured_scope = None
 
-    async def mock_wait(branch, *, repo, scope, **kw):
+    async def _side_effect(branch, *, repo, scope, **kw):
         nonlocal captured_scope
         captured_scope = scope
         return {"run_id": 1, "conclusion": "success", "failed_jobs": []}
 
-    tool_ctx.ci_watcher = type("W", (), {"wait": mock_wait})()
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(side_effect=_side_effect)
+    tool_ctx.ci_watcher = mock_watcher
     await wait_for_ci(branch="main", event="push", cwd="/tmp")
     assert captured_scope is not None
     assert captured_scope.event == "push"

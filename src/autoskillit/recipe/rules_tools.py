@@ -72,6 +72,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "remote_url",
             "head_sha",
             "workflow",
+            "event",
             "timeout_seconds",
             "cwd",
             "step_name",
@@ -92,7 +93,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "step_name",
         }
     ),
-    "get_ci_status": frozenset({"branch", "run_id", "repo", "workflow", "cwd"}),
+    "get_ci_status": frozenset({"branch", "run_id", "repo", "workflow", "event", "cwd"}),
     "set_commit_status": frozenset(
         {
             "sha",

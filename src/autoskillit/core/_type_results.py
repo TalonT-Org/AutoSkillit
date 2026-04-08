@@ -206,9 +206,10 @@ class CIRunScope:
     """Immutable scope parameters that uniquely identify which CI workflow runs are relevant.
 
     Passed as a single argument through the CIWatcher protocol so that adding a new
-    scope axis (e.g. event: str | None) requires changing only this dataclass and the
-    API params builder — not every method signature in the call chain.
+    scope axis requires changing only this dataclass and the API params builder —
+    not every method signature in the call chain.
     """
 
     workflow: str | None = None  # workflow filename, e.g. "tests.yml"
     head_sha: str | None = None  # commit SHA to pin results to
+    event: str | None = None  # trigger event, e.g. "push", "pull_request"

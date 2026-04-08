@@ -202,6 +202,29 @@ async def test_get_ci_status_no_watcher(tool_ctx):
 
 
 # ---------------------------------------------------------------------------
+# wait_for_ci event param propagation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_passes_event_to_scope(tool_ctx):
+    """wait_for_ci must propagate event param into CIRunScope."""
+    captured_scope = None
+
+    async def _side_effect(branch, *, repo, scope, **kw):
+        nonlocal captured_scope
+        captured_scope = scope
+        return {"run_id": 1, "conclusion": "success", "failed_jobs": []}
+
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(side_effect=_side_effect)
+    tool_ctx.ci_watcher = mock_watcher
+    await wait_for_ci(branch="main", event="push", cwd="/tmp")
+    assert captured_scope is not None
+    assert captured_scope.event == "push"
+
+
+# ---------------------------------------------------------------------------
 # wait_for_merge_queue
 # ---------------------------------------------------------------------------
 

@@ -2200,3 +2200,17 @@ class TestResearchRecipeStructure:
         step = recipe.steps["commit_research_artifacts"]
         assert step.on_success == "push_branch"
         assert step.on_failure == "push_branch"
+
+
+# ---------------------------------------------------------------------------
+# Cross-recipe CI parameterization guard
+# ---------------------------------------------------------------------------
+
+
+def test_bundled_recipes_have_no_ci_hardcoded_workflow() -> None:
+    """No bundled recipe should hardcode workflow in wait_for_ci steps."""
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        findings = run_semantic_rules(recipe)
+        wf_findings = [f for f in findings if f.rule == "ci-hardcoded-workflow"]
+        assert wf_findings == [], f"{recipe.name} has hardcoded workflow: {wf_findings}"

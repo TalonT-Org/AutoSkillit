@@ -250,22 +250,22 @@ class TestCIWorkflow:
 
 
 class TestRecipeWorkflowField:
-    def test_ci_watch_steps_carry_workflow_field(self):
-        """All wait_for_ci steps in bundled top-level recipes must specify a workflow.
+    def test_ci_watch_steps_carry_event_field(self):
+        """All wait_for_ci steps in bundled top-level recipes must specify an event.
 
-        Without a workflow field, wait_for_ci queries all workflows on the branch,
-        causing false failures when unrelated workflows (version bumps, labelers)
-        complete with failure before the test workflow runs.
+        Without an event field, wait_for_ci can match pull_request runs when a push
+        run is expected, causing the CI watcher to report a passing status for the
+        wrong trigger. The workflow field was removed in favor of config-level
+        ci.workflow defaults; event discrimination must be explicit in each recipe step.
         """
         recipes_dir = REPO_ROOT / "src" / "autoskillit" / "recipes"
         for recipe_path in recipes_dir.glob("*.yaml"):
             recipe = yaml.safe_load(recipe_path.read_text())
             for step_name, step in recipe.get("steps", {}).items():
                 if step.get("tool") == "wait_for_ci":
-                    assert "workflow" in step.get("with", {}), (
-                        f"{recipe_path.name}:{step_name} missing workflow in with: — "
-                        "add 'workflow: \"tests.yml\"' to scope CI polling to the correct"
-                        " workflow"
+                    assert "event" in step.get("with", {}), (
+                        f"{recipe_path.name}:{step_name} missing event in with: — "
+                        "add 'event: \"push\"' to scope CI polling to the correct trigger event"
                     )
 
 

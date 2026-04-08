@@ -7,6 +7,7 @@ import pytest
 
 from autoskillit.core.types import (
     ChannelConfirmation,
+    CIRunScope,
     MergeFailedStep,
     MergeState,
     RestartScope,
@@ -337,3 +338,22 @@ def test_run_managed_async_pty_mode_default_false():
 
     sig = inspect.signature(run_managed_async)
     assert sig.parameters["pty_mode"].default is False
+
+
+# ---------------------------------------------------------------------------
+# CIRunScope event field
+# ---------------------------------------------------------------------------
+
+
+def test_ci_run_scope_event_field():
+    """CIRunScope must accept and store an event field."""
+    scope = CIRunScope(event="push")
+    assert scope.event == "push"
+    assert scope.workflow is None
+    assert scope.head_sha is None
+
+
+def test_ci_run_scope_event_defaults_to_none():
+    """CIRunScope.event defaults to None when not specified."""
+    scope = CIRunScope()
+    assert scope.event is None

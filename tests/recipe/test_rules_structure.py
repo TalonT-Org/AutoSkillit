@@ -741,8 +741,10 @@ class TestOnContextLimitField:
             "unbounded" in f.message.lower() or "cycle" in f.message.lower() for f in warnings
         )
 
-    def test_bounded_cycle_with_retries_does_not_warn(self) -> None:
-        """A cycle with retries > 0 on the cycling step should NOT warn."""
+    def test_cycle_with_retries_warns_when_success_stays_in_cycle(self) -> None:
+        """A cycle where the retrying step's success path stays inside the cycle
+        must emit a WARNING. fix → test → fix: fix.on_success='test' re-enters
+        the cycle, so the outer loop is unbounded despite the retry exit."""
         recipe = Recipe(
             name="test",
             description="test",
@@ -772,7 +774,8 @@ class TestOnContextLimitField:
         cycle_warnings = [
             f for f in findings if "cycle" in f.message.lower() or "unbounded" in f.message.lower()
         ]
-        assert not cycle_warnings, f"Expected no cycle warnings but got: {cycle_warnings}"
+        assert len(cycle_warnings) >= 1, "Expected a cycle WARNING but got none"
+        assert any(f.severity == Severity.WARNING for f in cycle_warnings)
 
     def test_truly_trapped_cycle_without_exit_produces_error(self) -> None:
         """A cycle where every step's edges stay inside the cycle must produce an ERROR."""

@@ -111,6 +111,15 @@ affect git operations, which always use `git -C {worktree_path}` explicitly.
 2. Run `git log --oneline $(git merge-base HEAD origin/{base_branch})..HEAD`
 3. Run `git diff --stat $(git merge-base HEAD origin/{base_branch})..HEAD`
 
+### Step 2a: Reproduce CI Environment (before running tests)
+
+Check if the project has artifact generation steps that CI runs before tests:
+1. Read `.github/workflows/tests.yml` (or the CI workflow file) if it exists
+2. Identify pre-test steps (e.g., `generate_hooks_json`, `recipes render`, code generation)
+3. Run equivalent generation commands locally in the worktree before executing the test suite
+
+This ensures local test results match CI behavior. Skip if no pre-test generation steps exist.
+
 ### Step 2: Run Tests
 1. Run `cd {worktree_path} && {test_command}`
 2. If tests pass: go to Step 4 (Report Success)

@@ -564,7 +564,7 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.merge_target }}"
-      workflow: "tests.yml"
+      event: "push"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
@@ -774,7 +774,7 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.merge_target }}"
-      workflow: "tests.yml"
+      event: "push"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
@@ -981,7 +981,7 @@ steps:
   diagnose_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - tests.yml"
+      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - - push"
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
       ci_failed_jobs: "${{ context.ci_failed_jobs }}"

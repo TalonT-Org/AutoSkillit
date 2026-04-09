@@ -234,9 +234,8 @@ def test_close_kitchen_does_not_produce_gate_file(tmp_path, monkeypatch):
 
 @pytest.mark.anyio
 async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypatch):
-    """open_kitchen response contains static categorized tool groups from TOOL_CATEGORIES."""
-    from autoskillit.core.types import TOOL_CATEGORIES
-    from autoskillit.server.tools_kitchen import open_kitchen
+    """open_kitchen response contains static categorized tool groups from _DISPLAY_CATEGORIES."""
+    from autoskillit.server.tools_kitchen import _DISPLAY_CATEGORIES, open_kitchen
 
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
@@ -249,7 +248,7 @@ async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypa
                     result = await open_kitchen(ctx=mock_ctx)
 
     seen: set[str] = set()
-    for category_name, tools in TOOL_CATEGORIES:
+    for category_name, tools in _DISPLAY_CATEGORIES:
         assert category_name in result, (
             f"Category '{category_name}' missing from open_kitchen response"
         )

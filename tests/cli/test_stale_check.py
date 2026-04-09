@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
@@ -574,9 +575,15 @@ def test_run_stale_check_hooks_y_path_writes_state_and_returns(
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
 
     written_states: list[dict[str, object]] = []
-    monkeypatch.setattr(
-        _sc, "_write_dismiss_state", lambda home, state: written_states.append(dict(state))
-    )
+
+    def _tracking_write(home: Path, state: dict[str, object]) -> None:
+        written_states.append(dict(state))
+        # Actually persist so _read_dismiss_state picks up state on second call
+        state_file = home / ".autoskillit" / "update_check.json"
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(json.dumps(state))
+
+    monkeypatch.setattr(_sc, "_write_dismiss_state", _tracking_write)
     monkeypatch.setattr(
         "autoskillit.cli._count_hook_registry_drift",
         lambda settings_path: HookDriftResult(missing=3, orphaned=0),
@@ -604,4 +611,12 @@ def test_run_stale_check_hooks_y_path_writes_state_and_returns(
     assert len(written_states) >= 1, (
         "hooks YES-path must write dismiss/snooze state after install, "
         f"but _write_dismiss_state was called {len(written_states)} times"
+    )
+
+    # Second call: must NOT prompt again (snooze state persisted to disk)
+    prompt_count_before = len(input_calls)
+    _sc.run_stale_check(home=tmp_path)
+    assert len(input_calls) == prompt_count_before, (
+        "A second call to run_stale_check() must NOT prompt again, "
+        f"but {len(input_calls) - prompt_count_before} new prompt(s) appeared"
     )

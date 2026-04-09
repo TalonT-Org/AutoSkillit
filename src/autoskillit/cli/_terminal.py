@@ -20,6 +20,33 @@ from autoskillit.core import get_logger
 
 _log = get_logger(__name__)
 
+_KITTY_TERMINALS = frozenset({"kitty", "WezTerm", "ghostty", "iTerm.app"})
+
+# Base VT100 reset — universally safe no-ops on all terminal emulators.
+_BASE_RESET = (
+    "\033[?1049l"  # exit alternate screen buffer (defensive)
+    "\033[?2004l"  # disable bracketed paste mode
+    "\033[?1000l"  # disable normal mouse tracking
+    "\033[?1002l"  # disable button-event mouse tracking
+    "\033[?1003l"  # disable any-event mouse tracking
+    "\033[?1006l"  # disable SGR extended mouse protocol
+    "\033[?1004l"  # disable focus in/out events
+    "\033[?2026l"  # disable synchronized output
+    "\033[?1l"  # disable application cursor keys (DECCKM)
+    "\033>"  # numeric keypad mode (DECKPNM)
+    "\033[!p"  # DECSTR soft reset (18 DEC attributes, no screen clear)
+    "\033[0m"  # reset SGR attributes
+    "\033[?25h"  # show cursor (DECTCEM)
+)
+
+# Kitty keyboard protocol teardown — NOT universally safe. JediTerm
+# (JetBrains IDEs) echoes literal chars from these sequences
+# (claude-code#18135). Only emit when terminal is known to support KBP.
+_KITTY_RESET = (
+    "\033[=0u"  # hard-disable Kitty keyboard protocol
+    "\033[<99u"  # drain Kitty keyboard protocol push stack
+)
+
 
 @contextlib.contextmanager
 def terminal_guard() -> Generator[None, None, None]:
@@ -62,7 +89,12 @@ def terminal_guard() -> Generator[None, None, None]:
                 os.system("stty sane 2>/dev/null")
         if fd is not None:
             try:
-                sys.stdout.write("\033[?1049l\033[?1l\033>\033[0m\033[?25h")
+                sys.stdout.write(_BASE_RESET)
+                if (
+                    os.environ.get("KITTY_WINDOW_ID")
+                    or os.environ.get("TERM_PROGRAM", "") in _KITTY_TERMINALS
+                ):
+                    sys.stdout.write(_KITTY_RESET)
                 sys.stdout.flush()
             except OSError:
                 pass

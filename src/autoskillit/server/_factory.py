@@ -113,6 +113,20 @@ def make_context(
 
         runner = DefaultSubprocessRunner()
 
+    if runner is not None and os.environ.get("RECORD_SCENARIO"):
+        scenario_dir = os.environ.get("RECORD_SCENARIO_DIR", "")
+        recipe_name = os.environ.get("RECORD_SCENARIO_RECIPE", "unknown")
+        if scenario_dir:
+            import atexit
+
+            from api_simulator.claude import make_scenario_recorder
+
+            from autoskillit.execution.recording import RecordingSubprocessRunner
+
+            recorder = make_scenario_recorder(output_dir=scenario_dir, recipe_name=recipe_name)
+            runner = RecordingSubprocessRunner(recorder=recorder, inner=runner)
+            atexit.register(recorder.finalize)
+
     # Resolve token: config → GITHUB_TOKEN env var → gh CLI → None (unauthenticated)
     github_token = config.github.token or os.environ.get("GITHUB_TOKEN") or _gh_cli_token()
 

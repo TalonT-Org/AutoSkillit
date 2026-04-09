@@ -118,6 +118,7 @@ def build_full_headless_cmd(
     output_format_required_flags: Sequence[str] = (),
     add_dirs: Sequence[ValidatedAddDir] = (),
     exit_after_stop_delay_ms: int = 0,
+    scenario_step_name: str = "",
 ) -> list[str]:
     """Build the complete headless command list ready for subprocess invocation.
 
@@ -145,6 +146,8 @@ def build_full_headless_cmd(
         Each entry is appended as ``--add-dir <path>``.
     exit_after_stop_delay_ms
         When > 0, ``CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=<ms>`` is prepended.
+    scenario_step_name
+        When non-empty, ``SCENARIO_STEP_NAME=<name>`` is prepended for recording.
     """
     prompt = _inject_cwd_anchor(
         _inject_completion_directive(_ensure_skill_prefix(skill_command), completion_marker),
@@ -166,4 +169,6 @@ def build_full_headless_cmd(
     env_vars = ["AUTOSKILLIT_HEADLESS=1"]
     if exit_after_stop_delay_ms > 0:
         env_vars.append(f"CLAUDE_CODE_EXIT_AFTER_STOP_DELAY={exit_after_stop_delay_ms}")
+    if scenario_step_name:
+        env_vars.append(f"SCENARIO_STEP_NAME={scenario_step_name}")
     return ["env"] + env_vars + cmd

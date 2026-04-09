@@ -114,13 +114,12 @@ class RecordingSubprocessRunner(SubprocessRunner):
         )
 
         if step_name:
-            tool = env_dict.get("SCENARIO_TOOL", "run_cmd")
             self._recorder.record_non_session_step(
                 step_name=step_name,
-                tool=tool,
+                tool="run_cmd",
                 result_summary={
                     "exit_code": result.returncode,
-                    "stdout_head": result.stdout[:500],
+                    "stdout_head": (result.stdout or "")[:500],
                 },
             )
 
@@ -136,20 +135,24 @@ class RecordingSubprocessRunner(SubprocessRunner):
         session_log_dir: Path | None,
     ) -> SubprocessResult:
         """Record a session call via ScenarioRecorder.record_step()."""
-        step_result = await asyncio.to_thread(
-            self._recorder.record_step,
-            step_name=step_name,
-            tool="run_skill",
-            args=clean_args,
-            model=model,
-            session_log_dir=str(session_log_dir) if session_log_dir else None,
-        )
+        try:
+            step_result = await asyncio.to_thread(
+                self._recorder.record_step,
+                step_name=step_name,
+                tool="run_skill",
+                args=clean_args,
+                model=model,
+                session_log_dir=str(session_log_dir) if session_log_dir else None,
+            )
+        except Exception:
+            logger.exception("record_step failed for step=%r", step_name)
+            raise
 
-        # Read stdout from cassette for _build_skill_result compatibility
         stdout = ""
-        cassette_stdout = Path(step_result.cassette_path) / "stdout.jsonl"
-        if cassette_stdout.exists():
-            stdout = cassette_stdout.read_text()
+        if step_result.cassette_path:
+            cassette_stdout = Path(step_result.cassette_path) / "stdout.jsonl"
+            if cassette_stdout.exists():
+                stdout = cassette_stdout.read_text(encoding="utf-8")
 
         return SubprocessResult(
             returncode=step_result.cassette_exit_code,
@@ -157,5 +160,5 @@ class RecordingSubprocessRunner(SubprocessRunner):
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
             pid=0,
-            elapsed_seconds=step_result.cassette_duration_ms / 1000.0,
+            elapsed_seconds=(step_result.cassette_duration_ms or 0) / 1000.0,
         )

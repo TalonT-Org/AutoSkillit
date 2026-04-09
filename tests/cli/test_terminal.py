@@ -6,6 +6,7 @@ the investigation's test strategy recommendation.
 
 from __future__ import annotations
 
+import os
 import termios
 from unittest.mock import patch
 
@@ -99,6 +100,14 @@ class TestTerminalGuardTTYRestore:
             assert "\033[?1049l" in written, "Must exit alternate screen buffer"
             assert "\033[?1l" in written, "Must reset application cursor keys"
             assert "\033>" in written, "Must reset application keypad mode"
+            assert "\033[?2004l" in written, "Must disable bracketed paste mode"
+            assert "\033[?1000l" in written, "Must disable normal mouse tracking"
+            assert "\033[?1002l" in written, "Must disable button-event mouse tracking"
+            assert "\033[?1003l" in written, "Must disable any-event mouse tracking"
+            assert "\033[?1006l" in written, "Must disable SGR extended mouse protocol"
+            assert "\033[?1004l" in written, "Must disable focus in/out events"
+            assert "\033[?2026l" in written, "Must disable synchronized output"
+            assert "\033[!p" in written, "Must emit DECSTR soft reset"
 
     def test_emits_vt100_reset_sequences_on_exception(self):
         """Escape sequences are written even when subprocess raises."""
@@ -119,6 +128,10 @@ class TestTerminalGuardTTYRestore:
             written = "".join(c.args[0] for c in mock_stdout.write.call_args_list if c.args)
             assert "\033[?1049l" in written, "Must exit alternate screen buffer"
             assert "\033[?1l" in written
+            assert "\033[?2004l" in written, "Must disable bracketed paste mode"
+            assert "\033[?1003l" in written, "Must disable any-event mouse tracking"
+            assert "\033[?2026l" in written, "Must disable synchronized output"
+            assert "\033[!p" in written, "Must emit DECSTR soft reset"
 
     def test_noop_in_non_tty_environment(self):
         """When stdin is not a TTY, tcgetattr and tcsetattr are never called."""
@@ -249,6 +262,102 @@ class TestTerminalGuardTTYRestore:
                 pass
 
             mock_stdout.write.assert_not_called()
+
+    def test_kitty_sequences_emitted_on_supported_terminal(self):
+        """Kitty KBP sequences are emitted when TERM_PROGRAM indicates support."""
+        from autoskillit.cli._terminal import terminal_guard
+
+        with (
+            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli._terminal.termios"),
+            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch.dict("os.environ", {"TERM_PROGRAM": "kitty"}, clear=False),
+        ):
+            mock_stdin.isatty.return_value = True
+            mock_stdin.fileno.return_value = 0
+
+            with terminal_guard():
+                pass
+
+            written = "".join(c.args[0] for c in mock_stdout.write.call_args_list if c.args)
+            assert "\033[=0u" in written, "Must hard-disable Kitty keyboard protocol"
+            assert "\033[<99u" in written, "Must drain Kitty keyboard protocol push stack"
+
+    def test_kitty_sequences_not_emitted_on_unsupported_terminal(self):
+        """Kitty KBP sequences must NOT be emitted on unsupported terminals.
+
+        JediTerm (JetBrains IDEs) echoes literal garbage from \\033[<99u.
+        """
+        from autoskillit.cli._terminal import terminal_guard
+
+        env = os.environ.copy()
+        env.pop("TERM_PROGRAM", None)
+        env.pop("KITTY_WINDOW_ID", None)
+
+        with (
+            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli._terminal.termios"),
+            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch.dict("os.environ", env, clear=True),
+        ):
+            mock_stdin.isatty.return_value = True
+            mock_stdin.fileno.return_value = 0
+
+            with terminal_guard():
+                pass
+
+            written = "".join(c.args[0] for c in mock_stdout.write.call_args_list if c.args)
+            assert "\033[=0u" not in written, (
+                "Kitty hard-disable must not be emitted on unsupported terminals"
+            )
+            assert "\033[<99u" not in written, (
+                "Kitty stack drain must not be emitted on unsupported terminals"
+            )
+            # Base sequences must still be present
+            assert "\033[?2004l" in written, "Base reset must still be emitted"
+            assert "\033[!p" in written, "DECSTR must still be emitted"
+
+    def test_kitty_sequences_emitted_via_kitty_window_id(self):
+        """KITTY_WINDOW_ID triggers Kitty KBP sequences regardless of TERM_PROGRAM."""
+        from autoskillit.cli._terminal import terminal_guard
+
+        with (
+            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli._terminal.termios"),
+            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch.dict("os.environ", {"KITTY_WINDOW_ID": "1"}, clear=False),
+        ):
+            mock_stdin.isatty.return_value = True
+            mock_stdin.fileno.return_value = 0
+
+            with terminal_guard():
+                pass
+
+            written = "".join(c.args[0] for c in mock_stdout.write.call_args_list if c.args)
+            assert "\033[=0u" in written, "Must hard-disable Kitty keyboard protocol"
+
+    def test_kitty_protocol_sequences_emitted_after_decstr(self):
+        """Kitty KBP sequences must follow DECSTR to avoid being reset."""
+        from autoskillit.cli._terminal import terminal_guard
+
+        with (
+            patch("autoskillit.cli._terminal.sys.stdin") as mock_stdin,
+            patch("autoskillit.cli._terminal.termios"),
+            patch("autoskillit.cli._terminal.sys.stdout") as mock_stdout,
+            patch.dict("os.environ", {"TERM_PROGRAM": "kitty"}, clear=False),
+        ):
+            mock_stdin.isatty.return_value = True
+            mock_stdin.fileno.return_value = 0
+
+            with terminal_guard():
+                pass
+
+            written = "".join(c.args[0] for c in mock_stdout.write.call_args_list if c.args)
+            decstr_pos = written.index("\033[!p")
+            kitty_hard_pos = written.index("\033[=0u")
+            kitty_drain_pos = written.index("\033[<99u")
+            assert decstr_pos < kitty_hard_pos, "Kitty hard-disable must follow DECSTR"
+            assert decstr_pos < kitty_drain_pos, "Kitty stack drain must follow DECSTR"
 
 
 class TestCookTerminalGuard:

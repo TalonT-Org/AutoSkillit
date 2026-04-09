@@ -129,15 +129,32 @@ def _load_settings_data(settings_path: Path) -> dict:
     return {}
 
 
-def _extract_cmds(hooks_dict: dict) -> set[str]:
-    """Extract the set of hook command strings from a hooks dict."""
+def canonical_script_basenames() -> frozenset[str]:
+    """Return the set of all known autoskillit hook script basenames."""
+    return frozenset(s for h in HOOK_REGISTRY for s in h.scripts)
+
+
+def _is_own_hook(command: str) -> bool:
+    """Check if a hook command belongs to autoskillit (any format)."""
+    if "autoskillit" in command:
+        return True
+    known_scripts = canonical_script_basenames()
+    return any(command.endswith(script) or f"/{script}" in command for script in known_scripts)
+
+
+def _extract_script_basenames(hooks_dict: dict) -> set[str]:
+    """Extract autoskillit hook script basenames from a hooks dict.
+
+    Filters to autoskillit-owned commands only, then normalizes
+    to bare script filenames for installation-path-agnostic comparison.
+    """
     return {
-        hook.get("command", "")
+        Path(cmd.split()[-1]).name
         for event_entries in hooks_dict.values()
         if isinstance(event_entries, list)
         for entry in event_entries
         for hook in entry.get("hooks", [])
-        if hook.get("command", "")
+        if (cmd := hook.get("command", "")) and _is_own_hook(cmd)
     }
 
 
@@ -151,13 +168,12 @@ class HookDriftResult(NamedTuple):
 
 def _count_hook_registry_drift(settings_path: Path) -> HookDriftResult:
     """Return bidirectional hook drift counts between canonical and deployed settings.json."""
-    canonical = generate_hooks_json()
     deployed_data = _load_settings_data(settings_path)
-    canonical_cmds = _extract_cmds(canonical.get("hooks", {}))
-    deployed_cmds = _extract_cmds(deployed_data.get("hooks", {}))
-    orphaned = deployed_cmds - canonical_cmds
+    canonical_basenames = canonical_script_basenames()
+    deployed_basenames = _extract_script_basenames(deployed_data.get("hooks", {}))
+    orphaned = deployed_basenames - canonical_basenames
     return HookDriftResult(
-        missing=len(canonical_cmds - deployed_cmds),
+        missing=len(canonical_basenames - deployed_basenames),
         orphaned=len(orphaned),
         orphaned_cmds=frozenset(orphaned),
     )

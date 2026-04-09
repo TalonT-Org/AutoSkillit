@@ -1115,7 +1115,7 @@ def test_count_hook_registry_drift_detects_orphaned_hooks(tmp_path: Path) -> Non
 
     settings = tmp_path / ".claude" / "settings.json"
     settings.parent.mkdir()
-    ghost_cmd = "python3 /path/to/status_health_guard.py"
+    ghost_cmd = "python3 /path/to/autoskillit/hooks/status_health_guard.py"
     data = {
         "hooks": {
             "PreToolUse": [
@@ -1141,7 +1141,7 @@ def test_check_hook_registry_drift_error_on_orphaned_hooks(tmp_path: Path) -> No
 
     settings = tmp_path / ".claude" / "settings.json"
     settings.parent.mkdir()
-    ghost_cmd = "python3 /path/to/status_health_guard.py"
+    ghost_cmd = "python3 /path/to/autoskillit/hooks/status_health_guard.py"
     data = {
         "hooks": {
             "PreToolUse": [

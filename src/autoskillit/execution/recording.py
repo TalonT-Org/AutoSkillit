@@ -98,7 +98,6 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 session_log_dir=session_log_dir,
             )
 
-        # Non-session or no step_name — delegate to inner runner
         result = await self._inner(
             cmd,
             cwd=cwd,

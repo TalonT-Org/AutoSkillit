@@ -1166,7 +1166,7 @@ def test_check_hook_registry_drift_error_on_orphaned_hooks(tmp_path: Path) -> No
 def test_count_hook_registry_drift_ignores_user_hooks(tmp_path: Path) -> None:
     """Non-autoskillit user hooks in settings.json must not be counted as orphaned.
 
-    Regression: _extract_cmds() includes ALL commands without filtering,
+    Regression: _extract_script_basenames() includes ALL commands without filtering,
     making user hooks appear as orphans in the deployed - canonical set diff.
     """
     from autoskillit.hook_registry import _count_hook_registry_drift, generate_hooks_json

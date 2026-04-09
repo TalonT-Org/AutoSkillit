@@ -75,6 +75,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "headless",  # execution/headless.py: _OUTPUT_PATH_TOKENS = _build_path_token_set()
         "_stale_check",  # cli/_stale_check.py: _DISMISS_WINDOW = timedelta(hours=12)
+        "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(

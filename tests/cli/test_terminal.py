@@ -12,6 +12,8 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.cli._terminal import _RESET_SPEC
+
 
 class TestTerminalGuardTTYRestore:
     """terminal_guard() saves and restores termios attrs in all exit paths."""
@@ -81,8 +83,9 @@ class TestTerminalGuardTTYRestore:
 
             mock_termios.tcsetattr.assert_called_once_with(0, termios.TCSAFLUSH, fake_attrs)
 
-    def test_emits_vt100_reset_sequences_on_normal_exit(self):
-        """Escape sequences are written to stdout after normal subprocess exit."""
+    @pytest.mark.parametrize("entry", _RESET_SPEC, ids=lambda e: e.name)
+    def test_emits_all_spec_sequences_on_normal_exit(self, entry):
+        """Every sequence in _RESET_SPEC is emitted by terminal_guard() on normal exit."""
         from autoskillit.cli._terminal import terminal_guard
 
         with (
@@ -97,20 +100,13 @@ class TestTerminalGuardTTYRestore:
                 pass
 
             written = "".join(c.args[0] for c in mock_stdout.write.call_args_list if c.args)
-            assert "\033[?1049l" in written, "Must exit alternate screen buffer"
-            assert "\033[?1l" in written, "Must reset application cursor keys"
-            assert "\033>" in written, "Must reset application keypad mode"
-            assert "\033[?2004l" in written, "Must disable bracketed paste mode"
-            assert "\033[?1000l" in written, "Must disable normal mouse tracking"
-            assert "\033[?1002l" in written, "Must disable button-event mouse tracking"
-            assert "\033[?1003l" in written, "Must disable any-event mouse tracking"
-            assert "\033[?1006l" in written, "Must disable SGR extended mouse protocol"
-            assert "\033[?1004l" in written, "Must disable focus in/out events"
-            assert "\033[?2026l" in written, "Must disable synchronized output"
-            assert "\033[!p" in written, "Must emit DECSTR soft reset"
+            assert entry.sequence in written, (
+                f"Must emit {entry.name} ({entry.sequence!r}) — layer: {entry.layer.value}"
+            )
 
-    def test_emits_vt100_reset_sequences_on_exception(self):
-        """Escape sequences are written even when subprocess raises."""
+    @pytest.mark.parametrize("entry", _RESET_SPEC, ids=lambda e: e.name)
+    def test_emits_all_spec_sequences_on_exception(self, entry):
+        """Every sequence in _RESET_SPEC is emitted by terminal_guard() on exception."""
         from autoskillit.cli._terminal import terminal_guard
 
         with (
@@ -126,12 +122,9 @@ class TestTerminalGuardTTYRestore:
                     raise KeyboardInterrupt
 
             written = "".join(c.args[0] for c in mock_stdout.write.call_args_list if c.args)
-            assert "\033[?1049l" in written, "Must exit alternate screen buffer"
-            assert "\033[?1l" in written
-            assert "\033[?2004l" in written, "Must disable bracketed paste mode"
-            assert "\033[?1003l" in written, "Must disable any-event mouse tracking"
-            assert "\033[?2026l" in written, "Must disable synchronized output"
-            assert "\033[!p" in written, "Must emit DECSTR soft reset"
+            assert entry.sequence in written, (
+                f"Must emit {entry.name} ({entry.sequence!r}) — layer: {entry.layer.value}"
+            )
 
     def test_noop_in_non_tty_environment(self):
         """When stdin is not a TTY, tcgetattr and tcsetattr are never called."""
@@ -358,6 +351,66 @@ class TestTerminalGuardTTYRestore:
             kitty_drain_pos = written.index("\033[<99u")
             assert decstr_pos < kitty_hard_pos, "Kitty hard-disable must follow DECSTR"
             assert decstr_pos < kitty_drain_pos, "Kitty stack drain must follow DECSTR"
+
+
+class TestResetSpecificationCompleteness:
+    """Bidirectional completeness tests for the terminal reset specification.
+
+    Follows the GATED_TOOLS pattern: a structured specification is tested
+    via set operations to detect missing, extra, or duplicate entries.
+    """
+
+    def test_reset_spec_covers_all_layers(self):
+        """Every ResetLayer enum member must have >= 1 entry in _RESET_SPEC."""
+        from autoskillit.cli._terminal import _RESET_SPEC, ResetLayer
+
+        covered_layers = {entry.layer for entry in _RESET_SPEC}
+        missing = set(ResetLayer) - covered_layers
+        assert not missing, (
+            f"ResetLayer members {missing} have no entry in _RESET_SPEC. "
+            "Every layer must have at least one reset sequence."
+        )
+
+    def test_base_reset_matches_spec_bidirectional(self):
+        """_BASE_RESET must contain exactly the sequences in _RESET_SPEC."""
+        import re
+
+        from autoskillit.cli._terminal import _BASE_RESET, _RESET_SPEC
+
+        spec_sequences = {entry.sequence for entry in _RESET_SPEC}
+        for seq in spec_sequences:
+            assert seq in _BASE_RESET, f"Spec sequence {seq!r} missing from _BASE_RESET"
+
+        # Reverse: parse _BASE_RESET and verify every sequence is in the spec.
+        found = set(re.findall(r"\033(?:[\[\(!][^a-zA-Z]*[a-zA-Z]|[>-~])", _BASE_RESET))
+        unregistered = found - spec_sequences
+        assert not unregistered, (
+            f"Sequences in _BASE_RESET not registered in _RESET_SPEC: {unregistered}"
+        )
+
+    def test_content_layer_sequences_are_last(self):
+        """CONTENT layer sequences must follow all other layers in _BASE_RESET."""
+        from autoskillit.cli._terminal import _BASE_RESET, _RESET_SPEC, ResetLayer
+
+        content_seqs = [e.sequence for e in _RESET_SPEC if e.layer == ResetLayer.CONTENT]
+        other_seqs = [e.sequence for e in _RESET_SPEC if e.layer != ResetLayer.CONTENT]
+
+        for content_seq in content_seqs:
+            content_pos = _BASE_RESET.index(content_seq)
+            for other_seq in other_seqs:
+                other_pos = _BASE_RESET.index(other_seq)
+                assert other_pos < content_pos, (
+                    f"CONTENT sequence {content_seq!r} must follow "
+                    f"non-CONTENT sequence {other_seq!r}"
+                )
+
+    def test_reset_spec_has_no_duplicate_sequences(self):
+        """Each escape sequence must appear exactly once in _RESET_SPEC."""
+        from autoskillit.cli._terminal import _RESET_SPEC
+
+        sequences = [e.sequence for e in _RESET_SPEC]
+        duplicates = [s for s in sequences if sequences.count(s) > 1]
+        assert not duplicates, f"Duplicate sequences in _RESET_SPEC: {set(duplicates)}"
 
 
 class TestCookTerminalGuard:

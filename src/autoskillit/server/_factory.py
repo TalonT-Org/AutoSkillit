@@ -119,7 +119,13 @@ def make_context(
         if scenario_dir:
             import atexit
 
-            from api_simulator.claude import make_scenario_recorder
+            try:
+                from api_simulator.claude import make_scenario_recorder
+            except ImportError as exc:
+                raise RuntimeError(
+                    "RECORD_SCENARIO is set but 'api_simulator' is not installed. "
+                    "Install it to enable scenario recording."
+                ) from exc
 
             from autoskillit.execution import RecordingSubprocessRunner
 

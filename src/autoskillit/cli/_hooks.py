@@ -11,6 +11,9 @@ from autoskillit.hook_registry import (
     _claude_settings_path,  # noqa: F401 — re-exported; cli/__init__ + _stale_check + _init_helpers import from here
     _load_settings_data,
 )
+from autoskillit.hook_registry import (
+    _is_own_hook as _is_autoskillit_hook_command,
+)
 from autoskillit.hooks import HOOK_REGISTRY
 
 
@@ -18,14 +21,6 @@ def _write_settings_data(settings_path: Path, data: dict) -> None:
     """Write settings data back atomically, creating parent dirs if needed."""
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(settings_path, json.dumps(data, indent=2))
-
-
-def _is_autoskillit_hook_command(command: str) -> bool:
-    """Check if a hook command belongs to autoskillit (any format)."""
-    if "autoskillit" in command:
-        return True
-    known_scripts = {s for h in HOOK_REGISTRY for s in h.scripts}
-    return any(command.endswith(script) or f"/{script}" in command for script in known_scripts)
 
 
 def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:

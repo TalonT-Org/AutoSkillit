@@ -12,8 +12,8 @@ from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
 from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
 from autoskillit.core import _ROOT_GITIGNORE_ENTRIES, Severity
 from autoskillit.hook_registry import (
-    HOOK_REGISTRY,
     _count_hook_registry_drift,
+    canonical_script_basenames,
     find_broken_hook_scripts,
 )
 
@@ -96,9 +96,7 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
         for entry in event_entries
         for hook in entry.get("hooks", [])
     )
-    missing = [
-        script for hdef in HOOK_REGISTRY for script in hdef.scripts if script not in registered
-    ]
+    missing = [script for script in canonical_script_basenames() if script not in registered]
     if missing:
         return DoctorResult(
             severity=Severity.WARNING,
@@ -116,9 +114,7 @@ def _check_hook_registry_drift(settings_path: Path) -> DoctorResult:
     """Compare generate_hooks_json() with what is deployed in settings.json."""
     result = _count_hook_registry_drift(settings_path)
     if result.orphaned > 0:
-        ghost_scripts = sorted(
-            Path(cmd.split()[-1]).name for cmd in result.orphaned_cmds if len(cmd.split()) >= 2
-        )
+        ghost_scripts = sorted(result.orphaned_cmds)
         return DoctorResult(
             Severity.ERROR,
             "hook_registry_drift",

@@ -1115,7 +1115,7 @@ def test_count_hook_registry_drift_detects_orphaned_hooks(tmp_path: Path) -> Non
 
     settings = tmp_path / ".claude" / "settings.json"
     settings.parent.mkdir()
-    ghost_cmd = "python3 /path/to/status_health_guard.py"
+    ghost_cmd = "python3 /path/to/autoskillit/hooks/status_health_guard.py"
     data = {
         "hooks": {
             "PreToolUse": [
@@ -1141,7 +1141,7 @@ def test_check_hook_registry_drift_error_on_orphaned_hooks(tmp_path: Path) -> No
 
     settings = tmp_path / ".claude" / "settings.json"
     settings.parent.mkdir()
-    ghost_cmd = "python3 /path/to/status_health_guard.py"
+    ghost_cmd = "python3 /path/to/autoskillit/hooks/status_health_guard.py"
     data = {
         "hooks": {
             "PreToolUse": [
@@ -1159,4 +1159,77 @@ def test_check_hook_registry_drift_error_on_orphaned_hooks(tmp_path: Path) -> No
     )
     assert "status_health_guard.py" in result.message, (
         "Error message must name the orphaned script(s)"
+    )
+
+
+# T-DRIFT-3: User hooks must not appear as orphans
+def test_count_hook_registry_drift_ignores_user_hooks(tmp_path: Path) -> None:
+    """Non-autoskillit user hooks in settings.json must not be counted as orphaned.
+
+    Regression: _extract_script_basenames() includes ALL commands without filtering,
+    making user hooks appear as orphans in the deployed - canonical set diff.
+    """
+    from autoskillit.hook_registry import _count_hook_registry_drift, generate_hooks_json
+
+    # Start with all canonical hooks so missing=0
+    canonical_data = generate_hooks_json()
+    # Add non-autoskillit user hooks alongside canonical ones
+    user_hooks = [
+        {"type": "command", "command": "python3 /home/user/my_guard.py"},
+        {"type": "command", "command": 'wsl-notify-send.exe "Done!"'},
+    ]
+    canonical_data["hooks"].setdefault("PreToolUse", []).append(
+        {"matcher": ".*", "hooks": user_hooks}
+    )
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text(json.dumps(canonical_data))
+
+    result = _count_hook_registry_drift(settings)
+    assert result.orphaned == 0, (
+        f"User hooks must not be counted as orphaned, got orphaned={result.orphaned}, "
+        f"orphaned_cmds={result.orphaned_cmds}"
+    )
+    assert result.missing == 0, (
+        f"All canonical hooks are deployed, expected missing=0, got {result.missing}"
+    )
+
+
+# T-DRIFT-4: Cross-environment path mismatch must not cause false drift
+def test_count_hook_registry_drift_cross_env_path_mismatch(tmp_path: Path) -> None:
+    """settings.json written by a different install (different pkg_root prefix)
+    must not show drift when all script basenames match.
+
+    Regression: full-path string comparison treats path-prefix differences
+    as drift, even though the same scripts are deployed.
+    """
+    from autoskillit.hook_registry import HOOK_REGISTRY, _count_hook_registry_drift
+
+    # Build settings.json with a DIFFERENT path prefix than current pkg_root()
+    foreign_hooks_dir = (
+        "/home/user/.local/share/uv/tools/autoskillit/lib/python3.13"
+        "/site-packages/autoskillit/hooks"
+    )
+    by_event: dict[str, list[dict]] = {}
+    for hdef in HOOK_REGISTRY:
+        hook_commands = [
+            {"type": "command", "command": f"python3 {foreign_hooks_dir}/{script}"}
+            for script in hdef.scripts
+        ]
+        entry: dict = {"hooks": hook_commands}
+        if hdef.event_type != "SessionStart":
+            entry["matcher"] = hdef.matcher
+        by_event.setdefault(hdef.event_type, []).append(entry)
+    data = {"hooks": by_event}
+
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text(json.dumps(data))
+
+    result = _count_hook_registry_drift(settings)
+    assert result.orphaned == 0, (
+        f"Path prefix difference must not cause orphaned hooks, got orphaned={result.orphaned}"
+    )
+    assert result.missing == 0, (
+        f"Path prefix difference must not cause missing hooks, got missing={result.missing}"
     )

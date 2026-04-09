@@ -20,7 +20,7 @@ from autoskillit.core import get_logger
 
 _log = get_logger(__name__)
 
-_KITTY_TERMINALS = frozenset({"kitty", "WezTerm", "ghostty", "iTerm.app"})
+_KBP_TERMINALS = frozenset({"kitty", "WezTerm", "ghostty", "iTerm.app"})
 
 # Base VT100 reset — universally safe no-ops on all terminal emulators.
 _BASE_RESET = (
@@ -92,7 +92,7 @@ def terminal_guard() -> Generator[None, None, None]:
                 sys.stdout.write(_BASE_RESET)
                 if (
                     os.environ.get("KITTY_WINDOW_ID")
-                    or os.environ.get("TERM_PROGRAM", "") in _KITTY_TERMINALS
+                    or os.environ.get("TERM_PROGRAM", "") in _KBP_TERMINALS
                 ):
                     sys.stdout.write(_KITTY_RESET)
                 sys.stdout.flush()

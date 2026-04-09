@@ -16,6 +16,9 @@ from typing import Any
 from autoskillit.config import AutomationConfig
 from autoskillit.core import SubprocessRunner, WriteBehaviorSpec, get_logger, pkg_root
 from autoskillit.execution import (
+    RECORD_SCENARIO_DIR_ENV,
+    RECORD_SCENARIO_ENV,
+    RECORD_SCENARIO_RECIPE_ENV,
     DefaultCIWatcher,
     DefaultDatabaseReader,
     DefaultGitHubFetcher,
@@ -113,9 +116,9 @@ def make_context(
 
         runner = DefaultSubprocessRunner()
 
-    if runner is not None and os.environ.get("RECORD_SCENARIO"):
-        scenario_dir = os.environ.get("RECORD_SCENARIO_DIR", "")
-        recipe_name = os.environ.get("RECORD_SCENARIO_RECIPE", "unknown")
+    if runner is not None and os.environ.get(RECORD_SCENARIO_ENV):
+        scenario_dir = os.environ.get(RECORD_SCENARIO_DIR_ENV, "")
+        recipe_name = os.environ.get(RECORD_SCENARIO_RECIPE_ENV, "unknown")
         if scenario_dir:
             if not os.path.isdir(scenario_dir):
                 logger.warning(

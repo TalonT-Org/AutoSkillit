@@ -14,6 +14,12 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+#: Environment variable names for scenario recording activation.
+RECORD_SCENARIO_ENV = "RECORD_SCENARIO"
+RECORD_SCENARIO_DIR_ENV = "RECORD_SCENARIO_DIR"
+RECORD_SCENARIO_RECIPE_ENV = "RECORD_SCENARIO_RECIPE"
+SCENARIO_STEP_NAME_ENV = "SCENARIO_STEP_NAME"
+
 
 def _extract_env_and_args(cmd: list[str]) -> tuple[dict[str, str], list[str]]:
     """Parse ``["env", "K=V", ..., "program", ...]`` into (env_dict, clean_args).
@@ -81,7 +87,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         linux_tracing_config: Any | None = None,
     ) -> SubprocessResult:
         env_dict, clean_args = _extract_env_and_args(cmd)
-        step_name = env_dict.get("SCENARIO_STEP_NAME", "")
+        step_name = env_dict.get(SCENARIO_STEP_NAME_ENV, "")
 
         if pty_mode and step_name:
             return await self._record_session(

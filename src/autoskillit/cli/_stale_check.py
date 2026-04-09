@@ -225,7 +225,11 @@ def _verify_hooks_result(
     Returns True if drift is now zero.
     Returns False if drift persists, writing a hooks_snoozed record.
     """
-    from autoskillit.hook_registry import _count_hook_registry_drift
+    try:
+        from autoskillit.hook_registry import _count_hook_registry_drift
+    except ImportError:
+        logger.debug("hook_registry unavailable — cannot verify hooks result")
+        return False
 
     drift = _count_hook_registry_drift(settings_path)
     if drift.missing == 0 and drift.orphaned == 0:

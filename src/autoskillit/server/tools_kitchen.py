@@ -13,7 +13,6 @@ from autoskillit import __version__
 from autoskillit.config import resolve_ingredient_defaults
 from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
-    TOOL_CATEGORIES,
     atomic_write,
     get_logger,
     pkg_root,
@@ -32,6 +31,57 @@ from autoskillit.server.helpers import (
 )
 
 logger = get_logger(__name__)
+
+_DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Execution", ("run_cmd", "run_python", "run_skill")),
+    ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
+    (
+        "Git Operations",
+        ("merge_worktree", "create_unique_branch", "check_pr_mergeable", "set_commit_status"),
+    ),
+    ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
+    (
+        "Clone & Remote",
+        (
+            "clone_repo",
+            "remove_clone",
+            "push_to_remote",
+            "register_clone_status",
+            "batch_cleanup_clones",
+        ),
+    ),
+    (
+        "GitHub",
+        (
+            "fetch_github_issue",
+            "get_issue_title",
+            "report_bug",
+            "prepare_issue",
+            "enrich_issues",
+            "claim_issue",
+            "release_issue",
+            "get_pr_reviews",
+            "bulk_close_issues",
+        ),
+    ),
+    (
+        "CI & Automation",
+        ("wait_for_ci", "wait_for_merge_queue", "toggle_auto_merge", "get_ci_status"),
+    ),
+    (
+        "Telemetry & Diagnostics",
+        (
+            "read_db",
+            "write_telemetry_files",
+            "kitchen_status",
+            "get_pipeline_report",
+            "get_token_summary",
+            "get_timing_summary",
+            "get_quota_events",
+        ),
+    ),
+    ("Kitchen", ("open_kitchen", "close_kitchen")),
+)
 
 
 def _write_hook_config() -> None:
@@ -122,9 +172,9 @@ def get_recipe(name: str) -> str:
 
 
 def _build_tool_category_listing() -> str:
-    """Return a formatted string listing all tool categories from TOOL_CATEGORIES."""
+    """Return a formatted string listing all tool categories."""
     lines = []
-    for name, tools in TOOL_CATEGORIES:
+    for name, tools in _DISPLAY_CATEGORIES:
         lines.append(f"  {name}: {', '.join(tools)}")
     return "\n".join(lines)
 

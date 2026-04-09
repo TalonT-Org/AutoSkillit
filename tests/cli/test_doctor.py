@@ -1206,7 +1206,10 @@ def test_count_hook_registry_drift_cross_env_path_mismatch(tmp_path: Path) -> No
     from autoskillit.hook_registry import HOOK_REGISTRY, _count_hook_registry_drift
 
     # Build settings.json with a DIFFERENT path prefix than current pkg_root()
-    foreign_hooks_dir = "/home/user/.local/share/uv/tools/autoskillit/lib/python3.13/site-packages/autoskillit/hooks"
+    foreign_hooks_dir = (
+        "/home/user/.local/share/uv/tools/autoskillit/lib/python3.13"
+        "/site-packages/autoskillit/hooks"
+    )
     by_event: dict[str, list[dict]] = {}
     for hdef in HOOK_REGISTRY:
         hook_commands = [

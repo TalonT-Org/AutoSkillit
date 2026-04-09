@@ -45,7 +45,10 @@ def test_extract_script_basenames_canonical() -> None:
 
 # HR-BASENAME-2: different path prefixes -> returns same basenames
 def test_extract_script_basenames_different_prefix() -> None:
-    foreign_dir = "/home/user/.local/share/uv/tools/autoskillit/lib/python3.13/site-packages/autoskillit/hooks"
+    foreign_dir = (
+        "/home/user/.local/share/uv/tools/autoskillit/lib/python3.13"
+        "/site-packages/autoskillit/hooks"
+    )
     by_event: dict[str, list[dict]] = {}
     for hdef in HOOK_REGISTRY:
         hook_commands = [

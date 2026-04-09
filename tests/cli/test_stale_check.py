@@ -551,3 +551,57 @@ def test_run_stale_check_dev_mode_editable_install_y_path(
     assert "/home/user/autoskillit" in uv_calls[0]
     # Must NOT use uv tool install --force for editable installs
     assert not any("tool" in str(c) and "install" in str(c) for c in uv_calls)
+
+
+# SC-23: hooks YES-path must write state and not re-prompt on second call
+def test_run_stale_check_hooks_y_path_writes_state_and_returns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """After answering Y to the hook-drift prompt:
+    1. _write_dismiss_state must be called (dismiss or snooze)
+    2. A second call to run_stale_check() must NOT prompt again
+
+    Regression: the hooks YES-path ran the install subprocess but wrote no state
+    and did not return, causing an infinite prompt loop.
+    """
+    import autoskillit.cli._stale_check as _sc
+
+    monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: None)
+    monkeypatch.setattr(_sc.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(_sc.sys.stdout, "isatty", lambda: True)
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+
+    written_states: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        _sc, "_write_dismiss_state", lambda home, state: written_states.append(dict(state))
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._count_hook_registry_drift",
+        lambda settings_path: HookDriftResult(missing=3, orphaned=0),
+    )
+
+    def fake_run(cmd: list[str], **kwargs: object) -> object:
+        return type("R", (), {"returncode": 0})()
+
+    monkeypatch.setattr(_sc.subprocess, "run", fake_run)
+
+    input_calls = []
+
+    def fake_input(prompt: str = "") -> str:
+        input_calls.append(prompt)
+        return "y"
+
+    monkeypatch.setattr("builtins.input", fake_input)
+
+    # First call: should prompt and write state
+    _sc.run_stale_check(home=tmp_path)
+
+    assert len(input_calls) == 1, (
+        f"Expected exactly 1 input prompt on first call, got {len(input_calls)}"
+    )
+    assert len(written_states) >= 1, (
+        "hooks YES-path must write dismiss/snooze state after install, "
+        f"but _write_dismiss_state was called {len(written_states)} times"
+    )

@@ -133,7 +133,7 @@ src/autoskillit/
 │   ├── linux_tracing.py     #   Linux-only /proc + psutil process tracing (accumulate snapshots)
 │   ├── anomaly_detection.py #   Post-hoc anomaly detection over ProcSnapshot series
 │   ├── session_log.py       #   File-based session diagnostics log writer (XDG-aware)
-│   ├── recording.py         #   RecordingSubprocessRunner — decorator that records headless sessions as scenario cassettes via api-simulator ScenarioRecorder
+│   ├── recording.py         #   RecordingSubprocessRunner, ReplayingSubprocessRunner, build_replay_runner — scenario I/O for headless sessions (record + replay via api-simulator)
 │   ├── process.py           #   Subprocess management facade (re-exports from _process_*.py)
 │   ├── _process_io.py       #   create_temp_io, read_temp_output
 │   ├── _process_jsonl.py    #   _jsonl_contains_marker, _jsonl_has_record_type, _marker_is_standalone

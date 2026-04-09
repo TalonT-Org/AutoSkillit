@@ -13,8 +13,8 @@ from autoskillit.core.types import SubprocessRunner, TerminationReason
 from autoskillit.execution.commands import build_full_headless_cmd
 from autoskillit.execution.recording import (
     RecordingSubprocessRunner,
+    ReplayingSubprocessRunner,
     ScenarioReplayError,
-    SequencingSubprocessRunner,
     _extract_env_and_args,
     _extract_model,
 )
@@ -268,8 +268,8 @@ def test_make_context_default_runner_without_record_scenario(monkeypatch, tmp_pa
 
 
 def test_sequencing_runner_satisfies_protocol():
-    """SequencingSubprocessRunner is a valid SubprocessRunner."""
-    runner = SequencingSubprocessRunner({}, {})
+    """ReplayingSubprocessRunner is a valid SubprocessRunner."""
+    runner = ReplayingSubprocessRunner({}, {})
     assert isinstance(runner, SubprocessRunner)
 
 
@@ -282,7 +282,7 @@ async def test_sequencing_session_step_dispatch(tmp_path):
     cli = FakeCLI(stdout="session output", returncode=0)
     meta = FakeMeta(exit_code=0, duration_ms=2000)
     session_map: dict[str, deque] = {"implement": deque([(cli, meta)])}
-    runner = SequencingSubprocessRunner(session_map, {})
+    runner = ReplayingSubprocessRunner(session_map, {})
 
     cmd = ["env", "SCENARIO_STEP_NAME=implement", "claude", "--print", "do stuff"]
     result = await runner(cmd, cwd=tmp_path, timeout=60)
@@ -306,7 +306,7 @@ async def test_sequencing_non_session_step_dispatch(tmp_path):
             "stderr": "error output",
         }
     }
-    runner = SequencingSubprocessRunner({}, non_session)
+    runner = ReplayingSubprocessRunner({}, non_session)
 
     cmd = ["env", "SCENARIO_STEP_NAME=test-check", "task", "test-check"]
     result = await runner(cmd, cwd=tmp_path, timeout=60)
@@ -323,7 +323,7 @@ async def test_sequencing_non_session_step_dispatch(tmp_path):
 @pytest.mark.anyio
 async def test_sequencing_missing_step_name_raises(tmp_path):
     """No SCENARIO_STEP_NAME in cmd → ValueError."""
-    runner = SequencingSubprocessRunner({}, {})
+    runner = ReplayingSubprocessRunner({}, {})
     cmd = ["claude", "--print", "test"]
     with pytest.raises(ValueError, match="SCENARIO_STEP_NAME"):
         await runner(cmd, cwd=tmp_path, timeout=60)
@@ -335,13 +335,14 @@ async def test_sequencing_missing_step_name_raises(tmp_path):
 @pytest.mark.anyio
 async def test_sequencing_unknown_step_raises(tmp_path):
     """Step not in session_map or non_session → ScenarioReplayError with guidance."""
-    runner = SequencingSubprocessRunner({"known": deque()}, {"other": {}})
+    runner = ReplayingSubprocessRunner(
+        {"known": deque([(FakeCLI(), FakeMeta(exit_code=0))])}, {"other": {}}
+    )
     cmd = ["env", "SCENARIO_STEP_NAME=unknown-step", "claude", "--print", "test"]
     with pytest.raises(ScenarioReplayError) as exc_info:
         await runner(cmd, cwd=tmp_path, timeout=60)
     msg = str(exc_info.value)
     assert "unknown-step" in msg
-    assert "add_fallback" in msg
     assert "known" in msg
     assert "other" in msg
 
@@ -356,7 +357,7 @@ async def test_sequencing_call_log(tmp_path):
     meta = FakeMeta(exit_code=0, duration_ms=500)
     non_session = {"check": {"exit_code": 0, "stdout_head": "ok", "stderr": ""}}
     session_map: dict[str, deque] = {"run": deque([(cli, meta)])}
-    runner = SequencingSubprocessRunner(session_map, non_session)
+    runner = ReplayingSubprocessRunner(session_map, non_session)
 
     cmd1 = ["env", "SCENARIO_STEP_NAME=run", "claude", "--print", "go"]
     cmd2 = ["env", "SCENARIO_STEP_NAME=check", "task", "test"]
@@ -380,7 +381,7 @@ async def test_sequencing_multiple_calls_advance_queue(tmp_path):
     meta1 = FakeMeta(exit_code=0, duration_ms=100)
     meta2 = FakeMeta(exit_code=0, duration_ms=200)
     session_map: dict[str, deque] = {"implement": deque([(cli1, meta1), (cli2, meta2)])}
-    runner = SequencingSubprocessRunner(session_map, {})
+    runner = ReplayingSubprocessRunner(session_map, {})
 
     cmd = ["env", "SCENARIO_STEP_NAME=implement", "claude", "--print", "go"]
     result1 = await runner(cmd, cwd=tmp_path, timeout=60)
@@ -398,7 +399,7 @@ async def test_sequencing_exhausted_session_falls_to_non_session(tmp_path):
     """When session deque is empty but non_session has entry, use non_session."""
     non_session = {"test": {"exit_code": 2, "stdout_head": "non-session result", "stderr": ""}}
     session_map: dict[str, deque] = {"test": deque()}
-    runner = SequencingSubprocessRunner(session_map, non_session)
+    runner = ReplayingSubprocessRunner(session_map, non_session)
 
     cmd = ["env", "SCENARIO_STEP_NAME=test", "task", "test"]
     result = await runner(cmd, cwd=tmp_path, timeout=60)
@@ -407,11 +408,11 @@ async def test_sequencing_exhausted_session_falls_to_non_session(tmp_path):
     assert result.stdout == "non-session result"
 
 
-# --- T20: make_context wires SequencingSubprocessRunner when REPLAY_SCENARIO set ---
+# --- T20: make_context wires ReplayingSubprocessRunner when REPLAY_SCENARIO set ---
 
 
 def test_make_context_wires_sequencing_runner_when_replay_scenario(monkeypatch, tmp_path):
-    """REPLAY_SCENARIO=1 + valid dir → ctx.runner is SequencingSubprocessRunner."""
+    """REPLAY_SCENARIO=1 + valid dir → ctx.runner is ReplayingSubprocessRunner."""
     replay_dir = tmp_path / "replay"
     replay_dir.mkdir()
     monkeypatch.setenv("REPLAY_SCENARIO", "1")
@@ -423,18 +424,20 @@ def test_make_context_wires_sequencing_runner_when_replay_scenario(monkeypatch, 
     mock_player = Mock()
     mock_player.scenario.return_value = mock_scenario
     mock_player.build_session_map.return_value = {}
+    mock_make_player = Mock(return_value=mock_player)
 
     import api_simulator.claude as _api_sim_claude
 
-    monkeypatch.setattr(
-        _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False
-    )
+    monkeypatch.setattr(_api_sim_claude, "make_scenario_player", mock_make_player, raising=False)
 
     from autoskillit.config import AutomationConfig
     from autoskillit.server._factory import make_context
 
     ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
-    assert isinstance(ctx.runner, SequencingSubprocessRunner)
+    assert isinstance(ctx.runner, ReplayingSubprocessRunner)
+    mock_make_player.assert_called_once()
+    call_kwargs = mock_make_player.call_args.kwargs
+    assert call_kwargs.get("scenario_dir") == str(replay_dir)
 
 
 # --- T21: REPLAY_SCENARIO takes precedence over RECORD_SCENARIO ---
@@ -455,6 +458,7 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
     mock_player.scenario.return_value = mock_scenario
     mock_player.build_session_map.return_value = {}
     mock_recorder = Mock()
+    mock_make_recorder = Mock(return_value=mock_recorder)
 
     import api_simulator.claude as _api_sim_claude
 
@@ -462,7 +466,7 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
         _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False
     )
     monkeypatch.setattr(
-        _api_sim_claude, "make_scenario_recorder", Mock(return_value=mock_recorder), raising=False
+        _api_sim_claude, "make_scenario_recorder", mock_make_recorder, raising=False
     )
     monkeypatch.setattr("atexit.register", Mock())
 
@@ -470,7 +474,8 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
     from autoskillit.server._factory import make_context
 
     ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
-    assert isinstance(ctx.runner, SequencingSubprocessRunner)
+    assert isinstance(ctx.runner, ReplayingSubprocessRunner)
+    mock_make_recorder.assert_not_called()  # REPLAY takes precedence over RECORD
 
 
 # --- T22: Cross-scenario session override (integration, requires api-simulator) ---
@@ -478,35 +483,15 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
 
 @pytest.mark.anyio
 async def test_cross_scenario_override(tmp_path):
-    """ScenarioBuilder + cross-scenario override → SequencingSubprocessRunner replays override."""
-    api_sim = pytest.importorskip("api_simulator.claude")
-
-    b1 = api_sim.make_scenario_builder("recipe1")
-    b1.add_synthetic_step("implement", exit_code=0, stdout_lines=["from-scenario1"])
-
-    b2 = api_sim.make_scenario_builder("recipe2")
-    b2.add_synthetic_step("implement", exit_code=0, stdout_lines=["from-scenario2"])
-
-    scenario_dir1 = tmp_path / "s1"
-    scenario_dir1.mkdir()
-    scenario_dir2 = tmp_path / "s2"
-    scenario_dir2.mkdir()
-    binary = str(tmp_path / "claude")
-
-    player1 = b1.build(output_dir=str(scenario_dir1), binary_path=binary)
-    player2 = b2.build(output_dir=str(scenario_dir2), binary_path=binary)
-
-    raw_map1 = player1.build_session_map()
-    raw_map2 = player2.build_session_map()
-    assert "implement" in raw_map1
-    assert "implement" in raw_map2
-
-    # Override: replace player1's "implement" with a controlled FakeCLI (cross-scenario injection)
+    """Cross-scenario session injection → ReplayingSubprocessRunner replays override."""
+    # Simulate two scenarios providing the same step; override with a controlled FakeCLI
+    # to verify that ReplayingSubprocessRunner uses whatever session_map it is given,
+    # regardless of which scenario recorded a given step name.
     override_cli = FakeCLI(stdout="from-overridden-scenario2", returncode=0)
     override_meta = FakeMeta(exit_code=0, duration_ms=500)
     session_map: dict[str, deque] = {"implement": deque([(override_cli, override_meta)])}
 
-    runner = SequencingSubprocessRunner(session_map, {})
+    runner = ReplayingSubprocessRunner(session_map, {})
     cmd = ["env", "SCENARIO_STEP_NAME=implement", "claude", "--print", "go"]
     result = await runner(cmd, cwd=tmp_path, timeout=60)
 

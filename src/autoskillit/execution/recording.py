@@ -6,8 +6,7 @@ import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import get_logger
-from autoskillit.core.types import SubprocessResult, SubprocessRunner, TerminationReason
+from autoskillit.core import SubprocessResult, SubprocessRunner, TerminationReason, get_logger
 
 if TYPE_CHECKING:
     from api_simulator.claude import ScenarioRecorder

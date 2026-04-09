@@ -121,7 +121,7 @@ def make_context(
 
             from api_simulator.claude import make_scenario_recorder
 
-            from autoskillit.execution.recording import RecordingSubprocessRunner
+            from autoskillit.execution import RecordingSubprocessRunner
 
             recorder = make_scenario_recorder(output_dir=scenario_dir, recipe_name=recipe_name)
             runner = RecordingSubprocessRunner(recorder=recorder, inner=runner)

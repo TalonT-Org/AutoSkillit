@@ -648,6 +648,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
+        recording.py adds the RecordingSubprocessRunner decorator as a separate module
+        to keep scenario recording concerns isolated from the core process lifecycle.
+        Exempt at 25 files.
       core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
         (_type_enums, _type_protocols, _type_results, _type_subprocess, etc.) to
         prevent circular imports while keeping L0 types co-located. Also houses
@@ -669,7 +672,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     EXEMPTIONS: dict[str, int] = {
         "server": 17,
         "recipe": 29,
-        "execution": 24,
+        "execution": 25,
         "core": 15,
         "cli": 15,
         "hooks": 14,

@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 RECIPE_PATH = Path(__file__).resolve().parents[2] / ".autoskillit" / "recipes" / "full-audit.yaml"
 
 
@@ -40,7 +39,14 @@ def test_full_audit_recipe_step_names() -> None:
     from autoskillit.recipe.io import load_recipe
 
     recipe = load_recipe(RECIPE_PATH)
-    expected = {"checkout", "run_audits", "validate_audits", "create_issues", "done", "escalate_stop"}
+    expected = {
+        "checkout",
+        "run_audits",
+        "validate_audits",
+        "create_issues",
+        "done",
+        "escalate_stop",
+    }
     assert set(recipe.steps.keys()) == expected
 
 
@@ -68,7 +74,7 @@ def test_full_audit_kitchen_rules() -> None:
     from autoskillit.recipe.io import load_recipe
 
     recipe = load_recipe(RECIPE_PATH)
-    assert len(recipe.kitchen_rules) >= 1
+    assert len(recipe.kitchen_rules) == 3
 
 
 def test_full_audit_discovered_as_project_recipe(tmp_path: Path) -> None:
@@ -97,13 +103,15 @@ def test_full_audit_semantic_rules_no_errors() -> None:
 
     recipe = load_recipe(RECIPE_PATH)
 
-    known_skills = frozenset({
-        "audit-tests",
-        "audit-cohesion",
-        "audit-arch",
-        "validate-audit",
-        "prepare-issue",
-    })
+    known_skills = frozenset(
+        {
+            "audit-tests",
+            "audit-cohesion",
+            "audit-arch",
+            "validate-audit",
+            "prepare-issue",
+        }
+    )
     ctx = make_validation_context(recipe, available_skills=known_skills)
     findings = run_semantic_rules(ctx)
     errors = [f for f in findings if f.severity == Severity.ERROR]

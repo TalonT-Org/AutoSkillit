@@ -19,12 +19,15 @@ from autoskillit.execution import (
     RECORD_SCENARIO_DIR_ENV,
     RECORD_SCENARIO_ENV,
     RECORD_SCENARIO_RECIPE_ENV,
+    REPLAY_SCENARIO_DIR_ENV,
+    REPLAY_SCENARIO_ENV,
     DefaultCIWatcher,
     DefaultDatabaseReader,
     DefaultGitHubFetcher,
     DefaultHeadlessExecutor,
     DefaultMergeQueueWatcher,
     DefaultTestRunner,
+    build_replay_runner,
 )
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import (
@@ -116,7 +119,21 @@ def make_context(
 
         runner = DefaultSubprocessRunner()
 
-    if runner is not None and os.environ.get(RECORD_SCENARIO_ENV):
+    if runner is not None and os.environ.get(REPLAY_SCENARIO_ENV):
+        replay_dir = os.environ.get(REPLAY_SCENARIO_DIR_ENV, "")
+        if not replay_dir:
+            logger.warning(
+                "REPLAY_SCENARIO is set but REPLAY_SCENARIO_DIR is empty — skipping replay"
+            )
+        elif not os.path.isdir(replay_dir):
+            logger.warning(
+                "REPLAY_SCENARIO_DIR=%r is not an existing directory — skipping replay",
+                replay_dir,
+            )
+        else:
+            runner = build_replay_runner(replay_dir)
+
+    elif runner is not None and os.environ.get(RECORD_SCENARIO_ENV):
         scenario_dir = os.environ.get(RECORD_SCENARIO_DIR_ENV, "")
         recipe_name = os.environ.get(RECORD_SCENARIO_RECIPE_ENV, "unknown")
         if scenario_dir:

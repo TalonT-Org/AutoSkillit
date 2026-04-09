@@ -1,9 +1,12 @@
-"""RecordingSubprocessRunner — decorator that records headless sessions as scenario cassettes."""
+"""RecordingSubprocessRunner and ReplayingSubprocessRunner — scenario I/O for headless sessions."""
 
 from __future__ import annotations
 
 import asyncio
 import atexit
+import shutil
+import tempfile
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,11 +17,19 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-#: Environment variable names for scenario recording activation.
+# Environment variable names for scenario recording activation.
 RECORD_SCENARIO_ENV = "RECORD_SCENARIO"
 RECORD_SCENARIO_DIR_ENV = "RECORD_SCENARIO_DIR"
 RECORD_SCENARIO_RECIPE_ENV = "RECORD_SCENARIO_RECIPE"
 SCENARIO_STEP_NAME_ENV = "SCENARIO_STEP_NAME"
+
+# Environment variable names for scenario replay activation.
+REPLAY_SCENARIO_ENV = "REPLAY_SCENARIO"
+REPLAY_SCENARIO_DIR_ENV = "REPLAY_SCENARIO_DIR"
+
+
+class ScenarioReplayError(Exception):
+    """Raised when scenario replay cannot find a session or result for a step."""
 
 
 def _extract_env_and_args(cmd: list[str]) -> tuple[dict[str, str], list[str]]:
@@ -161,3 +172,128 @@ class RecordingSubprocessRunner(SubprocessRunner):
             pid=0,
             elapsed_seconds=(step_result.cassette_duration_ms or 0) / 1000.0,
         )
+
+
+class ReplayingSubprocessRunner(SubprocessRunner):
+    """Replays pre-recorded sessions by step name.
+
+    Consumes the session map from ``ScenarioPlayer.build_session_map()``
+    and non-session step results from the scenario manifest. On each call,
+    extracts ``SCENARIO_STEP_NAME`` from the command env prefix and
+    dispatches to the matching step queue.
+    """
+
+    def __init__(
+        self,
+        session_map: dict[str, deque[tuple[Any, Any]]],
+        non_session_results: dict[str, dict[str, Any]],
+    ) -> None:
+        self._sessions = session_map
+        self._non_session = non_session_results
+        self.call_log: list[tuple[str, list[str]]] = []
+
+    async def __call__(
+        self,
+        cmd: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        env: dict[str, str] | None = None,
+        stale_threshold: float = 1200,
+        completion_marker: str = "",
+        session_log_dir: Path | None = None,
+        pty_mode: bool = False,
+        input_data: str | None = None,
+        completion_drain_timeout: float = 5.0,
+        linux_tracing_config: Any | None = None,
+    ) -> SubprocessResult:
+        env_dict, _ = _extract_env_and_args(cmd)
+        step_name = env_dict.get(SCENARIO_STEP_NAME_ENV, "")
+
+        if not step_name:
+            raise ValueError(f"SCENARIO_STEP_NAME not found in cmd env prefix: {cmd!r}")
+
+        self.call_log.append((step_name, cmd))
+
+        if step_name in self._sessions and self._sessions[step_name]:
+            cli, meta = self._sessions[step_name].popleft()
+            result = cli.run()
+            return SubprocessResult(
+                returncode=meta.exit_code,
+                stdout=result.stdout,
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=0,
+                elapsed_seconds=meta.duration_ms / 1000.0,
+            )
+
+        if step_name in self._non_session:
+            summary = self._non_session[step_name]
+            return SubprocessResult(
+                returncode=summary.get("exit_code", 0),
+                stdout=summary.get("stdout_head", ""),
+                stderr=summary.get("stderr", ""),
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=0,
+            )
+
+        raise ScenarioReplayError(
+            f"No session or result for step {step_name!r}. "
+            f"Available sessions: {sorted(self._sessions.keys())}. "
+            f"Available non-session: {sorted(self._non_session.keys())}. "
+            f"Ensure the scenario was recorded with step {step_name!r} before replaying."
+        )
+
+
+def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
+    """Build a ReplayingSubprocessRunner from a scenario directory.
+
+    Creates a temporary output directory for the player, registers an atexit
+    handler to clean it up, then parses the scenario manifest and constructs
+    the deque-based session map.  All domain logic for replay setup lives here
+    (L1) rather than in the L3 composition root.
+
+    Args:
+        replay_dir: Path to a scenario directory produced by a recording run.
+
+    Returns:
+        A fully-initialised ReplayingSubprocessRunner ready to replace the
+        DefaultSubprocessRunner in a ToolContext.
+
+    Raises:
+        RuntimeError: If ``api_simulator`` is not installed.
+        Exception: Any exception raised by ``player.scenario()`` or
+            ``player.build_session_map()`` is re-raised after logging the
+            scenario path for context.
+    """
+    try:
+        from api_simulator.claude import make_scenario_player
+    except ImportError as exc:
+        raise RuntimeError(
+            "REPLAY_SCENARIO is set but 'api_simulator' is not installed. "
+            "Install it to enable scenario replay."
+        ) from exc
+
+    tmp_replay = tempfile.mkdtemp(prefix="autoskillit-replay-")
+    atexit.register(shutil.rmtree, tmp_replay, True)
+
+    player = make_scenario_player(
+        scenario_dir=replay_dir,
+        output_dir=tmp_replay,
+        binary_path=str(Path(tmp_replay) / "claude"),
+    )
+
+    try:
+        scenario = player.scenario()
+        non_session: dict[str, dict] = {
+            record.step_name: record.result_summary or {}
+            for record in scenario.step_sequence
+            if record.session_dir is None
+        }
+        raw_map = player.build_session_map()
+    except Exception:
+        logger.exception("Failed to parse scenario manifest in %r", replay_dir)
+        raise
+
+    session_map = {k: deque(v) for k, v in raw_map.items()}
+    return ReplayingSubprocessRunner(session_map, non_session)

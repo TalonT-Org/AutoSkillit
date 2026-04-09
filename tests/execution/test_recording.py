@@ -63,7 +63,13 @@ async def test_session_call_routes_to_record_step(tmp_path):
 
     result = await runner(cmd, cwd=Path("/tmp"), timeout=300, pty_mode=True)
 
-    mock_recorder.record_step.assert_called_once()
+    mock_recorder.record_step.assert_called_once_with(
+        step_name="investigate",
+        tool="run_skill",
+        args=["claude", "--model", "sonnet", "--print", "do stuff"],
+        model="sonnet",
+        session_log_dir=None,
+    )
     assert inner.call_args_list == []  # inner NOT called
     assert result.returncode == 0
     assert result.termination == TerminationReason.NATURAL_EXIT
@@ -199,8 +205,10 @@ async def test_run_headless_core_injects_scenario_step_name(tmp_path):
 
 
 def test_make_context_wraps_runner_when_record_scenario(monkeypatch, tmp_path):
+    scenario_dir = tmp_path / "scenario"
+    scenario_dir.mkdir()
     monkeypatch.setenv("RECORD_SCENARIO", "1")
-    monkeypatch.setenv("RECORD_SCENARIO_DIR", str(tmp_path / "scenario"))
+    monkeypatch.setenv("RECORD_SCENARIO_DIR", str(scenario_dir))
     monkeypatch.setenv("RECORD_SCENARIO_RECIPE", "smoke-test")
     mock_recorder = Mock()
     monkeypatch.setattr(

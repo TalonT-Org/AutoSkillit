@@ -844,6 +844,7 @@ async def run_headless_core(
             output_format_required_flags=cfg.output_format.required_cli_flags,
             add_dirs=add_dirs,
             exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
+            scenario_step_name=step_name,
         )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout

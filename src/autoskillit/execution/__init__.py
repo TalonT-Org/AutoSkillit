@@ -64,6 +64,13 @@ from autoskillit.execution.quota import (
     _refresh_quota_cache,  # noqa: F401 — imported for re-export via server.helpers; not in __all__
     check_and_sleep_if_needed,
 )
+from autoskillit.execution.recording import (
+    RECORD_SCENARIO_DIR_ENV,
+    RECORD_SCENARIO_ENV,
+    RECORD_SCENARIO_RECIPE_ENV,
+    SCENARIO_STEP_NAME_ENV,
+    RecordingSubprocessRunner,
+)
 from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE, resolve_remote_repo
 from autoskillit.execution.session import (
     ClaudeSessionResult,
@@ -94,6 +101,12 @@ __all__ = [
     "DefaultSubprocessRunner",
     "run_managed_async",
     "run_managed_sync",
+    # recording
+    "RecordingSubprocessRunner",
+    "RECORD_SCENARIO_ENV",
+    "RECORD_SCENARIO_DIR_ENV",
+    "RECORD_SCENARIO_RECIPE_ENV",
+    "SCENARIO_STEP_NAME_ENV",
     # quota
     "QuotaStatus",
     "check_and_sleep_if_needed",

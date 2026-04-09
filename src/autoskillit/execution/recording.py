@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -57,6 +58,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         inner: SubprocessRunner | None = None,
     ) -> None:
         self._recorder = recorder
+        atexit.register(recorder.finalize)
         if inner is None:
             from autoskillit.execution.process import DefaultSubprocessRunner
 

@@ -117,21 +117,24 @@ def make_context(
         scenario_dir = os.environ.get("RECORD_SCENARIO_DIR", "")
         recipe_name = os.environ.get("RECORD_SCENARIO_RECIPE", "unknown")
         if scenario_dir:
-            import atexit
+            if not os.path.isdir(scenario_dir):
+                logger.warning(
+                    "RECORD_SCENARIO_DIR=%r is not an existing directory — skipping recording",
+                    scenario_dir,
+                )
+            else:
+                try:
+                    from api_simulator.claude import make_scenario_recorder
+                except ImportError as exc:
+                    raise RuntimeError(
+                        "RECORD_SCENARIO is set but 'api_simulator' is not installed. "
+                        "Install it to enable scenario recording."
+                    ) from exc
 
-            try:
-                from api_simulator.claude import make_scenario_recorder
-            except ImportError as exc:
-                raise RuntimeError(
-                    "RECORD_SCENARIO is set but 'api_simulator' is not installed. "
-                    "Install it to enable scenario recording."
-                ) from exc
+                from autoskillit.execution import RecordingSubprocessRunner
 
-            from autoskillit.execution import RecordingSubprocessRunner
-
-            recorder = make_scenario_recorder(output_dir=scenario_dir, recipe_name=recipe_name)
-            runner = RecordingSubprocessRunner(recorder=recorder, inner=runner)
-            atexit.register(recorder.finalize)
+                recorder = make_scenario_recorder(output_dir=scenario_dir, recipe_name=recipe_name)
+                runner = RecordingSubprocessRunner(recorder=recorder, inner=runner)
 
     # Resolve token: config → GITHUB_TOKEN env var → gh CLI → None (unauthenticated)
     github_token = config.github.token or os.environ.get("GITHUB_TOKEN") or _gh_cli_token()

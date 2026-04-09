@@ -211,9 +211,10 @@ def test_make_context_wraps_runner_when_record_scenario(monkeypatch, tmp_path):
     monkeypatch.setenv("RECORD_SCENARIO_DIR", str(scenario_dir))
     monkeypatch.setenv("RECORD_SCENARIO_RECIPE", "smoke-test")
     mock_recorder = Mock()
+    import api_simulator.claude as _api_sim_claude
+
     monkeypatch.setattr(
-        "api_simulator.claude.make_scenario_recorder",
-        Mock(return_value=mock_recorder),
+        _api_sim_claude, "make_scenario_recorder", Mock(return_value=mock_recorder), raising=False
     )
     monkeypatch.setattr("atexit.register", Mock())
 

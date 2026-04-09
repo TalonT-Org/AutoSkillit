@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +20,14 @@ RECORD_SCENARIO_ENV = "RECORD_SCENARIO"
 RECORD_SCENARIO_DIR_ENV = "RECORD_SCENARIO_DIR"
 RECORD_SCENARIO_RECIPE_ENV = "RECORD_SCENARIO_RECIPE"
 SCENARIO_STEP_NAME_ENV = "SCENARIO_STEP_NAME"
+
+#: Environment variable names for scenario replay activation.
+REPLAY_SCENARIO_ENV = "REPLAY_SCENARIO"
+REPLAY_SCENARIO_DIR_ENV = "REPLAY_SCENARIO_DIR"
+
+
+class ScenarioReplayError(Exception):
+    """Raised when scenario replay cannot find a session or result for a step."""
 
 
 def _extract_env_and_args(cmd: list[str]) -> tuple[dict[str, str], list[str]]:
@@ -160,4 +169,74 @@ class RecordingSubprocessRunner(SubprocessRunner):
             termination=TerminationReason.NATURAL_EXIT,
             pid=0,
             elapsed_seconds=(step_result.cassette_duration_ms or 0) / 1000.0,
+        )
+
+
+class SequencingSubprocessRunner(SubprocessRunner):
+    """Replays pre-recorded sessions by step name.
+
+    Consumes the session map from ``ScenarioPlayer.build_session_map()``
+    and non-session step results from the scenario manifest. On each call,
+    extracts ``SCENARIO_STEP_NAME`` from the command env prefix and
+    dispatches to the matching step queue.
+    """
+
+    def __init__(
+        self,
+        session_map: dict[str, deque[tuple[Any, Any]]],
+        non_session_results: dict[str, dict[str, Any]],
+    ) -> None:
+        self._sessions = session_map
+        self._non_session = non_session_results
+        self.call_log: list[tuple[str, list[str]]] = []
+
+    async def __call__(
+        self,
+        cmd: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        env: dict[str, str] | None = None,
+        stale_threshold: float = 1200,
+        completion_marker: str = "",
+        session_log_dir: Path | None = None,
+        pty_mode: bool = False,
+        input_data: str | None = None,
+        completion_drain_timeout: float = 5.0,
+        linux_tracing_config: Any | None = None,
+    ) -> SubprocessResult:
+        env_dict, clean_args = _extract_env_and_args(cmd)
+        step_name = env_dict.get(SCENARIO_STEP_NAME_ENV, "")
+        self.call_log.append((step_name, cmd))
+
+        if not step_name:
+            raise ValueError(f"SCENARIO_STEP_NAME not found in cmd env prefix: {cmd!r}")
+
+        if step_name in self._sessions and self._sessions[step_name]:
+            cli, meta = self._sessions[step_name].popleft()
+            result = cli.run()
+            return SubprocessResult(
+                returncode=meta.exit_code,
+                stdout=result.stdout,
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=0,
+                elapsed_seconds=meta.duration_ms / 1000.0,
+            )
+
+        if step_name in self._non_session:
+            summary = self._non_session[step_name]
+            return SubprocessResult(
+                returncode=summary.get("exit_code", 0),
+                stdout=summary.get("stdout_head", ""),
+                stderr=summary.get("stderr", ""),
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=0,
+            )
+
+        raise ScenarioReplayError(
+            f"No session or result for step {step_name!r}. "
+            f"Available sessions: {sorted(self._sessions.keys())}. "
+            f"Available non-session: {sorted(self._non_session.keys())}. "
+            f"Register a fallback via player.add_fallback({step_name!r}, cli)."
         )

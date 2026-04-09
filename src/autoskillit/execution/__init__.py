@@ -68,8 +68,12 @@ from autoskillit.execution.recording import (
     RECORD_SCENARIO_DIR_ENV,
     RECORD_SCENARIO_ENV,
     RECORD_SCENARIO_RECIPE_ENV,
+    REPLAY_SCENARIO_DIR_ENV,
+    REPLAY_SCENARIO_ENV,
     SCENARIO_STEP_NAME_ENV,
     RecordingSubprocessRunner,
+    ScenarioReplayError,
+    SequencingSubprocessRunner,
 )
 from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE, resolve_remote_repo
 from autoskillit.execution.session import (
@@ -103,9 +107,13 @@ __all__ = [
     "run_managed_sync",
     # recording
     "RecordingSubprocessRunner",
+    "SequencingSubprocessRunner",
+    "ScenarioReplayError",
     "RECORD_SCENARIO_ENV",
     "RECORD_SCENARIO_DIR_ENV",
     "RECORD_SCENARIO_RECIPE_ENV",
+    "REPLAY_SCENARIO_ENV",
+    "REPLAY_SCENARIO_DIR_ENV",
     "SCENARIO_STEP_NAME_ENV",
     # quota
     "QuotaStatus",

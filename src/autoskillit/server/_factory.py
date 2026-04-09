@@ -19,6 +19,8 @@ from autoskillit.execution import (
     RECORD_SCENARIO_DIR_ENV,
     RECORD_SCENARIO_ENV,
     RECORD_SCENARIO_RECIPE_ENV,
+    REPLAY_SCENARIO_DIR_ENV,
+    REPLAY_SCENARIO_ENV,
     DefaultCIWatcher,
     DefaultDatabaseReader,
     DefaultGitHubFetcher,
@@ -116,7 +118,47 @@ def make_context(
 
         runner = DefaultSubprocessRunner()
 
-    if runner is not None and os.environ.get(RECORD_SCENARIO_ENV):
+    if runner is not None and os.environ.get(REPLAY_SCENARIO_ENV):
+        replay_dir = os.environ.get(REPLAY_SCENARIO_DIR_ENV, "")
+        if replay_dir:
+            if not os.path.isdir(replay_dir):
+                logger.warning(
+                    "REPLAY_SCENARIO_DIR=%r is not an existing directory — skipping replay",
+                    replay_dir,
+                )
+            else:
+                try:
+                    from api_simulator.claude import make_scenario_player
+                except ImportError as exc:
+                    raise RuntimeError(
+                        "REPLAY_SCENARIO is set but 'api_simulator' is not installed. "
+                        "Install it to enable scenario replay."
+                    ) from exc
+
+                import tempfile
+                from collections import deque
+
+                from autoskillit.execution import SequencingSubprocessRunner
+
+                tmp_replay = tempfile.mkdtemp(prefix="autoskillit-replay-")
+                player = make_scenario_player(
+                    scenario_dir=replay_dir,
+                    output_dir=tmp_replay,
+                    binary_path=os.path.join(tmp_replay, "claude"),
+                )
+
+                scenario = player.scenario()
+                non_session: dict[str, dict] = {}
+                for record in scenario.step_sequence:
+                    if record.session_dir is None:
+                        non_session[record.step_name] = record.result_summary or {}
+
+                raw_map = player.build_session_map()
+                session_map = {k: deque(v) for k, v in raw_map.items()}
+
+                runner = SequencingSubprocessRunner(session_map, non_session)
+
+    elif runner is not None and os.environ.get(RECORD_SCENARIO_ENV):
         scenario_dir = os.environ.get(RECORD_SCENARIO_DIR_ENV, "")
         recipe_name = os.environ.get(RECORD_SCENARIO_RECIPE_ENV, "unknown")
         if scenario_dir:

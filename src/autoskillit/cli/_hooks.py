@@ -9,8 +9,10 @@ from autoskillit.core import atomic_write, pkg_root
 from autoskillit.hook_registry import (
     _build_hook_entry,
     _claude_settings_path,  # noqa: F401 — re-exported; cli/__init__ + _stale_check + _init_helpers import from here
-    _is_own_hook as _is_autoskillit_hook_command,
     _load_settings_data,
+)
+from autoskillit.hook_registry import (
+    _is_own_hook as _is_autoskillit_hook_command,
 )
 from autoskillit.hooks import HOOK_REGISTRY
 

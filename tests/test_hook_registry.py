@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
     _extract_script_basenames,
@@ -32,9 +29,10 @@ def test_is_own_hook_unrelated_command() -> None:
 
 # HR-FILTER-4: known basename with different path prefix -> True
 def test_is_own_hook_different_prefix() -> None:
-    assert _is_own_hook(
-        "python3 /home/user/.local/share/uv/tools/lib/hooks/skill_cmd_check.py"
-    ) is True
+    assert (
+        _is_own_hook("python3 /home/user/.local/share/uv/tools/lib/hooks/skill_cmd_check.py")
+        is True
+    )
 
 
 # HR-BASENAME-1: canonical hooks dict -> returns set of bare filenames

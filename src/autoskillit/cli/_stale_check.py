@@ -214,6 +214,31 @@ def _verify_update_result(
     return False
 
 
+def _verify_hooks_result(
+    home: Path,
+    state: dict[str, object],
+    settings_path: Path,
+    current: str,
+) -> bool:
+    """Verify that hooks install resolved all drift.
+
+    Returns True if drift is now zero.
+    Returns False if drift persists, writing a hooks_snoozed record.
+    """
+    from autoskillit.hook_registry import _count_hook_registry_drift
+
+    drift = _count_hook_registry_drift(settings_path)
+    if drift.missing == 0 and drift.orphaned == 0:
+        return True
+
+    state["hooks_snoozed"] = {
+        "snoozed_at": datetime.now(UTC).isoformat(),
+        "attempted_version": current,
+    }
+    _write_dismiss_state(home, state)
+    return False
+
+
 def _detect_install_type() -> tuple[str, str | None]:
     """Detect whether autoskillit is installed as an editable or tool install.
 
@@ -318,7 +343,11 @@ def run_stale_check(home: Path | None = None) -> None:
 
     settings_path = _claude_settings_path("user")
     drift = _count_hook_registry_drift(settings_path)
-    if (drift.missing > 0 or drift.orphaned > 0) and not _is_dismissed(state, "hooks", None):
+    if (
+        (drift.missing > 0 or drift.orphaned > 0)
+        and not _is_dismissed(state, "hooks", None)
+        and not _is_snoozed(state, "hooks")
+    ):
         if drift.orphaned > 0:
             prompt_msg = (
                 f"\n\u26a0\ufe0f  {drift.orphaned} orphaned hook entry(ies) in settings.json "
@@ -334,6 +363,8 @@ def run_stale_check(home: Path | None = None) -> None:
         if answer in ("", "y", "yes"):
             with terminal_guard():
                 subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)
+            _verify_hooks_result(_home, state, settings_path, current)
+            return
         else:
             state["hooks"] = {
                 "dismissed_at": datetime.now(UTC).isoformat(),

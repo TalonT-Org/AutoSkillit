@@ -338,6 +338,41 @@ def test_defaults_yaml_cache_max_age_is_300():
     assert defaults["quota_guard"]["cache_max_age"] == 300
 
 
+# T-HOOK-MW-1: cache with one_hour binding above threshold → deny
+def test_deny_when_binding_window_is_one_hour_exhausted(tmp_path):
+    """Hook denies when binding window (one_hour) is above threshold."""
+    cache = tmp_path / "quota_cache.json"
+    payload = {
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "windows": {
+            "one_hour": {"utilization": 91.0, "resets_at": None},
+            "five_hour": {"utilization": 35.0, "resets_at": None},
+        },
+        "binding": {"window_name": "one_hour", "utilization": 91.0, "resets_at": None},
+    }
+    cache.write_text(json.dumps(payload))
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# T-HOOK-MW-2: cache with binding below threshold → approve
+def test_approve_when_binding_below_threshold(tmp_path):
+    """Hook approves when binding utilization is below threshold (even with high other window)."""
+    cache = tmp_path / "quota_cache.json"
+    payload = {
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "windows": {
+            "one_hour": {"utilization": 20.0, "resets_at": None},
+            "five_hour": {"utilization": 35.0, "resets_at": None},
+        },
+        "binding": {"window_name": "five_hour", "utilization": 35.0, "resets_at": None},
+    }
+    cache.write_text(json.dumps(payload))
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    assert out.strip() == ""
+
+
 def test_resolve_quota_log_dir_and_resolve_log_dir_in_sync(monkeypatch):
     """_resolve_quota_log_dir() must produce the same path as resolve_log_dir('') for
     identical env inputs. Guards against independent evolution of the two implementations.

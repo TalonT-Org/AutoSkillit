@@ -443,6 +443,124 @@ class TestIntegration:
         assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+class TestMultiWindowSelection:
+    """Verifies _compute_binding selects the worst-case window and full-snapshot cache I/O."""
+
+    # T-MW-1: one_hour exhausted, five_hour fine → binding = one_hour
+    def test_binding_window_one_hour_exhausted(self):
+        from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
+
+        now = datetime.now(UTC)
+        resets_one_hour = now + timedelta(minutes=45)
+        windows = {
+            "one_hour": QuotaWindowEntry(utilization=91.0, resets_at=resets_one_hour),
+            "five_hour": QuotaWindowEntry(utilization=35.0, resets_at=now + timedelta(hours=4)),
+        }
+        binding = _compute_binding(windows, threshold=85.0)
+        assert binding.utilization == pytest.approx(91.0)
+        assert binding.resets_at == resets_one_hour
+        assert binding.window_name == "one_hour"
+
+    # T-MW-2: multiple windows exhausted → binding = window with latest resets_at
+    def test_binding_window_latest_resets_at_governs(self):
+        from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
+
+        now = datetime.now(UTC)
+        resets_one_hour = now + timedelta(minutes=45)
+        resets_one_day = now + timedelta(hours=18)
+        windows = {
+            "one_hour": QuotaWindowEntry(utilization=91.0, resets_at=resets_one_hour),
+            "one_day": QuotaWindowEntry(utilization=97.0, resets_at=resets_one_day),
+            "five_hour": QuotaWindowEntry(utilization=35.0, resets_at=now + timedelta(hours=4)),
+        }
+        binding = _compute_binding(windows, threshold=85.0)
+        assert binding.window_name == "one_day"
+        assert binding.resets_at == resets_one_day
+
+    # T-MW-3: all windows fine → should_sleep=False, binding = highest utilization
+    def test_all_windows_fine_binding_is_highest_utilization(self):
+        from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
+
+        now = datetime.now(UTC)
+        windows = {
+            "one_hour": QuotaWindowEntry(utilization=40.0, resets_at=now + timedelta(hours=1)),
+            "five_hour": QuotaWindowEntry(utilization=60.0, resets_at=now + timedelta(hours=4)),
+            "one_day": QuotaWindowEntry(utilization=30.0, resets_at=now + timedelta(days=1)),
+        }
+        binding = _compute_binding(windows, threshold=85.0)
+        assert binding.utilization == pytest.approx(60.0)
+        assert binding.window_name == "five_hour"
+
+    # T-MW-4: _write_cache stores full windows dict + binding key
+    def test_write_cache_stores_all_windows(self, tmp_path):
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _write_cache,
+        )
+
+        now = datetime.now(UTC)
+        resets = now + timedelta(hours=1)
+        windows = {
+            "one_hour": QuotaWindowEntry(utilization=91.0, resets_at=resets),
+            "five_hour": QuotaWindowEntry(utilization=35.0, resets_at=now + timedelta(hours=4)),
+        }
+        binding = QuotaStatus(utilization=91.0, resets_at=resets, window_name="one_hour")
+        result = QuotaFetchResult(windows=windows, binding=binding)
+        cache_path = tmp_path / "cache.json"
+        _write_cache(str(cache_path), result)
+        data = json.loads(cache_path.read_text())
+        assert "windows" in data
+        assert "one_hour" in data["windows"]
+        assert "five_hour" in data["windows"]
+        assert "binding" in data
+        assert data["binding"]["window_name"] == "one_hour"
+        assert data["binding"]["utilization"] == pytest.approx(91.0)
+
+    # T-MW-5: _read_cache with old-format cache (missing "binding") returns None
+    def test_read_cache_old_format_returns_none(self, tmp_path):
+        from autoskillit.execution.quota import _read_cache
+
+        old_cache = {
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "five_hour": {"utilization": 87.0, "resets_at": None},
+        }
+        cache_path = tmp_path / "old_cache.json"
+        cache_path.write_text(json.dumps(old_cache))
+        result = _read_cache(str(cache_path), max_age=120)
+        assert result is None
+
+    # T-MW-6: _read_cache with new format returns QuotaStatus from binding
+    def test_read_cache_new_format_returns_binding(self, tmp_path):
+        from autoskillit.execution.quota import _read_cache
+
+        new_cache = {
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "windows": {
+                "one_hour": {
+                    "utilization": 91.0,
+                    "resets_at": "2026-04-10T09:45:00+00:00",
+                },
+                "five_hour": {
+                    "utilization": 35.0,
+                    "resets_at": "2026-04-10T13:00:00+00:00",
+                },
+            },
+            "binding": {
+                "window_name": "one_hour",
+                "utilization": 91.0,
+                "resets_at": "2026-04-10T09:45:00+00:00",
+            },
+        }
+        cache_path = tmp_path / "new_cache.json"
+        cache_path.write_text(json.dumps(new_cache))
+        status = _read_cache(str(cache_path), max_age=120)
+        assert status is not None
+        assert status.utilization == pytest.approx(91.0)
+        assert status.window_name == "one_hour"
+
+
 class TestRefreshQuotaCache:
     """Tests for _refresh_quota_cache: unconditional fetch-and-write behavior."""
 

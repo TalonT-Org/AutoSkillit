@@ -167,6 +167,7 @@ async def test_perform_merge_returns_success_on_green_tests(
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
+    conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -237,6 +238,7 @@ async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_run
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files (generated file check)
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
+    conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -324,6 +326,7 @@ async def test_perform_merge_strips_tracked_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
+    conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -373,6 +376,7 @@ async def test_perform_merge_noop_when_no_generated_files_tracked(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
+    conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -440,6 +444,7 @@ async def test_perform_merge_dirty_check_ignores_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
+    conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -477,6 +482,7 @@ async def test_perform_merge_strips_generated_files_before_dirty_check(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, f"worktree {fake_wt}\n", ""))  # wt list
+    conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
@@ -507,6 +513,7 @@ def _push_full_success_sequence(
     runner: "MockSubprocessRunner",
     *,
     worktree_path: "Path",  # noqa: F821
+    base_branch: str = "dev",
 ) -> None:
     """Push the git subprocess sequence for a successful merge onto runner.
 
@@ -515,7 +522,7 @@ def _push_full_success_sequence(
     Cleanup steps (remove_git_worktree, branch -D) use the runner default (rc=0).
     """
     runner.push(_make_result(0, "/repo/.git/worktrees/impl-test\n"))  # rev-parse --git-dir
-    runner.push(_make_result(0, "impl-test\n"))  # branch --show-current
+    runner.push(_make_result(0, "impl-test\n"))  # branch --show-current (worktree)
     runner.push(_make_result(0, ""))  # git ls-files (generated)
     runner.push(_make_result(0, ""))  # git status --porcelain
     runner.push(_make_result(0, ""))  # git fetch
@@ -523,9 +530,12 @@ def _push_full_success_sequence(
     runner.push(_make_result(0, ""))  # git log --merges
     runner.push(_make_result(0, ""))  # git rebase
     runner.push(  # worktree list --porcelain
-        _make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n")
+        _make_result(
+            0, f"worktree /repo\nHEAD abc123\nbranch refs/heads/{base_branch}\n\n"
+        )
     )
-    runner.push(_make_result(0, ""))  # git merge --no-ff
+    runner.push(_make_result(0, f"{base_branch}\n"))  # step 7.5: branch --show-current (main_repo)
+    runner.push(_make_result(0, ""))  # git merge --no-edit
 
 
 class TestPerformMergeSidecarCleanup:

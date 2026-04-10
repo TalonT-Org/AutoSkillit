@@ -119,15 +119,16 @@ def test_verdict_logic_all_three_outcomes(skill_text):
 
 
 def test_verdict_stop_on_l1_critical(skill_text):
-    """STOP must be causally linked to L1 dimensions via the stop_triggers code block."""
-    # The stop_triggers list must explicitly name the L1 dimensions as triggers
+    """STOP must be causally linked to STRUCTURAL L1 findings via the stop_triggers code block."""
     assert "stop_triggers" in skill_text, "stop_triggers code block not found"
-    # Verify causal linkage: stop_triggers assignment must reference both L1 dimensions
-    stop_trigger_line = 'f.dimension in {"estimand_clarity", "hypothesis_falsifiability"}'
-    assert stop_trigger_line in skill_text, (
-        "stop_triggers must explicitly name estimand_clarity and hypothesis_falsifiability "
-        "as the L1 STOP-triggering dimensions"
+    # Verify causal linkage: stop_triggers must reference STRUCTURAL classification
+    step7_text = skill_text_between("### Step 7", "### Step 8", skill_text)
+    assert "STRUCTURAL" in step7_text, (
+        "stop_triggers must be gated on STRUCTURAL classification, not raw dimension membership"
     )
+    # Both L1 dimensions must still be named as STOP-eligible dimensions
+    assert "estimand_clarity" in step7_text
+    assert "hypothesis_falsifiability" in step7_text
 
 
 def test_verdict_proportional_warning_threshold(skill_text):
@@ -428,4 +429,86 @@ def test_causal_inference_red_team_can_stop(skill_text: str) -> None:
     )
     assert rubric["causal_inference"] == "critical", (
         "causal_inference must retain critical as max red-team severity."
+    )
+
+
+# ── ADDRESSABLE/STRUCTURAL classification and priority tiers ──────────────────
+
+
+def test_l1_gate_addressable_structural_classification_present(skill_text: str) -> None:
+    step2_text = skill_text_between("### Step 2", "### Step 3", skill_text)
+    assert "ADDRESSABLE" in step2_text, (
+        "Step 2 fail-fast gate must classify L1 criticals as ADDRESSABLE or STRUCTURAL"
+    )
+    assert "STRUCTURAL" in step2_text, (
+        "Step 2 fail-fast gate must classify L1 criticals as ADDRESSABLE or STRUCTURAL"
+    )
+
+
+def test_addressable_findings_continue_l2_l4(skill_text: str) -> None:
+    step2_text = skill_text_between("### Step 2", "### Step 3", skill_text)
+    text_lower = step2_text.lower()
+    assert "continue" in text_lower and "addressable" in text_lower, (
+        "Step 2 must document that ADDRESSABLE L1 criticals continue to L2-L4 analysis"
+    )
+
+
+def test_structural_findings_halt_l2_l4(skill_text: str) -> None:
+    step2_text = skill_text_between("### Step 2", "### Step 3", skill_text)
+    assert "STRUCTURAL" in step2_text, (
+        "Step 2 must document that STRUCTURAL L1 criticals halt L2-L4 analysis"
+    )
+    text_lower = step2_text.lower()
+    assert (
+        "halt" in text_lower or "do not proceed" in text_lower
+    ) and "structural" in text_lower, (
+        "STRUCTURAL findings must still trigger halt at L1 fail-fast gate"
+    )
+
+
+def test_finding_priority_field_in_schema(skill_text: str) -> None:
+    assert '"priority"' in skill_text or "'priority'" in skill_text, (
+        "Finding schema must include a 'priority' field"
+    )
+    for tier in ["BLOCKING", "REQUIRED", "ADVISORY"]:
+        assert tier in skill_text, (
+            f"Priority tier {tier!r} not found — finding schema must define "
+            "BLOCKING, REQUIRED, and ADVISORY tiers"
+        )
+    assert '"fixability"' in skill_text or "'fixability'" in skill_text, (
+        "Finding schema must include a 'fixability' field (ADDRESSABLE | STRUCTURAL | null)"
+    )
+
+
+def test_deduplication_instruction_present(skill_text: str) -> None:
+    text_lower = skill_text.lower()
+    assert (
+        "deduplication" in text_lower or "deduplicate" in text_lower or "consolidat" in text_lower
+    ), "SKILL.md must contain a deduplication/consolidation instruction for repeated findings"
+    assert "sub-finding" in text_lower or "parent" in text_lower or "group" in text_lower, (
+        "Deduplication instruction must describe grouping related findings under a parent"
+    )
+
+
+def test_verdict_pseudocode_uses_addressable_structural(skill_text: str) -> None:
+    step7_text = skill_text_between("### Step 7", "### Step 8", skill_text)
+    assert "STRUCTURAL" in step7_text, (
+        "Step 7 verdict logic must reference STRUCTURAL classification in stop_triggers"
+    )
+    assert "ADDRESSABLE" in step7_text, (
+        "Step 7 verdict logic must reference ADDRESSABLE classification in verdict routing"
+    )
+
+
+def test_critical_constraints_updated_for_addressable(skill_text: str) -> None:
+    constraints_text = skill_text_between("## Critical Constraints", "## Workflow", skill_text)
+    assert "when any Level 1 finding is critical" not in constraints_text, (
+        "Critical Constraints must not contain the unqualified "
+        "'any Level 1 finding is critical' halt — ADDRESSABLE findings should continue L2-L4"
+    )
+
+
+def test_dashboard_yaml_includes_priority_counts(skill_text: str) -> None:
+    assert "blocking_count:" in skill_text, (
+        "Dashboard YAML summary must include blocking_count field"
     )

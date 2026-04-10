@@ -981,10 +981,11 @@ class TestSafetyConfigWiring:
         tool_ctx.runner.push(
             _make_result(
                 0,
-                "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n",
+                "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n",
                 "",
             )
         )  # worktree list
+        tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # git branch --show-current (step 7.5)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D

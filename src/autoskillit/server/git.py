@@ -95,8 +95,20 @@ async def _verify_merge_target(
     (compatible with perform_merge return format).
     """
     rc, current_out, _ = await _run_git(["git", "branch", "--show-current"], main_repo, 10, runner)
+    if rc != 0:
+        return {
+            "error": (
+                f"Failed to determine current branch of '{main_repo}' "
+                f"(git branch --show-current exited with rc={rc}). "
+                f"Ensure the work directory has '{expected_branch}' "
+                f"checked out before merging."
+            ),
+            "failed_step": MergeFailedStep.MERGE,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": "",  # filled in by caller
+        }
     current_branch = current_out.strip()
-    if rc != 0 or current_branch != expected_branch:
+    if current_branch != expected_branch:
         return {
             "error": (
                 f"Target repository '{main_repo}' is on branch "

@@ -679,8 +679,7 @@ class TestPerformMergeTargetBranchVerification:
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.MERGE
         assert result["state"] == MergeState.WORKTREE_INTACT
-        assert "main" in result["error"]
-        assert "dev" in result["error"]
+        assert "is on branch 'main', expected 'dev'" in result["error"]
         # No merge command should have been issued
         merge_cmds = [
             args[0] for args in runner.call_args_list if len(args[0]) > 1 and args[0][1] == "merge"

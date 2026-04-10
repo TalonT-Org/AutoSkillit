@@ -25,9 +25,10 @@ def _resolve_recipe_path(name: str) -> Path:
 _ALL_CLONE_RECIPE_PATHS: list[Path] = []
 for _dir in (builtin_recipes_dir(), PROJECT_ROOT / ".autoskillit" / "recipes"):
     if _dir.is_dir():
-        _ALL_CLONE_RECIPE_PATHS.extend(
-            p for p in sorted(_dir.glob("*.yaml")) if "clone_repo" in p.read_text()
-        )
+        for _p in sorted(_dir.glob("*.yaml")):
+            _wf = load_recipe(_p)
+            if any(s.tool == "clone_repo" for s in _wf.steps.values()):
+                _ALL_CLONE_RECIPE_PATHS.append(_p)
 
 
 def _assert_ci_conflict_fix_on_context_limit(recipe) -> None:

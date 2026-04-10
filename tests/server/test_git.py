@@ -539,9 +539,7 @@ def _push_full_success_sequence(
     runner.push(_make_result(0, ""))  # git log --merges
     runner.push(_make_result(0, ""))  # git rebase
     runner.push(  # worktree list --porcelain
-        _make_result(
-            0, f"worktree /repo\nHEAD abc123\nbranch refs/heads/{base_branch}\n\n"
-        )
+        _make_result(0, f"worktree /repo\nHEAD abc123\nbranch refs/heads/{base_branch}\n\n")
     )
     runner.push(_make_result(0, f"{base_branch}\n"))  # step 7.5: branch --show-current (main_repo)
     runner.push(_make_result(0, ""))  # git merge --no-edit
@@ -666,9 +664,7 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, ""))  # git log --merges
         runner.push(_make_result(0, ""))  # git rebase
         # worktree list says main_repo is on 'main'
-        runner.push(
-            _make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n")
-        )
+        runner.push(_make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n"))
         # Step 7.5: git branch --show-current on main_repo returns 'main'
         runner.push(_make_result(0, "main\n"))
 
@@ -687,9 +683,7 @@ class TestPerformMergeTargetBranchVerification:
         assert "dev" in result["error"]
         # No merge command should have been issued
         merge_cmds = [
-            args[0]
-            for args in runner.call_args_list
-            if len(args[0]) > 1 and args[0][1] == "merge"
+            args[0] for args in runner.call_args_list if len(args[0]) > 1 and args[0][1] == "merge"
         ]
         assert merge_cmds == [], f"Merge command was issued despite branch mismatch: {merge_cmds}"
 
@@ -714,9 +708,7 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, ""))  # git log --merges
         runner.push(_make_result(0, ""))  # git rebase
         # worktree list says main_repo is on 'dev'
-        runner.push(
-            _make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n")
-        )
+        runner.push(_make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n"))
         # Step 7.5: git branch --show-current on main_repo returns 'dev'
         runner.push(_make_result(0, "dev\n"))
         runner.push(_make_result(0, ""))  # git merge --no-edit
@@ -753,9 +745,7 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
         runner.push(_make_result(0, ""))  # git log --merges
         runner.push(_make_result(0, ""))  # git rebase
-        runner.push(
-            _make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n")
-        )
+        runner.push(_make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n"))
         # Step 7.5: branch verification
         runner.push(_make_result(0, "dev\n"))
         runner.push(_make_result(0, ""))  # git merge --no-edit
@@ -771,9 +761,7 @@ class TestPerformMergeTargetBranchVerification:
         assert result["merge_succeeded"] is True
         # Find the merge command and assert its cwd
         merge_call = next(
-            args
-            for args in runner.call_args_list
-            if len(args[0]) > 1 and args[0][1] == "merge"
+            args for args in runner.call_args_list if len(args[0]) > 1 and args[0][1] == "merge"
         )
         assert merge_call[1] == Path("/repo"), (
             f"Merge command cwd should be /repo (main_repo), got {merge_call[1]}"
@@ -799,9 +787,7 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
         runner.push(_make_result(0, ""))  # git log --merges
         runner.push(_make_result(0, ""))  # git rebase
-        runner.push(
-            _make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n")
-        )
+        runner.push(_make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n"))
         # Step 7.5: verified branch
         runner.push(_make_result(0, "dev\n"))
         runner.push(_make_result(0, ""))  # merge

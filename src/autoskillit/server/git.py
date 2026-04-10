@@ -94,9 +94,7 @@ async def _verify_merge_target(
     Returns GitMergeTarget on success, or an error dict on mismatch
     (compatible with perform_merge return format).
     """
-    rc, current_out, _ = await _run_git(
-        ["git", "branch", "--show-current"], main_repo, 10, runner
-    )
+    rc, current_out, _ = await _run_git(["git", "branch", "--show-current"], main_repo, 10, runner)
     current_branch = current_out.strip()
     if rc != 0 or current_branch != expected_branch:
         return {

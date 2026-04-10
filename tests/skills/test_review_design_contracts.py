@@ -583,6 +583,6 @@ def test_weight_matrix_has_eight_dimensions(skill_text: str) -> None:
             cells = [c.strip() for c in line.split("|") if c.strip()]
             if cells and cells[0] in known_dims:
                 dim_count += 1
-        elif in_table and not line.strip().startswith("|"):
+        elif in_table and line.strip() and not line.strip().startswith("|"):
             break
     assert dim_count == 8, f"Weight matrix must have exactly 8 dimension rows, found {dim_count}"

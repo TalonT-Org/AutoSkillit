@@ -1,5 +1,6 @@
 """Tests for server/git.py perform_merge()."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -181,7 +182,15 @@ async def test_perform_merge_returns_success_on_green_tests(
     )
     assert result.get("merge_succeeded") is True
     assert result["merged_branch"] == "feature-branch"
+    assert result["into_branch"] == "dev"
     assert tester.call_count == 2  # both pre- and post-rebase gates ran
+    # Verify merge command cwd is the main_repo (same as worktree root for this test)
+    merge_call = next(
+        args
+        for args in conftest_mock_runner.call_args_list
+        if len(args[0]) > 1 and args[0][1] == "merge"
+    )
+    assert merge_call[1] == Path(fake_wt)
 
 
 @pytest.mark.anyio
@@ -568,7 +577,13 @@ class TestPerformMergeSidecarCleanup:
             )
 
         assert result["merge_succeeded"] is True
+        assert result["into_branch"] == "dev"
         assert "impl-test" in sidecar_calls
+        # Verify merge command cwd is main_repo (/repo)
+        merge_call = next(
+            args for args in runner.call_args_list if len(args[0]) > 1 and args[0][1] == "merge"
+        )
+        assert merge_call[1] == Path("/repo")
 
     @pytest.mark.anyio
     async def test_sidecar_cleanup_failure_does_not_block_merge_result(self, tmp_path):
@@ -721,8 +736,6 @@ class TestPerformMergeTargetBranchVerification:
     @pytest.mark.anyio
     async def test_merge_command_cwd_is_main_repo(self, tmp_path):
         """Test 1.3: Assert git merge --no-edit is executed with cwd == main_repo path."""
-        from pathlib import Path
-
         from autoskillit.server.git import perform_merge
 
         wt = tmp_path / "worktrees" / "impl-test"

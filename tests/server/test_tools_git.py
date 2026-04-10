@@ -178,9 +178,17 @@ class TestMergeWorktree:
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
         result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
+        assert result["into_branch"] == "dev"
         assert result["cleanup_succeeded"] is True
         assert result["worktree_removed"] is True
         assert result["branch_deleted"] is True
+        # Verify merge command cwd is the main_repo (/repo)
+        merge_call = next(
+            args
+            for args in tool_ctx.runner.call_args_list
+            if len(args[0]) > 1 and args[0][1] == "merge"
+        )
+        assert merge_call[1] == Path("/repo")
 
     @pytest.mark.anyio
     async def test_merge_worktree_aborts_on_rebase_failure(self, tool_ctx, tmp_path):

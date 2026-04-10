@@ -17,11 +17,18 @@ def _write_cache(
     cache_path: Path,
     utilization: float,
     resets_at: str | None = None,
+    window_name: str = "five_hour",
+    extra_windows: dict | None = None,
 ) -> None:
-    """Write a fresh quota cache file."""
+    """Write a fresh quota cache file in the full-snapshot format."""
+    windows = {window_name: {"utilization": utilization, "resets_at": resets_at}}
+    if extra_windows:
+        windows.update(extra_windows)
     payload = {
         "fetched_at": datetime.now(UTC).isoformat(),
-        "five_hour": {
+        "windows": windows,
+        "binding": {
+            "window_name": window_name,
             "utilization": utilization,
             "resets_at": resets_at,
         },
@@ -260,15 +267,12 @@ def test_qpc14_only_run_skill_matcher():
 def test_warns_when_binding_window_exhausted(tmp_path):
     """PostToolUse hook emits warning when binding is one_hour (not five_hour)."""
     cache = tmp_path / "quota_cache.json"
-    payload = {
-        "fetched_at": datetime.now(UTC).isoformat(),
-        "windows": {
-            "one_hour": {"utilization": 91.0, "resets_at": None},
-            "five_hour": {"utilization": 35.0, "resets_at": None},
-        },
-        "binding": {"window_name": "one_hour", "utilization": 91.0, "resets_at": None},
-    }
-    cache.write_text(json.dumps(payload))
+    _write_cache(
+        cache,
+        utilization=91.0,
+        window_name="one_hour",
+        extra_windows={"five_hour": {"utilization": 35.0, "resets_at": None}},
+    )
     event = _build_event()
     out, _ = _run_hook(event=event, cache_path=cache)
     data = json.loads(out)

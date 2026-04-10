@@ -54,7 +54,14 @@ class TestReadCache:
         now = datetime.now(UTC)
         cache_data = {
             "fetched_at": (now - timedelta(seconds=30)).isoformat(),
-            "five_hour": {
+            "windows": {
+                "five_hour": {
+                    "utilization": 87.3,
+                    "resets_at": "2026-02-27T20:15:00+00:00",
+                }
+            },
+            "binding": {
+                "window_name": "five_hour",
                 "utilization": 87.3,
                 "resets_at": "2026-02-27T20:15:00+00:00",
             },
@@ -95,23 +102,40 @@ class TestReadCache:
 
 class TestWriteCache:
     def test_writes_readable_cache(self, tmp_path):
-        from autoskillit.execution.quota import QuotaStatus, _read_cache, _write_cache
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _read_cache,
+            _write_cache,
+        )
 
         resets_at = datetime(2026, 2, 27, 20, 15, tzinfo=UTC)
-        status = QuotaStatus(utilization=75.0, resets_at=resets_at)
+        result = QuotaFetchResult(
+            windows={"five_hour": QuotaWindowEntry(utilization=75.0, resets_at=resets_at)},
+            binding=QuotaStatus(utilization=75.0, resets_at=resets_at, window_name="five_hour"),
+        )
         cache_path = tmp_path / "usage_cache.json"
-        _write_cache(str(cache_path), status)
+        _write_cache(str(cache_path), result)
         recovered = _read_cache(str(cache_path), max_age=60)
         assert recovered is not None
         assert recovered.utilization == pytest.approx(75.0)
 
     def test_write_failure_does_not_raise(self, tmp_path):
-        from autoskillit.execution.quota import QuotaStatus, _write_cache
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _write_cache,
+        )
 
         resets_at = datetime(2026, 2, 27, 20, 15, tzinfo=UTC)
-        status = QuotaStatus(utilization=50.0, resets_at=resets_at)
+        result = QuotaFetchResult(
+            windows={"five_hour": QuotaWindowEntry(utilization=50.0, resets_at=resets_at)},
+            binding=QuotaStatus(utilization=50.0, resets_at=resets_at, window_name="five_hour"),
+        )
         # Nonexistent parent directory — should log warning, not raise
-        _write_cache("/nonexistent/dir/cache.json", status)
+        _write_cache("/nonexistent/dir/cache.json", result)
 
 
 class TestCheckAndSleepIfNeeded:
@@ -135,7 +159,12 @@ class TestCheckAndSleepIfNeeded:
     @pytest.mark.anyio
     async def test_below_threshold_returns_should_sleep_false(self, monkeypatch, tmp_path):
         from autoskillit.config.settings import QuotaGuardConfig
-        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = QuotaGuardConfig(
@@ -146,7 +175,12 @@ class TestCheckAndSleepIfNeeded:
         )
 
         async def mock_fetch(path, **kwargs):
-            return QuotaStatus(utilization=50.0, resets_at=resets_at)
+            return QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=50.0, resets_at=resets_at)},
+                binding=QuotaStatus(
+                    utilization=50.0, resets_at=resets_at, window_name="five_hour"
+                ),
+            )
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
@@ -158,7 +192,12 @@ class TestCheckAndSleepIfNeeded:
         from unittest.mock import AsyncMock
 
         from autoskillit.config.settings import QuotaGuardConfig
-        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = QuotaGuardConfig(
@@ -169,9 +208,15 @@ class TestCheckAndSleepIfNeeded:
             cache_path=str(tmp_path / "cache.json"),
         )
 
-        first_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
-        second_status = QuotaStatus(utilization=91.0, resets_at=resets_at)
-        mock_fetch = AsyncMock(side_effect=[first_status, second_status])
+        def _make_result(util: float) -> QuotaFetchResult:
+            return QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=util, resets_at=resets_at)},
+                binding=QuotaStatus(
+                    utilization=util, resets_at=resets_at, window_name="five_hour"
+                ),
+            )
+
+        mock_fetch = AsyncMock(side_effect=[_make_result(90.0), _make_result(91.0)])
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
@@ -182,14 +227,24 @@ class TestCheckAndSleepIfNeeded:
     async def test_uses_fresh_cache_skips_fetch(self, monkeypatch, tmp_path):
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
+            QuotaFetchResult,
             QuotaStatus,
+            QuotaWindowEntry,
             _write_cache,
             check_and_sleep_if_needed,
         )
 
         resets_at = datetime.now(UTC) + timedelta(hours=1)
         cache_path = tmp_path / "cache.json"
-        _write_cache(str(cache_path), QuotaStatus(utilization=40.0, resets_at=resets_at))
+        _write_cache(
+            str(cache_path),
+            QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=40.0, resets_at=resets_at)},
+                binding=QuotaStatus(
+                    utilization=40.0, resets_at=resets_at, window_name="five_hour"
+                ),
+            ),
+        )
         config = QuotaGuardConfig(
             enabled=True,
             threshold=80.0,
@@ -201,7 +256,7 @@ class TestCheckAndSleepIfNeeded:
 
         async def mock_fetch(path):
             fetch_called.append(1)
-            return QuotaStatus(utilization=99.9, resets_at=resets_at)
+            raise AssertionError("should not fetch when cache is fresh")
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
@@ -257,7 +312,12 @@ class TestCheckAndSleepIfNeeded:
         import structlog.testing
 
         from autoskillit.config.settings import QuotaGuardConfig
-        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
 
         config = QuotaGuardConfig(
             enabled=True,
@@ -265,14 +325,19 @@ class TestCheckAndSleepIfNeeded:
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
         )
+        resets = datetime.now(UTC) + timedelta(hours=1)
         # First fetch: above threshold, has resets_at so Gate 1 passes
-        first_status = QuotaStatus(
-            utilization=90.0, resets_at=datetime.now(UTC) + timedelta(hours=1)
+        first_result = QuotaFetchResult(
+            windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=resets)},
+            binding=QuotaStatus(utilization=90.0, resets_at=resets, window_name="five_hour"),
         )
         # Second fetch (re-fetch): above threshold, resets_at is None → Gate 2 fires
-        second_status = QuotaStatus(utilization=90.0, resets_at=None)
+        second_result = QuotaFetchResult(
+            windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=None)},
+            binding=QuotaStatus(utilization=90.0, resets_at=None, window_name="five_hour"),
+        )
 
-        mock_fetch = AsyncMock(side_effect=[first_status, second_status])
+        mock_fetch = AsyncMock(side_effect=[first_result, second_result])
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
 
         with structlog.testing.capture_logs() as cap:
@@ -293,7 +358,12 @@ class TestCheckAndSleepResetAtNoneBlocks:
     @pytest.mark.anyio
     async def test_above_threshold_resets_at_none_first_fetch_blocks(self, monkeypatch, tmp_path):
         from autoskillit.config.settings import QuotaGuardConfig
-        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
 
         config = QuotaGuardConfig(
             enabled=True,
@@ -304,7 +374,10 @@ class TestCheckAndSleepResetAtNoneBlocks:
         )
 
         async def mock_fetch(path, **kwargs):
-            return QuotaStatus(utilization=90.0, resets_at=None)
+            return QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=None)},
+                binding=QuotaStatus(utilization=90.0, resets_at=None, window_name="five_hour"),
+            )
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
@@ -316,7 +389,12 @@ class TestCheckAndSleepResetAtNoneBlocks:
         from unittest.mock import AsyncMock
 
         from autoskillit.config.settings import QuotaGuardConfig
-        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = QuotaGuardConfig(
@@ -327,9 +405,15 @@ class TestCheckAndSleepResetAtNoneBlocks:
             cache_path=str(tmp_path / "cache.json"),
         )
         # First fetch has resets_at (passes first None guard), second fetch has None
-        first_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
-        second_status = QuotaStatus(utilization=90.0, resets_at=None)
-        mock_fetch = AsyncMock(side_effect=[first_status, second_status])
+        first_result = QuotaFetchResult(
+            windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=resets_at)},
+            binding=QuotaStatus(utilization=90.0, resets_at=resets_at, window_name="five_hour"),
+        )
+        second_result = QuotaFetchResult(
+            windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=None)},
+            binding=QuotaStatus(utilization=90.0, resets_at=None, window_name="five_hour"),
+        )
+        mock_fetch = AsyncMock(side_effect=[first_result, second_result])
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
@@ -339,14 +423,22 @@ class TestCheckAndSleepResetAtNoneBlocks:
     async def test_cache_hit_resets_at_none_above_threshold_blocks(self, monkeypatch, tmp_path):
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
+            QuotaFetchResult,
             QuotaStatus,
+            QuotaWindowEntry,
             _write_cache,
             check_and_sleep_if_needed,
         )
 
         cache_path = tmp_path / "cache.json"
         # Write a cache entry with resets_at=None and above-threshold utilization
-        _write_cache(str(cache_path), QuotaStatus(utilization=90.0, resets_at=None))
+        _write_cache(
+            str(cache_path),
+            QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=None)},
+                binding=QuotaStatus(utilization=90.0, resets_at=None, window_name="five_hour"),
+            ),
+        )
         config = QuotaGuardConfig(
             enabled=True,
             threshold=80.0,
@@ -369,7 +461,12 @@ class TestCheckAndSleepResetAtNoneBlocks:
     @pytest.mark.anyio
     async def test_fallback_sleep_uses_at_least_buffer_seconds(self, monkeypatch, tmp_path):
         from autoskillit.config.settings import QuotaGuardConfig
-        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
 
         config = QuotaGuardConfig(
             enabled=True,
@@ -380,7 +477,10 @@ class TestCheckAndSleepResetAtNoneBlocks:
         )
 
         async def mock_fetch(path, **kwargs):
-            return QuotaStatus(utilization=90.0, resets_at=None)
+            return QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=None)},
+                binding=QuotaStatus(utilization=90.0, resets_at=None, window_name="five_hour"),
+            )
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
@@ -392,7 +492,12 @@ class TestCheckAndSleepResetAtNoneBlocks:
         from unittest.mock import AsyncMock
 
         from autoskillit.config.settings import QuotaGuardConfig
-        from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         # Do NOT override buffer_seconds — exercises the real default (60)
@@ -402,9 +507,16 @@ class TestCheckAndSleepResetAtNoneBlocks:
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
         )
-        first_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
-        second_status = QuotaStatus(utilization=90.0, resets_at=resets_at)
-        mock_fetch = AsyncMock(side_effect=[first_status, second_status])
+
+        def _r(util: float) -> QuotaFetchResult:
+            return QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=util, resets_at=resets_at)},
+                binding=QuotaStatus(
+                    utilization=util, resets_at=resets_at, window_name="five_hour"
+                ),
+            )
+
+        mock_fetch = AsyncMock(side_effect=[_r(90.0), _r(90.0)])
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
@@ -423,11 +535,22 @@ class TestIntegration:
         import io
         from contextlib import redirect_stdout
 
-        from autoskillit.execution.quota import QuotaStatus, _write_cache
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _write_cache,
+        )
         from autoskillit.hooks.quota_check import main
 
         cache_path = tmp_path / "quota_cache.json"
-        _write_cache(str(cache_path), QuotaStatus(utilization=95.0, resets_at=None))
+        _write_cache(
+            str(cache_path),
+            QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=95.0, resets_at=None)},
+                binding=QuotaStatus(utilization=95.0, resets_at=None, window_name="five_hour"),
+            ),
+        )
 
         stdin_text = json.dumps({"tool_name": "run_skill"})
         buf = io.StringIO()
@@ -569,7 +692,12 @@ class TestRefreshQuotaCache:
         self, tmp_path, monkeypatch
     ):
         """_refresh_quota_cache calls _fetch_quota unconditionally, even if cache is fresh."""
-        from autoskillit.execution.quota import QuotaStatus, _refresh_quota_cache
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _refresh_quota_cache,
+        )
 
         fresh_cache = tmp_path / "cache.json"
         # Write a 10-second-old cache (well within 300s max_age)
@@ -585,7 +713,10 @@ class TestRefreshQuotaCache:
 
         async def fake_fetch(credentials_path, **kwargs):
             fetch_called.append(True)
-            return QuotaStatus(utilization=0.35, resets_at=None)
+            return QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=0.35, resets_at=None)},
+                binding=QuotaStatus(utilization=0.35, resets_at=None, window_name="five_hour"),
+            )
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
         config = QuotaGuardConfig(cache_path=str(fresh_cache))
@@ -595,16 +726,24 @@ class TestRefreshQuotaCache:
     @pytest.mark.anyio
     async def test_refresh_quota_cache_writes_new_cache(self, tmp_path, monkeypatch):
         """_refresh_quota_cache writes a new cache file after fetching."""
-        from autoskillit.execution.quota import QuotaStatus, _refresh_quota_cache
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _refresh_quota_cache,
+        )
 
         cache_path = tmp_path / "cache.json"
 
         async def fake_fetch(credentials_path, **kwargs):
-            return QuotaStatus(utilization=0.5, resets_at=None)
+            return QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=0.5, resets_at=None)},
+                binding=QuotaStatus(utilization=0.5, resets_at=None, window_name="five_hour"),
+            )
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
         config = QuotaGuardConfig(cache_path=str(cache_path))
         await _refresh_quota_cache(config)
         assert cache_path.exists()
         data = json.loads(cache_path.read_text())
-        assert data["five_hour"]["utilization"] == pytest.approx(0.5)
+        assert data["binding"]["utilization"] == pytest.approx(0.5)

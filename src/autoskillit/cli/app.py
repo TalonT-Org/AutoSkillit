@@ -257,7 +257,7 @@ def migrate(*, check: bool = False):
 
 @app.command
 def quota_status() -> None:
-    """Check current 5-hour quota utilization. Exits 0 always; outputs JSON."""
+    """Check quota utilization across all rate-limit windows. Exits 0 always; outputs JSON."""
     import asyncio
 
     from autoskillit.config import load_config

@@ -132,7 +132,10 @@ def main(*, cache_path_override: str | None = None) -> None:
         sys.exit(0)  # no fresh cache — fail open
 
     try:
-        utilization = float(cache["five_hour"]["utilization"])
+        binding = cache.get("binding")
+        if not binding or not isinstance(binding, dict):
+            raise KeyError("binding")
+        utilization = float(binding["utilization"])
     except (KeyError, ValueError, TypeError):
         _write_quota_log_event(
             {
@@ -146,7 +149,7 @@ def main(*, cache_path_override: str | None = None) -> None:
         sys.exit(0)  # malformed cache — fail open
 
     if utilization >= threshold:
-        resets_at_str = cache.get("five_hour", {}).get("resets_at")
+        resets_at_str = binding.get("resets_at")
         if resets_at_str:
             try:
                 resets_at = datetime.fromisoformat(resets_at_str)

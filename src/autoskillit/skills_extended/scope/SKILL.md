@@ -99,6 +99,18 @@ additional exploration is necessary for the specific research question.
 > Output a "Metric Context" section listing which canonical metrics apply to this
 > research question and their current thresholds.
 
+**Subagent E — Computational Complexity:**
+> Identify the most expensive computation the research question involves.
+> Examine the codebase for algorithm implementations, library calls with
+> known high complexity (e.g., distance matrix computation, sorting of
+> large arrays, pairwise comparisons), and any baseline/reference
+> computations that will run alongside the focal algorithm. For each
+> expensive operation found, note its time and space complexity class
+> (O(n²), O(n log n), etc.) and any known pitfalls from library
+> documentation or prior art (implicit matrix materializations, hidden
+> copies, self-inclusion bugs). Report findings as: dominant operation,
+> scaling behavior, known bottlenecks, and gotchas.
+
 **Additional subagents (launch as many as needed):**
 - Web searches for specific tools, libraries, or methods relevant to the question
 - Deeper exploration of specific code areas identified by early subagents
@@ -134,6 +146,12 @@ must contain these sections:
 
 ## Technical Context
 {Architecture, key modules, data flow, algorithms involved}
+
+## Computational Complexity
+- **Dominant operation:** {the single most expensive computation the experiment will perform — include the specific library call or algorithm, not just a description}
+- **Scaling behavior:** {how cost grows with input size — O(n²), O(n·m), O(n log n), etc. — state both time and space complexity}
+- **Known bottlenecks:** {specific library calls, data structures, or algorithms with high memory/time cost — include baseline and reference computations, not just the focal algorithm. If the experiment compares a new method against an exact/standard baseline, the baseline's computational cost must be listed here.}
+- **Gotchas:** {known pitfalls from prior art or library documentation — self-inclusion bugs, implicit matrix materializations, hidden copies, dtype-dependent memory multipliers}
 
 ## Hypotheses
 {Proposed explanations or predictions to test, stated as falsifiable claims}

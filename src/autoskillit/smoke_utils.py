@@ -133,3 +133,8 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
     out_path = Path(output_dir) / "merge_queue_data.json"
     atomic_write(out_path, json.dumps(entries))
     return {"merge_queue_data_path": str(out_path)}
+
+
+def smoke_canary() -> bool:
+    """Smoke-test sentinel — always returns True."""
+    return True

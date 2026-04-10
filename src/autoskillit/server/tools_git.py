@@ -323,6 +323,13 @@ async def create_unique_branch(
                     break
                 suffix += 1
 
+        rc_head, head_out, _ = await _run_subprocess(
+            ["git", "branch", "--show-current"],
+            cwd=cwd,
+            timeout=10,
+        )
+        base_ref = head_out.strip() if rc_head == 0 and head_out.strip() else "DETACHED_HEAD"
+
         rc_checkout, _, _stderr_checkout = await _run_subprocess(
             ["git", "checkout", "-b", branch_name],
             cwd=cwd,
@@ -336,7 +343,9 @@ async def create_unique_branch(
                 }
             )
 
-        return json.dumps({"branch_name": branch_name, "was_unique": was_unique})
+        return json.dumps(
+            {"branch_name": branch_name, "was_unique": was_unique, "base_ref": base_ref}
+        )
     finally:
         if step_name:
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

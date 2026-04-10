@@ -58,9 +58,10 @@ class TestComputationalComplexitySection:
     def test_complexity_subagent_instruction(self) -> None:
         content = _read_scope_skill_md()
         assert re.search(
-            r"(?:Subagent|subagent).*(?:Complexity|complexity|dominant.*operation)",
+            r"(?:Subagent|subagent).*?Complexity.*?dominant.*?operation",
             content,
+            re.DOTALL | re.IGNORECASE,
         ), (
-            "Step 1 must include a subagent instruction for gathering "
-            "computational complexity information"
+            "Step 1 subagent must instruct gathering of computational complexity "
+            "fields including dominant operation (heading alone is not sufficient)"
         )

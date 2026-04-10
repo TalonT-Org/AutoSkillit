@@ -515,3 +515,74 @@ def test_dashboard_yaml_includes_priority_counts(skill_text: str) -> None:
     assert "blocking_count:" in skill_text, (
         "Dashboard YAML summary must include blocking_count field"
     )
+
+
+# ── agent_implementability dimension ─────────────────────────────────────────
+
+
+def test_agent_implementability_subagent_checks(skill_text: str) -> None:
+    """All 7 agent_implementability sub-checks must be named in SKILL.md."""
+    for check in [
+        "step atomicity",
+        "file path resolvability",
+        "performance feasibility",
+        "verification criteria completeness",
+        "dependency ordering",
+        "absence of human-only actions",
+        "artifact continuity",
+    ]:
+        assert check.lower() in skill_text.lower(), (
+            f"agent_implementability sub-check {check!r} not found in SKILL.md"
+        )
+
+
+def test_mechanizable_fixed_checklist_items(skill_text: str) -> None:
+    """Mechanizable check log must include two fixed checklist items."""
+    assert "All implementation phases have runnable verification criteria" in skill_text
+    assert "All file paths in the implementation plan resolve to valid locations" in skill_text
+
+
+def test_agent_implementability_not_stop_eligible(skill_text: str) -> None:
+    """agent_implementability must NOT appear in stop_triggers (L4 contract)."""
+    step7_text = skill_text_between("### Step 7", "### Step 8", skill_text)
+    assert "agent_implementability" not in step7_text, (
+        "agent_implementability must not appear in Step 7 verdict logic — "
+        "L4 dimensions do not produce STOP-eligible findings"
+    )
+
+
+def test_agent_implementability_l4_step5_placement(skill_text: str) -> None:
+    """agent_implementability must be defined in Step 5 (L4), not elsewhere."""
+    step5_text = skill_text_between("### Step 5", "### Step 6", skill_text)
+    assert "agent_implementability" in step5_text, (
+        "agent_implementability must be placed in Step 5 (Level 4 dimensions)"
+    )
+
+
+def test_weight_matrix_has_eight_dimensions(skill_text: str) -> None:
+    """Weight matrix must have exactly 8 dimension rows after adding agent_implementability."""
+    in_table = False
+    dim_count = 0
+    known_dims = {
+        "causal_structure",
+        "variance_protocol",
+        "statistical_corrections",
+        "ecological_validity",
+        "measurement_alignment",
+        "resource_proportionality",
+        "data_acquisition",
+        "agent_implementability",
+    }
+    for line in skill_text.splitlines():
+        if "| Dimension |" in line:
+            in_table = True
+            continue
+        if in_table and "|---" in line:
+            continue
+        if in_table and "|" in line:
+            cells = [c.strip() for c in line.split("|") if c.strip()]
+            if cells and cells[0] in known_dims:
+                dim_count += 1
+        elif in_table and not line.strip().startswith("|"):
+            break
+    assert dim_count == 8, f"Weight matrix must have exactly 8 dimension rows, found {dim_count}"

@@ -229,4 +229,4 @@ forbidden_modules = [
 ]
 
 [tool.uv.sources]
-api-simulator = { git = "https://github.com/TalonT-Org/api-simulator", branch = "main", subdirectory = "crates/api-simulator-py" }
+api-simulator = { git = "https://github.com/TalonT-Org/api-simulator", rev = "11aecd04a1bc86d7da0ca9043b26e30a49e6bc20", subdirectory = "crates/api-simulator-py" }

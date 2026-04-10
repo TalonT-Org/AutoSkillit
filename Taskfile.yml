@@ -119,39 +119,18 @@ tasks:
         exit $PYTEST_EXIT
 
   test-smoke-record:
-    desc: Record smoke test as a scenario fixture
-    deps: [_tmpdir-setup]
+    desc: Record smoke test scenario by running autoskillit order with recording enabled
     env:
-      PYTHONDONTWRITEBYTECODE: "1"
-      OMP_NUM_THREADS: "1"
-      SMOKE_TEST: "1"
       RECORD_SCENARIO: "1"
-      RECORD_SCENARIO_DIR: "tests/fixtures/scenarios/smoke-happy"
+      RECORD_SCENARIO_DIR: '{{.RECORD_SCENARIO_DIR | default "tests/fixtures/scenarios/smoke-happy"}}'
       RECORD_SCENARIO_RECIPE: "smoke-test"
-      TMPDIR: "{{.PYTEST_TMPDIR}}"
     cmds:
       - |
-        mkdir -p temp
-        TEST_OUTPUT="temp/smoke-record-$(date +%Y-%m-%d_%H%M%S).txt"
-        echo "Recording smoke tests as scenario fixtures"
-        echo "Output: $TEST_OUTPUT"
-
-        if [[ -d ".venv" ]]; then
-          PYTEST_CMD=".venv/bin/python -m pytest"
-        else
-          PYTEST_CMD="pytest"
-        fi
-
-        set -o pipefail
-        set +e
-        $PYTEST_CMD tests/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
-        PYTEST_EXIT=$?
-        set +o pipefail
-        set -e
-
+        mkdir -p "$RECORD_SCENARIO_DIR"
+        echo "Recording smoke-test scenario"
+        echo "  RECORD_SCENARIO_DIR=$RECORD_SCENARIO_DIR"
         echo ""
-        echo "Smoke record output saved to: $TEST_OUTPUT"
-        exit $PYTEST_EXIT
+        autoskillit order smoke-test
 
   check-docs:
     desc: Verify documentation counts match source code

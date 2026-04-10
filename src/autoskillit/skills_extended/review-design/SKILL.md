@@ -245,7 +245,7 @@ to STRUCTURAL (absent estimands typically indicate deeper design flaws).
 
 ### Step 3: Level 2 + Red-Team (concurrent)
 
-When the L1 gate passes (no critical L1 findings), launch 2–3 Level 2 subagents AND the
+When the L1 gate passes (no STRUCTURAL critical L1 findings — gate also passes when all L1 criticals are ADDRESSABLE), launch 2–3 Level 2 subagents AND the
 red-team agent concurrently — all at the same time without waiting for each other.
 
 **Level 2 subagents** (parallel, weights from the matrix):

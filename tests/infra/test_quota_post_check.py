@@ -17,11 +17,18 @@ def _write_cache(
     cache_path: Path,
     utilization: float,
     resets_at: str | None = None,
+    window_name: str = "five_hour",
+    extra_windows: dict | None = None,
 ) -> None:
-    """Write a fresh quota cache file."""
+    """Write a fresh quota cache file in the full-snapshot format."""
+    windows = {window_name: {"utilization": utilization, "resets_at": resets_at}}
+    if extra_windows:
+        windows.update(extra_windows)
     payload = {
         "fetched_at": datetime.now(UTC).isoformat(),
-        "five_hour": {
+        "windows": windows,
+        "binding": {
+            "window_name": window_name,
             "utilization": utilization,
             "resets_at": resets_at,
         },
@@ -254,3 +261,19 @@ def test_qpc14_only_run_skill_matcher():
     assert re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_skill")
     assert not re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_cmd")
     assert not re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__kitchen_status")
+
+
+# T-PCHK-MW-1: post_check warns when binding window is exhausted (not five_hour)
+def test_warns_when_binding_window_exhausted(tmp_path):
+    """PostToolUse hook emits warning when binding is one_hour (not five_hour)."""
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(
+        cache,
+        utilization=91.0,
+        window_name="one_hour",
+        extra_windows={"five_hour": {"utilization": 35.0, "resets_at": None}},
+    )
+    event = _build_event()
+    out, _ = _run_hook(event=event, cache_path=cache)
+    data = json.loads(out)
+    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]

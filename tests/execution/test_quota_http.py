@@ -164,3 +164,56 @@ async def test_z_suffix_resets_at_parsed_correctly(mock_http_server, quota_confi
     result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
 
     assert result["resets_at"] == "2026-04-05T00:00:00+00:00"
+
+
+# T-HTTP-MW-1: multi-window response, worst-case window governs
+async def test_multi_window_worst_case_governs(mock_http_server, quota_config):
+    """When one_hour is exhausted but five_hour is fine, one_hour governs the sleep."""
+    resets_at = (datetime.now(UTC) + timedelta(minutes=45)).isoformat()
+    five_hour_resets = (datetime.now(UTC) + timedelta(hours=4)).isoformat()
+    mock_http_server.register_sequence(
+        "GET",
+        QUOTA_ENDPOINT,
+        [
+            PyResponseSpec(
+                body={
+                    "one_hour": {"utilization": 91.0, "resets_at": resets_at},
+                    "five_hour": {"utilization": 35.0, "resets_at": five_hour_resets},
+                }
+            ),
+            PyResponseSpec(
+                body={
+                    "one_hour": {"utilization": 91.0, "resets_at": resets_at},
+                    "five_hour": {"utilization": 35.0, "resets_at": five_hour_resets},
+                }
+            ),
+        ],
+    )
+    result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
+    assert result["should_sleep"] is True
+    assert result["sleep_seconds"] == pytest.approx(45 * 60 + 60, abs=30)
+    assert result["window_name"] == "one_hour"
+
+
+# T-HTTP-MW-2: unknown/extra window keys are tolerated (forward compat)
+async def test_unknown_window_keys_tolerated(mock_http_server, quota_config):
+    """Extra unknown window keys in API response are tolerated without error."""
+    mock_http_server.register(
+        "GET",
+        QUOTA_ENDPOINT,
+        PyResponseSpec(
+            body={
+                "five_hour": {
+                    "utilization": 50.0,
+                    "resets_at": "2026-04-05T00:00:00+00:00",
+                },
+                "ten_year": {
+                    "utilization": 1.0,
+                    "resets_at": "2036-04-05T00:00:00+00:00",
+                },
+            }
+        ),
+    )
+    result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
+    assert result["should_sleep"] is False
+    assert result["utilization"] is not None

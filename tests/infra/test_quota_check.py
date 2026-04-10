@@ -12,11 +12,22 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-def _write_cache(cache_path: Path, utilization: float, resets_at: str | None = None) -> None:
-    """Write a fresh quota cache file."""
+def _write_cache(
+    cache_path: Path,
+    utilization: float,
+    resets_at: str | None = None,
+    window_name: str = "five_hour",
+    extra_windows: dict | None = None,
+) -> None:
+    """Write a fresh quota cache file in the full-snapshot format."""
+    windows = {window_name: {"utilization": utilization, "resets_at": resets_at}}
+    if extra_windows:
+        windows.update(extra_windows)
     payload = {
         "fetched_at": datetime.now(UTC).isoformat(),
-        "five_hour": {
+        "windows": windows,
+        "binding": {
+            "window_name": window_name,
             "utilization": utilization,
             "resets_at": resets_at,
         },
@@ -336,6 +347,36 @@ def test_defaults_yaml_cache_max_age_is_300():
     defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
     assert isinstance(defaults, dict)
     assert defaults["quota_guard"]["cache_max_age"] == 300
+
+
+# T-HOOK-MW-1: cache with one_hour binding above threshold → deny
+def test_deny_when_binding_window_is_one_hour_exhausted(tmp_path):
+    """Hook denies when binding window (one_hour) is above threshold."""
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(
+        cache,
+        utilization=91.0,
+        window_name="one_hour",
+        extra_windows={"five_hour": {"utilization": 35.0, "resets_at": None}},
+    )
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# T-HOOK-MW-2: cache with binding below threshold → approve
+def test_approve_when_binding_below_threshold(tmp_path):
+    """Hook approves when binding utilization is below threshold (even with high other window)."""
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(
+        cache,
+        utilization=35.0,
+        window_name="five_hour",
+        extra_windows={"one_hour": {"utilization": 20.0, "resets_at": None}},
+    )
+    out, exit_code = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    assert exit_code == 0
+    assert out.strip() == ""
 
 
 def test_resolve_quota_log_dir_and_resolve_log_dir_in_sync(monkeypatch):

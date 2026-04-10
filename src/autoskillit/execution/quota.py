@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -20,12 +20,63 @@ from autoskillit.core import atomic_write, get_logger
 _log = get_logger(__name__)
 
 _DEFAULT_BASE_URL: str = "https://api.anthropic.com"
+_DEFAULT_THRESHOLD: float = 85.0
 
 
 @dataclass
 class QuotaStatus:
     utilization: float  # percentage 0–100
     resets_at: datetime | None  # UTC-aware; None when utilization is 0
+    window_name: str = "unknown"  # which window this came from (diagnostic)
+
+
+@dataclass
+class QuotaWindowEntry:
+    """A single rate-limit window from the API response."""
+
+    utilization: float
+    resets_at: datetime | None
+
+
+@dataclass
+class QuotaFetchResult:
+    """All windows from one API call, with the binding (worst-case) identified."""
+
+    windows: dict[str, QuotaWindowEntry] = field(default_factory=dict)
+    binding: QuotaStatus = field(default_factory=lambda: QuotaStatus(0.0, None))
+
+
+def _parse_resets_at(resets_at_str: str | None) -> datetime | None:
+    """Parse a resets_at string from API or cache, handling Z-suffix and +00:00 variants."""
+    if not resets_at_str:
+        return None
+    return datetime.fromisoformat(resets_at_str.replace("Z", "+00:00"))
+
+
+def _compute_binding(
+    windows: dict[str, QuotaWindowEntry],
+    threshold: float,
+) -> QuotaStatus:
+    """Select the worst-case (binding) window.
+
+    Among windows at or above threshold, returns the one with the latest resets_at
+    (the last window to reset governs how long the caller must sleep).
+    If no window is above threshold, returns the window with highest utilization
+    (for diagnostic display; should_sleep will be False for the caller).
+    Returns QuotaStatus(0.0, None) when windows is empty.
+    """
+    if not windows:
+        return QuotaStatus(0.0, None)
+    exhausted = [(name, w) for name, w in windows.items() if w.utilization >= threshold]
+    if exhausted:
+        name, w = max(
+            exhausted,
+            key=lambda nw: nw[1].resets_at or datetime.min.replace(tzinfo=UTC),
+        )
+        return QuotaStatus(utilization=w.utilization, resets_at=w.resets_at, window_name=name)
+    # No window exhausted — return highest utilization for display
+    name, w = max(windows.items(), key=lambda nw: nw[1].utilization)
+    return QuotaStatus(utilization=w.utilization, resets_at=w.resets_at, window_name=name)
 
 
 def _read_credentials(credentials_path: str) -> str:
@@ -42,32 +93,44 @@ def _read_credentials(credentials_path: str) -> str:
 
 
 def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
-    """Return a fresh QuotaStatus from local cache, or None if stale/missing."""
+    """Return a fresh QuotaStatus from local cache, or None if stale/missing/old-format."""
     try:
         raw = json.loads(Path(cache_path).expanduser().read_text())
         fetched_at = datetime.fromisoformat(raw["fetched_at"])
         age = (datetime.now(UTC) - fetched_at).total_seconds()
         if age > max_age:
             return None
-        fh = raw["five_hour"]
-        resets_at_str = fh.get("resets_at")
-        resets_at = datetime.fromisoformat(resets_at_str) if resets_at_str else None
+        if "binding" not in raw:
+            # Old-format cache (no "binding" key) — treat as stale, force re-fetch
+            return None
+        b = raw["binding"]
         return QuotaStatus(
-            utilization=float(fh["utilization"]),
-            resets_at=resets_at,
+            utilization=float(b["utilization"]),
+            resets_at=_parse_resets_at(b.get("resets_at")),
+            window_name=str(b.get("window_name", "unknown")),
         )
     except (FileNotFoundError, KeyError, ValueError, json.JSONDecodeError):
         return None
 
 
-def _write_cache(cache_path: str, status: QuotaStatus) -> None:
-    """Write quota status to cache file. Silently logs on failure."""
+def _write_cache(cache_path: str, result: QuotaFetchResult) -> None:
+    """Write full-snapshot quota data to cache file. Silently logs on failure."""
     try:
         payload = {
             "fetched_at": datetime.now(UTC).isoformat(),
-            "five_hour": {
-                "utilization": status.utilization,
-                "resets_at": status.resets_at.isoformat() if status.resets_at else None,
+            "windows": {
+                name: {
+                    "utilization": w.utilization,
+                    "resets_at": w.resets_at.isoformat() if w.resets_at else None,
+                }
+                for name, w in result.windows.items()
+            },
+            "binding": {
+                "window_name": result.binding.window_name,
+                "utilization": result.binding.utilization,
+                "resets_at": (
+                    result.binding.resets_at.isoformat() if result.binding.resets_at else None
+                ),
             },
         }
         path = Path(cache_path).expanduser()
@@ -82,8 +145,8 @@ async def _fetch_quota(
     *,
     base_url: str = _DEFAULT_BASE_URL,
     _httpx_timeout: float = 10,
-) -> QuotaStatus:
-    """Fetch 5-hour utilization from Anthropic quota API."""
+) -> QuotaFetchResult:
+    """Fetch all rate-limit windows from Anthropic quota API and identify the binding window."""
     token = _read_credentials(credentials_path)
     async with httpx.AsyncClient(timeout=_httpx_timeout) as client:
         resp = await client.get(
@@ -95,15 +158,17 @@ async def _fetch_quota(
         )
     resp.raise_for_status()
     data = resp.json()
-    fh = data["five_hour"]
-    resets_at_str = fh.get("resets_at")
-    resets_at = (
-        datetime.fromisoformat(resets_at_str.replace("Z", "+00:00")) if resets_at_str else None
-    )
-    return QuotaStatus(
-        utilization=float(fh["utilization"]),
-        resets_at=resets_at,
-    )
+    windows: dict[str, QuotaWindowEntry] = {}
+    for name, w in data.items():
+        if isinstance(w, dict) and "utilization" in w:
+            windows[name] = QuotaWindowEntry(
+                utilization=float(w["utilization"]),
+                resets_at=_parse_resets_at(w.get("resets_at")),
+            )
+    if not windows:
+        return QuotaFetchResult(windows={}, binding=QuotaStatus(0.0, None))
+    binding = _compute_binding(windows, threshold=_DEFAULT_THRESHOLD)
+    return QuotaFetchResult(windows=windows, binding=binding)
 
 
 async def _refresh_quota_cache(
@@ -121,10 +186,10 @@ async def _refresh_quota_cache(
 
     Exceptions from _fetch_quota propagate to the caller for supervision.
     """
-    status = await _fetch_quota(
+    fetch_result = await _fetch_quota(
         config.credentials_path, base_url=base_url, _httpx_timeout=_httpx_timeout
     )
-    _write_cache(config.cache_path, status)
+    _write_cache(config.cache_path, fetch_result)
 
 
 async def check_and_sleep_if_needed(
@@ -148,19 +213,26 @@ async def check_and_sleep_if_needed(
 
     Returns:
         {"should_sleep": bool, "sleep_seconds": int, "utilization": float | None,
-         "resets_at": str | None}
+         "resets_at": str | None, "window_name": str | None}
         On error: adds "error" key, sets should_sleep=False.
     """
     if not config.enabled:
-        return {"should_sleep": False, "sleep_seconds": 0, "utilization": None, "resets_at": None}
+        return {
+            "should_sleep": False,
+            "sleep_seconds": 0,
+            "utilization": None,
+            "resets_at": None,
+            "window_name": None,
+        }
 
     try:
         status = _read_cache(config.cache_path, config.cache_max_age)
         if status is None:
-            status = await _fetch_quota(
+            fetch_result = await _fetch_quota(
                 config.credentials_path, base_url=base_url, _httpx_timeout=_httpx_timeout
             )
-            _write_cache(config.cache_path, status)
+            _write_cache(config.cache_path, fetch_result)
+            status = fetch_result.binding
 
         if status.utilization < config.threshold:
             return {
@@ -168,6 +240,7 @@ async def check_and_sleep_if_needed(
                 "sleep_seconds": 0,
                 "utilization": status.utilization,
                 "resets_at": status.resets_at.isoformat() if status.resets_at else None,
+                "window_name": status.window_name,
             }
 
         if status.resets_at is None:
@@ -182,14 +255,16 @@ async def check_and_sleep_if_needed(
                 "sleep_seconds": fallback_seconds,
                 "utilization": status.utilization,
                 "resets_at": None,
+                "window_name": status.window_name,
                 "reason": "unknown_reset",
             }
 
         # Re-fetch for accurate resets_at before returning sleep metadata
-        status = await _fetch_quota(
+        fetch_result = await _fetch_quota(
             config.credentials_path, base_url=base_url, _httpx_timeout=_httpx_timeout
         )
-        _write_cache(config.cache_path, status)
+        _write_cache(config.cache_path, fetch_result)
+        status = fetch_result.binding
 
         if status.resets_at is None:
             fallback_seconds = max(config.buffer_seconds, 60)
@@ -204,6 +279,7 @@ async def check_and_sleep_if_needed(
                 "sleep_seconds": fallback_seconds,
                 "utilization": status.utilization,
                 "resets_at": None,
+                "window_name": status.window_name,
                 "reason": "unknown_reset",
             }
 
@@ -222,6 +298,7 @@ async def check_and_sleep_if_needed(
             "sleep_seconds": sleep_secs,
             "utilization": status.utilization,
             "resets_at": status.resets_at.isoformat(),
+            "window_name": status.window_name,
         }
 
     except (
@@ -238,5 +315,6 @@ async def check_and_sleep_if_needed(
             "sleep_seconds": 0,
             "utilization": None,
             "resets_at": None,
+            "window_name": None,
             "error": str(exc),
         }

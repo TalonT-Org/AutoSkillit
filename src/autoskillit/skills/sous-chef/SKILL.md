@@ -318,7 +318,7 @@ When `run_skill` output contains `--- QUOTA WARNING ---`:
 
 ### Key Rules
 
-- Quota denials are **always temporary**. The API quota resets on a rolling 5-hour window.
+- Quota denials are **always temporary**. The API enforces multiple rate-limit windows (e.g. one-minute, one-hour, five-hour, one-day). The guard waits for the most constrained window — the one that resets latest among all windows above the threshold — to reset before retrying.
 - A denied `run_skill` has **zero side effects** — no partial state, no worktree changes.
   Retrying with the same arguments is always safe.
 - Multiple consecutive denials may occur if the sleep duration was underestimated.

@@ -30,6 +30,10 @@ _GIT_MUTATING_TOOLS = frozenset({"create_unique_branch"})
 )
 def _check_source_isolation(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
+    # NOTE: structural presence check — does not account for skip_when_false.
+    # A conditionally-skipped clone_repo step will suppress the WARNING below
+    # even for execution paths where the clone never runs.  Full fix requires
+    # dataflow-aware conditional reachability analysis (out of scope).
     has_clone = any(step.tool == "clone_repo" for step in wf.steps.values())
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():

@@ -365,7 +365,10 @@ class TestSourceIsolationContract:
             uses_mutation_tool = any(step.tool in GIT_MUTATION_TOOLS for step in wf.steps.values())
             if not uses_mutation_tool:
                 continue
-            has_clone = any(step.tool == "clone_repo" for step in wf.steps.values())
+            has_clone = any(
+                step.tool == "clone_repo" or (step.python and "clone_repo" in step.python)
+                for step in wf.steps.values()
+            )
             assert has_clone, (
                 f"{wf_info.name} uses MCP git-mutation tools "
                 f"({GIT_MUTATION_TOOLS & {s.tool for s in wf.steps.values()}}) "

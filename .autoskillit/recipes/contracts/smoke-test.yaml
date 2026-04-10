@@ -1,100 +1,130 @@
-generated_at: '2026-04-07T22:20:02.227203+00:00'
+generated_at: '2026-04-10T04:27:28.079155+00:00'
 bundled_manifest_version: 0.1.0
 skill_hashes: {}
 skills: {}
 dataflow:
+- step: clone
+  available:
+  - base_branch
+  - source_dir
+  required: []
+  produced:
+  - work_dir
+  - remote_url
 - step: create_branch
   available:
   - base_branch
-  - workspace
+  - remote_url
+  - source_dir
+  - work_dir
   required: []
   produced:
   - branch_name
-- step: create_worktree
+- step: setup
   available:
   - base_branch
   - branch_name
-  - workspace
-  required: []
-  produced:
-  - worktree_path
-- step: setup_worktree
-  available:
-  - base_branch
-  - branch_name
-  - workspace
-  - worktree_path
+  - remote_url
+  - source_dir
+  - work_dir
   required: []
   produced: []
 - step: implement_task
   available:
   - base_branch
   - branch_name
-  - workspace
-  - worktree_path
+  - remote_url
+  - source_dir
+  - work_dir
   required: []
   produced: []
-- step: test
+- step: run_tests
   available:
   - base_branch
   - branch_name
-  - workspace
-  - worktree_path
+  - remote_url
+  - source_dir
+  - work_dir
   required: []
   produced: []
 - step: push_branch
   available:
   - base_branch
   - branch_name
-  - workspace
-  - worktree_path
+  - remote_url
+  - source_dir
+  - work_dir
   required: []
   produced: []
 - step: create_pr
   available:
   - base_branch
   - branch_name
-  - workspace
-  - worktree_path
+  - remote_url
+  - source_dir
+  - work_dir
   required: []
   produced: []
 - step: close_pr
   available:
   - base_branch
   - branch_name
-  - workspace
-  - worktree_path
+  - remote_url
+  - source_dir
+  - work_dir
   required: []
   produced: []
-- step: cleanup
+- step: delete_remote_branch
   available:
   - base_branch
   - branch_name
-  - workspace
-  - worktree_path
+  - remote_url
+  - source_dir
+  - work_dir
   required: []
   produced: []
-- step: fail_cleanup
+- step: register_clone_success
   available:
   - base_branch
   - branch_name
-  - workspace
-  - worktree_path
+  - remote_url
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: fail_delete_remote_branch
+  available:
+  - base_branch
+  - branch_name
+  - remote_url
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: register_clone_failure
+  available:
+  - base_branch
+  - branch_name
+  - remote_url
+  - source_dir
+  - work_dir
   required: []
   produced: []
 - step: done
   available:
   - base_branch
   - branch_name
-  - workspace
-  - worktree_path
+  - remote_url
+  - source_dir
+  - work_dir
   required: []
   produced: []
 - step: escalate
   available:
   - base_branch
   - branch_name
-  - workspace
-  - worktree_path
+  - remote_url
+  - source_dir
+  - work_dir
   required: []
   produced: []

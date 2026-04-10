@@ -763,6 +763,27 @@ class TestCreateUniqueBranch:
         assert ls_remote_cmd is not None, "No ls-remote subprocess call found"
         assert any("impl/238" in arg for arg in ls_remote_cmd)
 
+    @pytest.mark.anyio
+    async def test_reports_base_ref_in_return_value(self, tool_ctx):
+        """Test 1.6: create_unique_branch reports base_ref (the branch HEAD was on)."""
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ls-remote: empty = absent
+        tool_ctx.runner.push(_make_result(0, "feature-branch\n", ""))  # branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git checkout -b
+        result = json.loads(await create_unique_branch("feat-foo", 42, "origin", "."))
+        assert result["branch_name"] == "feat-foo-42"
+        assert result["was_unique"] is True
+        assert result["base_ref"] == "feature-branch"
+
+    @pytest.mark.anyio
+    async def test_reports_detached_head_as_base_ref(self, tool_ctx):
+        """create_unique_branch reports DETACHED_HEAD when HEAD is detached."""
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ls-remote: empty = absent
+        tool_ctx.runner.push(_make_result(0, "", ""))  # branch --show-current returns empty
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git checkout -b
+        result = json.loads(await create_unique_branch("feat-foo", 42, "origin", "."))
+        assert result["branch_name"] == "feat-foo-42"
+        assert result["base_ref"] == "DETACHED_HEAD"
+
 
 class TestCheckPrMergeable:
     @pytest.mark.anyio

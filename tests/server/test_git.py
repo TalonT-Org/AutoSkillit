@@ -6,7 +6,13 @@ import pytest
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import CleanupResult
-from autoskillit.core.types import SubprocessResult, TerminationReason, TestResult
+from autoskillit.core.types import (
+    MergeFailedStep,
+    MergeState,
+    SubprocessResult,
+    TerminationReason,
+    TestResult,
+)
 from tests.conftest import MockSubprocessRunner, StatefulMockTester
 
 
@@ -608,3 +614,183 @@ class TestPerformMergeSidecarCleanup:
             )
 
         assert wt in remove_calls
+
+
+class TestPerformMergeTargetBranchVerification:
+    """perform_merge must verify main_repo's checked-out branch matches base_branch."""
+
+    @pytest.mark.anyio
+    async def test_rejects_merge_when_main_repo_on_wrong_branch(self, tmp_path):
+        """Test 1.1: Reproduce the primary bug — worktree list says 'main' but
+        base_branch='dev'. Step 7.5 must reject the mismatch."""
+        from autoskillit.server.git import perform_merge
+
+        wt = tmp_path / "worktrees" / "impl-test"
+        wt.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/impl-test")
+
+        runner = MockSubprocessRunner()
+        tester = _make_tester()
+
+        runner.push(_make_result(0, "/repo/.git/worktrees/impl-test\n"))  # rev-parse
+        runner.push(_make_result(0, "impl-test\n"))  # branch --show-current (worktree)
+        runner.push(_make_result(0, ""))  # git ls-files (generated)
+        runner.push(_make_result(0, ""))  # git status --porcelain
+        runner.push(_make_result(0, ""))  # git fetch
+        runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
+        runner.push(_make_result(0, ""))  # git log --merges
+        runner.push(_make_result(0, ""))  # git rebase
+        # worktree list says main_repo is on 'main'
+        runner.push(
+            _make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n")
+        )
+        # Step 7.5: git branch --show-current on main_repo returns 'main'
+        runner.push(_make_result(0, "main\n"))
+
+        result = await perform_merge(
+            str(wt),
+            "dev",
+            config=AutomationConfig(),
+            runner=runner,
+            tester=tester,
+        )
+
+        assert "error" in result
+        assert result["failed_step"] == MergeFailedStep.MERGE
+        assert result["state"] == MergeState.WORKTREE_INTACT
+        assert "main" in result["error"]
+        assert "dev" in result["error"]
+        # No merge command should have been issued
+        merge_cmds = [
+            args[0]
+            for args in runner.call_args_list
+            if len(args[0]) > 1 and args[0][1] == "merge"
+        ]
+        assert merge_cmds == [], f"Merge command was issued despite branch mismatch: {merge_cmds}"
+
+    @pytest.mark.anyio
+    async def test_succeeds_when_main_repo_branch_matches(self, tmp_path):
+        """Test 1.2: Happy path — worktree list and step 7.5 both say 'dev'."""
+        from autoskillit.server.git import perform_merge
+
+        wt = tmp_path / "worktrees" / "impl-test"
+        wt.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/impl-test")
+
+        runner = MockSubprocessRunner()
+        tester = _make_tester()
+
+        runner.push(_make_result(0, "/repo/.git/worktrees/impl-test\n"))  # rev-parse
+        runner.push(_make_result(0, "impl-test\n"))  # branch --show-current (worktree)
+        runner.push(_make_result(0, ""))  # git ls-files (generated)
+        runner.push(_make_result(0, ""))  # git status --porcelain
+        runner.push(_make_result(0, ""))  # git fetch
+        runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
+        runner.push(_make_result(0, ""))  # git log --merges
+        runner.push(_make_result(0, ""))  # git rebase
+        # worktree list says main_repo is on 'dev'
+        runner.push(
+            _make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n")
+        )
+        # Step 7.5: git branch --show-current on main_repo returns 'dev'
+        runner.push(_make_result(0, "dev\n"))
+        runner.push(_make_result(0, ""))  # git merge --no-edit
+        # cleanup: remove_git_worktree + branch -D use runner defaults (rc=0)
+
+        result = await perform_merge(
+            str(wt),
+            "dev",
+            config=AutomationConfig(),
+            runner=runner,
+            tester=tester,
+        )
+
+        assert result["merge_succeeded"] is True
+        assert result["into_branch"] == "dev"
+
+    @pytest.mark.anyio
+    async def test_merge_command_cwd_is_main_repo(self, tmp_path):
+        """Test 1.3: Assert git merge --no-edit is executed with cwd == main_repo path."""
+        from pathlib import Path
+
+        from autoskillit.server.git import perform_merge
+
+        wt = tmp_path / "worktrees" / "impl-test"
+        wt.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/impl-test")
+
+        runner = MockSubprocessRunner()
+        tester = _make_tester()
+
+        runner.push(_make_result(0, "/repo/.git/worktrees/impl-test\n"))  # rev-parse
+        runner.push(_make_result(0, "impl-test\n"))  # branch --show-current (worktree)
+        runner.push(_make_result(0, ""))  # git ls-files (generated)
+        runner.push(_make_result(0, ""))  # git status --porcelain
+        runner.push(_make_result(0, ""))  # git fetch
+        runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
+        runner.push(_make_result(0, ""))  # git log --merges
+        runner.push(_make_result(0, ""))  # git rebase
+        runner.push(
+            _make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n")
+        )
+        # Step 7.5: branch verification
+        runner.push(_make_result(0, "dev\n"))
+        runner.push(_make_result(0, ""))  # git merge --no-edit
+
+        result = await perform_merge(
+            str(wt),
+            "dev",
+            config=AutomationConfig(),
+            runner=runner,
+            tester=tester,
+        )
+
+        assert result["merge_succeeded"] is True
+        # Find the merge command and assert its cwd
+        merge_call = next(
+            args
+            for args in runner.call_args_list
+            if len(args[0]) > 1 and args[0][1] == "merge"
+        )
+        assert merge_call[1] == Path("/repo"), (
+            f"Merge command cwd should be /repo (main_repo), got {merge_call[1]}"
+        )
+
+    @pytest.mark.anyio
+    async def test_into_branch_reflects_verified_state(self, tmp_path):
+        """Test 1.4: into_branch must come from verified git state, not echoed input."""
+        from autoskillit.server.git import perform_merge
+
+        wt = tmp_path / "worktrees" / "impl-test"
+        wt.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/impl-test")
+
+        runner = MockSubprocessRunner()
+        tester = _make_tester()
+
+        runner.push(_make_result(0, "/repo/.git/worktrees/impl-test\n"))  # rev-parse
+        runner.push(_make_result(0, "impl-test\n"))  # branch --show-current (worktree)
+        runner.push(_make_result(0, ""))  # git ls-files (generated)
+        runner.push(_make_result(0, ""))  # git status --porcelain
+        runner.push(_make_result(0, ""))  # git fetch
+        runner.push(_make_result(0, "abc123\n"))  # rev-parse --verify
+        runner.push(_make_result(0, ""))  # git log --merges
+        runner.push(_make_result(0, ""))  # git rebase
+        runner.push(
+            _make_result(0, "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n")
+        )
+        # Step 7.5: verified branch
+        runner.push(_make_result(0, "dev\n"))
+        runner.push(_make_result(0, ""))  # merge
+
+        result = await perform_merge(
+            str(wt),
+            "dev",
+            config=AutomationConfig(),
+            runner=runner,
+            tester=tester,
+        )
+
+        assert result["merge_succeeded"] is True
+        # into_branch must match the verified branch from step 7.5
+        assert result["into_branch"] == "dev"

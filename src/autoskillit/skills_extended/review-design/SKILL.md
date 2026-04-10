@@ -143,6 +143,7 @@ matrix lookup, as this would corrupt all subsequent spawning decisions.
 | measurement_alignment | M | M | M | H | M |
 | resource_proportionality | L | L | L | L | L |
 | data_acquisition | M | M | M | H | M |
+| agent_implementability | H | H | M | M | L |
 
 Weight tiers: H (High), M (Medium), L (Low), S (SILENT — dimension not spawned, not mentioned).
 
@@ -326,6 +327,7 @@ Level 4 dimensions (spawn when not SILENT):
 - `measurement_alignment`: "Do the metrics actually measure what the research question claims?"
 - `reproducibility_spec`: "Could an independent party reproduce this experiment?"
 - `data_acquisition`: "Does the plan include a complete data acquisition strategy?"
+- `agent_implementability`: "Is this plan executable by a code-generating agent without human intervention?"
 
 #### `data_acquisition` — Data Acquisition Completeness
 
@@ -345,6 +347,38 @@ Validates that the experiment plan includes a complete data acquisition strategy
 **Findings format:**
 - STOP if: a hypothesis has no data source at all, or directive-specified data has no acquisition step
 - REVISE if: an external source lacks verification criteria, or gitignored path handling is unclear
+
+#### `agent_implementability` — Agent Execution Feasibility
+
+Validates that the experiment plan can be implemented by a code-generating agent
+without human intervention:
+
+1. **Step atomicity**: Each implementation step has a single unambiguous action.
+   Multiple interleaved actions in a single step create ambiguity about ordering
+   and completion criteria.
+2. **File path resolvability**: All referenced files and modules are named with
+   locatable paths. Vague references like "the utils module" or "the config file"
+   are insufficient — the agent needs exact paths or unambiguous naming conventions.
+3. **Performance feasibility**: Pseudocode and algorithms are viable at the
+   specified data scale. A nested loop that is O(n^2) at n=50K is a design-level
+   concern, not an implementation detail.
+4. **Verification criteria completeness**: Each implementation phase has a
+   concrete, runnable acceptance test or verification criterion. Phases without
+   verification criteria cannot be confirmed complete by an agent.
+5. **Dependency ordering**: No step requires an artifact (file, dataset, model
+   checkpoint) that has not yet been produced by a prior step. Circular or
+   forward dependencies make deterministic execution impossible.
+6. **Absence of human-only actions**: No steps require subjective judgment,
+   visual inspection, or domain expertise that a code-generating agent cannot
+   execute deterministically. Examples: "review the output and decide if it looks
+   reasonable", "manually inspect the plot for anomalies".
+7. **Artifact continuity**: No planned artifact from a prior plan version was
+   silently removed without replacement or explicit justification. Removals
+   without explanation are data provenance regressions.
+
+**Findings format:**
+- REVISE if: any of checks 1–7 identifies a gap in the plan
+- This dimension does not produce STOP-eligible findings (L4 contract)
 
 Level 3 and Level 4 may run concurrently with the red-team agent (do not block on red-team).
 
@@ -437,7 +471,11 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
      impossible due to absent plan content; minimum 2 entries, e.g.,
      "Randomization mechanism not described — cannot assess unit interference risk",
      "No resource budgets stated — cannot assess resource_proportionality")
-   - Mechanizable check log (binary checks that could be automated in future)
+   - Mechanizable check log — fixed checklist items (always evaluated) plus
+     ad-hoc additions from subagents:
+     - **Fixed:** "All implementation phases have runnable verification criteria"
+     - **Fixed:** "All file paths in the implementation plan resolve to valid locations"
+     - Ad-hoc entries contributed by dimension subagents during this review cycle
    - Machine-readable YAML summary block at end:
      ```yaml
      # --- review-design machine summary ---

@@ -63,7 +63,10 @@ def _compute_binding(
     (the last window to reset governs how long the caller must sleep).
     If no window is above threshold, returns the window with highest utilization
     (for diagnostic display; should_sleep will be False for the caller).
+    Returns QuotaStatus(0.0, None) when windows is empty.
     """
+    if not windows:
+        return QuotaStatus(0.0, None)
     exhausted = [(name, w) for name, w in windows.items() if w.utilization >= threshold]
     if exhausted:
         name, w = max(
@@ -162,6 +165,8 @@ async def _fetch_quota(
                 utilization=float(w["utilization"]),
                 resets_at=_parse_resets_at(w.get("resets_at")),
             )
+    if not windows:
+        return QuotaFetchResult(windows={}, binding=QuotaStatus(0.0, None))
     binding = _compute_binding(windows, threshold=_DEFAULT_THRESHOLD)
     return QuotaFetchResult(windows=windows, binding=binding)
 

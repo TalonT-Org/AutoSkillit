@@ -10,6 +10,7 @@ Public API:
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -73,6 +74,43 @@ async def _run_git(
     if result.termination == TerminationReason.TIMED_OUT:
         return -1, result.stdout, f"Process timed out after {timeout}s"
     return result.returncode, result.stdout, result.stderr
+
+
+@dataclasses.dataclass(frozen=True)
+class GitMergeTarget:
+    """Verified merge target — proof that main_repo's branch was checked."""
+
+    path: str
+    branch: str
+
+
+async def _verify_merge_target(
+    main_repo: str,
+    expected_branch: str,
+    runner: SubprocessRunner,
+) -> GitMergeTarget | dict[str, Any]:
+    """Verify main_repo has expected_branch checked out.
+
+    Returns GitMergeTarget on success, or an error dict on mismatch
+    (compatible with perform_merge return format).
+    """
+    rc, current_out, _ = await _run_git(
+        ["git", "branch", "--show-current"], main_repo, 10, runner
+    )
+    current_branch = current_out.strip()
+    if rc != 0 or current_branch != expected_branch:
+        return {
+            "error": (
+                f"Target repository '{main_repo}' is on branch "
+                f"'{current_branch}', expected '{expected_branch}'. "
+                f"Ensure the work directory has '{expected_branch}' "
+                f"checked out before merging."
+            ),
+            "failed_step": MergeFailedStep.MERGE,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": "",  # filled in by caller
+        }
+    return GitMergeTarget(path=main_repo, branch=current_branch)
 
 
 async def perform_merge(
@@ -360,9 +398,16 @@ async def perform_merge(
             "worktree_path": worktree_path,
         }
 
+    # 7.5 Verify main_repo is on base_branch
+    target_or_err = await _verify_merge_target(main_repo, base_branch, runner)
+    if isinstance(target_or_err, dict):
+        target_or_err["worktree_path"] = worktree_path
+        return target_or_err
+    target = target_or_err
+
     # 8. Merge
     rc, _, merge_stderr = await _run_git(
-        ["git", "merge", "--no-edit", worktree_branch], main_repo, 60, runner
+        ["git", "merge", "--no-edit", worktree_branch], target.path, 60, runner
     )
     if rc != 0:
         abort_rc, _, abort_stderr = await _run_git(
@@ -445,7 +490,7 @@ async def perform_merge(
     return {
         "merge_succeeded": True,
         "merged_branch": worktree_branch,
-        "into_branch": base_branch,
+        "into_branch": target.branch,
         "worktree_removed": wt_rc == 0,
         "branch_deleted": br_rc == 0,
         "cleanup_succeeded": wt_rc == 0 and br_rc == 0,

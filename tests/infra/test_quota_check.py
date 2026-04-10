@@ -374,7 +374,8 @@ def test_approve_when_binding_below_threshold(tmp_path):
         window_name="five_hour",
         extra_windows={"one_hour": {"utilization": 20.0, "resets_at": None}},
     )
-    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    out, exit_code = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    assert exit_code == 0
     assert out.strip() == ""
 
 

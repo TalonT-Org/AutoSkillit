@@ -448,7 +448,10 @@ def test_l1_gate_addressable_structural_classification_present(skill_text: str) 
 def test_addressable_findings_continue_l2_l4(skill_text: str) -> None:
     step2_text = skill_text_between("### Step 2", "### Step 3", skill_text)
     text_lower = step2_text.lower()
-    assert "continue" in text_lower and "addressable" in text_lower, (
+    assert "addressable" in text_lower, (
+        "Step 2 must reference ADDRESSABLE findings in the gate behavior"
+    )
+    assert "continue" in text_lower, (
         "Step 2 must document that ADDRESSABLE L1 criticals continue to L2-L4 analysis"
     )
 

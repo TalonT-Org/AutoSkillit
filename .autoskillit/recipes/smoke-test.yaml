@@ -1,15 +1,17 @@
 name: smoke-test
-autoskillit_version: "0.7.31"
+autoskillit_version: "0.7.50"
 description: >-
-  Lightweight end-to-end sanity check — creates an isolated branch and worktree,
-  implements a trivial micro-task (smoke_canary), runs the full project test suite,
-  opens a GitHub PR, and immediately closes it without merging.
+  Lightweight end-to-end sanity check — clones the repository, creates an
+  isolated branch, implements a trivial micro-task (smoke_canary), runs the
+  full project test suite, pushes to remote, opens a GitHub PR, and
+  immediately closes it without merging.
 summary: >-
-  create_branch > create_worktree > setup_worktree > implement_task > run_tests >
-  push_branch > create_pr > close_pr > cleanup > done
+  clone > create_branch > setup > implement_task > run_tests >
+  push_branch > create_pr > close_pr > delete_remote_branch >
+  register_clone_success > done
 
 ingredients:
-  workspace:
+  source_dir:
     description: >-
       Path to the git repository workspace. Must have a GitHub remote configured
       and an authenticated gh CLI available.
@@ -24,57 +26,56 @@ kitchen_rules:
     Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator. All file
     operations are delegated through run_skill or run_cmd.
   - >-
-    Route to escalate or fail_cleanup on any failure — never investigate or fix
-    directly from the orchestrator. This is a sanity check, not a stress test:
+    Route to escalate or fail_delete_remote_branch on any failure — never investigate
+    or fix directly from the orchestrator. This is a sanity check, not a stress test:
     no retries, no fix loops.
+  - >-
+    SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
+    off-limits. Never run any command in source_dir — no git checkout, git
+    fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
+    All work — skill invocations, git operations, file reads — happens
+    exclusively in the clone (work_dir).
 
 steps:
+  clone:
+    tool: clone_repo
+    with:
+      source_dir: "${{ inputs.source_dir }}"
+      run_name: "smoke"
+      branch: "${{ inputs.base_branch }}"
+    capture:
+      work_dir: "${{ result.clone_path }}"
+      remote_url: "${{ result.remote_url }}"
+    on_success: create_branch
+    on_failure: escalate
+
   create_branch:
     tool: create_unique_branch
     with:
       base_branch_name: "smoke/canary"
-      cwd: "${{ inputs.workspace }}"
+      cwd: "${{ context.work_dir }}"
       step_name: "create_branch"
     capture:
       branch_name: "${{ result.branch_name }}"
-    on_success: create_worktree
-    on_failure: escalate
+    on_success: setup
+    on_failure: register_clone_failure
     note: >-
       Creates a unique smoke/canary[-N] branch (collision-safe via ls-remote).
-      Routes to escalate on failure — no worktree exists yet, nothing to clean up.
 
-  create_worktree:
-    tool: run_cmd
-    with:
-      cmd: >-
-        WORKTREE="${{ inputs.workspace }}/.autoskillit/worktrees/$(echo "${{ context.branch_name }}" | tr '/' '-')" &&
-        git worktree add "$WORKTREE" "${{ context.branch_name }}" &&
-        printf '%s' "$WORKTREE"
-      cwd: "${{ inputs.workspace }}"
-      step_name: "create_worktree"
-    capture:
-      worktree_path: "${{ result.stdout }}"
-    on_success: setup_worktree
-    on_failure: fail_cleanup
-    note: >-
-      Creates the worktree at a deterministic path under .autoskillit/worktrees/.
-      Captures worktree_path for all subsequent steps. On failure, routes to
-      fail_cleanup which handles branch deletion even when the worktree was not created.
-
-  setup_worktree:
+  setup:
     tool: run_cmd
     with:
       cmd: "task install-worktree"
-      cwd: "${{ context.worktree_path }}"
-      step_name: "setup_worktree"
+      cwd: "${{ context.work_dir }}"
+      step_name: "setup"
     on_success: implement_task
-    on_failure: fail_cleanup
+    on_failure: register_clone_failure
 
   implement_task:
     tool: run_skill
     with:
       skill_command: >-
-        /autoskillit:smoke-task In ${{ context.worktree_path }}: (1) open
+        /autoskillit:smoke-task In ${{ context.work_dir }}: (1) open
         src/autoskillit/smoke_utils.py and append a blank line followed by the
         function 'def smoke_canary() -> bool:' with body
         '    """Smoke-test sentinel — always returns True."""' and '    return True';
@@ -83,33 +84,26 @@ steps:
         'def test_smoke_canary() -> None:' '    assert smoke_canary() is True';
         (3) run git add src/autoskillit/smoke_utils.py tests/test_smoke_canary.py;
         (4) run git commit -m 'smoke: add smoke_canary()'.
-      cwd: "${{ context.worktree_path }}"
+      cwd: "${{ context.work_dir }}"
     on_success: run_tests
-    on_failure: fail_cleanup
-    note: >-
-      REQ-TASK-001 + REQ-TASK-002: Trivial, fully-specified micro-task. No retries —
-      a failure here is an infrastructure signal, not a logic problem.
+    on_failure: register_clone_failure
 
   run_tests:
     tool: test_check
     with:
-      worktree_path: "${{ context.worktree_path }}"
+      worktree_path: "${{ context.work_dir }}"
       step_name: "run_tests"
     on_success: push_branch
-    on_failure: fail_cleanup
-    note: >-
-      REQ-PIPE-002: Runs the full project test suite in the worktree.
-      smoke_canary() is now defined and tests/test_smoke_canary.py passes alongside
-      the existing suite. Routes to fail_cleanup on failure — no retry loop.
+    on_failure: fail_delete_remote_branch
 
   push_branch:
-    tool: run_cmd
+    tool: push_to_remote
     with:
-      cmd: "git push -u origin \"${{ context.branch_name }}\""
-      cwd: "${{ context.worktree_path }}"
-      step_name: "push_branch"
+      clone_path: "${{ context.work_dir }}"
+      branch: "${{ context.branch_name }}"
+      remote_url: "${{ context.remote_url }}"
     on_success: create_pr
-    on_failure: fail_cleanup
+    on_failure: fail_delete_remote_branch
 
   create_pr:
     tool: run_cmd
@@ -119,13 +113,10 @@ steps:
           --title "smoke: add smoke_canary() [DO NOT MERGE]"
           --body "Automated smoke-test PR — closed without merging. Safe to ignore."
           --base "${{ inputs.base_branch }}"
-      cwd: "${{ context.worktree_path }}"
+      cwd: "${{ context.work_dir }}"
       step_name: "create_pr"
     on_success: close_pr
-    on_failure: fail_cleanup
-    note: >-
-      REQ-PIPE-003: Creates the PR. Does not capture the URL because close_pr
-      uses 'gh pr view' on the worktree branch to locate the PR.
+    on_failure: fail_delete_remote_branch
 
   close_pr:
     tool: run_cmd
@@ -134,46 +125,50 @@ steps:
         PR_NUM=$(gh pr view --json number --jq .number) &&
         [ -n "$PR_NUM" ] &&
         gh pr close "$PR_NUM" --comment "Smoke test complete. Closing without merge."
-      cwd: "${{ context.worktree_path }}"
+      cwd: "${{ context.work_dir }}"
       step_name: "close_pr"
-    on_success: cleanup
-    on_failure: cleanup
-    note: >-
-      REQ-PIPE-004: Closes the PR without merging. Uses gh pr view on the current
-      branch to find the PR number. Routes to cleanup on BOTH success and failure —
-      cleanup is always required (REQ-GUARD-002).
+    on_success: delete_remote_branch
+    on_failure: delete_remote_branch
 
-  cleanup:
+  delete_remote_branch:
     tool: run_cmd
     with:
       cmd: >-
-        git worktree remove "${{ context.worktree_path }}" --force 2>/dev/null || true &&
         git push origin --delete "${{ context.branch_name }}" 2>/dev/null || true &&
         git branch -D "${{ context.branch_name }}" 2>/dev/null || true
-      cwd: "${{ inputs.workspace }}"
-      step_name: "cleanup"
+      cwd: "${{ context.work_dir }}"
+      step_name: "delete_remote_branch"
+    on_success: register_clone_success
+    on_failure: register_clone_success
+
+  register_clone_success:
+    tool: register_clone_status
+    with:
+      clone_path: "${{ context.work_dir }}"
+      status: "success"
+      step_name: "register_clone_success"
     on_success: done
     on_failure: done
-    note: >-
-      REQ-PIPE-005 + REQ-GUARD-002: Best-effort cleanup — worktree remove, remote branch
-      delete, local branch delete. || true guards ensure partial cleanup does not fail
-      the step. Routes to done regardless so cleanup errors do not mask success.
 
-  fail_cleanup:
+  fail_delete_remote_branch:
     tool: run_cmd
     with:
       cmd: >-
-        git worktree remove "${{ context.worktree_path }}" --force 2>/dev/null || true &&
         git push origin --delete "${{ context.branch_name }}" 2>/dev/null || true &&
         git branch -D "${{ context.branch_name }}" 2>/dev/null || true
-      cwd: "${{ inputs.workspace }}"
-      step_name: "fail_cleanup"
+      cwd: "${{ context.work_dir }}"
+      step_name: "fail_delete_remote_branch"
+    on_success: register_clone_failure
+    on_failure: register_clone_failure
+
+  register_clone_failure:
+    tool: register_clone_status
+    with:
+      clone_path: "${{ context.work_dir }}"
+      status: "error"
+      step_name: "register_clone_failure"
     on_success: escalate
     on_failure: escalate
-    note: >-
-      REQ-GUARD-002 (failure path): Same cleanup as 'cleanup' but routes to escalate
-      to preserve failure semantics. context.worktree_path may be empty if create_worktree
-      failed — the || true guards handle this gracefully.
 
   done:
     action: stop

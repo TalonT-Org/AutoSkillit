@@ -72,9 +72,7 @@ def _check_source_isolation(ctx: ValidationContext) -> list[RuleFinding]:
 
 @semantic_rule(
     name="git-mutation-on-source",
-    description=(
-        "run_cmd steps with git-mutating commands must not use inputs.* as cwd."
-    ),
+    description=("run_cmd steps with git-mutating commands must not use inputs.* as cwd."),
     severity=Severity.WARNING,
 )
 def _check_git_mutation_on_source(ctx: ValidationContext) -> list[RuleFinding]:

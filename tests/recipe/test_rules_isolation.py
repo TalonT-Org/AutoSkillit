@@ -1,13 +1,14 @@
-"""Tests for workspace isolation semantic rules (source-isolation-violation, git-mutation-on-source)."""
+"""Tests for workspace isolation semantic rules.
+
+Covers source-isolation-violation and git-mutation-on-source rules.
+"""
 
 from __future__ import annotations
 
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import _RULE_REGISTRY, run_semantic_rules
-from autoskillit.recipe.schema import Recipe, RecipeStep
 from tests.recipe.conftest import _make_workflow
-
 
 # ---------------------------------------------------------------------------
 # Test 1a: Rule registration

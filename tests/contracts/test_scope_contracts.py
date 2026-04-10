@@ -31,7 +31,10 @@ class TestComputationalComplexitySection:
     )
     def test_field_present(self, field: str) -> None:
         content = _read_scope_skill_md()
-        assert field in content, (
+        cc_idx = content.index("## Computational Complexity")
+        hyp_idx = content.index("## Hypotheses")
+        section = content[cc_idx:hyp_idx]
+        assert field in section, (
             f"Scope SKILL.md missing '{field}' in Computational Complexity section"
         )
 

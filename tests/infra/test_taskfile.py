@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -60,3 +61,12 @@ class TestTaskfile:
         cmds = " ".join(str(c) for c in task.get("cmds", []))
         assert "@integration" in cmds, "install-dev must install from @integration branch"
         assert "autoskillit install" in cmds, "install-dev must run autoskillit install after uv"
+
+
+def test_taskfile_pytest_paths_exist() -> None:
+    """All pytest file paths in Taskfile.yml must exist."""
+    raw = TASKFILE.read_text()
+    paths = re.findall(r"tests/[\w/]+\.py", raw)
+    for path_str in paths:
+        full = REPO_ROOT / path_str
+        assert full.exists(), f"Taskfile references {path_str} but it does not exist"

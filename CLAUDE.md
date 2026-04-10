@@ -176,6 +176,7 @@ src/autoskillit/
 │   ├── rules_dataflow.py    #   Semantic rules for capture/output dataflow analysis
 │   ├── rules_graph.py       #   Semantic rules for step graph reachability and cycles
 │   ├── rules_inputs.py      #   Semantic rules for ingredient/version validation
+│   ├── rules_isolation.py   #   Semantic rules for workspace isolation (source-isolation-violation, git-mutation-on-source)
 │   ├── rules_merge.py       #   Semantic rules for merge_worktree routing completeness
 │   ├── rules_packs.py       #   Semantic rules for unknown pack names in requires_packs (unknown-required-pack)
 │   ├── rules_recipe.py      #   Semantic rules for unknown sub-recipe references (unknown-sub-recipe rule)

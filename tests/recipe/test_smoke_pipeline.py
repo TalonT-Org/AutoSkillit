@@ -1,9 +1,9 @@
 """Smoke-test pipeline: structural validation and end-to-end execution tests.
 
-The smoke-test recipe is a lightweight end-to-end sanity check that creates an
-isolated branch and worktree, implements a trivial micro-task (smoke_canary),
-runs the full project test suite, opens a GitHub PR, and immediately closes it
-without merging.
+The smoke-test recipe is a lightweight end-to-end sanity check that clones the
+repository, creates an isolated branch, implements a trivial micro-task
+(smoke_canary), runs the full project test suite, pushes to remote, opens a
+GitHub PR, and immediately closes it without merging.
 
 **Running tests:**
 
@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -126,7 +127,7 @@ class TestSmokeScriptValidation:
 
 
 # ---------------------------------------------------------------------------
-# New structural tests for rewritten recipe (T_SP_NEW_1 through T_SP_NEW_12)
+# New structural tests for rewritten recipe (T_SP_NEW_1 through T_SP_NEW_12+)
 # ---------------------------------------------------------------------------
 
 
@@ -134,16 +135,18 @@ class TestSmokeScriptValidation:
 def test_required_lifecycle_steps_present(smoke_recipe) -> None:
     """All new lifecycle steps must exist in the recipe."""
     required = {
+        "clone",
         "create_branch",
-        "create_worktree",
-        "setup_worktree",
+        "setup",
         "implement_task",
         "run_tests",
         "push_branch",
         "create_pr",
         "close_pr",
-        "cleanup",
-        "fail_cleanup",
+        "delete_remote_branch",
+        "register_clone_success",
+        "fail_delete_remote_branch",
+        "register_clone_failure",
         "done",
         "escalate",
     }
@@ -193,34 +196,36 @@ def test_close_pr_step_uses_gh_pr_close(smoke_recipe) -> None:
 
 
 # T_SP_NEW_7
-def test_close_pr_routes_to_cleanup_on_both_outcomes(smoke_recipe) -> None:
+def test_close_pr_routes_to_delete_remote_branch_on_both_outcomes(smoke_recipe) -> None:
     """REQ-GUARD-002: cleanup must be reached regardless of close_pr result."""
     step = smoke_recipe.steps["close_pr"]
-    assert step.on_success == "cleanup", "close_pr must route to cleanup on success"
-    assert step.on_failure == "cleanup", "close_pr must route to cleanup on failure"
+    assert step.on_success == "delete_remote_branch"
+    assert step.on_failure == "delete_remote_branch"
 
 
 # T_SP_NEW_8
-def test_cleanup_routes_to_done_regardless(smoke_recipe) -> None:
-    """cleanup is non-critical — must route to done on both success and failure."""
-    step = smoke_recipe.steps["cleanup"]
-    assert step.on_success == "done"
-    assert step.on_failure == "done"
+def test_delete_remote_branch_routes_to_register_clone_success(smoke_recipe) -> None:
+    """delete_remote_branch is non-critical — routes to register_clone_success."""
+    step = smoke_recipe.steps["delete_remote_branch"]
+    assert step.on_success == "register_clone_success"
+    assert step.on_failure == "register_clone_success"
 
 
 # T_SP_NEW_9
-def test_fail_cleanup_routes_to_escalate(smoke_recipe) -> None:
-    """fail_cleanup preserves failure semantics — must route to escalate."""
-    step = smoke_recipe.steps["fail_cleanup"]
+def test_register_clone_failure_routes_to_escalate(smoke_recipe) -> None:
+    """register_clone_failure preserves failure semantics — must route to escalate."""
+    step = smoke_recipe.steps["register_clone_failure"]
     assert step.on_success == "escalate"
     assert step.on_failure == "escalate"
 
 
 # T_SP_NEW_10
-def test_test_step_routes_to_fail_cleanup_on_failure(smoke_recipe) -> None:
+def test_test_step_routes_to_fail_delete_on_failure(smoke_recipe) -> None:
     """REQ-GUARD-002: test failure must clean up before escalating."""
     step = smoke_recipe.steps["run_tests"]
-    assert step.on_failure == "fail_cleanup"
+    assert step.tool == "run_cmd"
+    assert "task test-check" in step.with_args.get("cmd", "")
+    assert step.on_failure == "fail_delete_remote_branch"
 
 
 # T_SP_NEW_11
@@ -234,6 +239,70 @@ def test_done_and_escalate_are_stop_actions(smoke_recipe) -> None:
     """Both terminal steps must have action=stop."""
     assert smoke_recipe.steps["done"].action == "stop"
     assert smoke_recipe.steps["escalate"].action == "stop"
+
+
+# T_SP_NEW_13
+def test_clone_step_is_first_and_uses_clone_repo(smoke_recipe) -> None:
+    """The first step must be clone using clone_repo tool."""
+    first_step_name = next(iter(smoke_recipe.steps))
+    assert first_step_name == "clone"
+    step = smoke_recipe.steps["clone"]
+    assert step.tool == "clone_repo"
+    assert step.with_args["source_dir"] == "${{ inputs.source_dir }}"
+
+
+# T_SP_NEW_14
+def test_push_branch_uses_push_to_remote(smoke_recipe) -> None:
+    """push_branch must use push_to_remote tool (not run_cmd git push)."""
+    step = smoke_recipe.steps["push_branch"]
+    assert step.tool == "push_to_remote"
+    assert step.with_args["clone_path"] == "${{ context.work_dir }}"
+    assert step.with_args["branch"] == "${{ context.branch_name }}"
+    assert step.with_args["remote_url"] == "${{ context.remote_url }}"
+
+
+# T_SP_NEW_15
+def test_ingredient_renamed_to_source_dir(smoke_recipe) -> None:
+    """Ingredient must be source_dir, not workspace."""
+    assert "source_dir" in smoke_recipe.ingredients
+    assert "workspace" not in smoke_recipe.ingredients
+
+
+# T_SP_NEW_16
+def test_register_clone_success_routes_to_done(smoke_recipe) -> None:
+    """register_clone_success must route to done."""
+    step = smoke_recipe.steps["register_clone_success"]
+    assert step.tool == "register_clone_status"
+    assert step.on_success == "done"
+    assert step.on_failure == "done"
+
+
+# T_SP_NEW_17
+def test_no_step_uses_inputs_as_cwd_after_clone(smoke_recipe) -> None:
+    """No step after clone should use inputs.* as cwd."""
+    input_re = re.compile(r"\$\{\{\s*inputs\.\w+\s*\}\}")
+    seen_clone = False
+    for name, step in smoke_recipe.steps.items():
+        if step.tool == "clone_repo":
+            seen_clone = True
+            continue
+        if seen_clone and step.with_args:
+            cwd = step.with_args.get("cwd", "")
+            assert not input_re.search(cwd), (
+                f"Step '{name}' uses inputs.* as cwd after clone: {cwd}"
+            )
+
+
+# T_SP_NEW_18
+def test_smoke_recipe_passes_isolation_rules(smoke_recipe) -> None:
+    """Smoke recipe must pass all isolation semantic rules."""
+    from autoskillit.recipe.validator import run_semantic_rules
+
+    findings = run_semantic_rules(smoke_recipe)
+    isolation_findings = [
+        f for f in findings if f.rule in ("source-isolation-violation", "git-mutation-on-source")
+    ]
+    assert isolation_findings == []
 
 
 # ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ from autoskillit.recipe import rules_contracts as _rules_contracts  # noqa: E402
 from autoskillit.recipe import rules_dataflow as _rules_dataflow  # noqa: E402 F401
 from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401
 from autoskillit.recipe import rules_inputs as _rules_inputs  # noqa: E402 F401
+from autoskillit.recipe import rules_isolation as _rules_isolation  # noqa: E402 F401
 from autoskillit.recipe import rules_merge as _rules_merge  # noqa: E402 F401
 from autoskillit.recipe import rules_packs as _rules_packs  # noqa: E402 F401
 from autoskillit.recipe import rules_recipe as _rules_recipe  # noqa: E402 F401

@@ -353,6 +353,25 @@ class TestSourceIsolationContract:
             "autoskillit.workspace.clone module docstring must contain 'SOURCE ISOLATION'"
         )
 
+    def test_git_mutating_recipes_have_clone_step(self):
+        """Recipes using MCP git-mutation tools must use clone_repo."""
+        from autoskillit.recipe.io import list_recipes, load_recipe
+
+        GIT_MUTATION_TOOLS = {"create_unique_branch", "push_to_remote"}
+        workflows = list_recipes(Path("/nonexistent"))
+        bundled = [w for w in workflows.items if w.source.value == "builtin"]
+        for wf_info in bundled:
+            raw = wf_info.path.read_text()
+            wf = load_recipe(wf_info.path)
+            uses_mutation_tool = any(step.tool in GIT_MUTATION_TOOLS for step in wf.steps.values())
+            if not uses_mutation_tool:
+                continue
+            assert "clone_repo" in raw, (
+                f"{wf_info.name} uses MCP git-mutation tools "
+                f"({GIT_MUTATION_TOOLS & {s.tool for s in wf.steps.values()}}) "
+                f"but never calls clone_repo — workspace isolation is missing."
+            )
+
 
 class TestSousChefMergePhaseContract:
     """sous-chef/SKILL.md must carry a MERGE PHASE mandatory section."""

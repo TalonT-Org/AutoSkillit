@@ -223,6 +223,8 @@ def test_register_clone_failure_routes_to_escalate(smoke_recipe) -> None:
 def test_test_step_routes_to_fail_delete_on_failure(smoke_recipe) -> None:
     """REQ-GUARD-002: test failure must clean up before escalating."""
     step = smoke_recipe.steps["run_tests"]
+    assert step.tool == "run_cmd"
+    assert "task test-check" in step.with_args.get("cmd", "")
     assert step.on_failure == "fail_delete_remote_branch"
 
 

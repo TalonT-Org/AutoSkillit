@@ -164,13 +164,19 @@ def test_run_skill_with_inputs_cwd_fires_warning() -> None:
 
 
 def test_bundled_recipes_pass_isolation_rules() -> None:
+    """No bundled recipe may trigger an ERROR-level isolation finding.
+
+    WARNINGs are advisory (e.g. research.yaml legitimately operates on the
+    source directory without cloning).
+    """
     bd = builtin_recipes_dir()
     for yaml_path in sorted(bd.glob("*.yaml")):
         recipe = load_recipe(yaml_path)
         findings = run_semantic_rules(recipe)
-        isolation = [
+        errors = [
             f
             for f in findings
             if f.rule in ("source-isolation-violation", "git-mutation-on-source")
+            and f.severity == Severity.ERROR
         ]
-        assert isolation == [], f"{yaml_path.name} triggered isolation rule: {isolation}"
+        assert errors == [], f"{yaml_path.name} triggered isolation ERROR: {errors}"

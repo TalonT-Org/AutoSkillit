@@ -89,12 +89,17 @@ steps:
     on_failure: register_clone_failure
 
   run_tests:
-    tool: test_check
+    tool: run_cmd
     with:
-      worktree_path: "${{ context.work_dir }}"
+      cmd: "task test-check"
+      cwd: "${{ context.work_dir }}"
       step_name: "run_tests"
     on_success: push_branch
     on_failure: fail_delete_remote_branch
+    note: >-
+      Uses run_cmd instead of test_check because the smoke-test runs in the
+      clone root (not a sub-worktree). The clone-root-as-worktree semantic
+      rule correctly forbids passing clone_path as worktree_path.
 
   push_branch:
     tool: push_to_remote

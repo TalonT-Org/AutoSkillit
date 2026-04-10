@@ -15,6 +15,21 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SMOKE_RECIPE = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
 
 
+def _resolve_recipe_path(name: str) -> Path:
+    """Resolve recipe name to path, handling project-local smoke-test."""
+    if name == "smoke-test":
+        return SMOKE_RECIPE
+    return builtin_recipes_dir() / f"{name}.yaml"
+
+
+_ALL_CLONE_RECIPE_PATHS: list[Path] = []
+for _dir in (builtin_recipes_dir(), PROJECT_ROOT / ".autoskillit" / "recipes"):
+    if _dir.is_dir():
+        _ALL_CLONE_RECIPE_PATHS.extend(
+            p for p in sorted(_dir.glob("*.yaml")) if "clone_repo" in p.read_text()
+        )
+
+
 def _assert_ci_conflict_fix_on_context_limit(recipe) -> None:
     """Shared assertion: ci_conflict_fix must abort via release_issue_failure on context limit."""
     step = recipe.steps["ci_conflict_fix"]
@@ -1667,33 +1682,36 @@ def test_no_bare_temp_paths_in_bundled_recipe_notes() -> None:
 
 
 @pytest.mark.parametrize(
-    "recipe_name", ["implementation", "remediation", "implementation-groups", "merge-prs"]
+    "recipe_name",
+    ["implementation", "remediation", "implementation-groups", "merge-prs", "smoke-test"],
 )
 def test_recipe_has_no_defer_cleanup_ingredient(recipe_name: str) -> None:
     """Recipes must not declare 'defer_cleanup' — that design is removed."""
-    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    recipe = load_recipe(_resolve_recipe_path(recipe_name))
     assert "defer_cleanup" not in recipe.ingredients, (
         f"{recipe_name}.yaml must not declare 'defer_cleanup'"
     )
 
 
 @pytest.mark.parametrize(
-    "recipe_name", ["implementation", "remediation", "implementation-groups", "merge-prs"]
+    "recipe_name",
+    ["implementation", "remediation", "implementation-groups", "merge-prs", "smoke-test"],
 )
 def test_recipe_has_no_registry_path_ingredient(recipe_name: str) -> None:
     """Recipes must not declare 'registry_path' — replaced by a well-known default."""
-    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    recipe = load_recipe(_resolve_recipe_path(recipe_name))
     assert "registry_path" not in recipe.ingredients, (
         f"{recipe_name}.yaml must not declare 'registry_path'"
     )
 
 
 @pytest.mark.parametrize(
-    "recipe_name", ["implementation", "remediation", "implementation-groups", "merge-prs"]
+    "recipe_name",
+    ["implementation", "remediation", "implementation-groups", "merge-prs", "smoke-test"],
 )
 def test_recipe_has_no_interactive_cleanup_steps(recipe_name: str) -> None:
     """Recipes must not have confirm_cleanup or delete_clone — these blocked unattended runs."""
-    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    recipe = load_recipe(_resolve_recipe_path(recipe_name))
     assert "confirm_cleanup" not in recipe.steps, (
         f"{recipe_name}.yaml must not have 'confirm_cleanup' step"
     )
@@ -2214,3 +2232,28 @@ def test_bundled_recipes_have_no_ci_hardcoded_workflow() -> None:
         findings = run_semantic_rules(recipe)
         wf_findings = [f for f in findings if f.rule == "ci-hardcoded-workflow"]
         assert wf_findings == [], f"{recipe.name} has hardcoded workflow: {wf_findings}"
+
+
+# ---------------------------------------------------------------------------
+# Cross-recipe cwd-after-clone guard
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_path", _ALL_CLONE_RECIPE_PATHS, ids=lambda p: p.stem)
+def test_all_clone_recipes_use_context_cwd_after_clone(recipe_path: Path) -> None:
+    """After clone_repo, no step should use inputs.* as cwd."""
+    import re
+
+    input_re = re.compile(r"\$\{\{\s*inputs\.\w+\s*\}\}")
+    recipe = load_recipe(recipe_path)
+
+    seen_clone = False
+    for name, step in recipe.steps.items():
+        if step.tool == "clone_repo":
+            seen_clone = True
+            continue
+        if seen_clone and step.with_args:
+            cwd = step.with_args.get("cwd", "")
+            assert not input_re.search(cwd), (
+                f"{recipe_path.stem}: step '{name}' uses inputs.* as cwd after clone: {cwd}"
+            )

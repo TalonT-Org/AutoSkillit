@@ -37,8 +37,8 @@ best available plan.
 **NEVER:**
 - Modify the plan file, any source code, or any file outside `.autoskillit/temp/review-design/`
 - Halt the pipeline for a REVISE verdict — emit the verdict and let the recipe route
-- Proceed to Level 2, 3, or 4 analysis when any Level 1 finding is critical (halt
-  at fail-fast gate)
+- Proceed to Level 2, 3, or 4 analysis when any Level 1 finding is classified as
+  STRUCTURAL (halt at fail-fast gate). ADDRESSABLE L1 criticals continue L2-L4.
 - Spawn SILENT (S) dimension subagents — they are not run and not mentioned in output
 - Exit non-zero — GO, REVISE, and STOP are all normal outcomes (exit 0 in all cases)
 - Include code snippets, shell commands, or specific tool invocations in findings or revision guidance — findings describe gaps and risks, not implementation instructions
@@ -58,8 +58,9 @@ best available plan.
 - `revision_guidance` is written and emitted ONLY when verdict = REVISE
 - `evaluation_dashboard` is ALWAYS written and emitted
 - Red-team agent always sets `requires_decision: true` on all its findings
-- Halt at Level 1 fail-fast gate: if any Level 1 finding is critical, emit STOP immediately —
-  do NOT proceed to Level 2, 3, or 4
+- Halt at Level 1 fail-fast gate: if any Level 1 finding is classified as STRUCTURAL,
+  emit STOP immediately — do NOT proceed to Level 2, 3, or 4. If all L1 criticals are
+  ADDRESSABLE, tag them as REQUIRED priority fixes and continue L2-L4 analysis.
 
 ## Workflow
 
@@ -220,9 +221,31 @@ JSON, empty response, token-limit truncation), treat it as if it returned one cr
 finding with `message: "L1 subagent did not return parseable findings"`. This ensures
 parse failures trigger the fail-fast gate rather than silently passing it.
 
+**ADDRESSABLE vs STRUCTURAL classification**: After collecting critical L1 findings,
+classify each one before applying the gate:
+
+- **ADDRESSABLE**: Concrete methodological flaw with a mechanical fix — the research
+  question remains answerable after revision (e.g., "decompose composite hypothesis
+  into independent pairs", "add explicit estimand contrast statement")
+- **STRUCTURAL**: The research question is not answerable with this experimental design
+  regardless of revision (e.g., "no observable outcome exists for this hypothesis",
+  "estimand requires counterfactual data that cannot be collected")
+
+**Classification scope limitation**: Initially, only `hypothesis_falsifiability` findings
+are eligible for ADDRESSABLE classification — hypothesis restructuring is the dimension
+most likely to produce mechanically fixable defects. `estimand_clarity` findings default
+to STRUCTURAL (absent estimands typically indicate deeper design flaws).
+
+**Gate behavior after classification:**
+- If ANY critical finding is STRUCTURAL → halt L2-L4 analysis (emit STOP)
+- If ALL critical findings are ADDRESSABLE → tag each as `"priority": "REQUIRED"`,
+  continue L2-L4 analysis. The verdict becomes REVISE (not STOP) with the ADDRESSABLE
+  findings at the top of the evaluation dashboard.
+- If mixed (some ADDRESSABLE, some STRUCTURAL) → halt (STRUCTURAL takes precedence)
+
 ### Step 3: Level 2 + Red-Team (concurrent)
 
-When the L1 gate passes (no critical L1 findings), launch 2–3 Level 2 subagents AND the
+When the L1 gate passes (no STRUCTURAL critical L1 findings — gate also passes when all L1 criticals are ADDRESSABLE), launch 2–3 Level 2 subagents AND the
 red-team agent concurrently — all at the same time without waiting for each other.
 
 **Level 2 subagents** (parallel, weights from the matrix):
@@ -347,7 +370,14 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
 1. **Merge all findings** from L1, L2, L3, L4, and red-team into a single list.
 2. **Deduplicate** by `(dimension, section, message)` — identical findings from parallel
    agents are collapsed into one entry.
-3. **Apply red-team severity cap, then verdict logic**:
+3. **Consolidate related findings**: If multiple findings address the same underlying
+   methodological concern (e.g., four separate findings about multiple comparisons
+   correction from different dimensions), group them as sub-findings under a single
+   parent finding with the highest severity and priority of the group. The parent
+   finding's message should describe the shared concern; sub-findings retain their
+   dimension-specific detail as bullet points beneath the parent. This prevents
+   the same issue from inflating finding counts and obscuring distinct problems.
+4. **Apply red-team severity cap, then verdict logic**:
    ```python
    # Red-team severity cap: downgrade findings above the type ceiling
    RT_MAX_SEVERITY = {
@@ -375,11 +405,21 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
    WARNING_BUDGET_PER_DIM = 5
    warning_threshold = active_dimensions * WARNING_BUDGET_PER_DIM
 
-   # L1 fail-fast path: structural defects that block all further analysis
-   stop_triggers = [f for f in critical_findings if f.dimension in {"estimand_clarity", "hypothesis_falsifiability"}]
+   # L1 fail-fast path: only STRUCTURAL defects trigger STOP
+   l1_criticals = [f for f in critical_findings if f.dimension in {"estimand_clarity", "hypothesis_falsifiability"}]
+   # Tag ADDRESSABLE L1 criticals as REQUIRED (scope: hypothesis_falsifiability only)
+   for f in l1_criticals:
+       if f.fixability == "ADDRESSABLE":
+           f.priority = "REQUIRED"
+   # Scope guard: estimand_clarity always STRUCTURAL; None fixability defaults to STRUCTURAL
+   structural_stop_triggers = [
+       f for f in l1_criticals
+       if f.fixability == "STRUCTURAL" or f.fixability is None or f.dimension == "estimand_clarity"
+   ]
+
    # Red-team STOP path: adversarial critical findings after full analysis (L2-L4)
    # These fire only when the L1 gate passed AND the severity cap still allows critical.
-   stop_triggers += [f for f in critical_findings if f.dimension == "red_team"]
+   stop_triggers = structural_stop_triggers + [f for f in critical_findings if f.dimension == "red_team"]
 
    if stop_triggers:
        verdict = "STOP"
@@ -388,7 +428,7 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
    else:
        verdict = "GO"
    ```
-4. **Write `evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`** — always written.
+5. **Write `evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`** — always written.
    Must include:
    - Verdict banner and classification summary
    - Dimension scorecard table (dimension → weight → findings count → severity summary)
@@ -405,13 +445,16 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
      experiment_type: {type}
      critical_count: {n}
      warning_count: {n}
+     blocking_count: {n}
+     required_count: {n}
+     advisory_count: {n}
      red_team_count: {n}
      active_dimensions: {n}
      warning_threshold: {n}
      ```
    The YAML summary block enables downstream recipe steps to parse verdict and counts
    without re-reading prose.
-5. **Write `revision_guidance_{slug}_{YYYY-MM-DD_HHMMSS}.md`** — written ONLY when
+6. **Write `revision_guidance_{slug}_{YYYY-MM-DD_HHMMSS}.md`** — written ONLY when
    verdict = REVISE. Must include:
    - Required revisions: critical findings with gap and risk descriptions (not implementation instructions)
    - Recommended revisions: warning findings with gap and risk descriptions
@@ -445,10 +488,37 @@ All subagents must return findings in this JSON structure:
   "dimension": "estimand_clarity",
   "level": 1,
   "severity": "critical | warning | info",
+  "priority": "BLOCKING | REQUIRED | ADVISORY",
+  "fixability": "ADDRESSABLE | STRUCTURAL | null",
   "message": "{describes what is lacking or at risk — never prescribes how to fix}",
   "requires_decision": false
 }
 ```
+
+**Fixability classification** (L1 findings only — all other levels use JSON `null`):
+
+See **ADDRESSABLE vs STRUCTURAL classification** in Step 2 for authoritative definitions
+and scope limitations. `null` (JSON null literal, not the string "null") is used for all
+non-L1 findings where fixability is not applicable.
+
+**Priority tiers** (supplementing, not replacing, `severity`):
+
+- **BLOCKING**: Must be addressed before implementation proceeds. Structural invalidity
+  that would make results uninterpretable (e.g., "metric |Delta T_B| is mathematically
+  invalid for Approach B — entire experimental arm produces meaningless data")
+- **REQUIRED**: Must be addressed in revision. Methodology gaps that weaken but do not
+  invalidate results (e.g., "composite hypothesis is unfalsifiable — decompose into
+  independent pairs")
+- **ADVISORY**: Should be addressed but omission will not invalidate results (e.g.,
+  "gitignore coverage for generated artifacts not specified")
+
+**Priority assignment rules:**
+- STRUCTURAL L1 criticals → BLOCKING
+- ADDRESSABLE L1 criticals → REQUIRED
+- Non-L1 criticals → BLOCKING (default) or REQUIRED (if finding describes a gap
+  rather than an invalidity)
+- Warnings → REQUIRED (default) or ADVISORY (if finding is informational in nature)
+- Info → ADVISORY
 
 Red-team findings: always `"requires_decision": true`, `"dimension": "red_team"`.
 

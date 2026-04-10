@@ -605,14 +605,24 @@ class TestMultiWindowSelection:
         from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
 
         now = datetime.now(UTC)
+        five_hour_resets = now + timedelta(hours=4)
         windows = {
             "one_hour": QuotaWindowEntry(utilization=40.0, resets_at=now + timedelta(hours=1)),
-            "five_hour": QuotaWindowEntry(utilization=60.0, resets_at=now + timedelta(hours=4)),
+            "five_hour": QuotaWindowEntry(utilization=60.0, resets_at=five_hour_resets),
             "one_day": QuotaWindowEntry(utilization=30.0, resets_at=now + timedelta(days=1)),
         }
         binding = _compute_binding(windows, threshold=85.0)
         assert binding.utilization == pytest.approx(60.0)
         assert binding.window_name == "five_hour"
+        assert binding.resets_at == five_hour_resets
+
+    # T-MW-3b: empty windows dict → returns zero-utilization sentinel, no ValueError
+    def test_empty_windows_returns_zero_sentinel(self):
+        from autoskillit.execution.quota import _compute_binding
+
+        binding = _compute_binding({}, threshold=85.0)
+        assert binding.utilization == pytest.approx(0.0)
+        assert binding.resets_at is None
 
     # T-MW-4: _write_cache stores full windows dict + binding key
     def test_write_cache_stores_all_windows(self, tmp_path):

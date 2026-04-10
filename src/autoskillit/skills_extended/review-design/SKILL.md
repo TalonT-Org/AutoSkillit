@@ -495,15 +495,11 @@ All subagents must return findings in this JSON structure:
 }
 ```
 
-**Fixability classification** (L1 findings only — all other levels default to `null`):
+**Fixability classification** (L1 findings only — all other levels use JSON `null`):
 
-- **ADDRESSABLE**: Concrete methodological flaw with a mechanical fix — the research
-  question remains answerable after revision. Set by the L1 fail-fast gate classification
-  (Step 2). Only `hypothesis_falsifiability` findings are initially eligible.
-- **STRUCTURAL**: The research question is not answerable with this experimental design
-  regardless of revision. Set by the L1 fail-fast gate classification (Step 2).
-  `estimand_clarity` findings default to STRUCTURAL.
-- **null**: Non-L1 findings — fixability classification is not applicable.
+See **ADDRESSABLE vs STRUCTURAL classification** in Step 2 for authoritative definitions
+and scope limitations. `null` (JSON null literal, not the string "null") is used for all
+non-L1 findings where fixability is not applicable.
 
 **Priority tiers** (supplementing, not replacing, `severity`):
 

@@ -33,11 +33,8 @@ def _scan_atomic_write_json_dict_sites() -> set[tuple[str, int]]:
                 continue
             # Match atomic_write(path, json.dumps(...))
             func = node.func
-            is_atomic_write = (
-                isinstance(func, ast.Name) and func.id == "atomic_write"
-            ) or (
-                isinstance(func, ast.Attribute)
-                and func.attr == "atomic_write"
+            is_atomic_write = (isinstance(func, ast.Name) and func.id == "atomic_write") or (
+                isinstance(func, ast.Attribute) and func.attr == "atomic_write"
             )
             if not is_atomic_write:
                 continue
@@ -163,12 +160,12 @@ class TestSchemaVersionConvention:
         msg_parts = []
         if added:
             msg_parts.append(
-                f"New json.dumps dict write sites found (use write_versioned_json instead):\n"
+                "New json.dumps dict write sites found (use write_versioned_json instead):\n"
                 + "\n".join(f"  + {f}:{ln}" for f, ln in sorted(added))
             )
         if removed:
             msg_parts.append(
-                f"Allowlisted sites no longer found (remove from _LEGACY_JSON_WRITES):\n"
+                "Allowlisted sites no longer found (remove from _LEGACY_JSON_WRITES):\n"
                 + "\n".join(f"  - {f}:{ln}" for f, ln in sorted(removed))
             )
         assert current == _LEGACY_JSON_WRITES, "\n\n".join(msg_parts)

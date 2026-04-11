@@ -18,7 +18,7 @@ ingredients:
     required: true
   base_branch:
     description: Base branch for the PR target
-    default: main
+    default: ""
 
 kitchen_rules:
   - >-

@@ -739,6 +739,46 @@ async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingre
 
 
 @pytest.mark.anyio
+async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch):
+    """T7: open_kitchen smoke-test renders the config-resolved base_branch value."""
+    import autoskillit.recipe._api as api_mod
+    from autoskillit.core import pkg_root
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    project_dir = pkg_root().parent.parent
+    monkeypatch.chdir(project_dir)
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(
+        "autoskillit.server.tools_kitchen.resolve_ingredient_defaults",
+        lambda _: {"base_branch": "integration"},
+    )
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.quota_refresh_task = None
+    mock_ctx.recipes = DefaultRecipeRepository()
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="smoke-test", ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is True
+    ing_table = parsed.get("ingredients_table") or ""
+    assert ing_table, "ingredients_table must be present and non-empty"
+    assert "integration" in ing_table
+    # base_branch row must NOT show the YAML literal "main"
+    base_branch_rows = [line for line in ing_table.splitlines() if "base_branch" in line]
+    assert base_branch_rows, "base_branch row must appear in ingredients_table"
+    assert all("main" not in row for row in base_branch_rows)
+
+
+@pytest.mark.anyio
 async def test_open_kitchen_recipe_not_found_returns_failure_envelope(tmp_path, monkeypatch):
     """Invalid recipe name returns failure envelope (via load_and_validate raising)."""
     monkeypatch.chdir(tmp_path)

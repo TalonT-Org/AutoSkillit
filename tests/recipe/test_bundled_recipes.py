@@ -1442,12 +1442,12 @@ class TestBaseBranchDefaults:
             f"{recipe_name}.yaml: base_branch must use auto-detect (default: '')"
         )
 
-    def test_smoke_test_base_branch_remains_main(self) -> None:
-        """smoke-test.yaml must keep base_branch default 'main' — isolated scratch repo context."""
+    def test_smoke_test_base_branch_uses_auto_detect(self) -> None:
+        """smoke-test.yaml must use auto-detect for base_branch so config-resolved value wins."""
         recipe = load_recipe(SMOKE_RECIPE)
-        assert recipe.ingredients["base_branch"].default == "main", (
-            "smoke-test.yaml creates a fresh git repo initialized with 'main' — "
-            "its base_branch default must stay 'main'"
+        assert recipe.ingredients["base_branch"].default == "", (
+            "smoke-test.yaml base_branch must use auto-detect (default: '') so that "
+            "branching.default_base_branch from config is honoured at runtime (#703)"
         )
 
 

@@ -47,6 +47,19 @@ def _setup_project_recipe(tmp_path: Path, name: str, content: str) -> Path:
     return recipe_path
 
 
+def _make_recipe_with_ingredient(name: str, ingredient: object) -> object:
+    """Build a minimal Recipe with a single named ingredient for unit testing."""
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    return Recipe(
+        name="test",
+        description="test recipe",
+        ingredients={name: ingredient},
+        steps={"done": RecipeStep(action="stop", message="done")},
+        kitchen_rules=[],
+    )
+
+
 # T4a
 def test_load_and_validate_includes_kitchen_rules(tmp_path):
     """Response has top-level 'kitchen_rules' key with rule strings."""
@@ -544,6 +557,84 @@ class TestFormatIngredientsTableGfmWidthCap:
                     f"run_mode description not capped in GFM output: "
                     f"{len(desc_cell)} > {_GFM_DESC_MAX_WIDTH}"
                 )
+
+
+def test_build_ingredient_rows_resolved_overrides_literal_default():
+    """T1: config-resolved value wins over a non-empty YAML literal default."""
+    from autoskillit.recipe._api import build_ingredient_rows
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = _make_recipe_with_ingredient(
+        "base_branch",
+        RecipeIngredient(description="Base branch", default="main"),
+    )
+    rows = build_ingredient_rows(recipe, resolved_defaults={"base_branch": "integration"})
+    assert ("base_branch", "Base branch", "integration") in rows
+
+
+def test_build_ingredient_rows_literal_default_preserved_when_no_resolved():
+    """T2: YAML literal default is used when resolved_defaults has no entry."""
+    from autoskillit.recipe._api import build_ingredient_rows
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = _make_recipe_with_ingredient(
+        "base_branch",
+        RecipeIngredient(description="Base branch", default="main"),
+    )
+    rows = build_ingredient_rows(recipe, resolved_defaults={})
+    assert ("base_branch", "Base branch", "main") in rows
+
+
+def test_build_ingredient_rows_resolved_overrides_empty_sentinel():
+    """T3: resolved value also wins over the empty-string sentinel (regression guard)."""
+    from autoskillit.recipe._api import build_ingredient_rows
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = _make_recipe_with_ingredient(
+        "base_branch",
+        RecipeIngredient(description="Base branch", default=""),
+    )
+    rows = build_ingredient_rows(recipe, resolved_defaults={"base_branch": "integration"})
+    assert ("base_branch", "Base branch", "integration") in rows
+
+
+def test_build_ingredient_rows_empty_sentinel_falls_back_to_auto_detect():
+    """T4: empty-string sentinel displays 'auto-detect' when no resolved value exists."""
+    from autoskillit.recipe._api import build_ingredient_rows
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = _make_recipe_with_ingredient(
+        "base_branch",
+        RecipeIngredient(description="Base branch", default=""),
+    )
+    rows = build_ingredient_rows(recipe, resolved_defaults={})
+    assert ("base_branch", "Base branch", "auto-detect") in rows
+
+
+def test_build_ingredient_rows_resolved_does_not_override_required_marker():
+    """T5: required-without-default always shows '(required)'; resolved override must not apply."""
+    from autoskillit.recipe._api import build_ingredient_rows
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = _make_recipe_with_ingredient(
+        "x",
+        RecipeIngredient(description="Required thing", required=True),
+    )
+    rows = build_ingredient_rows(recipe, resolved_defaults={"x": "something"})
+    assert any(r[0] == "x *" and r[2] == "(required)" for r in rows)
+
+
+def test_build_ingredient_rows_resolved_overrides_boolean_literal():
+    """T6: resolved value wins over a boolean-literal default ('true'/'false' → 'on'/'off')."""
+    from autoskillit.recipe._api import build_ingredient_rows
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = _make_recipe_with_ingredient(
+        "flag",
+        RecipeIngredient(description="A flag", default="true"),
+    )
+    rows = build_ingredient_rows(recipe, resolved_defaults={"flag": "off"})
+    assert ("flag", "A flag", "off") in rows
 
 
 def test_build_ingredient_rows_returns_tuples():

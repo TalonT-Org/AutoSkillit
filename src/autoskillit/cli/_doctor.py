@@ -395,6 +395,30 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
         )
 
 
+def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:
+    """Check the quota cache file for schema version drift."""
+    check_name = "quota_cache_schema"
+    path = cache_path or (Path.home() / ".claude" / "autoskillit_quota_cache.json")
+    if not path.exists():
+        return DoctorResult(Severity.OK, check_name, "No quota cache present.")
+    try:
+        raw = json.loads(path.read_text())
+    except Exception as exc:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"Quota cache at {path} could not be parsed: {type(exc).__name__}.",
+        )
+    observed = raw.get("schema_version") if isinstance(raw, dict) else None
+    if observed == 2:
+        return DoctorResult(Severity.OK, check_name, f"Quota cache schema v2 at {path}.")
+    return DoctorResult(
+        Severity.WARNING,
+        check_name,
+        f"Quota cache schema drift at {path}: observed={observed!r}, expected=2.",
+    )
+
+
 def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
     from autoskillit.cli._marketplace import _clear_plugin_cache
@@ -589,6 +613,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 13: Source version drift (cache-only, never network)
     results.append(_check_source_version_drift())
+
+    # Check 14: Quota cache schema version
+    results.append(_check_quota_cache_schema())
 
     # Output
     if output_json:

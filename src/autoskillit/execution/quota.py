@@ -15,12 +15,20 @@ from typing import Any
 
 import httpx
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import get_logger, write_versioned_json
 
 _log = get_logger(__name__)
 
 _DEFAULT_BASE_URL: str = "https://api.anthropic.com"
 _DEFAULT_THRESHOLD: float = 85.0
+
+_QUOTA_CACHE_SCHEMA_VERSION: int = 2
+_SCHEMA_DRIFT_LOGGED: set[str] = set()
+
+
+def _reset_schema_drift_logged_for_tests() -> None:
+    """Test-only helper: clear the once-per-process drift-log set."""
+    _SCHEMA_DRIFT_LOGGED.clear()
 
 
 @dataclass
@@ -106,12 +114,21 @@ def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
     """Return a fresh QuotaStatus from local cache, or None if stale/missing/old-format."""
     try:
         raw = json.loads(Path(cache_path).expanduser().read_text())
+        if raw.get("schema_version") != _QUOTA_CACHE_SCHEMA_VERSION:
+            cache_key = str(Path(cache_path).expanduser())
+            if cache_key not in _SCHEMA_DRIFT_LOGGED:
+                _SCHEMA_DRIFT_LOGGED.add(cache_key)
+                _log.warning(
+                    "quota_cache_schema_drift",
+                    cache_path=cache_key,
+                    observed=raw.get("schema_version"),
+                )
+            return None
         fetched_at = datetime.fromisoformat(raw["fetched_at"])
         age = (datetime.now(UTC) - fetched_at).total_seconds()
         if age > max_age:
             return None
         if "binding" not in raw:
-            # Old-format cache (no "binding" key) — treat as stale, force re-fetch
             return None
         b = raw["binding"]
         return QuotaStatus(
@@ -145,7 +162,7 @@ def _write_cache(cache_path: str, result: QuotaFetchResult) -> None:
         }
         path = Path(cache_path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(path, json.dumps(payload))
+        write_versioned_json(path, payload, schema_version=_QUOTA_CACHE_SCHEMA_VERSION)
     except OSError as exc:
         _log.warning("quota cache write failed", path=cache_path, error=str(exc))
 

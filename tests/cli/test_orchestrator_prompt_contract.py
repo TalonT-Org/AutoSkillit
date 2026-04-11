@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import re
 
-import pytest
-
 
 def _get_prompt() -> str:
     """Return the orchestrator prompt for a demo recipe."""
@@ -71,7 +69,6 @@ class TestStep0ToolPredicateCoverage:
 
         # Each tool must appear in a FAILURE PREDICATE section
         for tool in tool_names:
-            assert (
-                f"FAILURE PREDICATE — {tool}" in prompt
-                or f"- {tool}:" in prompt
-            ), f"Tool '{tool}' in STEP 0 has no failure predicate or shared rule"
+            assert f"FAILURE PREDICATE — {tool}" in prompt or f"- {tool}:" in prompt, (
+                f"Tool '{tool}' in STEP 0 has no failure predicate or shared rule"
+            )

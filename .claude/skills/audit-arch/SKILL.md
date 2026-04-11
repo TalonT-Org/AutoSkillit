@@ -1,5 +1,6 @@
 ---
 name: audit-arch
+categories: [audit]
 description: Audit codebase for adherence to architectural standards, practices, and rules. Use when user says "audit arch", "audit architecture", "check architecture", or "architectural review". Spawns parallel subagents to examine multiple architectural aspects and generates a structured report.
 hooks:
   PreToolUse:
@@ -26,7 +27,7 @@ Audit the codebase for adherence to architectural standards and rules.
 
 **ALWAYS:**
 - Use subagents for parallel exploration
-- Write report to `temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md`
+- Write report to `{{AUTOSKILLIT_TEMP}}/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - Provide file paths and line numbers
 - Categorize by severity (CRITICAL, HIGH, MEDIUM, LOW)
 
@@ -288,7 +289,7 @@ These apply across all principles when evaluating architectural decisions:
 6. **Consolidate findings** by principle and severity
 7. **Cross-reference:** Ensure findings are categorized by the principle they violate, not just where discovered
 8. **Suggest new principle** (optional) — see below
-9. **Write report** to `temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md`
+9. **Write report** to `{{AUTOSKILLIT_TEMP}}/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 10. **Output summary** to terminal
 
 ---

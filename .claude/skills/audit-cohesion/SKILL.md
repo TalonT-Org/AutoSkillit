@@ -1,5 +1,6 @@
 ---
 name: audit-cohesion
+categories: [audit]
 description: Audit codebase for internal cohesion - how well components fit together and maintain consistent patterns. Distinct from audit-arch (which checks rule violations); this checks integration fitness and convergence. Use when user says "audit cohesion", "check cohesion", "cohesion audit", or "alignment check".
 hooks:
   PreToolUse:
@@ -31,8 +32,8 @@ Audit the codebase for internal cohesion: how well components integrate and main
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per cohesion dimension)
-- All output goes under `temp/audit-cohesion/` (create if needed)
-- Final report: `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — always one file, never split
+- All output goes under `{{AUTOSKILLIT_TEMP}}/audit-cohesion/` (create if needed)
+- Final report: `{{AUTOSKILLIT_TEMP}}/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — always one file, never split
 - Subagents must NOT create their own files — they return findings in their response text only
 - Score each dimension (STRONG, ADEQUATE, WEAK, FRACTURED)
 
@@ -451,9 +452,9 @@ After all subagents return:
 
 ### Step 3: Write Report
 
-Ensure `temp/audit-cohesion/` exists (`mkdir -p`).
+Ensure `{{AUTOSKILLIT_TEMP}}/audit-cohesion/` exists (`mkdir -p`).
 
-Write to `temp/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — **always one file, never split**.
+Write to `{{AUTOSKILLIT_TEMP}}/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — **always one file, never split**.
 
 The report WILL be long. This is expected and correct — thoroughness over brevity. Do not reduce content to stay under any line count.
 

@@ -29,6 +29,11 @@ class QuotaStatus:
     resets_at: datetime | None  # UTC-aware; None when utilization is 0
     window_name: str = "unknown"  # which window this came from (diagnostic)
 
+    def __post_init__(self) -> None:
+        if self.utilization is None:
+            raise TypeError("QuotaStatus.utilization must not be None")
+        self.utilization = float(self.utilization)
+
 
 @dataclass
 class QuotaWindowEntry:
@@ -36,6 +41,11 @@ class QuotaWindowEntry:
 
     utilization: float
     resets_at: datetime | None
+
+    def __post_init__(self) -> None:
+        if self.utilization is None:
+            raise TypeError("QuotaWindowEntry.utilization must not be None")
+        self.utilization = float(self.utilization)
 
 
 @dataclass
@@ -109,7 +119,7 @@ def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
             resets_at=_parse_resets_at(b.get("resets_at")),
             window_name=str(b.get("window_name", "unknown")),
         )
-    except (FileNotFoundError, KeyError, ValueError, json.JSONDecodeError):
+    except (FileNotFoundError, KeyError, ValueError, TypeError, json.JSONDecodeError):
         return None
 
 
@@ -161,8 +171,11 @@ async def _fetch_quota(
     windows: dict[str, QuotaWindowEntry] = {}
     for name, w in data.items():
         if isinstance(w, dict) and "utilization" in w:
+            raw_util = w["utilization"]
+            if raw_util is None:
+                continue
             windows[name] = QuotaWindowEntry(
-                utilization=float(w["utilization"]),
+                utilization=float(raw_util),
                 resets_at=_parse_resets_at(w.get("resets_at")),
             )
     if not windows:
@@ -301,15 +314,12 @@ async def check_and_sleep_if_needed(
             "window_name": status.window_name,
         }
 
-    except (
-        TimeoutError,
-        OSError,
-        KeyError,
-        ValueError,
-        json.JSONDecodeError,
-        httpx.HTTPError,
-    ) as exc:
-        _log.warning("quota check failed — continuing without sleep", error=str(exc))
+    except Exception as exc:
+        _log.warning(
+            "quota check failed — continuing without sleep",
+            error=str(exc),
+            exc_info=True,
+        )
         return {
             "should_sleep": False,
             "sleep_seconds": 0,

@@ -488,7 +488,7 @@ async def _prime_quota_cache() -> None:
 
     try:
         await check_and_sleep_if_needed(_get_ctx().config.quota_guard)
-    except (OSError, ValueError, RuntimeError):
+    except Exception:
         logger.warning("quota_prime_failed", exc_info=True)
 
 

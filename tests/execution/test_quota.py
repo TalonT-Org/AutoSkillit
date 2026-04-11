@@ -99,6 +99,62 @@ class TestReadCache:
         cache_path.write_text("not valid json{{")
         assert _read_cache(str(cache_path), max_age=120) is None
 
+    def test_read_cache_null_utilization_returns_none(self, tmp_path):
+        """Cache with utilization: null in binding must return None (fail-open)."""
+        from autoskillit.execution.quota import _read_cache
+
+        cache_path = tmp_path / "usage_cache.json"
+        payload = {
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "binding": {"utilization": None, "resets_at": None, "window_name": "five_hour"},
+        }
+        cache_path.write_text(json.dumps(payload))
+        assert _read_cache(str(cache_path), max_age=300) is None
+
+    def test_read_cache_typeerror_returns_none(self, tmp_path):
+        """_read_cache must catch TypeError (e.g., float(None)) and return None."""
+        from autoskillit.execution.quota import _read_cache
+
+        cache_path = tmp_path / "usage_cache.json"
+        payload = {
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "binding": {"utilization": None, "resets_at": None},
+        }
+        cache_path.write_text(json.dumps(payload))
+        # With __post_init__, constructing QuotaStatus with None raises TypeError.
+        # _read_cache must catch it and return None.
+        assert _read_cache(str(cache_path), max_age=300) is None
+
+
+class TestQuotaDataclassPostInit:
+    """QuotaStatus and QuotaWindowEntry must enforce types at construction."""
+
+    def test_quota_window_entry_rejects_none_utilization(self):
+        from autoskillit.execution.quota import QuotaWindowEntry
+
+        with pytest.raises(TypeError, match="utilization"):
+            QuotaWindowEntry(utilization=None, resets_at=None)
+
+    def test_quota_status_rejects_none_utilization(self):
+        from autoskillit.execution.quota import QuotaStatus
+
+        with pytest.raises(TypeError, match="utilization"):
+            QuotaStatus(utilization=None, resets_at=None)
+
+    def test_quota_window_entry_coerces_string_utilization(self):
+        from autoskillit.execution.quota import QuotaWindowEntry
+
+        entry = QuotaWindowEntry(utilization="85.5", resets_at=None)
+        assert entry.utilization == 85.5
+        assert isinstance(entry.utilization, float)
+
+    def test_quota_status_coerces_string_utilization(self):
+        from autoskillit.execution.quota import QuotaStatus
+
+        status = QuotaStatus(utilization="42.0", resets_at=None)
+        assert status.utilization == 42.0
+        assert isinstance(status.utilization, float)
+
 
 class TestWriteCache:
     def test_writes_readable_cache(self, tmp_path):

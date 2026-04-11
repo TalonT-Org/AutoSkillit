@@ -1348,3 +1348,158 @@ class TestRunSkillPerInvocationMarker:
         assert marker1 != marker2
         assert "%%ORDER_UP::" in marker1
         assert "%%ORDER_UP::" in marker2
+
+
+@pytest.mark.anyio
+async def test_run_skill_passes_allow_only_to_init_session(tool_ctx, monkeypatch) -> None:
+    """run_skill computes the closure for the resolved target and forwards it as allow_only."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import SkillResult, ValidatedAddDir
+
+    fake_validated = ValidatedAddDir(path="/fake/session/dir")
+    expected_closure = frozenset({"investigate", "mermaid"})
+
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    mock_ssm.compute_skill_closure.return_value = expected_closure
+    tool_ctx.session_skill_manager = mock_ssm
+
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
+    tool_ctx.skill_resolver = mock_resolver
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/autoskillit:investigate the bug", "/tmp")
+
+    mock_ssm.compute_skill_closure.assert_called_once_with("investigate")
+    mock_ssm.init_session.assert_called_once()
+    assert mock_ssm.init_session.call_args.kwargs.get("allow_only") == expected_closure
+
+
+@pytest.mark.anyio
+async def test_run_skill_no_target_skill_passes_none_allow_only(tool_ctx, monkeypatch) -> None:
+    """When skill_resolver is unset, target_name is None and allow_only stays None."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import SkillResult, ValidatedAddDir
+
+    fake_validated = ValidatedAddDir(path="/fake/session/dir")
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    tool_ctx.session_skill_manager = mock_ssm
+    tool_ctx.skill_resolver = None  # disables resolve_target_skill
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/test skill", "/tmp")
+
+    mock_ssm.init_session.assert_called_once()
+    assert mock_ssm.init_session.call_args.kwargs.get("allow_only") is None
+    mock_ssm.compute_skill_closure.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, monkeypatch) -> None:
+    """End-to-end: /make-plan resolves a closure containing the entire arch-lens pack."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import SkillResult, ValidatedAddDir
+    from autoskillit.workspace.session_skills import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+    )
+
+    real_provider = SkillsDirectoryProvider()
+    real_mgr = DefaultSessionSkillManager(provider=real_provider, ephemeral_root=tool_ctx.temp_dir)
+
+    captured: dict = {}
+
+    class _RecordingManager:
+        def __init__(self, real: DefaultSessionSkillManager) -> None:
+            self._real = real
+
+        def init_session(self, session_id, **kwargs):
+            captured["allow_only"] = kwargs.get("allow_only")
+            return ValidatedAddDir(path="/fake/session/dir")
+
+        def compute_skill_closure(self, target_name):
+            return self._real.compute_skill_closure(target_name)
+
+        def activate_skill_deps(self, session_id, skill_name):
+            return True
+
+        def cleanup_stale(self, max_age_seconds=86400):
+            return 0
+
+    tool_ctx.session_skill_manager = _RecordingManager(real_mgr)
+
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
+    tool_ctx.skill_resolver = mock_resolver
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/autoskillit:make-plan refactor", "/tmp")
+
+    closure = captured["allow_only"]
+    assert closure is not None
+    assert "make-plan" in closure
+    assert "mermaid" in closure
+    arch_members = {n for n in closure if n.startswith("arch-lens-")}
+    assert len(arch_members) == 13

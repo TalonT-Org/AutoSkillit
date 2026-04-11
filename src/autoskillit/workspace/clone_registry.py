@@ -35,10 +35,11 @@ def register_clone(
     clone_path: str,
     status: CloneStatus,
     registry_path: str = "",
+    temp_dir: Path | None = None,
 ) -> dict[str, str]:
     """Append a clone entry to the registry. Safe for parallel callers — holds an
     exclusive advisory lock across the entire read-modify-write sequence."""
-    path = _resolve_registry_path(registry_path)
+    path = _resolve_registry_path(registry_path, temp_dir)
     lock_path = path.with_suffix(".lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with open(lock_path, "w") as lock_file:
@@ -54,9 +55,12 @@ def register_clone(
     return {"registered": "true", "registry_path": str(path)}
 
 
-def read_registry(registry_path: str = "") -> list[dict[str, str]]:
+def read_registry(
+    registry_path: str = "",
+    temp_dir: Path | None = None,
+) -> list[dict[str, str]]:
     """Return all registry entries, or [] if the file does not exist."""
-    path = _resolve_registry_path(registry_path)
+    path = _resolve_registry_path(registry_path, temp_dir)
     if not path.exists():
         return []
     try:
@@ -68,13 +72,14 @@ def read_registry(registry_path: str = "") -> list[dict[str, str]]:
 
 def cleanup_candidates(
     registry_path: str = "",
+    temp_dir: Path | None = None,
 ) -> tuple[list[str], list[str]]:
     """Return (to_delete, to_preserve) path lists from the registry.
 
     to_delete  — clones with status='success' (safe to remove)
     to_preserve — clones with status='error'  (preserve for investigation)
     """
-    entries = read_registry(registry_path)
+    entries = read_registry(registry_path, temp_dir)
     to_delete = [e["path"] for e in entries if e.get("status") == "success" and "path" in e]
     to_preserve = [e["path"] for e in entries if e.get("status") == "error" and "path" in e]
     return to_delete, to_preserve
@@ -83,13 +88,14 @@ def cleanup_candidates(
 def batch_delete(
     registry_path: str,
     remove_fn: Callable[[str, str], dict[str, str]],
+    temp_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Read registry and delete success-status clones via remove_fn.
 
     Calls remove_fn(path, "false") for each success clone. Error clones are
     preserved. Returns {"deleted": [...], "delete_failures": [...], "preserved": [...]}.
     """
-    to_delete, to_preserve = cleanup_candidates(registry_path)
+    to_delete, to_preserve = cleanup_candidates(registry_path, temp_dir)
     deleted: list[str] = []
     delete_failures: list[dict[str, str]] = []
     for path in to_delete:

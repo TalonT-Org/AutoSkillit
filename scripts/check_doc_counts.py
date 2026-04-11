@@ -89,7 +89,7 @@ SELF_CORRECTING = re.compile(
 # claim describes a sub-family (arch-lens, exp-lens, Tier 1/2/3, audit suite,
 # rectify doctrine, …) and is exempt from the global-total check.
 SUBFAMILY_CONTEXT = re.compile(
-    r"arch-lens|exp-lens|Tier\s+[123]|free\s+range\s+tier|skills_extended"
+    r"arch-lens|exp-lens|Tier\s+[123]|skills_extended"
     r"|src/autoskillit/skills/|audit\s+suite|rectify\s+doctrine|sub-family",
     re.IGNORECASE,
 )

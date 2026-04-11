@@ -1338,7 +1338,6 @@ skills:
     - "verdict = approved\n%%ORDER_UP%%"
     - "verdict = changes_requested\n%%ORDER_UP%%"
     - "verdict = needs_human\n%%ORDER_UP%%"
-    write_behavior: always
 
   audit-claims:
     inputs:
@@ -1361,7 +1360,6 @@ skills:
     - "verdict = approved\n%%ORDER_UP%%"
     - "verdict = changes_requested\n%%ORDER_UP%%"
     - "verdict = needs_human\n%%ORDER_UP%%"
-    write_behavior: always
 
   resolve-claims-review:
     inputs:
@@ -1379,7 +1377,9 @@ skills:
     pattern_examples:
     - "needs_rerun = true\n%%ORDER_UP%%"
     - "needs_rerun = false\n%%ORDER_UP%%"
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - "Fixes applied:\\s*[1-9][0-9]*"
 
   resolve-research-review:
     inputs:
@@ -1397,4 +1397,6 @@ skills:
     pattern_examples:
     - "needs_rerun = true\n%%ORDER_UP%%"
     - "needs_rerun = false\n%%ORDER_UP%%"
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - "Fixes applied:\\s*[1-9][0-9]*"

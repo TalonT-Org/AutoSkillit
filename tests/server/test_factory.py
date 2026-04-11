@@ -290,6 +290,80 @@ def test_write_expected_resolver_for_resolve_review_returns_conditional() -> Non
     assert any("fixes_applied" in p for p in spec.expected_when)
 
 
+def test_write_expected_resolver_for_audit_claims_returns_unset() -> None:
+    """audit-claims must NOT declare write_behavior (gate must be inactive).
+
+    audit-claims is API-primary (gh api → Bash); write_call_count is always 0.
+    Declaring write_behavior: always demotes every successful run to zero_writes.
+    """
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.write_expected_resolver is not None
+    spec = ctx.write_expected_resolver(
+        "/autoskillit:audit-claims /tmp/wt main https://github.com/o/r/pull/1"
+    )
+    assert spec.mode is None, (
+        f"audit-claims must have no write_behavior (gate inactive), got '{spec.mode}'. "
+        "It is API-primary and never produces Edit/Write calls."
+    )
+    assert spec.expected_when == ()
+
+
+def test_write_expected_resolver_for_review_research_pr_returns_unset() -> None:
+    """review-research-pr must NOT declare write_behavior (gate must be inactive).
+
+    review-research-pr is API-primary (gh api → Bash); write_call_count is always 0.
+    Declaring write_behavior: always demotes every successful run to zero_writes.
+    """
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.write_expected_resolver is not None
+    spec = ctx.write_expected_resolver(
+        "/autoskillit:review-research-pr /tmp/wt main https://github.com/o/r/pull/1"
+    )
+    assert spec.mode is None, (
+        f"review-research-pr must have no write_behavior (gate inactive), got '{spec.mode}'. "
+        "It is API-primary and never produces Edit/Write calls."
+    )
+    assert spec.expected_when == ()
+
+
+def test_write_expected_resolver_for_resolve_claims_review_returns_conditional() -> None:
+    """resolve-claims-review must declare write_behavior='conditional'.
+
+    Legitimate zero-write success paths exist: Fixes applied: 0, all-escalations,
+    and graceful degradation (no PR found). The 'Fixes applied: N>=1' anchor fires
+    the gate only when the skill claims fixes were applied but produced no writes.
+    """
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.write_expected_resolver is not None
+    spec = ctx.write_expected_resolver("/autoskillit:resolve-claims-review /tmp/wt main")
+    assert spec.mode == "conditional", (
+        f"resolve-claims-review must use 'conditional' write_behavior, got '{spec.mode}'. "
+        "It has legitimate no-write success paths."
+    )
+    assert len(spec.expected_when) > 0
+    assert any("Fixes applied" in p for p in spec.expected_when)
+    assert any(r"[1-9][0-9]*" in p for p in spec.expected_when)
+
+
+def test_write_expected_resolver_for_resolve_research_review_returns_conditional() -> None:
+    """resolve-research-review must declare write_behavior='conditional'.
+
+    Legitimate zero-write success paths exist: Fixes applied: 0, all-escalations,
+    and graceful degradation (no PR found). The 'Fixes applied: N>=1' anchor fires
+    the gate only when the skill claims fixes were applied but produced no writes.
+    """
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.write_expected_resolver is not None
+    spec = ctx.write_expected_resolver("/autoskillit:resolve-research-review /tmp/wt main")
+    assert spec.mode == "conditional", (
+        f"resolve-research-review must use 'conditional' write_behavior, got '{spec.mode}'. "
+        "It has legitimate no-write success paths."
+    )
+    assert len(spec.expected_when) > 0
+    assert any("Fixes applied" in p for p in spec.expected_when)
+    assert any(r"[1-9][0-9]*" in p for p in spec.expected_when)
+
+
 def test_cook_and_factory_session_skill_manager_ctor_args_in_sync() -> None:
     """Sync test: _cook.py and _factory.py must call DefaultSessionSkillManager
     with the same number of positional arguments.

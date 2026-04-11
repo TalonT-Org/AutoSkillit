@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.core._type_protocols import SkillLister
+    from autoskillit.core import SkillLister
 
 from autoskillit.core import (
     SKILL_TOOLS,

@@ -14,6 +14,7 @@ from typing import Any, TypedDict
 from autoskillit.core import (
     LoadResult,
     RecipeSource,
+    SkillLister,
     TerminalColumn,
     YAMLError,
     _render_gfm_table,
@@ -22,7 +23,6 @@ from autoskillit.core import (
     pkg_root,
     resolve_temp_dir,
 )
-from autoskillit.core._type_protocols import SkillLister
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.contracts import (
     check_contract_staleness,

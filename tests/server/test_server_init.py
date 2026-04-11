@@ -1290,6 +1290,7 @@ def test_initialize_applies_subset_disables(monkeypatch):
     ctx = MagicMock(spec=ToolContext)
     ctx.config = AutomationConfig(subsets=SubsetsConfig(disabled=["github", "ci"]))
     ctx.session_skill_manager = None
+    ctx.runner = None
 
     with patch("autoskillit.server._ctx", None):
         with patch("autoskillit.server.mcp", mock_mcp):
@@ -1314,6 +1315,7 @@ def test_initialize_skips_subset_disable_when_empty(monkeypatch):
     ctx = MagicMock(spec=ToolContext)
     ctx.config = AutomationConfig(subsets=SubsetsConfig(disabled=[]))
     ctx.session_skill_manager = None
+    ctx.runner = None
 
     with patch("autoskillit.server.mcp", mock_mcp):
         from autoskillit.server._state import _initialize

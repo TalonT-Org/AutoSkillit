@@ -109,7 +109,7 @@ def _is_yaml_dump(node: ast.expr) -> bool:
 # Any new site that writes a dict payload SHOULD use write_versioned_json.
 _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # core/io.py — write_versioned_json itself (the blessed helper) uses atomic_write+json.dumps
-    ("src/autoskillit/core/io.py", 62),
+    ("src/autoskillit/core/io.py", 98),
     # session_log.py — summary dict, token_usage list, audit_log list
     ("src/autoskillit/execution/session_log.py", 206),
     ("src/autoskillit/execution/session_log.py", 219),
@@ -128,7 +128,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools_status.py", 320),
     # tools_github.py — bug report dict
-    ("src/autoskillit/server/tools_github.py", 260),
+    ("src/autoskillit/server/tools_github.py", 256),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 23),
     # _init_helpers.py — ~/.claude.json (co-owned)

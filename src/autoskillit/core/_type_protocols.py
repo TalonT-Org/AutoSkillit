@@ -39,8 +39,8 @@ __all__ = [
     "CIWatcher",
     "MergeQueueWatcher",
     "SessionSkillManager",
-    "TargetSkillResolver",
     "SkillLister",
+    "TargetSkillResolver",
     "BackgroundSupervisor",
     "QuotaRefreshTask",
 ]

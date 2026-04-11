@@ -651,6 +651,8 @@ CONDITIONAL_WRITE_SKILLS: dict[str, str] = {
     "resolve-merge-conflicts": "conflict_report_path",
     "resolve-review": "fixes_applied",
     "retry-worktree": "phases_implemented",
+    "resolve-claims-review": "Fixes applied",
+    "resolve-research-review": "Fixes applied",
 }
 
 

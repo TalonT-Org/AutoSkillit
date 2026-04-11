@@ -12,18 +12,37 @@ import json
 import os
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
+
+import httpx
 
 from autoskillit.cli._terminal import terminal_guard
-from autoskillit.core import get_logger, pkg_root
+from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION, atomic_write, get_logger, pkg_root
 
 logger = get_logger(__name__)
 
 _DISMISS_FILE = "update_check.json"
 _DISMISS_WINDOW = timedelta(hours=12)
 _SNOOZE_WINDOW = timedelta(hours=1)
-_FETCH_TIMEOUT = 5
+
+# Disposable on-disk cache for GitHub API GETs.  This is intentionally a plain
+# JSON dict (not ``write_versioned_json``) — it is a transient performance
+# cache, not a persisted schema artifact, so a stray pre-existing file at the
+# same path is safely ignored on a JSON parse failure.
+_FETCH_CACHE_FILE = "github_fetch_cache.json"
+_DEFAULT_FETCH_TTL_SECONDS = 30 * 60
+
+# connect=2s buffers for cold DNS (httpx's connect timeout does NOT cover the
+# OS resolver itself); read=1s is tight because 304 responses are tiny.  The
+# 30-min disk TTL above is the **only reliable quota defense** — GitHub's
+# x-ratelimit-used counter has been observed to increment on 304 responses
+# despite their docs claiming otherwise, so ETag/If-None-Match is a
+# bandwidth/latency optimization, not a rate-limit optimization.
+_HTTP_TIMEOUT = httpx.Timeout(connect=2.0, read=1.0, write=5.0, pool=1.0)
+_GITHUB_API_VERSION = "2022-11-28"
 
 _GITHUB_RELEASES_URL = "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest"
 _GITHUB_INTEGRATION_PYPROJECT_URL = (
@@ -75,31 +94,143 @@ def _read_dismiss_state(home: Path) -> dict[str, object]:
 
 def _write_dismiss_state(home: Path, state: dict[str, object]) -> None:
     """Write dismissal state atomically to ~/.autoskillit/update_check.json."""
-    from autoskillit.core import atomic_write
-
     state_file = home / ".autoskillit" / _DISMISS_FILE
     state_file.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(state_file, json.dumps(state))
 
 
-def _fetch_latest_version(dev_mode: bool) -> str | None:
-    """Fetch the latest available version from GitHub.
+def _fetch_cache_path(home: Path) -> Path:
+    return home / ".autoskillit" / _FETCH_CACHE_FILE
+
+
+def _read_fetch_cache(home: Path) -> dict[str, Any]:
+    """Read the GitHub fetch cache; tolerate any read/parse failure."""
+    try:
+        data = json.loads(_fetch_cache_path(home).read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        logger.debug("Failed to read fetch cache", exc_info=False)
+        return {}
+
+
+def _write_fetch_cache(home: Path, data: dict[str, Any]) -> None:
+    """Write the GitHub fetch cache atomically."""
+    target = _fetch_cache_path(home)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        atomic_write(target, json.dumps(data))
+    except Exception:
+        logger.debug("Failed to write fetch cache", exc_info=False)
+
+
+def _scrub_auth(text: str) -> str:
+    """Remove any GITHUB_TOKEN value or ``Bearer …`` token from a string."""
+    if not text:
+        return text
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        text = text.replace(token, "***")
+    # Belt-and-suspenders: any literal "Bearer <something>" gets masked too,
+    # in case httpx echoes a request repr that includes the header value.
+    import re
+
+    text = re.sub(r"(?i)Bearer\s+\S+", "Bearer ***", text)
+    return text
+
+
+def _resolve_fetch_ttl() -> int:
+    raw = os.environ.get("AUTOSKILLIT_FETCH_CACHE_TTL_SECONDS")
+    if raw is None:
+        return _DEFAULT_FETCH_TTL_SECONDS
+    try:
+        return int(raw)
+    except ValueError:
+        return _DEFAULT_FETCH_TTL_SECONDS
+
+
+def _fetch_with_cache(url: str, *, home: Path, ttl: int | None = None) -> dict[str, Any] | None:
+    """Fetch ``url`` via httpx with a disk-backed cache and conditional GETs.
+
+    Returns the parsed JSON dict on success (200 or 304), or ``None`` on any
+    error.  ``Authorization`` headers are scrubbed from log output to prevent
+    token leakage via DEBUG-level error reporting.
+
+    The 30-minute disk TTL is the only reliable quota defense — see
+    ``_DEFAULT_FETCH_TTL_SECONDS`` for the rationale.
+    """
+    effective_ttl = ttl if ttl is not None else _resolve_fetch_ttl()
+    cache = _read_fetch_cache(home)
+    entry = cache.get(url) if isinstance(cache.get(url), dict) else None
+    now = time.time()
+    if entry is not None:
+        cached_at = entry.get("cached_at")
+        body = entry.get("body")
+        if isinstance(cached_at, (int, float)) and isinstance(body, dict):
+            if now - cached_at < effective_ttl:
+                return body
+
+    headers: dict[str, str] = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": _GITHUB_API_VERSION,
+        "User-Agent": f"autoskillit/{AUTOSKILLIT_INSTALLED_VERSION}",
+    }
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    if entry is not None and isinstance(entry.get("etag"), str):
+        headers["If-None-Match"] = entry["etag"]
+
+    try:
+        with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+            response = client.get(url, headers=headers)
+    except Exception as exc:
+        logger.debug("fetch failed for %s: %s", url, _scrub_auth(str(exc)))
+        return None
+
+    try:
+        if response.status_code == 304 and entry is not None:
+            body = entry.get("body")
+            if isinstance(body, dict):
+                cache[url] = {
+                    "body": body,
+                    "etag": entry.get("etag"),
+                    "cached_at": now,
+                }
+                _write_fetch_cache(home, cache)
+                return body
+            return None
+        if response.status_code == 200:
+            body = response.json()
+            if not isinstance(body, dict):
+                return None
+            etag = response.headers.get("ETag")
+            cache[url] = {
+                "body": body,
+                "etag": etag,
+                "cached_at": now,
+            }
+            _write_fetch_cache(home, cache)
+            return body
+        logger.debug("fetch %s returned status %d", url, response.status_code)
+        return None
+    except Exception as exc:
+        logger.debug("fetch parse failed for %s: %s", url, _scrub_auth(str(exc)))
+        return None
+
+
+def _fetch_latest_version(dev_mode: bool, home: Path) -> str | None:
+    """Fetch the latest available version from GitHub via the cached client.
 
     Dev mode: reads pyproject.toml from the ``integration`` branch.
     Normal mode: reads the latest GitHub release tag.
 
     Returns ``None`` on any network error or timeout.
     """
-    import urllib.request
-
     try:
         if dev_mode:
-            req = urllib.request.Request(
-                _GITHUB_INTEGRATION_PYPROJECT_URL,
-                headers={"Accept": "application/vnd.github.v3+json"},
-            )
-            with urllib.request.urlopen(req, timeout=_FETCH_TIMEOUT) as resp:
-                data = json.loads(resp.read())
+            data = _fetch_with_cache(_GITHUB_INTEGRATION_PYPROJECT_URL, home=home)
+            if data is None:
+                return None
             import base64
 
             raw_content = data.get("content")
@@ -111,17 +242,13 @@ def _fetch_latest_version(dev_mode: bool) -> str | None:
                 if line.split("=", 1)[0].strip() == "version":
                     return line.split("=", 1)[1].strip().strip('"').strip("'")
             return None
-        else:
-            req = urllib.request.Request(
-                _GITHUB_RELEASES_URL,
-                headers={"Accept": "application/vnd.github.v3+json"},
-            )
-            with urllib.request.urlopen(req, timeout=_FETCH_TIMEOUT) as resp:
-                data = json.loads(resp.read())
-            tag = data.get("tag_name", "")
-            return tag.lstrip("v") if tag else None
-    except Exception:
-        logger.debug("Failed to fetch latest version from GitHub", exc_info=True)
+        data = _fetch_with_cache(_GITHUB_RELEASES_URL, home=home)
+        if data is None:
+            return None
+        tag = data.get("tag_name", "")
+        return tag.lstrip("v") if isinstance(tag, str) and tag else None
+    except Exception as exc:
+        logger.debug("Failed to fetch latest version from GitHub: %s", _scrub_auth(str(exc)))
         return None
 
 
@@ -149,6 +276,30 @@ def _is_dismissed(state: dict[str, object], check_type: str, latest: str | None)
         return True
     except Exception:
         logger.debug("Failed to parse dismiss state for check_type=%s", check_type, exc_info=True)
+        return False
+
+
+def _is_drift_dismissed(state: dict[str, object], installed_sha: str, reference_sha: str) -> bool:
+    """Return True if source drift has been dismissed within the window for the given SHA pair.
+
+    Dismissal is SHA-keyed: if either the ``installed_sha`` or ``reference_sha`` changes
+    (e.g. after a git pull on the source repo or a reinstall), the dismissal expires
+    immediately regardless of whether the 12-hour window has passed.
+    """
+    try:
+        entry = state.get("source_drift")
+        if not isinstance(entry, dict):
+            return False
+        dismissed_at = datetime.fromisoformat(entry["dismissed_at"])
+        if datetime.now(UTC) - dismissed_at >= _DISMISS_WINDOW:
+            return False
+        if entry.get("installed_sha") != installed_sha:
+            return False
+        if entry.get("reference_sha") != reference_sha:
+            return False
+        return True
+    except Exception:
+        logger.debug("Failed to parse source drift dismiss state", exc_info=True)
         return False
 
 
@@ -285,7 +436,11 @@ def run_stale_check(home: Path | None = None) -> None:
     ):
         return
 
-    _skip_env = {**os.environ, "AUTOSKILLIT_SKIP_STALE_CHECK": "1"}
+    _skip_env = {
+        **os.environ,
+        "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
+        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",
+    }
 
     import autoskillit as _pkg
     from autoskillit.cli._hooks import _claude_settings_path
@@ -293,7 +448,7 @@ def run_stale_check(home: Path | None = None) -> None:
     _home = home or Path.home()
     dev_mode = is_dev_mode(home=_home)
     state = _read_dismiss_state(_home)
-    latest = _fetch_latest_version(dev_mode)
+    latest = _fetch_latest_version(dev_mode, _home)
 
     current: str = getattr(_pkg, "__version__", "0.0.0")
 

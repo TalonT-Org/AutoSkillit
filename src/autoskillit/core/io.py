@@ -2,10 +2,15 @@
 
 Zero autoskillit imports. Provides atomic filesystem writes, project temp directory
 management, and YAML load/dump helpers.
+
+All NEW on-disk JSON artifacts SHOULD use ``write_versioned_json`` so schema drift
+is detectable. Existing artifacts are tracked in
+``tests/infra/test_schema_version_convention.py`` (landed in a later phase).
 """
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -22,6 +27,7 @@ __all__ = [
     "dump_yaml_str",
     "resolve_temp_dir",
     "temp_dir_display_str",
+    "write_versioned_json",
 ]
 
 
@@ -75,7 +81,31 @@ def atomic_write(path: Path, content: str) -> None:
         raise
 
 
-_AUTOSKILLIT_GITIGNORE_ENTRIES = [".secrets.yaml", ".onboarded", "sync_manifest.json"]
+def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: int) -> None:
+    """Write a dict JSON artifact enriched with ``schema_version``.
+
+    Covers **write atomicity only** (single-writer semantics via
+    ``atomic_write``). Callers performing read-modify-write composites
+    (e.g. the clone registry) must layer their own ``fcntl.flock`` —
+    this helper does not serialize concurrent mutators.
+
+    Raises ``TypeError`` if ``payload`` is not a dict (wrap bare arrays
+    as ``{"items": [...]}`` at the call site).
+    """
+    if not isinstance(payload, dict):
+        raise TypeError("write_versioned_json requires a dict payload")
+    enriched = {**payload, "schema_version": schema_version}
+    atomic_write(path, json.dumps(enriched))
+
+
+_AUTOSKILLIT_GITIGNORE_ENTRIES = ["temp/", ".secrets.yaml", ".onboarded", "sync_manifest.json"]
+
+_ROOT_GITIGNORE_ENTRIES = [
+    ".autoskillit/.secrets.yaml",
+    ".autoskillit/temp/",
+    ".autoskillit/.onboarded",
+    ".autoskillit/sync_manifest.json",
+]
 
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(
     {

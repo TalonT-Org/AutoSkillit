@@ -158,7 +158,7 @@ def test_run_stale_check_writes_dismiss_on_no(
     monkeypatch.setattr(fake_stdout, "isatty", lambda: True)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(autoskillit, "__version__", "0.5.0")
-    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "0.9.0")
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *args, **kwargs: "0.9.0")
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
     import autoskillit.cli as _cli
 
@@ -191,7 +191,7 @@ def test_run_stale_check_binary_update_y_path_injects_guard_env(
     monkeypatch.setattr(fake_stdout, "isatty", lambda: True)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(autoskillit, "__version__", "0.1.0")
-    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "9.9.9")
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *args, **kwargs: "9.9.9")
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
     import autoskillit.cli as _cli
 
@@ -229,7 +229,7 @@ def test_run_stale_check_hook_drift_y_path_injects_guard_env(
     monkeypatch.setattr(fake_stdin, "isatty", lambda: True)
     monkeypatch.setattr(fake_stdout, "isatty", lambda: True)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: None)
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *args, **kwargs: None)
     import autoskillit.cli as _cli
 
     monkeypatch.setattr(
@@ -279,7 +279,7 @@ def test_run_stale_check_dev_mode_y_path_command(
 
     calls: list[tuple[list[str], dict[str, object]]] = []
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: True)
-    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "99.0.0")
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *args, **kwargs: "99.0.0")
     monkeypatch.setattr(_sc, "_read_dismiss_state", lambda home: {})
     monkeypatch.setattr(_sc, "_write_dismiss_state", lambda home, state: None)
     # Force non-editable path so this test continues to assert uv tool install --force
@@ -322,7 +322,9 @@ def test_run_stale_check_hooks_n_path_writes_dismiss(
     import autoskillit.cli._stale_check as _sc
 
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
-    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "0.6.7")  # no binary prompt
+    monkeypatch.setattr(
+        _sc, "_fetch_latest_version", lambda *args, **kwargs: "0.6.7"
+    )  # no binary prompt
     monkeypatch.setattr(_sc.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(_sc.sys.stdout, "isatty", lambda: True)
     monkeypatch.delenv("CLAUDECODE", raising=False)
@@ -364,7 +366,7 @@ def test_run_stale_check_y_path_silent_failure_writes_snooze(
     import autoskillit.cli._stale_check as _sc
 
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
-    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "99.0.0")
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *args, **kwargs: "99.0.0")
     monkeypatch.setattr(_sc, "_read_dismiss_state", lambda home: {})
     monkeypatch.setattr(_sc.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(_sc.sys.stdout, "isatty", lambda: True)
@@ -434,7 +436,7 @@ def test_run_stale_check_y_path_success_no_state_written(
     import autoskillit.cli._stale_check as _sc
 
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
-    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "99.0.0")
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *args, **kwargs: "99.0.0")
     monkeypatch.setattr(_sc, "_read_dismiss_state", lambda home: {})
     monkeypatch.setattr(_sc.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(_sc.sys.stdout, "isatty", lambda: True)
@@ -508,7 +510,7 @@ def test_run_stale_check_dev_mode_editable_install_y_path(
     import autoskillit.cli._stale_check as _sc
 
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: True)
-    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: "99.0.0")
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *args, **kwargs: "99.0.0")
     monkeypatch.setattr(_sc, "_read_dismiss_state", lambda home: {})
     monkeypatch.setattr(_sc.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(_sc.sys.stdout, "isatty", lambda: True)
@@ -568,7 +570,7 @@ def test_run_stale_check_hooks_y_path_writes_state_and_returns(
     import autoskillit.cli._stale_check as _sc
 
     monkeypatch.setattr(_sc, "is_dev_mode", lambda home=None: False)
-    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda dev_mode: None)
+    monkeypatch.setattr(_sc, "_fetch_latest_version", lambda *args, **kwargs: None)
     monkeypatch.setattr(_sc.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(_sc.sys.stdout, "isatty", lambda: True)
     monkeypatch.delenv("CLAUDECODE", raising=False)
@@ -620,3 +622,298 @@ def test_run_stale_check_hooks_y_path_writes_state_and_returns(
         "A second call to run_stale_check() must NOT prompt again, "
         f"but {len(input_calls) - prompt_count_before} new prompt(s) appeared"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 — Fetch cache tests (_fetch_with_cache, _fetch_latest_version)
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_client(
+    *,
+    status_code: int = 200,
+    json_data: dict | None = None,
+    etag: str | None = None,
+    side_effect: BaseException | None = None,
+) -> MagicMock:
+    """Build a MagicMock httpx.Client context manager."""
+    response = MagicMock()
+    response.status_code = status_code
+    response.json.return_value = json_data if json_data is not None else {"tag_name": "v1.0.0"}
+    response.headers = {"ETag": etag} if etag else {}
+
+    client = MagicMock()
+    client.__enter__ = MagicMock(return_value=client)
+    client.__exit__ = MagicMock(return_value=False)
+    if side_effect is not None:
+        client.get = MagicMock(side_effect=side_effect)
+    else:
+        client.get = MagicMock(return_value=response)
+    return client
+
+
+def test_fetch_latest_version_uses_cache_within_ttl(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second call within TTL must use cached response without hitting network."""
+    import json
+    import time
+
+    import httpx
+
+    import autoskillit.cli._stale_check as _sc
+
+    url = "https://api.github.com/test_within_ttl"
+    # Pre-populate cache with a fresh entry (cached 10s ago, TTL=3600)
+    fresh_entry = {"body": {"tag_name": "v1.0.0"}, "etag": None, "cached_at": time.time() - 10}
+    cache = {url: fresh_entry}
+    cache_path = tmp_path / ".autoskillit" / _sc._FETCH_CACHE_FILE
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(cache), encoding="utf-8")
+
+    mock_client = _make_mock_client()
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    result1 = _sc._fetch_with_cache(url, home=tmp_path, ttl=3600)
+    result2 = _sc._fetch_with_cache(url, home=tmp_path, ttl=3600)
+
+    assert mock_client.get.call_count == 0, (
+        f"Expected 0 network calls within TTL, got {mock_client.get.call_count}"
+    )
+    assert result1 == result2 == {"tag_name": "v1.0.0"}
+
+
+def test_fetch_cache_expires_after_ttl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """When cache entry is older than TTL, a new network request must be made."""
+    import json
+    import time
+
+    import httpx
+
+    import autoskillit.cli._stale_check as _sc
+
+    url = "https://api.github.com/test_expires"
+    # Stale entry: cached 90s ago, TTL=60s
+    stale_entry = {"body": {"tag_name": "v0.5.0"}, "etag": None, "cached_at": time.time() - 90}
+    cache = {url: stale_entry}
+    cache_path = tmp_path / ".autoskillit" / _sc._FETCH_CACHE_FILE
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(cache), encoding="utf-8")
+
+    mock_client = _make_mock_client(json_data={"tag_name": "v1.0.0"})
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    result = _sc._fetch_with_cache(url, home=tmp_path, ttl=60)
+
+    assert mock_client.get.call_count == 1, (
+        f"Expected 1 network call after TTL expiry, got {mock_client.get.call_count}"
+    )
+    assert result == {"tag_name": "v1.0.0"}
+
+
+def test_fetch_cache_respects_env_var_ttl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """AUTOSKILLIT_FETCH_CACHE_TTL_SECONDS=60 is honored.
+
+    50s-old entry stays cached; 70s-old misses.
+    """
+    import json
+    import time
+
+    import httpx
+
+    import autoskillit.cli._stale_check as _sc
+
+    monkeypatch.setenv("AUTOSKILLIT_FETCH_CACHE_TTL_SECONDS", "60")
+    url = "https://api.github.com/test_env_ttl"
+
+    # Within TTL: cached 50s ago
+    fresh_entry = {"body": {"tag_name": "v1.0.0"}, "etag": None, "cached_at": time.time() - 50}
+    cache_path = tmp_path / ".autoskillit" / _sc._FETCH_CACHE_FILE
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps({url: fresh_entry}), encoding="utf-8")
+
+    mock_client = _make_mock_client()
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    _sc._fetch_with_cache(url, home=tmp_path)  # no explicit ttl → reads env var
+    assert mock_client.get.call_count == 0, "Within 60s TTL: must not hit network"
+
+    # Past TTL: cached 70s ago
+    stale_entry = {"body": {"tag_name": "v1.0.0"}, "etag": None, "cached_at": time.time() - 70}
+    cache_path.write_text(json.dumps({url: stale_entry}), encoding="utf-8")
+
+    mock_client2 = _make_mock_client()
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client2))
+
+    _sc._fetch_with_cache(url, home=tmp_path)
+    assert mock_client2.get.call_count == 1, "After 60s TTL: must hit network once"
+
+
+def test_fetch_sends_github_token_auth_header(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With GITHUB_TOKEN set, request must include Authorization: Bearer <token>."""
+    import httpx
+
+    import autoskillit.cli._stale_check as _sc
+
+    monkeypatch.setenv("GITHUB_TOKEN", "abc123token")
+    mock_client = _make_mock_client()
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    _sc._fetch_with_cache("https://api.github.com/test_auth", home=tmp_path)
+
+    assert mock_client.get.call_count == 1
+    call_headers = mock_client.get.call_args[1].get("headers", {})
+    assert call_headers.get("Authorization") == "Bearer abc123token"
+
+
+def test_fetch_sends_if_none_match_when_cached_etag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When cache has an etag, request must include If-None-Match header."""
+    import json
+    import time
+
+    import httpx
+
+    import autoskillit.cli._stale_check as _sc
+
+    url = "https://api.github.com/test_etag"
+    # Stale entry (ttl=0) but with an etag
+    stale_entry = {
+        "body": {"tag_name": "v1.0.0"},
+        "etag": 'W/"abc-etag-123"',
+        "cached_at": time.time() - 120,
+    }
+    cache_path = tmp_path / ".autoskillit" / _sc._FETCH_CACHE_FILE
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps({url: stale_entry}), encoding="utf-8")
+
+    mock_client = _make_mock_client()
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    _sc._fetch_with_cache(url, home=tmp_path, ttl=60)
+
+    assert mock_client.get.call_count == 1
+    call_headers = mock_client.get.call_args[1].get("headers", {})
+    assert call_headers.get("If-None-Match") == 'W/"abc-etag-123"'
+
+
+def test_fetch_304_response_returns_cached_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On 304 response, the previously-cached body must be returned without re-parsing."""
+    import json
+    import time
+
+    import httpx
+
+    import autoskillit.cli._stale_check as _sc
+
+    url = "https://api.github.com/test_304"
+    cached_body = {"tag_name": "v0.9.0", "description": "cached-payload"}
+    stale_entry = {"body": cached_body, "etag": "etag-abc", "cached_at": time.time() - 120}
+    cache_path = tmp_path / ".autoskillit" / _sc._FETCH_CACHE_FILE
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps({url: stale_entry}), encoding="utf-8")
+
+    mock_client = _make_mock_client(status_code=304)
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    result = _sc._fetch_with_cache(url, home=tmp_path, ttl=60)
+    assert result == cached_body, f"Expected cached body on 304, got {result}"
+
+
+def test_fetch_uses_2s_connect_1s_read_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_HTTP_TIMEOUT must be Timeout(connect=2.0, read=1.0, write=5.0, pool=1.0)."""
+    import httpx
+
+    import autoskillit.cli._stale_check as _sc
+
+    timeout = _sc._HTTP_TIMEOUT
+    assert isinstance(timeout, httpx.Timeout), f"Expected httpx.Timeout, got {type(timeout)}"
+    assert timeout.connect == 2.0, f"Expected connect=2.0, got {timeout.connect}"
+    assert timeout.read == 1.0, f"Expected read=1.0, got {timeout.read}"
+    assert timeout.write == 5.0, f"Expected write=5.0, got {timeout.write}"
+    assert timeout.pool == 1.0, f"Expected pool=1.0, got {timeout.pool}"
+
+
+def test_fetch_sends_modern_github_api_version_header(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Request must include X-GitHub-Api-Version: 2022-11-28 and modern Accept header."""
+    import httpx
+
+    import autoskillit.cli._stale_check as _sc
+
+    mock_client = _make_mock_client()
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    _sc._fetch_with_cache("https://api.github.com/test_api_version", home=tmp_path)
+
+    assert mock_client.get.call_count == 1
+    call_headers = mock_client.get.call_args[1].get("headers", {})
+    assert call_headers.get("X-GitHub-Api-Version") == "2022-11-28"
+    accept = call_headers.get("Accept", "")
+    assert accept == "application/vnd.github+json"
+    assert ".v3" not in accept, "Accept header must use modern form (no .v3 suffix)"
+
+
+def test_fetch_sends_user_agent_with_package_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """User-Agent header must start with 'autoskillit/' followed by the installed version."""
+    import httpx
+
+    import autoskillit.cli._stale_check as _sc
+
+    mock_client = _make_mock_client()
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    _sc._fetch_with_cache("https://api.github.com/test_ua", home=tmp_path)
+
+    assert mock_client.get.call_count == 1
+    call_headers = mock_client.get.call_args[1].get("headers", {})
+    user_agent = call_headers.get("User-Agent", "")
+    assert user_agent.startswith("autoskillit/"), (
+        f"User-Agent must start with 'autoskillit/', got: {user_agent!r}"
+    )
+
+
+def test_fetch_scrubs_authorization_header_from_logged_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """When GITHUB_TOKEN is set and a network error occurs, the token must not appear in logs."""
+    import logging
+
+    import httpx
+
+    import autoskillit.cli._stale_check as _sc
+
+    monkeypatch.setenv("GITHUB_TOKEN", "secret123")
+    mock_client = _make_mock_client(
+        side_effect=httpx.ConnectError("Connection refused Bearer secret123 endpoint")
+    )
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    with caplog.at_level(logging.DEBUG, logger="autoskillit.cli._stale_check"):
+        result = _sc._fetch_with_cache("https://api.github.com/test_scrub", home=tmp_path)
+
+    assert result is None
+    assert "secret123" not in caplog.text, (
+        f"GITHUB_TOKEN value leaked into log output! Log text: {caplog.text!r}"
+    )
+
+
+def test_fetch_fails_fast_offline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """On ConnectError, _fetch_latest_version must return None without raising."""
+    import httpx
+
+    import autoskillit.cli._stale_check as _sc
+
+    mock_client = _make_mock_client(side_effect=httpx.ConnectError("offline"))
+    monkeypatch.setattr(httpx, "Client", MagicMock(return_value=mock_client))
+
+    result = _sc._fetch_latest_version(dev_mode=False, home=tmp_path)
+    assert result is None, f"Expected None on ConnectError, got {result!r}"

@@ -137,3 +137,56 @@ def test_atomic_write_private_alias_removed():
     import autoskillit.core.io as io_mod
 
     assert not hasattr(io_mod, "_atomic_write")
+
+
+# ---------------------------------------------------------------------------
+# write_versioned_json — schema version envelope helper
+# ---------------------------------------------------------------------------
+
+
+def test_write_versioned_json_enriches_payload_with_schema_version(tmp_path):
+    import json
+
+    from autoskillit.core.io import write_versioned_json
+
+    target = tmp_path / "f.json"
+    write_versioned_json(target, {"a": 1}, schema_version=2)
+    assert json.loads(target.read_text(encoding="utf-8")) == {"a": 1, "schema_version": 2}
+
+
+def test_write_versioned_json_preserves_existing_keys_atomically(tmp_path, monkeypatch):
+    """Asserts the helper routes through ``atomic_write`` (no partial-file
+    fallout on a simulated mid-write crash)."""
+    import json
+
+    from autoskillit.core import io as io_mod
+    from autoskillit.core.io import write_versioned_json
+
+    calls: list[tuple[str, str]] = []
+    real_atomic_write = io_mod.atomic_write
+
+    def spy(path, content):
+        calls.append((str(path), content))
+        return real_atomic_write(path, content)
+
+    monkeypatch.setattr(io_mod, "atomic_write", spy)
+
+    target = tmp_path / "nested.json"
+    payload = {"outer": {"inner": [1, 2, 3]}, "name": "demo"}
+    write_versioned_json(target, payload, schema_version=7)
+
+    assert len(calls) == 1
+    assert calls[0][0] == str(target)
+    decoded = json.loads(target.read_text(encoding="utf-8"))
+    assert decoded == {"outer": {"inner": [1, 2, 3]}, "name": "demo", "schema_version": 7}
+
+
+def test_write_versioned_json_rejects_non_dict_payload(tmp_path):
+    import pytest
+
+    from autoskillit.core.io import write_versioned_json
+
+    target = tmp_path / "bad.json"
+    with pytest.raises(TypeError, match="dict payload"):
+        write_versioned_json(target, [1, 2, 3], schema_version=1)  # type: ignore[arg-type]
+    assert not target.exists()

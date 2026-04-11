@@ -333,6 +333,68 @@ def _check_config_layers_for_secrets(
     )
 
 
+def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
+    """Cache-only source-drift check.
+
+    Compares the installed commit SHA against the last-known HEAD of the branch
+    the binary was installed from.  Uses the disk cache written by previous
+    online invocations — **never makes a network request**.
+    """
+    check_name = "source_version_drift"
+    _home = home or Path.home()
+
+    try:
+        from autoskillit.cli._source_drift import (
+            InstallType,
+            detect_install,
+            resolve_reference_sha,
+        )
+
+        info = detect_install()
+
+        if info.install_type == InstallType.LOCAL_EDITABLE:
+            return DoctorResult(
+                Severity.OK, check_name, "Local editable install — drift check not applicable"
+            )
+
+        if info.install_type in (InstallType.UNKNOWN, InstallType.LOCAL_PATH):
+            return DoctorResult(
+                Severity.OK,
+                check_name,
+                "Not a source-tracked install — drift check not applicable",
+            )
+
+        # GIT_VCS: resolve SHA from disk cache only (network=False)
+        ref_sha = resolve_reference_sha(info, _home, network=False)
+
+        if ref_sha is None:
+            return DoctorResult(
+                Severity.OK,
+                check_name,
+                "Source drift cache is empty — run a command online to populate the check",
+            )
+
+        if info.commit_id == ref_sha:
+            return DoctorResult(Severity.OK, check_name, "No source drift detected")
+
+        installed_short = (info.commit_id or "unknown")[:8]
+        ref_short = ref_sha[:8]
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"Source drift: installed={installed_short}, reference={ref_short}. "
+            f"Run the appropriate install command to update.",
+        )
+
+    except Exception:
+        from autoskillit.core import get_logger as _get_logger
+
+        _get_logger(__name__).debug("Source drift check failed", exc_info=True)
+        return DoctorResult(
+            Severity.OK, check_name, "Source drift check skipped (unexpected error)"
+        )
+
+
 def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
     from autoskillit.cli._marketplace import _clear_plugin_cache
@@ -524,6 +586,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 12: No stale autoskillit entry points outside ~/.local/bin
     results.append(_check_stale_entry_points())
+
+    # Check 13: Source version drift (cache-only, never network)
+    results.append(_check_source_version_drift())
 
     # Output
     if output_json:

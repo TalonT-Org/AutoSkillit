@@ -64,7 +64,6 @@ def test_no_banned_phrases(md: Path) -> None:
         for phrase in BANNED_PHRASES:
             if re.search(phrase, line, flags=re.IGNORECASE):
                 hits.append((phrase, line_no))
-    assert not hits, (
-        f"{md.relative_to(REPO_ROOT)} contains banned phrases: "
-        + ", ".join(f"{phrase!r} on line {line}" for phrase, line in hits)
+    assert not hits, f"{md.relative_to(REPO_ROOT)} contains banned phrases: " + ", ".join(
+        f"{phrase!r} on line {line}" for phrase, line in hits
     )

@@ -61,9 +61,6 @@ def test_no_banned_variants(md: Path) -> None:
         for pat, canonical in BANNED_VARIANTS:
             if re.search(pat, line, flags=re.IGNORECASE):
                 hits.append((pat, canonical, line_no))
-    assert not hits, (
-        f"{md.relative_to(REPO_ROOT)} contains banned variants: "
-        + ", ".join(
-            f"/{pat}/ (use {canonical!r}) on line {line}" for pat, canonical, line in hits
-        )
+    assert not hits, f"{md.relative_to(REPO_ROOT)} contains banned variants: " + ", ".join(
+        f"/{pat}/ (use {canonical!r}) on line {line}" for pat, canonical, line in hits
     )

@@ -24,12 +24,11 @@ from autoskillit.pipeline import ToolContext
 logger = get_logger(__name__)
 
 _ctx: ToolContext | None = None
-_wired_runner_id: int | None = None
 
 
 def _initialize(ctx: ToolContext) -> None:
     """Set the server's ToolContext. Called by cli/app.py serve() before mcp.run()."""
-    global _ctx, _wired_runner_id
+    global _ctx
     _ctx = ctx
 
     # Apply server-level subset visibility from config.
@@ -51,37 +50,42 @@ def _initialize(ctx: ToolContext) -> None:
     # Wire MCP recording/replay middleware for scenario capture.
     # Core imports are outside the try/except so a broken autoskillit installation
     # surfaces as an error rather than being silently swallowed as a middleware warning.
-    # The idempotency guard on _wired_runner_id prevents double-registration if
-    # _initialize() is called more than once with the same runner instance.
+    # The _mcp_middleware_registered flag on the runner prevents double-registration
+    # if _initialize() is called more than once with the same runner instance.
     from autoskillit.execution import (  # noqa: PLC0415
         RecordingSubprocessRunner,
         ReplayingSubprocessRunner,
     )
     from autoskillit.server import mcp  # noqa: PLC0415
 
-    if id(ctx.runner) != _wired_runner_id:
-        if isinstance(ctx.runner, RecordingSubprocessRunner):
-            try:
-                from api_simulator.mcp import McpRecordingMiddleware  # noqa: PLC0415
+    if isinstance(ctx.runner, RecordingSubprocessRunner) and not getattr(
+        ctx.runner, "_mcp_middleware_registered", False
+    ):
+        try:
+            from api_simulator.mcp import McpRecordingMiddleware  # noqa: PLC0415
 
-                mcp.add_middleware(McpRecordingMiddleware(ctx.runner.recorder))
-                _wired_runner_id = id(ctx.runner)
-                logger.info("mcp_recording_middleware_registered")
-            except ImportError:
-                logger.warning("mcp_scenario_middleware_unavailable", exc_info=True)
-            except Exception:
-                logger.warning("mcp_scenario_middleware_registration_failed", exc_info=True)
-        elif isinstance(ctx.runner, ReplayingSubprocessRunner) and ctx.runner.player is not None:
-            try:
-                from api_simulator.mcp import McpReplayMiddleware  # noqa: PLC0415
+            mcp.add_middleware(McpRecordingMiddleware(ctx.runner.recorder))
+            ctx.runner._mcp_middleware_registered = True  # type: ignore[attr-defined]
+            logger.info("mcp_recording_middleware_registered")
+        except ImportError:
+            logger.warning("mcp_scenario_middleware_unavailable", exc_info=True)
+        except Exception:
+            logger.warning("mcp_scenario_middleware_registration_failed", exc_info=True)
+    elif (
+        isinstance(ctx.runner, ReplayingSubprocessRunner)
+        and ctx.runner.player is not None
+        and not getattr(ctx.runner, "_mcp_middleware_registered", False)
+    ):
+        try:
+            from api_simulator.mcp import McpReplayMiddleware  # noqa: PLC0415
 
-                mcp.add_middleware(McpReplayMiddleware(ctx.runner.player))
-                _wired_runner_id = id(ctx.runner)
-                logger.info("mcp_replay_middleware_registered")
-            except ImportError:
-                logger.warning("mcp_scenario_middleware_unavailable", exc_info=True)
-            except Exception:
-                logger.warning("mcp_scenario_middleware_registration_failed", exc_info=True)
+            mcp.add_middleware(McpReplayMiddleware(ctx.runner.player))
+            ctx.runner._mcp_middleware_registered = True  # type: ignore[attr-defined]
+            logger.info("mcp_replay_middleware_registered")
+        except ImportError:
+            logger.warning("mcp_scenario_middleware_unavailable", exc_info=True)
+        except Exception:
+            logger.warning("mcp_scenario_middleware_registration_failed", exc_info=True)
 
     # Recovery sweep: finalize any orphaned tmpfs trace files from crashed sessions.
     try:

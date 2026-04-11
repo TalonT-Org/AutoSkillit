@@ -60,7 +60,7 @@ Correct orchestration on `needs_retry=true`:
 ### Step 0: Validate Prerequisites
 
 1. Extract and verify the plan path using **path detection**: scan the tokens
-   after the skill name for the first one that starts with `/`, `./`, `.autoskillit/temp/`,
+   after the skill name for the first one that starts with `/`, `./`, `{{AUTOSKILLIT_TEMP}}/`,
    or `.autoskillit/` — that token is the plan path. Ignore any non-path words
    that appear before it. If no path-like token is found, treat the entire
    argument string as pasted plan content. Verify the resolved file exists before
@@ -75,7 +75,7 @@ Correct orchestration on `needs_retry=true`:
 5. **Multi-Part Plan Detection:** Examine the plan filename. If it contains `_part_` (e.g., `_part_a`, `_part_b`, `_part_1`):
    - Extract the part identifier (A, B, C… or number) from the suffix.
    - **SCOPE FENCE — MANDATORY:** Before any exploration or implementation begins, output the following constraint:
-     > "🚧 SCOPE FENCE ACTIVE: I am implementing PART {X} ONLY. I MUST NOT open, read, or execute any other part files, regardless of what I encounter in .autoskillit/temp/ or any other directory. Sibling part files are out of scope for this entire session."
+     > "🚧 SCOPE FENCE ACTIVE: I am implementing PART {X} ONLY. I MUST NOT open, read, or execute any other part files, regardless of what I encounter in {{AUTOSKILLIT_TEMP}}/ or any other directory. Sibling part files are out of scope for this entire session."
    - When launching subagents in Step 2, include this fence instruction explicitly in each subagent prompt so that the subagents do not open, read, or reference sibling part files.
 
 ### Step 1: Create Git Worktree
@@ -86,8 +86,8 @@ WORKTREE_NAME="impl-{plan_name}-$(date +%Y%m%d-%H%M%S)"
 WORKTREE_PATH="../worktrees/${WORKTREE_NAME}"
 git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
 WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
-mkdir -p ".autoskillit/temp/worktrees/${WORKTREE_NAME}"
-echo "${CURRENT_BRANCH}" > ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch"
+mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}"
+echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch"
 ```
 
 ### Step 1.5: Initialize Code Index for Original Project
@@ -180,7 +180,7 @@ If tests fail, fix the issue and re-run.
 ### Step 6: Rebase for Squash-and-Merge
 
 ```bash
-CURRENT_BRANCH=$(cat ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch")
+CURRENT_BRANCH=$(cat "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch")
 REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
 git fetch "$REMOTE"
 git rebase "$REMOTE/${CURRENT_BRANCH}"
@@ -198,7 +198,7 @@ Do not merge until user confirms first!
 Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
 
 ```bash
-CURRENT_BRANCH=$(cat ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch")
+CURRENT_BRANCH=$(cat "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch")
 ```
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no

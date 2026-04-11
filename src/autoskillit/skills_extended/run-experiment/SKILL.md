@@ -38,7 +38,7 @@ plan, executes what the plan describes, and reports what happened.
   (required). Scan tokens for the first path-like token (starts with `/`, `./`,
   or `.autoskillit/`).
 - `--adjust` — Optional flag indicating this is a retry after a previous failure.
-  When present, read the previous results/errors from `.autoskillit/temp/run-experiment/`
+  When present, read the previous results/errors from `{{AUTOSKILLIT_TEMP}}/run-experiment/`
   and adjust the approach before re-running.
 
 ## Critical Constraints
@@ -48,18 +48,18 @@ plan, executes what the plan describes, and reports what happened.
 - Merge the worktree — leave it intact for the orchestrator
 - Skip result collection — every run must produce structured output
 - Assume what kind of experiment this is — read the plan and follow it
-- Commit files under `.autoskillit/temp/` — this directory is gitignored working space, NOT for version control. Do not use `git add -f` or `git add --force` to bypass the gitignore.
+- Commit files under `{{AUTOSKILLIT_TEMP}}/` — this directory is gitignored working space, NOT for version control. Do not use `git add -f` or `git add --force` to bypass the gitignore.
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
-- Write results to `.autoskillit/temp/run-experiment/` in the worktree (disk only, never committed)
+- Write results to `{{AUTOSKILLIT_TEMP}}/run-experiment/` in the worktree (disk only, never committed)
 - Report failures with enough detail for the `--adjust` retry to fix them
 
 ## Workflow
 
 ### Step 1 — Discover Experiment
 
-Read the experiment plan from `.autoskillit/temp/experiment-plan.md` in the
+Read the experiment plan from `{{AUTOSKILLIT_TEMP}}/experiment-plan.md` in the
 worktree (or the project root, checking both locations). This was saved by the
 recipe's `save_experiment_plan` step from the approved GitHub issue.
 
@@ -76,7 +76,7 @@ Before running the experiment:
 1. Verify the project builds or that prerequisites are met.
 2. Verify experiment artifacts exist (scripts, data, dependencies).
 3. If `--adjust` flag is set, read previous results from
-   `.autoskillit/temp/run-experiment/` and identify what went wrong.
+   `{{AUTOSKILLIT_TEMP}}/run-experiment/` and identify what went wrong.
 
 Launch subagents (model: "sonnet") if needed to investigate the experiment
 setup, resolve dependencies, or research how to use specific tools mentioned
@@ -162,10 +162,10 @@ the final conclusions.}
 ### Step 5 — Save Results
 
 1. Save results to:
-   `.autoskillit/temp/run-experiment/results_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+   `{{AUTOSKILLIT_TEMP}}/run-experiment/results_{topic}_{YYYY-MM-DD_HHMMSS}.md`
    (relative to the current working directory) within the worktree.
 2. Also save any raw data files (CSV, JSON, logs) to the same directory.
-3. Do NOT `git add` or commit files under `.autoskillit/temp/`. This directory
+3. Do NOT `git add` or commit files under `{{AUTOSKILLIT_TEMP}}/`. This directory
    is gitignored working space. The files persist on the worktree filesystem
    for `write-report` to read. Final results are published to `research/` by
    the `write-report` skill.
@@ -198,7 +198,7 @@ with `## Status: FAILED`.
 
 When `--adjust` is passed, this is a retry after a previous execution failed.
 
-1. Read previous results from `.autoskillit/temp/run-experiment/` in the worktree
+1. Read previous results from `{{AUTOSKILLIT_TEMP}}/run-experiment/` in the worktree
 2. Identify the failure mode
 3. Make targeted adjustments to address the specific failure
 4. Re-run the experiment with adjustments

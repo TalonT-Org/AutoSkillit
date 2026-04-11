@@ -48,7 +48,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 **NEVER:**
 - Modify source files, plan files, or any other files — read-only audit only
 - Run tests — this skill audits, it does not fix
-- Create files outside `.autoskillit/temp/audit-impl/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/audit-impl/`
 - Emit a GO verdict when any `MISSING` or `CONFLICT` finding exists
 
 **ALWAYS:**
@@ -113,7 +113,7 @@ store as `conflict_report_path_list`. Proceed even if empty — the cross-refere
 Step 2.5 is skipped when the list is empty.
 
 **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
-exist (e.g., plan file arguments, `.autoskillit/temp/investigate/` reports, external file references), use
+exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, external file references), use
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
 
@@ -296,7 +296,7 @@ verdict = GO
 
 #### If NO GO
 
-Generate `.autoskillit/temp/audit-impl/remediation_{topic}_{YYYY-MM-DD_HHMMSS}.md`:
+Generate `{{AUTOSKILLIT_TEMP}}/audit-impl/remediation_{topic}_{YYYY-MM-DD_HHMMSS}.md`:
 
 ```markdown
 Dry-walkthrough verified = TRUE
@@ -376,7 +376,7 @@ NO GO; omit the `remediation_path=` line entirely on GO).
 ## Output Location
 
 ```
-.autoskillit/temp/audit-impl/
+{{AUTOSKILLIT_TEMP}}/audit-impl/
 └── remediation_{topic}_{YYYY-MM-DD_HHMMSS}.md    (written on NO GO only)
 ```
 

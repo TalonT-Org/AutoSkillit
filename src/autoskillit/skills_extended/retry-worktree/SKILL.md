@@ -60,7 +60,7 @@ Parse two positional arguments from the prompt:
 2. **Worktree path** — verify the directory exists and is a git worktree. Check that the development environment is set up (e.g. `.venv` exists for Python projects)
 
 **Path Detection:** Use path detection to locate both arguments. Scan all
-tokens after the skill name for those starting with `/`, `./`, `.autoskillit/temp/`, or
+tokens after the skill name for those starting with `/`, `./`, `{{AUTOSKILLIT_TEMP}}/`, or
 `.autoskillit/`. The first such token is `plan_path`; the second is
 `worktree_path`. Ignore any non-path tokens that appear before them (e.g.,
 extra descriptive text like "use this plan" or "from worktree"). If fewer than
@@ -98,14 +98,14 @@ if [ -z "$BASE_BRANCH" ]; then
     # Fallback: read explicit file store written by implement-worktree-no-merge
     MAIN_GIT_DIR=$(git rev-parse --git-common-dir)
     MAIN_REPO_ROOT=$(dirname "${MAIN_GIT_DIR}")
-    STORE_FILE="${MAIN_REPO_ROOT}/.autoskillit/temp/worktrees/${CURRENT_BRANCH}/base-branch"
+    STORE_FILE="${MAIN_REPO_ROOT}/{{AUTOSKILLIT_TEMP}}/worktrees/${CURRENT_BRANCH}/base-branch"
     BASE_BRANCH=$(cat "${STORE_FILE}" 2>/dev/null)
 fi
 
 if [ -z "$BASE_BRANCH" ]; then
     echo "ERROR: Cannot determine base branch from git structure."
     echo "Both the upstream tracking ref and the explicit base-branch file at"
-    echo ".autoskillit/temp/worktrees/${CURRENT_BRANCH}/base-branch are missing."
+    echo "{{AUTOSKILLIT_TEMP}}/worktrees/${CURRENT_BRANCH}/base-branch are missing."
     echo "Ensure the worktree was created by implement-worktree-no-merge,"
     echo "which writes both stores at worktree creation time."
     exit 1

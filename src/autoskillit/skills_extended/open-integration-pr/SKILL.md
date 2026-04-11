@@ -45,7 +45,7 @@ PR, and output `pr_url=<url>`.
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `.autoskillit/temp/open-integration-pr/` (except the temp body file for `gh pr create --body-file`)
+- Create files outside `{{AUTOSKILLIT_TEMP}}/open-integration-pr/` (except the temp body file for `gh pr create --body-file`)
 - Modify any source code
 - Fail the pipeline if `gh` is unavailable or not authenticated — output `pr_url=` (empty) and exit successfully
 - Close original PRs before the integration PR is successfully created
@@ -216,7 +216,7 @@ create end_turn windows that cause stochastic session termination.
 
 **1. Write the PR context to a file using the Write tool:**
 
-- **Path:** `.autoskillit/temp/open-integration-pr/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
+- **Path:** `{{AUTOSKILLIT_TEMP}}/open-integration-pr/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:** The following PR context block, with placeholders filled in:
 
 ```markdown
@@ -249,7 +249,7 @@ omitted per Step 7 behavior).**
 **3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
 Using ONLY classDef styles from the mermaid skill (no invented colors).
 
-The arch-lens skills write their output to `.autoskillit/temp/arch-lens-{lens-name}/` (relative to the current working directory). After each skill
+The arch-lens skills write their output to `{{AUTOSKILLIT_TEMP}}/arch-lens-{lens-name}/` (relative to the current working directory). After each skill
 runs, read the generated markdown file and extract the mermaid code block(s).
 
 After extracting the mermaid block, inspect its content for `★` or `●` characters:
@@ -258,7 +258,7 @@ After extracting the mermaid block, inspect its content for `★` or `●` chara
 
 ### Step 7: Compose PR Body
 
-Write to `.autoskillit/temp/open-integration-pr/pr_body_{timestamp}.md`. (relative to the current working directory)
+Write to `{{AUTOSKILLIT_TEMP}}/open-integration-pr/pr_body_{timestamp}.md`. (relative to the current working directory)
 
 ```markdown
 ## Integration Summary
@@ -330,7 +330,7 @@ gh pr create \
   --base {base_branch} \
   --head {integration_branch} \
   --title "Integration: collapsed PRs #{numbers} into {base_branch}" \
-  --body-file .autoskillit/temp/open-integration-pr/pr_body_{timestamp}.md
+  --body-file {{AUTOSKILLIT_TEMP}}/open-integration-pr/pr_body_{timestamp}.md
 ```
 
 `{numbers}` = comma-separated PR numbers (e.g., `#42, #47, #51`).

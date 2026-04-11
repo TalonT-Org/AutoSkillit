@@ -859,7 +859,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     context_path = AUTOSKILLIT_ROOT / "pipeline" / "context.py"
     context_tree = ast.parse(context_path.read_text())
 
-    EXEMPT = {"plugin_dir", "config", "active_recipe_packs"}
+    EXEMPT = {"plugin_dir", "config", "active_recipe_packs", "temp_dir"}
     violations: list[str] = []
 
     for node in ast.walk(context_tree):

@@ -10,7 +10,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.config import resolve_ingredient_defaults
-from autoskillit.core import get_logger
+from autoskillit.core import get_logger, temp_dir_display_str
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
 from autoskillit.server._state import _get_ctx_or_none
@@ -111,7 +111,7 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
         "summary" → the open_pr skill self-retrieves its own
                      token summary from disk (pipeline-scoped). Do NOT call
                      get_token_summary for this purpose and do NOT pre-stage
-                     .autoskillit/temp/open-pr/token_summary.md — the skill handles it.
+                     <temp_dir>/open-pr/token_summary.md — the skill handles it.
         "none"    → do NOT call get_token_summary. Skip token reporting entirely.
     - Do NOT print or render a token usage table after individual steps.
       Only one call to get_token_summary is permitted per pipeline run,
@@ -179,6 +179,8 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
         suppressed=suppressed,
         resolved_defaults=_defaults,
         ingredient_overrides=overrides,
+        temp_dir=tool_ctx.temp_dir,
+        temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
     )
     recipe_info = tool_ctx.recipes.find(name, Path.cwd())
     return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))
@@ -213,7 +215,10 @@ async def validate_recipe(script_path: str) -> str:
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"valid": False, "errors": ["Server not initialized"]})
-    result = tool_ctx.recipes.validate_from_path(Path(script_path))
+    result = tool_ctx.recipes.validate_from_path(
+        Path(script_path),
+        temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
+    )
     return json.dumps(result)
 
 

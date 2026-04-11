@@ -168,7 +168,7 @@ def test_validate_from_path_delegates_to_api(tmp_path: Path) -> None:
         result = repo.validate_from_path(script_path)
 
     assert result == expected
-    mock_api.assert_called_once_with(script_path)
+    mock_api.assert_called_once_with(script_path, temp_dir_relpath=".autoskillit/temp")
 
 
 def test_list_all_delegates_to_api() -> None:

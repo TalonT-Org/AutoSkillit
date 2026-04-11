@@ -308,13 +308,20 @@ class TestEnsureProjectTemp:
         assert result == tmp_path / ".autoskillit" / "temp"
         assert result.is_dir()
 
-    def test_ensure_project_temp_writes_gitignore(self, tmp_path):
+    def test_ensure_project_temp_writes_self_gitignore(self, tmp_path):
+        from autoskillit.core.io import ensure_project_temp
+
+        ensure_project_temp(tmp_path)
+        temp_gitignore = tmp_path / ".autoskillit" / "temp" / ".gitignore"
+        assert temp_gitignore.exists()
+        assert "*" in temp_gitignore.read_text()
+
+    def test_ensure_project_temp_writes_autoskillit_gitignore_with_secrets(self, tmp_path):
         from autoskillit.core.io import ensure_project_temp
 
         ensure_project_temp(tmp_path)
         gitignore = tmp_path / ".autoskillit" / ".gitignore"
         content = gitignore.read_text()
-        assert "temp/" in content
         assert ".secrets.yaml" in content
 
     def test_ensure_project_temp_is_idempotent(self, tmp_path):
@@ -327,15 +334,15 @@ class TestEnsureProjectTemp:
     def test_ensure_project_temp_backfills_secrets_into_existing_gitignore(self, tmp_path):
         from autoskillit.core.io import ensure_project_temp
 
-        # Simulate a pre-fix .gitignore with only temp/
+        # Simulate a pre-fix .gitignore without .secrets.yaml
         autoskillit_dir = tmp_path / ".autoskillit"
         autoskillit_dir.mkdir()
-        (autoskillit_dir / ".gitignore").write_text("temp/\n")
+        (autoskillit_dir / ".gitignore").write_text(".onboarded\n")
 
         ensure_project_temp(tmp_path)
         content = (autoskillit_dir / ".gitignore").read_text()
         assert ".secrets.yaml" in content
-        assert "temp/" in content
+        assert ".onboarded" in content
 
 
 class TestServeStartupLog:
@@ -416,7 +423,13 @@ def test_init_creates_secrets_template(tmp_path: Path, monkeypatch: pytest.Monke
 
 
 def test_init_all_created_files_covered_by_gitignore(tmp_path: Path) -> None:
-    """Every file in .autoskillit/ after init must be gitignored or in the committed allowlist."""
+    """Every file in .autoskillit/ after init must be gitignored or self-gitignoring.
+
+    The temp directory uses the self-gitignoring pattern (pytest #3286 / mypy
+    PR #8193): it owns its own .gitignore containing ``*``. All other files
+    created in .autoskillit/ must either appear in .autoskillit/.gitignore or
+    be in the committed allowlist.
+    """
     from autoskillit.cli._init_helpers import _create_secrets_template
     from autoskillit.core.io import _COMMITTED_BY_DESIGN, ensure_project_temp
 
@@ -430,6 +443,13 @@ def test_init_all_created_files_covered_by_gitignore(tmp_path: Path) -> None:
         if item.name == ".gitignore":
             continue
         if item.name in _COMMITTED_BY_DESIGN:
+            continue
+        if item.is_dir() and (item / ".gitignore").exists():
+            # Self-gitignoring directory — its own .gitignore covers its contents.
+            self_ignore = (item / ".gitignore").read_text()
+            assert "*" in self_ignore, (
+                f"{item.name}/ is a directory without a self-gitignore covering '*'"
+            )
             continue
         check_name = item.name + "/" if item.is_dir() else item.name
         assert check_name in gitignore_content, (
@@ -466,74 +486,20 @@ def test_gitignore_entries_includes_secrets_yaml() -> None:
     assert ".secrets.yaml" in _AUTOSKILLIT_GITIGNORE_ENTRIES
 
 
-def test_gitignore_entries_includes_temp() -> None:
-    """_AUTOSKILLIT_GITIGNORE_ENTRIES must include temp/ — regression guard."""
-    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES
+def test_ensure_project_temp_does_not_mutate_root_gitignore(tmp_path: Path) -> None:
+    """ensure_project_temp() must NOT write to the project root .gitignore.
 
-    assert "temp/" in _AUTOSKILLIT_GITIGNORE_ENTRIES
-
-
-# RG-ROOT-2
-def test_root_gitignore_entries_covers_secrets_yaml() -> None:
-    """_ROOT_GITIGNORE_ENTRIES must include the root-scope secrets entry — regression guard."""
-    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES
-
-    assert ".autoskillit/.secrets.yaml" in _ROOT_GITIGNORE_ENTRIES
-
-
-# RG-ROOT-3
-def test_ensure_project_temp_writes_root_gitignore(tmp_path: Path) -> None:
-    """ensure_project_temp() must write all _ROOT_GITIGNORE_ENTRIES to the root .gitignore.
-
-    This is the structural invariant test. Its failure signals that a new sensitive
-    root-scope entry was added without updating _ROOT_GITIGNORE_ENTRIES in core/io.py.
+    Per the self-gitignoring directory pattern (pytest #3286 / mypy PR #8193),
+    the resolved temp directory owns its own .gitignore. The project's
+    version-controlled root .gitignore is never mutated by this tool.
     """
-    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES, ensure_project_temp
+    from autoskillit.core.io import ensure_project_temp
 
     assert not (tmp_path / ".gitignore").exists(), "precondition: no root .gitignore"
-
     ensure_project_temp(tmp_path)
-
-    root_gitignore = tmp_path / ".gitignore"
-    assert root_gitignore.exists(), "ensure_project_temp must create root .gitignore"
-    content = root_gitignore.read_text()
-    for entry in _ROOT_GITIGNORE_ENTRIES:
-        assert entry in content, (
-            f"Root .gitignore is missing {entry!r}. "
-            "Add it to _ROOT_GITIGNORE_ENTRIES in core/io.py."
-        )
-
-
-# RG-ROOT-4
-def test_ensure_project_temp_appends_to_existing_root_gitignore(tmp_path: Path) -> None:
-    """ensure_project_temp() must append to an existing root .gitignore without overwriting."""
-    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES, ensure_project_temp
-
-    existing_content = "*.pyc\n__pycache__/\n.env\n"
-    (tmp_path / ".gitignore").write_text(existing_content)
-
-    ensure_project_temp(tmp_path)
-
-    content = (tmp_path / ".gitignore").read_text()
-    assert "*.pyc" in content, "existing root .gitignore content must be preserved"
-    assert "__pycache__/" in content, "existing root .gitignore content must be preserved"
-    for entry in _ROOT_GITIGNORE_ENTRIES:
-        assert entry in content, f"Missing entry {entry!r} after append"
-
-
-# RG-ROOT-5
-def test_ensure_project_temp_root_gitignore_idempotent(tmp_path: Path) -> None:
-    """Running ensure_project_temp() twice must not duplicate root .gitignore entries."""
-    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES, ensure_project_temp
-
-    ensure_project_temp(tmp_path)
-    ensure_project_temp(tmp_path)
-
-    content = (tmp_path / ".gitignore").read_text()
-    for entry in _ROOT_GITIGNORE_ENTRIES:
-        assert content.count(entry) == 1, (
-            f"Root .gitignore has duplicate entry for {entry!r} after two init calls"
-        )
+    assert not (tmp_path / ".gitignore").exists(), (
+        "ensure_project_temp must not create a root .gitignore"
+    )
 
 
 # SS-INIT-1

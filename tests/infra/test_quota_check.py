@@ -162,7 +162,7 @@ def test_quota_check_reads_threshold_from_hook_config(tmp_path, monkeypatch):
     cache = tmp_path / "custom_cache.json"
     _write_cache(cache, utilization=60.0)
     _write_hook_config(
-        tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json",
+        tmp_path / ".autoskillit" / ".hook_config.json",
         threshold=50.0,
         cache_max_age=300,
         cache_path=str(cache),
@@ -180,7 +180,7 @@ def test_quota_check_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
     custom_cache = tmp_path / "my_custom_cache.json"
     _write_cache(custom_cache, utilization=95.0)
     _write_hook_config(
-        tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json",
+        tmp_path / ".autoskillit" / ".hook_config.json",
         threshold=85.0,
         cache_max_age=300,
         cache_path=str(custom_cache),
@@ -195,7 +195,7 @@ def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypa
     """AUTOSKILLIT_QUOTA_CACHE env var must take precedence over hook config cache_path.
 
     Regression test: env var path must win even when a hook config is present at the
-    canonical path (.autoskillit/temp/.autoskillit_hook_config.json). Writing different
+    canonical path (.autoskillit/.hook_config.json). Writing different
     utilization values to each cache confirms which source the hook actually reads.
     """
     monkeypatch.chdir(tmp_path)
@@ -206,7 +206,7 @@ def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypa
     wrong_cache = tmp_path / "wrong_cache.json"
     _write_cache(wrong_cache, utilization=50.0)
     _write_hook_config(
-        tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json",
+        tmp_path / ".autoskillit" / ".hook_config.json",
         threshold=85.0,
         cache_max_age=300,
         cache_path=str(wrong_cache),

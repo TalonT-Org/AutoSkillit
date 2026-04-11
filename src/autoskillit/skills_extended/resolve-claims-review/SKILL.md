@@ -40,7 +40,7 @@ Called by the research recipe when `audit_claims` routes `changes_requested` via
 **NEVER:**
 - Merge or push the branch — the recipe's `re_push_research` step handles push
 - Dismiss review threads without addressing the underlying comment
-- Create files outside `.autoskillit/temp/resolve-claims-review/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/`
 - Exceed 3 fix-and-retry iterations
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
@@ -170,9 +170,9 @@ If the GraphQL call fails, log a warning and set `comment_id_to_thread_id = {}`.
 Thread resolution will be silently skipped in Step 6.
 
 Save to:
-- `.autoskillit/temp/resolve-claims-review/inline_comments_{pr}.json`
-- `.autoskillit/temp/resolve-claims-review/reviews_{pr}.json`
-- `.autoskillit/temp/resolve-claims-review/threads_{pr}.json`
+- `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/inline_comments_{pr}.json`
+- `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/reviews_{pr}.json`
+- `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/threads_{pr}.json`
 
 ### Step 3: Parse, Classify, and Dimension-Group
 
@@ -286,7 +286,7 @@ and affected comment IDs.
 Merge results into `classification_map: dict[comment_id, verdict_entry]`.
 Save `classification_map_{pr}.json`.
 
-Write analysis report to `.autoskillit/temp/resolve-claims-review/analysis_{pr}_{ts}.md`
+Write analysis report to `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/analysis_{pr}_{ts}.md`
 with banner (BEFORE any code changes):
 ```
 Analysis complete (BEFORE any code changes)
@@ -398,7 +398,7 @@ any reply must not affect exit code.
 ### Step 6.6: Persist Reject Patterns
 
 Save all REJECT-classified comments to:
-`.autoskillit/temp/resolve-claims-review/reject_patterns_{pr}_{ts}.json`
+`{{AUTOSKILLIT_TEMP}}/resolve-claims-review/reject_patterns_{pr}_{ts}.json`
 
 Schema:
 ```json
@@ -416,7 +416,7 @@ Schema:
 ```
 
 Save escalation records to:
-`.autoskillit/temp/resolve-claims-review/escalation_records_{pr}.json`
+`{{AUTOSKILLIT_TEMP}}/resolve-claims-review/escalation_records_{pr}.json`
 
 Each escalation record must include a `"strategy"` field set to the `fix_strategy` value
 (either `"rerun_required"` or `"design_flaw"`). This field is read by the structured
@@ -443,14 +443,14 @@ Inline replies: {reply_posted_count} posted / {reply_failed_count} failed
 Status: PASS
 ```
 
-Save full report to `.autoskillit/temp/resolve-claims-review/report_{pr}_{ts}.md`.
+Save full report to `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/report_{pr}_{ts}.md`.
 
 Exit 0.
 
 ## Temp File Layout
 
 ```
-.autoskillit/temp/resolve-claims-review/
+{{AUTOSKILLIT_TEMP}}/resolve-claims-review/
 ├── inline_comments_{pr}.json
 ├── reviews_{pr}.json
 ├── threads_{pr}.json
@@ -498,4 +498,4 @@ needs_rerun = {true|false}
 %%ORDER_UP%%
 ```
 
-Summary: `.autoskillit/temp/resolve-claims-review/report_{pr}_{ts}.md` (relative to the current working directory)
+Summary: `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/report_{pr}_{ts}.md` (relative to the current working directory)

@@ -36,7 +36,7 @@ Does NOT invoke lens skills or other sub-skills.
 - Invoke any sub-skills or slash commands during execution
 - Auto-merge or approve the PR — research PRs are for human review only
 - Fail the pipeline if `gh` is unavailable — emit `pr_url = ` (empty string) and exit 0
-- Create files outside `.autoskillit/temp/compose-research-pr/` (relative to the current working directory)
+- Create files outside `{{AUTOSKILLIT_TEMP}}/compose-research-pr/` (relative to the current working directory)
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill when composing the PR body.
 
@@ -70,7 +70,7 @@ Derive `feature_branch`:
 
 Create temp directory:
 
-    mkdir -p .autoskillit/temp/compose-research-pr/
+    mkdir -p {{AUTOSKILLIT_TEMP}}/compose-research-pr/
 
 Generate a timestamp `ts` for unique file naming.
 
@@ -108,7 +108,7 @@ and continue (the Experiment Design section will be omitted).
 
 ### Step 3: Compose PR body
 
-Write to `.autoskillit/temp/compose-research-pr/pr_body_{ts}.md`:
+Write to `{{AUTOSKILLIT_TEMP}}/compose-research-pr/pr_body_{ts}.md`:
 
 ```markdown
 ## Recommendation

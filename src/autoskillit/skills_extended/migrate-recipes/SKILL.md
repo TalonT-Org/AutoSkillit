@@ -37,7 +37,7 @@ The orchestrator provides all context in the prompt:
 - Declare success if validation fails after all retry attempts
 
 **ALWAYS:**
-- Save migrated scripts to .autoskillit/temp/migrations/{script_name}.yaml for review
+- Save migrated scripts to {{AUTOSKILLIT_TEMP}}/migrations/{script_name}.yaml for review
 - Validate via validate_recipe before declaring success
 - Preserve all existing script fields not targeted by migration changes
 - Output a human-readable diff summary of changes applied
@@ -57,7 +57,7 @@ The orchestrator provides all context in the prompt:
 4. Validate the result with `validate_recipe`
 5. On validation failure, retry up to 3 times with error feedback
 6. Ensure `autoskillit_version` is set to the `target_version`
-7. Save the migrated script to `.autoskillit/temp/migrations/{script_name}.yaml`
+7. Save the migrated script to `{{AUTOSKILLIT_TEMP}}/migrations/{script_name}.yaml`
 8. Output a summary of changes applied
 
 ## Error Handling

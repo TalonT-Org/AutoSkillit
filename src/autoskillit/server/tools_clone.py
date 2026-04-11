@@ -307,7 +307,11 @@ async def register_clone_status(
     typed_status: Literal["success", "error"] = "success" if status == "success" else "error"
     try:
         result = await asyncio.to_thread(
-            clone_registry.register_clone, clone_path, typed_status, registry_path
+            clone_registry.register_clone,
+            clone_path,
+            typed_status,
+            registry_path,
+            tool_ctx.temp_dir,
         )
         return json.dumps(result)
     except Exception as exc:
@@ -360,7 +364,10 @@ async def batch_cleanup_clones(
         _start = time.monotonic()
         try:
             result = await asyncio.to_thread(
-                clone_registry.batch_delete, registry_path, tool_ctx.clone_mgr.remove_clone
+                clone_registry.batch_delete,
+                registry_path,
+                tool_ctx.clone_mgr.remove_clone,
+                tool_ctx.temp_dir,
             )
             return json.dumps(result)
         finally:

@@ -31,7 +31,7 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 - Exceed 3 fix-and-retest iterations
 - Delete the worktree if tests still fail after max attempts
 - Modify the plan file
-- Create files outside `.autoskillit/temp/resolve-failures/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/resolve-failures/` directory
 
 **ALWAYS:**
 - Read the plan first to understand implementation intent
@@ -55,7 +55,7 @@ Read the configured test command from `.autoskillit/config.yaml` (key: `test_che
 3. Verify plan file exists and is readable
 
    **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
-   exist (e.g., plan file arguments, `.autoskillit/temp/investigate/` reports, external file references), use
+   exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, external file references), use
    `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
    sibling parallel-call cancellations.
 4. Check for development environment in worktree, recreate if missing. Use the project's configured `worktree_setup.command`, or: `cd "${worktree_path}" && task install-worktree`
@@ -130,10 +130,10 @@ This ensures local test results match CI behavior. Skip if no pre-test generatio
 2. Apply targeted fixes
 3. If the project has pre-commit hooks, run `pre-commit run --all-files` and
    stage any auto-fixed files before committing. Commit each fix: `fix: {what was wrong and why}`
-4. Write a fix log entry to `.autoskillit/temp/resolve-failures/` (relative to
+4. Write a fix log entry to `{{AUTOSKILLIT_TEMP}}/resolve-failures/` (relative to
    the current working directory) to satisfy the write_behavior contract
    (generates an Edit/Write call that proves work was done):
-   - Path: `.autoskillit/temp/resolve-failures/fix_log_{iteration}_{ts}.md`
+   - Path: `{{AUTOSKILLIT_TEMP}}/resolve-failures/fix_log_{iteration}_{ts}.md`
    - Content: iteration number, files changed, commit SHA, brief description
 5. Re-run: `cd {worktree_path} && {test_command}`
 6. Green → Step 4; Red and < 3 iterations → repeat; Red and >= 3 → Step 5

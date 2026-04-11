@@ -167,7 +167,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/arch-lens-security/arch_diag_security_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `{{AUTOSKILLIT_TEMP}}/arch-lens-security/arch_diag_security_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After writing the diagram file, emit a structured output line:
 

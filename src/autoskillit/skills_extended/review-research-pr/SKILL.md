@@ -34,7 +34,7 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `.autoskillit/temp/review-research-pr/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/review-research-pr/`
 - Approve a PR that has `changes_requested` findings
 - Post review comments when `gh` is unavailable — output `verdict=approved` and exit 0
 - Review files outside the PR diff — scope all audit to diff content only
@@ -117,7 +117,7 @@ gh pr diff {pr_number}
 gh repo view --json nameWithOwner -q .nameWithOwner
 ```
 
-Save the diff to `.autoskillit/temp/review-research-pr/diff_{pr_number}.txt`. (relative to the current working directory)
+Save the diff to `{{AUTOSKILLIT_TEMP}}/review-research-pr/diff_{pr_number}.txt`. (relative to the current working directory)
 
 ### Step 3: Run Parallel Audit Subagents
 
@@ -357,7 +357,7 @@ gh pr review {pr_number} --comment --body "AutoSkillit research review: uncertai
 
 ### Step 8: Write Summary and Emit Verdict
 
-Save findings summary to `.autoskillit/temp/review-research-pr/summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
+Save findings summary to `{{AUTOSKILLIT_TEMP}}/review-research-pr/summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
 
 Output the verdict as the final line:
 
@@ -379,4 +379,4 @@ Exit 1 only for unrecoverable tool-level errors.
 - `verdict=changes_requested` — Blocking issues found; recipe routes to next step
 - `verdict=needs_human` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
 
-Summary written to: `.autoskillit/temp/review-research-pr/summary_{pr_number}_{timestamp}.md`
+Summary written to: `{{AUTOSKILLIT_TEMP}}/review-research-pr/summary_{pr_number}_{timestamp}.md`

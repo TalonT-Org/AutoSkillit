@@ -41,7 +41,7 @@ hooks:
 **NEVER:**
 - Modify any source code files
 - Accept a "pass" result without asking what a false result would have looked like under this design
-- Create files outside `.autoskillit/temp/exp-lens-severity-testing/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/`
 
 **ALWAYS:**
 - For every positive claim, identify what error the test was capable of detecting
@@ -50,12 +50,12 @@ hooks:
 - Flag confirmatory theater: experiments designed to confirm rather than risk refutation
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Write output to `.autoskillit/temp/exp-lens-severity-testing/exp_diag_severity_testing_{YYYY-MM-DD_HHMMSS}.md`
+- Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/exp_diag_severity_testing_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
 
   ```
-  diagram_path = /absolute/path/to/.autoskillit/temp/exp-lens-severity-testing/exp_diag_severity_testing_{...}.md
+  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/exp_diag_severity_testing_{...}.md
   %%ORDER_UP%%
   ```
 
@@ -115,7 +115,7 @@ Show Claims → HIGH/MEDIUM/LOW severity tests → Severity verdicts.
 
 ### Step 5: Write Output
 
-Write the analysis to: `.autoskillit/temp/exp-lens-severity-testing/exp_diag_severity_testing_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the analysis to: `{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/exp_diag_severity_testing_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

@@ -43,7 +43,7 @@ hooks:
 - Modify any source code or experiment files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Accept at face value that baselines received symmetric treatment
-- Create files outside `.autoskillit/temp/exp-lens-comparator-construction/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/`
 
 **ALWAYS:**
 - Build a fairness matrix covering all treatment-vs-comparator pairs
@@ -52,12 +52,12 @@ hooks:
 - Identify temporal drift in baseline relevance
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Write output to `.autoskillit/temp/exp-lens-comparator-construction/exp_diag_comparator_construction_{YYYY-MM-DD_HHMMSS}.md`
+- Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/exp_diag_comparator_construction_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
 
   ```
-  diagram_path = /absolute/path/to/.autoskillit/temp/exp-lens-comparator-construction/exp_diag_comparator_construction_{...}.md
+  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/exp_diag_comparator_construction_{...}.md
   %%ORDER_UP%%
   ```
 
@@ -133,7 +133,7 @@ If a diagram adds value, create a simplified flowchart. This is OPTIONAL for thi
 
 ### Step 5: Write Output
 
-Write the analysis to: `.autoskillit/temp/exp-lens-comparator-construction/exp_diag_comparator_construction_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the analysis to: `{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/exp_diag_comparator_construction_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

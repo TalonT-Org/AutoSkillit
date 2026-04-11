@@ -62,11 +62,11 @@ results are valid findings, not failures.
 ### Step 1 — Gather All Artifacts
 
 Read all available artifacts from the worktree:
-1. Experiment plan: `.autoskillit/temp/experiment-plan.md`
-2. Scope report: `.autoskillit/temp/scope/` (if available in worktree)
+1. Experiment plan: `{{AUTOSKILLIT_TEMP}}/experiment-plan.md`
+2. Scope report: `{{AUTOSKILLIT_TEMP}}/scope/` (if available in worktree)
 3. Experiment results: `{results_path}`
-4. Any raw data files in `.autoskillit/temp/run-experiment/`
-5. Standardized metrics: scan `.autoskillit/temp/run-experiment/` for
+4. Any raw data files in `{{AUTOSKILLIT_TEMP}}/run-experiment/`
+5. Standardized metrics: scan `{{AUTOSKILLIT_TEMP}}/run-experiment/` for
    `*_metrics.json` files (e.g., `accuracy_metrics.json`, `parity_metrics.json`).
    If present, read them — they will populate the Standardized Metrics Assessment
    section of the report.
@@ -178,7 +178,7 @@ Before including data from any `*_metrics.json` file:
 ### Standardized Metrics
 
 {Include this section when `*_metrics.json` files are present in
-`.autoskillit/temp/run-experiment/`. Omit entirely if no metrics JSON was produced.}
+`{{AUTOSKILLIT_TEMP}}/run-experiment/`. Omit entirely if no metrics JSON was produced.}
 
 | Metric | Dimension | Dataset | Value | Threshold | Status |
 |--------|-----------|---------|-------|-----------|--------|

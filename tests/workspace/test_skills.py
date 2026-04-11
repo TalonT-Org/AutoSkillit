@@ -233,6 +233,9 @@ class TestSkillResolver:
                     start = match.start()
                     if start >= 1 and content[start - 1] == "/":
                         continue
+                    # Skip placeholder filesystem paths like {{AUTOSKILLIT_TEMP}}/skill-name/
+                    if start >= 1 and content[start - 1] == "}":
+                        continue
                     if name in BUNDLED_SKILL_NAMES:
                         skill_file = f"{skill_md.parent.name}/SKILL.md"
                         assert False, f"{skill_file}: /{name} should be /autoskillit:{name}"

@@ -75,7 +75,7 @@ worktree, discarding all partial progress. Instead, route to the next step
 
 1. Extract and verify the plan path using **path detection**: scan the tokens
    after the skill name for the first one that starts with `/`, `./`,
-   `.autoskillit/temp/`, or `.autoskillit/` — that token is the plan path.
+   `{{AUTOSKILLIT_TEMP}}/`, or `.autoskillit/` — that token is the plan path.
    Ignore any non-path words that appear before it. If no path-like token is
    found, treat the entire argument string as pasted plan content. Verify the
    resolved file exists before proceeding.
@@ -97,8 +97,8 @@ git worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}"
 WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
 
 # Record the base branch for reliable discovery:
-mkdir -p ".autoskillit/temp/worktrees/${WORKTREE_NAME}"
-echo "${CURRENT_BRANCH}" > ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch"
+mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}"
+echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch"
 
 # Set upstream tracking if possible:
 if ! git fetch origin "${CURRENT_BRANCH}" 2>/dev/null; then

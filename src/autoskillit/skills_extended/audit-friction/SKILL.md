@@ -29,14 +29,14 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last month`). I
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `.autoskillit/temp/audit-friction/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/audit-friction/` directory
 - Have subagents write files — they return all findings in response text only
 - Analyze subagent log subdirectories (`*/subagents/`) — top-level session files only
 
 **ALWAYS:**
 - Use subagents heavily for parallel log analysis
-- All output goes under `.autoskillit/temp/audit-friction/` (create if needed)
-- Final report: `.autoskillit/temp/audit-friction/friction_audit_{YYYY-MM-DD_HHMMSS}.md`
+- All output goes under `{{AUTOSKILLIT_TEMP}}/audit-friction/` (create if needed)
+- Final report: `{{AUTOSKILLIT_TEMP}}/audit-friction/friction_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Report the file and line counts to the terminal before choosing analysis mode
 
 ## Friction Categories
@@ -173,9 +173,9 @@ After all subagents return:
 
 ### Step 6: Write Report
 
-Ensure `.autoskillit/temp/audit-friction/` exists (`mkdir -p`).
+Ensure `{{AUTOSKILLIT_TEMP}}/audit-friction/` exists (`mkdir -p`).
 
-Save to: `.autoskillit/temp/audit-friction/friction_audit_{YYYY-MM-DD_HHMMSS}.md`
+Save to: `{{AUTOSKILLIT_TEMP}}/audit-friction/friction_audit_{YYYY-MM-DD_HHMMSS}.md`
 
 Structure:
 

@@ -41,7 +41,7 @@ hooks:
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `.autoskillit/temp/exp-lens-governance-risk/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/`
 
 **ALWAYS:**
 - Identify subgroups for whom the experimental evidence may not generalize
@@ -50,12 +50,12 @@ hooks:
 - Distinguish risks that are monitored from risks that are merely acknowledged
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Write output to `.autoskillit/temp/exp-lens-governance-risk/exp_diag_governance_risk_{YYYY-MM-DD_HHMMSS}.md`
+- Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/exp_diag_governance_risk_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
 
   ```
-  diagram_path = /absolute/path/to/.autoskillit/temp/exp-lens-governance-risk/exp_diag_governance_risk_{...}.md
+  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/exp_diag_governance_risk_{...}.md
   %%ORDER_UP%%
   ```
 
@@ -110,7 +110,7 @@ For every deployment decision: Does the experiment provide sufficient evidence? 
 
 ### Step 5: Write Output
 
-Write the output to: `.autoskillit/temp/exp-lens-governance-risk/exp_diag_governance_risk_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the output to: `{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/exp_diag_governance_risk_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

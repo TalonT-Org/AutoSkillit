@@ -45,13 +45,13 @@ text is supplementary context.
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `.autoskillit/temp/scope/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/scope/` directory
 - Propose solutions or write implementation code
 - Skip the prior art survey — always check what already exists in the codebase
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
-- Write output to `.autoskillit/temp/scope/` directory
+- Write output to `{{AUTOSKILLIT_TEMP}}/scope/` directory
 - Clearly separate facts (what the code does) from hypotheses (what might be true)
 - Include a known/unknown matrix in the output
 
@@ -61,7 +61,7 @@ text is supplementary context.
 
 1. Parse the research question from arguments.
 2. If a GitHub issue reference is detected, fetch it via `fetch_github_issue`.
-3. Create the output directory: `mkdir -p .autoskillit/temp/scope/`
+3. Create the output directory: `mkdir -p {{AUTOSKILLIT_TEMP}}/scope/`
 
 ### Step 1 — Parallel Exploration
 
@@ -171,7 +171,7 @@ current threshold value. Note any gaps where no canonical metric exists.}
 ### Step 3 — Write Output
 
 Save the scope report to:
-`.autoskillit/temp/scope/scope_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+`{{AUTOSKILLIT_TEMP}}/scope/scope_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 Where `{topic}` is a snake_case summary of the research question (max 40 chars).
 

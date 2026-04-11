@@ -202,11 +202,7 @@ async def report_bug(
 
         # Resolve and create the report directory up front so the path is stable
         # before the (potentially background) session writes the file.
-        report_dir = (
-            Path(cfg.report_dir)
-            if cfg.report_dir
-            else Path(cwd) / ".autoskillit" / "temp" / "bug-reports"
-        )
+        report_dir = Path(cfg.report_dir) if cfg.report_dir else tool_ctx.temp_dir / "bug-reports"
         report_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
         report_path = report_dir / f"{timestamp}_report.md"

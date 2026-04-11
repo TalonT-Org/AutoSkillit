@@ -415,9 +415,9 @@ def test_format_kitchen_status():
 def test_pipeline_mode_compact_run_skill(tmp_path):
     """In pipeline mode (hook config present), run_skill output uses compact format."""
     # Create the hook config file to signal pipeline mode
-    config_dir = tmp_path / ".autoskillit" / "temp"
+    config_dir = tmp_path / ".autoskillit"
     config_dir.mkdir(parents=True)
-    (config_dir / ".autoskillit_hook_config.json").write_text('{"quota_guard": {}}')
+    (config_dir / ".hook_config.json").write_text('{"quota_guard": {}}')
 
     event = _make_run_skill_event(success=False, needs_retry=True, retry_reason="budget_exhausted")
 
@@ -592,9 +592,9 @@ def test_fmt_merge_worktree_dirty_tree_shows_files():
 # PHK-26
 def test_fmt_run_skill_pipeline_includes_stderr(tmp_path):
     """run_skill pipeline mode must include stderr."""
-    config_dir = tmp_path / ".autoskillit" / "temp"
+    config_dir = tmp_path / ".autoskillit"
     config_dir.mkdir(parents=True)
-    (config_dir / ".autoskillit_hook_config.json").write_text('{"quota_guard": {}}')
+    (config_dir / ".hook_config.json").write_text('{"quota_guard": {}}')
 
     event = _make_run_skill_event(
         success=False,

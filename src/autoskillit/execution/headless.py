@@ -37,6 +37,7 @@ from autoskillit.core import (
     is_git_worktree,
     load_yaml,
     pkg_root,
+    temp_dir_display_str,
 )
 from autoskillit.execution.clone_guard import (
     check_and_revert_clone_contamination,
@@ -845,6 +846,7 @@ async def run_headless_core(
             add_dirs=add_dirs,
             exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
             scenario_step_name=step_name,
+            temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
         )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout

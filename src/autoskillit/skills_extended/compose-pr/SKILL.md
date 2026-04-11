@@ -38,7 +38,7 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
 **NEVER:**
 - Invoke any sub-skills or slash commands
 - Fail the pipeline if `gh` is unavailable — emit `pr_url = ` (empty) and exit successfully
-- Create files outside `.autoskillit/temp/compose-pr/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/compose-pr/`
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill (no invented colors).
 
@@ -70,7 +70,7 @@ BASE_BRANCH=$4
 
 Create temp dir (relative to the current working directory):
 ```bash
-mkdir -p .autoskillit/temp/compose-pr/
+mkdir -p {{AUTOSKILLIT_TEMP}}/compose-pr/
 ts=$(date +%Y-%m-%d_%H%M%S)
 ```
 Timestamp `ts` is assigned in the bash block above.
@@ -102,7 +102,7 @@ If `all_diagram_paths` is empty or all diagrams fail → `validated_diagrams = [
 
 ### Step 3: Compose PR Body
 
-Write PR body to `.autoskillit/temp/compose-pr/pr_body_$ts.md` (using the `ts` variable from Step 0).
+Write PR body to `{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md` (using the `ts` variable from Step 0).
 
 #### Single plan format:
 
@@ -212,7 +212,7 @@ gh pr create \
   --base $BASE_BRANCH \
   --head $FEATURE_BRANCH \
   --title "$TASK_TITLE" \
-  --body-file .autoskillit/temp/compose-pr/pr_body_$ts.md
+  --body-file {{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md
 ```
 
 Capture PR URL from stdout.

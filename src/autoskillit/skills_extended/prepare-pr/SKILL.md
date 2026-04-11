@@ -37,7 +37,7 @@ in the decomposed PR flow (prepare → run_arch_lenses → compose).
 
 **NEVER:**
 - Invoke arch-lens skills or any other sub-skills
-- Create files outside `.autoskillit/temp/prepare-pr/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-pr/`
 - Fail if closing_issue is absent or gh is unavailable — degrade gracefully
 
 **ALWAYS:**
@@ -58,7 +58,7 @@ Parse positional arguments:
 Derive `feature_branch` (`git rev-parse --abbrev-ref HEAD`).
 Create temp dir (relative to the current working directory):
 ```bash
-mkdir -p .autoskillit/temp/prepare-pr/
+mkdir -p {{AUTOSKILLIT_TEMP}}/prepare-pr/
 FEATURE_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 ts=$(date +%Y-%m-%d_%H%M%S)
 CLOSING_ISSUE="${4:-}"
@@ -140,7 +140,7 @@ Output: comma-separated slug list → `selected_lens_slugs`.
 ### Step 6: Write Context Files per Lens
 
 For each selected slug, write one context file to
-`.autoskillit/temp/prepare-pr/pr_arch_lens_context_{slug}_{ts}.md`:
+`{{AUTOSKILLIT_TEMP}}/prepare-pr/pr_arch_lens_context_{slug}_{ts}.md`:
 
 ```markdown
 # PR Context — Changed Files
@@ -170,7 +170,7 @@ Read `## Summary` from each plan file. Store plan summaries for the prep file.
 
 ### Step 8: Write PR Prep File
 
-Write PR prep file to `.autoskillit/temp/prepare-pr/pr_prep_{ts}.md`:
+Write PR prep file to `{{AUTOSKILLIT_TEMP}}/prepare-pr/pr_prep_{ts}.md`:
 
 ```markdown
 # PR Prep: {task_title}
@@ -219,11 +219,11 @@ Write PR prep file to `.autoskillit/temp/prepare-pr/pr_prep_{ts}.md`:
 ## Output
 
 Emit these structured output tokens (literal plain text, no markdown decoration).
-All output paths are absolute (resolve `.autoskillit/temp/prepare-pr/` relative to
+All output paths are absolute (resolve `{{AUTOSKILLIT_TEMP}}/prepare-pr/` relative to
 the current working directory using `$(pwd)`):
 
 ```
-prep_path = /absolute/path/.autoskillit/temp/prepare-pr/pr_prep_{ts}.md
+prep_path = /absolute/path/{{AUTOSKILLIT_TEMP}}/prepare-pr/pr_prep_{ts}.md
 selected_lenses = module-dependency,process-flow
 lens_context_paths = /abs/ctx_module-dependency_{ts}.md,/abs/ctx_process-flow_{ts}.md
 %%ORDER_UP%%

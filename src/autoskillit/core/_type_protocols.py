@@ -203,9 +203,13 @@ class RecipeRepository(Protocol):
         suppressed: Sequence[str] | None = None,
         resolved_defaults: dict[str, str] | None = None,
         ingredient_overrides: dict[str, str] | None = None,
+        temp_dir: Path | None = None,
+        temp_dir_relpath: str | None = None,
     ) -> dict[str, Any]: ...
 
-    def validate_from_path(self, script_path: Any) -> dict[str, Any]: ...
+    def validate_from_path(
+        self, script_path: Any, temp_dir_relpath: str = ".autoskillit/temp"
+    ) -> dict[str, Any]: ...
 
     def list_all(self, project_dir: Any | None = None) -> dict[str, Any]: ...
 

@@ -41,8 +41,11 @@ DATE_ONLY_PATTERN = re.compile(
 )
 
 # Lines that contain output file path instructions (write/save directives).
+# Matches both legacy literal ``.autoskillit/temp/`` and the placeholder
+# ``{{AUTOSKILLIT_TEMP}}/`` form used by SKILL.md files post-substitution.
 OUTPUT_PATH_LINE = re.compile(
-    r"(?:write|save|output)\s+.*?(?:to|path|file)\s*[:=]?\s*`?(?:\.autoskillit/)?temp/",
+    r"(?:write|save|output)\s+.*?(?:to|path|file)\s*[:=]?\s*"
+    r"`?(?:\.autoskillit/temp/|\{\{AUTOSKILLIT_TEMP\}\}/)",
     re.IGNORECASE,
 )
 
@@ -120,7 +123,7 @@ def test_skill_output_uses_hhmmss_timestamp(skill_name: str) -> None:
     output_lines = [
         line
         for line in content.splitlines()
-        if re.search(r"(?:\.autoskillit/)?temp/.*\{.*\}", line)
+        if re.search(r"(?:\.autoskillit/temp/|\{\{AUTOSKILLIT_TEMP\}\}/).*\{.*\}", line)
         and not line.strip().startswith("#")
     ]
 

@@ -20,7 +20,7 @@ ingredients:
     default: "false"
   plans_dir:
     description: Plan files for audit
-    default: ".autoskillit/temp/merge-prs"
+    default: "{{AUTOSKILLIT_TEMP}}/merge-prs"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -152,7 +152,7 @@ steps:
       callable: "autoskillit.smoke_utils.fetch_merge_queue_data"
       base_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}/.autoskillit/temp/merge-prs"
+      output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/merge-prs"
     capture:
       merge_queue_data_path: "${{ result.merge_queue_data_path }}"
     on_success: analyze_prs
@@ -587,14 +587,14 @@ steps:
   collect_artifacts:
     tool: run_cmd
     with:
-      cmd: "mkdir -p ${{ inputs.plans_dir }} && find .autoskillit/temp/make-plan/ -name '*_plan_*.md' -exec cp {} ${{ inputs.plans_dir }}/ \\; 2>/dev/null || true"
+      cmd: "mkdir -p ${{ inputs.plans_dir }} && find {{AUTOSKILLIT_TEMP}}/make-plan/ -name '*_plan_*.md' -exec cp {} ${{ inputs.plans_dir }}/ \\; 2>/dev/null || true"
       cwd: "${{ context.work_dir }}"
       step_name: "collect_artifacts"
     on_success: check_impl_plans
     on_failure: check_impl_plans
     note: >
-      Copies plan files generated during the pipeline (from .autoskillit/temp/make-plan/) into
-      .autoskillit/temp/merge-prs/ alongside any conflict reports already there.
+      Copies plan files generated during the pipeline (from {{AUTOSKILLIT_TEMP}}/make-plan/) into
+      {{AUTOSKILLIT_TEMP}}/merge-prs/ alongside any conflict reports already there.
       Always routes to check_impl_plans, which determines whether audit_impl
       is meaningful. In queue mode (context.queue_mode == true), the integration_branch
       is the base_branch itself — no batch branch push is needed. The step after
@@ -662,7 +662,7 @@ steps:
       integration_branch: "${{ context.integration_branch }}"
       base_branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}/.autoskillit/temp/open-integration-pr"
+      output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/open-integration-pr"
     capture:
       domain_partitions_path: "${{ result.domain_partitions_path }}"
     on_success: open_integration_pr
@@ -807,7 +807,7 @@ steps:
       callable: "autoskillit.smoke_utils.annotate_pr_diff"
       pr_number: "${{ context.review_pr_number }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}/.autoskillit/temp/review-pr"
+      output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr"
     capture:
       annotated_diff_path: "${{ result.annotated_diff_path }}"
       hunk_ranges_path: "${{ result.hunk_ranges_path }}"
@@ -900,7 +900,7 @@ steps:
     on_failure: register_clone_failure
     note: >
       Runs when ci_watch_pr reports CI failure on the integration branch.
-      Fetches logs and writes a diagnosis to .autoskillit/temp/diagnose-ci/ for human inspection.
+      Fetches logs and writes a diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/ for human inspection.
       diagnosis_path is captured for observability — no automated remediation for
       integration CI, so always routes to register_clone_failure.
 
@@ -930,7 +930,7 @@ steps:
 
   escalate_stop:
     action: stop
-    message: "Pipeline failed — human intervention needed. Check the integration branch and .autoskillit/temp/merge-prs/ for details."
+    message: "Pipeline failed — human intervention needed. Check the integration branch and {{AUTOSKILLIT_TEMP}}/merge-prs/ for details."
     note: >
       context.task may be null when reached via escalation_required=true from merge_pr
       (merge-pr does not set conflict_report_path on escalation paths). Do not rely on

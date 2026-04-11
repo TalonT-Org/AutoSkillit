@@ -8,6 +8,7 @@ Replaces two mutable module-level singletons in server.py:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
@@ -74,6 +75,10 @@ class ToolContext:
                           to the current kitchen session lifetime.
     active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
                           (frozenset() when kitchen open but no recipe loaded; None when closed)
+    temp_dir:             Resolved temp directory for this project. MUST be supplied explicitly
+                          by callers outside make_context(). The default_factory falls back to
+                          Path.cwd() / ".autoskillit" / "temp", which is cwd-dependent and
+                          ignores the configured workspace.temp_dir.
     """
 
     config: AutomationConfig
@@ -83,6 +88,13 @@ class ToolContext:
     gate: GatePolicy
     plugin_dir: str
     runner: SubprocessRunner | None
+    # Always supply temp_dir explicitly when constructing ToolContext directly.
+    # The default captures Path.cwd() at field-instantiation time, which is
+    # cwd-dependent and will differ from the configured workspace.temp_dir.
+    # Production callers must use make_context() (server/_factory.py), which
+    # resolves temp_dir from config via resolve_temp_dir(). Direct construction
+    # (e.g. in tests) must override this field before any file I/O that uses it.
+    temp_dir: Path = field(default_factory=lambda: Path.cwd() / ".autoskillit" / "temp")
     response_log: McpResponseStore = field(default_factory=DefaultMcpResponseLog)
     executor: HeadlessExecutor | None = field(default=None)
     tester: TestRunner | None = field(default=None)

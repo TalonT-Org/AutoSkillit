@@ -169,7 +169,7 @@ class GitHubConfig:
 class ReportBugConfig:
     timeout: int = 600
     model: str | None = None
-    report_dir: str | None = None  # None = {cwd}/.autoskillit/temp/bug-reports/
+    report_dir: str | None = None  # None = resolved temp dir + /bug-reports/
     github_filing: bool = True
     github_labels: list[str] = field(default_factory=lambda: ["autoreported", "bug"])
 
@@ -233,6 +233,7 @@ class PacksConfig:
 class WorkspaceConfig:
     worktree_root: str | None = None  # null = auto-resolve to ../worktrees/
     runs_root: str | None = None  # null = auto-resolve to ../autoskillit-runs/
+    temp_dir: str | None = None  # null = canonical default (see resolve_temp_dir)
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:
@@ -449,6 +450,7 @@ class AutomationConfig:
             workspace=WorkspaceConfig(
                 worktree_root=val(ws_raw, "worktree_root", _wsc["worktree_root"]) or None,
                 runs_root=val(ws_raw, "runs_root", _wsc["runs_root"]) or None,
+                temp_dir=val(ws_raw, "temp_dir", _wsc["temp_dir"]) or None,
             ),
         )
 

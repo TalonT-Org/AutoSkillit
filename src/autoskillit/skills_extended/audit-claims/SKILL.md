@@ -39,7 +39,7 @@ comments and emits a verdict for recipe routing.
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `.autoskillit/temp/audit-claims/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/audit-claims/`
 - Approve a PR that has `changes_requested` findings
 - Post review comments when `gh` is unavailable — output `verdict=approved` and exit 0
 - Review files outside the PR diff — scope all audit to diff content only
@@ -111,11 +111,11 @@ If `gh` is unavailable or not authenticated:
 ### Step 2: Get PR Diff
 
 ```bash
-mkdir -p .autoskillit/temp/audit-claims
-gh pr diff {pr_number} > .autoskillit/temp/audit-claims/diff_{pr_number}.txt
+mkdir -p {{AUTOSKILLIT_TEMP}}/audit-claims
+gh pr diff {pr_number} > {{AUTOSKILLIT_TEMP}}/audit-claims/diff_{pr_number}.txt
 ```
 
-Save the diff to `.autoskillit/temp/audit-claims/diff_{pr_number}.txt` (relative to the
+Save the diff to `{{AUTOSKILLIT_TEMP}}/audit-claims/diff_{pr_number}.txt` (relative to the
 current working directory).
 
 Do NOT run deterministic diff annotation — claim positions are report-level, not
@@ -167,7 +167,7 @@ Subagent prompt template:
 > {section_diff_content}
 
 Aggregate all extracted claims from all subagents. Save to
-`.autoskillit/temp/audit-claims/claims_{pr_number}.json`.
+`{{AUTOSKILLIT_TEMP}}/audit-claims/claims_{pr_number}.json`.
 
 #### Phase 2 — Evidence Matching (parallel subagents by claim type)
 
@@ -216,7 +216,7 @@ Subagent prompt template:
 > Full PR diff:
 > {diff_content}
 
-Save findings to `.autoskillit/temp/audit-claims/findings_{pr_number}.json`.
+Save findings to `{{AUTOSKILLIT_TEMP}}/audit-claims/findings_{pr_number}.json`.
 
 ### Step 4: Aggregate and Deduplicate Findings
 
@@ -343,7 +343,7 @@ gh pr review {pr_number} --comment --body "AutoSkillit citation audit: uncertain
 
 ### Step 8: Write Summary and Emit Verdict
 
-Save findings summary to `.autoskillit/temp/audit-claims/summary_{pr_number}_{timestamp}.md`.
+Save findings summary to `{{AUTOSKILLIT_TEMP}}/audit-claims/summary_{pr_number}_{timestamp}.md`.
 
 Output the verdict as the final line:
 
@@ -362,7 +362,7 @@ Exit 1 only for unrecoverable tool-level errors.
 ## Temp File Layout
 
 ```
-.autoskillit/temp/audit-claims/
+{{AUTOSKILLIT_TEMP}}/audit-claims/
 ├── diff_{pr_number}.txt
 ├── claims_{pr_number}.json          (Phase 1 output)
 ├── findings_{pr_number}.json        (Phase 2 output)
@@ -375,4 +375,4 @@ Exit 1 only for unrecoverable tool-level errors.
 - `verdict=changes_requested` — Missing citations or unsupported claims found; recipe routes to resolve step
 - `verdict=needs_human` — Ambiguous citation requirements; human review requested
 
-Summary written to: `.autoskillit/temp/audit-claims/summary_{pr_number}_{timestamp}.md`
+Summary written to: `{{AUTOSKILLIT_TEMP}}/audit-claims/summary_{pr_number}_{timestamp}.md`

@@ -20,6 +20,7 @@ from autoskillit.core import (
     get_logger,
     load_yaml,
     pkg_root,
+    resolve_temp_dir,
 )
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.contracts import (
@@ -41,6 +42,7 @@ from autoskillit.recipe.io import (
     find_recipe_by_name,
     find_sub_recipe_by_name,
     list_recipes,
+    substitute_temp_placeholder,
 )
 from autoskillit.recipe.io import (
     load_recipe as _load_recipe_from_path,
@@ -388,6 +390,7 @@ def _build_active_recipe(
     recipe: Any,
     ingredient_overrides: dict[str, str] | None,
     project_dir: Path,
+    temp_dir_relpath: str = ".autoskillit/temp",
 ) -> tuple[Any, Any | None]:
     """Return (active_recipe, combined_recipe | None).
 
@@ -428,7 +431,7 @@ def _build_active_recipe(
                     f"Expected in recipes/sub-recipes/{current_step.sub_recipe}.yaml"
                 )
             try:
-                sub_recipe = _load_recipe_from_path(sr_path)
+                sub_recipe = _load_recipe_from_path(sr_path, temp_dir_relpath)
             except (YAMLError, ValueError, OSError) as exc:
                 raise ValueError(
                     f"Failed to load sub-recipe '{current_step.sub_recipe}' "
@@ -442,8 +445,14 @@ def _build_active_recipe(
     return working, combined
 
 
-def validate_from_path(path: Path) -> dict[str, Any]:
+def validate_from_path(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> dict[str, Any]:
     """Validate a recipe YAML file at the given path.
+
+    Args:
+        path: Path to the recipe YAML file.
+        temp_dir_relpath: Relative path to the temp directory used for
+            ``{{AUTOSKILLIT_TEMP}}`` substitution. Defaults to
+            ``.autoskillit/temp``.
 
     Returns:
         {"valid": bool, "errors": list, "quality": dict, "semantic": list, "contracts": list}
@@ -456,7 +465,9 @@ def validate_from_path(path: Path) -> dict[str, Any]:
         }
 
     try:
-        data = load_yaml(path)
+        raw_text = path.read_text(encoding="utf-8")
+        substituted = substitute_temp_placeholder(raw_text, temp_dir_relpath)
+        data = load_yaml(substituted)
     except YAMLError as exc:
         return {
             "valid": False,
@@ -507,6 +518,8 @@ def load_and_validate(
     recipe_info: RecipeInfo | None = None,
     resolved_defaults: dict[str, str] | None = None,
     ingredient_overrides: dict[str, str] | None = None,
+    temp_dir: Path | None = None,
+    temp_dir_relpath: str | None = None,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -564,6 +577,8 @@ def load_and_validate(
         return {"error": f"No recipe named '{name}' found"}
 
     raw = match.content if match.content is not None else match.path.read_text()
+    _temp_relpath = temp_dir_relpath or ".autoskillit/temp"
+    raw = substitute_temp_placeholder(raw, _temp_relpath)
     suggestions: list[dict[str, Any]] = []
     valid = True
     recipe = None
@@ -585,7 +600,7 @@ def load_and_validate(
 
             # Stage: sub-recipe composition (lazy-loaded prefixes)
             active_recipe, combined_recipe = _build_active_recipe(
-                recipe, ingredient_overrides, _pdir
+                recipe, ingredient_overrides, _pdir, _temp_relpath
             )
 
             # Stage: structural validation on active recipe
@@ -636,9 +651,8 @@ def load_and_validate(
 
             # Stage: staleness check
             if contract:
-                staleness_cache_path = (
-                    _pdir / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
-                )
+                resolved_temp = temp_dir if temp_dir is not None else resolve_temp_dir(_pdir, None)
+                staleness_cache_path = resolved_temp / "recipe_staleness_cache.json"
                 stale = check_contract_staleness(
                     contract, recipe_path=match.path, cache_path=staleness_cache_path
                 )

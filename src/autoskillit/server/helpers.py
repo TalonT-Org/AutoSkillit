@@ -37,8 +37,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_HOOK_CONFIG_FILENAME: str = ".autoskillit_hook_config.json"
-_HOOK_DIR_COMPONENTS: tuple[str, ...] = (".autoskillit", "temp")
+_HOOK_CONFIG_FILENAME: str = ".hook_config.json"
+_HOOK_DIR_COMPONENTS: tuple[str, ...] = (".autoskillit",)
 
 
 def _hook_config_path(project_root: Path) -> Path:
@@ -260,7 +260,7 @@ async def _apply_triage_gate(
     if recipe_info is None:
         return result
 
-    cache_path = Path.cwd() / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
+    cache_path = _ctx.temp_dir / "recipe_staleness_cache.json"
     t0 = time.perf_counter()
     cached = read_staleness_cache(cache_path, name)
     logger.debug(

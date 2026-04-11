@@ -342,7 +342,8 @@ class TestQuotaGuardConfig:
 
         config = AutomationConfig()
         assert config.quota_guard.enabled is True
-        assert config.quota_guard.threshold == pytest.approx(85.0)
+        assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
+        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
         assert config.quota_guard.buffer_seconds == 60
         assert config.quota_guard.cache_max_age == 300
 
@@ -352,13 +353,66 @@ class TestQuotaGuardConfig:
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text(
-            yaml.dump({"quota_guard": {"enabled": True, "threshold": 85.0}})
+            yaml.dump(
+                {
+                    "quota_guard": {
+                        "enabled": True,
+                        "short_window_threshold": 85.0,
+                        "long_window_threshold": 98.0,
+                    }
+                }
+            )
         )
         config = load_config(tmp_path)
         assert config.quota_guard.enabled is True
-        assert config.quota_guard.threshold == pytest.approx(85.0)
+        assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
+        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
         # Unspecified fields keep defaults
         assert config.quota_guard.buffer_seconds == 60
+
+    def test_short_window_threshold_defaults_to_85(self):
+        from autoskillit.config.settings import QuotaGuardConfig
+
+        assert QuotaGuardConfig().short_window_threshold == 85.0
+
+    def test_long_window_threshold_defaults_to_98(self):
+        from autoskillit.config.settings import QuotaGuardConfig
+
+        assert QuotaGuardConfig().long_window_threshold == 98.0
+
+    def test_long_window_patterns_default(self):
+        from autoskillit.config.settings import QuotaGuardConfig
+
+        assert QuotaGuardConfig().long_window_patterns == ["weekly", "sonnet", "opus"]
+
+    def test_threshold_field_removed(self):
+        import dataclasses
+
+        from autoskillit.config.settings import QuotaGuardConfig
+
+        names = {f.name for f in dataclasses.fields(QuotaGuardConfig)}
+        assert "threshold" not in names
+
+    def test_quota_guard_yaml_round_trip_per_window(self, tmp_path):
+        import pytest
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump(
+                {
+                    "quota_guard": {
+                        "short_window_threshold": 85.0,
+                        "long_window_threshold": 98.0,
+                        "long_window_patterns": ["weekly", "sonnet", "opus"],
+                    }
+                }
+            )
+        )
+        config = load_config(tmp_path)
+        assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
+        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
+        assert config.quota_guard.long_window_patterns == ["weekly", "sonnet", "opus"]
 
     def test_quota_guard_config_has_cache_refresh_interval(self):
         """QG_C3: QuotaGuardConfig has cache_refresh_interval defaulting to 240."""

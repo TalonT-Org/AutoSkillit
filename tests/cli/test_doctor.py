@@ -1373,16 +1373,21 @@ def test_check_source_version_drift_never_makes_network_call(
 class TestCheckQuotaCacheSchema:
     """Tests for _check_quota_cache_schema doctor check."""
 
-    def test_check_quota_cache_schema_ok_when_v2(self, tmp_path):
+    def test_check_quota_cache_schema_ok_when_current(self, tmp_path):
         import json
 
         from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+        from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 
         cache = tmp_path / "cache.json"
-        cache.write_text(json.dumps({"schema_version": 2, "fetched_at": "2026-01-01T00:00:00"}))
+        cache.write_text(
+            json.dumps(
+                {"schema_version": QUOTA_CACHE_SCHEMA_VERSION, "fetched_at": "2026-01-01T00:00:00"}
+            )
+        )
         result = _check_quota_cache_schema(cache_path=cache)
         assert result.severity == Severity.OK
-        assert "v2" in result.message
+        assert f"v{QUOTA_CACHE_SCHEMA_VERSION}" in result.message
 
     def test_check_quota_cache_schema_ok_when_missing(self, tmp_path):
         from autoskillit.cli._doctor import Severity, _check_quota_cache_schema

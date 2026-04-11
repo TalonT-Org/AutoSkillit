@@ -12,6 +12,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+_LONG_PATTERNS = ("weekly", "sonnet", "opus")
+
+
+def _classify_threshold(window_name: str) -> float:
+    lowered = window_name.lower()
+    return 98.0 if any(p in lowered for p in _LONG_PATTERNS) else 85.0
+
 
 def _write_cache(
     cache_path: Path,
@@ -19,8 +26,18 @@ def _write_cache(
     resets_at: str | None = None,
     window_name: str = "five_hour",
     extra_windows: dict | None = None,
+    should_block: bool | None = None,
+    effective_threshold: float | None = None,
 ) -> None:
-    """Write a fresh quota cache file in the full-snapshot format."""
+    """Write a fresh quota cache file in the full-snapshot format.
+
+    When ``should_block`` is None, classifies the window via the default
+    long-window patterns and computes ``should_block`` from utilization.
+    """
+    if effective_threshold is None:
+        effective_threshold = _classify_threshold(window_name)
+    if should_block is None:
+        should_block = utilization >= effective_threshold
     windows = {window_name: {"utilization": utilization, "resets_at": resets_at}}
     if extra_windows:
         windows.update(extra_windows)
@@ -31,6 +48,8 @@ def _write_cache(
             "window_name": window_name,
             "utilization": utilization,
             "resets_at": resets_at,
+            "should_block": should_block,
+            "effective_threshold": effective_threshold,
         },
     }
     cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -200,19 +219,24 @@ def test_qpc10_fires_on_failed_run_skill(tmp_path):
     assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
 
 
-# T11: Hook reads threshold from hook config
-def test_qpc11_reads_threshold_from_hook_config(tmp_path, monkeypatch):
-    """PostToolUse hook reads threshold from .autoskillit/.hook_config.json."""
+# T11: Hook reads cache_path from hook config
+def test_qpc11_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
+    """PostToolUse hook reads cache_path from .autoskillit/.hook_config.json.
+
+    The hook trusts the cache binding's ``should_block`` flag — it never re-derives
+    a verdict from a hook config threshold. This test only verifies that the hook
+    locates the cache file via the hook config cache_path setting.
+    """
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_CACHE", raising=False)
     cache = tmp_path / "custom_cache.json"
-    _write_cache(cache, utilization=60.0)
+    _write_cache(cache, utilization=95.0)
     hook_cfg_path = tmp_path / ".autoskillit" / ".hook_config.json"
     hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
     hook_cfg_path.write_text(
         json.dumps(
             {
                 "quota_guard": {
-                    "threshold": 50.0,
                     "cache_max_age": 300,
                     "cache_path": str(cache),
                 }
@@ -261,6 +285,42 @@ def test_qpc14_only_run_skill_matcher():
     assert re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_skill")
     assert not re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_cmd")
     assert not re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__kitchen_status")
+
+
+# T-PCHK-PWT-1: regression test for #721 — post_check silent for weekly at 86%.
+def test_post_hook_silent_when_weekly_below_long_threshold(tmp_path):
+    """Weekly window at 86% must NOT emit a warning. Regression test for #721."""
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(
+        cache,
+        utilization=86.0,
+        window_name="weekly",
+        should_block=False,
+        effective_threshold=98.0,
+    )
+    event = _build_event()
+    out, exit_code = _run_hook(event=event, cache_path=cache)
+    assert out.strip() == ""
+    assert exit_code == 0
+
+
+# T-PCHK-PWT-2: weekly above 98% must still warn.
+def test_post_hook_warns_when_weekly_above_long_threshold(tmp_path):
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(
+        cache,
+        utilization=99.0,
+        window_name="weekly",
+        should_block=True,
+        effective_threshold=98.0,
+    )
+    event = _build_event()
+    out, _ = _run_hook(event=event, cache_path=cache)
+    data = json.loads(out)
+    output = data["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "QUOTA WARNING" in output
+    assert "weekly" in output
+    assert "98" in output
 
 
 # T-PCHK-MW-1: post_check warns when binding window is exhausted (not five_hour)

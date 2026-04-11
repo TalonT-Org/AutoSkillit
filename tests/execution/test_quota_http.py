@@ -46,7 +46,9 @@ def quota_config(credentials, tmp_path):
         credentials_path=credentials,
         cache_path=str(tmp_path / "quota_cache.json"),
         cache_max_age=120,
-        threshold=80,
+        short_window_threshold=80.0,
+        long_window_threshold=98.0,
+        long_window_patterns=["weekly", "sonnet", "opus"],
         buffer_seconds=60,
     )
 

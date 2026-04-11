@@ -20,9 +20,8 @@ from autoskillit.core import get_logger, write_versioned_json
 _log = get_logger(__name__)
 
 _DEFAULT_BASE_URL: str = "https://api.anthropic.com"
-_DEFAULT_THRESHOLD: float = 85.0
 
-QUOTA_CACHE_SCHEMA_VERSION: int = 2
+QUOTA_CACHE_SCHEMA_VERSION: int = 3
 _SCHEMA_DRIFT_LOGGED: set[str] = set()
 
 
@@ -36,6 +35,8 @@ class QuotaStatus:
     utilization: float  # percentage 0–100
     resets_at: datetime | None  # UTC-aware; None when utilization is 0
     window_name: str = "unknown"  # which window this came from (diagnostic)
+    should_block: bool = False
+    effective_threshold: float = 0.0
 
     def __post_init__(self) -> None:
         if self.utilization is None:
@@ -71,30 +72,68 @@ def _parse_resets_at(resets_at_str: str | None) -> datetime | None:
     return datetime.fromisoformat(resets_at_str.replace("Z", "+00:00"))
 
 
+def _threshold_for_window(
+    name: str,
+    *,
+    short_threshold: float,
+    long_threshold: float,
+    long_patterns: list[str],
+) -> float:
+    """Return the threshold to apply to a window of the given name.
+
+    Long-window classification is substring match (case-insensitive) against
+    long_patterns. Unknown windows fall through to short_threshold.
+    """
+    lowered = name.lower()
+    for pat in long_patterns:
+        if pat.lower() in lowered:
+            return long_threshold
+    return short_threshold
+
+
 def _compute_binding(
     windows: dict[str, QuotaWindowEntry],
-    threshold: float,
+    *,
+    short_threshold: float,
+    long_threshold: float,
+    long_patterns: list[str],
 ) -> QuotaStatus:
-    """Select the worst-case (binding) window.
+    """Select the worst-case (binding) window using per-window thresholds.
 
-    Among windows at or above threshold, returns the one with the latest resets_at
-    (the last window to reset governs how long the caller must sleep).
-    If no window is above threshold, returns the window with highest utilization
-    (for diagnostic display; should_sleep will be False for the caller).
-    Returns QuotaStatus(0.0, None) when windows is empty.
+    Each window is classified by name into short or long via long_patterns.
+    Among windows at or above their own threshold, returns the one with the
+    latest resets_at. If none are exhausted, returns the window with highest
+    utilization (for diagnostic display; should_block will be False).
+    Returns QuotaStatus(0.0, None, ...) when windows is empty.
     """
     if not windows:
-        return QuotaStatus(0.0, None)
-    exhausted = [(name, w) for name, w in windows.items() if w.utilization >= threshold]
+        return QuotaStatus(0.0, None, effective_threshold=100.0)
+
+    def threshold_of(name: str) -> float:
+        return _threshold_for_window(
+            name,
+            short_threshold=short_threshold,
+            long_threshold=long_threshold,
+            long_patterns=long_patterns,
+        )
+
+    exhausted = [(name, w) for name, w in windows.items() if w.utilization >= threshold_of(name)]
     if exhausted:
         name, w = max(
             exhausted,
             key=lambda nw: nw[1].resets_at or datetime.min.replace(tzinfo=UTC),
         )
-        return QuotaStatus(utilization=w.utilization, resets_at=w.resets_at, window_name=name)
-    # No window exhausted — return highest utilization for display
-    name, w = max(windows.items(), key=lambda nw: nw[1].utilization)
-    return QuotaStatus(utilization=w.utilization, resets_at=w.resets_at, window_name=name)
+    else:
+        name, w = max(windows.items(), key=lambda nw: nw[1].utilization)
+
+    effective = threshold_of(name)
+    return QuotaStatus(
+        utilization=w.utilization,
+        resets_at=w.resets_at,
+        window_name=name,
+        should_block=w.utilization >= effective,
+        effective_threshold=effective,
+    )
 
 
 def _read_credentials(credentials_path: str) -> str:
@@ -137,6 +176,8 @@ def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
             utilization=float(b["utilization"]),
             resets_at=_parse_resets_at(b.get("resets_at")),
             window_name=str(b.get("window_name", "unknown")),
+            should_block=bool(b.get("should_block", False)),
+            effective_threshold=float(b.get("effective_threshold", 0.0)),
         )
     except (FileNotFoundError, KeyError, ValueError, TypeError, json.JSONDecodeError):
         return None
@@ -160,6 +201,8 @@ def _write_cache(cache_path: str, result: QuotaFetchResult) -> None:
                 "resets_at": (
                     result.binding.resets_at.isoformat() if result.binding.resets_at else None
                 ),
+                "should_block": result.binding.should_block,
+                "effective_threshold": result.binding.effective_threshold,
             },
         }
         path = Path(cache_path).expanduser()
@@ -172,6 +215,9 @@ def _write_cache(cache_path: str, result: QuotaFetchResult) -> None:
 async def _fetch_quota(
     credentials_path: str,
     *,
+    short_threshold: float,
+    long_threshold: float,
+    long_patterns: list[str],
     base_url: str = _DEFAULT_BASE_URL,
     _httpx_timeout: float = 10,
 ) -> QuotaFetchResult:
@@ -198,8 +244,15 @@ async def _fetch_quota(
                 resets_at=_parse_resets_at(w.get("resets_at")),
             )
     if not windows:
-        return QuotaFetchResult(windows={}, binding=QuotaStatus(0.0, None))
-    binding = _compute_binding(windows, threshold=_DEFAULT_THRESHOLD)
+        return QuotaFetchResult(
+            windows={}, binding=QuotaStatus(0.0, None, effective_threshold=100.0)
+        )
+    binding = _compute_binding(
+        windows,
+        short_threshold=short_threshold,
+        long_threshold=long_threshold,
+        long_patterns=long_patterns,
+    )
     return QuotaFetchResult(windows=windows, binding=binding)
 
 
@@ -219,7 +272,12 @@ async def _refresh_quota_cache(
     Exceptions from _fetch_quota propagate to the caller for supervision.
     """
     fetch_result = await _fetch_quota(
-        config.credentials_path, base_url=base_url, _httpx_timeout=_httpx_timeout
+        config.credentials_path,
+        short_threshold=config.short_window_threshold,
+        long_threshold=config.long_window_threshold,
+        long_patterns=list(config.long_window_patterns),
+        base_url=base_url,
+        _httpx_timeout=_httpx_timeout,
     )
     _write_cache(config.cache_path, fetch_result)
 
@@ -257,22 +315,29 @@ async def check_and_sleep_if_needed(
             "window_name": None,
         }
 
+    fetch_kwargs = {
+        "short_threshold": config.short_window_threshold,
+        "long_threshold": config.long_window_threshold,
+        "long_patterns": list(config.long_window_patterns),
+        "base_url": base_url,
+        "_httpx_timeout": _httpx_timeout,
+    }
+
     try:
         status = _read_cache(config.cache_path, config.cache_max_age)
         if status is None:
-            fetch_result = await _fetch_quota(
-                config.credentials_path, base_url=base_url, _httpx_timeout=_httpx_timeout
-            )
+            fetch_result = await _fetch_quota(config.credentials_path, **fetch_kwargs)
             _write_cache(config.cache_path, fetch_result)
             status = fetch_result.binding
 
-        if status.utilization < config.threshold:
+        if not status.should_block:
             return {
                 "should_sleep": False,
                 "sleep_seconds": 0,
                 "utilization": status.utilization,
                 "resets_at": status.resets_at.isoformat() if status.resets_at else None,
                 "window_name": status.window_name,
+                "effective_threshold": status.effective_threshold,
             }
 
         if status.resets_at is None:
@@ -288,13 +353,12 @@ async def check_and_sleep_if_needed(
                 "utilization": status.utilization,
                 "resets_at": None,
                 "window_name": status.window_name,
+                "effective_threshold": status.effective_threshold,
                 "reason": "unknown_reset",
             }
 
         # Re-fetch for accurate resets_at before returning sleep metadata
-        fetch_result = await _fetch_quota(
-            config.credentials_path, base_url=base_url, _httpx_timeout=_httpx_timeout
-        )
+        fetch_result = await _fetch_quota(config.credentials_path, **fetch_kwargs)
         _write_cache(config.cache_path, fetch_result)
         status = fetch_result.binding
 
@@ -312,6 +376,7 @@ async def check_and_sleep_if_needed(
                 "utilization": status.utilization,
                 "resets_at": None,
                 "window_name": status.window_name,
+                "effective_threshold": status.effective_threshold,
                 "reason": "unknown_reset",
             }
 
@@ -321,7 +386,8 @@ async def check_and_sleep_if_needed(
         _log.info(
             "quota threshold exceeded — caller should sleep",
             utilization=status.utilization,
-            threshold=config.threshold,
+            effective_threshold=status.effective_threshold,
+            window_name=status.window_name,
             sleep_seconds=sleep_secs,
             resets_at=status.resets_at.isoformat(),
         )
@@ -331,6 +397,7 @@ async def check_and_sleep_if_needed(
             "utilization": status.utilization,
             "resets_at": status.resets_at.isoformat(),
             "window_name": status.window_name,
+            "effective_threshold": status.effective_threshold,
         }
 
     except Exception as exc:

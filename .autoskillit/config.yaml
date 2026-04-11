@@ -30,4 +30,4 @@ github:
   default_repo: "TalonT-Org/AutoSkillit"
 
 quota_guard:
-  threshold: 95.0
+  short_window_threshold: 95.0

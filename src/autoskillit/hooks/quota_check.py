@@ -2,8 +2,10 @@
 """PreToolUse hook: quota check before run_skill.
 
 Reads the local quota cache file (written by autoskillit's quota module) and
-denies run_skill when utilization exceeds the threshold. Fails open when the
-cache is missing, expired, or unreadable — the next run_skill call will discover
+denies run_skill when the cached binding marks ``should_block=True``. The
+threshold classification is computed once on the cache write side, so this
+hook contains no threshold logic of its own. Fails open when the cache is
+missing, expired, or unreadable — the next run_skill call will discover
 quota exhaustion on its own.
 
 This script is stdlib-only so it can run under any Python interpreter without
@@ -17,7 +19,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 _DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
-_DEFAULT_THRESHOLD = 85.0
 _DEFAULT_CACHE_MAX_AGE = 300  # seconds
 
 HOOK_CONFIG_FILENAME = ".hook_config.json"
@@ -79,7 +80,8 @@ def _write_quota_log_event(event: dict, log_dir: Path | None) -> None:
     """Append a quota guard event to quota_events.jsonl at the log root.
 
     Silently no-ops on any error — hook observability must never block run_skill.
-    Event schema: {ts, event, threshold, utilization?, sleep_seconds?, resets_at?, cache_path?}
+    Event schema: {ts, event, effective_threshold?, window_name?, utilization?,
+    sleep_seconds?, resets_at?, cache_path?}
     """
     if log_dir is None:
         return
@@ -106,7 +108,6 @@ def main(*, cache_path_override: str | None = None) -> None:
         sys.exit(0)  # log but approve — don't block run_skill on hook bugs
 
     hook_config = _read_hook_config()
-    threshold = hook_config.get("threshold", _DEFAULT_THRESHOLD)
     cache_max_age = hook_config.get("cache_max_age", _DEFAULT_CACHE_MAX_AGE)
     # Function parameter > env var > hook config > module default
     cache_path_str = (
@@ -124,7 +125,6 @@ def main(*, cache_path_override: str | None = None) -> None:
             {
                 "ts": ts,
                 "event": "cache_miss",
-                "threshold": threshold,
                 "cache_path": cache_path_str,
             },
             log_dir,
@@ -136,19 +136,21 @@ def main(*, cache_path_override: str | None = None) -> None:
         if not binding or not isinstance(binding, dict):
             raise KeyError("binding")
         utilization = float(binding["utilization"])
+        should_block = bool(binding.get("should_block", False))
+        effective_threshold = float(binding.get("effective_threshold", 0.0))
+        window_name = str(binding.get("window_name", "unknown"))
     except (KeyError, ValueError, TypeError):
         _write_quota_log_event(
             {
                 "ts": ts,
                 "event": "parse_error",
-                "threshold": threshold,
                 "cache_path": cache_path_str,
             },
             log_dir,
         )
         sys.exit(0)  # malformed cache — fail open
 
-    if utilization >= threshold:
+    if should_block:
         resets_at_str = binding.get("resets_at")
         if resets_at_str:
             try:
@@ -165,7 +167,8 @@ def main(*, cache_path_override: str | None = None) -> None:
             {
                 "ts": ts,
                 "event": "blocked",
-                "threshold": threshold,
+                "effective_threshold": effective_threshold,
+                "window_name": window_name,
                 "utilization": utilization,
                 "sleep_seconds": n,
                 "resets_at": resets_at_str,
@@ -180,7 +183,8 @@ def main(*, cache_path_override: str | None = None) -> None:
                         "permissionDecision": "deny",
                         "permissionDecisionReason": (
                             f"QUOTA WAIT REQUIRED (temporary — NOT a permanent error). "
-                            f"Utilization: {utilization:.0f}% (threshold: {threshold:.0f}%). "
+                            f"Utilization: {utilization:.0f}% on window '{window_name}' "
+                            f"(threshold: {effective_threshold:.0f}%). "
                             f"MANDATORY ACTION: Call run_cmd with: "
                             f'python3 -c "import time; time.sleep({n})" timeout={n + 30} — '
                             f"then retry the SAME run_skill call with identical arguments. "
@@ -197,7 +201,8 @@ def main(*, cache_path_override: str | None = None) -> None:
             {
                 "ts": ts,
                 "event": "approved",
-                "threshold": threshold,
+                "effective_threshold": effective_threshold,
+                "window_name": window_name,
                 "utilization": utilization,
             },
             log_dir,

@@ -53,7 +53,7 @@ class TestReadCache:
 
         now = datetime.now(UTC)
         cache_data = {
-            "schema_version": 2,
+            "schema_version": 3,
             "fetched_at": (now - timedelta(seconds=30)).isoformat(),
             "windows": {
                 "five_hour": {
@@ -65,6 +65,8 @@ class TestReadCache:
                 "window_name": "five_hour",
                 "utilization": 87.3,
                 "resets_at": "2026-02-27T20:15:00+00:00",
+                "should_block": True,
+                "effective_threshold": 85.0,
             },
         }
         cache_path = tmp_path / "usage_cache.json"
@@ -226,7 +228,6 @@ class TestCheckAndSleepIfNeeded:
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = QuotaGuardConfig(
             enabled=True,
-            threshold=80.0,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
         )
@@ -259,7 +260,6 @@ class TestCheckAndSleepIfNeeded:
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = QuotaGuardConfig(
             enabled=True,
-            threshold=80.0,
             buffer_seconds=0,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
@@ -269,7 +269,11 @@ class TestCheckAndSleepIfNeeded:
             return QuotaFetchResult(
                 windows={"five_hour": QuotaWindowEntry(utilization=util, resets_at=resets_at)},
                 binding=QuotaStatus(
-                    utilization=util, resets_at=resets_at, window_name="five_hour"
+                    utilization=util,
+                    resets_at=resets_at,
+                    window_name="five_hour",
+                    should_block=util >= 85.0,
+                    effective_threshold=85.0,
                 ),
             )
 
@@ -304,7 +308,6 @@ class TestCheckAndSleepIfNeeded:
         )
         config = QuotaGuardConfig(
             enabled=True,
-            threshold=80.0,
             cache_max_age=120,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(cache_path),
@@ -378,7 +381,6 @@ class TestCheckAndSleepIfNeeded:
 
         config = QuotaGuardConfig(
             enabled=True,
-            threshold=80.0,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
         )
@@ -386,12 +388,24 @@ class TestCheckAndSleepIfNeeded:
         # First fetch: above threshold, has resets_at so Gate 1 passes
         first_result = QuotaFetchResult(
             windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=resets)},
-            binding=QuotaStatus(utilization=90.0, resets_at=resets, window_name="five_hour"),
+            binding=QuotaStatus(
+                utilization=90.0,
+                resets_at=resets,
+                window_name="five_hour",
+                should_block=True,
+                effective_threshold=85.0,
+            ),
         )
         # Second fetch (re-fetch): above threshold, resets_at is None → Gate 2 fires
         second_result = QuotaFetchResult(
             windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=None)},
-            binding=QuotaStatus(utilization=90.0, resets_at=None, window_name="five_hour"),
+            binding=QuotaStatus(
+                utilization=90.0,
+                resets_at=None,
+                window_name="five_hour",
+                should_block=True,
+                effective_threshold=85.0,
+            ),
         )
 
         mock_fetch = AsyncMock(side_effect=[first_result, second_result])
@@ -424,7 +438,6 @@ class TestCheckAndSleepResetAtNoneBlocks:
 
         config = QuotaGuardConfig(
             enabled=True,
-            threshold=80.0,
             buffer_seconds=60,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
@@ -433,7 +446,13 @@ class TestCheckAndSleepResetAtNoneBlocks:
         async def mock_fetch(path, **kwargs):
             return QuotaFetchResult(
                 windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=None)},
-                binding=QuotaStatus(utilization=90.0, resets_at=None, window_name="five_hour"),
+                binding=QuotaStatus(
+                    utilization=90.0,
+                    resets_at=None,
+                    window_name="five_hour",
+                    should_block=True,
+                    effective_threshold=85.0,
+                ),
             )
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
@@ -456,7 +475,6 @@ class TestCheckAndSleepResetAtNoneBlocks:
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = QuotaGuardConfig(
             enabled=True,
-            threshold=80.0,
             buffer_seconds=60,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
@@ -464,11 +482,23 @@ class TestCheckAndSleepResetAtNoneBlocks:
         # First fetch has resets_at (passes first None guard), second fetch has None
         first_result = QuotaFetchResult(
             windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=resets_at)},
-            binding=QuotaStatus(utilization=90.0, resets_at=resets_at, window_name="five_hour"),
+            binding=QuotaStatus(
+                utilization=90.0,
+                resets_at=resets_at,
+                window_name="five_hour",
+                should_block=True,
+                effective_threshold=85.0,
+            ),
         )
         second_result = QuotaFetchResult(
             windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=None)},
-            binding=QuotaStatus(utilization=90.0, resets_at=None, window_name="five_hour"),
+            binding=QuotaStatus(
+                utilization=90.0,
+                resets_at=None,
+                window_name="five_hour",
+                should_block=True,
+                effective_threshold=85.0,
+            ),
         )
         mock_fetch = AsyncMock(side_effect=[first_result, second_result])
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
@@ -493,12 +523,17 @@ class TestCheckAndSleepResetAtNoneBlocks:
             str(cache_path),
             QuotaFetchResult(
                 windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=None)},
-                binding=QuotaStatus(utilization=90.0, resets_at=None, window_name="five_hour"),
+                binding=QuotaStatus(
+                    utilization=90.0,
+                    resets_at=None,
+                    window_name="five_hour",
+                    should_block=True,
+                    effective_threshold=85.0,
+                ),
             ),
         )
         config = QuotaGuardConfig(
             enabled=True,
-            threshold=80.0,
             buffer_seconds=60,
             cache_max_age=120,
             credentials_path=str(tmp_path / ".credentials.json"),
@@ -527,7 +562,6 @@ class TestCheckAndSleepResetAtNoneBlocks:
 
         config = QuotaGuardConfig(
             enabled=True,
-            threshold=80.0,
             buffer_seconds=120,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
@@ -536,7 +570,13 @@ class TestCheckAndSleepResetAtNoneBlocks:
         async def mock_fetch(path, **kwargs):
             return QuotaFetchResult(
                 windows={"five_hour": QuotaWindowEntry(utilization=90.0, resets_at=None)},
-                binding=QuotaStatus(utilization=90.0, resets_at=None, window_name="five_hour"),
+                binding=QuotaStatus(
+                    utilization=90.0,
+                    resets_at=None,
+                    window_name="five_hour",
+                    should_block=True,
+                    effective_threshold=85.0,
+                ),
             )
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
@@ -560,7 +600,6 @@ class TestCheckAndSleepResetAtNoneBlocks:
         # Do NOT override buffer_seconds — exercises the real default (60)
         config = QuotaGuardConfig(
             enabled=True,
-            threshold=80.0,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
         )
@@ -569,7 +608,11 @@ class TestCheckAndSleepResetAtNoneBlocks:
             return QuotaFetchResult(
                 windows={"five_hour": QuotaWindowEntry(utilization=util, resets_at=resets_at)},
                 binding=QuotaStatus(
-                    utilization=util, resets_at=resets_at, window_name="five_hour"
+                    utilization=util,
+                    resets_at=resets_at,
+                    window_name="five_hour",
+                    should_block=util >= 85.0,
+                    effective_threshold=85.0,
                 ),
             )
 
@@ -605,7 +648,13 @@ class TestIntegration:
             str(cache_path),
             QuotaFetchResult(
                 windows={"five_hour": QuotaWindowEntry(utilization=95.0, resets_at=None)},
-                binding=QuotaStatus(utilization=95.0, resets_at=None, window_name="five_hour"),
+                binding=QuotaStatus(
+                    utilization=95.0,
+                    resets_at=None,
+                    window_name="five_hour",
+                    should_block=True,
+                    effective_threshold=85.0,
+                ),
             ),
         )
 
@@ -636,7 +685,12 @@ class TestMultiWindowSelection:
             "one_hour": QuotaWindowEntry(utilization=91.0, resets_at=resets_one_hour),
             "five_hour": QuotaWindowEntry(utilization=35.0, resets_at=now + timedelta(hours=4)),
         }
-        binding = _compute_binding(windows, threshold=85.0)
+        binding = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=["weekly", "sonnet", "opus"],
+        )
         assert binding.utilization == pytest.approx(91.0)
         assert binding.resets_at == resets_one_hour
         assert binding.window_name == "one_hour"
@@ -653,7 +707,12 @@ class TestMultiWindowSelection:
             "one_day": QuotaWindowEntry(utilization=97.0, resets_at=resets_one_day),
             "five_hour": QuotaWindowEntry(utilization=35.0, resets_at=now + timedelta(hours=4)),
         }
-        binding = _compute_binding(windows, threshold=85.0)
+        binding = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=["weekly", "sonnet", "opus"],
+        )
         assert binding.window_name == "one_day"
         assert binding.resets_at == resets_one_day
 
@@ -668,7 +727,12 @@ class TestMultiWindowSelection:
             "five_hour": QuotaWindowEntry(utilization=60.0, resets_at=five_hour_resets),
             "one_day": QuotaWindowEntry(utilization=30.0, resets_at=now + timedelta(days=1)),
         }
-        binding = _compute_binding(windows, threshold=85.0)
+        binding = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=["weekly", "sonnet", "opus"],
+        )
         assert binding.utilization == pytest.approx(60.0)
         assert binding.window_name == "five_hour"
         assert binding.resets_at == five_hour_resets
@@ -677,7 +741,12 @@ class TestMultiWindowSelection:
     def test_empty_windows_returns_zero_sentinel(self):
         from autoskillit.execution.quota import _compute_binding
 
-        binding = _compute_binding({}, threshold=85.0)
+        binding = _compute_binding(
+            {},
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=["weekly", "sonnet", "opus"],
+        )
         assert binding.utilization == pytest.approx(0.0)
         assert binding.resets_at is None
 
@@ -726,7 +795,7 @@ class TestMultiWindowSelection:
         from autoskillit.execution.quota import _read_cache
 
         new_cache = {
-            "schema_version": 2,
+            "schema_version": 3,
             "fetched_at": datetime.now(UTC).isoformat(),
             "windows": {
                 "one_hour": {
@@ -742,6 +811,8 @@ class TestMultiWindowSelection:
                 "window_name": "one_hour",
                 "utilization": 91.0,
                 "resets_at": "2026-04-10T09:45:00+00:00",
+                "should_block": True,
+                "effective_threshold": 85.0,
             },
         }
         cache_path = tmp_path / "new_cache.json"
@@ -750,6 +821,283 @@ class TestMultiWindowSelection:
         assert status is not None
         assert status.utilization == pytest.approx(91.0)
         assert status.window_name == "one_hour"
+
+
+class TestPerWindowThresholds:
+    """Per-window threshold classification: short windows block at 85%, long at 98%."""
+
+    _LONG_PATTERNS = ["weekly", "sonnet", "opus"]
+
+    def test_threshold_for_window_short_default(self):
+        from autoskillit.execution.quota import _threshold_for_window
+
+        assert (
+            _threshold_for_window(
+                "five_hour",
+                short_threshold=85.0,
+                long_threshold=98.0,
+                long_patterns=self._LONG_PATTERNS,
+            )
+            == 85.0
+        )
+
+    def test_threshold_for_window_long_weekly(self):
+        from autoskillit.execution.quota import _threshold_for_window
+
+        assert (
+            _threshold_for_window(
+                "weekly",
+                short_threshold=85.0,
+                long_threshold=98.0,
+                long_patterns=self._LONG_PATTERNS,
+            )
+            == 98.0
+        )
+
+    def test_threshold_for_window_long_sonnet_substring(self):
+        from autoskillit.execution.quota import _threshold_for_window
+
+        assert (
+            _threshold_for_window(
+                "weekly_sonnet",
+                short_threshold=85.0,
+                long_threshold=98.0,
+                long_patterns=self._LONG_PATTERNS,
+            )
+            == 98.0
+        )
+
+    def test_threshold_for_window_case_insensitive(self):
+        from autoskillit.execution.quota import _threshold_for_window
+
+        assert (
+            _threshold_for_window(
+                "Weekly",
+                short_threshold=85.0,
+                long_threshold=98.0,
+                long_patterns=self._LONG_PATTERNS,
+            )
+            == 98.0
+        )
+
+    def test_threshold_for_window_unknown_uses_short(self):
+        from autoskillit.execution.quota import _threshold_for_window
+
+        assert (
+            _threshold_for_window(
+                "context",
+                short_threshold=85.0,
+                long_threshold=98.0,
+                long_patterns=self._LONG_PATTERNS,
+            )
+            == 85.0
+        )
+
+    def test_compute_binding_picks_short_when_only_short_exhausted(self):
+        from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
+
+        now = datetime.now(UTC)
+        windows = {
+            "five_hour": QuotaWindowEntry(utilization=90.0, resets_at=now + timedelta(hours=1)),
+            "weekly": QuotaWindowEntry(utilization=80.0, resets_at=now + timedelta(days=4)),
+        }
+        binding = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+        )
+        assert binding.window_name == "five_hour"
+        assert binding.should_block is True
+        assert binding.effective_threshold == pytest.approx(85.0)
+
+    def test_compute_binding_does_not_block_weekly_below_long_threshold(self):
+        """Regression test for issue #721: weekly at 86% must not block.
+
+        Long-window quotas (weekly, sonnet, opus) reset across multi-day windows,
+        so 14% remaining headroom is comfortable, not exhausted. The pre-fix
+        behaviour blocked the pipeline for ~4 days at 86% weekly.
+        """
+        from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
+
+        now = datetime.now(UTC)
+        windows = {
+            "weekly": QuotaWindowEntry(utilization=86.0, resets_at=now + timedelta(days=4)),
+            "five_hour": QuotaWindowEntry(utilization=50.0, resets_at=now + timedelta(hours=1)),
+        }
+        binding = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+        )
+        assert binding.should_block is False
+        assert binding.effective_threshold == pytest.approx(98.0)
+
+    def test_compute_binding_blocks_weekly_at_99_percent(self):
+        from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
+
+        now = datetime.now(UTC)
+        windows = {
+            "weekly": QuotaWindowEntry(utilization=99.0, resets_at=now + timedelta(days=4)),
+        }
+        binding = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+        )
+        assert binding.should_block is True
+        assert binding.effective_threshold == pytest.approx(98.0)
+
+    def test_compute_binding_picks_latest_resets_among_exhausted(self):
+        """Among exhausted windows, the one with the latest reset wins."""
+        from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
+
+        now = datetime.now(UTC)
+        weekly_resets = now + timedelta(days=4)
+        windows = {
+            "five_hour": QuotaWindowEntry(utilization=90.0, resets_at=now + timedelta(hours=1)),
+            "weekly": QuotaWindowEntry(utilization=99.0, resets_at=weekly_resets),
+        }
+        binding = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+        )
+        assert binding.window_name == "weekly"
+        assert binding.resets_at == weekly_resets
+        assert binding.should_block is True
+
+    def test_write_cache_includes_should_block_and_effective_threshold(self, tmp_path):
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _write_cache,
+        )
+
+        now = datetime.now(UTC)
+        weekly_resets = now + timedelta(days=4)
+        windows = {
+            "weekly": QuotaWindowEntry(utilization=86.0, resets_at=weekly_resets),
+        }
+        binding = QuotaStatus(
+            utilization=86.0,
+            resets_at=weekly_resets,
+            window_name="weekly",
+            should_block=False,
+            effective_threshold=98.0,
+        )
+        result = QuotaFetchResult(windows=windows, binding=binding)
+        cache_path = tmp_path / "cache.json"
+        _write_cache(str(cache_path), result)
+        data = json.loads(cache_path.read_text())
+        assert data["binding"]["should_block"] is False
+        assert data["binding"]["effective_threshold"] == pytest.approx(98.0)
+
+    def test_read_cache_round_trip_should_block(self, tmp_path):
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _read_cache,
+            _write_cache,
+        )
+
+        now = datetime.now(UTC)
+        weekly_resets = now + timedelta(days=4)
+        windows = {
+            "weekly": QuotaWindowEntry(utilization=99.0, resets_at=weekly_resets),
+        }
+        binding = QuotaStatus(
+            utilization=99.0,
+            resets_at=weekly_resets,
+            window_name="weekly",
+            should_block=True,
+            effective_threshold=98.0,
+        )
+        cache_path = tmp_path / "cache.json"
+        _write_cache(str(cache_path), QuotaFetchResult(windows=windows, binding=binding))
+        status = _read_cache(str(cache_path), max_age=300)
+        assert status is not None
+        assert status.should_block is True
+        assert status.effective_threshold == pytest.approx(98.0)
+        assert status.window_name == "weekly"
+
+    @pytest.mark.anyio
+    async def test_check_and_sleep_returns_false_for_weekly_at_86_percent(
+        self, monkeypatch, tmp_path
+    ):
+        """End-to-end regression test for #721 — weekly at 86% must not sleep."""
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaWindowEntry,
+            _compute_binding,
+            check_and_sleep_if_needed,
+        )
+
+        now = datetime.now(UTC)
+        windows = {
+            "weekly": QuotaWindowEntry(utilization=86.0, resets_at=now + timedelta(days=4)),
+            "five_hour": QuotaWindowEntry(utilization=2.0, resets_at=now + timedelta(hours=1)),
+        }
+        binding = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+        )
+
+        async def fake_fetch(credentials_path, **kwargs):
+            return QuotaFetchResult(windows=windows, binding=binding)
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
+        config = QuotaGuardConfig(
+            cache_path=str(tmp_path / "cache.json"),
+            credentials_path=str(tmp_path / "creds.json"),
+        )
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is False
+        assert result["window_name"] == "weekly"
+
+    @pytest.mark.anyio
+    async def test_check_and_sleep_returns_true_for_weekly_at_99_percent(
+        self, monkeypatch, tmp_path
+    ):
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaWindowEntry,
+            _compute_binding,
+            check_and_sleep_if_needed,
+        )
+
+        now = datetime.now(UTC)
+        weekly_resets = now + timedelta(days=4)
+        windows = {
+            "weekly": QuotaWindowEntry(utilization=99.0, resets_at=weekly_resets),
+            "five_hour": QuotaWindowEntry(utilization=2.0, resets_at=now + timedelta(hours=1)),
+        }
+        binding = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+        )
+
+        async def fake_fetch(credentials_path, **kwargs):
+            return QuotaFetchResult(windows=windows, binding=binding)
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
+        config = QuotaGuardConfig(
+            cache_path=str(tmp_path / "cache.json"),
+            credentials_path=str(tmp_path / "creds.json"),
+        )
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is True
+        assert result["window_name"] == "weekly"
+        assert result["sleep_seconds"] > 0
 
 
 class TestRefreshQuotaCache:
@@ -825,7 +1173,7 @@ class TestCacheSchemaVersion:
 
         _reset_schema_drift_logged_for_tests()
 
-    def test_write_cache_embeds_schema_version_2(self, tmp_path):
+    def test_write_cache_embeds_schema_version(self, tmp_path):
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
@@ -840,7 +1188,7 @@ class TestCacheSchemaVersion:
         cache_path = tmp_path / "cache.json"
         _write_cache(str(cache_path), result)
         raw = json.loads(cache_path.read_text())
-        assert raw["schema_version"] == 2
+        assert raw["schema_version"] == 3
 
     def test_write_cache_uses_write_versioned_json(self, tmp_path, monkeypatch):
         from autoskillit.execution.quota import (
@@ -868,9 +1216,9 @@ class TestCacheSchemaVersion:
         cache_path = tmp_path / "cache.json"
         _write_cache(str(cache_path), result)
         assert len(calls) == 1
-        assert calls[0]["schema_version"] == 2
+        assert calls[0]["schema_version"] == 3
 
-    def test_read_cache_schema_v2_returns_status(self, tmp_path):
+    def test_read_cache_schema_round_trip_returns_status(self, tmp_path):
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
@@ -1042,4 +1390,4 @@ class TestCacheSchemaVersion:
         )
         await check_and_sleep_if_needed(config)
         new_data = json.loads(cache_path.read_text())
-        assert new_data["schema_version"] == 2
+        assert new_data["schema_version"] == 3

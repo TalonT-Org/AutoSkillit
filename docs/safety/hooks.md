@@ -17,9 +17,12 @@ Denies merges and pushes targeting branches in `safety.protected_branches`
 
 ### `quota_check.py`
 **Guarded tool:** `run_skill`
-Blocks launching new headless sessions when API quota utilization exceeds
-`quota_guard.threshold` (default 85.0% of the 5-hour window). Reports the
-exact sleep duration the orchestrator must wait.
+Blocks launching new headless sessions when the cached binding window marks
+`should_block=True`. The threshold is per-window: short windows (e.g.
+`five_hour`) use `quota_guard.short_window_threshold` (default 85.0%); long
+windows matched by `quota_guard.long_window_patterns` (default `weekly`,
+`sonnet`, `opus`) use `quota_guard.long_window_threshold` (default 98.0%).
+Reports the exact sleep duration the orchestrator must wait.
 
 ### `skill_command_guard.py`
 **Guarded tool:** `run_skill`
@@ -74,8 +77,9 @@ table to the PR body so reviewers can see per-step token cost.
 ### `quota_post_check.py`
 **Guarded tool:** `run_skill`
 After `run_skill` returns, appends a quota warning to the tool output when
-utilization has crossed `quota_guard.threshold`. Gives the orchestrator a
-chance to back off voluntarily before the PreToolUse hook starts denying.
+the cached binding window marks `should_block=True` (per-window threshold —
+see `quota_check.py` above). Gives the orchestrator a chance to back off
+voluntarily before the PreToolUse hook starts denying.
 
 ## SessionStart hook (1)
 
@@ -113,7 +117,9 @@ safety:
 
 quota_guard:
   enabled: true
-  threshold: 85.0
+  short_window_threshold: 85.0
+  long_window_threshold: 98.0
+  long_window_patterns: ["weekly", "sonnet", "opus"]
   buffer_seconds: 60
 ```
 

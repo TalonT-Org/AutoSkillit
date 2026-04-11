@@ -139,9 +139,14 @@ Default: `command: null` (disabled), `preserve_dirs: []`.
 ```yaml
 quota_guard:
   enabled: true
-  threshold: 85.0          # block run_skill when 5-hour utilization exceeds this %
-  buffer_seconds: 60       # extra buffer after quota reset before resuming
-  cache_max_age: 60        # seconds before a live quota fetch is triggered
+  short_window_threshold: 85.0   # block at this % for short windows (e.g. five_hour)
+  long_window_threshold: 98.0    # block at this % for long windows (weekly, sonnet, opus)
+  long_window_patterns:          # substrings (case-insensitive) that classify a
+    - weekly                     # window name as long-window
+    - sonnet
+    - opus
+  buffer_seconds: 60             # extra buffer after quota reset before resuming
+  cache_max_age: 60              # seconds before a live quota fetch is triggered
 ```
 
 Check current quota: `autoskillit quota-status`.

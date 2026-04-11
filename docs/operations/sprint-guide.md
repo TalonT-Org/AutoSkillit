@@ -51,15 +51,24 @@ bug surfaced during the run.
 
 ## Quota tuning + buffer
 
-The quota guard blocks new headless sessions when 5-hour rolling utilization
-exceeds `quota_guard.threshold` (default 85.0%). Two settings tune the
-behaviour:
+The quota guard blocks new headless sessions when the binding rate-limit
+window crosses its own per-window threshold. Short windows (e.g. `five_hour`)
+use `quota_guard.short_window_threshold` (default 85.0%); long windows
+matched by `quota_guard.long_window_patterns` (default `weekly`, `sonnet`,
+`opus`) use `quota_guard.long_window_threshold` (default 98.0%) — short-window
+exhaustion means imminent throttling, while 15% headroom on a multi-day
+weekly window is comfortable.
 
 ```yaml
 quota_guard:
   enabled: true
-  threshold: 85.0           # block at 85% of the 5-hour budget
-  buffer_seconds: 60        # extra delay above the strict reset time
+  short_window_threshold: 85.0   # block at 85% for short windows
+  long_window_threshold: 98.0    # block at 98% for long windows (weekly, sonnet, opus)
+  long_window_patterns:
+    - weekly
+    - sonnet
+    - opus
+  buffer_seconds: 60             # extra delay above the strict reset time
   cache_path: "~/.claude/autoskillit_quota_cache.json"
 ```
 

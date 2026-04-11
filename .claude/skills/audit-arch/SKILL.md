@@ -305,7 +305,7 @@ Before reporting any finding, complete the mandatory verification for its catego
 
 ## Audit Workflow
 
-1. **Launch parallel subagents** for each principle
+1. **Launch parallel subagents** for each principle. Each subagent MUST NOT invent or enforce principles beyond its assigned principle.
 2. **Apply P1 3-question gate** before finalizing any P1 findings — confirm all three questions are YES and the pattern is not listed under "Non-SSOT Patterns — Do NOT flag these"
 3. **Apply cross-cutting exemptions** — verify CC-flagged patterns are not listed under "Standard patterns that are NOT cross-cutting violations" (error accumulation, validator collections, or facade re-exports)
 4. **Apply severity gate** — CRITICAL requires data loss, security bypass, or correctness bug; downgrade findings that do not meet this bar
@@ -344,9 +344,15 @@ Before reporting any finding, complete the mandatory verification for its catego
 
 ## Principle Suggestion (Optional)
 
-After consolidating findings, consider whether a **new** architectural principle would significantly benefit the codebase.
+Launch ONE dedicated subagent AFTER all per-principle findings are consolidated. This subagent's only job is to propose a single new principle.
 
-**Criteria - ALL must be true:**
+**Constraints — ALL are mandatory:**
+- At most ONE suggestion per audit, labeled "PROPOSED PRINCIPLE".
+- A proposed principle MUST NOT generate findings, errors, warnings, or severity ratings.
+- A proposed principle MUST NOT be enforced in this or any subsequent audit.
+- Subagents running P1–P14 audits MUST NOT invent or enforce principles beyond their assigned principle.
+
+**Criteria — ALL must be true** (for the dedicated suggestion subagent):
 - Not a one-off issue
 - No existing principle covers it
 - Would prevent recurring architectural debt or bugs

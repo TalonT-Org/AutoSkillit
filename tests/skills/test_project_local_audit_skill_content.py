@@ -173,7 +173,7 @@ def test_audit_arch_principle_suggestion_constraints() -> None:
     assert "ONE dedicated subagent" in content, (
         "audit-arch/SKILL.md Principle Suggestion missing 'ONE dedicated subagent' constraint"
     )
-    assert "at most ONE" in content, (
+    assert "At most ONE" in content, (
         "audit-arch/SKILL.md Principle Suggestion missing 'at most ONE' constraint"
     )
     assert "MUST NOT generate findings" in content, (

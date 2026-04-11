@@ -123,7 +123,11 @@ def _count_hooks_by_event() -> dict[str, int]:
 
 def _quota_threshold_default() -> float:
     data = yaml.safe_load(_read(SRC_DIR / "config" / "defaults.yaml"))
-    return float(data["quota_guard"]["threshold"])
+    quota = data.get("quota_guard")
+    assert quota is not None, "quota_guard key missing from config/defaults.yaml"
+    threshold = quota.get("threshold")
+    assert threshold is not None, "quota_guard.threshold key missing from config/defaults.yaml"
+    return float(threshold)
 
 
 def _count_doctor_checks() -> int:
@@ -134,7 +138,7 @@ def _count_doctor_checks() -> int:
     ``run_doctor`` so those comments do not double-count.
     """
     text = _read(SRC_DIR / "cli" / "_doctor.py")
-    body = re.search(r"def run_doctor\(.*?\n((?:    .*\n|\n)+)", text)
+    body = re.search(r"def run_doctor\(.*?\n((?:    .*\n|\n)+)", text, re.DOTALL)
     assert body, "run_doctor not found in _doctor.py"
     body_text = body.group(1)
     numbered = len(re.findall(r"# Check \d+:", body_text))

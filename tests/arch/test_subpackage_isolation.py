@@ -695,6 +695,25 @@ def test_no_subpackage_exceeds_10_files() -> None:
     )
 
 
+def test_data_directories_are_not_python_packages() -> None:
+    """REQ-ARCH-005: data-only directories under src/autoskillit/ must not
+    contain __init__.py — that turns them into phantom Python packages
+    distinct from the real L2 module of similar name."""
+    src = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+    data_dirs = {"migrations", "recipes", "skills", "skills_extended"}
+    offenders: list[str] = []
+    for name in data_dirs:
+        d = src / name
+        if not d.is_dir():
+            continue
+        init = d / "__init__.py"
+        if init.exists():
+            offenders.append(str(init.relative_to(src)))
+    assert not offenders, (
+        f"Data directories must not be Python packages. Remove __init__.py from: {offenders}"
+    )
+
+
 # ── REQ-CNST-010: Per-module source size limit ───────────────────────────────
 # REQ-CNST-010: No source module in src/autoskillit/ may exceed 1000 lines.
 # Modules that exceed this limit require a documented exemption with rule ID and

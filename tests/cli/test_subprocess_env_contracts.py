@@ -363,9 +363,12 @@ class _ClaudeLaunchWalker:
             if fn == "build_claude_env":
                 return True, ""
         if isinstance(env_val, ast.Name):
-            # Parameter / local re-binding: rely on the function owning it to pass
-            # a scrubbed env. This escape hatch is narrow — direct os.environ bindings
-            # would already be visible as a Dict/Attribute at the call site.
+            # Resolve one level of local binding to catch aliased os.environ.
+            bound = self._resolve_name(env_val)
+            if bound is not None:
+                return self._env_shape_ok(bound)
+            # Unresolvable name (parameter / outer scope): rely on the function
+            # owning it to pass a scrubbed env.
             return True, ""
         return False, f"env= has unrecognised shape: {ast.dump(env_val)[:60]}"
 

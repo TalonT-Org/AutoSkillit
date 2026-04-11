@@ -299,8 +299,9 @@ def test_post_hook_silent_when_weekly_below_long_threshold(tmp_path):
         effective_threshold=98.0,
     )
     event = _build_event()
-    out, _ = _run_hook(event=event, cache_path=cache)
+    out, exit_code = _run_hook(event=event, cache_path=cache)
     assert out.strip() == ""
+    assert exit_code == 0
 
 
 # T-PCHK-PWT-2: weekly above 98% must still warn.

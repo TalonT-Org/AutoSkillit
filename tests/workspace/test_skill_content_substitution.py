@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
-from unittest.mock import patch
 
 import pytest
 
@@ -32,28 +30,35 @@ def _make_synth_skill_md(tmp_path: Path, name: str, body: str) -> Path:
 
 
 def _provider_with_synth(
-    tmp_path: Path, name: str, body: str, *, temp_dir_relpath: str = ".autoskillit/temp"
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    name: str,
+    body: str,
+    *,
+    temp_dir_relpath: str = ".autoskillit/temp",
 ) -> tuple[SkillsDirectoryProvider, _StubInfo]:
     provider = SkillsDirectoryProvider(temp_dir_relpath=temp_dir_relpath)
     info = _StubInfo(_make_synth_skill_md(tmp_path, name, body), name)
-    patcher = patch.object(
-        provider._resolver, "resolve", side_effect=lambda n: info if n == name else None
-    )
-    patcher.start()
+    monkeypatch.setattr(provider._resolver, "resolve", lambda n: info if n == name else None)
     return provider, info
 
 
-def test_get_skill_content_substitutes_default_temp_dir(tmp_path: Path) -> None:
+def test_get_skill_content_substitutes_default_temp_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     provider, _ = _provider_with_synth(
-        tmp_path, "synth_default", "Write to {{AUTOSKILLIT_TEMP}}/foo/output.md"
+        monkeypatch, tmp_path, "synth_default", "Write to {{AUTOSKILLIT_TEMP}}/foo/output.md"
     )
     content = provider.get_skill_content("synth_default", gated=False)
     assert "{{AUTOSKILLIT_TEMP}}" not in content
     assert ".autoskillit/temp/foo/output.md" in content
 
 
-def test_get_skill_content_substitutes_custom_temp_dir(tmp_path: Path) -> None:
+def test_get_skill_content_substitutes_custom_temp_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     provider, _ = _provider_with_synth(
+        monkeypatch,
         tmp_path,
         "synth_custom",
         "Write to {{AUTOSKILLIT_TEMP}}/foo",
@@ -63,17 +68,21 @@ def test_get_skill_content_substitutes_custom_temp_dir(tmp_path: Path) -> None:
     assert ".build/scratch/foo" in content
 
 
-def test_get_skill_content_substitution_runs_after_gating(tmp_path: Path) -> None:
+def test_get_skill_content_substitution_runs_after_gating(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     provider, _ = _provider_with_synth(
-        tmp_path, "synth_gated", "Write to {{AUTOSKILLIT_TEMP}}/x"
+        monkeypatch, tmp_path, "synth_gated", "Write to {{AUTOSKILLIT_TEMP}}/x"
     )
     content = provider.get_skill_content("synth_gated", gated=True)
     assert "disable-model-invocation: true" in content
     assert ".autoskillit/temp/x" in content
 
 
-def test_get_skill_content_no_placeholder_no_change(tmp_path: Path) -> None:
-    provider, _ = _provider_with_synth(tmp_path, "synth_plain", "Hello world.")
+def test_get_skill_content_no_placeholder_no_change(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    provider, _ = _provider_with_synth(monkeypatch, tmp_path, "synth_plain", "Hello world.")
     content = provider.get_skill_content("synth_plain", gated=False)
     assert "Hello world." in content
 
@@ -95,11 +104,14 @@ def test_init_session_writes_substituted_skill_md_for_real_skill(
     substituted.
     """
     provider = SkillsDirectoryProvider(temp_dir_relpath=".autoskillit/temp")
-    candidates = [
-        s
-        for s in provider.list_skills()
-        if "{{AUTOSKILLIT_TEMP}}" in s.path.read_text(encoding="utf-8")
-    ]
+    candidates = sorted(
+        (
+            s
+            for s in provider.list_skills()
+            if "{{AUTOSKILLIT_TEMP}}" in s.path.read_text(encoding="utf-8")
+        ),
+        key=lambda s: s.name,
+    )
     assert candidates, "expected at least one bundled skill with the placeholder"
     target = candidates[0]
 
@@ -107,9 +119,7 @@ def test_init_session_writes_substituted_skill_md_for_real_skill(
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=ephemeral_root)
     validated = mgr.init_session(session_id="sess-1", cook_session=True)
 
-    written = (
-        Path(str(validated.path)) / ".claude" / "skills" / target.name / "SKILL.md"
-    )
+    written = Path(str(validated.path)) / ".claude" / "skills" / target.name / "SKILL.md"
     assert written.exists(), f"ephemeral SKILL.md not written at {written}"
     text = written.read_text()
     assert "{{AUTOSKILLIT_TEMP}}" not in text, (

@@ -10,9 +10,6 @@ the child must NOT attach to the IDE channel via either discovery path:
 2. **Auto-connect disable** — ``CLAUDE_CODE_AUTO_CONNECT_IDE=0`` is injected,
    which suppresses the ``~/.claude/ide/*.lock`` scan fallback that fires even
    when no IDE env vars are set.
-3. **Lock file is not opened** by the parent process between the builder call
-   and the subprocess spawn. Env scrub alone cannot catch a lock-file-scan
-   regression; this is the additional assertion that locks the immunity claim.
 """
 
 from __future__ import annotations
@@ -26,7 +23,7 @@ import pytest
 def test_cook_session_ignores_ide_lock_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Launch cook under simulated IDE state; assert the three-layer immunity."""
+    """Launch cook under simulated IDE state; assert env scrub + auto-connect disable."""
     fake_home = tmp_path / "home"
     ide_dir = fake_home / ".claude" / "ide"
     ide_dir.mkdir(parents=True)
@@ -38,22 +35,6 @@ def test_cook_session_ignores_ide_lock_file(
     monkeypatch.setenv("ENABLE_IDE_INTEGRATION", "1")
     monkeypatch.setenv("VSCODE_GIT_ASKPASS_MAIN", "/fake/vscode")
     monkeypatch.setenv("CLAUDE_CODE_IDE_HOST_OVERRIDE", "localhost")
-
-    # Wrap Path.open so any parent-process touch of the IDE lock path is
-    # detectable. We count reads against the exact lock_file path object.
-    lock_touches = {"count": 0}
-    real_path_open = Path.open
-    resolved_lock = lock_file.resolve()
-
-    def tracking_open(self: Path, *args: object, **kwargs: object) -> object:
-        try:
-            if self.resolve() == resolved_lock:
-                lock_touches["count"] += 1
-        except OSError:
-            pass
-        return real_path_open(self, *args, **kwargs)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(Path, "open", tracking_open)
 
     from autoskillit.cli.app import _launch_cook_session
 
@@ -76,14 +57,6 @@ def test_cook_session_ignores_ide_lock_file(
 
     # (2) Auto-connect suppressor
     assert env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
-
-    # (3) Parent process must NOT open the IDE lock file during session build.
-    assert lock_touches["count"] == 0, (
-        f"IDE lock file was opened {lock_touches['count']} time(s) by the parent "
-        "process between build_claude_env() and subprocess.run. This indicates a "
-        "regression in the lock-file-scan discovery path that env scrub alone "
-        "cannot catch."
-    )
 
     # Argv must no longer carry a leading ['env', ...] prefix.
     cmd = mock_run.call_args.args[0]

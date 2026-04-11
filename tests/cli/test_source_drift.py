@@ -604,7 +604,6 @@ def test_drift_gate_offers_yn_prompt_on_tty(
     # fake_stdin is set to "n\n" by _setup_drift_check
     input_calls: list[str] = []
 
-
     monkeypatch.setattr("builtins.input", lambda prompt="": (input_calls.append(prompt), "n")[1])
 
     run_source_drift_check(home=tmp_path)

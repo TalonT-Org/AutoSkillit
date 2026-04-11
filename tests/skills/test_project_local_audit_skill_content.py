@@ -24,7 +24,10 @@ def _parse_frontmatter(content: str) -> dict:
     """Extract and parse YAML frontmatter from a markdown file."""
     if not content.startswith("---"):
         return {}
-    end = content.index("---", 3)
+    try:
+        end = content.index("---", 3)
+    except ValueError as exc:
+        raise ValueError("Unclosed frontmatter delimiter in SKILL.md content") from exc
     fm_text = content[3:end].strip()
     return yaml.safe_load(fm_text) or {}
 
@@ -96,7 +99,7 @@ def test_audit_arch_p12_has_composition_boundary_tiers() -> None:
 @pytest.mark.parametrize("ge_id", ["GE-1", "GE-2", "GE-7", "GE-9", "GE-13", "GE-16", "GE-17"])
 def test_audit_arch_general_exceptions_present(ge_id: str) -> None:
     content = _read_skill("audit-arch")
-    assert ge_id in content, (
+    assert re.search(r"\*\*" + re.escape(ge_id) + r"\*\*", content), (
         f"audit-arch/SKILL.md missing exception ID '{ge_id}' in Exception Whitelist"
     )
 
@@ -106,6 +109,7 @@ def test_audit_arch_general_exceptions_present(ge_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+# PS-3/5/6 are cohesion-specific; tested in test_audit_cohesion_general_exceptions_present
 @pytest.mark.parametrize("ps_id", ["PS-1", "PS-2", "PS-4", "PS-7", "PS-8"])
 def test_audit_arch_project_specific_exceptions_present(ps_id: str) -> None:
     content = _read_skill("audit-arch")

@@ -851,7 +851,6 @@ class TestCacheSchemaVersion:
         )
 
         calls = []
-        original = None
 
         def spy(path, payload, schema_version):
             calls.append({"path": path, "schema_version": schema_version})

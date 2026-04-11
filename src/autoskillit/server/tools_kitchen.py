@@ -156,11 +156,13 @@ async def _open_kitchen_handler() -> str | None:
     try:
         _write_hook_config()
     except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="write_hook_config", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="write_hook_config")
 
     try:
         await _prime_quota_cache()
     except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="prime_quota_cache", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="prime_quota_cache")
 
     if ctx.quota_refresh_task is not None:
@@ -171,6 +173,7 @@ async def _open_kitchen_handler() -> str | None:
             label="quota_refresh_loop",
         )
     except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="start_quota_refresh", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
 
     return None
@@ -266,11 +269,13 @@ async def open_kitchen(
     try:
         await ctx.enable_components(tags={"kitchen"})
     except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="enable_components", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="enable_components")
 
     try:
         await _redisable_subsets(ctx, disabled_subsets)
     except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="redisable_subsets")
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
@@ -298,6 +303,7 @@ async def open_kitchen(
                 ingredient_overrides=overrides,
             )
         except Exception as exc:
+            logger.warning("open_kitchen_failure", stage="load_and_validate", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="load_and_validate")
 
         tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
@@ -305,11 +311,13 @@ async def open_kitchen(
         try:
             recipe_info = tool_ctx.recipes.find(name, Path.cwd())
         except Exception as exc:
+            logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="recipe_find")
 
         try:
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
         except Exception as exc:
+            logger.warning("open_kitchen_failure", stage="apply_triage_gate", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
 
         result["success"] = True
@@ -322,6 +330,7 @@ async def open_kitchen(
         try:
             warning = _build_hook_diagnostic_warning()
         except Exception as exc:
+            logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
         if warning:
             result["hook_warning"] = warning.strip()
@@ -344,6 +353,7 @@ async def open_kitchen(
         if _sous_chef_path.exists():
             text += "\n\n" + _sous_chef_path.read_text()
     except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="read_sous_chef", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="read_sous_chef")
 
     # Check if the project needs an upgrade
@@ -359,6 +369,7 @@ async def open_kitchen(
     try:
         warning = _build_hook_diagnostic_warning()
     except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
     if warning:
         text += warning

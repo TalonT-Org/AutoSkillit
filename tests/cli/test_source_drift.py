@@ -249,7 +249,6 @@ def test_resolve_ref_sha_uses_git_ls_remote_origin_refs_heads(
     monkeypatch.setenv("AUTOSKILLIT_SOURCE_REPO", str(repo))
 
     captured: list[list[str]] = []
-    real_run = subprocess.run
 
     def spy_run(cmd: list[str], **kwargs: Any) -> Any:
         captured.append(list(cmd))
@@ -600,7 +599,7 @@ def test_drift_gate_offers_yn_prompt_on_tty(
     """On a TTY, the gate offers a [Y/n] update prompt."""
     from autoskillit.cli._source_drift import run_source_drift_check
 
-    fake_stdout = _setup_drift_check(monkeypatch, tmp_path, is_tty=True)
+    _setup_drift_check(monkeypatch, tmp_path, is_tty=True)
     # fake_stdin is set to "n\n" by _setup_drift_check
     input_calls: list[str] = []
 

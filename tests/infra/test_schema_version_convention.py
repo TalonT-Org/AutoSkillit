@@ -200,7 +200,7 @@ class TestSchemaVersionConvention:
                 pass
 
     def test_allowlist_includes_list_payloads_as_documented(self):
-        """List-payload sites are included since the AST scanner can't distinguish call return types."""
+        """List-payload sites are included since the AST scanner can't distinguish return types."""
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
             ("src/autoskillit/execution/session_log.py", 219),

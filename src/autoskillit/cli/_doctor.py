@@ -10,12 +10,14 @@ from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
 from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
-from autoskillit.core import Severity
+from autoskillit.core import Severity, get_logger
 from autoskillit.hook_registry import (
     _count_hook_registry_drift,
     canonical_script_basenames,
     find_broken_hook_scripts,
 )
+
+_log = get_logger(__name__)
 
 
 @dataclass
@@ -404,6 +406,7 @@ def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:
     try:
         raw = json.loads(path.read_text())
     except Exception as exc:
+        _log.warning("quota_cache_parse_error", path=str(path), exc_info=True)
         return DoctorResult(
             Severity.WARNING,
             check_name,

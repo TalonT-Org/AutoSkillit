@@ -856,12 +856,13 @@ class TestStaleSuppressionBounded:
         )
 
         async def write_activity() -> None:
+            import json as _json
+
             for i in range(6):
                 await anyio.sleep(0.5)
-                import json
-
                 with session_file.open("a") as f:
-                    f.write(json.dumps({"type": "assistant", "message": f"msg-{i}"}) + "\n")
+                    record = {"type": "assistant", "message": {"content": f"msg-{i}"}}
+                    f.write(_json.dumps(record) + "\n")
 
         with anyio.fail_after(10.0):
             async with anyio.create_task_group() as tg:

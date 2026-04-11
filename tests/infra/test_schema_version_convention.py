@@ -144,9 +144,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _stale_check.py — fetch cache
     ("src/autoskillit/cli/_stale_check.py", 121),
     # smoke_utils.py — domain partitions dict, hunk ranges list, merge queue list
-    ("src/autoskillit/smoke_utils.py", 52),
-    ("src/autoskillit/smoke_utils.py", 81),
-    ("src/autoskillit/smoke_utils.py", 134),
+    ("src/autoskillit/smoke_utils.py", 53),
+    ("src/autoskillit/smoke_utils.py", 83),
+    ("src/autoskillit/smoke_utils.py", 138),
 }
 
 

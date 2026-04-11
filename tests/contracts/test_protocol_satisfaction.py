@@ -312,6 +312,8 @@ class TestGroupDApiContractPreservation:
             "session_record_types",
             "completion_drain_timeout",
             "linux_tracing_config",
+            "idle_output_timeout",
+            "max_suppression_seconds",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -371,6 +373,8 @@ class TestGroupDApiContractPreservation:
             "completion_drain_timeout",
             "linux_tracing_config",
             "env",
+            "idle_output_timeout",
+            "max_suppression_seconds",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"
@@ -511,6 +515,7 @@ class TestGroupDApiContractPreservation:
             TerminationReason.NATURAL_EXIT,
             TerminationReason.COMPLETED,
             TerminationReason.STALE,
+            TerminationReason.IDLE_STALL,
             TerminationReason.TIMED_OUT,
         }
 
@@ -521,6 +526,7 @@ class TestGroupDApiContractPreservation:
         assert TerminationReason.NATURAL_EXIT == "natural_exit"
         assert TerminationReason.COMPLETED == "completed"
         assert TerminationReason.STALE == "stale"
+        assert TerminationReason.IDLE_STALL == "idle_stall"
         assert TerminationReason.TIMED_OUT == "timed_out"
 
     def test_req_api_006_channel_confirmation_members(self):

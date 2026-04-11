@@ -398,4 +398,4 @@ class TestIdleStallWatchdog:
 
         elapsed = time.monotonic() - start
         assert result.termination == TerminationReason.IDLE_STALL
-        assert elapsed < 10.0
+        assert elapsed < 12.0

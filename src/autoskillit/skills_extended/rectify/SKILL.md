@@ -1,5 +1,6 @@
 ---
 name: rectify
+activate_deps: [arch-lens]
 description: Deep investigation of test gaps and architectural weaknesses following an investigation, then devise a plan for architectural immunity rather than direct fixes. Use when user says "rectify", "rectify this", or wants to address root architectural causes after an investigation.
 hooks:
   PreToolUse:

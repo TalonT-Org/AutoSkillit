@@ -434,7 +434,10 @@ class SessionSkillManager(Protocol):
         config: Any | None = None,
         project_dir: Path | None = None,
         recipe_packs: frozenset[str] | None = None,
+        allow_only: frozenset[str] | None = None,
     ) -> ValidatedAddDir: ...
+
+    def compute_skill_closure(self, target_name: str) -> frozenset[str]: ...
 
     def activate_skill_deps(self, session_id: str, skill_name: str) -> bool: ...
 

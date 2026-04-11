@@ -210,6 +210,60 @@ def _should_inject_skill(
     return True
 
 
+def _build_pack_index(provider: SkillsDirectoryProvider) -> dict[str, set[str]]:
+    """Build a pack-name → set of member skill names index from the provider."""
+    index: dict[str, set[str]] = {}
+    for skill in provider.list_skills():
+        for cat in skill.categories:
+            index.setdefault(cat, set()).add(skill.name)
+    return index
+
+
+def compute_skill_closure(
+    target_name: str,
+    provider: SkillsDirectoryProvider,
+) -> frozenset[str]:
+    """Return the transitive activate_deps closure for a target skill.
+
+    Walks ``activate_deps`` breadth-first starting from ``target_name``. Pack-name
+    entries (those present in :data:`PACK_REGISTRY`) are expanded via the
+    ``categories:`` index built from the provider's full skill list. Bare skill
+    names recurse into the queue. Cycle-safe via a ``visited`` set.
+
+    Returns ``frozenset()`` if ``target_name`` does not resolve to a real skill.
+    Unknown bare-name deps and pack names with no members are silently dropped.
+    """
+    if provider.resolver.resolve(target_name) is None:
+        return frozenset()
+    pack_index: dict[str, set[str]] | None = None
+    visited: set[str] = set()
+    resolved: set[str] = set()
+    queue: list[str] = [target_name]
+    while queue:
+        name = queue.pop()
+        if name in visited:
+            continue
+        visited.add(name)
+        info = provider.resolver.resolve(name)
+        if info is None:
+            continue
+        try:
+            content = info.path.read_text()
+        except OSError:
+            continue
+        resolved.add(name)
+        for dep in _parse_activate_deps(content):
+            if dep in PACK_REGISTRY:
+                if pack_index is None:
+                    pack_index = _build_pack_index(provider)
+                for member in pack_index.get(dep, ()):
+                    if member not in visited:
+                        queue.append(member)
+            elif dep not in visited:
+                queue.append(dep)
+    return frozenset(resolved)
+
+
 class SkillsDirectoryProvider:
     """Provides bundled skill content with tier-aware frontmatter injection."""
 
@@ -257,6 +311,13 @@ class DefaultSessionSkillManager:
         self._provider = provider
         self._root = ephemeral_root
 
+    def compute_skill_closure(self, target_name: str) -> frozenset[str]:
+        """Return the transitive activate_deps closure for ``target_name``.
+
+        See :func:`compute_skill_closure` for semantics.
+        """
+        return compute_skill_closure(target_name, self._provider)
+
     def init_session(
         self,
         session_id: str,
@@ -265,6 +326,7 @@ class DefaultSessionSkillManager:
         config: AutomationConfig | None = None,
         project_dir: Path | None = None,
         recipe_packs: frozenset[str] | None = None,
+        allow_only: frozenset[str] | None = None,
     ) -> ValidatedAddDir:
         """Create ephemeral skill dir for session_id.
 
@@ -324,6 +386,9 @@ class DefaultSessionSkillManager:
         skills_base = session_skills_dir / _SKILLS_SUBDIR
         skills_base.mkdir(parents=True, exist_ok=True)
         for skill_info in self._provider.list_skills():
+            if allow_only is not None and skill_info.name not in allow_only:
+                _log.debug("init_session_allow_only_skip", skill=skill_info.name)
+                continue
             if not _should_inject_skill(
                 skill_info,
                 overrides=overrides,

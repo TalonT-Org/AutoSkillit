@@ -68,9 +68,7 @@ def test_load_recipe_rejects_yaml_unsafe_temp_dir_relpath(tmp_path: Path) -> Non
 
 def test_no_recipe_yaml_contains_literal_temp_path() -> None:
     """Bundled recipe YAMLs must use {{AUTOSKILLIT_TEMP}}, never the literal."""
-    recipes_root = (
-        Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "recipes"
-    )
+    recipes_root = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "recipes"
     assert recipes_root.is_dir(), f"recipes root not found: {recipes_root}"
 
     offenders: list[str] = []

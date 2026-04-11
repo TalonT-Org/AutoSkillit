@@ -11,6 +11,7 @@ from pathlib import Path
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
 from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
 from autoskillit.core import Severity, get_logger
+from autoskillit.execution.quota import QUOTA_CACHE_SCHEMA_VERSION
 from autoskillit.hook_registry import (
     _count_hook_registry_drift,
     canonical_script_basenames,
@@ -389,9 +390,7 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
         )
 
     except Exception:
-        from autoskillit.core import get_logger as _get_logger
-
-        _get_logger(__name__).debug("Source drift check failed", exc_info=True)
+        _log.debug("Source drift check failed", exc_info=True)
         return DoctorResult(
             Severity.OK, check_name, "Source drift check skipped (unexpected error)"
         )
@@ -413,12 +412,16 @@ def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:
             f"Quota cache at {path} could not be parsed: {type(exc).__name__}.",
         )
     observed = raw.get("schema_version") if isinstance(raw, dict) else None
-    if observed == 2:
-        return DoctorResult(Severity.OK, check_name, f"Quota cache schema v2 at {path}.")
+    if observed == QUOTA_CACHE_SCHEMA_VERSION:
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"Quota cache schema v{QUOTA_CACHE_SCHEMA_VERSION} at {path}.",
+        )
     return DoctorResult(
         Severity.WARNING,
         check_name,
-        f"Quota cache schema drift at {path}: observed={observed!r}, expected=2.",
+        f"Quota cache schema drift at {path}: observed={observed!r}, expected={QUOTA_CACHE_SCHEMA_VERSION}.",
     )
 
 

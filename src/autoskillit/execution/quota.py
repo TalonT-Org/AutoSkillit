@@ -22,7 +22,7 @@ _log = get_logger(__name__)
 _DEFAULT_BASE_URL: str = "https://api.anthropic.com"
 _DEFAULT_THRESHOLD: float = 85.0
 
-_QUOTA_CACHE_SCHEMA_VERSION: int = 2
+QUOTA_CACHE_SCHEMA_VERSION: int = 2
 _SCHEMA_DRIFT_LOGGED: set[str] = set()
 
 
@@ -114,7 +114,9 @@ def _read_cache(cache_path: str, max_age: int) -> QuotaStatus | None:
     """Return a fresh QuotaStatus from local cache, or None if stale/missing/old-format."""
     try:
         raw = json.loads(Path(cache_path).expanduser().read_text())
-        if raw.get("schema_version") != _QUOTA_CACHE_SCHEMA_VERSION:
+        if not isinstance(raw, dict):
+            return None
+        if raw.get("schema_version") != QUOTA_CACHE_SCHEMA_VERSION:
             cache_key = str(Path(cache_path).expanduser())
             if cache_key not in _SCHEMA_DRIFT_LOGGED:
                 _SCHEMA_DRIFT_LOGGED.add(cache_key)
@@ -162,7 +164,7 @@ def _write_cache(cache_path: str, result: QuotaFetchResult) -> None:
         }
         path = Path(cache_path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
-        write_versioned_json(path, payload, schema_version=_QUOTA_CACHE_SCHEMA_VERSION)
+        write_versioned_json(path, payload, schema_version=QUOTA_CACHE_SCHEMA_VERSION)
     except OSError as exc:
         _log.warning("quota cache write failed", path=cache_path, error=str(exc))
 

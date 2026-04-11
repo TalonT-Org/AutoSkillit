@@ -1015,20 +1015,28 @@ def test_recipe_lister_callsites_use_protocol_typing() -> None:
     """REQ-ARCH-006: callsites in recipe/ that consume the skill listing
     must reference the SkillLister Protocol (parameter type), so the
     deferred SkillResolver() instantiation is a default-factory fallback
-    rather than the only path."""
-    targets = {
+    rather than the only path.
+
+    contracts.py uses .resolve() and therefore references TargetSkillResolver,
+    not SkillLister. That is checked separately below.
+    """
+    lister_targets = {
         "src/autoskillit/recipe/rules_skills.py",
         "src/autoskillit/recipe/_api.py",
-        "src/autoskillit/recipe/contracts.py",
     }
     src_root = Path(__file__).resolve().parents[2]
     missing: list[str] = []
-    for relpath in targets:
+    for relpath in lister_targets:
         text = (src_root / relpath).read_text()
         if "SkillLister" not in text:
             missing.append(relpath)
     assert not missing, (
         f"These files still consume SkillResolver without SkillLister Protocol typing: {missing}"
+    )
+    # contracts.py uses .resolve() — must reference TargetSkillResolver, not SkillLister
+    contracts_text = (src_root / "src/autoskillit/recipe/contracts.py").read_text()
+    assert "TargetSkillResolver" in contracts_text, (
+        "contracts.py must reference TargetSkillResolver for the resolver parameter"
     )
 
 

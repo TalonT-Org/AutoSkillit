@@ -32,7 +32,7 @@ def _collect_referenced_names(tree: ast.Module) -> set[str]:
     """
     # Collect all module-level function definitions by name
     top_level_fns: dict[str, ast.FunctionDef] = {}
-    for node in tree.body:
+    for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef):
             top_level_fns[node.name] = node
 

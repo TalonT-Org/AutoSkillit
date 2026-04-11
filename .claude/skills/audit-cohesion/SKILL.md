@@ -514,6 +514,40 @@ Do NOT flag:
 
 ---
 
+## Exception Whitelist
+
+### General Exceptions (GE)
+
+These exceptions apply to cohesion audit findings. Before reporting, verify the finding does not match any entry below.
+
+**GE-10** — Naming convention enforcement applies to exported/public symbols only. Module-private classes not in `__all__` are not naming violations.
+*Source: [C4-C-1], [C4-C-2] April cohesion round.*
+
+**GE-11** — `public_name = _private_name` in `__init__.py` is a standard re-export idiom — not "logic in `__init__`."
+*Source: [C1-E] April cohesion round.*
+
+**GE-12** — Modules with documented stdlib-only or early-boot constraints using bare `logging` are exempt from structured-logging conventions.
+
+**GE-13** — Grep `tests/` for imports before claiming no test coverage. Absence of `test_<module>.py` is not evidence of missing coverage.
+
+**GE-15** — Documented optional/empty-when-skipped recipe context variables are not phantom.
+*Source: [C7-3] April cohesion round.*
+
+### C10 File-Verification Rule
+
+Before claiming a documentation error, read the actual file at the cited path — don't rely on the CLAUDE.md ASCII tree representation.
+*Source: [C10-D] April cohesion round.*
+
+### Project-Specific Exceptions
+
+**PS-3** — `test_check` in `server/tools_workspace.py` omits the `_require_enabled()` guard by design: it uses the dual-tag headless detection path and must be callable from both interactive and headless sessions.
+
+**PS-5** — CLAUDE.md findings tracked in #713. Suppress cohesion findings related to CLAUDE.md accuracy until #713 closes.
+
+**PS-6** — `remove_clone` string booleans (`"true"`/`"false"`) are a domain contract baked into recipe YAMLs; converting to Python `bool` would break recipe compatibility.
+
+---
+
 ## Score Guidelines
 
 **STRONG:** Components fit together cleanly. Patterns are consistent, interfaces are complete. No action needed.

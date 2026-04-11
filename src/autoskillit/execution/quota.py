@@ -315,9 +315,24 @@ async def check_and_sleep_if_needed(
         }
 
     except Exception as exc:
-        _log.warning(
+        # Fail-open subsystem-boundary contract: never raise on quota errors.
+        # Split severity so operational failures stay at WARNING while programming
+        # bugs (AttributeError, NameError, ImportError, ...) surface at ERROR in
+        # dashboards instead of being masked as routine transient errors.
+        _operational_types = (
+            TimeoutError,
+            OSError,
+            KeyError,
+            ValueError,
+            TypeError,
+            json.JSONDecodeError,
+            httpx.HTTPError,
+        )
+        _log_fn = _log.warning if isinstance(exc, _operational_types) else _log.error
+        _log_fn(
             "quota check failed — continuing without sleep",
             error=str(exc),
+            error_type=type(exc).__name__,
             exc_info=True,
         )
         return {

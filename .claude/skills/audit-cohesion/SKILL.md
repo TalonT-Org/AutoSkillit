@@ -527,8 +527,10 @@ These exceptions apply to cohesion audit findings. Before reporting, verify the 
 *Source: [C1-E] April cohesion round.*
 
 **GE-12** — Modules with documented stdlib-only or early-boot constraints using bare `logging` are exempt from structured-logging conventions.
+*Source: April cohesion round.*
 
 **GE-13** — Grep `tests/` for imports before claiming no test coverage. Absence of `test_<module>.py` is not evidence of missing coverage.
+*Source: cohesion round 1 contest batches.*
 
 **GE-15** — Documented optional/empty-when-skipped recipe context variables are not phantom.
 *Source: [C7-3] April cohesion round.*
@@ -538,7 +540,7 @@ These exceptions apply to cohesion audit findings. Before reporting, verify the 
 Before claiming a documentation error, read the actual file at the cited path — don't rely on the CLAUDE.md ASCII tree representation.
 *Source: [C10-D] April cohesion round.*
 
-### Project-Specific Exceptions
+### Project-Specific Exceptions (PS)
 
 **PS-3** — `test_check` in `server/tools_workspace.py` omits the `_require_enabled()` guard by design: it uses the dual-tag headless detection path and must be callable from both interactive and headless sessions.
 

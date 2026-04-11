@@ -76,8 +76,6 @@ Before assigning a final verdict, code validation agents MUST consult this table
 | PS-7 | `SkillResolver` naming | No Protocol to be "Default" of |
 | PS-8 | L3 `server/`/`cli/` exclusion from REQ-IMP-001 | IL-005/IL-006 compensate |
 
-Code validation agents MUST consult this table before assigning a verdict. A finding that matches a Known Project Exception receives verdict VALID BUT EXCEPTION WARRANTED with the matching PS ID as the exception note.
-
 ---
 
 ## Workflow

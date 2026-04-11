@@ -5,7 +5,6 @@ REQ-ARCH-007: IL-003 must document the pipeline → config exception inline.
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 
 

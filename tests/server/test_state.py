@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import sys
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 
 def _make_mock_ctx(tmp_path: Path) -> MagicMock:
@@ -98,3 +99,110 @@ def test_initialize_does_not_load_token_log(tmp_path):
         "_initialize() must not populate DefaultTimingLog from disk; "
         "timing telemetry is per-pipeline only"
     )
+
+
+# --- T-INIT-1: McpRecordingMiddleware registered for RecordingSubprocessRunner ---
+
+
+def test_initialize_registers_mcp_recording_middleware(tmp_path, monkeypatch):
+    """_initialize() calls mcp.add_middleware(McpRecordingMiddleware(recorder)) when runner is RecordingSubprocessRunner."""
+    from autoskillit.execution.recording import RecordingSubprocessRunner
+    from autoskillit.server._state import _initialize
+
+    monkeypatch.setattr("atexit.register", Mock())
+    mock_recorder = Mock()
+    recording_runner = RecordingSubprocessRunner(recorder=mock_recorder)
+
+    mock_ctx = _make_mock_ctx(tmp_path)
+    mock_ctx.runner = recording_runner
+    mock_ctx.config.subsets.disabled = []
+    mock_ctx.session_skill_manager = None
+
+    mock_mcp = MagicMock()
+    mock_middleware_cls = MagicMock()
+
+    import api_simulator.mcp as _api_sim_mcp
+
+    monkeypatch.setattr("autoskillit.server.mcp", mock_mcp)
+    monkeypatch.setattr(_api_sim_mcp, "McpRecordingMiddleware", mock_middleware_cls)
+
+    with patch("autoskillit.execution.recover_crashed_sessions", return_value=0):
+        _initialize(mock_ctx)
+
+    mock_middleware_cls.assert_called_once_with(mock_recorder)
+    mock_mcp.add_middleware.assert_called_once()
+
+
+# --- T-INIT-2: No middleware registered for non-recording runner ---
+
+
+def test_initialize_skips_middleware_for_non_recording_runner(tmp_path, monkeypatch):
+    """_initialize() does not call mcp.add_middleware() when runner is not RecordingSubprocessRunner."""
+    from autoskillit.server._state import _initialize
+
+    mock_ctx = _make_mock_ctx(tmp_path)
+    mock_ctx.runner = MagicMock()
+    mock_ctx.config.subsets.disabled = []
+    mock_ctx.session_skill_manager = None
+
+    mock_mcp = MagicMock()
+    monkeypatch.setattr("autoskillit.server.mcp", mock_mcp)
+
+    with patch("autoskillit.execution.recover_crashed_sessions", return_value=0):
+        _initialize(mock_ctx)
+
+    mock_mcp.add_middleware.assert_not_called()
+
+
+# --- T-INIT-3: ImportError from api_simulator.mcp does not raise ---
+
+
+def test_initialize_recording_middleware_import_error_does_not_raise(tmp_path, monkeypatch):
+    """_initialize() degrades gracefully when api_simulator.mcp is unavailable."""
+    from autoskillit.execution.recording import RecordingSubprocessRunner
+    from autoskillit.server._state import _initialize
+
+    monkeypatch.setattr("atexit.register", Mock())
+    mock_recorder = Mock()
+    recording_runner = RecordingSubprocessRunner(recorder=mock_recorder)
+
+    mock_ctx = _make_mock_ctx(tmp_path)
+    mock_ctx.runner = recording_runner
+    mock_ctx.config.subsets.disabled = []
+    mock_ctx.session_skill_manager = None
+
+    monkeypatch.setitem(sys.modules, "api_simulator.mcp", None)
+
+    with patch("autoskillit.execution.recover_crashed_sessions", return_value=0):
+        _initialize(mock_ctx)  # Must not raise
+
+
+# --- T-INIT-4: McpReplayMiddleware registered for ReplayingSubprocessRunner ---
+
+
+def test_initialize_registers_mcp_replay_middleware(tmp_path, monkeypatch):
+    """_initialize() calls mcp.add_middleware(McpReplayMiddleware(player)) when runner is ReplayingSubprocessRunner with player."""
+    from autoskillit.execution.recording import ReplayingSubprocessRunner
+    from autoskillit.server._state import _initialize
+
+    mock_player = Mock()
+    replaying_runner = ReplayingSubprocessRunner({}, {}, player=mock_player)
+
+    mock_ctx = _make_mock_ctx(tmp_path)
+    mock_ctx.runner = replaying_runner
+    mock_ctx.config.subsets.disabled = []
+    mock_ctx.session_skill_manager = None
+
+    mock_mcp = MagicMock()
+    mock_middleware_cls = MagicMock()
+
+    import api_simulator.mcp as _api_sim_mcp
+
+    monkeypatch.setattr("autoskillit.server.mcp", mock_mcp)
+    monkeypatch.setattr(_api_sim_mcp, "McpReplayMiddleware", mock_middleware_cls)
+
+    with patch("autoskillit.execution.recover_crashed_sessions", return_value=0):
+        _initialize(mock_ctx)
+
+    mock_middleware_cls.assert_called_once_with(mock_player)
+    mock_mcp.add_middleware.assert_called_once()

@@ -498,3 +498,57 @@ async def test_cross_scenario_override(tmp_path):
     assert result.stdout == "from-overridden-scenario2"
     assert result.returncode == 0
     assert result.elapsed_seconds == pytest.approx(0.5)
+
+
+# --- T-REC-PUBLIC: recorder is a public attribute ---
+
+
+def test_recording_runner_recorder_is_public(monkeypatch):
+    """RecordingSubprocessRunner exposes recorder as a public attribute."""
+    monkeypatch.setattr("atexit.register", Mock())
+    mock_recorder = Mock()
+    runner = RecordingSubprocessRunner(recorder=mock_recorder)
+    assert runner.recorder is mock_recorder
+
+
+# --- T-REPLAY-PLAYER: player attribute stored ---
+
+
+def test_replaying_runner_stores_player_attribute():
+    """ReplayingSubprocessRunner stores player when provided."""
+    mock_player = Mock()
+    runner = ReplayingSubprocessRunner({}, {}, player=mock_player)
+    assert runner.player is mock_player
+
+
+# --- T-REPLAY-PLAYER-NONE: player defaults to None ---
+
+
+def test_replaying_runner_player_defaults_to_none():
+    """ReplayingSubprocessRunner.player is None when not provided."""
+    runner = ReplayingSubprocessRunner({}, {})
+    assert runner.player is None
+
+
+# --- T-BUILD-REPLAY-PLAYER: build_replay_runner stores player on runner ---
+
+
+def test_build_replay_runner_stores_player_on_runner(tmp_path, monkeypatch):
+    """build_replay_runner() passes the ScenarioPlayer to ReplayingSubprocessRunner.player."""
+    from autoskillit.execution.recording import build_replay_runner
+
+    mock_scenario = Mock()
+    mock_scenario.step_sequence = []
+    mock_player = Mock()
+    mock_player.scenario.return_value = mock_scenario
+    mock_player.build_session_map.return_value = {}
+
+    import api_simulator.claude as _api_sim_claude
+
+    monkeypatch.setattr(
+        _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False
+    )
+    monkeypatch.setattr("atexit.register", Mock())
+
+    result = build_replay_runner(str(tmp_path))
+    assert result.player is mock_player

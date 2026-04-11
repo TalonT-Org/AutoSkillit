@@ -45,11 +45,6 @@ class TestBuildInteractiveCmd:
         assert result.env.get("HOME") == "/tmp/home"
         assert result.env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
 
-    def test_env_strips_sse_port(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
-        result = build_interactive_cmd()
-        assert "CLAUDE_CODE_SSE_PORT" not in result.env
-
     def test_accepts_model(self) -> None:
         result = build_interactive_cmd(model="claude-opus-4-6")
         assert ClaudeFlags.MODEL in result.cmd
@@ -161,11 +156,6 @@ class TestBuildHeadlessCmd:
         assert "CLAUDE_CODE_SSE_PORT" not in result.env
         assert result.env.get("HOME") == "/tmp/home"
         assert result.env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
-
-    def test_env_strips_sse_port(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
-        result = build_headless_cmd("some prompt")
-        assert "CLAUDE_CODE_SSE_PORT" not in result.env
 
     def test_accepts_model(self) -> None:
         result = build_headless_cmd("some prompt", model="claude-sonnet-4-6")

@@ -130,7 +130,7 @@ def test_initialize_registers_mcp_recording_middleware(tmp_path, monkeypatch):
         _initialize(mock_ctx)
 
     mock_middleware_cls.assert_called_once_with(mock_recorder)
-    mock_mcp.add_middleware.assert_called_once()
+    mock_mcp.add_middleware.assert_called_once_with(mock_middleware_cls.return_value)
 
 
 # --- T-INIT-2: No middleware registered for non-recording runner ---
@@ -205,4 +205,4 @@ def test_initialize_registers_mcp_replay_middleware(tmp_path, monkeypatch):
         _initialize(mock_ctx)
 
     mock_middleware_cls.assert_called_once_with(mock_player)
-    mock_mcp.add_middleware.assert_called_once()
+    mock_mcp.add_middleware.assert_called_once_with(mock_middleware_cls.return_value)

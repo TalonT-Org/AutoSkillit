@@ -6,7 +6,7 @@ SubprocessRunner, and the termination contract sentinel.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -115,7 +115,7 @@ class SubprocessRunner(Protocol):
         *,
         cwd: Path,
         timeout: float,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] | None = None,
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,

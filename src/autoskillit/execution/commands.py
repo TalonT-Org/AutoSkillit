@@ -3,23 +3,43 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from autoskillit.core import ClaudeFlags, ValidatedAddDir, temp_dir_display_str
+from autoskillit.core import (
+    ClaudeFlags,
+    ValidatedAddDir,
+    build_claude_env,
+    temp_dir_display_str,
+)
 
 
 @dataclass(frozen=True)
 class ClaudeInteractiveCmd:
+    """Resolved argv + env for a claude interactive subprocess.
+
+    ``env`` is the fully resolved environment returned by
+    :func:`build_claude_env` — pass directly to ``subprocess.run(env=...)``.
+    Callers must NOT merge in ``os.environ`` again; the sanitization layer
+    has already applied the denylist and the auto-connect suppressor.
+    """
+
     cmd: list[str]
-    env: dict[str, str]
+    env: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class ClaudeHeadlessCmd:
+    """Resolved argv + env for a claude headless subprocess.
+
+    ``env`` is the fully resolved environment returned by
+    :func:`build_claude_env`, including any headless-only extras such as
+    ``AUTOSKILLIT_HEADLESS=1``. Pass directly to the subprocess runner.
+    """
+
     cmd: list[str]
-    env: dict[str, str] = field(default_factory=dict)  # always {}
+    env: Mapping[str, str] = field(default_factory=dict)
 
 
 def build_interactive_cmd(
@@ -29,6 +49,7 @@ def build_interactive_cmd(
     plugin_dir: Path | None = None,
     add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
     resume_session_id: str | None = None,
+    env_extras: Mapping[str, str] | None = None,
 ) -> ClaudeInteractiveCmd:
     """Build a Claude interactive session command.
 
@@ -46,6 +67,8 @@ def build_interactive_cmd(
         Each entry is appended as ``--add-dir <path>``.
     resume_session_id
         When provided, appended as ``--resume <id>`` before any positional prompt.
+    env_extras
+        Optional caller overrides merged into the resolved env after IDE scrubbing.
     """
     cmd = ["claude", ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
     if resume_session_id is not None:
@@ -58,15 +81,20 @@ def build_interactive_cmd(
         cmd += [ClaudeFlags.ADD_DIR, str(d)]
     if initial_prompt is not None:
         cmd.append(initial_prompt)
-    return ClaudeInteractiveCmd(cmd=cmd, env={})
+    return ClaudeInteractiveCmd(cmd=cmd, env=build_claude_env(extras=env_extras))
 
 
-def build_headless_cmd(prompt: str, *, model: str | None = None) -> ClaudeHeadlessCmd:
+def build_headless_cmd(
+    prompt: str,
+    *,
+    model: str | None = None,
+    env_extras: Mapping[str, str] | None = None,
+) -> ClaudeHeadlessCmd:
     """Build a Claude headless session command for skill execution."""
     cmd = ["claude", ClaudeFlags.PRINT, prompt, ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
     if model:
         cmd += [ClaudeFlags.MODEL, model]
-    return ClaudeHeadlessCmd(cmd=cmd, env={})
+    return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(extras=env_extras))
 
 
 def _ensure_skill_prefix(skill_command: str) -> str:
@@ -121,12 +149,13 @@ def build_full_headless_cmd(
     exit_after_stop_delay_ms: int = 0,
     scenario_step_name: str = "",
     temp_dir_relpath: str | None = None,
-) -> list[str]:
-    """Build the complete headless command list ready for subprocess invocation.
+) -> ClaudeHeadlessCmd:
+    """Build the complete headless command spec ready for subprocess invocation.
 
     Applies prompt transformations (skill prefix, completion directive, cwd anchor),
     then constructs the full CLI command including plugin-dir, output-format,
-    add-dir entries, and the ``env AUTOSKILLIT_HEADLESS=1`` prefix.
+    and add-dir entries. The environment carries ``AUTOSKILLIT_HEADLESS=1`` and any
+    scenario / exit-delay extras on ``.env`` — it is NOT serialized as an argv prefix.
 
     Parameters
     ----------
@@ -147,16 +176,22 @@ def build_full_headless_cmd(
     add_dirs
         Each entry is appended as ``--add-dir <path>``.
     exit_after_stop_delay_ms
-        When > 0, ``CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=<ms>`` is prepended.
+        When > 0, carried as ``CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=<ms>`` in ``.env``.
     scenario_step_name
-        When non-empty, ``SCENARIO_STEP_NAME=<name>`` is prepended for recording.
+        When non-empty, carried as ``SCENARIO_STEP_NAME=<name>`` in ``.env`` for recording.
     """
     prompt = _inject_cwd_anchor(
         _inject_completion_directive(_ensure_skill_prefix(skill_command), completion_marker),
         cwd,
         temp_dir_relpath=temp_dir_relpath,
     )
-    spec = build_headless_cmd(prompt, model=model)
+    extras: dict[str, str] = {"AUTOSKILLIT_HEADLESS": "1"}
+    if exit_after_stop_delay_ms > 0:
+        extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
+    if scenario_step_name:
+        extras["SCENARIO_STEP_NAME"] = scenario_step_name
+
+    spec = build_headless_cmd(prompt, model=model, env_extras=extras)
     cmd: list[str] = spec.cmd + [
         ClaudeFlags.PLUGIN_DIR,
         str(plugin_dir),
@@ -169,9 +204,4 @@ def build_full_headless_cmd(
     for validated_dir in add_dirs:
         cmd.extend([ClaudeFlags.ADD_DIR, validated_dir.path])
 
-    env_vars = ["AUTOSKILLIT_HEADLESS=1"]
-    if exit_after_stop_delay_ms > 0:
-        env_vars.append(f"CLAUDE_CODE_EXIT_AFTER_STOP_DELAY={exit_after_stop_delay_ms}")
-    if scenario_step_name:
-        env_vars.append(f"SCENARIO_STEP_NAME={scenario_step_name}")
-    return ["env"] + env_vars + cmd
+    return ClaudeHeadlessCmd(cmd=cmd, env=spec.env)

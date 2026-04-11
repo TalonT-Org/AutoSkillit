@@ -15,7 +15,6 @@ from autoskillit.execution.recording import (
     RecordingSubprocessRunner,
     ReplayingSubprocessRunner,
     ScenarioReplayError,
-    _extract_env_and_args,
     _extract_model,
 )
 from tests.conftest import MockSubprocessRunner, _make_result
@@ -64,7 +63,7 @@ def test_recording_runner_satisfies_protocol():
 
 @pytest.mark.anyio
 async def test_session_call_routes_to_record_step(tmp_path):
-    """pty_mode=True + SCENARIO_STEP_NAME → record_step(), not inner runner."""
+    """pty_mode=True + SCENARIO_STEP_NAME in env kwarg → record_step(), not inner runner."""
     mock_recorder = Mock()
     mock_recorder.record_step.return_value = FakeStepResult(
         cassette_exit_code=0,
@@ -74,18 +73,13 @@ async def test_session_call_routes_to_record_step(tmp_path):
     inner = MockSubprocessRunner()
     runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
 
-    cmd = [
-        "env",
-        "AUTOSKILLIT_HEADLESS=1",
-        "SCENARIO_STEP_NAME=investigate",
-        "claude",
-        "--model",
-        "sonnet",
-        "--print",
-        "do stuff",
-    ]
+    cmd = ["claude", "--model", "sonnet", "--print", "do stuff"]
+    env = {
+        "AUTOSKILLIT_HEADLESS": "1",
+        "SCENARIO_STEP_NAME": "investigate",
+    }
 
-    result = await runner(cmd, cwd=Path("/tmp"), timeout=300, pty_mode=True)
+    result = await runner(cmd, cwd=Path("/tmp"), timeout=300, env=env, pty_mode=True)
 
     mock_recorder.record_step.assert_called_once_with(
         step_name="investigate",
@@ -110,9 +104,10 @@ async def test_non_session_call_delegates_and_records():
     inner.set_default(_make_result(returncode=0))
     runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
 
-    cmd = ["env", "SCENARIO_STEP_NAME=test-check", "pytest", "tests/"]
+    cmd = ["pytest", "tests/"]
+    env = {"SCENARIO_STEP_NAME": "test-check"}
 
-    result = await runner(cmd, cwd=Path("/tmp"), timeout=60, pty_mode=False)
+    result = await runner(cmd, cwd=Path("/tmp"), timeout=60, env=env, pty_mode=False)
 
     assert len(inner.call_args_list) == 1  # inner WAS called
     mock_recorder.record_non_session_step.assert_called_once_with(
@@ -133,30 +128,14 @@ async def test_no_step_name_skips_recording():
     inner.set_default(_make_result(returncode=0))
     runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
 
-    cmd = ["env", "AUTOSKILLIT_HEADLESS=1", "claude", "--print", "test"]
+    cmd = ["claude", "--print", "test"]
+    env = {"AUTOSKILLIT_HEADLESS": "1"}
 
-    await runner(cmd, cwd=Path("/tmp"), timeout=300, pty_mode=True)
+    await runner(cmd, cwd=Path("/tmp"), timeout=300, env=env, pty_mode=True)
 
     assert len(inner.call_args_list) == 1  # inner called (no recording intercept)
     mock_recorder.record_step.assert_not_called()
     mock_recorder.record_non_session_step.assert_not_called()
-
-
-# --- T5: _extract_env_and_args parsing ---
-
-
-def test_extract_env_and_args():
-    cmd = ["env", "A=1", "B=hello", "claude", "--print", "do stuff"]
-    env_dict, clean_args = _extract_env_and_args(cmd)
-    assert env_dict == {"A": "1", "B": "hello"}
-    assert clean_args == ["claude", "--print", "do stuff"]
-
-
-def test_extract_env_and_args_no_env_prefix():
-    cmd = ["claude", "--print", "do stuff"]
-    env_dict, clean_args = _extract_env_and_args(cmd)
-    assert env_dict == {}
-    assert clean_args == ["claude", "--print", "do stuff"]
 
 
 # --- T6: _extract_model from args ---
@@ -184,23 +163,25 @@ _BASE_CMD_ARGS = dict(
 
 
 def test_build_full_headless_cmd_injects_scenario_step_name():
-    cmd = build_full_headless_cmd(
+    spec = build_full_headless_cmd(
         "/investigate foo",
         scenario_step_name="investigate",
         **_BASE_CMD_ARGS,
     )
-    assert "SCENARIO_STEP_NAME=investigate" in cmd
+    assert spec.env["SCENARIO_STEP_NAME"] == "investigate"
+    assert not any("SCENARIO_STEP_NAME" in tok for tok in spec.cmd)
 
 
 # --- T8: build_full_headless_cmd without scenario_step_name ---
 
 
 def test_build_full_headless_cmd_no_scenario_step_name():
-    cmd = build_full_headless_cmd(
+    spec = build_full_headless_cmd(
         "/investigate foo",
         **_BASE_CMD_ARGS,
     )
-    assert not any("SCENARIO_STEP_NAME" in token for token in cmd)
+    assert "SCENARIO_STEP_NAME" not in spec.env
+    assert not any("SCENARIO_STEP_NAME" in tok for tok in spec.cmd)
 
 
 # --- T9: run_headless_core passes scenario_step_name through ---
@@ -208,7 +189,7 @@ def test_build_full_headless_cmd_no_scenario_step_name():
 
 @pytest.mark.anyio
 async def test_run_headless_core_injects_scenario_step_name(tmp_path):
-    """run_headless_core passes step_name as scenario_step_name to cmd builder."""
+    """run_headless_core passes step_name as scenario_step_name and routes it via env kwarg."""
     from autoskillit.config import AutomationConfig
     from autoskillit.execution.headless import run_headless_core
     from autoskillit.pipeline import DefaultGateState
@@ -221,8 +202,11 @@ async def test_run_headless_core_injects_scenario_step_name(tmp_path):
 
     await run_headless_core("/investigate foo", str(tmp_path), ctx, step_name="investigate")
 
-    cmd = mock_runner.call_args_list[0][0]
-    assert "SCENARIO_STEP_NAME=investigate" in cmd
+    cmd, _cwd, _timeout, kwargs = mock_runner.call_args_list[0]
+    assert cmd[0] != "env"
+    env = kwargs.get("env")
+    assert env is not None
+    assert env["SCENARIO_STEP_NAME"] == "investigate"
 
 
 # --- T10: make_context wraps runner when RECORD_SCENARIO set ---
@@ -284,8 +268,9 @@ async def test_sequencing_session_step_dispatch(tmp_path):
     session_map: dict[str, deque] = {"implement": deque([(cli, meta)])}
     runner = ReplayingSubprocessRunner(session_map, {})
 
-    cmd = ["env", "SCENARIO_STEP_NAME=implement", "claude", "--print", "do stuff"]
-    result = await runner(cmd, cwd=tmp_path, timeout=60)
+    cmd = ["claude", "--print", "do stuff"]
+    env = {"SCENARIO_STEP_NAME": "implement"}
+    result = await runner(cmd, cwd=tmp_path, timeout=60, env=env)
 
     assert result.returncode == meta.exit_code
     assert result.stdout == "session output"
@@ -308,8 +293,9 @@ async def test_sequencing_non_session_step_dispatch(tmp_path):
     }
     runner = ReplayingSubprocessRunner({}, non_session)
 
-    cmd = ["env", "SCENARIO_STEP_NAME=test-check", "task", "test-check"]
-    result = await runner(cmd, cwd=tmp_path, timeout=60)
+    cmd = ["task", "test-check"]
+    env = {"SCENARIO_STEP_NAME": "test-check"}
+    result = await runner(cmd, cwd=tmp_path, timeout=60, env=env)
 
     assert result.returncode == 1
     assert result.stdout == "FAILED"
@@ -322,7 +308,7 @@ async def test_sequencing_non_session_step_dispatch(tmp_path):
 
 @pytest.mark.anyio
 async def test_sequencing_missing_step_name_raises(tmp_path):
-    """No SCENARIO_STEP_NAME in cmd → ValueError."""
+    """No SCENARIO_STEP_NAME in env kwarg → ValueError."""
     runner = ReplayingSubprocessRunner({}, {})
     cmd = ["claude", "--print", "test"]
     with pytest.raises(ValueError, match="SCENARIO_STEP_NAME"):
@@ -338,9 +324,10 @@ async def test_sequencing_unknown_step_raises(tmp_path):
     runner = ReplayingSubprocessRunner(
         {"known": deque([(FakeCLI(), FakeMeta(exit_code=0))])}, {"other": {}}
     )
-    cmd = ["env", "SCENARIO_STEP_NAME=unknown-step", "claude", "--print", "test"]
+    cmd = ["claude", "--print", "test"]
+    env = {"SCENARIO_STEP_NAME": "unknown-step"}
     with pytest.raises(ScenarioReplayError) as exc_info:
-        await runner(cmd, cwd=tmp_path, timeout=60)
+        await runner(cmd, cwd=tmp_path, timeout=60, env=env)
     msg = str(exc_info.value)
     assert "unknown-step" in msg
     assert "known" in msg
@@ -359,11 +346,13 @@ async def test_sequencing_call_log(tmp_path):
     session_map: dict[str, deque] = {"run": deque([(cli, meta)])}
     runner = ReplayingSubprocessRunner(session_map, non_session)
 
-    cmd1 = ["env", "SCENARIO_STEP_NAME=run", "claude", "--print", "go"]
-    cmd2 = ["env", "SCENARIO_STEP_NAME=check", "task", "test"]
+    cmd1 = ["claude", "--print", "go"]
+    env1 = {"SCENARIO_STEP_NAME": "run"}
+    cmd2 = ["task", "test"]
+    env2 = {"SCENARIO_STEP_NAME": "check"}
 
-    await runner(cmd1, cwd=tmp_path, timeout=60)
-    await runner(cmd2, cwd=tmp_path, timeout=60)
+    await runner(cmd1, cwd=tmp_path, timeout=60, env=env1)
+    await runner(cmd2, cwd=tmp_path, timeout=60, env=env2)
 
     assert len(runner.call_log) == 2
     assert runner.call_log[0] == ("run", cmd1)
@@ -383,9 +372,10 @@ async def test_sequencing_multiple_calls_advance_queue(tmp_path):
     session_map: dict[str, deque] = {"implement": deque([(cli1, meta1), (cli2, meta2)])}
     runner = ReplayingSubprocessRunner(session_map, {})
 
-    cmd = ["env", "SCENARIO_STEP_NAME=implement", "claude", "--print", "go"]
-    result1 = await runner(cmd, cwd=tmp_path, timeout=60)
-    result2 = await runner(cmd, cwd=tmp_path, timeout=60)
+    cmd = ["claude", "--print", "go"]
+    env = {"SCENARIO_STEP_NAME": "implement"}
+    result1 = await runner(cmd, cwd=tmp_path, timeout=60, env=env)
+    result2 = await runner(cmd, cwd=tmp_path, timeout=60, env=env)
 
     assert result1.stdout == "first"
     assert result2.stdout == "second"
@@ -401,8 +391,9 @@ async def test_sequencing_exhausted_session_falls_to_non_session(tmp_path):
     session_map: dict[str, deque] = {"test": deque()}
     runner = ReplayingSubprocessRunner(session_map, non_session)
 
-    cmd = ["env", "SCENARIO_STEP_NAME=test", "task", "test"]
-    result = await runner(cmd, cwd=tmp_path, timeout=60)
+    cmd = ["task", "test"]
+    env = {"SCENARIO_STEP_NAME": "test"}
+    result = await runner(cmd, cwd=tmp_path, timeout=60, env=env)
 
     assert result.returncode == 2
     assert result.stdout == "non-session result"
@@ -492,8 +483,9 @@ async def test_cross_scenario_override(tmp_path):
     session_map: dict[str, deque] = {"implement": deque([(override_cli, override_meta)])}
 
     runner = ReplayingSubprocessRunner(session_map, {})
-    cmd = ["env", "SCENARIO_STEP_NAME=implement", "claude", "--print", "go"]
-    result = await runner(cmd, cwd=tmp_path, timeout=60)
+    cmd = ["claude", "--print", "go"]
+    env = {"SCENARIO_STEP_NAME": "implement"}
+    result = await runner(cmd, cwd=tmp_path, timeout=60, env=env)
 
     assert result.stdout == "from-overridden-scenario2"
     assert result.returncode == 0

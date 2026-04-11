@@ -491,3 +491,57 @@ async def test_triage_command_includes_format_required_flags(
     fmt = OutputFormat.JSON
     for flag in fmt.required_cli_flags:
         assert flag in cmd, f"Missing required flag {flag!r} in triage command: {cmd}"
+
+
+@pytest.mark.anyio
+async def test_triage_env_excludes_ide_vars(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """triage_staleness must route env through build_claude_env() — no IDE leak."""
+    from unittest.mock import AsyncMock
+
+    from autoskillit._llm_triage import triage_staleness
+    from autoskillit.execution.process import SubprocessResult, TerminationReason
+
+    monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
+    monkeypatch.setenv("ENABLE_IDE_INTEGRATION", "true")
+
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# Test\nContent.")
+    monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+
+    ndjson = (
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": json.dumps(
+                    [
+                        {
+                            "index": 1,
+                            "skill": "test-skill",
+                            "meaningful_change": False,
+                            "summary": "",
+                        }
+                    ]
+                ),
+                "session_id": "s1",
+            }
+        )
+        + "\n"
+    )
+    mock_run = AsyncMock(
+        return_value=SubprocessResult(0, ndjson, "", TerminationReason.NATURAL_EXIT, pid=1)
+    )
+    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+
+    item = StaleItem(
+        skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
+    )
+    await triage_staleness([item])
+
+    env = mock_run.call_args.kwargs["env"]
+    assert env is not None
+    assert "CLAUDE_CODE_SSE_PORT" not in env
+    assert "ENABLE_IDE_INTEGRATION" not in env
+    assert env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"

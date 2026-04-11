@@ -167,7 +167,8 @@ class TestRunSkillPrefix:
         )
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[5].startswith("Use /investigate error")
+        prompt_idx = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
+        assert cmd[prompt_idx].startswith("Use /investigate error")
         # cwd must propagate to the subprocess runner
         from pathlib import Path
 
@@ -222,7 +223,8 @@ class TestRunSkillPrefix:
         )
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
-        assert "%%ORDER_UP::" in cmd[5]
+        prompt_idx = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
+        assert "%%ORDER_UP::" in cmd[prompt_idx]
         # cwd must propagate to the subprocess runner
         from pathlib import Path
 
@@ -328,9 +330,8 @@ class TestRunSkillInjectsCompletionDirective:
         await run_skill("/investigate foo", "/tmp")
 
         cmd = tool_ctx.runner.call_args_list[-1][0]
-        # The prompt argument is at index 5
-        # (shifted by 3 env tokens: env + AUTOSKILLIT_HEADLESS=1 + delay)
-        skill_arg = cmd[5]
+        prompt_idx = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
+        skill_arg = cmd[prompt_idx]
         assert "%%ORDER_UP::" in skill_arg
         assert "ORCHESTRATION DIRECTIVE" in skill_arg
 
@@ -350,17 +351,17 @@ class TestRunSkillInjectsCompletionDirective:
 
 
 class TestRunSkillEnvPrefix:
-    """run_skill always injects AUTOSKILLIT_HEADLESS=1 and optionally CLAUDE_CODE_EXIT_AFTER_STOP_DELAY."""  # noqa: E501
+    """run_skill always injects AUTOSKILLIT_HEADLESS=1 and optionally CLAUDE_CODE_EXIT_AFTER_STOP_DELAY via the env kwarg."""  # noqa: E501
 
     @pytest.mark.anyio
-    async def test_default_delay_prepends_env_to_cmd(self, tool_ctx):
+    async def test_default_delay_populates_env(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[0] == "env"
-        assert cmd[1] == "AUTOSKILLIT_HEADLESS=1"
-        assert cmd[2] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000"
-        assert "claude" in cmd
+        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        assert cmd[0] == "claude"
+        env = kwargs["env"]
+        assert env["AUTOSKILLIT_HEADLESS"] == "1"
+        assert env["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] == "120000"
 
     @pytest.mark.anyio
     async def test_zero_delay_omits_delay_env_var(self, tool_ctx):
@@ -370,25 +371,25 @@ class TestRunSkillEnvPrefix:
         tool_ctx.config = cfg
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd = tool_ctx.runner.call_args_list[0][0]
-        # AUTOSKILLIT_HEADLESS=1 is always injected; delay var is omitted when delay=0
-        assert cmd[0] == "env"
-        assert cmd[1] == "AUTOSKILLIT_HEADLESS=1"
-        assert cmd[2] == "claude"
-        assert not any("CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" in arg for arg in cmd)
+        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        assert cmd[0] == "claude"
+        env = kwargs["env"]
+        assert env["AUTOSKILLIT_HEADLESS"] == "1"
+        assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in env
 
     @pytest.mark.anyio
-    async def test_custom_delay_value_in_cmd(self, tool_ctx):
+    async def test_custom_delay_value_in_env(self, tool_ctx):
         cfg = AutomationConfig()
         cfg.run_skill = RunSkillConfig(exit_after_stop_delay_ms=60000)
         cfg.safety.require_dry_walkthrough = False
         tool_ctx.config = cfg
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[0] == "env"
-        assert cmd[1] == "AUTOSKILLIT_HEADLESS=1"
-        assert cmd[2] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=60000"
+        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        assert cmd[0] == "claude"
+        env = kwargs["env"]
+        assert env["AUTOSKILLIT_HEADLESS"] == "1"
+        assert env["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] == "60000"
 
 
 class TestRunSkillPassesSessionLogDir:

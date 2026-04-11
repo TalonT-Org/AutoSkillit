@@ -835,7 +835,7 @@ async def run_headless_core(
     ):
         effective_plugin_dir = ctx.plugin_dir
         resolved_model = _resolve_model(model, ctx.config)
-        cmd = build_full_headless_cmd(
+        spec = build_full_headless_cmd(
             skill_command,
             cwd=cwd,
             completion_marker=effective_marker,
@@ -876,9 +876,10 @@ async def run_headless_core(
         _result: SubprocessResult | None = None
         try:
             _result = await runner(
-                cmd,
+                spec.cmd,
                 cwd=Path(cwd),
                 timeout=effective_timeout,
+                env=spec.env,
                 pty_mode=True,
                 session_log_dir=_session_log_dir(cwd),
                 completion_marker=effective_marker,

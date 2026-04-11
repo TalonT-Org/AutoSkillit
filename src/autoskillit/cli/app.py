@@ -428,7 +428,9 @@ def _launch_cook_session(
         print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
     spec = build_interactive_cmd(
-        initial_prompt=initial_message, resume_session_id=resume_session_id
+        initial_prompt=initial_message,
+        resume_session_id=resume_session_id,
+        env_extras=extra_env,
     )
     cmd = spec.cmd + [
         ClaudeFlags.PLUGIN_DIR,
@@ -438,11 +440,8 @@ def _launch_cook_session(
         ClaudeFlags.APPEND_SYSTEM_PROMPT,
         system_prompt,
     ]
-    env = {**os.environ, **spec.env}
-    if extra_env:
-        env.update(extra_env)
     with terminal_guard():
-        result = subprocess.run(cmd, env=env)
+        result = subprocess.run(cmd, env=spec.env)
     if result.returncode != 0:
         sys.exit(result.returncode)
 

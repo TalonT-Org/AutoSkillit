@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import subprocess
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -98,7 +99,7 @@ async def run_managed_async(
     cwd: Path,
     timeout: float,
     input_data: str | None = None,
-    env: dict[str, str] | None = None,
+    env: Mapping[str, str] | None = None,
     pty_mode: bool = False,
     heartbeat_record_types: frozenset[str] = frozenset({"result"}),
     session_log_dir: Path | None = None,
@@ -322,7 +323,7 @@ def run_managed_sync(
     cwd: Path | None,
     timeout: float,
     input_data: str | None = None,
-    env: dict[str, str] | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> SubprocessResult:
     """Sync subprocess execution with temp file I/O and process tree cleanup.
 
@@ -398,7 +399,7 @@ class DefaultSubprocessRunner:
         *,
         cwd: Path,
         timeout: float,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] | None = None,
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,

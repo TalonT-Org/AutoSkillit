@@ -106,6 +106,7 @@ generic_automation_mcp/
 │   ├── _type_results.py     #   LoadResult, SkillResult, FailureRecord, CleanupResult, etc.
 │   ├── _type_protocols.py   #   Protocols: GatePolicy, HeadlessExecutor, CIWatcher, etc.
 │   ├── _type_helpers.py
+│   ├── _claude_env.py       #   IDE-scrubbing canonical env builder for claude subprocesses
 │   ├── _terminal_table.py   #   L0 color-agnostic terminal table primitive
 │   ├── branch_guard.py
 │   ├── claude_conventions.py #  Skill discovery directory layout constants

@@ -13,7 +13,7 @@ hooks:
 # diagnose-ci Skill
 
 Fetch CI logs for a failing branch, classify the failure type, and write a structured
-diagnosis report to `.autoskillit/temp/diagnose-ci/`. Called by the orchestrator on `ci_watch` failure
+diagnosis report to `{{AUTOSKILLIT_TEMP}}/diagnose-ci/`. Called by the orchestrator on `ci_watch` failure
 before routing to `resolve-failures`.
 
 ## Invocation
@@ -34,7 +34,7 @@ before routing to `resolve-failures`.
 **NEVER:**
 - Modify any source code files
 - Run the test suite
-- Write files outside `.autoskillit/temp/diagnose-ci/`
+- Write files outside `{{AUTOSKILLIT_TEMP}}/diagnose-ci/`
 - Block on missing `gh` CLI — write a minimal `failure_type=unknown` diagnosis instead
 
 **ALWAYS:**
@@ -111,7 +111,7 @@ Determine `is_fixable`:
 
 ### Step 6: Write Diagnosis Report
 
-Create directory `.autoskillit/temp/diagnose-ci/` if it doesn't exist. Write the diagnosis file:
+Create directory `{{AUTOSKILLIT_TEMP}}/diagnose-ci/` if it doesn't exist. Write the diagnosis file:
 
 ```markdown
 # CI Diagnosis: {branch}
@@ -132,7 +132,7 @@ Create directory `.autoskillit/temp/diagnose-ci/` if it doesn't exist. Write the
 {1-3 sentences describing how resolve-failures should approach this}
 ```
 
-Save to `.autoskillit/temp/diagnose-ci/diagnosis_{timestamp}.md`. (relative to the current working directory)
+Save to `{{AUTOSKILLIT_TEMP}}/diagnose-ci/diagnosis_{timestamp}.md`. (relative to the current working directory)
 
 ### Step 7: Emit Output Tokens
 
@@ -144,7 +144,7 @@ Emit these tokens on their own lines at the end of your response:
 > exact token name — decorators cause match failure.
 
 ```
-diagnosis_path = /absolute/path/to/.autoskillit/temp/diagnose-ci/diagnosis_{timestamp}.md
+diagnosis_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/diagnose-ci/diagnosis_{timestamp}.md
 failure_type = test|lint|build|type_check|env|unknown
 is_fixable = true|false
 ```

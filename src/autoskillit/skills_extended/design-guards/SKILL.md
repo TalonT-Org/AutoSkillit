@@ -22,21 +22,21 @@ Take a bug pattern audit report and design architectural guards that make each p
 
 ## Arguments
 
-Path to a bug pattern audit report (typically under `.autoskillit/temp/audit-bugs/`). If not specified, use the most recent `.autoskillit/temp/audit-bugs/bug_pattern_audit_*.md`.
+Path to a bug pattern audit report (typically under `{{AUTOSKILLIT_TEMP}}/audit-bugs/`). If not specified, use the most recent `{{AUTOSKILLIT_TEMP}}/audit-bugs/bug_pattern_audit_*.md`.
 
 ## Critical Constraints
 
 **NEVER:**
 - Modify any source code files
 - Propose bandaid fixes or direct-only patches
-- Create files outside `.autoskillit/temp/design-guards/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/design-guards/` directory
 
 **ALWAYS:**
 - Use subagents for parallel codebase exploration
 - Focus on structural immunity over one-off fixes
 - Each guard must be concrete and testable
-- All output goes under `.autoskillit/temp/design-guards/` (create if needed)
-- Final report: `.autoskillit/temp/design-guards/defense_guards_{YYYY-MM-DD_HHMMSS}.md`
+- All output goes under `{{AUTOSKILLIT_TEMP}}/design-guards/` (create if needed)
+- Final report: `{{AUTOSKILLIT_TEMP}}/design-guards/defense_guards_{YYYY-MM-DD_HHMMSS}.md`
 - Subagents must NOT create their own files - they return findings in their response text only
 - Do not change any code
 
@@ -82,9 +82,9 @@ Prioritize guards by:
 
 ### Step 4: Write Report
 
-Ensure `.autoskillit/temp/design-guards/` exists (`mkdir -p`).
+Ensure `{{AUTOSKILLIT_TEMP}}/design-guards/` exists (`mkdir -p`).
 
-Save to: `.autoskillit/temp/design-guards/defense_guards_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Save to: `{{AUTOSKILLIT_TEMP}}/design-guards/defense_guards_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ```markdown
 # Defense Guards: {Report Title}

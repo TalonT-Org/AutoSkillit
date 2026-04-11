@@ -11,10 +11,18 @@ from __future__ import annotations
 
 import os
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import SubprocessRunner, WriteBehaviorSpec, get_logger, pkg_root
+from autoskillit.core import (
+    SubprocessRunner,
+    WriteBehaviorSpec,
+    get_logger,
+    pkg_root,
+    resolve_temp_dir,
+    temp_dir_display_str,
+)
 from autoskillit.execution import (
     RECORD_SCENARIO_DIR_ENV,
     RECORD_SCENARIO_ENV,
@@ -162,7 +170,11 @@ def make_context(
     resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
     gate = DefaultGateState(enabled=False)
 
-    provider = SkillsDirectoryProvider()
+    project_dir = Path.cwd()
+    temp_dir = resolve_temp_dir(project_dir, config.workspace.temp_dir)
+    temp_dir_relpath = temp_dir_display_str(config.workspace.temp_dir)
+
+    provider = SkillsDirectoryProvider(temp_dir_relpath=temp_dir_relpath)
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root)
 
@@ -176,6 +188,7 @@ def make_context(
         gate=gate,
         plugin_dir=resolved_dir,
         runner=runner,
+        temp_dir=temp_dir,
         tester=DefaultTestRunner(config=config, runner=runner) if runner is not None else None,
         recipes=DefaultRecipeRepository(),
         db_reader=DefaultDatabaseReader(),

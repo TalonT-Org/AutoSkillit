@@ -8,6 +8,7 @@ Replaces two mutable module-level singletons in server.py:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
@@ -83,6 +84,7 @@ class ToolContext:
     gate: GatePolicy
     plugin_dir: str
     runner: SubprocessRunner | None
+    temp_dir: Path = field(default_factory=lambda: Path.cwd() / ".autoskillit" / "temp")
     response_log: McpResponseStore = field(default_factory=DefaultMcpResponseLog)
     executor: HeadlessExecutor | None = field(default=None)
     tester: TestRunner | None = field(default=None)

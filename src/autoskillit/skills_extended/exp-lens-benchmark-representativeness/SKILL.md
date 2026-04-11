@@ -42,7 +42,7 @@ hooks:
 **NEVER:**
 - Modify any source code files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
-- Create files outside `.autoskillit/temp/exp-lens-benchmark-representativeness/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-benchmark-representativeness/`
 
 **ALWAYS:**
 - Focus on GENERALIZATION GAP between benchmark coverage and claimed scope
@@ -51,12 +51,12 @@ hooks:
 - Include a coverage matrix mapping scenarios to metrics
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Write output to `.autoskillit/temp/exp-lens-benchmark-representativeness/exp_diag_benchmark_representativeness_{YYYY-MM-DD_HHMMSS}.md`
+- Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-benchmark-representativeness/exp_diag_benchmark_representativeness_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
 
   ```
-  diagram_path = /absolute/path/to/.autoskillit/temp/exp-lens-benchmark-representativeness/exp_diag_benchmark_representativeness_{...}.md
+  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-benchmark-representativeness/exp_diag_benchmark_representativeness_{...}.md
   %%ORDER_UP%%
   ```
 
@@ -136,7 +136,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/exp-lens-benchmark-representativeness/exp_diag_benchmark_representativeness_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `{{AUTOSKILLIT_TEMP}}/exp-lens-benchmark-representativeness/exp_diag_benchmark_representativeness_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

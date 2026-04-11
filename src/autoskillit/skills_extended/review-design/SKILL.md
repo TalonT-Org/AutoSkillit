@@ -35,7 +35,7 @@ best available plan.
 ## Critical Constraints
 
 **NEVER:**
-- Modify the plan file, any source code, or any file outside `.autoskillit/temp/review-design/`
+- Modify the plan file, any source code, or any file outside `{{AUTOSKILLIT_TEMP}}/review-design/`
 - Halt the pipeline for a REVISE verdict — emit the verdict and let the recipe route
 - Proceed to Level 2, 3, or 4 analysis when any Level 1 finding is classified as
   STRUCTURAL (halt at fail-fast gate). ADDRESSABLE L1 criticals continue L2-L4.
@@ -46,14 +46,14 @@ best available plan.
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
-- Write output to `.autoskillit/temp/review-design/` (relative to the current working directory)
+- Write output to `{{AUTOSKILLIT_TEMP}}/review-design/` (relative to the current working directory)
 - After writing output files, emit the **absolute paths** as structured output tokens
   immediately before `%%ORDER_UP%%`. Resolve relative save paths to absolute by prepending
   the full CWD:
     verdict = GO|REVISE|STOP
     experiment_type = {type}
-    evaluation_dashboard = /absolute/cwd/.autoskillit/temp/review-design/{filename}.md
-    revision_guidance = /absolute/cwd/.autoskillit/temp/review-design/{filename}.md   (REVISE only)
+    evaluation_dashboard = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/review-design/{filename}.md
+    revision_guidance = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/review-design/{filename}.md   (REVISE only)
     %%ORDER_UP%%
 - `revision_guidance` is written and emitted ONLY when verdict = REVISE
 - `evaluation_dashboard` is ALWAYS written and emitted
@@ -66,7 +66,7 @@ best available plan.
 
 ### Step 0: Read Plan & Setup
 
-1. Create `.autoskillit/temp/review-design/` if absent.
+1. Create `{{AUTOSKILLIT_TEMP}}/review-design/` if absent.
 2. Extract `experiment_plan_path` from arguments (first path-like token starting with `/`,
    `./`, or `.autoskillit/`).
    **Error handling:** If no path-like token is found in the arguments, emit
@@ -508,8 +508,8 @@ Emit these lines immediately before `%%ORDER_UP%%`:
 ```
 verdict = GO|REVISE|STOP
 experiment_type = {experiment_type}
-evaluation_dashboard = /absolute/path/.autoskillit/temp/review-design/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md
-revision_guidance = /absolute/path/.autoskillit/temp/review-design/revision_guidance_{slug}_{YYYY-MM-DD_HHMMSS}.md
+evaluation_dashboard = /absolute/path/{{AUTOSKILLIT_TEMP}}/review-design/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md
+revision_guidance = /absolute/path/{{AUTOSKILLIT_TEMP}}/review-design/revision_guidance_{slug}_{YYYY-MM-DD_HHMMSS}.md
 %%ORDER_UP%%
 ```
 
@@ -563,7 +563,7 @@ Red-team findings: always `"requires_decision": true`, `"dimension": "red_team"`
 ## Output
 
 ```
-.autoskillit/temp/review-design/
+{{AUTOSKILLIT_TEMP}}/review-design/
 ├── evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md   (always written)
 └── revision_guidance_{slug}_{YYYY-MM-DD_HHMMSS}.md      (REVISE only)
 ```

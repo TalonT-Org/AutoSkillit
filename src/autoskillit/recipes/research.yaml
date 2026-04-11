@@ -170,8 +170,8 @@ steps:
     message: >
       Research pipeline halted: experiment design rejected (verdict=STOP, resolution=failed).
       All stop-trigger findings are structural — revision cannot address the identified flaws.
-      Check .autoskillit/temp/resolve-design-review/ for the triage report and
-      .autoskillit/temp/review-design/ for the evaluation dashboard.
+      Check {{AUTOSKILLIT_TEMP}}/resolve-design-review/ for the triage report and
+      {{AUTOSKILLIT_TEMP}}/review-design/ for the evaluation dashboard.
 
   # --- EXECUTION PHASE ---
   create_worktree:
@@ -183,11 +183,11 @@ steps:
         git worktree add -b "${BRANCH}" "${WORKTREE_PATH}" &&
         RESOLVED="$(cd "${WORKTREE_PATH}" && pwd)" &&
         case "${RESOLVED}" in /*) ;; *) echo "error: resolved worktree path is not absolute: ${RESOLVED}" >&2; exit 1;; esac &&
-        mkdir -p ".autoskillit/temp/worktrees/${BRANCH}" &&
-        echo "$(git rev-parse --abbrev-ref HEAD)" > ".autoskillit/temp/worktrees/${BRANCH}/base-branch" &&
-        mkdir -p "${RESOLVED}/.autoskillit/temp" &&
+        mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${BRANCH}" &&
+        echo "$(git rev-parse --abbrev-ref HEAD)" > "{{AUTOSKILLIT_TEMP}}/worktrees/${BRANCH}/base-branch" &&
+        mkdir -p "${RESOLVED}/{{AUTOSKILLIT_TEMP}}" &&
         EXPERIMENT_PLAN="${{ context.experiment_plan }}" &&
-        cp "${EXPERIMENT_PLAN}" "${RESOLVED}/.autoskillit/temp/experiment-plan.md" &&
+        cp "${EXPERIMENT_PLAN}" "${RESOLVED}/{{AUTOSKILLIT_TEMP}}/experiment-plan.md" &&
         TASK="${{ inputs.task }}" &&
         SLUG=$(printf '%s' "${TASK}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/--*/-/g;s/^-//;s/-$//' | cut -c1-30) &&
         RESEARCH_DIR="${RESOLVED}/research/$(date +%Y-%m-%d)-${SLUG:-experiment}" &&
@@ -197,7 +197,7 @@ steps:
         EVAL_DASHBOARD="${{ context.evaluation_dashboard }}" &&
         if [ -n "${SCOPE_REPORT}" ] && [ -f "${SCOPE_REPORT}" ]; then cp "${SCOPE_REPORT}" "${RESEARCH_DIR}/artifacts/scope-report.md"; fi &&
         if [ -n "${EVAL_DASHBOARD}" ] && [ -f "${EVAL_DASHBOARD}" ]; then cp "${EVAL_DASHBOARD}" "${RESEARCH_DIR}/artifacts/design-evaluation.md"; fi &&
-        SRC_TEMP="${{ inputs.source_dir }}/.autoskillit/temp" &&
+        SRC_TEMP="${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}" &&
         mkdir -p "${RESEARCH_DIR}/artifacts/review-cycles" &&
         mkdir -p "${RESEARCH_DIR}/artifacts/plan-versions" &&
         for f in "${SRC_TEMP}"/review-design/evaluation_dashboard_*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/review-cycles/"; done;
@@ -340,7 +340,7 @@ steps:
       cmd: >
         RESULTS="${{ context.experiment_results }}" &&
         if [ -z "${RESULTS}" ]; then
-          RESULTS="${{ context.worktree_path }}/.autoskillit/temp/run-experiment/results-inconclusive.md" &&
+          RESULTS="${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}/run-experiment/results-inconclusive.md" &&
           mkdir -p "$(dirname "${RESULTS}")" &&
           printf '# Experiment Results\n\n## Status\nINCONCLUSIVE\n\nExperiment did not produce results — retries exhausted or adjustment failed.\n' > "${RESULTS}"
         fi &&
@@ -411,7 +411,7 @@ steps:
       cmd: >
         RESEARCH_DIR="${{ context.research_dir }}" &&
         if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
-          WT_TEMP="${{ context.worktree_path }}/.autoskillit/temp" &&
+          WT_TEMP="${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}" &&
           mkdir -p "${RESEARCH_DIR}/artifacts/phase-groups" &&
           mkdir -p "${RESEARCH_DIR}/artifacts/phase-plans" &&
           for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done;

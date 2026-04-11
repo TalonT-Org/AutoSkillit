@@ -34,7 +34,7 @@ Does NOT invoke any exp-lens skills or create a PR.
 
 **NEVER:**
 - Invoke exp-lens skills — they are run in separate sessions by the recipe orchestrator
-- Create files outside `.autoskillit/temp/prepare-research-pr/` (relative to the current working directory)
+- Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-research-pr/` (relative to the current working directory)
 - Fail silently — always emit all three output tokens before `%%ORDER_UP%%`
 
 **ALWAYS:**
@@ -77,7 +77,7 @@ Derive `feature_branch`:
 
 Create temp directory:
 
-    mkdir -p .autoskillit/temp/prepare-research-pr/
+    mkdir -p {{AUTOSKILLIT_TEMP}}/prepare-research-pr/
 
 Generate a timestamp `ts` (format: `YYYY-MM-DD_HHMMSS`) for unique file naming.
 
@@ -125,7 +125,7 @@ Store as `selected_lens_slugs`.
 
 For each slug in `selected_lens_slugs`, write a context file to:
 
-    .autoskillit/temp/prepare-research-pr/exp_lens_context_{slug}_{ts}.md
+    {{AUTOSKILLIT_TEMP}}/prepare-research-pr/exp_lens_context_{slug}_{ts}.md
 
 The context file must contain (enough for the lens to build its diagram without
 reading the entire CWD):
@@ -178,7 +178,7 @@ Store as `results_summary` (plain text, will be embedded in prep file).
 
 ### Step 7: Write PR prep file
 
-Write to `.autoskillit/temp/prepare-research-pr/pr_prep_{ts}.md`:
+Write to `{{AUTOSKILLIT_TEMP}}/prepare-research-pr/pr_prep_{ts}.md`:
 
 ```markdown
 # PR Prep: {title from report}
@@ -236,7 +236,7 @@ Emit these tokens as **literal plain text** (no markdown formatting on the token
 before `%%ORDER_UP%%`:
 
 ```
-prep_path = /absolute/path/.autoskillit/temp/prepare-research-pr/pr_prep_{ts}.md
+prep_path = /absolute/path/{{AUTOSKILLIT_TEMP}}/prepare-research-pr/pr_prep_{ts}.md
 selected_lenses = fair-comparison,estimand-clarity
 lens_context_paths = /abs/ctx_fair-comparison_{ts}.md,/abs/ctx_estimand-clarity_{ts}.md
 %%ORDER_UP%%

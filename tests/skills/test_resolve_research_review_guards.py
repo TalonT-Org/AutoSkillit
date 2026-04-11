@@ -310,9 +310,9 @@ def test_step7_report_includes_escalations() -> None:
 
 
 def test_temp_dir_uses_resolve_research_review() -> None:
-    """Temp files must use .autoskillit/temp/resolve-research-review/ directory."""
-    assert ".autoskillit/temp/resolve-research-review/" in SKILL_TEXT, (
-        "SKILL.md must use .autoskillit/temp/resolve-research-review/ for temp files"
+    """Temp files must use ``{{AUTOSKILLIT_TEMP}}/resolve-research-review/`` directory."""
+    assert "{{AUTOSKILLIT_TEMP}}/resolve-research-review/" in SKILL_TEXT, (
+        "SKILL.md must use {{AUTOSKILLIT_TEMP}}/resolve-research-review/ for temp files"
     )
 
 

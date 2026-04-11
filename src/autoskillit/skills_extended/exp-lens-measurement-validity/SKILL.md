@@ -42,7 +42,7 @@ hooks:
 **NEVER:**
 - Modify any source code or experimental artifacts
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
-- Create files outside `.autoskillit/temp/exp-lens-measurement-validity/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-measurement-validity/`
 
 **ALWAYS:**
 - Treat every reported metric as a claim requiring a validity argument
@@ -51,12 +51,12 @@ hooks:
 - Identify where metric-construct alignment is weak or unsupported by evidence
 - BEFORE creating any optional diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Write output to `.autoskillit/temp/exp-lens-measurement-validity/exp_diag_measurement_validity_{YYYY-MM-DD_HHMMSS}.md`
+- Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-measurement-validity/exp_diag_measurement_validity_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
 
   ```
-  diagram_path = /absolute/path/to/.autoskillit/temp/exp-lens-measurement-validity/exp_diag_measurement_validity_{...}.md
+  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-measurement-validity/exp_diag_measurement_validity_{...}.md
   %%ORDER_UP%%
   ```
 
@@ -137,7 +137,7 @@ If including the optional diagram:
 
 ### Step 5: Write Output
 
-Write the output to: `.autoskillit/temp/exp-lens-measurement-validity/exp_diag_measurement_validity_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the output to: `{{AUTOSKILLIT_TEMP}}/exp-lens-measurement-validity/exp_diag_measurement_validity_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

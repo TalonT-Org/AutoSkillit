@@ -1,7 +1,7 @@
 ---
 name: audit-tests
 categories: [audit]
-description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, and other test quality issues. Use when user says "audit tests", "audit test suite", "review tests", or "test quality check". Generates an improvement plan in .autoskillit/temp/ with explanations for each proposed change.
+description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, and other test quality issues. Use when user says "audit tests", "audit test suite", "review tests", or "test quality check". Generates an improvement plan in {{AUTOSKILLIT_TEMP}}/ with explanations for each proposed change.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -33,7 +33,7 @@ Audit the test suite to identify useless tests, consolidation opportunities, qua
 - Use subagents for parallel exploration
 - Read both the test AND the code it tests before judging
 - Provide file paths, line numbers, and an explanation for each finding
-- Write the improvement plan to `.autoskillit/temp/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+- Write the improvement plan to `{{AUTOSKILLIT_TEMP}}/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - Categorize findings by issue type and severity
 
 ---
@@ -152,7 +152,7 @@ After subagents complete:
 
 ### Step 3: Generate Improvement Plan
 
-Write a structured plan to: `.autoskillit/temp/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write a structured plan to: `{{AUTOSKILLIT_TEMP}}/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 Organize the plan into phases grouped by issue type. Each finding must include:
 - **File path and line range**

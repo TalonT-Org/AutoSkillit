@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from autoskillit.core import ClaudeFlags, ValidatedAddDir
+from autoskillit.core import ClaudeFlags, ValidatedAddDir, temp_dir_display_str
 
 
 @dataclass(frozen=True)
@@ -92,13 +92,14 @@ def _inject_completion_directive(skill_command: str, marker: str) -> str:
     return skill_command + directive
 
 
-def _inject_cwd_anchor(skill_command: str, cwd: str) -> str:
+def _inject_cwd_anchor(skill_command: str, cwd: str, temp_dir_relpath: str | None = None) -> str:
     """Append a working directory anchor directive to prevent path contamination."""
     if not cwd or not os.path.isabs(cwd):
         return skill_command
+    relpath = temp_dir_relpath if temp_dir_relpath is not None else temp_dir_display_str(None)
     directive = (
         f"\n\nWORKING DIRECTORY ANCHOR: Your working directory is {cwd}. "
-        f"All relative paths (.autoskillit/temp/, .autoskillit/, etc.) "
+        f"All relative paths ({relpath}/, .autoskillit/, etc.) "
         f"MUST resolve against {cwd}. "
         f"Do NOT use any other directory as a base for relative paths, regardless of "
         f"what paths appear in code-index tool responses or set_project_path results. "
@@ -119,6 +120,7 @@ def build_full_headless_cmd(
     add_dirs: Sequence[ValidatedAddDir] = (),
     exit_after_stop_delay_ms: int = 0,
     scenario_step_name: str = "",
+    temp_dir_relpath: str | None = None,
 ) -> list[str]:
     """Build the complete headless command list ready for subprocess invocation.
 
@@ -152,6 +154,7 @@ def build_full_headless_cmd(
     prompt = _inject_cwd_anchor(
         _inject_completion_directive(_ensure_skill_prefix(skill_command), completion_marker),
         cwd,
+        temp_dir_relpath=temp_dir_relpath,
     )
     spec = build_headless_cmd(prompt, model=model)
     cmd: list[str] = spec.cmd + [

@@ -33,7 +33,7 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 **NEVER:**
 - Modify any files in the target project without user confirmation at the summary gate
 - Run commands that change the target project
-- Create files outside `.autoskillit/temp/setup-project/` directory (until the summary gate)
+- Create files outside `{{AUTOSKILLIT_TEMP}}/setup-project/` directory (until the summary gate)
 - Assume test framework — detect it from evidence
 - Use Makefile or `make` in generated examples — use Taskfile/`task` if a task runner is needed
 - Suggest `reset_guard_marker` config — that's a workspace concern, not project setup
@@ -137,12 +137,12 @@ Consolidate subagent findings into a structured profile:
 - Current git branch (for `base_branch` default)
 - Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate recipe drafts
 
-### Step 3: Write Analysis to .autoskillit/temp/ (relative to the current working directory)
+### Step 3: Write Analysis to {{AUTOSKILLIT_TEMP}}/ (relative to the current working directory)
 
 Before presenting anything interactively, write the full analysis (project profile, workflow patterns, candidate workflows, shell command patterns) to:
 
 ```
-.autoskillit/temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md
+{{AUTOSKILLIT_TEMP}}/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md
 ```
 
 Tell the user: "Full analysis saved to {path} for your review."
@@ -254,7 +254,7 @@ Do NOT include:
 ## Output
 
 Artifacts created:
-- `.autoskillit/temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
+- `{{AUTOSKILLIT_TEMP}}/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
 - `.autoskillit/recipes/{name}.yaml` — approved recipes
 - `.autoskillit/config.yaml` — updated config (if changes approved)
 

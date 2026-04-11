@@ -206,7 +206,7 @@ def test_arch_lens_context_via_file_not_prose(skill_name: str) -> None:
     it as a conversational text block.
     """
     text = _skill_text(skill_name)
-    assert f".autoskillit/temp/{skill_name}/pr_arch_lens_context_" in text, (
+    assert f"{{{{AUTOSKILLIT_TEMP}}}}/{skill_name}/pr_arch_lens_context_" in text, (
         f"{skill_name}/SKILL.md does not reference a skill-scoped pr_arch_lens_context file. "
         "PR context must be written to a skill-scoped temp file, not a shared path."
     )

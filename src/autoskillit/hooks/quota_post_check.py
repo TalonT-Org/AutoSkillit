@@ -20,14 +20,14 @@ _DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
 _DEFAULT_THRESHOLD = 85.0
 _DEFAULT_CACHE_MAX_AGE = 300  # seconds
 
-HOOK_CONFIG_FILENAME = ".autoskillit_hook_config.json"
-HOOK_DIR_COMPONENTS = (".autoskillit", "temp")
+HOOK_CONFIG_FILENAME = ".hook_config.json"
+HOOK_DIR_COMPONENTS = (".autoskillit",)
 
 _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
 
 
 def _read_hook_config() -> dict:
-    """Read server-written config from .autoskillit/temp/.autoskillit_hook_config.json.
+    """Read server-written config from ``<cwd>/.autoskillit/.hook_config.json``.
 
     Returns the quota_guard section, or {} if the file is absent or unreadable.
     """

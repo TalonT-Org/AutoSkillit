@@ -80,8 +80,8 @@ def test_structured_output_tokens_present():
 
 
 def test_temp_directory_is_resolve_design_review():
-    """SKILL.md must use .autoskillit/temp/resolve-design-review/ for output."""
-    assert ".autoskillit/temp/resolve-design-review/" in SKILL_TEXT
+    """SKILL.md must use ``{{AUTOSKILLIT_TEMP}}/resolve-design-review/`` for output."""
+    assert "{{AUTOSKILLIT_TEMP}}/resolve-design-review/" in SKILL_TEXT
 
 
 # ── Diminishing-return detection ──────────────────────────────────────────────

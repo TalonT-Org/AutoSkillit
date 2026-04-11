@@ -45,7 +45,7 @@ incorporate the feedback before writing the plan.
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `.autoskillit/temp/plan-experiment/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/plan-experiment/` directory
 - Write implementation code — this skill produces a plan only
 - Skip the threats-to-validity section
 - Leave success criteria vague — every criterion must be measurable
@@ -56,7 +56,7 @@ incorporate the feedback before writing the plan.
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
-- Write output to `.autoskillit/temp/plan-experiment/` directory
+- Write output to `{{AUTOSKILLIT_TEMP}}/plan-experiment/` directory
 - State hypotheses as falsifiable claims with measurable outcomes
 - Define metrics before describing the method
 - Reference specific files, functions, and test fixtures from the scope report
@@ -446,7 +446,7 @@ Field requirements by experiment type:
 ### Step 4 — Write Output
 
 Save the experiment plan to:
-`.autoskillit/temp/plan-experiment/experiment_plan_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+`{{AUTOSKILLIT_TEMP}}/plan-experiment/experiment_plan_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After saving, emit the structured output token as the very last line of your
 text output:

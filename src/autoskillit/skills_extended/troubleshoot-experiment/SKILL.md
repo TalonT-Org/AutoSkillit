@@ -34,7 +34,7 @@ Called by the `research` recipe on `implement_phase` failure before routing to
 **NEVER:**
 - Modify any source code files
 - Run tests
-- Write files outside `.autoskillit/temp/troubleshoot-experiment/`
+- Write files outside `{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/`
 - Abort when session data is missing — emit `failure_type=unknown`, `is_fixable=false` and exit cleanly
 
 **ALWAYS:**
@@ -75,7 +75,7 @@ From `~/.local/share/autoskillit/logs/sessions/{session_id}/`:
 - `anomalies.jsonl` — structured anomaly records (one per line): `kind`,
   `severity`, `detail`
 
-Also read from `{worktree_path}/.autoskillit/temp/run-experiment/` any
+Also read from `{worktree_path}/{{AUTOSKILLIT_TEMP}}/run-experiment/` any
 `results_*.md` files (if the failed step was `run_experiment` and produced
 partial results).
 
@@ -98,10 +98,10 @@ Apply this decision table in priority order (stop at the first match):
 
 ### Step 5: Write Diagnosis Report
 
-Create directory `.autoskillit/temp/troubleshoot-experiment/` if it does not exist.
+Create directory `{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/` if it does not exist.
 Write the diagnosis file to:
 
-`.autoskillit/temp/troubleshoot-experiment/diagnosis_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+`{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/diagnosis_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ```markdown
 # Experiment Failure Diagnosis

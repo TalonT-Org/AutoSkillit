@@ -314,6 +314,8 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
         recipe_info=None,
         resolved_defaults=None,
         ingredient_overrides=None,
+        temp_dir=None,
+        temp_dir_relpath=None,
     ):
         captured["recipe_info"] = recipe_info
         return real_fn(
@@ -323,6 +325,8 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
             recipe_info=recipe_info,
             resolved_defaults=resolved_defaults,
             ingredient_overrides=ingredient_overrides,
+            temp_dir=temp_dir,
+            temp_dir_relpath=temp_dir_relpath,
         )
 
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)

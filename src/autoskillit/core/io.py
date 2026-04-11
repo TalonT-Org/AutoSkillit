@@ -20,7 +20,43 @@ __all__ = [
     "ensure_project_temp",
     "load_yaml",
     "dump_yaml_str",
+    "resolve_temp_dir",
+    "temp_dir_display_str",
 ]
+
+
+def resolve_temp_dir(project_dir: Path, override: str | None = None) -> Path:
+    """Resolve the autoskillit temp directory for a project.
+
+    Canonical default literal: ``.autoskillit/temp`` — do not change without
+    updating ``_TEMP_PATH_WHITELIST`` in ``tests/python_no_hardcoded_temp.py``.
+
+    Precedence:
+    - ``override`` absolute: returned as-is.
+    - ``override`` relative: anchored to ``project_dir``.
+    - ``override`` None: default to ``project_dir/.autoskillit/temp``.
+
+    ``override == ""`` raises ``ValueError``; empty strings must be normalized to
+    ``None`` at the ``AutomationConfig.from_dynaconf`` dataclass boundary.
+    """
+    if override is None:
+        return project_dir / ".autoskillit" / "temp"
+    if override == "":
+        raise ValueError(
+            "resolve_temp_dir received empty string; "
+            "normalize empty to None at the dataclass boundary"
+        )
+    p = Path(override)
+    return p if p.is_absolute() else project_dir / p
+
+
+def temp_dir_display_str(override: str | None) -> str:
+    """Return the string placed into SKILL.md/recipe YAML for ``override``.
+
+    Mirrors ``resolve_temp_dir`` for string-facing sites (skill content,
+    recipe YAML substitution). ``None`` yields the canonical default literal.
+    """
+    return override or ".autoskillit/temp"
 
 
 def atomic_write(path: Path, content: str) -> None:
@@ -39,14 +75,7 @@ def atomic_write(path: Path, content: str) -> None:
         raise
 
 
-_AUTOSKILLIT_GITIGNORE_ENTRIES = ["temp/", ".secrets.yaml", ".onboarded", "sync_manifest.json"]
-
-_ROOT_GITIGNORE_ENTRIES = [
-    ".autoskillit/.secrets.yaml",
-    ".autoskillit/temp/",
-    ".autoskillit/.onboarded",
-    ".autoskillit/sync_manifest.json",
-]
+_AUTOSKILLIT_GITIGNORE_ENTRIES = [".secrets.yaml", ".onboarded", "sync_manifest.json"]
 
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(
     {
@@ -56,30 +85,45 @@ _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(
 )
 
 
-def ensure_project_temp(project_dir: Path) -> Path:
-    """Create .autoskillit/temp/ with a .gitignore; idempotent. Returns the path."""
-    autoskillit_dir = project_dir / ".autoskillit"
-    temp_dir = autoskillit_dir / "temp"
+def ensure_project_temp(project_dir: Path, override: str | None = None) -> Path:
+    """Create the autoskillit temp directory with a self-gitignore; idempotent.
+
+    Uses the pytest/mypy self-gitignoring directory pattern: the temp directory
+    owns a ``.gitignore`` containing ``*`` — no mutation of the project root
+    ``.gitignore``. Works identically for default, custom-relative, and absolute
+    external overrides.
+
+    Also maintains ``.autoskillit/.gitignore`` covering session artefacts that
+    land alongside ``config.yaml`` (``.secrets.yaml``, ``.onboarded``,
+    ``sync_manifest.json``) when the project uses the canonical ``.autoskillit``
+    directory.
+    """
+    temp_dir = resolve_temp_dir(project_dir, override)
     temp_dir.mkdir(parents=True, exist_ok=True)
-    gitignore_path = autoskillit_dir / ".gitignore"
+    # Race-safe ordering: .gitignore is the FIRST file written after mkdir,
+    # before any session content lands. See pytest #12167 / mypy #12442.
+    gitignore_path = temp_dir / ".gitignore"
     if not gitignore_path.exists():
-        atomic_write(gitignore_path, "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n")
-    else:
-        existing = gitignore_path.read_text(encoding="utf-8")
-        missing = [e for e in _AUTOSKILLIT_GITIGNORE_ENTRIES if e not in existing.splitlines()]
-        if missing:
-            atomic_write(gitignore_path, existing.rstrip("\n") + "\n" + "\n".join(missing) + "\n")
-    root_gitignore = project_dir / ".gitignore"
-    if not root_gitignore.exists():
-        atomic_write(root_gitignore, "\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
-    else:
-        existing_root = root_gitignore.read_text(encoding="utf-8")
-        missing_root = [e for e in _ROOT_GITIGNORE_ENTRIES if e not in existing_root.splitlines()]
-        if missing_root:
+        atomic_write(
+            gitignore_path,
+            "# Created by autoskillit automatically.\n*\n",
+        )
+    autoskillit_dir = project_dir / ".autoskillit"
+    if autoskillit_dir.is_dir():
+        autoskillit_gitignore = autoskillit_dir / ".gitignore"
+        if not autoskillit_gitignore.exists():
             atomic_write(
-                root_gitignore,
-                existing_root.rstrip("\n") + "\n" + "\n".join(missing_root) + "\n",
+                autoskillit_gitignore,
+                "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n",
             )
+        else:
+            existing = autoskillit_gitignore.read_text(encoding="utf-8")
+            missing = [e for e in _AUTOSKILLIT_GITIGNORE_ENTRIES if e not in existing.splitlines()]
+            if missing:
+                atomic_write(
+                    autoskillit_gitignore,
+                    existing.rstrip("\n") + "\n" + "\n".join(missing) + "\n",
+                )
     return temp_dir
 
 

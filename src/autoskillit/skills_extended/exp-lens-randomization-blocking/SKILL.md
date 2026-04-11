@@ -42,7 +42,7 @@ hooks:
 **NEVER:**
 - Modify any source code files
 - Assume comparability without tracing its source
-- Create files outside `.autoskillit/temp/exp-lens-randomization-blocking/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/`
 
 **ALWAYS:**
 - Trace the exact mechanism that creates comparability between treatment groups
@@ -51,12 +51,12 @@ hooks:
 - Verify that replication is adequate for the claimed inferential precision
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Write output to `.autoskillit/temp/exp-lens-randomization-blocking/exp_diag_randomization_blocking_{YYYY-MM-DD_HHMMSS}.md`
+- Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/exp_diag_randomization_blocking_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
 
   ```
-  diagram_path = /absolute/path/to/.autoskillit/temp/exp-lens-randomization-blocking/exp_diag_randomization_blocking_{...}.md
+  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/exp_diag_randomization_blocking_{...}.md
   %%ORDER_UP%%
   ```
 
@@ -112,7 +112,7 @@ For each: Is the comparability mechanism strong enough for the claimed inference
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/exp-lens-randomization-blocking/exp_diag_randomization_blocking_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/exp_diag_randomization_blocking_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

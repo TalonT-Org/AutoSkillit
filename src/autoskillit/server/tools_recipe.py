@@ -111,7 +111,7 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
         "summary" → the open_pr skill self-retrieves its own
                      token summary from disk (pipeline-scoped). Do NOT call
                      get_token_summary for this purpose and do NOT pre-stage
-                     .autoskillit/temp/open-pr/token_summary.md — the skill handles it.
+                     <temp_dir>/open-pr/token_summary.md — the skill handles it.
         "none"    → do NOT call get_token_summary. Skip token reporting entirely.
     - Do NOT print or render a token usage table after individual steps.
       Only one call to get_token_summary is permitted per pipeline run,
@@ -179,6 +179,8 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
         suppressed=suppressed,
         resolved_defaults=_defaults,
         ingredient_overrides=overrides,
+        temp_dir=tool_ctx.temp_dir,
+        temp_dir_relpath=tool_ctx.config.workspace.temp_dir or ".autoskillit/temp",
     )
     recipe_info = tool_ctx.recipes.find(name, Path.cwd())
     return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))

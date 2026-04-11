@@ -366,9 +366,11 @@ class DefaultMigrationService:
         engine: MigrationEngine,
         *,
         run_headless: Callable[..., Awaitable[SkillResult]] | None = None,
+        temp_dir: Path | None = None,
     ) -> None:
         self._engine = engine
         self._run_headless = run_headless
+        self._temp_dir_override = temp_dir
 
     async def migrate(self, recipe_path: Path) -> dict[str, Any]:
         """Apply pending migration notes to the recipe file at recipe_path.
@@ -394,7 +396,12 @@ class DefaultMigrationService:
         # Derive project_dir: recipe_path → recipes_dir → .autoskillit/ → project_dir
         recipes_dir = recipe_path.parent
         project_dir = recipes_dir.parent.parent
-        temp_dir = project_dir / ".autoskillit" / "temp"
+        if self._temp_dir_override is not None:
+            temp_dir = self._temp_dir_override
+        else:
+            from autoskillit.core import resolve_temp_dir  # noqa: PLC0415
+
+            temp_dir = resolve_temp_dir(project_dir, None)
 
         if self._run_headless is not None:
             run_headless: Callable[..., Awaitable[SkillResult]] = self._run_headless
@@ -430,7 +437,7 @@ class DefaultMigrationService:
                 file, run_headless=run_headless, temp_dir=temp_dir
             )
 
-            failure_store = FailureStore(default_store_path(project_dir))
+            failure_store = FailureStore(default_store_path(project_dir, temp_dir=temp_dir))
 
             if migration_result.success:
                 failure_store.clear(name)

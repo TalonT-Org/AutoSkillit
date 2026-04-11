@@ -19,7 +19,7 @@ hooks:
 ## Arguments (positional)
 
 - `{worktree_path}` — absolute path to the existing worktree (must exist; rebase was aborted cleanly)
-- `{plan_path}` — absolute path to the implementation plan (`.autoskillit/temp/make-plan/…_plan_….md`, relative to the current working directory)
+- `{plan_path}` — absolute path to the implementation plan (`{{AUTOSKILLIT_TEMP}}/make-plan/…_plan_….md`, relative to the current working directory)
 - `{base_branch}` — the integration branch to rebase onto (e.g. `integration/run-N`)
 
 ## Critical Constraints
@@ -37,7 +37,7 @@ hooks:
 - Emit `worktree_path=` and `branch_name=` on successful resolution
 - Run `pre-commit run --all-files` after a successful rebase before emitting output tokens
 - Validate all three positional arguments before touching git state
-- Write `conflict_resolution_report_*.md` to `.autoskillit/temp/resolve-merge-conflicts/` and emit `conflict_report_path=` after successful conflict resolution
+- Write `conflict_resolution_report_*.md` to `{{AUTOSKILLIT_TEMP}}/resolve-merge-conflicts/` and emit `conflict_report_path=` after successful conflict resolution
 
 ## When to Use
 
@@ -365,12 +365,12 @@ escalation_reason = Duplicate key detected in <file>: key '<key>' appears multip
 Create the directory and write the conflict resolution report:
 
 ```bash
-mkdir -p {worktree_path}/.autoskillit/temp/resolve-merge-conflicts
+mkdir -p {worktree_path}/{{AUTOSKILLIT_TEMP}}/resolve-merge-conflicts
 ```
 
 Write the report to:
 ```
-{worktree_path}/.autoskillit/temp/resolve-merge-conflicts/conflict_resolution_report_{YYYY-MM-DD_HHMMSS}.md
+{worktree_path}/{{AUTOSKILLIT_TEMP}}/resolve-merge-conflicts/conflict_resolution_report_{YYYY-MM-DD_HHMMSS}.md
 ```
 
 Report format:

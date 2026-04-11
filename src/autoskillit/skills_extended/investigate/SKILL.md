@@ -50,18 +50,18 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Modify any source code files
 - Suggest backward compatibility solutions
 - Suggest fallbacks that hide errors
-- Create files outside `.autoskillit/temp/investigate/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/investigate/` directory
 - Choose or accept approaches, solutions, and/or fixes that are chosen simply because they are easier
 
 **ALWAYS:**
 - Use subagents for parallel exploration
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
-- Write findings as a markdown report with unique name to `.autoskillit/temp/investigate/` directory (relative to the current working directory)
+- Write findings as a markdown report with unique name to `{{AUTOSKILLIT_TEMP}}/investigate/` directory (relative to the current working directory)
 - After writing the investigation report, emit the **absolute path** as a structured output
-  token immediately before `%%ORDER_UP%%`. Resolve the relative `.autoskillit/temp/investigate/...`
+  token immediately before `%%ORDER_UP%%`. Resolve the relative `{{AUTOSKILLIT_TEMP}}/investigate/...`
   save path to absolute by prepending the full CWD:
   ```
-  investigation_path = /absolute/cwd/.autoskillit/temp/investigate/{filename}.md
+  investigation_path = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/investigate/{filename}.md
   %%ORDER_UP%%
   ```
   This token is MANDATORY — the pipeline cannot proceed without it.
@@ -72,7 +72,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 ## Investigation Workflow
 
 **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
-exist (e.g., plan file arguments, `.autoskillit/temp/investigate/` reports, external file references), use
+exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, external file references), use
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
 
@@ -163,7 +163,7 @@ After subagents complete, consolidate into structured findings:
 
 ### Step 4: Write Report
 
-Write findings to: `.autoskillit/temp/investigate/investigation_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write findings to: `{{AUTOSKILLIT_TEMP}}/investigate/investigation_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 Report structure:
 ```markdown

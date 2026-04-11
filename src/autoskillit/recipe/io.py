@@ -20,9 +20,32 @@ from autoskillit.recipe.schema import (
 logger = get_logger(__name__)
 
 
-def load_recipe(path: Path) -> Recipe:
-    """Parse a YAML recipe file into a Recipe dataclass."""
-    data = load_yaml(path)
+_TEMP_PLACEHOLDER = "{{AUTOSKILLIT_TEMP}}"
+
+
+def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
+    """Replace ``{{AUTOSKILLIT_TEMP}}`` in raw recipe/skill text.
+
+    Validates that ``temp_dir_relpath`` is YAML-safe (no newlines or
+    ``": "`` sequences); raises ``ValueError`` otherwise. Filesystem paths
+    should never contain these characters, but the guard makes the failure
+    loud and free.
+    """
+    if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
+        raise ValueError(f"temp_dir_relpath is YAML-unsafe: {temp_dir_relpath!r}")
+    return text.replace(_TEMP_PLACEHOLDER, temp_dir_relpath)
+
+
+def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Recipe:
+    """Parse a YAML recipe file into a Recipe dataclass.
+
+    Substitutes ``{{AUTOSKILLIT_TEMP}}`` in the raw text with
+    ``temp_dir_relpath`` *before* YAML parsing so the resulting Recipe
+    dataclass observes the resolved value uniformly.
+    """
+    raw_text = path.read_text(encoding="utf-8")
+    substituted = substitute_temp_placeholder(raw_text, temp_dir_relpath)
+    data = load_yaml(substituted)
     if not isinstance(data, dict):
         raise ValueError(f"Recipe file must contain a YAML mapping: {path}")
     return _parse_recipe(data)

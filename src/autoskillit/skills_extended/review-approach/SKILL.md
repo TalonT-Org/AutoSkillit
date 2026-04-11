@@ -25,7 +25,7 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `.autoskillit/temp/review-approach/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/review-approach/` directory
 
 **ALWAYS:**
 - Use subagents with web search for parallel research
@@ -73,7 +73,7 @@ Drop anything that doesn't meaningfully inform the decision.
 
 ### Step 4: Write Review
 
-Save to: `.autoskillit/temp/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Save to: `{{AUTOSKILLIT_TEMP}}/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ```markdown
 # Approach Review: {Topic}

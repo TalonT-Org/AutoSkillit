@@ -35,7 +35,7 @@ MCP-only — not user-invocable directly.
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `.autoskillit/temp/resolve-design-review/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/resolve-design-review/`
 - Modify the evaluation dashboard, experiment plan, or any source file
 - Apply fixes — this skill triages fixability only
 
@@ -48,7 +48,7 @@ MCP-only — not user-invocable directly.
 
 ### Step 0: Validate Arguments and Parse Dashboard
 
-1. Create `.autoskillit/temp/resolve-design-review/` if absent
+1. Create `{{AUTOSKILLIT_TEMP}}/resolve-design-review/` if absent
 2. Parse two positional path arguments: `evaluation_dashboard_path`, `experiment_plan_path`
    - If missing: print `"Error: missing required argument(s) — expected <evaluation_dashboard_path> <experiment_plan_path>"`, then emit `resolution=failed`, exit 0
    - If file not found: print `"Error: file not found — {missing_path}"`, then emit `resolution=failed`, exit 0
@@ -86,7 +86,7 @@ Each subagent returns:
 
 Fallback: failed/timed-out subagent → classify finding as DISCUSS (safe, routes to revision).
 
-Write analysis report to `.autoskillit/temp/resolve-design-review/analysis_{slug}_{ts}.md`
+Write analysis report to `{{AUTOSKILLIT_TEMP}}/resolve-design-review/analysis_{slug}_{ts}.md`
 BEFORE any guidance is generated. Report must include summary banner:
 ```
 Triage complete (BEFORE any guidance written)
@@ -131,7 +131,7 @@ resolution = "failed"  only when ALL findings are STRUCTURAL
 
 ### Step 3: Write Revision Guidance (only when resolution = revised)
 
-Write `revision_guidance_{slug}_{ts}.md` to `.autoskillit/temp/resolve-design-review/`
+Write `revision_guidance_{slug}_{ts}.md` to `{{AUTOSKILLIT_TEMP}}/resolve-design-review/`
 
 Sections:
 1. **Required Fixes** — ADDRESSABLE findings with fix_sketch from subagent
@@ -159,7 +159,7 @@ When resolution = revised, emit immediately before `%%ORDER_UP%%`:
 
 ```
 resolution = revised
-revision_guidance = /absolute/path/.autoskillit/temp/resolve-design-review/revision_guidance_{slug}_{ts}.md
+revision_guidance = /absolute/path/{{AUTOSKILLIT_TEMP}}/resolve-design-review/revision_guidance_{slug}_{ts}.md
 %%ORDER_UP%%
 ```
 
@@ -174,11 +174,11 @@ resolution = failed
 
 ## Output
 
-All output files are written to `.autoskillit/temp/resolve-design-review/` relative to
+All output files are written to `{{AUTOSKILLIT_TEMP}}/resolve-design-review/` relative to
 the current working directory.
 
 ```
-.autoskillit/temp/resolve-design-review/
+{{AUTOSKILLIT_TEMP}}/resolve-design-review/
 ├── analysis_{slug}_{ts}.md          (always written — before any guidance)
 └── revision_guidance_{slug}_{ts}.md  (revised path only)
 ```

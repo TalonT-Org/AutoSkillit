@@ -16,7 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import atomic_write, get_logger, resolve_temp_dir
 
 _log = get_logger(__name__)
 
@@ -24,12 +24,11 @@ CloneStatus = Literal["success", "error"]
 _DEFAULT_REGISTRY_NAME = "clone-cleanup-registry.json"
 
 
-def _resolve_registry_path(registry_path: str) -> Path:
+def _resolve_registry_path(registry_path: str, temp_dir: Path | None = None) -> Path:
     if registry_path:
         return Path(registry_path)
-    # Default location mirrors the project temp convention. atomic_write creates
-    # parent dirs; no need to call ensure_project_temp (which requires project_dir).
-    return Path.cwd() / ".autoskillit" / "temp" / _DEFAULT_REGISTRY_NAME
+    base = temp_dir if temp_dir is not None else resolve_temp_dir(Path.cwd(), None)
+    return base / _DEFAULT_REGISTRY_NAME
 
 
 def register_clone(

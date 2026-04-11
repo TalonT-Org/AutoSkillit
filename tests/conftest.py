@@ -255,5 +255,9 @@ def tool_ctx(monkeypatch, tmp_path):
     ctx = make_context(AutomationConfig(), runner=mock_runner, plugin_dir=str(tmp_path))
     ctx.gate = DefaultGateState(enabled=True)
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
+    # Anchor temp_dir to tmp_path so server tools that read from ctx.temp_dir
+    # (e.g. _apply_triage_gate's staleness cache) write under the per-test
+    # tmp directory rather than the cwd captured at fixture-init time.
+    ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
     monkeypatch.setattr(_state, "_ctx", ctx)
     return ctx

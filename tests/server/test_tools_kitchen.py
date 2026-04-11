@@ -66,7 +66,7 @@ def test_close_kitchen_no_file_no_error(tmp_path, monkeypatch):
             _close_kitchen_handler()  # Should not raise
 
     # Gate file was never created — confirm it still does not exist
-    assert not (tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json").exists()
+    assert not (tmp_path / ".autoskillit" / ".hook_config.json").exists()
 
 
 # T-CACHE-1
@@ -91,7 +91,7 @@ async def test_open_kitchen_primes_quota_cache(tmp_path, monkeypatch):
 # T-CACHE-2
 @pytest.mark.anyio
 async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
-    """open_kitchen must write temp/.autoskillit_hook_config.json with user quota_guard values."""
+    """open_kitchen must write .autoskillit/.hook_config.json with user quota_guard values."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.config.quota_guard.threshold = 85.0
@@ -113,7 +113,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
         "_get_ctx must be called in both _open_kitchen_handler and _write_hook_config; "
         "if call_count < 2 the patch did not cover _write_hook_config's deferred import"
     )
-    hook_cfg = tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
+    hook_cfg = tmp_path / ".autoskillit" / ".hook_config.json"
     assert hook_cfg.exists(), "Hook config file must be written by open_kitchen"
     data = json.loads(hook_cfg.read_text())
     assert data["quota_guard"]["threshold"] == 85.0
@@ -131,7 +131,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
 # T-CACHE-3
 @pytest.mark.anyio
 async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
-    """close_kitchen must remove temp/.autoskillit_hook_config.json to prevent stale config."""
+    """close_kitchen must remove .autoskillit/.hook_config.json to prevent stale config."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.config.quota_guard.threshold = 85.0
@@ -149,7 +149,7 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
                 await _open_kitchen_handler()
                 _close_kitchen_handler()
 
-    hook_cfg = tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
+    hook_cfg = tmp_path / ".autoskillit" / ".hook_config.json"
     assert not hook_cfg.exists(), "Hook config must be removed by close_kitchen"
 
 

@@ -1,0 +1,80 @@
+"""Architectural invariant: no literal ``.autoskillit/temp`` outside the whitelist.
+
+Every Python file under ``src/autoskillit/`` is walked. The literal substring
+``.autoskillit/temp`` may only appear in files listed in
+``_TEMP_PATH_WHITELIST``. Each whitelisted entry carries a justification —
+adding new entries requires adding a justification too.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+# Each entry: relative path under src/autoskillit/ → justification.
+# When adding a new entry, document WHY the literal is allowed there.
+_TEMP_PATH_WHITELIST: dict[str, str] = {
+    # Justification: canonical default literal used by resolve_temp_dir +
+    # temp_dir_display_str (the single source of truth).
+    "core/io.py": "canonical default literal used by resolve_temp_dir",
+    # Justification: load_recipe() default parameter value (matches resolver default).
+    "recipe/io.py": "load_recipe default arg matches canonical default",
+    # Justification: default fallback values for temp_dir_relpath in load_and_validate
+    # / _build_active_recipe / validate_from_path (mirrors canonical default).
+    "recipe/_api.py": "fallback default for temp_dir_relpath kwargs",
+    # Justification: SkillsDirectoryProvider default ctor arg matches canonical default.
+    "workspace/session_skills.py": "SkillsDirectoryProvider default arg",
+    # Justification: tools_recipe handler falls back to canonical default when
+    # cfg.workspace.temp_dir is None.
+    "server/tools_recipe.py": "fallback default in load_recipe handler",
+    # Justification: docstring example referencing the canonical default path.
+    "hooks/skill_cmd_check.py": "docstring example",
+    # Justification: docstring referencing the canonical default path.
+    "workspace/worktree.py": "docstring example",
+    # Justification: docstring referencing the canonical default path.
+    "server/tools_clone.py": "docstring example",
+}
+
+_LITERAL = ".autoskillit/temp"
+
+
+def _src_root() -> Path:
+    # tests/test_python_no_hardcoded_temp.py → repo root
+    return Path(__file__).resolve().parent.parent / "src" / "autoskillit"
+
+
+def test_no_hardcoded_temp_path_in_python_outside_resolver() -> None:
+    src = _src_root()
+    assert src.is_dir(), f"src/autoskillit not found at {src}"
+
+    offenders: list[str] = []
+    for py in src.rglob("*.py"):
+        rel = py.relative_to(src).as_posix()
+        if rel in _TEMP_PATH_WHITELIST:
+            continue
+        text = py.read_text(encoding="utf-8")
+        if _LITERAL in text:
+            offenders.append(rel)
+
+    assert not offenders, (
+        f"Python files contain literal {_LITERAL!r} but are not in the whitelist: "
+        f"{offenders}. Either replace with resolve_temp_dir(...) or add an entry "
+        f"to _TEMP_PATH_WHITELIST in tests/test_python_no_hardcoded_temp.py with "
+        f"a justification."
+    )
+
+
+def test_whitelist_entries_actually_contain_the_literal() -> None:
+    """Whitelist hygiene: an entry that no longer contains the literal must be removed."""
+    src = _src_root()
+    stale: list[str] = []
+    for rel in _TEMP_PATH_WHITELIST:
+        path = src / rel
+        if not path.is_file():
+            stale.append(f"{rel} (file missing)")
+            continue
+        if _LITERAL not in path.read_text(encoding="utf-8"):
+            stale.append(rel)
+    assert not stale, (
+        f"Whitelist entries no longer contain {_LITERAL!r}: {stale}. "
+        "Remove them from _TEMP_PATH_WHITELIST."
+    )

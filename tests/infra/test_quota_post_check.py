@@ -202,11 +202,11 @@ def test_qpc10_fires_on_failed_run_skill(tmp_path):
 
 # T11: Hook reads threshold from hook config
 def test_qpc11_reads_threshold_from_hook_config(tmp_path, monkeypatch):
-    """PostToolUse hook reads threshold from .autoskillit_hook_config.json."""
+    """PostToolUse hook reads threshold from .autoskillit/.hook_config.json."""
     monkeypatch.chdir(tmp_path)
     cache = tmp_path / "custom_cache.json"
     _write_cache(cache, utilization=60.0)
-    hook_cfg_path = tmp_path / ".autoskillit" / "temp" / ".autoskillit_hook_config.json"
+    hook_cfg_path = tmp_path / ".autoskillit" / ".hook_config.json"
     hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
     hook_cfg_path.write_text(
         json.dumps(

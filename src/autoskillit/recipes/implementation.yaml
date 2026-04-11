@@ -252,7 +252,7 @@ steps:
     on_success: review
     on_failure: release_issue_failure
     note: >
-      Produces plan in .autoskillit/temp/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
+      Produces plan in {{AUTOSKILLIT_TEMP}}/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
       plan_parts context key contains the full ordered list of part files (sorted alphabetically).
       For a single-part plan, plan_parts has one entry equal to plan_path.
       REMEDIATION MODE: context.remediation_path is available when the orchestrator
@@ -515,7 +515,7 @@ steps:
       callable: "autoskillit.smoke_utils.annotate_pr_diff"
       pr_number: "${{ context.pr_number }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "${{ context.work_dir }}/.autoskillit/temp/review-pr"
+      output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr"
     capture:
       annotated_diff_path: "${{ result.annotated_diff_path }}"
       hunk_ranges_path: "${{ result.hunk_ranges_path }}"
@@ -1019,7 +1019,7 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes
-      a structured diagnosis to .autoskillit/temp/diagnose-ci/. Routes to resolve_ci on success
+      a structured diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/. Routes to resolve_ci on success
       OR failure (best-effort: resolve-failures proceeds even without a diagnosis).
       diagnosis_path is passed to resolve_ci for targeted remediation context.
 

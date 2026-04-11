@@ -44,7 +44,7 @@ This skill is intentionally lightweight: concern analysis is performed as in-con
 - Use subagents — concern analysis is in-context LLM reasoning, not subagent delegation
 - Close the parent issue — it becomes a tracking issue
 - Apply `batch:N` labels to any GitHub object
-- Create files outside `.autoskillit/temp/issue-splitter/` (for any dry-run reports)
+- Create files outside `{{AUTOSKILLIT_TEMP}}/issue-splitter/` (for any dry-run reports)
 
 **ALWAYS:**
 - Use `--force` on all `gh label create` calls for idempotency
@@ -238,7 +238,7 @@ Output to stdout for `triage-issues` subagent parsing:
 
 ## Output Location
 
-Dry-run reports (if any): `.autoskillit/temp/issue-splitter/`
+Dry-run reports (if any): `{{AUTOSKILLIT_TEMP}}/issue-splitter/`
 
 ## Error Handling
 

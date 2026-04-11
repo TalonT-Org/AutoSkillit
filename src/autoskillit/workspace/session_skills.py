@@ -213,8 +213,11 @@ def _should_inject_skill(
 class SkillsDirectoryProvider:
     """Provides bundled skill content with tier-aware frontmatter injection."""
 
-    def __init__(self) -> None:
+    def __init__(self, temp_dir_relpath: str = ".autoskillit/temp") -> None:
+        if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
+            raise ValueError(f"temp_dir_relpath is YAML-unsafe: {temp_dir_relpath!r}")
         self._resolver = SkillResolver()
+        self._temp_dir_relpath = temp_dir_relpath
 
     @property
     def resolver(self) -> SkillResolver:
@@ -230,6 +233,9 @@ class SkillsDirectoryProvider:
 
         - gated=True  → ensure disable-model-invocation: true is present
         - gated=False → return unmodified content (cook session or Tier 1)
+
+        Substitutes ``{{AUTOSKILLIT_TEMP}}`` with the configured temp dir relpath.
+        Tier 1 skills (which contain no placeholder) are unaffected.
         """
         skill_info = self._resolver.resolve(name)
         if skill_info is None:
@@ -237,7 +243,7 @@ class SkillsDirectoryProvider:
         content = skill_info.path.read_text()
         if gated:
             content = _inject_disable_model_invocation(content)
-        return content
+        return content.replace("{{AUTOSKILLIT_TEMP}}", self._temp_dir_relpath)
 
 
 class DefaultSessionSkillManager:

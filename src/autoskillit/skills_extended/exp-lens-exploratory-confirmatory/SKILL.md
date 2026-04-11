@@ -41,7 +41,7 @@ hooks:
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `.autoskillit/temp/exp-lens-exploratory-confirmatory/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/`
 
 **ALWAYS:**
 - Map the full analytic timeline — what was decided before vs. after seeing data
@@ -50,12 +50,12 @@ hooks:
 - Flag absent preregistration as a finding without assuming bad faith
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Write output to `.autoskillit/temp/exp-lens-exploratory-confirmatory/exp_diag_exploratory_confirmatory_{YYYY-MM-DD_HHMMSS}.md`
+- Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/exp_diag_exploratory_confirmatory_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
 
   ```
-  diagram_path = /absolute/path/to/.autoskillit/temp/exp-lens-exploratory-confirmatory/exp_diag_exploratory_confirmatory_{...}.md
+  diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/exp_diag_exploratory_confirmatory_{...}.md
   %%ORDER_UP%%
   ```
 
@@ -109,7 +109,7 @@ For every reported result: Was the analysis plan fixed pre-outcome? How many alt
 
 ### Step 5: Write Output
 
-Write the output to: `.autoskillit/temp/exp-lens-exploratory-confirmatory/exp_diag_exploratory_confirmatory_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the output to: `{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/exp_diag_exploratory_confirmatory_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 ---
 

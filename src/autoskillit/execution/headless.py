@@ -834,6 +834,8 @@ async def run_headless_core(
     ):
         effective_plugin_dir = ctx.plugin_dir
         resolved_model = _resolve_model(model, ctx.config)
+        from autoskillit.core import temp_dir_display_str  # noqa: PLC0415
+
         cmd = build_full_headless_cmd(
             skill_command,
             cwd=cwd,
@@ -845,6 +847,7 @@ async def run_headless_core(
             add_dirs=add_dirs,
             exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
             scenario_step_name=step_name,
+            temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
         )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout

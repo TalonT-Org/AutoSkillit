@@ -209,7 +209,7 @@ def test_show_cook_preview_no_diagram(monkeypatch, tmp_path, capsys):
     assert "RECIPE" not in captured.out
 
 
-def test_show_cook_preview_uses_resolved_base_branch_for_smoke_test(monkeypatch, tmp_path, capsys):
+def test_show_cook_preview_uses_resolved_base_branch_for_smoke_test(monkeypatch, capsys):
     """T8: show_cook_preview renders the config-resolved base_branch for smoke-test."""
     import autoskillit.recipe._api as api_mod
     from autoskillit.cli._prompts import show_cook_preview

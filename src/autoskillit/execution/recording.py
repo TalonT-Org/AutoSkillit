@@ -67,6 +67,11 @@ class RecordingSubprocessRunner(SubprocessRunner):
     - **Non-session calls**: delegates to the inner runner, then records a summary via
       ``recorder.record_non_session_step()`` if ``SCENARIO_STEP_NAME`` is present.
     - **Calls without SCENARIO_STEP_NAME**: passes through to inner runner unrecorded.
+
+    Public attribute ``recorder`` holds the :class:`ScenarioRecorder` instance.
+    The symmetric counterpart :class:`ReplayingSubprocessRunner` exposes ``player``
+    (a ``ScenarioPlayer``).  The different names reflect the different domain objects
+    each class wraps — the asymmetry is intentional.
     """
 
     def __init__(

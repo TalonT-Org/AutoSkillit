@@ -55,6 +55,7 @@ async def resolve_remote_repo(
             try:
                 await asyncio.wait_for(proc.wait(), timeout=15.0)
             except TimeoutError:
+                io_task.cancel()
                 proc.kill()
                 await proc.wait()
                 _log.warning("Timed out getting URL for remote %r in %r", remote, cwd)

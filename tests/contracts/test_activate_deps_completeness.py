@@ -40,7 +40,7 @@ def provider() -> SkillsDirectoryProvider:
 
 def test_make_arch_diag_declares_arch_lens_dep(provider: SkillsDirectoryProvider) -> None:
     closure = compute_skill_closure("make-arch-diag", provider)
-    assert "make-arch-diag" in closure
+    assert "make-arch-diag" in closure  # contract: target is always included in its own closure
     assert any(name.startswith("arch-lens-") for name in closure), closure
 
 

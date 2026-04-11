@@ -332,6 +332,49 @@ Do NOT flag:
 
 ---
 
+## Exception Whitelist
+
+### General Exceptions (GE)
+
+These exceptions apply across all principles. Before reporting a finding, verify it does not match any entry below.
+
+**GE-1** — Deferred function-body imports with `# noqa: PLC0415` are not P3/P4 layer violations. Only module-level unsuppressed cross-layer imports are flagged.
+*Source: audit-arch round 1 contest batch.*
+
+**GE-2** — `TYPE_CHECKING`-only imports create zero runtime coupling and must not be flagged as cross-layer or cross-domain violations.
+*Source: audit-arch round 1 contest batch.*
+
+**GE-7** — Stdlib-only forced duplication with an output-equivalence test is accepted; not a P6 violation when the module has a documented zero-external-imports constraint.
+*Source: audit-arch round 2 contest batch.*
+
+**GE-9** — Decorator-based registration imports in `__init__.py` (e.g., importing `rules_*.py` to trigger `@semantic_rule` registration) are intentional and not impure side effects.
+*Source: audit-arch round 2 contest batch.*
+
+**GE-13** — "No dedicated test file" ≠ "no test coverage." Before claiming a module lacks coverage, grep `tests/` for `from <package>.<module> import`. Absence of `test_<module>.py` is not evidence.
+*Source: audit-arch round 1 and cohesion round 1 contest batches.*
+
+**GE-16** — Same-shape functions with different return types serving different layers or precision purposes are not duplicates.
+*Source: audit-arch round 2 contest batch.*
+
+**GE-17** — Approximately 6 lines of shared boilerplate between functions with fundamentally different feature sets is not duplication. Threshold: fewer than 8 lines of overlap between functions whose core logic is distinct does not constitute a P6 violation.
+*Source: audit-arch round 2 contest batch.*
+
+### Project-Specific Exceptions (PS)
+
+These exceptions apply to known autoskillit codebase patterns that are legitimately non-standard.
+
+**PS-1** — `smoke_utils.py` at package root: stable callable-path API; `autoskillit.smoke_utils.*` is baked into recipe YAMLs and must remain at the top-level path.
+
+**PS-2** — `hook_registry.py` at package root: the `hooks/` sub-package has a stdlib-only constraint; `hook_registry` cannot be placed inside `hooks/`. See commit `ee83681d`.
+
+**PS-4** — `_llm_triage.py` at package root: circular import constraint with its sole caller `server/helpers.py` prevents placing it inside `server/`.
+
+**PS-7** — `SkillResolver` naming: no `SkillResolver` Protocol exists; the `Default*` naming convention applies only to Protocol implementors. `SkillResolver` is the only implementation and needs no `Default` prefix.
+
+**PS-8** — L3 `server/` and `cli/` are excluded from REQ-IMP-001 intentionally; `IL-005` and `IL-006` provide compensating controls at the gateway boundary.
+
+---
+
 ## Severity Guidelines
 
 **CRITICAL** (requires at least one of):

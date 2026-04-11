@@ -161,7 +161,8 @@ generic_automation_mcp/
 │   ├── clone.py             #   Clone-based run isolation
 │   ├── session_skills.py    #   Per-session ephemeral skill dirs; subset filtering
 │   ├── clone_registry.py    #   Shared file-based coordination for deferred cleanup
-│   └── skills.py            #   SkillResolver — bundled skill listing
+│   ├── skills.py            #   SkillResolver — bundled skill listing
+│   └── worktree.py
 │
 ├── recipe/                  # L2
 │   ├── __init__.py
@@ -173,9 +174,23 @@ generic_automation_mcp/
 │   ├── registry.py          #   RuleFinding, RuleSpec, semantic_rule decorator
 │   ├── repository.py
 │   ├── _analysis.py         #   Step graph building + dataflow analysis
-│   ├── rules_*.py           #   Semantic rule modules (bypass, ci, clone, cmd, contracts,
-│   │                        #   dataflow, graph, inputs, isolation, merge, packs, recipe,
-│   │                        #   skill_content, skills, tools, verdict, worktree)
+│   ├── rules_bypass.py
+│   ├── rules_ci.py
+│   ├── rules_clone.py
+│   ├── rules_cmd.py
+│   ├── rules_contracts.py
+│   ├── rules_dataflow.py
+│   ├── rules_graph.py
+│   ├── rules_inputs.py
+│   ├── rules_isolation.py
+│   ├── rules_merge.py
+│   ├── rules_packs.py
+│   ├── rules_recipe.py
+│   ├── rules_skill_content.py
+│   ├── rules_skills.py
+│   ├── rules_tools.py
+│   ├── rules_verdict.py
+│   ├── rules_worktree.py     #   Semantic validation rule modules
 │   ├── _skill_placeholder_parser.py
 │   ├── schema.py            #   Recipe, RecipeStep, DataFlowWarning
 │   ├── staleness_cache.py

@@ -70,16 +70,16 @@ analysis
 | `autoskillit order [recipe]` | Run a recipe (prompts if omitted) |
 | `autoskillit cook` | Launch Claude with all bundled skills as slash commands |
 
-See the [CLI Reference](docs/cli-reference.md) for all commands.
+See the [CLI Reference](docs/cli.md) for all commands.
 
 ## Documentation
 
 - **[Getting Started](docs/getting-started.md)** — Walk through the implementation workflow step by step
 - **[Installation](docs/installation.md)** — Prerequisites, install, troubleshooting
-- **[Recipes](docs/recipes.md)** — All recipes with flow diagrams and input reference
-- **[CLI Reference](docs/cli-reference.md)** — All commands and options
+- **[Recipes](docs/recipes/overview.md)** — All recipes with flow diagrams and input reference
+- **[CLI Reference](docs/cli.md)** — All commands and options
 - **[Configuration](docs/configuration.md)** — Layered config, all settings, examples
-- **[Architecture](docs/architecture.md)** — Gating, clone isolation, headless sessions, hooks
+- **[Architecture](docs/execution/architecture.md)** — Gating, clone isolation, headless sessions, hooks
 - **[Contributing](docs/developer/contributing.md)** — Development setup, testing, architecture layers
 
 ## License

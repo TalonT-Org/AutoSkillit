@@ -112,7 +112,7 @@ When you have a bug or regression, use the remediation recipe instead. It starts
 autoskillit order remediation
 ```
 
-See **[Recipes](recipes.md)** for details.
+See **[Recipes](recipes/overview.md)** for details.
 
 ### Large documents: `implementation-groups`
 For architecture proposals, migration plans, or large feature specs, use `implementation-groups`. It decomposes the document into ordered groups and implements each one:
@@ -140,6 +140,6 @@ Then use any skill as a slash command: `/autoskillit:investigate`, `/autoskillit
 
 ## Next Steps
 
-- **[Recipes](recipes.md)** — All recipes with ingredients and flow diagrams
-- **[CLI Reference](cli-reference.md)** — All commands and options
+- **[Recipes](recipes/overview.md)** — All recipes with ingredients and flow diagrams
+- **[CLI Reference](cli.md)** — All commands and options
 - **[Configuration](configuration.md)** — Customize test commands, safety settings, and more

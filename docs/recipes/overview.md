@@ -132,7 +132,7 @@ steps:
     message: "Failed."
 ```
 
-See **[Sub-Recipe Composition](sub-recipe-composition.md)** for advanced patterns like sprint mode.
+See **[Sub-Recipe Composition](composition.md)** for advanced patterns like sprint mode.
 
 ## Recipe Management
 

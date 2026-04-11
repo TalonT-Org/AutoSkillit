@@ -73,7 +73,7 @@ AUTOSKILLIT_QUOTA_GUARD__ENABLED=false        # disables quota guard
 
 This is useful for CI pipelines or per-session overrides without touching config files.
 
-Partial configs are fine. Unset fields keep their defaults. View the resolved config with [`autoskillit config show`](cli-reference.md#autoskillit-config-show).
+Partial configs are fine. Unset fields keep their defaults. View the resolved config with [`autoskillit config show`](cli.md#autoskillit-config-show).
 
 ## Test Command
 
@@ -182,7 +182,7 @@ linux_tracing:
   tmpfs_path: "/dev/shm"  # RAM-backed path for crash resilience
 ```
 
-See [Session Diagnostics](developer/session-diagnostics.md) for details on log output.
+See [Session Diagnostics](developer/diagnostics.md) for details on log output.
 
 ## Headless Sessions
 
@@ -305,7 +305,7 @@ skills:
 ```
 
 Any bundled skill can be promoted or demoted by adding it to the desired tier list. A skill
-in multiple tiers simultaneously is a validation error. See **[Skill Visibility](skill-visibility.md)**
+in multiple tiers simultaneously is a validation error. See **[Skill Visibility](skills/visibility.md)**
 for the full tier breakdown, session mode table, and override rules.
 
 ## Subset Categories
@@ -325,7 +325,7 @@ subsets:
 ```
 
 Disabling a subset hides its members from all session modes — even after `open_kitchen`.
-See **[Subset Categories](subset-categories.md)** for the complete category listing and
+See **[Subset Categories](skills/subsets.md)** for the complete category listing and
 FastMCP mechanics.
 
 ## Full Example

@@ -200,4 +200,4 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`
 **Total: 42 tools** — 2 Free Range + 1 Headless-tagged + 39 Kitchen-only
 
 For subset configuration that can hide functional-category tools, see
-[Subset Categories](subset-categories.md).
+[Subset Categories](../skills/subsets.md).

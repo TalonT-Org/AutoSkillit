@@ -34,7 +34,7 @@ cluttering the tool list.
 
 Functional category subsets (`github`, `ci`, `clone`, `telemetry`) can be disabled in config;
 those tools remain hidden even after `open_kitchen`.
-See **[MCP Tool Access Control](mcp-tool-access.md)** for the complete tool map.
+See **[MCP Tool Access Control](tool-access.md)** for the complete tool map.
 
 ## Clone Isolation
 
@@ -77,11 +77,11 @@ AutoSkillit supports four session modes with different tool and skill visibility
   Bash, etc.) and all skill tiers via `--add-dir skills_extended/`.
 
 This prevents recursive session nesting and keeps the orchestrator as a pure routing engine.
-See **[Skill Visibility](skill-visibility.md)** for the full tier breakdown and configuration.
+See **[Skill Visibility](../skills/visibility.md)** for the full tier breakdown and configuration.
 
 ## Safety
 
-See **[Hooks & Safety](hooks-and-safety.md)** for the complete safety system: protected branches, quota management, format validation, and session boundary enforcement.
+See **[Hooks](../safety/hooks.md)** for the complete safety system: protected branches, quota management, format validation, and session boundary enforcement.
 
 ## Session Diagnostics
 
@@ -89,4 +89,4 @@ Pipeline sessions are logged to `~/.local/share/autoskillit/logs/` (Linux) or `~
 
 Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`
 
-See **[Session Diagnostics](developer/session-diagnostics.md)** for details.
+See **[Session Diagnostics](../developer/diagnostics.md)** for details.

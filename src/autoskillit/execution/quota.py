@@ -328,13 +328,20 @@ async def check_and_sleep_if_needed(
             json.JSONDecodeError,
             httpx.HTTPError,
         )
-        _log_fn = _log.warning if isinstance(exc, _operational_types) else _log.error
-        _log_fn(
-            "quota check failed — continuing without sleep",
-            error=str(exc),
-            error_type=type(exc).__name__,
-            exc_info=True,
-        )
+        if isinstance(exc, _operational_types):
+            _log.warning(
+                "quota check failed — continuing without sleep",
+                error=str(exc),
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+        else:
+            _log.error(
+                "quota check failed (unexpected error) — continuing without sleep",
+                error=str(exc),
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
         return {
             "should_sleep": False,
             "sleep_seconds": 0,

@@ -670,9 +670,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
         Exempt at 16 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
-        file so Claude Code can invoke it directly as a subprocess. Adding
-        session_start_reminder.py for the SessionStart event brings the count to 11.
-        Exempt at 11 files.
+        file so Claude Code can invoke it directly as a subprocess. pretty_output.py
+        additionally owns a set of underscore-prefixed private formatter modules
+        (_fmt_primitives.py, _fmt_execution.py, _fmt_status.py, _fmt_recipe.py)
+        that are imported helpers — not standalone hook scripts — split out to
+        keep pretty_output.py under its line budget. Exempt at 18 files
+        (14 hook scripts + 4 private helpers).
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 17,
@@ -680,7 +683,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 25,
         "core": 16,
         "cli": 16,
-        "hooks": 14,
+        "hooks": 18,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):

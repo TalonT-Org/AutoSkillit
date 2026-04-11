@@ -5,6 +5,18 @@ Intercepts MCP tool responses and reformats them from raw JSON to Markdown-KV
 before Claude consumes them. Reduces token overhead 30-77% and improves
 LLM field-extraction accuracy.
 
+This module is the dispatch entrypoint. The per-tool formatters live in four
+private helper modules to keep this file under its line budget:
+
+  * ``_fmt_primitives`` — payload dataclasses, token formatter, pipeline-mode
+    detector, and short-name extractor.
+  * ``_fmt_execution``  — ``run_skill``, ``run_cmd``, ``test_check``,
+    ``merge_worktree``.
+  * ``_fmt_status``     — ``get_token_summary``, ``get_timing_summary``,
+    ``kitchen_status``, ``clone_repo``.
+  * ``_fmt_recipe``     — ``load_recipe``, ``open_kitchen``, ``list_recipes``
+    plus the recipe field-coverage contracts.
+
 Stdlib-only — runs under any Python interpreter without the autoskillit package.
 """
 
@@ -12,539 +24,58 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from pathlib import Path  # re-exported for tests that patch ``pretty_output.Path.cwd``
+from typing import Any
 
-if TYPE_CHECKING:
-    from autoskillit.recipe import ListRecipesResult, LoadRecipeResult
+# Hooks run as ``python3 /path/to/pretty_output.py`` subprocesses outside the
+# autoskillit venv (test_hooks_are_stdlib_only). To split the formatter without
+# breaking that constraint, sibling helpers are imported by bare name with the
+# script's directory placed first on sys.path. The same bootstrap makes
+# package-mode loading (``from autoskillit.hooks.pretty_output import ...``)
+# resolve the helpers to the same top-level modules so identity stays
+# consistent across both invocation modes.
+_HOOKS_DIR = str(Path(__file__).resolve().parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
 
-_HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", ".hook_config.json")
-
-
-@dataclass(frozen=True)
-class _DictPayload:
-    data: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class _PlainTextPayload:
-    text: str
-
-
-_Payload = _DictPayload | _PlainTextPayload
-_CHECK_MARK = "\u2713"  # ✓
-_CROSS_MARK = "\u2717"  # ✗
-_WARN_MARK = "\u26a0"  # ⚠
-
-
-def _is_pipeline_mode() -> bool:
-    """Check if kitchen is open (pipeline mode) by hook config file presence."""
-    config_path = Path.cwd().joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
-    return config_path.is_file()
-
-
-def _fmt_tokens(n: int | None) -> str:
-    """Format a token count as compact string (45.2k, 1.2M, etc.)."""
-    if n is None or n == 0:
-        return "0"
-    if not isinstance(n, (int, float)):
-        return "0"
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:.1f}M"
-    if n >= 1_000:
-        return f"{n / 1_000:.1f}k"
-    return str(n)
-
-
-def _extract_tool_short_name(tool_name: str) -> str:
-    """Extract short tool name from full MCP tool name.
-
-    "mcp__plugin_autoskillit_autoskillit__run_skill" -> "run_skill"
-    Falls back to the full tool_name if no __ separator found.
-    """
-    return tool_name.rsplit("__", 1)[-1] if "__" in tool_name else tool_name
-
-
-def _fmt_run_skill(data: dict, pipeline: bool) -> str:
-    """Format run_skill result as Markdown-KV."""
-    success = data.get("success", False)
-    subtype = data.get("subtype", "")
-    mark = _CHECK_MARK if success else _CROSS_MARK
-    status = subtype if subtype else ("OK" if success else "FAIL")
-
-    if pipeline:
-        # Compact format for pipeline mode
-        header = f"run_skill: {'OK' if success else 'FAIL'} [{status}]"
-        lines = [header]
-        session_id = data.get("session_id", "")
-        if session_id:
-            lines.append(f"session_id: {session_id}")
-        lines.append(f"exit_code: {data.get('exit_code', '')}")
-        lines.append(f"needs_retry: {data.get('needs_retry', False)}")
-        if data.get("retry_reason") and data["retry_reason"] != "none":
-            lines.append(f"retry_reason: {data['retry_reason']}")
-        worktree = data.get("worktree_path", "")
-        if worktree:
-            lines.append(f"worktree_path: {worktree}")
-        result = data.get("result", "")
-        if result:
-            lines.append(f"\nresult:\n{result}")
-        stderr = (data.get("stderr") or "").strip()
-        if stderr:
-            lines.extend(["", "### stderr", stderr])
-        return "\n".join(lines)
-
-    # Interactive mode
-    lines = [f"## run_skill {mark} {status}", ""]
-    lines.append(f"success: {success}")
-    session_id = data.get("session_id", "")
-    if session_id:
-        lines.append(f"session_id: {session_id}")
-    lines.append(f"subtype: {subtype}")
-    lines.append(f"exit_code: {data.get('exit_code', '')}")
-    lines.append(f"needs_retry: {data.get('needs_retry', False)}")
-    retry_reason = data.get("retry_reason", "none")
-    if retry_reason and retry_reason != "none":
-        lines.append(f"retry_reason: {retry_reason}")
-    worktree = data.get("worktree_path", "")
-    if worktree:
-        lines.append(f"worktree_path: {worktree}")
-    token_usage = data.get("token_usage")
-    if isinstance(token_usage, dict):
-        lines.append("")
-        lines.append(f"tokens_uncached: {_fmt_tokens(token_usage.get('input_tokens'))}")
-        lines.append(f"tokens_out: {_fmt_tokens(token_usage.get('output_tokens'))}")
-        cr = token_usage.get("cache_read_input_tokens", 0)
-        if cr:
-            lines.append(f"tokens_cache_read: {_fmt_tokens(cr)}")
-        cw = token_usage.get("cache_creation_input_tokens", 0)
-        if cw:
-            lines.append(f"tokens_cache_write: {_fmt_tokens(cw)}")
-    result = data.get("result", "")
-    if result:
-        lines.extend(["", "### Result", result])
-    stderr = data.get("stderr", "")
-    if stderr:
-        lines.extend(["", "### stderr", stderr])
-    return "\n".join(lines)
-
-
-def _fmt_run_cmd(data: dict, pipeline: bool) -> str:
-    """Format run_cmd result as Markdown-KV."""
-    success = data.get("success", False)
-    exit_code = data.get("exit_code", "")
-    mark = _CHECK_MARK if success else _CROSS_MARK
-
-    if pipeline:
-        lines = [
-            f"run_cmd: {'OK' if success else 'FAIL'} [{exit_code}]",
-            f"success: {success}",
-            f"exit_code: {exit_code}",
-        ]
-        stdout = (data.get("stdout") or "").strip()
-        if stdout:
-            lines.extend(["", "### stdout", stdout])
-        stderr = (data.get("stderr") or "").strip()
-        if stderr:
-            lines.extend(["", "### stderr", stderr])
-        return "\n".join(lines)
-
-    lines = [
-        f"## run_cmd {mark} {'OK' if success else 'FAIL'}",
-        "",
-        f"success: {success}",
-        f"exit_code: {exit_code}",
-    ]
-    stdout = (data.get("stdout") or "").strip()
-    if stdout:
-        lines.extend(["", "### stdout", stdout])
-    stderr = (data.get("stderr") or "").strip()
-    if stderr:
-        lines.extend(["", "### stderr", stderr])
-    return "\n".join(lines)
-
-
-def _filter_pytest_output(raw: str) -> str:
-    """Filter pytest boilerplate, keeping only failure-relevant lines."""
-    boilerplate_prefixes = (
-        "platform ",
-        "rootdir:",
-        "configfile:",
-        "plugins:",
-        "collecting ",
-        "collected ",
-        "cacheprovider",
-    )
-    boilerplate_exact = {"", " "}
-    lines = raw.splitlines()
-    filtered = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped in boilerplate_exact:
-            continue
-        if any(stripped.startswith(p) for p in boilerplate_prefixes):
-            continue
-        filtered.append(line)
-    return "\n".join(filtered)
-
-
-def _fmt_test_check(data: dict, _pipeline: bool) -> str:
-    """Format test_check result as Markdown-KV."""
-    passed = data.get("passed", False)
-    mark = _CHECK_MARK if passed else _CROSS_MARK
-    status = "PASS" if passed else "FAIL"
-    lines = [f"## test_check {mark} {status}", "", f"passed: {passed}"]
-    raw_output = data.get("output", "")
-    if raw_output:
-        filtered = _filter_pytest_output(raw_output)
-        lines.extend(["", "### Output", filtered])
-    error = data.get("error", "")
-    if error:
-        lines.extend(["", f"error: {error}"])
-    return "\n".join(lines)
-
-
-def _fmt_merge_worktree(data: dict, _pipeline: bool) -> str:
-    """Format merge_worktree result as Markdown-KV."""
-    succeeded = data.get("merge_succeeded")
-    has_error = "error" in data
-
-    if succeeded:
-        mark = _CHECK_MARK
-        status = "OK"
-    elif has_error:
-        mark = _CROSS_MARK
-        status = "FAIL"
-    else:
-        mark = _CROSS_MARK
-        status = "UNKNOWN"
-
-    lines = [f"## merge_worktree {mark} {status}", ""]
-    for key, val in data.items():
-        if isinstance(val, list):
-            lines.append(f"{key}:")
-            for item in val:
-                lines.append(f"  - {item}")
-        elif isinstance(val, dict):
-            continue
-        elif key == "stderr":
-            continue
-        else:
-            lines.append(f"{key}: {val}")
-    stderr = (data.get("stderr") or "").strip()
-    if stderr:
-        lines.extend(["", "### stderr", stderr])
-    return "\n".join(lines)
-
-
-def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
-    """Format get_token_summary compact Markdown-KV output.
-
-    This formatter receives only the JSON dict payload (format="json").
-    When format="table" is used, the tool returns a pre-formatted markdown
-    string. _resolve_payload() detects this as a _PlainTextPayload and routes
-    it through _PLAIN_TEXT_FORMATTERS (pass-through), so this function is
-    never called for the table format.
-    """
-    lines = ["## token_summary", ""]
-    steps = data.get("steps", [])
-    for step in steps:
-        name = step.get("step_name", "?")
-        count = step.get("invocation_count", 1)
-        inp = _fmt_tokens(step.get("input_tokens", 0))
-        out = _fmt_tokens(step.get("output_tokens", 0))
-        cache_rd = _fmt_tokens(step.get("cache_read_input_tokens", 0))
-        cache_wr = _fmt_tokens(step.get("cache_creation_input_tokens", 0))
-        wc = step.get("wall_clock_seconds", step.get("elapsed_seconds", 0.0))
-        lines.append(
-            f"{name} x{count} [uc:{inp} out:{out} cr:{cache_rd} cw:{cache_wr} t:{wc:.1f}s]"
-        )
-    total = data.get("total", {})
-    if total:
-        lines.append("")
-        lines.append(f"total_uncached: {_fmt_tokens(total.get('input_tokens', 0))}")
-        lines.append(f"total_out: {_fmt_tokens(total.get('output_tokens', 0))}")
-        lines.append(f"total_cache_read: {_fmt_tokens(total.get('cache_read_input_tokens', 0))}")
-        lines.append(
-            f"total_cache_write: {_fmt_tokens(total.get('cache_creation_input_tokens', 0))}"
-        )
-    mcp = data.get("mcp_responses", {})
-    mcp_total = mcp.get("total", {})
-    if mcp_total:
-        lines.append("")
-        lines.append(f"mcp_invocations: {mcp_total.get('total_invocations', 0)}")
-        est_tokens = mcp_total.get("total_estimated_response_tokens", 0)
-        lines.append(f"mcp_response_tokens: ~{_fmt_tokens(est_tokens)}")
-    return "\n".join(lines)
-
-
-def _fmt_get_timing_summary(data: dict, _pipeline: bool) -> str:
-    """Format get_timing_summary compact Markdown-KV output.
-
-    This formatter receives only the JSON dict payload (format="json").
-    When format="table" is used, the tool returns a pre-formatted markdown
-    string. _resolve_payload() detects this as a _PlainTextPayload and routes
-    it through _PLAIN_TEXT_FORMATTERS (pass-through), so this function is
-    never called for the table format.
-
-    Each step becomes: name xN [dur:Xs]
-    """
-    lines = ["## timing_summary", ""]
-    steps = data.get("steps", [])
-    for step in steps:
-        name = step.get("step_name", "?")
-        count = step.get("invocation_count", 1)
-        secs = step.get("total_seconds", 0.0)
-        if secs < 60:
-            dur = f"{secs:.0f}s"
-        elif secs < 3600:
-            m, s = divmod(int(secs), 60)
-            dur = f"{m}m {s}s"
-        else:
-            h, remainder = divmod(int(secs), 3600)
-            m = remainder // 60
-            dur = f"{h}h {m}m"
-        lines.append(f"{name} x{count} [dur:{dur}]")
-    total = data.get("total", {})
-    if total:
-        total_secs = total.get("total_seconds", 0.0)
-        if total_secs < 60:
-            total_dur = f"{total_secs:.0f}s"
-        elif total_secs < 3600:
-            m, s = divmod(int(total_secs), 60)
-            total_dur = f"{m}m {s}s"
-        else:
-            h, remainder = divmod(int(total_secs), 3600)
-            m = remainder // 60
-            total_dur = f"{h}h {m}m"
-        lines.append("")
-        lines.append(f"total: {total_dur}")
-    return "\n".join(lines)
-
-
-def _fmt_kitchen_status(data: dict, _pipeline: bool) -> str:
-    """Format kitchen_status as Markdown-KV."""
-    success = not data.get("error")
-    mark = _CHECK_MARK if success else _CROSS_MARK
-    enabled = data.get("tools_enabled", False)
-    gate_str = "OPEN" if enabled else "CLOSED"
-    lines = [f"## kitchen_status {mark} {gate_str}", ""]
-    for key in (
-        "package_version",
-        "plugin_json_version",
-        "versions_match",
-        "tools_enabled",
-        "token_usage_verbosity",
-        "quota_guard_enabled",
-        "github_token_configured",
-        "github_default_repo",
-    ):
-        if key in data:
-            lines.append(f"{key}: {data[key]}")
-    warning = data.get("warning")
-    if warning:
-        lines.extend(["", f"warning: {warning}"])
-    return "\n".join(lines)
-
-
-def _fmt_clone_repo(data: dict, _pipeline: bool) -> str:
-    """Format clone_repo result as Markdown-KV."""
-    is_warning = "uncommitted_changes" in data or "unpublished_branch" in data
-    has_error = "error" in data
-
-    if is_warning:
-        mark = "\u26a0"
-        status = "WARNING"
-    elif has_error:
-        mark = _CROSS_MARK
-        status = "FAIL"
-    else:
-        mark = _CHECK_MARK
-        status = "OK"
-
-    lines = [f"## clone_repo {mark} {status}", ""]
-    for key, val in data.items():
-        if isinstance(val, (dict, list)):
-            continue
-        lines.append(f"{key}: {val}")
-    return "\n".join(lines)
-
-
-# Field coverage contract for _fmt_load_recipe ↔ LoadRecipeResult
-_FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
-    {
-        "valid",
-        "suggestions",
-        "error",
-        "content",
-        "ingredients_table",
-    }
+from _fmt_execution import (  # type: ignore[import-not-found]  # noqa: E402
+    _fmt_merge_worktree,
+    _fmt_run_cmd,
+    _fmt_run_skill,
+    _fmt_test_check,
 )
-_FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
-    {
-        "greeting",  # delivered via positional CLI arg, not MCP response
-        "diagram",  # user sees it in terminal preview; agent doesn't need it
-        "kitchen_rules",  # already in the YAML content
-        "requires_packs",  # internal field; used for skill gating, not display
-    }
+from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402, F401
+    _CHECK_MARK,
+    _CROSS_MARK,
+    _HOOK_CONFIG_PATH_COMPONENTS,
+    _DictPayload,
+    _extract_tool_short_name,
+    _is_pipeline_mode,
+    _Payload,
+    _PlainTextPayload,
 )
-
-# Maps derived-display field name → source field name in LoadRecipeResult.
-# When a derived field is present in a response, the formatter strips its
-# corresponding source block from the source field to prevent duplicate display.
-# All entries must map to "content" — only content-derived fields require
-# ingredients-block stripping. Non-content source fields are not supported here.
-#
-# HOW TO USE: When adding a new field to _FMT_LOAD_RECIPE_RENDERED, ask:
-#   "Is this field a re-rendering of content already in another RENDERED field?"
-# If yes, add an entry here: {new_derived_field: "content"}.
-# The augmented field coverage test will enforce this declaration.
-_LOAD_RECIPE_CONTENT_DERIVED_FROM: dict[str, str] = {
-    "ingredients_table": "content",  # GFM table derived from the ingredients: block in content
-}
-
-
-def _strip_yaml_ingredients_block(yaml_text: str) -> str:
-    """Remove the top-level `ingredients:` block from YAML text.
-
-    Called by _fmt_recipe_body() when ingredients_table is present, so the
-    RECIPE block does not repeat the TABLE block. Operates line-by-line:
-    drops the `ingredients:` key and all its indented children until a
-    non-indented line signals the next top-level key. Preserves all other
-    top-level keys (steps, kitchen_rules, description, etc.) unchanged.
-    """
-    lines = yaml_text.splitlines(keepends=True)
-    result: list[str] = []
-    in_ingredients = False
-    for line in lines:
-        if line.startswith("ingredients:"):
-            in_ingredients = True
-            continue
-        if in_ingredients:
-            if line and not line[0].isspace():
-                # First non-indented non-empty line = next top-level key
-                in_ingredients = False
-                result.append(line)
-            # else: still inside the ingredients block — skip
-        else:
-            result.append(line)
-    return "".join(result)
-
-
-def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
-    """Shared recipe content rendering for load_recipe and open_kitchen+recipe."""
-    lines: list[str] = []
-    content = data.get("content")
-    if content:
-        # When a derived field is present, strip its source block from content
-        # to prevent duplicate display. The derivation map drives this automatically.
-        display_content = content
-        for derived_field in _LOAD_RECIPE_CONTENT_DERIVED_FROM:
-            if data.get(derived_field):
-                display_content = _strip_yaml_ingredients_block(display_content)
-        lines.append("\n--- RECIPE ---")
-        lines.append(display_content)
-        lines.append("--- END RECIPE ---")
-    ing_table = data.get("ingredients_table")
-    if ing_table:
-        lines.append("\n--- INGREDIENTS TABLE (display this verbatim to the user) ---")
-        lines.append(ing_table)
-        lines.append("--- END TABLE ---")
-    suggestions = data.get("suggestions") or []
-    errors = [
-        f for f in suggestions if isinstance(f, dict) and f.get("severity") in ("error", "warning")
-    ]
-    if errors:
-        lines.append(f"\n{len(errors)} finding(s)")
-    return lines
-
-
-def _fmt_load_recipe(data: LoadRecipeResult, pipeline: bool) -> str:
-    """Format load_recipe result as Markdown-KV."""
-    if not isinstance(data, dict):
-        return "## load_recipe\n\n_(unexpected response type)_"
-
-    error = data.get("error")
-    if error:
-        return f"## load_recipe {_CROSS_MARK}\n\n**Error:** {error}"
-
-    valid = data.get("valid", True)
-    mark = _CHECK_MARK if valid else _CROSS_MARK
-    lines: list[str] = [f"## load_recipe {mark}"]
-    lines.extend(_fmt_recipe_body(data))
-    return "\n".join(lines)
-
-
-# Field coverage contract for _fmt_list_recipes ↔ ListRecipesResult
-_FMT_LIST_RECIPES_RENDERED: frozenset[str] = frozenset(
-    {
-        "recipes",
-        "count",
-        "errors",
-    }
+from _fmt_recipe import (  # type: ignore[import-not-found]  # noqa: E402, F401
+    _FMT_LIST_RECIPES_RENDERED,
+    _FMT_LIST_RECIPES_SUPPRESSED,
+    _FMT_LOAD_RECIPE_RENDERED,
+    _FMT_LOAD_RECIPE_SUPPRESSED,
+    _FMT_RECIPE_LIST_ITEM_RENDERED,
+    _FMT_RECIPE_LIST_ITEM_SUPPRESSED,
+    _LOAD_RECIPE_CONTENT_DERIVED_FROM,
+    _fmt_list_recipes,
+    _fmt_load_recipe,
+    _fmt_open_kitchen,
+    _fmt_open_kitchen_plain_text,
+    _fmt_recipe_body,
+    _strip_yaml_ingredients_block,
 )
-_FMT_LIST_RECIPES_SUPPRESSED: frozenset[str] = frozenset()
-
-# Field coverage contract for per-item recipe entries ↔ RecipeListItem
-_FMT_RECIPE_LIST_ITEM_RENDERED: frozenset[str] = frozenset(
-    {
-        "name",
-        "description",
-        "summary",
-        "source",
-    }
+from _fmt_status import (  # type: ignore[import-not-found]  # noqa: E402
+    _fmt_clone_repo,
+    _fmt_get_timing_summary,
+    _fmt_get_token_summary,
+    _fmt_kitchen_status,
 )
-_FMT_RECIPE_LIST_ITEM_SUPPRESSED: frozenset[str] = frozenset()
-
-
-def _fmt_open_kitchen(data: dict, pipeline: bool) -> str:
-    """Format open_kitchen combined kitchen+recipe result."""
-    version = data.get("version", "")
-
-    error = data.get("error")
-    if error:
-        return f"## open_kitchen {_CROSS_MARK} v{version}\n\nKitchen open. Recipe error: {error}"
-
-    valid = data.get("valid", True)
-    mark = _CHECK_MARK if valid else _CROSS_MARK
-    lines: list[str] = [f"## open_kitchen {mark} v{version}"]
-    lines.extend(_fmt_recipe_body(data))
-    return "\n".join(lines)
-
-
-def _fmt_open_kitchen_plain_text(text: str, _pipeline: bool) -> str:
-    """Format open_kitchen plain-text response (no recipe attached)."""
-    return f"## open_kitchen\n\n{text}"
-
-
-def _fmt_list_recipes(data: ListRecipesResult, pipeline: bool) -> str:
-    """Format list_recipes result as Markdown-KV."""
-    if not isinstance(data, dict):
-        return "## list_recipes\n\n_(unexpected response type)_"
-    lines: list[str] = ["## list_recipes"]
-    recipes = data.get("recipes") or []
-    for recipe in recipes[:30]:
-        if isinstance(recipe, dict):
-            name = recipe.get("name", "?")
-            desc = recipe.get("description", "")
-            summary = recipe.get("summary", "")
-            source = recipe.get("source", "")
-            source_tag = f" [{source}]" if source else ""
-            lines.append(f"  - {name}{source_tag}: {desc}" if desc else f"  - {name}{source_tag}")
-            if summary:
-                lines.append(f"    {summary}")
-        else:
-            lines.append(f"  - {recipe}")
-    if len(recipes) > 30:
-        lines.append(f"  ... and {len(recipes) - 30} more")
-    count = data.get("count", len(recipes))
-    lines.append(f"\n{count} recipe(s) available")
-    errors = data.get("errors") or []
-    if errors:
-        lines.append(f"\n{_WARN_MARK} {len(errors)} recipe file(s) had load errors")
-    return "\n".join(lines)
 
 
 def _fmt_tool_exception(data: dict, pipeline: bool) -> str:
@@ -681,7 +212,7 @@ def _resolve_payload(tool_name: str, tool_response: str) -> _Payload | None:
                          hook should pass through.
     """
     try:
-        data = json.loads(tool_response)
+        data: Any = json.loads(tool_response)
     except (json.JSONDecodeError, ValueError):
         return None
 

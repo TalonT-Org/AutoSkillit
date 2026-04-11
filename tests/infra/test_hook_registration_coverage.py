@@ -8,7 +8,13 @@ HOOKS_DIR = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks
 
 
 def test_all_pretooluse_hook_scripts_are_registered() -> None:
-    """Every hook .py (excl. PostToolUse, SessionStart, __init__) is PreToolUse-registered."""
+    """Every hook .py (excl. PostToolUse, SessionStart, __init__, private helpers)
+    is PreToolUse-registered.
+
+    Underscore-prefixed modules (e.g. ``_fmt_primitives.py``) are private helper
+    modules imported by hook scripts, not standalone hook scripts themselves, and
+    are excluded from registration coverage.
+    """
     post_or_session_registered = {
         script
         for hd in HOOK_REGISTRY
@@ -18,7 +24,9 @@ def test_all_pretooluse_hook_scripts_are_registered() -> None:
     hook_files = {
         f.name
         for f in HOOKS_DIR.glob("*.py")
-        if f.name != "__init__.py" and f.name not in post_or_session_registered
+        if f.name != "__init__.py"
+        and not f.name.startswith("_")
+        and f.name not in post_or_session_registered
     }
     registered_scripts: set[str] = set()
     for hook_def in HOOK_REGISTRY:
@@ -39,7 +47,11 @@ def test_all_posttooluse_hook_scripts_are_registered() -> None:
     registered_post = {
         script for hd in HOOK_REGISTRY if hd.event_type == "PostToolUse" for script in hd.scripts
     }
-    all_scripts = {p.name for p in HOOKS_DIR.glob("*.py") if p.name != "__init__.py"}
+    all_scripts = {
+        p.name
+        for p in HOOKS_DIR.glob("*.py")
+        if p.name != "__init__.py" and not p.name.startswith("_")
+    }
     pre_registered = {
         script for hd in HOOK_REGISTRY if hd.event_type == "PreToolUse" for script in hd.scripts
     }

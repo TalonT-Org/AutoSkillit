@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.workspace import SkillResolver
+    from autoskillit.core import TargetSkillResolver
 
 from autoskillit.core import (
     SKILL_TOOLS,
@@ -392,7 +392,7 @@ def check_contract_staleness(
     recipe_path: Path | None = None,
     cache_path: Path | None = None,
     skills_dir: Path | None = None,
-    resolver: SkillResolver | None = None,
+    resolver: TargetSkillResolver | None = None,
 ) -> list[StaleItem]:
     """Check a pipeline contract for staleness against the current manifest.
 

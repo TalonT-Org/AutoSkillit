@@ -670,9 +670,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
         Exempt at 16 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
-        file so Claude Code can invoke it directly as a subprocess. Adding
-        session_start_reminder.py for the SessionStart event brings the count to 11.
-        Exempt at 11 files.
+        file so Claude Code can invoke it directly as a subprocess. pretty_output.py
+        additionally owns a set of underscore-prefixed private formatter modules
+        (_fmt_primitives.py, _fmt_execution.py, _fmt_status.py, _fmt_recipe.py)
+        that are imported helpers — not standalone hook scripts — split out to
+        keep pretty_output.py under its line budget. Exempt at 18 files
+        (14 hook scripts + 4 private helpers).
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 17,
@@ -680,7 +683,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 25,
         "core": 16,
         "cli": 16,
-        "hooks": 14,
+        "hooks": 18,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
@@ -692,6 +695,25 @@ def test_no_subpackage_exceeds_10_files() -> None:
             violations.append(f"{sub_dir.name}/: {len(py_files)} Python files (max {limit})")
     assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
         f"  {v}" for v in violations
+    )
+
+
+def test_data_directories_are_not_python_packages() -> None:
+    """REQ-ARCH-005: data-only directories under src/autoskillit/ must not
+    contain __init__.py — that turns them into phantom Python packages
+    distinct from the real L2 module of similar name."""
+    src = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+    data_dirs = {"migrations", "recipes", "skills", "skills_extended"}
+    offenders: list[str] = []
+    for name in data_dirs:
+        d = src / name
+        if not d.is_dir():
+            continue
+        init = d / "__init__.py"
+        if init.exists():
+            offenders.append(str(init.relative_to(src)))
+    assert not offenders, (
+        f"Data directories must not be Python packages. Remove __init__.py from: {offenders}"
     )
 
 
@@ -987,6 +1009,35 @@ def test_recipe_api_module_exists() -> None:
 def test_default_recipe_repository_in_repository_module() -> None:
     """P2-F1: DefaultRecipeRepository must live in recipe/repository.py."""
     from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: F401
+
+
+def test_recipe_lister_callsites_use_protocol_typing() -> None:
+    """REQ-ARCH-006: callsites in recipe/ that consume the skill listing
+    must reference the SkillLister Protocol (parameter type), so the
+    deferred SkillResolver() instantiation is a default-factory fallback
+    rather than the only path.
+
+    contracts.py uses .resolve() and therefore references TargetSkillResolver,
+    not SkillLister. That is checked separately below.
+    """
+    lister_targets = {
+        "src/autoskillit/recipe/rules_skills.py",
+        "src/autoskillit/recipe/_api.py",
+    }
+    src_root = Path(__file__).resolve().parents[2]
+    missing: list[str] = []
+    for relpath in lister_targets:
+        text = (src_root / relpath).read_text()
+        if "SkillLister" not in text:
+            missing.append(relpath)
+    assert not missing, (
+        f"These files still consume SkillResolver without SkillLister Protocol typing: {missing}"
+    )
+    # contracts.py uses .resolve() — must reference TargetSkillResolver, not SkillLister
+    contracts_text = (src_root / "src/autoskillit/recipe/contracts.py").read_text()
+    assert "TargetSkillResolver" in contracts_text, (
+        "contracts.py must reference TargetSkillResolver for the resolver parameter"
+    )
 
 
 def test_default_recipe_repository_not_in_io() -> None:

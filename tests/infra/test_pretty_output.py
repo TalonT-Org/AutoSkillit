@@ -1769,3 +1769,12 @@ def test_fmt_open_kitchen_ingredients_not_duplicated_when_table_present():
     recipe_section = result.split("--- INGREDIENTS TABLE")[0]
     assert "  task:" not in recipe_section
     assert "review_approach:" not in recipe_section
+
+
+def test_pretty_output_public_surface_unchanged() -> None:
+    """T-5 (audit finding 8.3): the hook entrypoint and the format router are
+    the only public surface; the four-way split must preserve them."""
+    import autoskillit.hooks.pretty_output as p
+
+    assert callable(p.main)
+    assert callable(p._format_response)

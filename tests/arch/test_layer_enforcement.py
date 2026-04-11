@@ -974,3 +974,58 @@ def test_server_docstring_counts_accurate() -> None:
         "server/__init__.py docstring count claims do not match frozenset sizes:\n"
         + "\n".join(f"  {m}" for m in mismatches)
     )
+
+
+# ---------------------------------------------------------------------------
+# REQ-P12-002: Default* classes may only be instantiated in the Composition Root
+# (Finding 13.1) — AST gate with explicit allowlist
+# ---------------------------------------------------------------------------
+
+
+def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None:
+    """REQ-P12-002: Default* classes must be instantiated only in
+    server/_factory.py (the Composition Root). Five allowlisted exception
+    sites are recognized — they must remain in-place; introducing a sixth
+    requires either routing through make_context() or an explicit allowlist
+    update via this test."""
+    import ast
+
+    allowlist: dict[Path, set[str]] = {
+        Path("server/_factory.py"): {"*"},  # Composition Root
+        Path("cli/_workspace.py"): {"DefaultSubprocessRunner"},  # CLI worktree listing
+        Path("cli/_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
+        Path("execution/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback
+        Path("pipeline/context.py"): {  # __post_init__ +
+            "DefaultBackgroundSupervisor",  # field default_factory
+            "DefaultMcpResponseLog",
+        },
+    }
+
+    violations: list[str] = []
+    for f in SRC_ROOT.rglob("*.py"):
+        rel = f.relative_to(SRC_ROOT)
+        if "__pycache__" in rel.parts:
+            continue
+        if rel in allowlist and "*" in allowlist[rel]:
+            continue
+        tree = ast.parse(f.read_text(), filename=str(f))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = (
+                func.id
+                if isinstance(func, ast.Name)
+                else func.attr
+                if isinstance(func, ast.Attribute)
+                else None
+            )
+            if not (name and name.startswith("Default") and len(name) > 7 and name[7].isupper()):
+                continue
+            permitted = allowlist.get(rel, set())
+            if name not in permitted:
+                violations.append(f"{rel}:{node.lineno} {name}()")
+    assert not violations, (
+        "Default* classes may only be constructed in server/_factory.py "
+        "or in the allowlisted CLI/recording/context fallback sites:\n" + "\n".join(violations)
+    )

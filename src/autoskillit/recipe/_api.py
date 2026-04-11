@@ -14,6 +14,7 @@ from typing import Any, TypedDict
 from autoskillit.core import (
     LoadResult,
     RecipeSource,
+    SkillLister,
     TerminalColumn,
     YAMLError,
     _render_gfm_table,
@@ -445,7 +446,12 @@ def _build_active_recipe(
     return working, combined
 
 
-def validate_from_path(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> dict[str, Any]:
+def validate_from_path(
+    path: Path,
+    temp_dir_relpath: str = ".autoskillit/temp",
+    *,
+    lister: SkillLister | None = None,
+) -> dict[str, Any]:
     """Validate a recipe YAML file at the given path.
 
     Args:
@@ -480,11 +486,14 @@ def validate_from_path(path: Path, temp_dir_relpath: str = ".autoskillit/temp") 
             "findings": [{"error": "File must contain a YAML mapping"}],
         }
 
-    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+    if lister is None:
+        from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+
+        lister = SkillResolver()
 
     recipe = _parse_recipe(data)
     errors = validate_recipe(recipe)
-    known_skills = frozenset(s.name for s in SkillResolver().list_all())
+    known_skills = frozenset(s.name for s in lister.list_all())
     ctx = make_validation_context(recipe, available_skills=known_skills)
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)
@@ -520,6 +529,7 @@ def load_and_validate(
     ingredient_overrides: dict[str, str] | None = None,
     temp_dir: Path | None = None,
     temp_dir_relpath: str | None = None,
+    lister: SkillLister | None = None,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -612,10 +622,13 @@ def load_and_validate(
             t0 = _t("validate_recipe", t0, name)
 
             # Stage: semantic rules (builds ValidationContext once — shared computation)
-            from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+            if lister is None:
+                from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+
+                lister = SkillResolver()
 
             known = frozenset(r.name for r in list_recipes(_pdir).items)
-            known_skills = frozenset(s.name for s in SkillResolver().list_all())
+            known_skills = frozenset(s.name for s in lister.list_all())
             sub_recipes_dir = builtin_sub_recipes_dir()
             known_sub_recipes: frozenset[str] = (
                 frozenset(p.stem for p in sub_recipes_dir.glob("*.yaml"))

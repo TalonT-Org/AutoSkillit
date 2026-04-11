@@ -28,7 +28,7 @@ dependencies = [
     "dynaconf>=3.2.13,<4.0",
     "fastmcp>=3.2.0,<4.0",
     "httpx>=0.28,<0.29",
-    "igraph>=1.0",
+    "igraph>=1.0,<2.0",
     "packaging>=23.0",
     "psutil>=7.2.0",
     "pygments>=2.20.0",
@@ -154,6 +154,14 @@ forbidden_modules = [
 name = "L1 pipeline does not import L2 or L3"
 type = "forbidden"
 source_modules = ["autoskillit.pipeline"]
+# EXCEPTION: autoskillit.config is intentionally omitted from the
+# forbidden_modules list. pipeline.context.ToolContext owns
+# AutomationConfig as the DI wiring point — see the docstrings on
+# pipeline/context.py and pipeline/__init__.py. The coupling is safe
+# because config/ depends only on L0 (enforced by IL-002), so no
+# cycle is possible. This exception is asserted by
+# tests/arch/test_import_linter_contracts.py
+#     ::test_il003_pipeline_config_exception_documented.
 forbidden_modules = [
     "autoskillit.execution",
     "autoskillit.workspace",

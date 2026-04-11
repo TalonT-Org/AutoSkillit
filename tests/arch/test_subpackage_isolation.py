@@ -1011,6 +1011,27 @@ def test_default_recipe_repository_in_repository_module() -> None:
     from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: F401
 
 
+def test_recipe_lister_callsites_use_protocol_typing() -> None:
+    """REQ-ARCH-006: callsites in recipe/ that consume the skill listing
+    must reference the SkillLister Protocol (parameter type), so the
+    deferred SkillResolver() instantiation is a default-factory fallback
+    rather than the only path."""
+    targets = {
+        "src/autoskillit/recipe/rules_skills.py",
+        "src/autoskillit/recipe/_api.py",
+        "src/autoskillit/recipe/contracts.py",
+    }
+    src_root = Path(__file__).resolve().parents[2]
+    missing: list[str] = []
+    for relpath in targets:
+        text = (src_root / relpath).read_text()
+        if "SkillLister" not in text:
+            missing.append(relpath)
+    assert not missing, (
+        f"These files still consume SkillResolver without SkillLister Protocol typing: {missing}"
+    )
+
+
 def test_default_recipe_repository_not_in_io() -> None:
     """P2-F1: DefaultRecipeRepository must be removed from recipe/io.py."""
     io_path = SRC_ROOT / "recipe" / "io.py"

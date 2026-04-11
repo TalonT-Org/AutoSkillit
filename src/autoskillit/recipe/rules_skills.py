@@ -5,22 +5,27 @@ from __future__ import annotations
 import re
 
 from autoskillit.core import AUTOSKILLIT_SKILL_PREFIX, SKILL_TOOLS, Severity
+from autoskillit.core._type_protocols import SkillLister
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 
-def _get_bundled_skill_names() -> frozenset[str]:
-    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+def _get_bundled_skill_names(lister: SkillLister | None = None) -> frozenset[str]:
+    if lister is None:
+        from autoskillit.workspace import SkillResolver  # noqa: PLC0415
 
-    return frozenset(s.name for s in SkillResolver().list_all())
+        lister = SkillResolver()
+    return frozenset(s.name for s in lister.list_all())
 
 
-def _get_skill_category_map() -> dict[str, frozenset[str]]:
+def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, frozenset[str]]:
     """Return {skill_name: categories} for all bundled skills."""
-    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+    if lister is None:
+        from autoskillit.workspace import SkillResolver  # noqa: PLC0415
 
-    return {s.name: s.categories for s in SkillResolver().list_all()}
+        lister = SkillResolver()
+    return {s.name: s.categories for s in lister.list_all()}
 
 
 _SKILL_TOKEN_RE = re.compile(r"/autoskillit:(\S+)")

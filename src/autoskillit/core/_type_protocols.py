@@ -40,6 +40,7 @@ __all__ = [
     "MergeQueueWatcher",
     "SessionSkillManager",
     "TargetSkillResolver",
+    "SkillLister",
     "BackgroundSupervisor",
     "QuotaRefreshTask",
 ]
@@ -449,6 +450,20 @@ class TargetSkillResolver(Protocol):
     """Protocol for resolving skill names to their source tier."""
 
     def resolve(self, name: str) -> Any: ...
+
+
+@runtime_checkable
+class SkillLister(Protocol):
+    """L0 contract for listing all available skills.
+
+    Allows L2 recipe rules to type their skill-listing dependency
+    against an L0 protocol instead of binding to the L1 workspace
+    concrete class. The default implementation lives at
+    autoskillit.workspace.skills.SkillResolver and satisfies this
+    protocol structurally.
+    """
+
+    def list_all(self) -> list[Any]: ...
 
 
 @runtime_checkable

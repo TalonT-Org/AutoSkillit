@@ -223,8 +223,7 @@ def test_show_cook_preview_uses_resolved_base_branch_for_smoke_test(monkeypatch,
         lambda _: {"base_branch": "integration"},
     )
 
-    recipes_dir = project_dir / ".autoskillit" / "recipes"
-    recipe_info = find_recipe_by_name("smoke-test", recipes_dir)
+    recipe_info = find_recipe_by_name("smoke-test", project_dir)
     assert recipe_info is not None, "smoke-test recipe must exist in project-local recipes"
     recipe = load_recipe(recipe_info.path)
 

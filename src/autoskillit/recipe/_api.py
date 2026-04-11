@@ -114,10 +114,10 @@ def build_ingredient_rows(
         sort_key = _ingredient_sort_key(name, required, default)
         if default is None and required:
             default_str, name_str = "(required)", f"{name} *"
+        elif res := resolved.get(name):
+            default_str, name_str = res, name
         elif default == "":
-            res = resolved.get(name)
-            default_str = res if res else "auto-detect"
-            name_str = name
+            default_str, name_str = "auto-detect", name
         elif default == "true":
             default_str, name_str = "on", name
         elif default == "false":

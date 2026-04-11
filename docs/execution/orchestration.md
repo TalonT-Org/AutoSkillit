@@ -13,7 +13,7 @@ AutoSkillit splits agent execution into two layers:
   MCP tools, spawns headless workers, and routes verdicts. Never reads or
   writes code itself.
 - **Tier 2/3 — worker.** A headless Claude session launched by `run_skill`.
-  Sees the 2 free-range tools plus `test_check` (the only `headless`-tagged
+  Sees the 2 free range tools plus `test_check` (the only `headless`-tagged
   tool). Cannot call `run_skill`, `run_cmd`, or `run_python`.
 
 The boundary is enforced three ways: FastMCP visibility, the

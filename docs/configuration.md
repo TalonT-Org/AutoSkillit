@@ -8,8 +8,11 @@ Most projects only need one setting — the test command:
     autoskillit init
 
 This creates `.autoskillit/config.yaml` with the test command you provide.
-Everything else has sensible defaults. See [Getting Started](getting-started.md)
-for a full tutorial.
+Every other field falls back to the layered defaults loaded by
+`config/settings.py` (package `defaults.yaml` → user-level
+`~/.autoskillit/config.yaml` → project-level `.autoskillit/config.yaml` →
+`.autoskillit/.secrets.yaml` → `AUTOSKILLIT_*` environment variables, in that
+order). See [Getting Started](getting-started.md) for a full tutorial.
 
 ## Common Configurations
 

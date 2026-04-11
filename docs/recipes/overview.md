@@ -23,7 +23,7 @@ Plan, implement, test, and open a PR for a task or GitHub issue.
 | `auto_merge` | `true` | Enroll PR in merge queue after CI passes |
 | `base_branch` | *(auto-detect)* | Branch to merge into |
 
-See **[Getting Started](getting-started.md)** for a complete walkthrough.
+See **[Getting Started](../getting-started.md)** for a complete walkthrough.
 
 ### remediation
 

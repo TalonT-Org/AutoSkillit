@@ -10,7 +10,15 @@ DOCS_DIR = REPO_ROOT / "docs"
 DOCS_README = DOCS_DIR / "README.md"
 ROOT_README = REPO_ROOT / "README.md"
 
-EXPECTED_SUBDIRS = {"examples", "recipes", "skills", "execution", "safety", "operations", "developer"}
+EXPECTED_SUBDIRS = {
+    "examples",
+    "recipes",
+    "skills",
+    "execution",
+    "safety",
+    "operations",
+    "developer",
+}
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)#]+)(?:#[^)]*)?\)")
 
@@ -71,9 +79,8 @@ def test_every_doc_reachable_from_index() -> None:
 
     expected = {p.resolve() for p in _all_md_files()}
     unreachable = expected - visited
-    assert not unreachable, (
-        "Unreachable from docs/README.md: "
-        + ", ".join(sorted(p.relative_to(REPO_ROOT).as_posix() for p in unreachable))
+    assert not unreachable, "Unreachable from docs/README.md: " + ", ".join(
+        sorted(p.relative_to(REPO_ROOT).as_posix() for p in unreachable)
     )
 
 

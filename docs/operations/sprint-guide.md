@@ -78,7 +78,7 @@ pipelines are pacing correctly.
 ## Stale session detection
 
 If a worker emits no output for `run_skill.stale_threshold` seconds (default
-1200, 20 minutes), the orchestrator records a `stale` retry reason and
+1200, 20 minutes), the orchestrator records a `stale` `retry_reason` and
 re-spawns from scratch. Stale events are visible in the audit log under the
 step that produced them.
 

@@ -30,7 +30,7 @@ Example:
 Task: https://github.com/your-org/your-repo/issues/42
 ```
 
-AutoSkillit fills in the rest automatically: it detects your repository, base branch, and creates a feature branch named from the issue (e.g., `fix-auth-regression/42`).
+The orchestrator resolves the rest from the local repo: `config/ingredient_defaults.py:resolve_ingredient_defaults` auto-detects `source_dir` and `base_branch`, and `create_unique_branch` derives the feature branch name from the issue (e.g., `fix-auth-regression/42`).
 
 ## What Happens Next
 
@@ -40,7 +40,7 @@ The pipeline runs through these stages without intervention:
 Your repo is cloned into an isolated directory. Your working tree is never touched. A feature branch is created and published.
 
 ### 2. Planning (~5-7 min)
-A headless Claude session analyzes your codebase with parallel subagents, designs the best technical approach, and writes a detailed implementation plan. If the plan is large, it's split into sequential parts.
+A headless Claude session analyses the codebase with parallel subagents, drafts an implementation approach, and writes a phase-by-phase plan. If the plan exceeds the token budget, it is split into sequential `_part_a`, `_part_b`, … files that the orchestrator merges between parts.
 
 ### 3. Dry Walkthrough (~4-5 min)
 The plan is validated against the actual codebase. Missing files, wrong function signatures, and broken assumptions are caught and fixed in the plan before any code is written.

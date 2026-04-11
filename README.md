@@ -33,7 +33,7 @@ autoskillit order implementation
 ## What it does
 
 Each bundled recipe is a sequenced graph of skill invocations. The orchestrator
-holds a kitchen of 40 gated MCP tools plus 2 free-range tools (`open_kitchen`,
+holds a kitchen of 40 gated MCP tools plus 2 free range tools (`open_kitchen`,
 `close_kitchen`), launches headless Claude sessions for the heavy work, and
 routes verdicts through retry, merge, and review gates. The 5 bundled recipes
 are `implementation`, `implementation-groups`, `merge-prs`, `remediation`, and

@@ -98,9 +98,7 @@ def _count_exp_lens_skills() -> int:
 
 
 def _hook_files() -> list[Path]:
-    return sorted(
-        f for f in (SRC_DIR / "hooks").glob("*.py") if f.name not in {"__init__.py"}
-    )
+    return sorted(f for f in (SRC_DIR / "hooks").glob("*.py") if f.name not in {"__init__.py"})
 
 
 def _count_hooks_by_event() -> dict[str, int]:
@@ -163,23 +161,33 @@ def _count_semantic_rule_files() -> int:
 
 
 def test_mcp_tool_count_is_42() -> None:
-    assert _count_mcp_tools() == 42, f"Expected 42 @mcp.tool decorators; found {_count_mcp_tools()}"
+    assert _count_mcp_tools() == 42, (
+        f"Expected 42 @mcp.tool decorators; found {_count_mcp_tools()}"
+    )
 
 
 def test_kitchen_tagged_tool_count_is_40() -> None:
-    assert _count_kitchen_tools() == 40, f"Expected 40 kitchen-tagged tools; found {_count_kitchen_tools()}"
+    assert _count_kitchen_tools() == 40, (
+        f"Expected 40 kitchen-tagged tools; found {_count_kitchen_tools()}"
+    )
 
 
 def test_free_range_tool_count_is_2() -> None:
-    assert _count_free_range_tools() == 2, f"Expected 2 free-range tools; found {_count_free_range_tools()}"
+    assert _count_free_range_tools() == 2, (
+        f"Expected 2 free-range tools; found {_count_free_range_tools()}"
+    )
 
 
 def test_headless_tool_count_is_1() -> None:
-    assert _count_headless_tools() == 1, f"Expected 1 headless-tagged tool; found {_count_headless_tools()}"
+    assert _count_headless_tools() == 1, (
+        f"Expected 1 headless-tagged tool; found {_count_headless_tools()}"
+    )
 
 
 def test_skills_total_is_95() -> None:
-    assert _count_skills_total() == 95, f"Expected 95 bundled skills; found {_count_skills_total()}"
+    assert _count_skills_total() == 95, (
+        f"Expected 95 bundled skills; found {_count_skills_total()}"
+    )
 
 
 def test_arch_lens_count_is_13() -> None:
@@ -203,7 +211,9 @@ def test_quota_threshold_default_is_85() -> None:
 
 
 def test_doctor_check_count_is_14() -> None:
-    assert _count_doctor_checks() == 14, f"Expected 14 doctor checks; found {_count_doctor_checks()}"
+    assert _count_doctor_checks() == 14, (
+        f"Expected 14 doctor checks; found {_count_doctor_checks()}"
+    )
 
 
 def test_bundled_recipe_count_is_5() -> None:

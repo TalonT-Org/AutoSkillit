@@ -109,7 +109,7 @@ def _read_fetch_cache(home: Path) -> dict[str, Any]:
         data = json.loads(_fetch_cache_path(home).read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
     except Exception:
-        logger.debug("Failed to read fetch cache", exc_info=False)
+        logger.debug("Failed to read fetch cache", exc_info=True)
         return {}
 
 

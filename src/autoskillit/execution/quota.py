@@ -107,7 +107,7 @@ def _compute_binding(
     Returns QuotaStatus(0.0, None, ...) when windows is empty.
     """
     if not windows:
-        return QuotaStatus(0.0, None)
+        return QuotaStatus(0.0, None, effective_threshold=100.0)
 
     def threshold_of(name: str) -> float:
         return _threshold_for_window(
@@ -244,7 +244,9 @@ async def _fetch_quota(
                 resets_at=_parse_resets_at(w.get("resets_at")),
             )
     if not windows:
-        return QuotaFetchResult(windows={}, binding=QuotaStatus(0.0, None))
+        return QuotaFetchResult(
+            windows={}, binding=QuotaStatus(0.0, None, effective_threshold=100.0)
+        )
     binding = _compute_binding(
         windows,
         short_threshold=short_threshold,

@@ -220,6 +220,16 @@ infrastructure -> depends on nothing project-specific
 - Confirm `ToolContext` is only instantiated in `server/_factory.py` and test files
 - Flag any `Default*` adapter instantiated outside the Composition Root in production code
 
+**Composition-Boundary Tiers — NOT Violations:**
+
+The Composition Root rule applies only to full DI wiring sessions. The following three tiers are legitimate composition boundaries and MUST NOT be flagged as P12 violations:
+
+- **Intra-package Default* instantiation** — sibling modules within the same sub-package wiring `Default*` adapters as dataclass field defaults. This pattern is intentional: the sub-package is a cohesive unit and the sibling wiring is not "escaping" the Composition Root. Example: `pipeline/context.py` instantiating `DefaultBackgroundSupervisor`, `DefaultMcpResponseLog` as field defaults.
+- **L3 CLI / interactive launcher composition boundaries** — modules in `cli/` with their own lifecycle that do not receive a `ToolContext` at all. These modules compose their own lightweight dependencies because they operate outside the server pipeline. Examples: `cli/_workspace.py`, `cli/_cook.py`.
+- **DI convenience default** — an optional parameter typed `SomeProtocol | None = None` with a deferred-import fallback inside `if param is None:`. This is a dependency-injection convenience pattern, not a Composition Root bypass. Example: `recording.py`.
+
+Only `Default*` instantiation that bypasses the Composition Root AND falls outside all three tiers is a P12 violation.
+
 **Severity:** HIGH — concrete class leakage in field annotations defeats substitutability; Protocol naming gaps make the DI contract non-discoverable
 
 ---

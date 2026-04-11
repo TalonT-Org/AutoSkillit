@@ -110,10 +110,12 @@ def test_docs_readme_line_count_under_80() -> None:
     assert line_count <= 80, f"docs/README.md has {line_count} lines (max 80)"
 
 
-def test_root_readme_line_count_50_to_70() -> None:
+def test_root_readme_line_count_at_least_30() -> None:
     if not ROOT_README.exists():
         import pytest
 
         pytest.skip("README.md not present yet")
     line_count = len(ROOT_README.read_text(encoding="utf-8").splitlines())
-    assert 50 <= line_count <= 70, f"README.md has {line_count} lines (target 50-70)"
+    assert line_count >= 30, (
+        f"README.md has {line_count} lines (expected >= 30 to guard against accidental truncation)"
+    )

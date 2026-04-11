@@ -21,11 +21,14 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: default fallback values for temp_dir_relpath in load_and_validate
     # / _build_active_recipe / validate_from_path (mirrors canonical default).
     "recipe/_api.py": "fallback default for temp_dir_relpath kwargs",
+    # Justification: validate_from_path signature now includes temp_dir_relpath with
+    # the canonical default value, mirroring the _api.py pattern.
+    "recipe/repository.py": "validate_from_path default arg mirrors canonical default",
+    # Justification: RecipeRepository protocol method includes temp_dir_relpath with
+    # the canonical default value for backward compatibility.
+    "core/_type_protocols.py": "RecipeRepository.validate_from_path default arg",
     # Justification: SkillsDirectoryProvider default ctor arg matches canonical default.
     "workspace/session_skills.py": "SkillsDirectoryProvider default arg",
-    # Justification: tools_recipe handler falls back to canonical default when
-    # cfg.workspace.temp_dir is None.
-    "server/tools_recipe.py": "fallback default in load_recipe handler",
     # Justification: docstring example referencing the canonical default path.
     "hooks/skill_cmd_check.py": "docstring example",
     # Justification: docstring referencing the canonical default path.

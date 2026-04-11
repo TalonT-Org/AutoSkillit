@@ -5,6 +5,7 @@ so callers can do either `from autoskillit.core import get_logger` or the
 explicit `from autoskillit.core.logging import get_logger`.
 """
 
+from ._claude_env import build_claude_env
 from ._terminal_table import TerminalColumn as TerminalColumn
 from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
@@ -111,6 +112,8 @@ from .types import (
 )
 
 __all__ = [
+    # _claude_env
+    "build_claude_env",
     # _terminal_table
     "TerminalColumn",
     "_render_gfm_table",

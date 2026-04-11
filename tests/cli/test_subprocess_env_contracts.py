@@ -11,6 +11,13 @@ Contract: each call site must satisfy BOTH conditions:
      same source file, confirming the env dict is built from the guard (the variable
      pattern ``_skip_env = {**os.environ, "AUTOSKILLIT_SKIP_STALE_CHECK": "1"}``
      satisfies this without requiring the literal to appear inside the call expression).
+
+Also contains ``test_no_raw_claude_env``: the sibling rule for claude-launching
+subprocess calls. Every claude-launching site must route its env through
+:func:`autoskillit.core.build_claude_env` (via ``spec.env`` from a
+``Claude*Cmd`` dataclass, or via a direct builder call). The rule bans
+``env={**os.environ, ...}``, ``env=os.environ``, ``env=None``, missing ``env=``,
+and ``env=<literal dict>`` at every claude-launching site.
 """
 
 from __future__ import annotations
@@ -21,7 +28,16 @@ from pathlib import Path
 import pytest
 
 CLI_ROOT = Path(__file__).parents[2] / "src" / "autoskillit" / "cli"
+SRC_ROOT = Path(__file__).parents[2] / "src" / "autoskillit"
 REQUIRED_GUARD = "AUTOSKILLIT_SKIP_STALE_CHECK"
+
+_CLAUDE_BUILDER_NAMES = frozenset(
+    {
+        "build_interactive_cmd",
+        "build_headless_cmd",
+        "build_full_headless_cmd",
+    }
+)
 
 
 def _collect_autoskillit_subprocess_calls(source: str) -> list[tuple[int, str, bool]]:
@@ -195,4 +211,222 @@ def test_source_drift_all_subprocess_calls_have_env_kwarg() -> None:
     # File-level: must define both guard env vars
     assert DRIFT_GUARD in content, (
         f"_source_drift.py must define '{DRIFT_GUARD}' in its _skip_env dict"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sibling rule: claude-launching subprocess calls must route env through
+# build_claude_env() — enforced via intra-function AST walk.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _call_func_name(func: ast.AST) -> str:
+    """Return the simple/qualified name of a Call's .func expression (best-effort)."""
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return ""
+
+
+def _is_claude_builder_call(node: ast.AST) -> bool:
+    """True if *node* is a call to any claude command builder."""
+    if not isinstance(node, ast.Call):
+        return False
+    return _call_func_name(node.func) in _CLAUDE_BUILDER_NAMES
+
+
+def _is_literal_claude_list(node: ast.AST) -> bool:
+    """True if *node* is a literal list whose first element is the string 'claude'."""
+    if not isinstance(node, ast.List) or not node.elts:
+        return False
+    first = node.elts[0]
+    return isinstance(first, ast.Constant) and first.value == "claude"
+
+
+class _ClaudeLaunchWalker:
+    """Per-function walker: tracks single-assignment symbol table for a FunctionDef.
+
+    Detects claude-launching call patterns on the first positional or ``cmd=``
+    kwarg and verifies the ``env=`` kwarg shape is one of:
+
+    - ``Attribute(value=Name, attr="env")`` where Name was assigned from a
+      ``build_interactive_cmd``/``build_headless_cmd``/``build_full_headless_cmd``
+      call earlier in the same function body (spec.env pattern).
+    - ``Call(func=Name("build_claude_env") | Attribute(..., "build_claude_env"))``
+      (direct builder escape hatch).
+    """
+
+    def __init__(self, func_node: ast.AST, path: Path) -> None:
+        self.func_node = func_node
+        self.path = path
+        # Name -> most recent assigned value (single-assignment tracker).
+        self._bindings: dict[str, ast.expr] = {}
+        self.violations: list[str] = []
+
+    def walk(self) -> None:
+        for stmt in ast.walk(self.func_node):
+            # Track simple assignments first so calls later in the body can resolve.
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                target = stmt.targets[0]
+                if isinstance(target, ast.Name):
+                    self._bindings[target.id] = stmt.value
+            elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+                if isinstance(stmt.target, ast.Name):
+                    self._bindings[stmt.target.id] = stmt.value
+            elif isinstance(stmt, ast.Call):
+                self._check_call(stmt)
+
+    def _resolve_name(self, node: ast.AST) -> ast.expr | None:
+        """Follow a Name through one level of assignment; return the bound value or None."""
+        if isinstance(node, ast.Name) and node.id in self._bindings:
+            return self._bindings[node.id]
+        return None
+
+    def _cmd_is_claude_launching(self, cmd_arg: ast.AST) -> bool:
+        """True if *cmd_arg* refers to a claude-launching argv (via spec or literal)."""
+        # Direct literal: ["claude", ...]
+        if _is_literal_claude_list(cmd_arg):
+            return True
+
+        # spec.cmd attribute access where spec was assigned from a builder.
+        if isinstance(cmd_arg, ast.Attribute) and cmd_arg.attr == "cmd":
+            bound = self._resolve_name(cmd_arg.value)
+            if bound is not None and _is_claude_builder_call(bound):
+                return True
+
+        # Name: resolve one level.
+        if isinstance(cmd_arg, ast.Name):
+            bound = self._resolve_name(cmd_arg)
+            if bound is None:
+                return False
+            # cmd = ["claude", ...]
+            if _is_literal_claude_list(bound):
+                return True
+            # cmd = spec.cmd (+ [...])  or  cmd = spec.cmd
+            if isinstance(bound, ast.Attribute) and bound.attr == "cmd":
+                return self._cmd_is_claude_launching(bound)
+            if isinstance(bound, ast.BinOp) and isinstance(bound.op, ast.Add):
+                return self._cmd_is_claude_launching(bound.left) or self._cmd_is_claude_launching(
+                    bound.right
+                )
+            # cmd = spec_result_of_builder  → treat attribute .cmd the same way
+            if _is_claude_builder_call(bound):
+                return True
+
+        # cmd = spec.cmd + [...] passed inline as BinOp.
+        if isinstance(cmd_arg, ast.BinOp) and isinstance(cmd_arg.op, ast.Add):
+            return self._cmd_is_claude_launching(cmd_arg.left) or self._cmd_is_claude_launching(
+                cmd_arg.right
+            )
+
+        return False
+
+    @staticmethod
+    def _cmd_arg_of(call: ast.Call) -> ast.AST | None:
+        """Return the claude argv argument: first positional, or cmd= kwarg."""
+        if call.args:
+            return call.args[0]
+        for kw in call.keywords:
+            if kw.arg == "cmd":
+                return kw.value
+        return None
+
+    @staticmethod
+    def _env_kwarg(call: ast.Call) -> ast.expr | None:
+        for kw in call.keywords:
+            if kw.arg == "env":
+                return kw.value
+        return None
+
+    def _env_shape_ok(self, env_val: ast.expr | None) -> tuple[bool, str]:
+        if env_val is None:
+            return False, "missing env= kwarg"
+        if isinstance(env_val, ast.Constant) and env_val.value is None:
+            return False, "env=None is not allowed"
+        if isinstance(env_val, ast.Dict):
+            # env={**os.environ, ...} or env={"K": "V"} — both are banned.
+            return False, "env=<literal dict> is not allowed"
+        if isinstance(env_val, ast.Attribute):
+            # env=os.environ
+            if (
+                isinstance(env_val.value, ast.Name)
+                and env_val.value.id == "os"
+                and env_val.attr == "environ"
+            ):
+                return False, "env=os.environ is not allowed"
+            # env=spec.env / env=foo.env
+            if env_val.attr == "env":
+                return True, ""
+        if isinstance(env_val, ast.Call):
+            fn = _call_func_name(env_val.func)
+            if fn == "build_claude_env":
+                return True, ""
+        if isinstance(env_val, ast.Name):
+            # Parameter / local re-binding: rely on the function owning it to pass
+            # a scrubbed env. This escape hatch is narrow — direct os.environ bindings
+            # would already be visible as a Dict/Attribute at the call site.
+            return True, ""
+        return False, f"env= has unrecognised shape: {ast.dump(env_val)[:60]}"
+
+    def _check_call(self, call: ast.Call) -> None:
+        cmd_arg = self._cmd_arg_of(call)
+        if cmd_arg is None:
+            return
+        if not self._cmd_is_claude_launching(cmd_arg):
+            return
+        env_val = self._env_kwarg(call)
+        ok, reason = self._env_shape_ok(env_val)
+        if not ok:
+            rel = self.path.relative_to(SRC_ROOT.parents[1])
+            self.violations.append(
+                f"{rel}:{call.lineno}: claude-launching call at "
+                f"{_call_func_name(call.func) or '<anonymous>'}(...) — {reason}"
+            )
+
+
+# Allowlist: administrative ``claude plugin ...`` subprocess calls that are
+# plugin marketplace / registration operations, NOT skill sessions. They do
+# not present a tool surface to the model, so IDE-channel attach is not a
+# concern. Each entry is (filename, enclosing_function_name).
+#
+# Adding a new entry requires a comment justifying why the call cannot use
+# build_claude_env — matching the convention in
+# ``tests/arch/test_ast_rules.py::test_no_raw_claude_list_construction``.
+_CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
+    {
+        # doctor check: `claude plugin list` — read-only registration probe.
+        ("_doctor.py", "_check_mcp_server_registered"),
+        # onboarding probe: `claude plugin list` — read-only install check.
+        ("_init_helpers.py", "_is_plugin_installed"),
+        # marketplace registration + install: `claude plugin marketplace add` /
+        # `claude plugin install`. Administrative ops invoked once during setup.
+        ("_marketplace.py", "install"),
+    }
+)
+
+
+def test_no_raw_claude_env() -> None:
+    """Every claude-launching subprocess call must route env through build_claude_env()."""
+    if not SRC_ROOT.is_dir():
+        pytest.skip("Source tree unavailable")
+
+    violations: list[str] = []
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        try:
+            tree = ast.parse(py_file.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if (py_file.name, node.name) in _CLAUDE_ENV_RULE_ALLOWED:
+                continue
+            walker = _ClaudeLaunchWalker(node, py_file)
+            walker.walk()
+            violations.extend(walker.violations)
+
+    assert not violations, (
+        "Found claude-launching subprocess calls that bypass build_claude_env():\n"
+        + "\n".join(f"  {v}" for v in violations)
     )

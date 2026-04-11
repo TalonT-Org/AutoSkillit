@@ -1,0 +1,102 @@
+"""Launch-site env-scrub contract tests for _launch_cook_session and cook().
+
+Each test monkeypatches ``CLAUDE_CODE_SSE_PORT`` and ``ENABLE_IDE_INTEGRATION``
+into the parent env, drives the launch site with ``subprocess.run`` patched,
+and asserts the captured ``env`` kwarg does not contain the IDE discovery
+variables and does contain the auto-connect suppressor.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+def test_launch_cook_session_env_excludes_ide_vars(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
+    monkeypatch.setenv("ENABLE_IDE_INTEGRATION", "true")
+    monkeypatch.setenv("VSCODE_GIT_ASKPASS_MAIN", "/fake/vscode")
+    monkeypatch.setenv("CLAUDE_CODE_IDE_HOST_OVERRIDE", "host")
+
+    from autoskillit.cli.app import _launch_cook_session
+
+    with (
+        patch("shutil.which", return_value="/usr/bin/claude"),
+        patch(
+            "autoskillit.cli.app.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_run,
+        patch("autoskillit.cli.app.terminal_guard"),
+    ):
+        _launch_cook_session("system prompt", initial_message="hello")
+
+    assert mock_run.call_args is not None
+    env = mock_run.call_args.kwargs["env"]
+    assert "CLAUDE_CODE_SSE_PORT" not in env
+    assert "ENABLE_IDE_INTEGRATION" not in env
+    assert "VSCODE_GIT_ASKPASS_MAIN" not in env
+    assert "CLAUDE_CODE_IDE_HOST_OVERRIDE" not in env
+    assert env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
+
+
+def test_launch_cook_session_extra_env_still_applied(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
+
+    from autoskillit.cli.app import _launch_cook_session
+
+    with (
+        patch("shutil.which", return_value="/usr/bin/claude"),
+        patch(
+            "autoskillit.cli.app.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_run,
+        patch("autoskillit.cli.app.terminal_guard"),
+    ):
+        _launch_cook_session(
+            "system prompt",
+            extra_env={"AUTOSKILLIT_SUBSETS__DISABLED": "@json []"},
+        )
+
+    env = mock_run.call_args.kwargs["env"]
+    assert env["AUTOSKILLIT_SUBSETS__DISABLED"] == "@json []"
+    assert "CLAUDE_CODE_SSE_PORT" not in env
+
+
+def test_cook_command_env_excludes_ide_vars(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
+    monkeypatch.setenv("ENABLE_IDE_INTEGRATION", "true")
+    monkeypatch.chdir(tmp_path)
+
+    fake_skills_dir = tmp_path / "skills"
+    fake_skills_dir.mkdir()
+    mock_mgr = MagicMock()
+    mock_mgr.init_session.return_value = fake_skills_dir
+
+    with (
+        patch("shutil.which", return_value="/usr/bin/claude"),
+        patch("builtins.input", return_value=""),
+        patch("sys.stdin.isatty", return_value=True),
+        patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+        patch(
+            "autoskillit.cli._cook.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_run,
+        patch("autoskillit.cli._cook.terminal_guard"),
+    ):
+        from autoskillit.cli._cook import cook
+
+        cook()
+
+    assert mock_run.call_args is not None
+    env = mock_run.call_args.kwargs["env"]
+    assert "CLAUDE_CODE_SSE_PORT" not in env
+    assert "ENABLE_IDE_INTEGRATION" not in env
+    assert env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"

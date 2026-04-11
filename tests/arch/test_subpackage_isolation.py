@@ -99,6 +99,7 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
         "version",
         "compile",
         "object",
+        "MappingProxyType",  # types.MappingProxyType — read-only view, no state
     }
 )
 
@@ -657,7 +658,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         prevent circular imports while keeping L0 types co-located. Also houses
         _terminal_table.py as the L0 shared terminal rendering primitive so that
         both cli/ (L3) and pipeline/ (L1) can import it without layer violations.
-        Exempt at 15 files.
+        _claude_env.py adds the canonical IDE-scrubbing env builder for all
+        claude subprocess launches.
+        Exempt at 16 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -675,7 +678,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 17,
         "recipe": 30,
         "execution": 25,
-        "core": 15,
+        "core": 16,
         "cli": 16,
         "hooks": 14,
     }

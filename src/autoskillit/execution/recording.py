@@ -7,6 +7,7 @@ import atexit
 import shutil
 import tempfile
 from collections import deque
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -30,23 +31,6 @@ REPLAY_SCENARIO_DIR_ENV = "REPLAY_SCENARIO_DIR"
 
 class ScenarioReplayError(Exception):
     """Raised when scenario replay cannot find a session or result for a step."""
-
-
-def _extract_env_and_args(cmd: list[str]) -> tuple[dict[str, str], list[str]]:
-    """Parse ``["env", "K=V", ..., "program", ...]`` into (env_dict, clean_args).
-
-    If *cmd* does not start with ``"env"``, returns ``({}, cmd)``.
-    """
-    if not cmd or cmd[0] != "env":
-        return {}, list(cmd)
-
-    env_dict: dict[str, str] = {}
-    i = 1
-    while i < len(cmd) and "=" in cmd[i]:
-        key, _, val = cmd[i].partition("=")
-        env_dict[key] = val
-        i += 1
-    return env_dict, cmd[i:]
 
 
 def _extract_model(args: list[str]) -> str:
@@ -93,7 +77,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         *,
         cwd: Path,
         timeout: float,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] | None = None,
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,
@@ -102,15 +86,13 @@ class RecordingSubprocessRunner(SubprocessRunner):
         completion_drain_timeout: float = 5.0,
         linux_tracing_config: Any | None = None,
     ) -> SubprocessResult:
-        env_dict, clean_args = _extract_env_and_args(cmd)
-        step_name = env_dict.get(SCENARIO_STEP_NAME_ENV, "")
+        step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
         if pty_mode and step_name:
             return await self._record_session(
                 cmd=cmd,
-                clean_args=clean_args,
                 step_name=step_name,
-                model=_extract_model(clean_args),
+                model=_extract_model(cmd),
                 session_log_dir=session_log_dir,
             )
 
@@ -144,7 +126,6 @@ class RecordingSubprocessRunner(SubprocessRunner):
         self,
         *,
         cmd: list[str],
-        clean_args: list[str],
         step_name: str,
         model: str,
         session_log_dir: Path | None,
@@ -155,7 +136,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 self.recorder.record_step,
                 step_name=step_name,
                 tool="run_skill",
-                args=clean_args,
+                args=cmd,
                 model=model,
                 session_log_dir=str(session_log_dir) if session_log_dir else None,
             )
@@ -206,7 +187,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         *,
         cwd: Path,
         timeout: float,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] | None = None,
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,
@@ -215,11 +196,10 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         completion_drain_timeout: float = 5.0,
         linux_tracing_config: Any | None = None,
     ) -> SubprocessResult:
-        env_dict, _ = _extract_env_and_args(cmd)
-        step_name = env_dict.get(SCENARIO_STEP_NAME_ENV, "")
+        step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
         if not step_name:
-            raise ValueError(f"SCENARIO_STEP_NAME not found in cmd env prefix: {cmd!r}")
+            raise ValueError(f"SCENARIO_STEP_NAME not found in env kwarg for cmd: {cmd!r}")
 
         self.call_log.append((step_name, cmd))
 

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 
 from autoskillit.cli._terminal import terminal_guard
@@ -65,7 +65,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
 def _run_cook_session(
     *,
     cmd: list[str],
-    env: dict[str, str],
+    env: Mapping[str, str],
     _first_run: bool,
     initial_prompt: str | None,
     project_dir: Path,
@@ -151,16 +151,15 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         session_id_local, cook_session=True, config=config, project_dir=project_dir
     )
 
-    cmd = build_interactive_cmd(
+    spec = build_interactive_cmd(
         plugin_dir=pkg_root(),
         add_dirs=[skills_dir],
         initial_prompt=initial_prompt,
         resume_session_id=resume_session_id,
-    ).cmd
-    env = {**os.environ}
+    )
     _run_cook_session(
-        cmd=cmd,
-        env=env,
+        cmd=spec.cmd,
+        env=spec.env,
         _first_run=_first_run,
         initial_prompt=initial_prompt,
         project_dir=project_dir,

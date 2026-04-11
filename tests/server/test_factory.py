@@ -335,9 +335,7 @@ def test_write_expected_resolver_for_resolve_claims_review_returns_conditional()
     """
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver(
-        "/autoskillit:resolve-claims-review /tmp/wt main"
-    )
+    spec = ctx.write_expected_resolver("/autoskillit:resolve-claims-review /tmp/wt main")
     assert spec.mode == "conditional", (
         f"resolve-claims-review must use 'conditional' write_behavior, got '{spec.mode}'. "
         "It has legitimate no-write success paths."
@@ -356,9 +354,7 @@ def test_write_expected_resolver_for_resolve_research_review_returns_conditional
     """
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver(
-        "/autoskillit:resolve-research-review /tmp/wt main"
-    )
+    spec = ctx.write_expected_resolver("/autoskillit:resolve-research-review /tmp/wt main")
     assert spec.mode == "conditional", (
         f"resolve-research-review must use 'conditional' write_behavior, got '{spec.mode}'. "
         "It has legitimate no-write success paths."

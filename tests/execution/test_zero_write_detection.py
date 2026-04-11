@@ -372,9 +372,7 @@ class TestZeroWriteDetection:
                 expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
             ),
         )
-        assert sr.success is True, (
-            "Fixes applied with actual writes must NOT be demoted."
-        )
+        assert sr.success is True, "Fixes applied with actual writes must NOT be demoted."
         assert sr.subtype != "zero_writes"
 
     def test_resolve_research_review_no_fixes_applied_not_demoted(self) -> None:
@@ -481,9 +479,7 @@ class TestZeroWriteDetection:
                 expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
             ),
         )
-        assert sr.success is True, (
-            "Fixes applied with actual writes must NOT be demoted."
-        )
+        assert sr.success is True, "Fixes applied with actual writes must NOT be demoted."
         assert sr.subtype != "zero_writes"
 
 

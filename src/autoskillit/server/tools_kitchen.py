@@ -124,9 +124,6 @@ def _write_hook_config() -> None:
     cfg = ctx.config.quota_guard
     payload = {
         "quota_guard": {
-            "short_window_threshold": cfg.short_window_threshold,
-            "long_window_threshold": cfg.long_window_threshold,
-            "long_window_patterns": list(cfg.long_window_patterns),
             "cache_max_age": cfg.cache_max_age,
             "cache_path": cfg.cache_path,
         },

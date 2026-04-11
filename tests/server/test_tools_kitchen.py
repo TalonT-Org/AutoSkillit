@@ -118,12 +118,13 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     hook_cfg = tmp_path / ".autoskillit" / ".hook_config.json"
     assert hook_cfg.exists(), "Hook config file must be written by open_kitchen"
     data = json.loads(hook_cfg.read_text())
-    assert data["quota_guard"]["short_window_threshold"] == 85.0
-    assert data["quota_guard"]["long_window_threshold"] == 98.0
-    assert data["quota_guard"]["long_window_patterns"] == ["weekly", "sonnet", "opus"]
-    assert "threshold" not in data["quota_guard"]
     assert data["quota_guard"]["cache_max_age"] == 300
     assert data["quota_guard"]["cache_path"] == "/custom/path.json"
+    # threshold fields are pre-computed into should_block in the cache — not written to hook_config
+    assert "threshold" not in data["quota_guard"]
+    assert "short_window_threshold" not in data["quota_guard"]
+    assert "long_window_threshold" not in data["quota_guard"]
+    assert "long_window_patterns" not in data["quota_guard"]
     # Confirm kitchen_id rename: hook config must contain 'kitchen_id' (not 'pipeline_id')
     assert "kitchen_id" in data, (
         "hook config must contain 'kitchen_id' after rename from 'pipeline_id'"

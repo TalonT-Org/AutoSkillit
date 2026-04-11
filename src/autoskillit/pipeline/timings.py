@@ -140,7 +140,8 @@ class DefaultTimingLog:
             if key not in self._entries:
                 self._entries[key] = TimingEntry(step_name=step_name)
             e = self._entries[key]
-            e.total_seconds += max(0.0, float(data.get("total_seconds", 0.0)))
+            _raw_total = data.get("total_seconds")
+            e.total_seconds += max(0.0, float(_raw_total) if _raw_total is not None else 0.0)
             e.invocation_count += 1
             count += 1
 

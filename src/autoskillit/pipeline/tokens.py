@@ -216,7 +216,8 @@ class DefaultTokenLog:
             e.cache_read_input_tokens += data.get("cache_read_input_tokens", 0)
             # timing_seconds is the on-disk key name written by session_log.py;
             # elapsed_seconds is the in-memory field name on TokenEntry.
-            e.elapsed_seconds += float(data.get("timing_seconds", 0.0))
+            _raw_timing = data.get("timing_seconds")
+            e.elapsed_seconds += float(_raw_timing) if _raw_timing is not None else 0.0
             # Each token_usage.json file represents a single run_skill invocation
             # (one file = one invocation). Incrementing here reconstructs the
             # invocation count that was accumulated live via record().

@@ -231,7 +231,8 @@ def _load_sessions(
         entry["output_tokens"] += data.get("output_tokens", 0)
         entry["cache_creation_input_tokens"] += data.get("cache_creation_input_tokens", 0)
         entry["cache_read_input_tokens"] += data.get("cache_read_input_tokens", 0)
-        entry["elapsed_seconds"] += float(data.get("timing_seconds", 0.0))
+        _raw_timing = data.get("timing_seconds")
+        entry["elapsed_seconds"] += float(_raw_timing) if _raw_timing is not None else 0.0
         entry["invocation_count"] += 1
 
     return aggregated

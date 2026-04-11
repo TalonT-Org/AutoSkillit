@@ -195,6 +195,39 @@ async def test_multi_window_worst_case_governs(mock_http_server, quota_config):
     assert result["window_name"] == "one_hour"
 
 
+async def test_null_utilization_window_skipped(mock_http_server, quota_config):
+    """Windows with utilization: null must be skipped, not crash."""
+    mock_http_server.register(
+        "GET",
+        QUOTA_ENDPOINT,
+        PyResponseSpec(
+            body={
+                "five_hour": {"utilization": None, "resets_at": "2026-04-10T12:00:00Z"},
+                "daily": {"utilization": 50.0, "resets_at": "2026-04-10T18:00:00Z"},
+            }
+        ),
+    )
+    result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
+    assert result["should_sleep"] is False
+    assert result["utilization"] == 50.0
+
+
+async def test_all_null_utilization_returns_zero(mock_http_server, quota_config):
+    """When all windows have null utilization, result should be 0.0 (below threshold)."""
+    mock_http_server.register(
+        "GET",
+        QUOTA_ENDPOINT,
+        PyResponseSpec(
+            body={
+                "five_hour": {"utilization": None, "resets_at": None},
+            }
+        ),
+    )
+    result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
+    assert result["should_sleep"] is False
+    assert result["utilization"] == 0.0
+
+
 # T-HTTP-MW-2: unknown/extra window keys are tolerated (forward compat)
 async def test_unknown_window_keys_tolerated(mock_http_server, quota_config):
     """Extra unknown window keys in API response are tolerated without error."""

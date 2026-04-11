@@ -136,7 +136,7 @@ Default: `command: null` (disabled), `preserve_dirs: []`.
 ```yaml
 quota_guard:
   enabled: true
-  threshold: 80.0          # block run_skill when 5-hour utilization exceeds this %
+  threshold: 85.0          # block run_skill when 5-hour utilization exceeds this %
   buffer_seconds: 60       # extra buffer after quota reset before resuming
   cache_max_age: 60        # seconds before a live quota fetch is triggered
 ```

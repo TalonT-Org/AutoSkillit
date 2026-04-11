@@ -14,7 +14,7 @@ KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*\.md$")
 
 # Files allow-listed against specific rules. Each entry: rule -> {filenames}.
 ALLOWLIST = {
-    "ing_suffix": {"getting-started.md", "contributing.md"},
+    "ing_suffix": {"getting-started.md", "contributing.md", "authoring.md"},
     "segment_count": {"getting-started.md", "end-turn-hazards.md", "research-pipeline.md"},
 }
 

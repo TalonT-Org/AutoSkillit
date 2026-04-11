@@ -23,7 +23,7 @@ Plan, implement, test, and open a PR for a task or GitHub issue.
 | `auto_merge` | `true` | Enroll PR in merge queue after CI passes |
 | `base_branch` | *(auto-detect)* | Branch to merge into |
 
-See **[Getting Started](getting-started.md)** for a complete walkthrough.
+See **[Getting Started](../getting-started.md)** for a complete walkthrough.
 
 ### remediation
 
@@ -132,7 +132,7 @@ steps:
     message: "Failed."
 ```
 
-See **[Sub-Recipe Composition](sub-recipe-composition.md)** for advanced patterns like sprint mode.
+See **[Sub-Recipe Composition](composition.md)** for advanced patterns like sprint mode.
 
 ## Recipe Management
 

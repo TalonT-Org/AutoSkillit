@@ -5,7 +5,7 @@
 AutoSkillit's 95 bundled skills are organized into three tiers that control when and where
 they appear as slash commands. The tier system is orthogonal to subset categories — you can
 disable a subset across all tiers simultaneously, or reclassify individual skills between
-tiers. See [Subset Categories](subset-categories.md) for subset configuration.
+tiers. See [Subset Categories](subsets.md) for subset configuration.
 
 ## The Three Tiers
 
@@ -130,7 +130,7 @@ of tier. The two axes compose independently:
 | **Tier 2** | Skill visible in cook + headless | Skill hidden from all sessions |
 | **Tier 3** | Skill visible in cook + headless | Skill hidden from all sessions |
 
-See [Subset Categories](subset-categories.md) for how to configure subset disablement.
+See [Subset Categories](subsets.md) for how to configure subset disablement.
 
 ## Why Two Directories, Not `disable-model-invocation`
 

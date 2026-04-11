@@ -8,8 +8,11 @@ Most projects only need one setting — the test command:
     autoskillit init
 
 This creates `.autoskillit/config.yaml` with the test command you provide.
-Everything else has sensible defaults. See [Getting Started](getting-started.md)
-for a full tutorial.
+Every other field falls back to the layered defaults loaded by
+`config/settings.py` (package `defaults.yaml` → user-level
+`~/.autoskillit/config.yaml` → project-level `.autoskillit/config.yaml` →
+`.autoskillit/.secrets.yaml` → `AUTOSKILLIT_*` environment variables, in that
+order). See [Getting Started](getting-started.md) for a full tutorial.
 
 ## Common Configurations
 
@@ -73,7 +76,7 @@ AUTOSKILLIT_QUOTA_GUARD__ENABLED=false        # disables quota guard
 
 This is useful for CI pipelines or per-session overrides without touching config files.
 
-Partial configs are fine. Unset fields keep their defaults. View the resolved config with [`autoskillit config show`](cli-reference.md#autoskillit-config-show).
+Partial configs are fine. Unset fields keep their defaults. View the resolved config with [`autoskillit config show`](cli.md#autoskillit-config-show).
 
 ## Test Command
 
@@ -136,7 +139,7 @@ Default: `command: null` (disabled), `preserve_dirs: []`.
 ```yaml
 quota_guard:
   enabled: true
-  threshold: 80.0          # block run_skill when 5-hour utilization exceeds this %
+  threshold: 85.0          # block run_skill when 5-hour utilization exceeds this %
   buffer_seconds: 60       # extra buffer after quota reset before resuming
   cache_max_age: 60        # seconds before a live quota fetch is triggered
 ```
@@ -182,7 +185,7 @@ linux_tracing:
   tmpfs_path: "/dev/shm"  # RAM-backed path for crash resilience
 ```
 
-See [Session Diagnostics](developer/session-diagnostics.md) for details on log output.
+See [Session Diagnostics](developer/diagnostics.md) for details on log output.
 
 ## Headless Sessions
 
@@ -305,7 +308,7 @@ skills:
 ```
 
 Any bundled skill can be promoted or demoted by adding it to the desired tier list. A skill
-in multiple tiers simultaneously is a validation error. See **[Skill Visibility](skill-visibility.md)**
+in multiple tiers simultaneously is a validation error. See **[Skill Visibility](skills/visibility.md)**
 for the full tier breakdown, session mode table, and override rules.
 
 ## Subset Categories
@@ -325,7 +328,7 @@ subsets:
 ```
 
 Disabling a subset hides its members from all session modes — even after `open_kitchen`.
-See **[Subset Categories](subset-categories.md)** for the complete category listing and
+See **[Subset Categories](skills/subsets.md)** for the complete category listing and
 FastMCP mechanics.
 
 ## Full Example

@@ -77,14 +77,19 @@ Launch an interactive pipeline session.
 
 Run health checks on your setup.
 
-    autoskillit doctor [--output-json] [--fix]
+    autoskillit doctor [--output-json]
 
 **Flags:**
 - `--output-json` — Output results as JSON
-- `--fix` — Attempt to fix issues automatically
 
-Runs 8 checks: stale MCP servers, MCP registration, PATH, project config,
-version consistency, hook health, hook registration, recipe version health.
+Runs 14 checks enumerated by `run_doctor` in `cli/_doctor.py` (12 numbered
+plus the lettered sub-checks `4b` *Config secrets placement* and `7b` *Hook
+registry drift*). The checks cover stale MCP servers, plugin registration,
+PATH, project config, secrets placement, version consistency, hook health,
+hook registration, hook registry drift, recipe version health, gitignore
+completeness, secret-scanning hook, editable install source, and stale entry
+points. See [installation.md](installation.md#post-install-verification) for
+the full table.
 
 ---
 
@@ -171,7 +176,7 @@ List all bundled skills.
 
     autoskillit skills list
 
-Shows name, source, and path for all bundled skills (see `autoskillit skills list` for the full list).
+Shows name, source, and path for all bundled skills. The complete catalogue is also documented in [skills/catalog.md](skills/catalog.md).
 
 ---
 

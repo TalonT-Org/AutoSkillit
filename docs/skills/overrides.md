@@ -66,7 +66,7 @@ Compare your project-local skills against the bundled skill list:
 ls .claude/skills/
 
 # List bundled skills (Tier 2+3)
-autoskillit skills
+autoskillit skills list
 ```
 
 Any name appearing in both lists is overriding its bundled counterpart.

@@ -27,6 +27,7 @@ from .io import (
     load_yaml,
     resolve_temp_dir,
     temp_dir_display_str,
+    write_versioned_json,
 )
 from .logging import (
     configure_logging,
@@ -132,6 +133,7 @@ __all__ = [
     "load_yaml",
     "resolve_temp_dir",
     "temp_dir_display_str",
+    "write_versioned_json",
     # logging
     "configure_logging",
     "get_logger",

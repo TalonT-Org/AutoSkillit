@@ -215,8 +215,8 @@ def test_quota_threshold_default_is_85() -> None:
 
 
 def test_doctor_check_count_is_14() -> None:
-    assert _count_doctor_checks() == 14, (
-        f"Expected 14 doctor checks; found {_count_doctor_checks()}"
+    assert _count_doctor_checks() == 16, (
+        f"Expected 16 doctor checks; found {_count_doctor_checks()}"
     )
 
 

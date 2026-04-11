@@ -113,6 +113,15 @@ FAILURE PREDICATES — when to follow on_failure:
 - run_skill: "success: False" in output
 - classify_fix: "error:" line present in output
 
+FAILURE PREDICATE — open_kitchen:
+  If the open_kitchen response contains `"success": false` OR does not
+  contain the substring `--- INGREDIENTS TABLE ---`:
+    1. Extract and print the value of "user_visible_message" from the
+       JSON response verbatim (fall back to the raw response text if
+       parsing fails).
+    2. DO NOT call AskUserQuestion.
+    3. End the session with a final text response.
+
 CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
 - When run_skill returns "success: False" AND "needs_retry: true" AND "retry_reason: resume":
   - Check "subtype" to discriminate the termination cause:

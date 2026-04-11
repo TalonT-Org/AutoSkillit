@@ -36,6 +36,7 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
     {
         "AUTOSKILLIT_HEADLESS",
         "AUTOSKILLIT_SKIP_STALE_CHECK",
+        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK",
     }
 )
 

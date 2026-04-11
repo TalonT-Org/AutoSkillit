@@ -1188,3 +1188,241 @@ def test_count_hook_registry_drift_cross_env_path_mismatch(tmp_path: Path) -> No
     assert result.missing == 0, (
         f"Path prefix difference must not cause missing hooks, got missing={result.missing}"
     )
+
+
+# ---------------------------------------------------------------------------
+# _check_source_version_drift — doctor check (cache-only, no network)
+# ---------------------------------------------------------------------------
+
+
+def test_check_source_version_drift_ok_outside_source_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GIT_VCS install with empty cache reports OK (no drift observable)."""
+    import autoskillit.cli._source_drift as _sd
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._source_drift import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="abc1234",
+        requested_revision="integration",
+        url=None,
+        editable_source=None,
+    )
+    monkeypatch.setattr(_sd, "detect_install", lambda: info)
+    # Simulate empty cache and no source repo: resolve returns None
+    monkeypatch.setattr(_sd, "resolve_reference_sha", lambda info, home, **kw: None)
+
+    result = _check_source_version_drift(home=tmp_path)
+    assert result.severity == Severity.OK
+
+
+def test_check_source_version_drift_ok_for_editable_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LOCAL_EDITABLE installs are under active development — drift check is skipped."""
+    import autoskillit.cli._source_drift as _sd
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._source_drift import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    info = InstallInfo(
+        install_type=InstallType.LOCAL_EDITABLE,
+        commit_id=None,
+        requested_revision=None,
+        url="file:///home/user/autoskillit",
+        editable_source=Path("/home/user/autoskillit"),
+    )
+    monkeypatch.setattr(_sd, "detect_install", lambda: info)
+
+    result = _check_source_version_drift(home=tmp_path)
+    assert result.severity == Severity.OK
+    assert "editable" in result.message.lower() or "not applicable" in result.message.lower()
+
+
+def test_check_source_version_drift_ok_for_pinned_sha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When requested_revision == commit_id, resolve_reference_sha short-circuits → no drift."""
+    import autoskillit.cli._source_drift as _sd
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._source_drift import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    sha = "abcdef1234567890abcdef1234567890"
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id=sha,
+        requested_revision=sha,  # pinned SHA = no drift possible
+        url=None,
+        editable_source=None,
+    )
+    monkeypatch.setattr(_sd, "detect_install", lambda: info)
+    # When requested_revision == commit_id, resolve_reference_sha returns commit_id
+    monkeypatch.setattr(_sd, "resolve_reference_sha", lambda info, home, **kw: sha)
+
+    result = _check_source_version_drift(home=tmp_path)
+    assert result.severity == Severity.OK
+
+
+def test_check_source_version_drift_ok_when_cache_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When cache is empty (no prior online fetch), doctor reports OK with explanatory message."""
+    import autoskillit.cli._source_drift as _sd
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._source_drift import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="installed123",
+        requested_revision="integration",
+        url=None,
+        editable_source=None,
+    )
+    monkeypatch.setattr(_sd, "detect_install", lambda: info)
+    monkeypatch.setattr(_sd, "resolve_reference_sha", lambda info, home, **kw: None)
+
+    result = _check_source_version_drift(home=tmp_path)
+    assert result.severity == Severity.OK
+    # Message should note the empty cache
+    assert "cache" in result.message.lower(), (
+        f"Expected 'cache' in message for empty cache case, got: {result.message!r}"
+    )
+
+
+def test_check_source_version_drift_warning_on_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When cache has a different reference SHA than installed, reports WARNING with short SHAs."""
+    import autoskillit.cli._source_drift as _sd
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._source_drift import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    installed_sha = "installed123abc"
+    ref_sha = "reference456def"
+
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id=installed_sha,
+        requested_revision="integration",
+        url=None,
+        editable_source=None,
+    )
+    monkeypatch.setattr(_sd, "detect_install", lambda: info)
+    monkeypatch.setattr(_sd, "resolve_reference_sha", lambda info, home, **kw: ref_sha)
+
+    result = _check_source_version_drift(home=tmp_path)
+    assert result.severity == Severity.WARNING
+    assert installed_sha[:8] in result.message
+    assert ref_sha[:8] in result.message
+
+
+def test_check_source_version_drift_never_makes_network_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Doctor check must never make network calls — httpx and subprocess must not be called."""
+
+    import httpx
+
+    import autoskillit.cli._source_drift as _sd
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._source_drift import InstallInfo, InstallType
+
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="installed000",
+        requested_revision="integration",
+        url=None,
+        editable_source=None,
+    )
+    monkeypatch.setattr(_sd, "detect_install", lambda: info)
+    # Ensure find_source_repo returns None (so no git subprocess)
+    monkeypatch.setattr(_sd, "find_source_repo", lambda: None)
+
+    http_calls: list[str] = []
+    subprocess_calls: list[list[str]] = []
+
+    def bad_client(*args: object, **kwargs: object) -> object:
+        http_calls.append("httpx.Client called!")
+        raise AssertionError("httpx.Client must not be called in doctor mode")
+
+    def bad_run(cmd: list[str], **kwargs: object) -> object:
+        subprocess_calls.append(list(cmd))
+        raise AssertionError(f"subprocess.run must not be called in doctor mode: {cmd}")
+
+    monkeypatch.setattr(httpx, "Client", bad_client)
+    monkeypatch.setattr(_sd.subprocess, "run", bad_run)
+
+    # Should not raise even with bad mocks (cache is empty → returns None → OK)
+    _check_source_version_drift(home=tmp_path)
+
+    assert not http_calls, f"httpx.Client was called: {http_calls}"
+    assert not subprocess_calls, f"subprocess.run was called: {subprocess_calls}"
+
+
+# ---------------------------------------------------------------------------
+# Check 14: Quota cache schema version (#711 Part B, Phase 4)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckQuotaCacheSchema:
+    """Tests for _check_quota_cache_schema doctor check."""
+
+    def test_check_quota_cache_schema_ok_when_v2(self, tmp_path):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"schema_version": 2, "fetched_at": "2026-01-01T00:00:00"}))
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.OK
+        assert "v2" in result.message
+
+    def test_check_quota_cache_schema_ok_when_missing(self, tmp_path):
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "nonexistent.json"
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.OK
+        assert "No quota cache" in result.message
+
+    def test_check_quota_cache_schema_warning_when_no_schema_version_key(self, tmp_path):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"fetched_at": "2026-01-01T00:00:00"}))
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.WARNING
+        assert "schema drift" in result.message.lower()
+
+    def test_check_quota_cache_schema_warning_when_older_schema_version(self, tmp_path):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"schema_version": 1, "fetched_at": "2026-01-01T00:00:00"}))
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.WARNING
+
+    def test_check_quota_cache_schema_warning_includes_cache_path_and_observed_value(
+        self, tmp_path
+    ):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"schema_version": 1}))
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.WARNING
+        assert str(cache) in result.message
+        assert "observed=1" in result.message

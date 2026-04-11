@@ -32,6 +32,34 @@ from autoskillit.server.helpers import (
 
 logger = get_logger(__name__)
 
+
+def _kitchen_failure_envelope(
+    exc: BaseException,
+    stage: str,
+    *,
+    user_hint: str | None = None,
+) -> str:
+    """Return a JSON failure envelope for open_kitchen errors.
+
+    Tool implementations catch exceptions locally and emit domain-specific
+    envelopes with helpful ``user_visible_message`` values; the
+    ``@track_response_size`` decorator only catches what slips through.
+    """
+    msg = user_hint or (
+        f"open_kitchen failed during {stage}: {type(exc).__name__}. "
+        f"Run 'autoskillit doctor' to diagnose, or reinstall if the failure persists."
+    )
+    return json.dumps(
+        {
+            "success": False,
+            "kitchen": "failed",
+            "user_visible_message": msg,
+            "error": f"{type(exc).__name__}: {exc}",
+            "stage": stage,
+        }
+    )
+
+
 _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Execution", ("run_cmd", "run_python", "run_skill")),
     ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
@@ -112,25 +140,43 @@ def _write_hook_config() -> None:
         logger.warning("hook_config_write_failed", path=str(hook_cfg_path))
 
 
-async def _open_kitchen_handler() -> None:
-    """Set the tools-enabled flag. Extracted for testability."""
+async def _open_kitchen_handler() -> str | None:
+    """Set the tools-enabled flag. Extracted for testability.
+
+    Returns ``None`` on success, or a JSON failure envelope string on error.
+    """
     from autoskillit.server import _get_ctx, logger
 
     ctx = _get_ctx()
     ctx.gate.enable()
     ctx.kitchen_id = str(uuid4())
-    # Store recipe packs — populated from LoadRecipeResult.requires_packs in #524.
-    # For now, store empty frozenset to establish the contract.
     ctx.active_recipe_packs = frozenset()
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
-    _write_hook_config()
-    await _prime_quota_cache()
+
+    try:
+        _write_hook_config()
+    except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="write_hook_config", exc_info=True)
+        return _kitchen_failure_envelope(exc, stage="write_hook_config")
+
+    try:
+        await _prime_quota_cache()
+    except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="prime_quota_cache", exc_info=True)
+        return _kitchen_failure_envelope(exc, stage="prime_quota_cache")
+
     if ctx.quota_refresh_task is not None:
         ctx.quota_refresh_task.cancel()
-    ctx.quota_refresh_task = create_background_task(
-        _quota_refresh_loop(ctx.config.quota_guard),
-        label="quota_refresh_loop",
-    )
+    try:
+        ctx.quota_refresh_task = create_background_task(
+            _quota_refresh_loop(ctx.config.quota_guard),
+            label="quota_refresh_loop",
+        )
+    except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="start_quota_refresh", exc_info=True)
+        return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
+
+    return None
 
 
 async def _redisable_subsets(ctx: Context, disabled: list[str]) -> None:
@@ -196,15 +242,41 @@ async def open_kitchen(
         overrides: Optional dict of ingredient name → value to override recipe defaults.
             Use to activate hidden features (e.g., ``{"sprint_mode": "true"}``).
     """
+    # Headless guard — wrap denial in envelope shape
     if (h := _require_not_headless("open_kitchen")) is not None:
-        return h
+        parsed_h = json.loads(h)
+        return json.dumps(
+            {
+                "success": False,
+                "kitchen": "failed",
+                "user_visible_message": parsed_h.get(
+                    "result",
+                    "open_kitchen cannot be called from headless sessions.",
+                ),
+                "error": "HeadlessDenied",
+                "stage": "headless_guard",
+            }
+        )
 
     from autoskillit.server import _get_ctx  # noqa: PLC0415
 
     disabled_subsets = _get_ctx().config.subsets.disabled
-    await _open_kitchen_handler()
-    await ctx.enable_components(tags={"kitchen"})
-    await _redisable_subsets(ctx, disabled_subsets)
+
+    handler_err = await _open_kitchen_handler()
+    if handler_err is not None:
+        return handler_err
+
+    try:
+        await ctx.enable_components(tags={"kitchen"})
+    except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="enable_components", exc_info=True)
+        return _kitchen_failure_envelope(exc, stage="enable_components")
+
+    try:
+        await _redisable_subsets(ctx, disabled_subsets)
+    except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
+        return _kitchen_failure_envelope(exc, stage="redisable_subsets")
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     _categories = _build_tool_category_listing()
@@ -212,22 +284,54 @@ async def open_kitchen(
     if name is not None:
         tool_ctx = _get_ctx()
         if tool_ctx.recipes is None:
-            return json.dumps({"error": "Server not initialized", "kitchen": "open"})
+            return _kitchen_failure_envelope(
+                RuntimeError("Server not initialized"),
+                stage="recipe_context",
+                user_hint=(
+                    "open_kitchen cannot load a recipe because the server is not "
+                    "initialized. Run 'autoskillit doctor' to diagnose."
+                ),
+            )
         suppressed = tool_ctx.config.migration.suppressed
         _defaults = resolve_ingredient_defaults(Path.cwd())
-        result = tool_ctx.recipes.load_and_validate(
-            name,
-            Path.cwd(),
-            suppressed=suppressed,
-            resolved_defaults=_defaults,
-            ingredient_overrides=overrides,
-        )
+        try:
+            result = tool_ctx.recipes.load_and_validate(
+                name,
+                Path.cwd(),
+                suppressed=suppressed,
+                resolved_defaults=_defaults,
+                ingredient_overrides=overrides,
+            )
+        except Exception as exc:
+            logger.warning("open_kitchen_failure", stage="load_and_validate", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="load_and_validate")
+
         tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
-        recipe_info = tool_ctx.recipes.find(name, Path.cwd())
-        result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
+
+        try:
+            recipe_info = tool_ctx.recipes.find(name, Path.cwd())
+        except Exception as exc:
+            logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="recipe_find")
+
+        try:
+            result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
+        except Exception as exc:
+            logger.warning("open_kitchen_failure", stage="apply_triage_gate", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
+
+        result["success"] = True
         result["kitchen"] = "open"
         result["version"] = __version__
-        warning = _build_hook_diagnostic_warning()
+
+        if "ingredients_table" not in result or not result["ingredients_table"]:
+            result["ingredients_table"] = None
+
+        try:
+            warning = _build_hook_diagnostic_warning()
+        except Exception as exc:
+            logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
         if warning:
             result["hook_warning"] = warning.strip()
         return json.dumps(result)
@@ -245,8 +349,12 @@ async def open_kitchen(
 
     # Inject sous-chef global orchestration rules (graceful degradation if absent)
     _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
-    if _sous_chef_path.exists():
-        text += "\n\n" + _sous_chef_path.read_text()
+    try:
+        if _sous_chef_path.exists():
+            text += "\n\n" + _sous_chef_path.read_text()
+    except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="read_sous_chef", exc_info=True)
+        return _kitchen_failure_envelope(exc, stage="read_sous_chef")
 
     # Check if the project needs an upgrade
     scripts_dir = Path.cwd() / ".autoskillit" / "scripts"
@@ -258,11 +366,23 @@ async def open_kitchen(
             "to migrate automatically, or ask me to do it for you."
         )
 
-    warning = _build_hook_diagnostic_warning()
+    try:
+        warning = _build_hook_diagnostic_warning()
+    except Exception as exc:
+        logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
+        return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
     if warning:
         text += warning
 
-    return text
+    return json.dumps(
+        {
+            "success": True,
+            "kitchen": "open",
+            "content": text,
+            "ingredients_table": None,
+            "version": __version__,
+        }
+    )
 
 
 @mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": True})

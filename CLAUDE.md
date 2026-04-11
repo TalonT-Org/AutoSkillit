@@ -235,6 +235,7 @@ generic_automation_mcp/
 │   ├── _mcp_names.py        #   MCP prefix detection
 │   ├── _onboarding.py       #   First-run detection + guided menu
 │   ├── _prompts.py          #   Orchestrator prompt builder
+│   ├── _source_drift.py     #   Source-drift boot gate: install-type detection, reference-SHA resolution, dismissal-aware CLI gate
 │   ├── _stale_check.py      #   Version comparison, hook-drift prompt
 │   ├── _workspace.py        #   Workspace clean helpers
 │   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, etc.

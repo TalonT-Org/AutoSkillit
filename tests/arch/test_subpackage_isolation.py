@@ -663,7 +663,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
         management context manager (terminal_guard) for interactive subprocess
         sessions. _stale_check.py adds the stale-install detection surface.
-        Exempt at 14 files.
+        _source_drift.py adds the source-drift boot gate.
+        Exempt at 16 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
         file so Claude Code can invoke it directly as a subprocess. Adding
@@ -675,7 +676,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 30,
         "execution": 25,
         "core": 15,
-        "cli": 15,
+        "cli": 16,
         "hooks": 14,
     }
     violations: list[str] = []

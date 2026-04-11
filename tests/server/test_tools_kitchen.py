@@ -245,16 +245,18 @@ async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypa
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
                 with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    result = await open_kitchen(ctx=mock_ctx)
+                    result_str = await open_kitchen(ctx=mock_ctx)
 
+    parsed = json.loads(result_str)
+    content = parsed["content"]
     seen: set[str] = set()
     for category_name, tools in _DISPLAY_CATEGORIES:
-        assert category_name in result, (
+        assert category_name in content, (
             f"Category '{category_name}' missing from open_kitchen response"
         )
         for tool_name in tools:
             if tool_name not in seen:
-                assert tool_name in result, (
+                assert tool_name in content, (
                     f"Tool '{tool_name}' missing from open_kitchen response"
                 )
                 seen.add(tool_name)
@@ -298,6 +300,7 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
                     result_str = await open_kitchen(name="test-recipe", ctx=mock_ctx)
 
     result = json.loads(result_str)
+    assert result["success"] is True
     assert result["kitchen"] == "open"
     assert "version" in result
     assert "content" in result
@@ -336,8 +339,8 @@ async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_without_recipe_returns_plain_text(tmp_path, monkeypatch):
-    """open_kitchen() without name returns plain text (not JSON)."""
+async def test_open_kitchen_without_recipe_returns_json_envelope(tmp_path, monkeypatch):
+    """open_kitchen() without name returns JSON envelope with success=True."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
@@ -351,8 +354,11 @@ async def test_open_kitchen_without_recipe_returns_plain_text(tmp_path, monkeypa
                     result = await open_kitchen(ctx=mock_ctx)
 
     assert isinstance(result, str)
-    assert "Kitchen is open" in result
-    assert "content" not in result, "No-recipe open_kitchen should not contain recipe content key"
+    parsed = json.loads(result)
+    assert parsed["success"] is True
+    assert parsed["kitchen"] == "open"
+    assert "Kitchen is open" in parsed["content"]
+    assert parsed["ingredients_table"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -368,7 +374,10 @@ async def test_open_kitchen_denied_by_gate_when_headless(tmp_path, monkeypatch):
 
     result = json.loads(await open_kitchen())
     assert result["success"] is False
-    assert result["subtype"] == "headless_error"
+    assert result["kitchen"] == "failed"
+    assert "user_visible_message" in result
+    assert len(result["user_visible_message"]) > 0
+    assert result["stage"] == "headless_guard"
 
 
 @pytest.mark.anyio
@@ -589,8 +598,10 @@ async def test_open_kitchen_warns_on_orphaned_hooks(tmp_path, monkeypatch):
 
                     result = await open_kitchen(ctx=mock_ctx)
 
+    parsed = json.loads(result)
+    content = parsed["content"]
     assert (
-        "orphan" in result.lower() or "drift" in result.lower() or "install" in result.lower()
+        "orphan" in content.lower() or "drift" in content.lower() or "install" in content.lower()
     ), "open_kitchen() must include a hook drift warning when orphaned > 0"
 
 
@@ -628,7 +639,9 @@ async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch)
 
                     result = await open_kitchen(ctx=mock_ctx)
 
-    assert "Hook scripts not found" in result, (
+    parsed = json.loads(result)
+    content = parsed["content"]
+    assert "Hook scripts not found" in content, (
         "open_kitchen() must include the exact _build_hook_diagnostic_warning phrase"
     )
 
@@ -652,3 +665,371 @@ async def test_prime_quota_cache_catches_typeerror(monkeypatch):
             # Must not raise — fails open
             await _prime_quota_cache()
             mock_logger.warning.assert_called_once_with("quota_prime_failed", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# Envelope contract tests — Phase 3 (#711 Part B)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_no_name_returns_json_envelope_with_success_true(tmp_path, monkeypatch):
+    """No-recipe open_kitchen returns JSON envelope with success=True."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result = await open_kitchen(ctx=mock_ctx)
+
+    parsed = json.loads(result)
+    assert parsed["success"] is True
+    assert parsed["kitchen"] == "open"
+    assert "Kitchen is open" in parsed["content"]
+    assert parsed["ingredients_table"] is None
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingredients_table(
+    tmp_path, monkeypatch
+):
+    """Recipe loads successfully: success=True, kitchen=open, version present."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
+    }
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="demo", ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is True
+    assert parsed["kitchen"] == "open"
+    assert "version" in parsed
+    assert "--- INGREDIENTS TABLE ---" in result_str
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_recipe_not_found_returns_failure_envelope(tmp_path, monkeypatch):
+    """Invalid recipe name returns failure envelope (via load_and_validate raising)."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.side_effect = ValueError("No recipe 'bad' found")
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="bad", ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["kitchen"] == "failed"
+    assert len(parsed["user_visible_message"]) > 0
+    assert "ValueError" in parsed["error"]
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_server_not_initialized_returns_failure_envelope(tmp_path, monkeypatch):
+    """tool_ctx.recipes is None → failure envelope with user_visible_message."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = None
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="demo", ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["kitchen"] == "failed"
+    assert "user_visible_message" in parsed
+    assert "not initialized" in parsed["user_visible_message"]
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_headless_denied_returns_failure_envelope(tmp_path, monkeypatch):
+    """AUTOSKILLIT_HEADLESS=1: failure envelope with user_visible_message present."""
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.server.tools_kitchen import open_kitchen
+
+    result = json.loads(await open_kitchen())
+    assert result["success"] is False
+    assert result["kitchen"] == "failed"
+    assert "user_visible_message" in result
+    assert len(result["user_visible_message"]) > 0
+    assert result["stage"] == "headless_guard"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_prime_quota_cache_typeerror_returns_failure_envelope(
+    tmp_path, monkeypatch
+):
+    """_prime_quota_cache raising TypeError → failure envelope with stage=prime_quota_cache."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    async def raise_type_error():
+        raise TypeError("float() argument must be a string or a real number, not 'NoneType'")
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools_kitchen._prime_quota_cache",
+                new=raise_type_error,
+            ):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["kitchen"] == "failed"
+    assert parsed["stage"] == "prime_quota_cache"
+    assert "TypeError" in parsed["error"]
+    assert len(parsed["user_visible_message"]) > 0
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_prime_quota_cache_runtimeerror_returns_failure_envelope(
+    tmp_path, monkeypatch
+):
+    """_prime_quota_cache raising RuntimeError → failure envelope."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    async def raise_runtime():
+        raise RuntimeError("unexpected failure")
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools_kitchen._prime_quota_cache",
+                new=raise_runtime,
+            ):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["stage"] == "prime_quota_cache"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_create_background_task_raises_returns_failure_envelope(
+    tmp_path, monkeypatch
+):
+    """create_background_task raising → failure envelope with stage=start_quota_refresh."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools_kitchen.create_background_task",
+                        side_effect=RuntimeError("task creation failed"),
+                    ):
+                        from autoskillit.server.tools_kitchen import open_kitchen
+
+                        result_str = await open_kitchen(ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["stage"] == "start_quota_refresh"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_load_and_validate_raises_returns_failure_envelope(
+    tmp_path, monkeypatch
+):
+    """load_and_validate raising → failure envelope with stage=load_and_validate."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.side_effect = OSError("disk full")
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="demo", ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["stage"] == "load_and_validate"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_apply_triage_gate_raises_returns_failure_envelope(
+    tmp_path, monkeypatch
+):
+    """_apply_triage_gate raising → failure envelope with stage=apply_triage_gate."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "test",
+        "valid": True,
+        "suggestions": [],
+    }
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.config.migration.suppressed = []
+
+    async def raise_apply(*a, **kw):
+        raise RuntimeError("triage failed")
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools_kitchen._apply_triage_gate",
+                        new=raise_apply,
+                    ):
+                        from autoskillit.server.tools_kitchen import open_kitchen
+
+                        result_str = await open_kitchen(name="demo", ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["stage"] == "apply_triage_gate"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_enable_components_raises_returns_failure_envelope(
+    tmp_path, monkeypatch
+):
+    """ctx.enable_components raising → failure envelope with stage=enable_components."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock(side_effect=RuntimeError("enable failed"))
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["stage"] == "enable_components"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_sous_chef_read_raises_returns_failure_envelope(tmp_path, monkeypatch):
+    """Path.read_text raising OSError → failure envelope with stage=read_sous_chef."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    import autoskillit.server.tools_kitchen as tk_mod
+
+    _original_pkg_root = tk_mod.pkg_root
+
+    def fake_pkg_root():
+        root = tmp_path / "fake_pkg"
+        sc_path = root / "skills" / "sous-chef"
+        sc_path.mkdir(parents=True, exist_ok=True)
+        skill_md = sc_path / "SKILL.md"
+        skill_md.write_text("dummy")
+        skill_md.chmod(0o000)
+        return root
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    with patch.object(tk_mod, "pkg_root", fake_pkg_root):
+                        from autoskillit.server.tools_kitchen import open_kitchen
+
+                        result_str = await open_kitchen(ctx=mock_ctx)
+
+    # Restore permissions for cleanup
+    for p in tmp_path.rglob("SKILL.md"):
+        p.chmod(0o644)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["stage"] == "read_sous_chef"
+
+
+# Parametrized: every failure envelope has user_visible_message
+_FAILURE_STAGES = [
+    "headless_guard",
+    "prime_quota_cache",
+    "start_quota_refresh",
+    "enable_components",
+    "load_and_validate",
+    "apply_triage_gate",
+    "recipe_context",
+]
+
+
+@pytest.mark.parametrize("stage", _FAILURE_STAGES)
+def test_every_failure_envelope_has_user_visible_message(stage):
+    """All failure envelopes have a non-empty user_visible_message string."""
+    from autoskillit.server.tools_kitchen import _kitchen_failure_envelope
+
+    envelope = json.loads(_kitchen_failure_envelope(RuntimeError("test"), stage=stage))
+    assert isinstance(envelope["user_visible_message"], str)
+    assert len(envelope["user_visible_message"]) > 0
+    assert envelope["success"] is False
+    assert envelope["kitchen"] == "failed"
+
+
+@pytest.mark.parametrize(
+    "stage",
+    _FAILURE_STAGES + ["hook_diagnostic", "read_sous_chef", "redisable_subsets"],
+)
+def test_every_return_path_parses_as_json_and_has_boolean_success(stage):
+    """Every failure envelope parses as JSON with boolean success."""
+    from autoskillit.server.tools_kitchen import _kitchen_failure_envelope
+
+    envelope = json.loads(_kitchen_failure_envelope(RuntimeError("test"), stage=stage))
+    assert isinstance(envelope["success"], bool)

@@ -209,8 +209,8 @@ class TestSchemaVersionConvention:
         list_sites = [
             ("src/autoskillit/execution/session_log.py", 219),
             ("src/autoskillit/execution/session_log.py", 222),
-            ("src/autoskillit/smoke_utils.py", 81),
-            ("src/autoskillit/smoke_utils.py", 134),
+            ("src/autoskillit/smoke_utils.py", 83),
+            ("src/autoskillit/smoke_utils.py", 138),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import SubprocessResult, SubprocessRunner, TerminationReason, get_logger
 
 if TYPE_CHECKING:
-    from api_simulator.claude import ScenarioRecorder
+    from api_simulator.claude import ScenarioPlayer, ScenarioRecorder
 
 logger = get_logger(__name__)
 
@@ -74,7 +74,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         recorder: ScenarioRecorder,
         inner: SubprocessRunner | None = None,
     ) -> None:
-        self._recorder = recorder
+        self.recorder = recorder
         atexit.register(recorder.finalize)
         if inner is None:
             from autoskillit.execution.process import DefaultSubprocessRunner
@@ -124,7 +124,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         )
 
         if step_name:
-            self._recorder.record_non_session_step(
+            self.recorder.record_non_session_step(
                 step_name=step_name,
                 tool="run_cmd",
                 result_summary={
@@ -147,7 +147,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         """Record a session call via ScenarioRecorder.record_step()."""
         try:
             step_result = await asyncio.to_thread(
-                self._recorder.record_step,
+                self.recorder.record_step,
                 step_name=step_name,
                 tool="run_skill",
                 args=clean_args,
@@ -187,9 +187,12 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         self,
         session_map: dict[str, deque[tuple[Any, Any]]],
         non_session_results: dict[str, dict[str, Any]],
+        *,
+        player: ScenarioPlayer | None = None,
     ) -> None:
         self._sessions = session_map
         self._non_session = non_session_results
+        self.player: ScenarioPlayer | None = player
         self.call_log: list[tuple[str, list[str]]] = []
 
     async def __call__(
@@ -296,4 +299,4 @@ def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
         raise
 
     session_map = {k: deque(v) for k, v in raw_map.items()}
-    return ReplayingSubprocessRunner(session_map, non_session)
+    return ReplayingSubprocessRunner(session_map, non_session, player=player)

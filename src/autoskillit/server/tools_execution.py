@@ -259,6 +259,11 @@ async def run_skill(
 
     skill_add_dirs: list[ValidatedAddDir] = []
     if tool_ctx.session_skill_manager is not None:
+        allow_only: frozenset[str] | None = None
+        if target_name:
+            closure = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
+            allow_only = closure if closure else None
+
         session_id = f"headless-{uuid4().hex[:12]}"
         session_root = tool_ctx.session_skill_manager.init_session(
             session_id,
@@ -266,6 +271,7 @@ async def run_skill(
             config=tool_ctx.config,
             project_dir=Path(cwd),
             recipe_packs=tool_ctx.active_recipe_packs,
+            allow_only=allow_only,
         )
         skill_add_dirs.append(session_root)
 

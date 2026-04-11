@@ -1,5 +1,6 @@
 ---
 name: elaborate-phase
+activate_deps: [dry-walkthrough]
 description: Elaborate a migration plan phase into a complete self-contained implementation plan. Use when user says "elaborate phase", "elaborate phase N", or "phase elaboration". Assesses codebase, writes detailed phase plan, then validates with dry walkthrough.
 hooks:
   PreToolUse:

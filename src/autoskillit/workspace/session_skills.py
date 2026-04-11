@@ -220,25 +220,20 @@ def _build_pack_index(provider: SkillsDirectoryProvider) -> dict[str, set[str]]:
 
 
 def compute_skill_closure(
-    target_name: str,
+    skill_name: str,
     provider: SkillsDirectoryProvider,
 ) -> frozenset[str]:
-    """Return the transitive activate_deps closure for a target skill.
+    """Return the transitive activate_deps closure for a skill, including the skill itself.
 
-    Walks ``activate_deps`` breadth-first starting from ``target_name``. Pack-name
-    entries (those present in :data:`PACK_REGISTRY`) are expanded via the
-    ``categories:`` index built from the provider's full skill list. Bare skill
-    names recurse into the queue. Cycle-safe via a ``visited`` set.
-
-    Returns ``frozenset()`` if ``target_name`` does not resolve to a real skill.
-    Unknown bare-name deps and pack names with no members are silently dropped.
+    Returns ``frozenset()`` if ``skill_name`` does not resolve to a real skill.
+    Pack-name dependencies are expanded to all pack members. Unknown deps are silently dropped.
     """
-    if provider.resolver.resolve(target_name) is None:
+    if provider.resolver.resolve(skill_name) is None:
         return frozenset()
     pack_index: dict[str, set[str]] | None = None
     visited: set[str] = set()
     resolved: set[str] = set()
-    queue: list[str] = [target_name]
+    queue: list[str] = [skill_name]
     while queue:
         name = queue.pop()
         if name in visited:
@@ -311,12 +306,12 @@ class DefaultSessionSkillManager:
         self._provider = provider
         self._root = ephemeral_root
 
-    def compute_skill_closure(self, target_name: str) -> frozenset[str]:
-        """Return the transitive activate_deps closure for ``target_name``.
+    def compute_skill_closure(self, skill_name: str) -> frozenset[str]:
+        """Return the transitive activate_deps closure for ``skill_name``.
 
         See :func:`compute_skill_closure` for semantics.
         """
-        return compute_skill_closure(target_name, self._provider)
+        return compute_skill_closure(skill_name, self._provider)
 
     def init_session(
         self,

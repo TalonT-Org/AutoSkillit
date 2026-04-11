@@ -17,9 +17,7 @@ from autoskillit.config.settings import AutomationConfig
 _SUBCONFIG_DATACLASSES = [
     cls
     for cls in vars(settings_mod).values()
-    if isinstance(cls, type)
-    and dataclasses.is_dataclass(cls)
-    and cls is not AutomationConfig
+    if isinstance(cls, type) and dataclasses.is_dataclass(cls) and cls is not AutomationConfig
 ]
 
 
@@ -88,6 +86,6 @@ def test_every_subconfig_field_referenced_in_from_dynaconf(dc: type) -> None:
 
     missing = [f.name for f in dataclasses.fields(dc) if f.name not in referenced]
     assert not missing, (
-        f"{dc.__name__} fields not referenced in from_dynaconf or its _build_* helpers: {missing}. "
+        f"{dc.__name__} fields missing from from_dynaconf/_build_* helpers: {missing}. "
         f"Add an explicit val(...) line for each."
     )

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import sys
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -105,7 +105,7 @@ def test_initialize_does_not_load_token_log(tmp_path):
 
 
 def test_initialize_registers_mcp_recording_middleware(tmp_path, monkeypatch):
-    """_initialize() calls mcp.add_middleware(McpRecordingMiddleware(recorder)) when runner is RecordingSubprocessRunner."""
+    """_initialize() registers McpRecordingMiddleware when runner is RecordingSubprocessRunner."""
     from autoskillit.execution.recording import RecordingSubprocessRunner
     from autoskillit.server._state import _initialize
 
@@ -137,7 +137,7 @@ def test_initialize_registers_mcp_recording_middleware(tmp_path, monkeypatch):
 
 
 def test_initialize_skips_middleware_for_non_recording_runner(tmp_path, monkeypatch):
-    """_initialize() does not call mcp.add_middleware() when runner is not RecordingSubprocessRunner."""
+    """_initialize() does not call mcp.add_middleware() for a non-recording runner."""
     from autoskillit.server._state import _initialize
 
     mock_ctx = _make_mock_ctx(tmp_path)
@@ -181,7 +181,7 @@ def test_initialize_recording_middleware_import_error_does_not_raise(tmp_path, m
 
 
 def test_initialize_registers_mcp_replay_middleware(tmp_path, monkeypatch):
-    """_initialize() calls mcp.add_middleware(McpReplayMiddleware(player)) when runner is ReplayingSubprocessRunner with player."""
+    """_initialize() registers McpReplayMiddleware when runner is ReplayingSubprocessRunner."""
     from autoskillit.execution.recording import ReplayingSubprocessRunner
     from autoskillit.server._state import _initialize
 

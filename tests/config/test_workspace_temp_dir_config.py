@@ -46,9 +46,7 @@ def test_temp_dir_layered_priority_user_wins_over_default(
     assert cfg.workspace.temp_dir == "/user/x"
 
 
-def test_temp_dir_env_override_wins(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_temp_dir_env_override_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project_dir = tmp_path / "project"
     project_cfg = project_dir / ".autoskillit"
     project_cfg.mkdir(parents=True)

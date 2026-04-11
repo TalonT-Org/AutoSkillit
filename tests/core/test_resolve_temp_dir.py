@@ -62,6 +62,4 @@ def test_resolve_temp_dir_no_autoskillit_imports() -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 0, (
-        f"core.io leaked imports outside core/: {result.stdout.strip()}"
-    )
+    assert result.returncode == 0, f"core.io leaked imports outside core/: {result.stdout.strip()}"

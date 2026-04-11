@@ -47,6 +47,46 @@ def _initialize(ctx: ToolContext) -> None:
                 exc_info=True,
             )
 
+    # Wire MCP recording/replay middleware for scenario capture.
+    # Core imports are outside the try/except so a broken autoskillit installation
+    # surfaces as an error rather than being silently swallowed as a middleware warning.
+    # The _mcp_middleware_registered flag on the runner prevents double-registration
+    # if _initialize() is called more than once with the same runner instance.
+    from autoskillit.execution import (  # noqa: PLC0415
+        RecordingSubprocessRunner,
+        ReplayingSubprocessRunner,
+    )
+    from autoskillit.server import mcp  # noqa: PLC0415
+
+    if isinstance(ctx.runner, RecordingSubprocessRunner) and not getattr(
+        ctx.runner, "_mcp_middleware_registered", False
+    ):
+        try:
+            from api_simulator.mcp import McpRecordingMiddleware  # noqa: PLC0415
+
+            mcp.add_middleware(McpRecordingMiddleware(ctx.runner.recorder))
+            ctx.runner._mcp_middleware_registered = True  # type: ignore[attr-defined]
+            logger.info("mcp_recording_middleware_registered")
+        except ImportError:
+            logger.warning("mcp_scenario_middleware_unavailable", exc_info=True)
+        except Exception:
+            logger.warning("mcp_scenario_middleware_registration_failed", exc_info=True)
+    elif (
+        isinstance(ctx.runner, ReplayingSubprocessRunner)
+        and ctx.runner.player is not None
+        and not getattr(ctx.runner, "_mcp_middleware_registered", False)
+    ):
+        try:
+            from api_simulator.mcp import McpReplayMiddleware  # noqa: PLC0415
+
+            mcp.add_middleware(McpReplayMiddleware(ctx.runner.player))
+            ctx.runner._mcp_middleware_registered = True  # type: ignore[attr-defined]
+            logger.info("mcp_replay_middleware_registered")
+        except ImportError:
+            logger.warning("mcp_scenario_middleware_unavailable", exc_info=True)
+        except Exception:
+            logger.warning("mcp_scenario_middleware_registration_failed", exc_info=True)
+
     # Recovery sweep: finalize any orphaned tmpfs trace files from crashed sessions.
     try:
         from autoskillit.execution import recover_crashed_sessions

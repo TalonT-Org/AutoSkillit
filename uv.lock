@@ -48,7 +48,7 @@ wheels = [
 [[package]]
 name = "api-simulator"
 version = "0.1.0"
-source = { git = "https://github.com/TalonT-Org/api-simulator?subdirectory=crates%2Fapi-simulator-py&rev=11aecd04a1bc86d7da0ca9043b26e30a49e6bc20#11aecd04a1bc86d7da0ca9043b26e30a49e6bc20" }
+source = { git = "https://github.com/TalonT-Org/api-simulator?subdirectory=crates%2Fapi-simulator-py&rev=8f711f958d4d93a8e53a3c3b51279fb420870f3a#8f711f958d4d93a8e53a3c3b51279fb420870f3a" }
 
 [[package]]
 name = "attrs"
@@ -106,7 +106,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.6.0" },
-    { name = "api-simulator", marker = "extra == 'dev'", git = "https://github.com/TalonT-Org/api-simulator?subdirectory=crates%2Fapi-simulator-py&rev=11aecd04a1bc86d7da0ca9043b26e30a49e6bc20" },
+    { name = "api-simulator", marker = "extra == 'dev'", git = "https://github.com/TalonT-Org/api-simulator?subdirectory=crates%2Fapi-simulator-py&rev=8f711f958d4d93a8e53a3c3b51279fb420870f3a" },
     { name = "cyclopts", specifier = ">=4.0" },
     { name = "dynaconf", specifier = ">=3.2.13,<4.0" },
     { name = "fastmcp", specifier = ">=3.2.0,<4.0" },

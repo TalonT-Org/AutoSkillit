@@ -236,8 +236,9 @@ async def get_quota_events(n: int = 50) -> str:
     during long pipeline runs.
 
     Returns JSON with:
-      - events: list of {ts, event, threshold, utilization?, sleep_seconds?,
-                         resets_at?, cache_path?}  (most recent first)
+      - events: list of {ts, event, effective_threshold?, window_name?,
+                         utilization?, sleep_seconds?, resets_at?, cache_path?}
+                         (most recent first)
       - total_count: int  (total events in the log, before limiting to n)
 
     Args:

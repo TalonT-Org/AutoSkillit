@@ -122,7 +122,9 @@ class TokenUsageConfig:
 @dataclass
 class QuotaGuardConfig:
     enabled: bool = True
-    threshold: float = 85.0
+    short_window_threshold: float = 85.0
+    long_window_threshold: float = 98.0
+    long_window_patterns: list[str] = field(default_factory=lambda: ["weekly", "sonnet", "opus"])
     buffer_seconds: int = 60
     cache_max_age: int = 300
     cache_refresh_interval: int = 240
@@ -388,7 +390,15 @@ class AutomationConfig:
             ),
             quota_guard=QuotaGuardConfig(
                 enabled=bool(val(qg, "enabled", _qg["enabled"])),
-                threshold=float(val(qg, "threshold", _qg["threshold"])),
+                short_window_threshold=float(
+                    val(qg, "short_window_threshold", _qg["short_window_threshold"])
+                ),
+                long_window_threshold=float(
+                    val(qg, "long_window_threshold", _qg["long_window_threshold"])
+                ),
+                long_window_patterns=list(
+                    val(qg, "long_window_patterns", _qg["long_window_patterns"])
+                ),
                 buffer_seconds=int(val(qg, "buffer_seconds", _qg["buffer_seconds"])),
                 cache_max_age=int(val(qg, "cache_max_age", _qg["cache_max_age"])),
                 cache_refresh_interval=int(

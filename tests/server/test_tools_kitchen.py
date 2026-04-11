@@ -94,7 +94,9 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     """open_kitchen must write .autoskillit/.hook_config.json with user quota_guard values."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
-    mock_ctx.config.quota_guard.threshold = 85.0
+    mock_ctx.config.quota_guard.short_window_threshold = 85.0
+    mock_ctx.config.quota_guard.long_window_threshold = 98.0
+    mock_ctx.config.quota_guard.long_window_patterns = ["weekly", "sonnet", "opus"]
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "/custom/path.json"
 
@@ -116,7 +118,10 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     hook_cfg = tmp_path / ".autoskillit" / ".hook_config.json"
     assert hook_cfg.exists(), "Hook config file must be written by open_kitchen"
     data = json.loads(hook_cfg.read_text())
-    assert data["quota_guard"]["threshold"] == 85.0
+    assert data["quota_guard"]["short_window_threshold"] == 85.0
+    assert data["quota_guard"]["long_window_threshold"] == 98.0
+    assert data["quota_guard"]["long_window_patterns"] == ["weekly", "sonnet", "opus"]
+    assert "threshold" not in data["quota_guard"]
     assert data["quota_guard"]["cache_max_age"] == 300
     assert data["quota_guard"]["cache_path"] == "/custom/path.json"
     # Confirm kitchen_id rename: hook config must contain 'kitchen_id' (not 'pipeline_id')
@@ -134,7 +139,9 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
     """close_kitchen must remove .autoskillit/.hook_config.json to prevent stale config."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
-    mock_ctx.config.quota_guard.threshold = 85.0
+    mock_ctx.config.quota_guard.short_window_threshold = 85.0
+    mock_ctx.config.quota_guard.long_window_threshold = 98.0
+    mock_ctx.config.quota_guard.long_window_patterns = ["weekly", "sonnet", "opus"]
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "~/.claude/quota_cache.json"
 
@@ -206,9 +213,11 @@ async def test_open_kitchen_does_not_write_gate_file(tmp_path, monkeypatch):
     """_open_kitchen_handler must never write a gate file."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
-    mock_ctx.config.quota_guard.threshold = None
-    mock_ctx.config.quota_guard.cache_max_age = None
-    mock_ctx.config.quota_guard.cache_path = None
+    mock_ctx.config.quota_guard.short_window_threshold = 85.0
+    mock_ctx.config.quota_guard.long_window_threshold = 98.0
+    mock_ctx.config.quota_guard.long_window_patterns = ["weekly", "sonnet", "opus"]
+    mock_ctx.config.quota_guard.cache_max_age = 300
+    mock_ctx.config.quota_guard.cache_path = "~/.claude/quota_cache.json"
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):

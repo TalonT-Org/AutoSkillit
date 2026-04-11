@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """PostToolUse hook: quota warning after run_skill execution.
 
-Fires after run_skill completes and checks whether post-execution quota
-utilization exceeds the threshold. When over threshold, replaces the tool
-output with a compact result summary + quota warning + sleep instruction
-via updatedMCPToolOutput.
+Fires after run_skill completes and checks whether the cached binding marks
+``should_block=True``. When set, replaces the tool output with a compact
+result summary + quota warning + sleep instruction via updatedMCPToolOutput.
 
 This script is stdlib-only so it can run under any Python interpreter without
 requiring the autoskillit package to be importable.
@@ -17,7 +16,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 _DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
-_DEFAULT_THRESHOLD = 85.0
 _DEFAULT_CACHE_MAX_AGE = 300  # seconds
 
 HOOK_CONFIG_FILENAME = ".hook_config.json"
@@ -120,7 +118,6 @@ def main(*, cache_path_override: str | None = None) -> None:
     tool_response = event.get("tool_response") or ""
 
     hook_config = _read_hook_config()
-    threshold = hook_config.get("threshold", _DEFAULT_THRESHOLD)
     cache_max_age = hook_config.get("cache_max_age", _DEFAULT_CACHE_MAX_AGE)
     cache_path_str = (
         cache_path_override
@@ -140,15 +137,19 @@ def main(*, cache_path_override: str | None = None) -> None:
         if not binding or not isinstance(binding, dict):
             raise KeyError("binding")
         utilization = float(binding["utilization"])
+        should_block = bool(binding.get("should_block", False))
+        effective_threshold = float(binding.get("effective_threshold", 0.0))
+        window_name = str(binding.get("window_name", "unknown"))
     except (KeyError, ValueError, TypeError):
         sys.exit(0)
 
-    if utilization < threshold:
+    if not should_block:
         _write_quota_log_event(
             {
                 "ts": ts,
                 "event": "post_check_pass",
-                "threshold": threshold,
+                "effective_threshold": effective_threshold,
+                "window_name": window_name,
                 "utilization": utilization,
                 "tool_name": tool_name,
             },
@@ -173,7 +174,8 @@ def main(*, cache_path_override: str | None = None) -> None:
     warning_text = (
         f"{result_summary}\n\n"
         f"--- QUOTA WARNING ---\n"
-        f"Post-execution utilization: {utilization:.0f}% (threshold: {threshold:.0f}%)\n"
+        f"Post-execution utilization: {utilization:.0f}% on window '{window_name}' "
+        f"(threshold: {effective_threshold:.0f}%)\n"
         f"MANDATORY ACTION before next run_skill: Call run_cmd with: "
         f'python3 -c "import time; time.sleep({n})" timeout={n + 30}\n'
         f"Before executing, state aloud: "
@@ -184,7 +186,8 @@ def main(*, cache_path_override: str | None = None) -> None:
         {
             "ts": ts,
             "event": "post_check_warning",
-            "threshold": threshold,
+            "effective_threshold": effective_threshold,
+            "window_name": window_name,
             "utilization": utilization,
             "sleep_seconds": n,
             "resets_at": resets_at_str,

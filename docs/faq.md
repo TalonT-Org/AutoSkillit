@@ -67,7 +67,9 @@ tree. See [safety/workspace.md](safety/workspace.md).
 
 ### How do I tune the API quota guard?
 
-Set `quota_guard.threshold` (default 85.0) and `quota_guard.buffer_seconds`
+Set `quota_guard.short_window_threshold` (default 85.0) for short windows
+(e.g. `five_hour`), `quota_guard.long_window_threshold` (default 98.0) for
+long windows (weekly, sonnet, opus), and `quota_guard.buffer_seconds`
 (default 60) in `.autoskillit/config.yaml`. See
 [operations/sprint-guide.md](operations/sprint-guide.md).
 

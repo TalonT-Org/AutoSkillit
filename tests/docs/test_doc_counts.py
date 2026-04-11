@@ -121,13 +121,19 @@ def _count_hooks_by_event() -> dict[str, int]:
     return {event: len(scripts) for event, scripts in by_event.items()}
 
 
-def _quota_threshold_default() -> float:
+def _quota_thresholds_default() -> tuple[float, float]:
     data = yaml.safe_load(_read(SRC_DIR / "config" / "defaults.yaml"))
     quota = data.get("quota_guard")
     assert quota is not None, "quota_guard key missing from config/defaults.yaml"
-    threshold = quota.get("threshold")
-    assert threshold is not None, "quota_guard.threshold key missing from config/defaults.yaml"
-    return float(threshold)
+    short = quota.get("short_window_threshold")
+    long_ = quota.get("long_window_threshold")
+    assert short is not None, (
+        "quota_guard.short_window_threshold key missing from config/defaults.yaml"
+    )
+    assert long_ is not None, (
+        "quota_guard.long_window_threshold key missing from config/defaults.yaml"
+    )
+    return float(short), float(long_)
 
 
 def _count_doctor_checks() -> int:
@@ -210,8 +216,10 @@ def test_hook_total_is_13() -> None:
     assert counts["SessionStart"] == 1, counts
 
 
-def test_quota_threshold_default_is_85() -> None:
-    assert _quota_threshold_default() == pytest.approx(85.0)
+def test_quota_thresholds_defaults() -> None:
+    short, long_ = _quota_thresholds_default()
+    assert short == pytest.approx(85.0)
+    assert long_ == pytest.approx(98.0)
 
 
 def test_doctor_check_count_is_14() -> None:
@@ -276,12 +284,17 @@ def test_safety_hooks_states_13_hooks() -> None:
     _assert_doc_states_number(DOCS_DIR / "safety" / "hooks.md", "hooks total", 13)
 
 
-def test_configuration_states_quota_threshold() -> None:
+def test_configuration_states_quota_thresholds() -> None:
     doc = DOCS_DIR / "configuration.md"
     if not doc.exists():
         pytest.skip("docs/configuration.md not present")
     text = _read(doc)
-    assert "85.0" in text, "docs/configuration.md does not state quota_guard.threshold = 85.0"
+    assert "85.0" in text, (
+        "docs/configuration.md does not state quota_guard.short_window_threshold = 85.0"
+    )
+    assert "98.0" in text, (
+        "docs/configuration.md does not state quota_guard.long_window_threshold = 98.0"
+    )
 
 
 def test_installation_states_14_doctor_checks() -> None:

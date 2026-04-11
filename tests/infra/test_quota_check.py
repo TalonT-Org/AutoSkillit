@@ -1,7 +1,8 @@
 """Tests for the quota_check PreToolUse hook.
 
-The hook reads a local quota cache file and denies run_skill when utilization
-exceeds the threshold. It fails open when the cache is missing/stale/corrupt.
+The hook reads a local quota cache file and denies run_skill when the cached
+binding marks ``should_block=True``. It fails open when the cache is
+missing/stale/corrupt.
 """
 
 import io
@@ -11,6 +12,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+_LONG_PATTERNS = ("weekly", "sonnet", "opus")
+
+
+def _classify_threshold(window_name: str) -> float:
+    lowered = window_name.lower()
+    return 98.0 if any(p in lowered for p in _LONG_PATTERNS) else 85.0
+
 
 def _write_cache(
     cache_path: Path,
@@ -18,8 +26,18 @@ def _write_cache(
     resets_at: str | None = None,
     window_name: str = "five_hour",
     extra_windows: dict | None = None,
+    should_block: bool | None = None,
+    effective_threshold: float | None = None,
 ) -> None:
-    """Write a fresh quota cache file in the full-snapshot format."""
+    """Write a fresh quota cache file in the full-snapshot format.
+
+    When ``should_block`` is None, classifies the window via the default
+    long-window patterns and computes ``should_block`` from utilization.
+    """
+    if effective_threshold is None:
+        effective_threshold = _classify_threshold(window_name)
+    if should_block is None:
+        should_block = utilization >= effective_threshold
     windows = {window_name: {"utilization": utilization, "resets_at": resets_at}}
     if extra_windows:
         windows.update(extra_windows)
@@ -30,6 +48,8 @@ def _write_cache(
             "window_name": window_name,
             "utilization": utilization,
             "resets_at": resets_at,
+            "should_block": should_block,
+            "effective_threshold": effective_threshold,
         },
     }
     cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -138,38 +158,47 @@ def test_approve_when_stale_cache(tmp_path):
 
 
 def _write_hook_config(
-    hook_cfg_path: Path, threshold: float, cache_max_age: int, cache_path: str
+    hook_cfg_path: Path,
+    cache_max_age: int,
+    cache_path: str,
+    extra: dict | None = None,
 ) -> None:
     """Write a hook config file to the given path."""
+    quota_guard: dict = {
+        "cache_max_age": cache_max_age,
+        "cache_path": cache_path,
+    }
+    if extra:
+        quota_guard.update(extra)
     hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(
-        json.dumps(
-            {
-                "quota_guard": {
-                    "threshold": threshold,
-                    "cache_max_age": cache_max_age,
-                    "cache_path": cache_path,
-                }
-            }
-        )
-    )
+    hook_cfg_path.write_text(json.dumps({"quota_guard": quota_guard}))
 
 
-# T-CFG-1
-def test_quota_check_reads_threshold_from_hook_config(tmp_path, monkeypatch):
-    """Hook must deny when utilization exceeds user-configured threshold from hook config."""
+# T-CFG-1: hook trusts cache binding, never re-derives a verdict from hook config.
+def test_hook_does_not_consult_threshold_field_in_hook_config(tmp_path, monkeypatch):
+    """Hook trusts ``binding.should_block`` and ignores any threshold in hook config.
+
+    Single-source-of-truth assertion: even if a stale ``short_window_threshold``
+    in hook config would imply a deny, the hook must approve when the cache
+    binding says ``should_block=False``.
+    """
     monkeypatch.chdir(tmp_path)
     cache = tmp_path / "custom_cache.json"
-    _write_cache(cache, utilization=60.0)
+    _write_cache(
+        cache,
+        utilization=70.0,
+        window_name="five_hour",
+        should_block=False,
+        effective_threshold=85.0,
+    )
     _write_hook_config(
         tmp_path / ".autoskillit" / ".hook_config.json",
-        threshold=50.0,
         cache_max_age=300,
         cache_path=str(cache),
+        extra={"short_window_threshold": 50.0},
     )
     out, _ = _run_hook(event={"tool_name": "run_skill"})
-    data = json.loads(out)
-    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert out.strip() == ""
 
 
 # T-CFG-2
@@ -181,7 +210,6 @@ def test_quota_check_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
     _write_cache(custom_cache, utilization=95.0)
     _write_hook_config(
         tmp_path / ".autoskillit" / ".hook_config.json",
-        threshold=85.0,
         cache_max_age=300,
         cache_path=str(custom_cache),
     )
@@ -207,7 +235,6 @@ def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypa
     _write_cache(wrong_cache, utilization=50.0)
     _write_hook_config(
         tmp_path / ".autoskillit" / ".hook_config.json",
-        threshold=85.0,
         cache_max_age=300,
         cache_path=str(wrong_cache),
     )
@@ -220,10 +247,7 @@ def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypa
 
 # T-CFG-4
 def test_quota_check_falls_back_to_defaults_without_hook_config(tmp_path, monkeypatch):
-    """Without hook config, hook falls back to hard-coded defaults (threshold=85.0).
-
-    Regression test: no regression when kitchen was never opened or hook config was removed.
-    """
+    """Without hook config, hook still resolves cache via override / env var."""
     monkeypatch.chdir(tmp_path)
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0)
@@ -245,7 +269,7 @@ def test_quota_event_approved_written_to_log(tmp_path, monkeypatch):
     assert len(events) == 1
     assert events[0]["event"] == "approved"
     assert events[0]["utilization"] == 50.0
-    assert events[0]["threshold"] == 85.0
+    assert events[0]["effective_threshold"] == 85.0
     assert "ts" in events[0]
 
 
@@ -263,7 +287,7 @@ def test_quota_event_blocked_written_to_log(tmp_path, monkeypatch):
     ev = events[0]
     assert ev["event"] == "blocked"
     assert ev["utilization"] == 95.0
-    assert ev["threshold"] == 85.0
+    assert ev["effective_threshold"] == 85.0
     assert isinstance(ev["sleep_seconds"], int)
     assert ev["sleep_seconds"] > 0
     assert "ts" in ev
@@ -347,6 +371,78 @@ def test_defaults_yaml_cache_max_age_is_300():
     defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
     assert isinstance(defaults, dict)
     assert defaults["quota_guard"]["cache_max_age"] == 300
+
+
+# T-HOOK-PWT-1: regression test for #721 — weekly at 86% must approve.
+def test_hook_approves_weekly_at_86_percent_should_block_false(tmp_path):
+    """Weekly window at 86% utilisation must NOT be blocked.
+
+    Regression test for issue #721: long-window quotas (weekly/sonnet/opus)
+    use a higher threshold (98%), so 86% is comfortable headroom — not exhaustion.
+    """
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(
+        cache,
+        utilization=86.0,
+        window_name="weekly",
+        should_block=False,
+        effective_threshold=98.0,
+    )
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    assert out.strip() == ""
+
+
+# T-HOOK-PWT-2: weekly above 98% must still deny.
+def test_hook_blocks_weekly_above_long_threshold(tmp_path):
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(
+        cache,
+        utilization=99.0,
+        window_name="weekly",
+        should_block=True,
+        effective_threshold=98.0,
+    )
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "weekly" in reason
+    assert "98" in reason
+
+
+# T-HOOK-PWT-3: short window above 85% must deny with short threshold in message.
+def test_hook_blocks_short_window_above_threshold_message(tmp_path):
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(
+        cache,
+        utilization=90.0,
+        window_name="five_hour",
+        should_block=True,
+        effective_threshold=85.0,
+    )
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    data = json.loads(out)
+    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "five_hour" in reason
+    assert "85" in reason
+
+
+# T-HOOK-PWT-4: missing should_block field → fail open (approve).
+def test_hook_falls_back_when_should_block_field_missing(tmp_path):
+    """Old-format cache without should_block defaults to approve (fail-open)."""
+    cache = tmp_path / "quota_cache.json"
+    payload = {
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "windows": {"five_hour": {"utilization": 95.0, "resets_at": None}},
+        "binding": {
+            "window_name": "five_hour",
+            "utilization": 95.0,
+            "resets_at": None,
+        },
+    }
+    cache.write_text(json.dumps(payload))
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    assert out.strip() == ""
 
 
 # T-HOOK-MW-1: cache with one_hour binding above threshold → deny

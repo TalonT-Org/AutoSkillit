@@ -49,7 +49,7 @@ def _initialize(ctx: ToolContext) -> None:
 
     # Wire MCP recording/replay middleware for scenario capture
     try:
-        from autoskillit.execution.recording import (  # noqa: PLC0415
+        from autoskillit.execution import (  # noqa: PLC0415
             RecordingSubprocessRunner,
             ReplayingSubprocessRunner,
         )

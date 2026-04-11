@@ -1363,3 +1363,66 @@ def test_check_source_version_drift_never_makes_network_call(
 
     assert not http_calls, f"httpx.Client was called: {http_calls}"
     assert not subprocess_calls, f"subprocess.run was called: {subprocess_calls}"
+
+
+# ---------------------------------------------------------------------------
+# Check 14: Quota cache schema version (#711 Part B, Phase 4)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckQuotaCacheSchema:
+    """Tests for _check_quota_cache_schema doctor check."""
+
+    def test_check_quota_cache_schema_ok_when_v2(self, tmp_path):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"schema_version": 2, "fetched_at": "2026-01-01T00:00:00"}))
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.OK
+        assert "v2" in result.message
+
+    def test_check_quota_cache_schema_ok_when_missing(self, tmp_path):
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "nonexistent.json"
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.OK
+        assert "No quota cache" in result.message
+
+    def test_check_quota_cache_schema_warning_when_no_schema_version_key(self, tmp_path):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"fetched_at": "2026-01-01T00:00:00"}))
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.WARNING
+        assert "schema drift" in result.message.lower()
+
+    def test_check_quota_cache_schema_warning_when_older_schema_version(self, tmp_path):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"schema_version": 1, "fetched_at": "2026-01-01T00:00:00"}))
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.WARNING
+
+    def test_check_quota_cache_schema_warning_includes_cache_path_and_observed_value(
+        self, tmp_path
+    ):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"schema_version": 1}))
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.WARNING
+        assert str(cache) in result.message
+        assert "observed=1" in result.message

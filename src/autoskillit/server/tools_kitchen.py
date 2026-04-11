@@ -316,10 +316,7 @@ async def open_kitchen(
         result["kitchen"] = "open"
         result["version"] = __version__
 
-        serialized = json.dumps(result)
-        if "--- INGREDIENTS TABLE ---" in serialized:
-            result["ingredients_table"] = True
-        else:
+        if "ingredients_table" not in result or not result["ingredients_table"]:
             result["ingredients_table"] = None
 
         try:

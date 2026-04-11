@@ -53,6 +53,7 @@ class TestReadCache:
 
         now = datetime.now(UTC)
         cache_data = {
+            "schema_version": 2,
             "fetched_at": (now - timedelta(seconds=30)).isoformat(),
             "windows": {
                 "five_hour": {
@@ -725,6 +726,7 @@ class TestMultiWindowSelection:
         from autoskillit.execution.quota import _read_cache
 
         new_cache = {
+            "schema_version": 2,
             "fetched_at": datetime.now(UTC).isoformat(),
             "windows": {
                 "one_hour": {
@@ -813,3 +815,232 @@ class TestRefreshQuotaCache:
         assert cache_path.exists()
         data = json.loads(cache_path.read_text())
         assert data["binding"]["utilization"] == pytest.approx(0.5)
+
+
+class TestCacheSchemaVersion:
+    """Phase 4 (#711 Part B): quota cache schema versioning tests."""
+
+    def setup_method(self):
+        from autoskillit.execution.quota import _reset_schema_drift_logged_for_tests
+
+        _reset_schema_drift_logged_for_tests()
+
+    def test_write_cache_embeds_schema_version_2(self, tmp_path):
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _write_cache,
+        )
+
+        result = QuotaFetchResult(
+            windows={"five_hour": QuotaWindowEntry(utilization=50.0, resets_at=None)},
+            binding=QuotaStatus(utilization=50.0, resets_at=None, window_name="five_hour"),
+        )
+        cache_path = tmp_path / "cache.json"
+        _write_cache(str(cache_path), result)
+        raw = json.loads(cache_path.read_text())
+        assert raw["schema_version"] == 2
+
+    def test_write_cache_uses_write_versioned_json(self, tmp_path, monkeypatch):
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _write_cache,
+        )
+
+        calls = []
+        original = None
+
+        def spy(path, payload, schema_version):
+            calls.append({"path": path, "schema_version": schema_version})
+            # Call through to real impl
+            from autoskillit.core import write_versioned_json as real
+
+            real(path, payload, schema_version)
+
+        monkeypatch.setattr("autoskillit.execution.quota.write_versioned_json", spy)
+
+        result = QuotaFetchResult(
+            windows={"five_hour": QuotaWindowEntry(utilization=50.0, resets_at=None)},
+            binding=QuotaStatus(utilization=50.0, resets_at=None, window_name="five_hour"),
+        )
+        cache_path = tmp_path / "cache.json"
+        _write_cache(str(cache_path), result)
+        assert len(calls) == 1
+        assert calls[0]["schema_version"] == 2
+
+    def test_read_cache_schema_v2_returns_status(self, tmp_path):
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _read_cache,
+            _write_cache,
+        )
+
+        resets_at = datetime(2026, 2, 27, 20, 15, tzinfo=UTC)
+        result = QuotaFetchResult(
+            windows={"five_hour": QuotaWindowEntry(utilization=60.0, resets_at=resets_at)},
+            binding=QuotaStatus(utilization=60.0, resets_at=resets_at, window_name="five_hour"),
+        )
+        cache_path = tmp_path / "cache.json"
+        _write_cache(str(cache_path), result)
+        status = _read_cache(str(cache_path), max_age=60)
+        assert status is not None
+        assert status.utilization == pytest.approx(60.0)
+
+    def test_read_cache_missing_schema_version_returns_none(self, tmp_path):
+        from autoskillit.execution.quota import _read_cache
+
+        cache_path = tmp_path / "cache.json"
+        old_data = {
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "windows": {},
+            "binding": {"utilization": 50.0, "resets_at": None, "window_name": "five_hour"},
+        }
+        cache_path.write_text(json.dumps(old_data))
+        assert _read_cache(str(cache_path), max_age=60) is None
+
+    def test_read_cache_wrong_schema_version_returns_none(self, tmp_path):
+        from autoskillit.execution.quota import _read_cache
+
+        cache_path = tmp_path / "cache.json"
+        old_data = {
+            "schema_version": 1,
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "windows": {},
+            "binding": {"utilization": 50.0, "resets_at": None, "window_name": "five_hour"},
+        }
+        cache_path.write_text(json.dumps(old_data))
+        assert _read_cache(str(cache_path), max_age=60) is None
+
+    def test_read_cache_logs_drift_warning_on_schema_mismatch(self, tmp_path):
+        import structlog.testing
+
+        from autoskillit.execution.quota import _read_cache
+
+        cache_path = tmp_path / "cache.json"
+        old_data = {
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "windows": {},
+            "binding": {"utilization": 50.0, "resets_at": None, "window_name": "five_hour"},
+        }
+        cache_path.write_text(json.dumps(old_data))
+
+        with structlog.testing.capture_logs() as cap:
+            _read_cache(str(cache_path), max_age=60)
+
+        drift_logs = [r for r in cap if "quota_cache_schema_drift" in r.get("event", "")]
+        assert len(drift_logs) == 1
+        assert "cache_path" in drift_logs[0]
+        assert drift_logs[0]["observed"] is None
+
+    def test_read_cache_logs_drift_exactly_once_per_path_per_process(self, tmp_path):
+        import structlog.testing
+
+        from autoskillit.execution.quota import _read_cache
+
+        cache_path = tmp_path / "cache.json"
+        old_data = {
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "windows": {},
+            "binding": {"utilization": 50.0, "resets_at": None, "window_name": "five_hour"},
+        }
+        cache_path.write_text(json.dumps(old_data))
+
+        with structlog.testing.capture_logs() as cap:
+            for _ in range(5):
+                _read_cache(str(cache_path), max_age=60)
+
+        drift_logs = [r for r in cap if "quota_cache_schema_drift" in r.get("event", "")]
+        assert len(drift_logs) == 1
+
+    def test_read_cache_logs_drift_once_per_path_not_globally(self, tmp_path):
+        import structlog.testing
+
+        from autoskillit.execution.quota import _read_cache
+
+        for name in ("cache_a.json", "cache_b.json"):
+            path = tmp_path / name
+            path.write_text(
+                json.dumps(
+                    {
+                        "fetched_at": datetime.now(UTC).isoformat(),
+                        "windows": {},
+                        "binding": {"utilization": 50.0},
+                    }
+                )
+            )
+
+        with structlog.testing.capture_logs() as cap:
+            _read_cache(str(tmp_path / "cache_a.json"), max_age=60)
+            _read_cache(str(tmp_path / "cache_b.json"), max_age=60)
+
+        drift_logs = [r for r in cap if "quota_cache_schema_drift" in r.get("event", "")]
+        assert len(drift_logs) == 2
+
+    def test_read_cache_drift_set_is_module_scoped_and_reset_helper_works(self, tmp_path):
+        import structlog.testing
+
+        from autoskillit.execution.quota import (
+            _read_cache,
+            _reset_schema_drift_logged_for_tests,
+        )
+
+        cache_path = tmp_path / "cache.json"
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "fetched_at": datetime.now(UTC).isoformat(),
+                    "windows": {},
+                    "binding": {"utilization": 50.0},
+                }
+            )
+        )
+
+        with structlog.testing.capture_logs() as cap1:
+            _read_cache(str(cache_path), max_age=60)
+        assert len([r for r in cap1 if "quota_cache_schema_drift" in r.get("event", "")]) == 1
+
+        _reset_schema_drift_logged_for_tests()
+
+        with structlog.testing.capture_logs() as cap2:
+            _read_cache(str(cache_path), max_age=60)
+        assert len([r for r in cap2 if "quota_cache_schema_drift" in r.get("event", "")]) == 1
+
+    @pytest.mark.anyio
+    async def test_old_format_cache_gets_rewritten_with_new_format_on_next_fetch(
+        self, tmp_path, monkeypatch
+    ):
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
+
+        cache_path = tmp_path / "cache.json"
+        # Write old-format cache (no schema_version)
+        old_data = {
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "windows": {},
+            "binding": {"utilization": 50.0, "resets_at": None, "window_name": "five_hour"},
+        }
+        cache_path.write_text(json.dumps(old_data))
+
+        async def fake_fetch(credentials_path, **kwargs):
+            return QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=30.0, resets_at=None)},
+                binding=QuotaStatus(utilization=30.0, resets_at=None, window_name="five_hour"),
+            )
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
+        config = QuotaGuardConfig(
+            cache_path=str(cache_path),
+            credentials_path=str(tmp_path / "fake_creds.json"),
+        )
+        await check_and_sleep_if_needed(config)
+        new_data = json.loads(cache_path.read_text())
+        assert new_data["schema_version"] == 2

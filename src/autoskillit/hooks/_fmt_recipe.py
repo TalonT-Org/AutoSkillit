@@ -147,7 +147,7 @@ _FMT_RECIPE_LIST_ITEM_RENDERED: frozenset[str] = frozenset(
 _FMT_RECIPE_LIST_ITEM_SUPPRESSED: frozenset[str] = frozenset()
 
 
-def _fmt_open_kitchen(data: dict, pipeline: bool) -> str:
+def _fmt_open_kitchen(data: dict[str, Any], pipeline: bool) -> str:
     """Format open_kitchen combined kitchen+recipe result."""
     version = data.get("version", "")
 

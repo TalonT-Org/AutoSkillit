@@ -311,6 +311,7 @@ def main() -> None:
             ["gh", "api", f"repos/{owner}/{repo}/pulls/{pr_number}", "--jq", ".body"],
             capture_output=True,
             text=True,
+            timeout=30,
         )
         if view_proc.returncode != 0:
             sys.stderr.write(
@@ -345,6 +346,7 @@ def main() -> None:
                 check=True,
                 capture_output=True,
                 text=True,
+                timeout=30,
             )
         except subprocess.CalledProcessError as cpe:
             sys.stderr.write(

@@ -45,6 +45,7 @@ from autoskillit.execution._process_race import (
     _watch_heartbeat,
     _watch_process,
     _watch_session_log,
+    _watch_stdout_idle,
     resolve_termination,
 )
 
@@ -108,6 +109,8 @@ async def run_managed_async(
     session_record_types: frozenset[str] = frozenset({"assistant"}),
     completion_drain_timeout: float = 5.0,
     linux_tracing_config: LinuxTracingConfig | None = None,
+    idle_output_timeout: float | None = None,
+    max_suppression_seconds: float | None = None,
     _phase1_poll: float = 1.0,
     _phase2_poll: float = 2.0,
     _heartbeat_poll: float = 0.5,
@@ -202,6 +205,15 @@ async def run_managed_async(
                         _phase2_poll,
                         _phase1_timeout,
                         stdout_session_id_ready,
+                        max_suppression_seconds,
+                    )
+                if idle_output_timeout is not None and idle_output_timeout > 0:
+                    tg.start_soon(
+                        _watch_stdout_idle,
+                        stdout_path,
+                        idle_output_timeout,
+                        acc,
+                        trigger,
                     )
                 tracing_handle = None
                 if linux_tracing_config is not None:
@@ -260,6 +272,16 @@ async def run_managed_async(
                     reason="natural_exit",
                     returncode=signals.process_returncode,
                 )
+            elif termination == TerminationReason.IDLE_STALL:
+                proc_log.debug(
+                    "kill_decision",
+                    reason="idle_stall",
+                    idle_output_timeout=idle_output_timeout,
+                )
+                logger.warning(
+                    "Stdout idle for %ss, killing tree (IDLE_STALL)", idle_output_timeout
+                )
+                await async_kill_process_tree(proc.pid)
             elif termination == TerminationReason.STALE:
                 proc_log.debug("kill_decision", reason="stale", stale_threshold=stale_threshold)
                 logger.warning("Session stale for %ss, killing tree", stale_threshold)
@@ -407,6 +429,8 @@ class DefaultSubprocessRunner:
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
         linux_tracing_config: LinuxTracingConfig | None = None,
+        idle_output_timeout: float | None = None,
+        max_suppression_seconds: float | None = None,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -420,4 +444,6 @@ class DefaultSubprocessRunner:
             input_data=input_data,
             completion_drain_timeout=completion_drain_timeout,
             linux_tracing_config=linux_tracing_config,
+            idle_output_timeout=idle_output_timeout,
+            max_suppression_seconds=max_suppression_seconds,
         )

@@ -815,6 +815,106 @@ class TestSessionLogMonitorStaleSuppressionGate:
         assert call_count["cpu"] == 2  # suppressed once, then fired
 
 
+class TestStaleSuppressionBounded:
+    """Bounded suppression: max_suppression_seconds caps stale deferral."""
+
+    @pytest.mark.anyio
+    async def test_stale_suppression_bounded_by_max_duration(self, tmp_path, monkeypatch):
+        """Stale fires after max_suppression_seconds despite ESTABLISHED connection."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor._has_active_api_connection",
+            lambda pid: True,
+        )
+
+        with anyio.fail_after(8.0):
+            result = await _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.05,
+                spawn_time=spawn_time,
+                pid=9999,
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+                max_suppression_seconds=1.0,
+            )
+        assert result.status == ChannelBStatus.STALE
+
+    @pytest.mark.anyio
+    async def test_stale_suppression_resets_on_genuine_activity(self, tmp_path, monkeypatch):
+        """Suppression counter resets when JSONL file grows."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor._has_active_api_connection",
+            lambda pid: True,
+        )
+
+        async def write_activity() -> None:
+            for i in range(6):
+                await anyio.sleep(0.5)
+                import json
+
+                with session_file.open("a") as f:
+                    f.write(json.dumps({"type": "assistant", "message": f"msg-{i}"}) + "\n")
+
+        with anyio.fail_after(10.0):
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(write_activity)
+                result = await _session_log_monitor(
+                    tmp_path,
+                    "DONE",
+                    stale_threshold=0.05,
+                    spawn_time=spawn_time,
+                    pid=9999,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                    max_suppression_seconds=2.0,
+                )
+                tg.cancel_scope.cancel()
+
+        assert result.status == ChannelBStatus.STALE
+
+    @pytest.mark.anyio
+    async def test_stale_suppression_logs_warning_on_bounded_kill(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """Warning log emitted when bounded suppression fires."""
+        import structlog.testing
+
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor._has_active_api_connection",
+            lambda pid: True,
+        )
+
+        with anyio.fail_after(8.0):
+            with structlog.testing.capture_logs() as logs:
+                result = await _session_log_monitor(
+                    tmp_path,
+                    "DONE",
+                    stale_threshold=0.05,
+                    spawn_time=spawn_time,
+                    pid=9999,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                    max_suppression_seconds=1.0,
+                )
+        assert result.status == ChannelBStatus.STALE
+        captured = capsys.readouterr().out + capsys.readouterr().err
+        bounded_in_logs = any("Suppression bounded" in str(log.get("event", "")) for log in logs)
+        bounded_in_stdout = "Suppression bounded" in captured
+        assert bounded_in_logs or bounded_in_stdout
+
+
 class TestHeartbeatMarkerAwareness:
     """_heartbeat respects completion_marker when configured."""
 

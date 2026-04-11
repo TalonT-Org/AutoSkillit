@@ -45,6 +45,7 @@ def compute_domain_partitions(
         text=True,
         check=True,
         cwd=cwd,
+        timeout=60,
     )
     files = [f for f in result.stdout.strip().split("\n") if f]
     partitions = partition_files_by_domain(files)
@@ -71,6 +72,7 @@ def annotate_pr_diff(pr_number: str, cwd: str, output_dir: str) -> dict[str, str
         text=True,
         check=True,
         cwd=cwd,
+        timeout=60,
     )
     diff = result.stdout
     out = Path(output_dir)
@@ -103,6 +105,7 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
         text=True,
         check=True,
         cwd=cwd,
+        timeout=60,
     )
     info = json.loads(repo_info.stdout)
     owner = info["owner"]["login"]
@@ -119,6 +122,7 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
         capture_output=True,
         text=True,
         cwd=cwd,
+        timeout=60,
     )
     if graphql_result.returncode != 0:
         entries: list = []

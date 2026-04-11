@@ -51,7 +51,15 @@ async def resolve_remote_repo(
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
             )
-            stdout, _ = await proc.communicate()
+            io_task = asyncio.ensure_future(proc.communicate())
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=15.0)
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
+                _log.warning("Timed out getting URL for remote %r in %r", remote, cwd)
+                continue
+            stdout, _ = await io_task
             if proc.returncode == 0:
                 parsed = parse_github_repo(stdout.decode().strip())
                 if parsed:

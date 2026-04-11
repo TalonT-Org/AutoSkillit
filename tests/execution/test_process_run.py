@@ -15,6 +15,7 @@ import textwrap
 import time
 from pathlib import Path
 
+import anyio
 import psutil
 import pytest
 
@@ -361,3 +362,40 @@ class TestOuterCancelRaceGuard:
         assert caught_exc is None or not isinstance(caught_exc, AttributeError), (
             f"timeout_scope None dereference — got AttributeError: {caught_exc}"
         )
+
+
+class TestIdleStallWatchdog:
+    """Integration test: idle_output_timeout kills a hanging process."""
+
+    @pytest.mark.anyio
+    async def test_run_managed_async_idle_stall_kills_hanging_process(self, tmp_path, monkeypatch):
+        """Process writes burst then stalls — IDLE_STALL kills it promptly."""
+        script = tmp_path / "burst_stall.py"
+        script.write_text(
+            textwrap.dedent("""\
+                import sys, time, json
+                for i in range(3):
+                    sys.stdout.write(json.dumps({"type": "assistant", "i": i}) + "\\n")
+                    sys.stdout.flush()
+                time.sleep(9999)
+            """)
+        )
+
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor._has_active_api_connection",
+            lambda pid: True,
+        )
+
+        start = time.monotonic()
+        with anyio.fail_after(15.0):
+            result = await run_managed_async(
+                [sys.executable, str(script)],
+                cwd=tmp_path,
+                timeout=30,
+                idle_output_timeout=2.0,
+                stale_threshold=60,
+            )
+
+        elapsed = time.monotonic() - start
+        assert result.termination == TerminationReason.IDLE_STALL
+        assert elapsed < 10.0

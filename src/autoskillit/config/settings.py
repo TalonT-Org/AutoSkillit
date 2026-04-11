@@ -91,6 +91,8 @@ class RunSkillConfig:
     completion_marker: str = "%%ORDER_UP%%"
     completion_drain_timeout: float = 5.0
     exit_after_stop_delay_ms: int = 120000
+    idle_output_timeout: int = 600
+    max_suppression_seconds: int = 1800
 
     @property
     def output_format(self) -> OutputFormat:

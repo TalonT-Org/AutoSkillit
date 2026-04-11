@@ -124,3 +124,35 @@ async def test_resolve_returns_none_when_no_remotes(tmp_path: Path) -> None:
     repo = _make_repo_with_remotes(tmp_path)
     result = await resolve_remote_repo(str(repo))
     assert result is None
+
+
+@pytest.mark.anyio
+async def test_resolve_remote_has_timeout(tmp_path: Path, monkeypatch) -> None:
+    """Resolver does not hang indefinitely on a slow git subprocess."""
+    import asyncio
+    import time
+
+    repo = _make_repo_with_remotes(
+        tmp_path,
+        origin="https://github.com/testowner/testrepo.git",
+    )
+
+    original_exec = asyncio.create_subprocess_exec
+
+    async def slow_subprocess_exec(*args, **kwargs):
+        proc = await original_exec(*args, **kwargs)
+        original_wait = proc.wait
+
+        async def slow_wait():
+            await asyncio.sleep(9999)
+            return await original_wait()
+
+        proc.wait = slow_wait
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", slow_subprocess_exec)
+
+    start = time.monotonic()
+    await resolve_remote_repo(str(repo))
+    elapsed = time.monotonic() - start
+    assert elapsed < 20.0

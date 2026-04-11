@@ -43,7 +43,13 @@ _TOKEN_FIELDS = (
 )
 
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
-    {CliSubtype.UNKNOWN, CliSubtype.EMPTY_OUTPUT, CliSubtype.UNPARSEABLE, CliSubtype.TIMEOUT}
+    {
+        CliSubtype.UNKNOWN,
+        CliSubtype.EMPTY_OUTPUT,
+        CliSubtype.UNPARSEABLE,
+        CliSubtype.TIMEOUT,
+        CliSubtype.IDLE_STALL,
+    }
 )
 
 
@@ -630,6 +636,9 @@ def _compute_success(
         case TerminationReason.STALE:
             return False
 
+        case TerminationReason.IDLE_STALL:
+            return False
+
         case TerminationReason.COMPLETED:
             # The process was killed by our own async_kill_process_tree
             # (signal -15 or -9), so a non-zero returncode is expected and
@@ -819,6 +828,12 @@ def _compute_retry(
             logger.debug("compute_retry_result", termination="STALE", needs_retry=False)
             return False, RetryReason.NONE
 
+        case TerminationReason.IDLE_STALL:
+            # _build_skill_result intercepts IDLE_STALL before calling _compute_retry.
+            # Explicit arm exists for exhaustiveness; unreachable in production.
+            logger.debug("compute_retry_result", termination="IDLE_STALL", needs_retry=False)
+            return False, RetryReason.NONE
+
         case TerminationReason.TIMED_OUT:
             # Wall-clock timeout: non-retriable (permanent infrastructure limit).
             logger.debug("compute_retry_result", termination="TIMED_OUT", needs_retry=False)
@@ -869,6 +884,7 @@ def _normalize_subtype(
             | CliSubtype.EMPTY_OUTPUT
             | CliSubtype.UNPARSEABLE
             | CliSubtype.TIMEOUT
+            | CliSubtype.IDLE_STALL
         ):
             # Failure subtypes: upward normalize to "success" when adjudicated SUCCEEDED
             if outcome == SessionOutcome.SUCCEEDED:

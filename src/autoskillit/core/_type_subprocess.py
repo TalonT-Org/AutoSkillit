@@ -123,4 +123,6 @@ class SubprocessRunner(Protocol):
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
         linux_tracing_config: Any | None = None,
+        idle_output_timeout: float | None = None,
+        max_suppression_seconds: float | None = None,
     ) -> Awaitable[SubprocessResult]: ...

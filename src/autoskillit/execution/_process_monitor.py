@@ -124,6 +124,7 @@ async def _session_log_monitor(
     _phase1_timeout: float = 30.0,
     _on_poll: Callable[[], None] | None = None,
     expected_session_id: str | None = None,
+    max_suppression_seconds: float = 1800.0,
 ) -> SessionMonitorResult:
     """Watch Claude Code session log for completion or staleness.
 
@@ -210,6 +211,7 @@ async def _session_log_monitor(
     last_change = _time.monotonic()
     scan_pos = 0
     os_error_count = 0
+    suppression_start: float | None = None
 
     while True:
         await anyio.sleep(_phase2_poll)
@@ -227,6 +229,7 @@ async def _session_log_monitor(
         if current_size > last_size:
             last_size = current_size
             last_change = _time.monotonic()
+            suppression_start = None
 
             # Check new content for completion marker (structured)
             try:
@@ -248,6 +251,17 @@ async def _session_log_monitor(
             elapsed = _time.monotonic() - last_change
             if elapsed >= stale_threshold:
                 if pid is not None and _has_active_api_connection(pid):
+                    if suppression_start is None:
+                        suppression_start = _time.monotonic()
+                    if _time.monotonic() - suppression_start >= max_suppression_seconds:
+                        logger.warning(
+                            "Suppression bounded: stale kill after %.0fs consecutive "
+                            "suppression (max_suppression_seconds=%.0f, pid=%d)",
+                            _time.monotonic() - suppression_start,
+                            max_suppression_seconds,
+                            pid,
+                        )
+                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
                     last_change = _time.monotonic()
                     logger.warning(
                         "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
@@ -256,6 +270,17 @@ async def _session_log_monitor(
                         pid,
                     )
                 elif pid is not None and _has_active_child_processes(pid):
+                    if suppression_start is None:
+                        suppression_start = _time.monotonic()
+                    if _time.monotonic() - suppression_start >= max_suppression_seconds:
+                        logger.warning(
+                            "Suppression bounded: stale kill after %.0fs consecutive "
+                            "suppression (max_suppression_seconds=%.0f, pid=%d)",
+                            _time.monotonic() - suppression_start,
+                            max_suppression_seconds,
+                            pid,
+                        )
+                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
                     last_change = _time.monotonic()
                     logger.warning(
                         "JSONL silent for %.0fs but child processes are CPU-active — "

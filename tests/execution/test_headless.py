@@ -307,8 +307,17 @@ class TestBuildSkillResult:
             cwd="/tmp",
         )
         assert skill_result.session_id == "b077addc-926d-4869-b27a-7465a4c0fda4"
-        assert skill_result.success is False
-        assert skill_result.needs_retry is True
+
+    def test_build_skill_result_idle_stall_is_retriable(self):
+        """IDLE_STALL termination → success=False, needs_retry=True, subtype=idle_stall."""
+        from autoskillit.execution.headless import _build_skill_result
+
+        skill = _build_skill_result(
+            _sr(returncode=-15, stdout="", termination=TerminationReason.IDLE_STALL)
+        )
+        assert skill.success is False
+        assert skill.needs_retry is True
+        assert skill.subtype == "idle_stall"
 
     def test_build_skill_result_timeout_empty_stdout_uses_channel_b_session_id(self):
         """_build_skill_result must use Channel B session_id on TIMED_OUT with empty stdout."""

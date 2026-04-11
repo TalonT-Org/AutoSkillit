@@ -587,7 +587,9 @@ def test_drift_gate_prints_generic_hint_for_unknown_ref(
     run_source_drift_check(home=tmp_path)
 
     output = fake_stdout.getvalue()
-    assert output.strip(), "Expected some output for unknown-ref drift"
+    assert "reinstall from the source you originally used" in output, (
+        f"Expected generic reinstall hint in output, got: {output!r}"
+    )
     # No specific command should be mentioned for unknown refs
     assert "task install-dev" not in output
     assert "install.sh" not in output
@@ -817,7 +819,7 @@ def test_drift_gate_never_raises_on_error(
     )
     _sd.run_source_drift_check(home=tmp_path)  # must not raise
 
-    # Fault point 4: _write_dismiss_state (dismiss path, non-TTY so no prompt)
+    # Fault point 4: _write_dismiss_state (dismiss path via TTY, user answers "n")
     monkeypatch.setattr(_sc, "_read_dismiss_state", lambda home: {})
     monkeypatch.setattr(_sc, "_is_drift_dismissed", lambda state, installed, ref: False)
     monkeypatch.setattr(
@@ -826,9 +828,9 @@ def test_drift_gate_never_raises_on_error(
         lambda home, state: (_ for _ in ()).throw(type(exc)(str(exc))),
     )
     fake_stdout = io.StringIO()
-    fake_stdin = io.StringIO("")
-    monkeypatch.setattr(fake_stdin, "isatty", lambda: False)
-    monkeypatch.setattr(fake_stdout, "isatty", lambda: False)
+    fake_stdin = io.StringIO("n\n")
+    monkeypatch.setattr(fake_stdin, "isatty", lambda: True)
+    monkeypatch.setattr(fake_stdout, "isatty", lambda: True)
     monkeypatch.setattr(_sd.sys, "stdin", fake_stdin)
     monkeypatch.setattr(_sd.sys, "stdout", fake_stdout)
     _sd.run_source_drift_check(home=tmp_path)  # must not raise

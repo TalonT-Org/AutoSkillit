@@ -261,7 +261,8 @@ async def run_skill(
     if tool_ctx.session_skill_manager is not None:
         allow_only: frozenset[str] | None = None
         if target_name:
-            allow_only = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
+            closure = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
+            allow_only = closure if closure else None
 
         session_id = f"headless-{uuid4().hex[:12]}"
         session_root = tool_ctx.session_skill_manager.init_session(

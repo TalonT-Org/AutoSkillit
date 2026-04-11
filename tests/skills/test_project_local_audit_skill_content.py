@@ -82,9 +82,7 @@ def test_audit_arch_p12_has_composition_boundary_tiers() -> None:
     assert "Intra-package Default*" in content, (
         "audit-arch/SKILL.md P12 missing 'Intra-package Default*' tier marker"
     )
-    assert "L3 CLI" in content, (
-        "audit-arch/SKILL.md P12 missing 'L3 CLI' tier marker"
-    )
+    assert "L3 CLI" in content, "audit-arch/SKILL.md P12 missing 'L3 CLI' tier marker"
     assert "DI convenience default" in content, (
         "audit-arch/SKILL.md P12 missing 'DI convenience default' tier marker"
     )
@@ -111,9 +109,7 @@ def test_audit_arch_general_exceptions_present(ge_id: str) -> None:
 @pytest.mark.parametrize("ps_id", ["PS-1", "PS-2", "PS-4", "PS-7", "PS-8"])
 def test_audit_arch_project_specific_exceptions_present(ps_id: str) -> None:
     content = _read_skill("audit-arch")
-    assert ps_id in content, (
-        f"audit-arch/SKILL.md missing project-specific exception '{ps_id}'"
-    )
+    assert ps_id in content, f"audit-arch/SKILL.md missing project-specific exception '{ps_id}'"
 
 
 # ---------------------------------------------------------------------------
@@ -196,9 +192,7 @@ def test_audit_arch_principle_suggestion_constraints() -> None:
 def test_audit_cohesion_general_exceptions_present() -> None:
     content = _read_skill("audit-cohesion")
     for ge_id in ["GE-10", "GE-11", "GE-12", "GE-13", "GE-15"]:
-        assert ge_id in content, (
-            f"audit-cohesion/SKILL.md missing exception ID '{ge_id}'"
-        )
+        assert ge_id in content, f"audit-cohesion/SKILL.md missing exception ID '{ge_id}'"
     for ps_id in ["PS-3", "PS-5", "PS-6"]:
         assert ps_id in content, (
             f"audit-cohesion/SKILL.md missing project-specific exception '{ps_id}'"

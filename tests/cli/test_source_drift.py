@@ -6,15 +6,13 @@ import ast
 import io
 import json
 import subprocess
-import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -92,9 +90,7 @@ def test_classify_git_vcs_stable(monkeypatch: pytest.MonkeyPatch) -> None:
         requested_revision="stable",
         vcs_url="https://github.com/TalonT-Org/AutoSkillit.git",
     )
-    monkeypatch.setattr(
-        importlib.metadata.Distribution, "from_name", staticmethod(lambda _: dist)
-    )
+    monkeypatch.setattr(importlib.metadata.Distribution, "from_name", staticmethod(lambda _: dist))
 
     info = detect_install()
     assert info.install_type == InstallType.GIT_VCS
@@ -114,9 +110,7 @@ def test_classify_git_vcs_integration(monkeypatch: pytest.MonkeyPatch) -> None:
         commit_id="fed9876543210abc",
         requested_revision="integration",
     )
-    monkeypatch.setattr(
-        importlib.metadata.Distribution, "from_name", staticmethod(lambda _: dist)
-    )
+    monkeypatch.setattr(importlib.metadata.Distribution, "from_name", staticmethod(lambda _: dist))
 
     info = detect_install()
     assert info.install_type == InstallType.GIT_VCS
@@ -129,9 +123,7 @@ def test_classify_local_editable(monkeypatch: pytest.MonkeyPatch) -> None:
     from autoskillit.cli._source_drift import InstallType, detect_install
 
     dist = _fake_dist(editable=True, file_url="file:///home/x/repo")
-    monkeypatch.setattr(
-        importlib.metadata.Distribution, "from_name", staticmethod(lambda _: dist)
-    )
+    monkeypatch.setattr(importlib.metadata.Distribution, "from_name", staticmethod(lambda _: dist))
 
     info = detect_install()
     assert info.install_type == InstallType.LOCAL_EDITABLE
@@ -146,9 +138,7 @@ def test_classify_unknown_when_no_direct_url(monkeypatch: pytest.MonkeyPatch) ->
     from autoskillit.cli._source_drift import InstallType, detect_install
 
     dist = _fake_dist(no_direct_url=True)
-    monkeypatch.setattr(
-        importlib.metadata.Distribution, "from_name", staticmethod(lambda _: dist)
-    )
+    monkeypatch.setattr(importlib.metadata.Distribution, "from_name", staticmethod(lambda _: dist))
 
     info = detect_install()
     assert info.install_type == InstallType.UNKNOWN
@@ -172,9 +162,7 @@ def test_classify_deterministic_independent_of_cwd(
     monkeypatch.chdir(cwd)
 
     dist = _fake_dist(vcs="git", commit_id="aabbccdd", requested_revision="stable")
-    monkeypatch.setattr(
-        importlib.metadata.Distribution, "from_name", staticmethod(lambda _: dist)
-    )
+    monkeypatch.setattr(importlib.metadata.Distribution, "from_name", staticmethod(lambda _: dist))
 
     info = detect_install()
     assert info.install_type == InstallType.GIT_VCS
@@ -278,13 +266,9 @@ def test_resolve_ref_sha_uses_git_ls_remote_origin_refs_heads(
     assert any("ls-remote" in " ".join(cmd) for cmd in captured), (
         f"Expected git ls-remote call, got: {captured}"
     )
-    heads_call = next(
-        (cmd for cmd in captured if "refs/heads/integration" in " ".join(cmd)), None
-    )
+    heads_call = next((cmd for cmd in captured if "refs/heads/integration" in " ".join(cmd)), None)
     assert heads_call is not None, f"Expected refs/heads/integration call, got: {captured}"
-    assert "rev-parse" not in " ".join(heads_call), (
-        "Must use ls-remote, not rev-parse"
-    )
+    assert "rev-parse" not in " ".join(heads_call), "Must use ls-remote, not rev-parse"
 
 
 def test_resolve_ref_sha_parses_sha_from_ls_remote_first_column(
@@ -383,7 +367,7 @@ def test_resolve_ref_sha_short_circuits_exact_sha_equality(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When requested_revision exactly equals commit_id, return early without git or network."""
-    from autoskillit.cli._source_drift import InstallType, InstallInfo, resolve_reference_sha
+    from autoskillit.cli._source_drift import InstallInfo, InstallType, resolve_reference_sha
 
     commit = "abcdef1234567890abcdef1234567890"
     info = InstallInfo(
@@ -411,7 +395,7 @@ def test_resolve_ref_sha_does_not_short_circuit_on_hex_prefix_branch_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A branch named after a hex prefix of commit_id must NOT short-circuit."""
-    from autoskillit.cli._source_drift import InstallType, InstallInfo, resolve_reference_sha
+    from autoskillit.cli._source_drift import InstallInfo, InstallType, resolve_reference_sha
 
     # commit_id starts with "abc123", requested_revision IS "abc123" (a branch)
     # These are NOT equal (one is a branch name, other is a full SHA)
@@ -447,7 +431,7 @@ def test_resolve_ref_sha_missing_requested_revision_returns_none(
     tmp_path: Path,
 ) -> None:
     """When requested_revision is None, return None and skip all resolution."""
-    from autoskillit.cli._source_drift import InstallType, InstallInfo, resolve_reference_sha
+    from autoskillit.cli._source_drift import InstallInfo, InstallType, resolve_reference_sha
 
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
@@ -465,7 +449,6 @@ def test_resolve_ref_sha_fails_open_on_any_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """On subprocess error, resolve_reference_sha returns None and logs DEBUG."""
-    import logging
 
     from autoskillit.cli._source_drift import resolve_reference_sha
 
@@ -508,7 +491,6 @@ def _setup_drift_check(
     """Set up mocks for run_source_drift_check and return a captured stdout."""
     import autoskillit.cli._source_drift as _sd
     import autoskillit.cli._stale_check as _sc
-
     from autoskillit.cli._source_drift import InstallInfo, InstallType
 
     install_type = InstallType(install_type_str)
@@ -547,9 +529,7 @@ def test_drift_gate_prints_install_dev_hint_for_integration(
     """When drift is detected for integration branch, hint includes 'task install-dev'."""
     from autoskillit.cli._source_drift import run_source_drift_check
 
-    fake_stdout = _setup_drift_check(
-        monkeypatch, tmp_path, requested_revision="integration"
-    )
+    fake_stdout = _setup_drift_check(monkeypatch, tmp_path, requested_revision="integration")
 
     run_source_drift_check(home=tmp_path)
 
@@ -563,9 +543,7 @@ def test_drift_gate_prints_curl_install_hint_for_stable(
     """When drift is detected for stable branch, hint includes curl install.sh."""
     from autoskillit.cli._source_drift import run_source_drift_check
 
-    fake_stdout = _setup_drift_check(
-        monkeypatch, tmp_path, requested_revision="stable"
-    )
+    fake_stdout = _setup_drift_check(monkeypatch, tmp_path, requested_revision="stable")
 
     run_source_drift_check(home=tmp_path)
 
@@ -626,7 +604,6 @@ def test_drift_gate_offers_yn_prompt_on_tty(
     # fake_stdin is set to "n\n" by _setup_drift_check
     input_calls: list[str] = []
 
-    import autoskillit.cli._source_drift as _sd
 
     monkeypatch.setattr("builtins.input", lambda prompt="": (input_calls.append(prompt), "n")[1])
 

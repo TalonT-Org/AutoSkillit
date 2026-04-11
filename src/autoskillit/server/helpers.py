@@ -107,6 +107,10 @@ def track_response_size(
 ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
     """Decorator: measure the JSON string size of a tool response and record to response_log.
 
+    Last-resort safety net. Tool implementations SHOULD catch exceptions locally
+    and emit domain-specific envelopes with more helpful ``user_visible_message``
+    values; this decorator only catches what slips through.
+
     Apply BELOW @mcp.tool() so the wrapped function is what FastMCP registers:
 
         @mcp.tool(tags={"automation"})
@@ -127,6 +131,10 @@ def track_response_size(
                         "error": f"{type(exc).__name__}: {exc}",
                         "exit_code": -1,
                         "subtype": "tool_exception",
+                        "user_visible_message": (
+                            f"An internal error occurred in {tool_name}: "
+                            f"{type(exc).__name__}. Run 'autoskillit doctor' or reinstall."
+                        ),
                     }
                 )
                 logger.exception("Unhandled exception in tool %s", tool_name)

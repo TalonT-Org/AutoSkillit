@@ -74,7 +74,7 @@ def detect_install() -> InstallInfo:
         url = data.get("url", "")
         if isinstance(dir_info, dict) and dir_info.get("editable") is True:
             if isinstance(url, str) and url.startswith("file://"):
-                src_path = url[len("file://"):]
+                src_path = url[len("file://") :]
                 return InstallInfo(
                     install_type=InstallType.LOCAL_EDITABLE,
                     commit_id=None,
@@ -131,9 +131,10 @@ def find_source_repo() -> Path | None:
                     with open(pyproject, "rb") as fh:
                         data = tomllib.load(fh)
                     project_name = data.get("project", {}).get("name")
-                    if project_name == "autoskillit" and (
-                        current / "src" / "autoskillit"
-                    ).exists():
+                    if (
+                        project_name == "autoskillit"
+                        and (current / "src" / "autoskillit").exists()
+                    ):
                         return current
                 except Exception:
                     logger.debug("drift check: could not parse %s", pyproject, exc_info=True)

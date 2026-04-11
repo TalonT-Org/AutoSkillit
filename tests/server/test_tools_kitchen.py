@@ -245,16 +245,18 @@ async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypa
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
                 with patch("autoskillit.server.tools_kitchen._write_hook_config"):
-                    result = await open_kitchen(ctx=mock_ctx)
+                    result_str = await open_kitchen(ctx=mock_ctx)
 
+    parsed = json.loads(result_str)
+    content = parsed["content"]
     seen: set[str] = set()
     for category_name, tools in _DISPLAY_CATEGORIES:
-        assert category_name in result, (
+        assert category_name in content, (
             f"Category '{category_name}' missing from open_kitchen response"
         )
         for tool_name in tools:
             if tool_name not in seen:
-                assert tool_name in result, (
+                assert tool_name in content, (
                     f"Tool '{tool_name}' missing from open_kitchen response"
                 )
                 seen.add(tool_name)
@@ -298,6 +300,7 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
                     result_str = await open_kitchen(name="test-recipe", ctx=mock_ctx)
 
     result = json.loads(result_str)
+    assert result["success"] is True
     assert result["kitchen"] == "open"
     assert "version" in result
     assert "content" in result
@@ -336,8 +339,8 @@ async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_without_recipe_returns_plain_text(tmp_path, monkeypatch):
-    """open_kitchen() without name returns plain text (not JSON)."""
+async def test_open_kitchen_without_recipe_returns_json_envelope(tmp_path, monkeypatch):
+    """open_kitchen() without name returns JSON envelope with success=True."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
@@ -351,8 +354,11 @@ async def test_open_kitchen_without_recipe_returns_plain_text(tmp_path, monkeypa
                     result = await open_kitchen(ctx=mock_ctx)
 
     assert isinstance(result, str)
-    assert "Kitchen is open" in result
-    assert "content" not in result, "No-recipe open_kitchen should not contain recipe content key"
+    parsed = json.loads(result)
+    assert parsed["success"] is True
+    assert parsed["kitchen"] == "open"
+    assert "Kitchen is open" in parsed["content"]
+    assert parsed["ingredients_table"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -368,7 +374,10 @@ async def test_open_kitchen_denied_by_gate_when_headless(tmp_path, monkeypatch):
 
     result = json.loads(await open_kitchen())
     assert result["success"] is False
-    assert result["subtype"] == "headless_error"
+    assert result["kitchen"] == "failed"
+    assert "user_visible_message" in result
+    assert len(result["user_visible_message"]) > 0
+    assert result["stage"] == "headless_guard"
 
 
 @pytest.mark.anyio

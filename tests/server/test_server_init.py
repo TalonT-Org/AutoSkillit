@@ -508,8 +508,13 @@ class TestOpenKitchenVersionReporting:
 
     @staticmethod
     def _prompt_text(result) -> str:
-        """Extract text from open_kitchen result (now returns str directly)."""
-        return result
+        import json as _json
+
+        try:
+            parsed = _json.loads(result)
+            return parsed.get("content", result)
+        except (ValueError, TypeError):
+            return result
 
     @pytest.mark.anyio
     async def test_open_kitchen_instructs_status_call(self):
@@ -589,7 +594,13 @@ class TestOpenKitchenSousChef:
 
     @staticmethod
     def _prompt_text(result) -> str:
-        return result
+        import json as _json
+
+        try:
+            parsed = _json.loads(result)
+            return parsed.get("content", result)
+        except (ValueError, TypeError):
+            return result
 
     @pytest.mark.anyio
     async def test_sous_chef_rules_injected_at_open_kitchen(self):

@@ -1,8 +1,5 @@
 # FAQ
 
-Questions that come up repeatedly. Each answer cross-links to the canonical
-doc.
-
 ### What is AutoSkillit?
 
 A Claude Code plugin that runs YAML recipes through a two-tier orchestrator.

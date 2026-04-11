@@ -73,7 +73,7 @@ parallel waves rather than serially. The three-part rule:
 1. Group the input issues into **independent groups** by analyzing file
    overlap.
 2. Within each group, run every issue in parallel via background `run_skill`
-   calls supervised by `pipeline/background.DefaultBackgroundSupervisor`.
+   calls supervised by `pipeline/background.py:DefaultBackgroundSupervisor`.
 3. Wait for the entire wave to settle before starting the next wave.
 
 ## Multi-part sequencing

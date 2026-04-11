@@ -77,8 +77,10 @@ class DefaultRecipeRepository:
             ),
         )
 
-    def validate_from_path(self, script_path: Any) -> dict[str, Any]:
-        return _api.validate_from_path(script_path)
+    def validate_from_path(
+        self, script_path: Any, temp_dir_relpath: str = ".autoskillit/temp"
+    ) -> dict[str, Any]:
+        return _api.validate_from_path(script_path, temp_dir_relpath=temp_dir_relpath)
 
     def list_all(self, project_dir: Any | None = None) -> dict[str, Any]:
         return _api.list_all(project_dir=project_dir)

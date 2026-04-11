@@ -20,6 +20,7 @@ from autoskillit.core import (
     get_logger,
     load_yaml,
     pkg_root,
+    resolve_temp_dir,
 )
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.contracts import (
@@ -444,8 +445,14 @@ def _build_active_recipe(
     return working, combined
 
 
-def validate_from_path(path: Path) -> dict[str, Any]:
+def validate_from_path(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> dict[str, Any]:
     """Validate a recipe YAML file at the given path.
+
+    Args:
+        path: Path to the recipe YAML file.
+        temp_dir_relpath: Relative path to the temp directory used for
+            ``{{AUTOSKILLIT_TEMP}}`` substitution. Defaults to
+            ``.autoskillit/temp``.
 
     Returns:
         {"valid": bool, "errors": list, "quality": dict, "semantic": list, "contracts": list}
@@ -459,7 +466,7 @@ def validate_from_path(path: Path) -> dict[str, Any]:
 
     try:
         raw_text = path.read_text(encoding="utf-8")
-        substituted = substitute_temp_placeholder(raw_text, ".autoskillit/temp")
+        substituted = substitute_temp_placeholder(raw_text, temp_dir_relpath)
         data = load_yaml(substituted)
     except YAMLError as exc:
         return {
@@ -644,8 +651,6 @@ def load_and_validate(
 
             # Stage: staleness check
             if contract:
-                from autoskillit.core import resolve_temp_dir  # noqa: PLC0415
-
                 resolved_temp = temp_dir if temp_dir is not None else resolve_temp_dir(_pdir, None)
                 staleness_cache_path = resolved_temp / "recipe_staleness_cache.json"
                 stale = check_contract_staleness(

@@ -11,7 +11,7 @@ from pathlib import Path
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
 from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
 from autoskillit.core import Severity, get_logger
-from autoskillit.execution.quota import QUOTA_CACHE_SCHEMA_VERSION
+from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 from autoskillit.hook_registry import (
     _count_hook_registry_drift,
     canonical_script_basenames,
@@ -421,7 +421,8 @@ def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:
     return DoctorResult(
         Severity.WARNING,
         check_name,
-        f"Quota cache schema drift at {path}: observed={observed!r}, expected={QUOTA_CACHE_SCHEMA_VERSION}.",
+        f"Quota cache schema drift at {path}: observed={observed!r}, "
+        f"expected={QUOTA_CACHE_SCHEMA_VERSION}.",
     )
 
 

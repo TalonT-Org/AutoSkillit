@@ -60,6 +60,7 @@ from autoskillit.execution.process import (
     run_managed_sync,
 )
 from autoskillit.execution.quota import (
+    QUOTA_CACHE_SCHEMA_VERSION,
     QuotaStatus,
     _refresh_quota_cache,  # noqa: F401 — imported for re-export via server.helpers; not in __all__
     check_and_sleep_if_needed,
@@ -118,6 +119,7 @@ __all__ = [
     "REPLAY_SCENARIO_DIR_ENV",
     "SCENARIO_STEP_NAME_ENV",
     # quota
+    "QUOTA_CACHE_SCHEMA_VERSION",
     "QuotaStatus",
     "check_and_sleep_if_needed",
     # session

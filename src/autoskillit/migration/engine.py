@@ -17,6 +17,7 @@ from autoskillit.core import (
     dump_yaml_str,
     get_logger,
     load_yaml,
+    resolve_temp_dir,
 )
 from autoskillit.migration.loader import applicable_migrations
 
@@ -399,8 +400,6 @@ class DefaultMigrationService:
         if self._temp_dir_override is not None:
             temp_dir = self._temp_dir_override
         else:
-            from autoskillit.core import resolve_temp_dir  # noqa: PLC0415
-
             temp_dir = resolve_temp_dir(project_dir, None)
 
         if self._run_headless is not None:

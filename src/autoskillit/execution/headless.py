@@ -37,6 +37,7 @@ from autoskillit.core import (
     is_git_worktree,
     load_yaml,
     pkg_root,
+    temp_dir_display_str,
 )
 from autoskillit.execution.clone_guard import (
     check_and_revert_clone_contamination,
@@ -834,8 +835,6 @@ async def run_headless_core(
     ):
         effective_plugin_dir = ctx.plugin_dir
         resolved_model = _resolve_model(model, ctx.config)
-        from autoskillit.core import temp_dir_display_str  # noqa: PLC0415
-
         cmd = build_full_headless_cmd(
             skill_command,
             cwd=cwd,

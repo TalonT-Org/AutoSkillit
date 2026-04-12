@@ -12,7 +12,6 @@ from pathlib import Path
 
 import autoskillit.cli._hooks as _hooks_mod
 from autoskillit.cli._hooks import (
-    _evict_stale_autoskillit_hooks,
     sweep_all_scopes_for_orphans,
     sync_hooks_to_settings,
 )
@@ -173,7 +172,6 @@ def install(*, scope: str = "user"):
     # writing canonical entries to the target scope.
     sweep_all_scopes_for_orphans(Path.cwd())
     settings_path = _hooks_mod._claude_settings_path(scope)
-    _evict_stale_autoskillit_hooks(settings_path)
     sync_hooks_to_settings(settings_path)
 
 

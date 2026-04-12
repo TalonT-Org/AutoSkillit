@@ -654,7 +654,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         etc.) that cannot be merged without re-introducing the coupling they isolate.
         recording.py adds the RecordingSubprocessRunner decorator as a separate module
         to keep scenario recording concerns isolated from the core process lifecycle.
-        Exempt at 25 files.
+        _headless_scan.py extracts write-path JSONL scanning from headless.py to keep
+        that module within its REQ-CNST-010-E2 line budget.
+        Exempt at 26 files.
       core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
         (_type_enums, _type_protocols, _type_results, _type_subprocess, etc.) to
         prevent circular imports while keeping L0 types co-located. Also houses
@@ -682,7 +684,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     EXEMPTIONS: dict[str, int] = {
         "server": 18,
         "recipe": 30,
-        "execution": 25,
+        "execution": 26,
         "core": 16,
         "cli": 16,
         "hooks": 19,
@@ -741,7 +743,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
     "headless.py": (
         1250,
         "REQ-CNST-010-E2: headless session orchestration — Channel B drain-race "
-        "recovery + IDLE_STALL routing + contract nudge resume tier; splitting would fragment the "
+        "recovery + IDLE_STALL routing + contract nudge resume tier "
+        "+ DIR_MISSING late-bind recovery arm; splitting would fragment the "
         "adjudication pipeline across modules",
     ),
     "session.py": (

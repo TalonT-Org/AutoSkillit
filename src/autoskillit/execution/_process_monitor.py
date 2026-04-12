@@ -195,6 +195,12 @@ async def _session_log_monitor(
                     else "recency",
                 )
             os_error_count = 0
+        except FileNotFoundError:
+            # Directory missing is structural — it won't self-heal during a
+            # poll loop.  Return immediately so downstream gates can
+            # distinguish "could not monitor" from "monitored but timed out".
+            logger.warning("session_log_dir_absent", path=str(session_log_dir))
+            return SessionMonitorResult(ChannelBStatus.DIR_MISSING, "")
         except OSError:
             os_error_count += 1
             if os_error_count == 10:

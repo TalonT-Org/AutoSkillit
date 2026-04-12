@@ -34,6 +34,11 @@ class TestChannelBStatusExhaustiveCoverage:
                 TerminationReason.STALE,
                 ChannelConfirmation.UNMONITORED,
             ),
+            (
+                ChannelBStatus.DIR_MISSING,
+                TerminationReason.STALE,
+                ChannelConfirmation.DIR_MISSING,
+            ),
         ],
     )
     def test_each_channel_b_status_produces_defined_pair(
@@ -56,10 +61,25 @@ class TestChannelBStatusExhaustiveCoverage:
 
     def test_sentinel_member_count(self) -> None:
         """Breaks when a new ChannelBStatus member is added, forcing test update."""
-        assert len(ChannelBStatus) == 2, (
-            f"ChannelBStatus has {len(ChannelBStatus)} members (expected 2). "
+        assert len(ChannelBStatus) == 3, (
+            f"ChannelBStatus has {len(ChannelBStatus)} members (expected 3). "
             "Update the parametrized test above to cover the new member."
         )
+
+    def test_resolve_termination_dir_missing_is_not_unmonitored(self) -> None:
+        """DIR_MISSING must NOT collapse to UNMONITORED — it gets its own
+        ChannelConfirmation value so downstream gates can distinguish."""
+        signals = RaceSignals(
+            process_exited=True,
+            process_returncode=0,
+            channel_a_confirmed=False,
+            channel_b_status=ChannelBStatus.DIR_MISSING,
+            channel_b_session_id="",
+            stdout_session_id=None,
+        )
+        termination, channel = resolve_termination(signals)
+        assert channel != ChannelConfirmation.UNMONITORED
+        assert channel == ChannelConfirmation.DIR_MISSING
 
 
 class TestResolveTerminationPriority:

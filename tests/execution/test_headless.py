@@ -126,9 +126,9 @@ class TestSessionLogDir:
         with structlog.testing.capture_logs() as logs:
             _session_log_dir(cwd)
         assert any(
-            e.get("event") == "session_log_dir_missing"
+            e.get("event") == "session_log_dir_precreating"
             for e in logs
-            if e.get("log_level") == "warning"
+            if e.get("log_level") == "info"
         )
 
     def test_no_warning_when_dir_present(self, tmp_path, monkeypatch):
@@ -176,7 +176,8 @@ class TestSessionLogDir:
         assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
         computed = next(e for e in info_entries if e.get("event") == "session_log_dir_computed")
         assert computed.get("path") == str(result)
-        assert any(e.get("event") == "session_log_dir_missing" for e in logs)
+        assert any(e.get("event") == "session_log_dir_precreating" for e in info_entries)
+        assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
 
     def test_headless_session_log_dir_uses_shared_util(self):
         from autoskillit.core.paths import claude_code_project_dir
@@ -184,6 +185,19 @@ class TestSessionLogDir:
 
         cwd = "/home/user/project"
         assert _session_log_dir(cwd) == claude_code_project_dir(cwd)
+
+    def test_session_log_dir_creates_missing_directory(self, tmp_path, monkeypatch):
+        """_session_log_dir must create the directory if absent, so Channel B
+        always has a directory to poll."""
+        from autoskillit.execution.headless import _session_log_dir
+
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
+        cwd = "/some/fresh/clone/path"
+        result = _session_log_dir(cwd)
+        assert result.exists()
+        assert result.is_dir()
 
 
 class TestResolveSessionId:
@@ -2951,6 +2965,74 @@ class TestBuildSkillResultChannelAPatternRecovery:
         assert sr.success is True
         assert sr.subtype != "adjudicated_failure"
         assert sr.needs_retry is False
+
+
+class TestBuildSkillResultDirMissingRecovery:
+    """DIR_MISSING channel confirmation does not silently pass — it attempts
+    late-bind recovery when conditions allow."""
+
+    def test_dir_missing_with_recoverable_subtype_attempts_recovery(self):
+        """When channel_confirmation is DIR_MISSING and subtype is recoverable,
+        the recovery gate must attempt marker-based recovery.
+
+        Setup: termination=COMPLETED (bypasses stale branch), subtype=empty_output
+        (in _CHANNEL_B_RECOVERABLE_SUBTYPES), marker on a standalone line in the
+        assistant message (required by _marker_is_standalone).
+        """
+        import structlog.testing
+
+        marker = "===DONE==="
+        # Marker must appear as a standalone line for _marker_is_standalone to match
+        assistant_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": f"Task complete.\n\n{marker}"}],
+                },
+            }
+        )
+        # subtype=empty_output places the session in _CHANNEL_B_RECOVERABLE_SUBTYPES,
+        # triggering the DIR_MISSING recovery guard in _build_skill_result
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "empty_output",
+                "is_error": True,
+                "result": "",
+                "session_id": "s1",
+                "errors": [],
+            }
+        )
+        stdout = assistant_line + "\n" + result_line
+        # termination=COMPLETED skips the stale-branch early return so execution
+        # reaches the Channel B / DIR_MISSING recovery gate
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.COMPLETED,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.DIR_MISSING,
+        )
+        with structlog.testing.capture_logs() as logs:
+            skill = _build_skill_result(sub_result, completion_marker=marker)
+        # Recovery should succeed — marker found as standalone line in assistant_messages
+        assert skill.success is True
+        # Verify the recovery code path was taken, not just the outcome
+        assert any(e.get("event") == "dir_missing_late_bind_recovery" for e in logs)
+
+    def test_dir_missing_without_marker_does_not_recover(self):
+        """DIR_MISSING with no completion marker must not silently succeed."""
+        sub_result = SubprocessResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.DIR_MISSING,
+        )
+        skill = _build_skill_result(sub_result)
+        assert skill.success is False
 
 
 class TestTimedOutSessionPreservesState:

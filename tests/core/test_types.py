@@ -84,10 +84,12 @@ def test_channel_confirmation_values():
         ChannelConfirmation.CHANNEL_A,
         ChannelConfirmation.CHANNEL_B,
         ChannelConfirmation.UNMONITORED,
+        ChannelConfirmation.DIR_MISSING,
     }
     assert ChannelConfirmation.CHANNEL_A.value == "channel_a"
     assert ChannelConfirmation.CHANNEL_B.value == "channel_b"
     assert ChannelConfirmation.UNMONITORED.value == "unmonitored"
+    assert ChannelConfirmation.DIR_MISSING.value == "dir_missing"
 
 
 def test_skill_command_prefix_constant_exists():

@@ -327,3 +327,35 @@ def _check_pipeline_internal_not_hidden(
                 )
             )
     return findings
+
+
+@semantic_rule(
+    name="required-ingredient-no-default",
+    severity=Severity.WARNING,
+    description=(
+        "Ingredient with required=True and no default may cause the orchestrator "
+        "to call AskUserQuestion before open_kitchen."
+    ),
+)
+def _check_required_without_default(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for name, ing in (ctx.recipe.ingredients or {}).items():
+        if getattr(ing, "hidden", False):
+            continue
+        if getattr(ing, "required", False) and getattr(ing, "default", None) is None:
+            findings.append(
+                RuleFinding(
+                    rule="required-ingredient-no-default",
+                    severity=Severity.WARNING,
+                    step_name=name,
+                    message=(
+                        f"Ingredient '{name}' is required but has no default value. "
+                        "This may cause the orchestrator to call AskUserQuestion "
+                        "before open_kitchen. Consider adding a default value or "
+                        "marking as hidden."
+                    ),
+                )
+            )
+    return findings

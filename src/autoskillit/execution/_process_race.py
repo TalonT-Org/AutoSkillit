@@ -274,6 +274,8 @@ def resolve_termination(
                 channel = ChannelConfirmation.CHANNEL_B
             case ChannelBStatus.STALE | None:
                 channel = ChannelConfirmation.UNMONITORED
+            case ChannelBStatus.DIR_MISSING:
+                channel = ChannelConfirmation.DIR_MISSING
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -284,7 +286,14 @@ def resolve_termination(
         termination = TerminationReason.IDLE_STALL
     else:
         match signals.channel_b_status:
-            case ChannelBStatus.STALE:
+            case ChannelBStatus.STALE | ChannelBStatus.DIR_MISSING:
+                # DIR_MISSING maps to STALE: both represent inconclusive monitoring
+                # that triggered an external kill, not a clean process exit.
+                # TerminationReason does not need a DIR_MISSING variant because
+                # downstream consumers only care whether the process exited cleanly
+                # (NATURAL_EXIT) or was forcibly terminated (STALE/COMPLETED).
+                # The DIR_MISSING structural distinction is preserved at the
+                # ChannelConfirmation level for recovery-gate decisions.
                 termination = TerminationReason.STALE
             case ChannelBStatus.COMPLETION:
                 termination = TerminationReason.COMPLETED

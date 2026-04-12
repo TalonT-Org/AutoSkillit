@@ -72,3 +72,17 @@ class TestStep0ToolPredicateCoverage:
             assert f"FAILURE PREDICATE — {tool}" in prompt or f"- {tool}:" in prompt, (
                 f"Tool '{tool}' in STEP 0 has no failure predicate or shared rule"
             )
+
+
+class TestFirstActionAskUserQuestionProhibition:
+    """FIRST ACTION section must explicitly prohibit AskUserQuestion before open_kitchen."""
+
+    def test_first_action_prohibits_ask_user_question_before_open_kitchen(self):
+        """The FIRST ACTION section must contain an explicit prohibition on
+        AskUserQuestion before open_kitchen."""
+        prompt = _get_prompt()
+        first_action_start = prompt.index("FIRST ACTION")
+        # Find the end of the FIRST ACTION section (next major section)
+        first_action_end = prompt.index("During pipeline execution", first_action_start)
+        first_action_section = prompt[first_action_start:first_action_end]
+        assert "DO NOT call AskUserQuestion" in first_action_section

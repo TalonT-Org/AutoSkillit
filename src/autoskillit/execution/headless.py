@@ -11,7 +11,6 @@ Public API:
 from __future__ import annotations
 
 import dataclasses
-import json
 import os
 import re
 import time
@@ -39,6 +38,7 @@ from autoskillit.core import (
     pkg_root,
     temp_dir_display_str,
 )
+from autoskillit.execution._headless_scan import _scan_jsonl_write_paths
 from autoskillit.execution.clone_guard import (
     check_and_revert_clone_contamination,
     is_worktree_skill,
@@ -85,11 +85,23 @@ _PATH_CAPTURE: re.Pattern[str] = re.compile(r"^(\w+)\\s\*=\\s\*/.+")
 
 
 def _session_log_dir(cwd: str) -> Path:
-    """Derive Claude Code session log directory from project cwd."""
+    """Derive Claude Code session log directory from project cwd.
+
+    Pre-creates the directory if absent so Channel B always has a directory
+    to poll.  Without this, a fresh clone path whose encoded project dir
+    doesn't exist yet causes ``_session_log_monitor`` to burn its entire
+    phase-1 timeout absorbing ``OSError``, ultimately producing a false
+    ``EMPTY_OUTPUT`` retry.
+    """
     log_dir = claude_code_project_dir(cwd)
     logger.info("session_log_dir_computed", path=str(log_dir), cwd=cwd)
     if not log_dir.exists():
-        logger.warning("session_log_dir_missing", path=str(log_dir), cwd=cwd)
+        logger.info("session_log_dir_precreating", path=str(log_dir), cwd=cwd)
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.warning("session_log_dir_mkdir_failed", path=str(log_dir), cwd=cwd)
+            raise
     return log_dir
 
 
@@ -479,82 +491,6 @@ def _validate_output_paths(
     return "; ".join(violations) if violations else None
 
 
-_WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})
-_BASH_TOOL_NAME: str = "Bash"
-_ABS_PATH_PATTERN: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+:-]+))')
-# Exclude paths of 4 chars or fewer (/tmp, /etc, /bin, /var) as low-signal noise.
-_MIN_BASH_PATH_LEN: int = 5
-
-
-def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
-    """Scan raw JSONL stdout for Write/Edit/Bash tool calls outside cwd.
-
-    Parses assistant records from the JSONL stream and extracts file_path
-    arguments from Write and Edit tool_use blocks, plus absolute paths from
-    Bash commands. Returns warning strings for any path outside cwd.
-
-    Non-blocking: caller decides whether to surface or suppress warnings.
-    Returns [] when stdout is empty or cwd is empty/relative.
-    """
-    if not stdout.strip() or not cwd or not os.path.isabs(cwd):
-        return []
-
-    cwd_prefix = cwd.rstrip("/") + "/"
-    warnings: list[str] = []
-
-    for raw_line in stdout.strip().splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict) or obj.get("type") != "assistant":
-            continue
-        msg = obj.get("message")
-        if not isinstance(msg, dict):
-            continue
-        content = msg.get("content", [])
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if not isinstance(block, dict) or block.get("type") != "tool_use":
-                continue
-            tool_name = block.get("name", "")
-            inputs = block.get("input") or {}
-            if not isinstance(inputs, dict):
-                continue
-
-            if tool_name in _WRITE_TOOL_NAMES:
-                file_path = inputs.get("file_path", "")
-                if (
-                    isinstance(file_path, str)
-                    and os.path.isabs(file_path)
-                    and not file_path.startswith(cwd_prefix)
-                    and file_path != cwd.rstrip("/")
-                ):
-                    warnings.append(
-                        f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'"
-                    )
-
-            elif tool_name == _BASH_TOOL_NAME:
-                command = inputs.get("command", "")
-                if isinstance(command, str):
-                    for match in _ABS_PATH_PATTERN.finditer(command):
-                        path = match.group(1)
-                        if (
-                            len(path) >= _MIN_BASH_PATH_LEN
-                            and not path.startswith(cwd_prefix)
-                            and path != cwd.rstrip("/")
-                        ):
-                            warnings.append(
-                                f"Bash command contained path '{path}' outside session cwd '{cwd}'"
-                            )
-
-    return warnings
-
-
 def _apply_budget_guard(
     sr: SkillResult,
     skill_command: str,
@@ -771,10 +707,37 @@ def _build_skill_result(
                     original_subtype=str(original_subtype),
                     assistant_message_count=len(session.assistant_messages),
                 )
+        case ChannelConfirmation.DIR_MISSING if (
+            session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES and completion_marker
+        ):
+            # Late-bind recovery: the directory may have been created by
+            # Claude Code during the run even though it was absent at
+            # monitor start.  Attempt the same marker-based recovery as
+            # the CHANNEL_B arm.
+            cb_recovered = _recover_from_separate_marker(session, completion_marker)
+            if cb_recovered is not None:
+                original_subtype = session.subtype
+                session = dataclasses.replace(
+                    cb_recovered,
+                    subtype=CliSubtype.SUCCESS,
+                    is_error=False,
+                )
+                logger.warning(
+                    "dir_missing_late_bind_recovery",
+                    original_subtype=str(original_subtype),
+                    assistant_message_count=len(session.assistant_messages),
+                )
+            else:
+                logger.warning(
+                    "dir_missing_late_bind_recovery_failed",
+                    subtype=str(session.subtype),
+                    assistant_message_count=len(session.assistant_messages),
+                )
         case (
             ChannelConfirmation.CHANNEL_B
             | ChannelConfirmation.CHANNEL_A
             | ChannelConfirmation.UNMONITORED
+            | ChannelConfirmation.DIR_MISSING
         ):
             pass  # no drain-race recovery applicable
         case _ as _unreachable_cc:

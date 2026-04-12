@@ -195,11 +195,15 @@ class ChannelConfirmation(StrEnum):
       stdout may be empty. Downstream must not require stdout content.
     - UNMONITORED: no channel monitoring active (NATURAL_EXIT, STALE, TIMED_OUT,
       sync path, or heartbeat disabled with no Channel B win).
+    - DIR_MISSING: session log directory did not exist when monitoring started.
+      Monitoring was structurally impossible. Distinct from UNMONITORED (which
+      means monitoring ran but produced no confirmation).
     """
 
     CHANNEL_A = "channel_a"
     CHANNEL_B = "channel_b"
     UNMONITORED = "unmonitored"
+    DIR_MISSING = "dir_missing"
 
 
 class SessionOutcome(StrEnum):
@@ -258,7 +262,14 @@ class ChannelBStatus(StrEnum):
 
     Replaces the raw string ``"completion"`` / ``"stale"`` convention with
     compile-time exhaustiveness enforcement via assert_never.
+
+    - COMPLETION: session JSONL marker was found; monitoring succeeded.
+    - STALE: monitoring ran but timed out with no marker found.
+    - DIR_MISSING: session log directory did not exist when monitoring started.
+      Monitoring was structurally impossible. Distinct from STALE (which
+      means monitoring ran but produced no marker).
     """
 
     COMPLETION = "completion"
     STALE = "stale"
+    DIR_MISSING = "dir_missing"

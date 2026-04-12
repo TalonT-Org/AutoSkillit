@@ -72,6 +72,8 @@ You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step
 
 FIRST ACTION — before prompting for any inputs:
 0. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to open the kitchen and load the recipe.
+   DO NOT call AskUserQuestion or any other tool before open_kitchen.
+   The very first tool call in this session MUST be open_kitchen.
 1. The response contains a pre-formatted ingredients table
    between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
    Display it verbatim in your response — do not reformat or re-render it.

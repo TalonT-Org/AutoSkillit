@@ -624,7 +624,11 @@ def _compute_success(
                     return False
                 logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
                 return True
-        case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
+        case (
+            ChannelConfirmation.CHANNEL_A
+            | ChannelConfirmation.UNMONITORED
+            | ChannelConfirmation.DIR_MISSING
+        ):
             pass  # fall through to termination dispatch
         case _ as _unreachable_cc:
             assert_never(_unreachable_cc)
@@ -807,7 +811,11 @@ def _compute_retry(
                         needs_retry=False,
                     )
                     return False, RetryReason.NONE
-                case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
+                case (
+                    ChannelConfirmation.CHANNEL_A
+                    | ChannelConfirmation.UNMONITORED
+                    | ChannelConfirmation.DIR_MISSING
+                ):
                     is_anomaly = _is_kill_anomaly(session)
                     logger.debug(
                         "compute_retry_result",
@@ -987,7 +995,7 @@ def _compute_outcome(
                         content_state=content_state.value,
                         channel=channel_confirmation.value,
                     )
-            case ChannelConfirmation.UNMONITORED:
+            case ChannelConfirmation.UNMONITORED | ChannelConfirmation.DIR_MISSING:
                 pass  # legitimate terminal failure — no channel confirmed completion
             case _ as unreachable_cc:
                 assert_never(unreachable_cc)

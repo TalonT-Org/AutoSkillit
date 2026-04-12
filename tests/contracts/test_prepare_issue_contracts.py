@@ -267,3 +267,84 @@ def test_prepare_issue_strips_artifact_paths_from_validated_report_body():
     assert "Original report" in body_section, (
         "Skill must document removing the 'Original report:' line (artifact path) from the body"
     )
+
+
+# ---------------------------------------------------------------------------
+# DETERMINISTIC STRIP: New tests for validated-report strip completeness
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_issue_does_not_keep_findings_with_exceptions():
+    """## Findings with Exceptions must be stripped, not kept."""
+    text = SKILL_MD.read_text()
+    # Confirm the section name is referenced (validates the test is meaningful)
+    assert "Findings with Exceptions" in text, (
+        "Sanity: 'Findings with Exceptions' not found at all in SKILL.md"
+    )
+    # No line in the file may simultaneously contain 'Keep' and 'Findings with Exceptions'
+    for line in text.splitlines():
+        assert not ("Keep" in line and "Findings with Exceptions" in line), (
+            f"prepare-issue must NOT Keep '## Findings with Exceptions'. Offending line: {line!r}"
+        )
+
+
+def test_prepare_issue_strips_contested_table_rows():
+    """prepare-issue must explicitly strip '| CONTESTED |' table rows."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1, "Sanity: 'is_validated_report' not found"
+    body_section = text[validated_pos:]
+    assert "| CONTESTED |" in body_section, (
+        "prepare-issue validated-report section must reference '| CONTESTED |' "
+        "as a strip target (e.g. grep -v or Remove rule)"
+    )
+
+
+def test_prepare_issue_strips_exception_warranted_table_rows():
+    """prepare-issue must explicitly strip '| VALID BUT EXCEPTION WARRANTED |' rows."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1, "Sanity: 'is_validated_report' not found"
+    body_section = text[validated_pos:]
+    assert (
+        "VALID BUT EXCEPTION WARRANTED" in body_section or "EXCEPTION WARRANTED" in body_section
+    ), (
+        "prepare-issue validated-report section must reference 'VALID BUT EXCEPTION WARRANTED' "
+        "as a strip target"
+    )
+
+
+def test_prepare_issue_validated_report_uses_body_file():
+    """prepare-issue must use --body-file (not inline --body) for validated report issue creation."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1, "Sanity: 'is_validated_report' not found"
+    body_section = text[validated_pos:]
+    # --body-file must appear in the validated-report section
+    assert "--body-file" in body_section, (
+        "prepare-issue must use 'gh issue create --body-file' for validated-report input, "
+        "not inline '--body'"
+    )
+    # The temp file must live under AUTOSKILLIT_TEMP
+    assert "AUTOSKILLIT_TEMP" in body_section and "issue_body_" in body_section, (
+        "prepare-issue must write the issue body to "
+        "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_*.md before calling gh issue create"
+    )
+
+
+def test_prepare_issue_never_constraint_prohibits_inline_body():
+    """CRITICAL CONSTRAINTS must explicitly prohibit inline --body for validated-report path."""
+    text = SKILL_MD.read_text()
+    # Find the NEVER block within Critical Constraints
+    never_pos = text.find("**NEVER:**")
+    assert never_pos != -1, "Sanity: '**NEVER:**' block not found"
+    # Find end of NEVER block (next **ALWAYS:** or end of constraints section)
+    always_pos = text.find("**ALWAYS:**", never_pos)
+    never_block = (
+        text[never_pos:always_pos] if always_pos != -1 else text[never_pos : never_pos + 800]
+    )
+    lower = never_block.lower()
+    assert "--body" in never_block and "inline" in lower, (
+        "prepare-issue NEVER block must prohibit inline '--body' for validated-report issue creation. "
+        "Add: 'Use --body inline for the validated-report path — always use --body-file'"
+    )

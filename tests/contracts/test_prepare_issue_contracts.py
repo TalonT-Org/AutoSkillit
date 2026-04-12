@@ -315,7 +315,7 @@ def test_prepare_issue_strips_exception_warranted_table_rows():
 
 
 def test_prepare_issue_validated_report_uses_body_file():
-    """prepare-issue must use --body-file (not inline --body) for validated report issue creation."""
+    """prepare-issue must use --body-file (not inline --body) for validated report creation."""
     text = SKILL_MD.read_text()
     validated_pos = text.find("is_validated_report")
     assert validated_pos != -1, "Sanity: 'is_validated_report' not found"
@@ -345,6 +345,6 @@ def test_prepare_issue_never_constraint_prohibits_inline_body():
     )
     lower = never_block.lower()
     assert "--body" in never_block and "inline" in lower, (
-        "prepare-issue NEVER block must prohibit inline '--body' for validated-report issue creation. "
-        "Add: 'Use --body inline for the validated-report path — always use --body-file'"
+        "prepare-issue NEVER block must prohibit inline '--body' for validated-report "
+        "issue creation. Add: 'Use --body inline for the path — always use --body-file'"
     )

@@ -75,10 +75,7 @@ def test_guard_permits_when_marker_present(tmp_path: Path, monkeypatch) -> None:
         env_extra={"AUTOSKILLIT_STATE_DIR": str(tmp_path)},
     )
     assert result.exit_code == 0
-    if result.stdout.strip():
-        payload = json.loads(result.stdout)
-        hook_out = payload.get("hookSpecificOutput", {})
-        assert hook_out.get("permissionDecision") != "deny"
+    assert result.stdout.strip() == ""  # permit path exits silently
 
 
 def test_guard_permits_unrelated_tool(tmp_path: Path) -> None:
@@ -87,7 +84,4 @@ def test_guard_permits_unrelated_tool(tmp_path: Path) -> None:
         env_extra={"AUTOSKILLIT_STATE_DIR": str(tmp_path)},
     )
     assert result.exit_code == 0
-    if result.stdout.strip():
-        payload = json.loads(result.stdout)
-        hook_out = payload.get("hookSpecificOutput", {})
-        assert hook_out.get("permissionDecision") != "deny"
+    assert result.stdout.strip() == ""  # non-AskUserQuestion exits silently

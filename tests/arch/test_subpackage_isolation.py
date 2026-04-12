@@ -743,8 +743,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
     "headless.py": (
         1250,
         "REQ-CNST-010-E2: headless session orchestration — Channel B drain-race "
-        "recovery + IDLE_STALL routing + contract nudge resume tier + DIR_MISSING late-bind recovery arm; "
-        "splitting would fragment the adjudication pipeline across modules",
+        "recovery + IDLE_STALL routing + contract nudge resume tier "
+        "+ DIR_MISSING late-bind recovery arm; splitting would fragment the "
+        "adjudication pipeline across modules",
     ),
     "session.py": (
         1050,

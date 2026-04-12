@@ -12,6 +12,7 @@ from autoskillit.execution.commands import (
     ClaudeInteractiveCmd,
     build_full_headless_cmd,
     build_headless_cmd,
+    build_headless_resume_cmd,
     build_interactive_cmd,
 )
 
@@ -162,6 +163,40 @@ class TestBuildHeadlessCmd:
         assert ClaudeFlags.MODEL in result.cmd
         idx = result.cmd.index(ClaudeFlags.MODEL)
         assert result.cmd[idx + 1] == "claude-sonnet-4-6"
+
+
+class TestBuildHeadlessResumeCmd:
+    def test_basic_cmd_structure(self) -> None:
+        result = build_headless_resume_cmd(resume_session_id="abc-123", prompt="Emit token")
+        assert result.cmd[0] == "claude"
+        assert ClaudeFlags.PRINT in result.cmd
+        assert ClaudeFlags.RESUME in result.cmd
+        assert result.cmd[result.cmd.index(ClaudeFlags.RESUME) + 1] == "abc-123"
+        assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in result.cmd
+        assert ClaudeFlags.OUTPUT_FORMAT in result.cmd
+        assert result.cmd[result.cmd.index(ClaudeFlags.OUTPUT_FORMAT) + 1] == "json"
+        prompt_idx = result.cmd.index(ClaudeFlags.PRINT) + 1
+        assert result.cmd[prompt_idx] == "Emit token"
+
+    def test_env_is_populated_with_ide_suppression(self) -> None:
+        from collections.abc import Mapping
+
+        result = build_headless_resume_cmd(resume_session_id="abc-123", prompt="Emit token")
+        assert isinstance(result.env, Mapping)
+        assert len(result.env) > 0
+        assert result.env.get("CLAUDE_CODE_AUTO_CONNECT_IDE") == "0"
+
+    def test_no_plugin_dir_by_default(self) -> None:
+        result = build_headless_resume_cmd(resume_session_id="abc-123", prompt="Emit token")
+        assert ClaudeFlags.PLUGIN_DIR not in result.cmd
+
+    def test_with_plugin_dir(self) -> None:
+        result = build_headless_resume_cmd(
+            resume_session_id="abc-123", prompt="Emit token", plugin_dir=Path("/tmp/plugin")
+        )
+        assert ClaudeFlags.PLUGIN_DIR in result.cmd
+        idx = result.cmd.index(ClaudeFlags.PLUGIN_DIR)
+        assert result.cmd[idx + 1] == "/tmp/plugin"
 
 
 class TestBuildFullHeadlessCmd:

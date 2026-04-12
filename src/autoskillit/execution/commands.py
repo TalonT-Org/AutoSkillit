@@ -109,6 +109,35 @@ _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
 )
 
 
+def build_headless_resume_cmd(
+    *,
+    resume_session_id: str,
+    prompt: str,
+    output_format: str = "json",
+    plugin_dir: Path | None = None,
+    env_extras: Mapping[str, str] | None = None,
+) -> ClaudeHeadlessCmd:
+    """Build a headless resume command for contract recovery nudge.
+
+    Resumes an existing session with a short feedback prompt, asking the model
+    to emit missing structured output tokens. Uses ``--output-format json``
+    (not stream-json) because the response is tiny and needs no assistant records.
+    """
+    cmd: list[str] = [
+        "claude",
+        ClaudeFlags.PRINT,
+        prompt,
+        ClaudeFlags.RESUME,
+        resume_session_id,
+        ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS,
+        ClaudeFlags.OUTPUT_FORMAT,
+        output_format,
+    ]
+    if plugin_dir is not None:
+        cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_dir)]
+    return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(extras=env_extras))
+
+
 def _ensure_skill_prefix(skill_command: str) -> str:
     """Prompt-formatting helper: prepend 'Use ' to slash-commands for headless session loading.
 

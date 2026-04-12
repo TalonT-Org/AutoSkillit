@@ -15,6 +15,7 @@ from autoskillit.core.types import (
 from autoskillit.execution.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
     _build_skill_result,
+    _extract_missing_token_hints,
     _extract_worktree_path,
     _scan_jsonl_write_paths,
 )
@@ -3472,3 +3473,338 @@ class TestHeadlessExecutorCompletionMarker:
         assert "completion_marker" in sig.parameters
         param = sig.parameters["completion_marker"]
         assert param.default == ""
+
+
+def _ndjson_with_write(result_text: str, file_paths: list[str], session_id: str = "test-session"):
+    """Build NDJSON stdout with Write tool_use entries and a result record."""
+    records = []
+    if file_paths:
+        content = [
+            {
+                "type": "tool_use",
+                "name": "Write",
+                "id": f"t{i}",
+                "input": {"file_path": fp},
+            }
+            for i, fp in enumerate(file_paths)
+        ]
+        records.append(json.dumps({"type": "assistant", "message": {"content": content}}))
+    records.append(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": result_text,
+                "session_id": session_id,
+            }
+        )
+    )
+    return "\n".join(records)
+
+
+class TestExtractMissingTokenHints:
+    def test_extracts_token_and_path(self):
+        stdout = _ndjson_with_write("plan summary\n%%ORDER_UP%%", ["/tmp/out.md"])
+        hints = _extract_missing_token_hints(stdout, [r"plan_path\s*=\s*/.+"])
+        assert hints == [("plan_path", "/tmp/out.md")]
+
+    def test_returns_empty_when_pattern_satisfied(self):
+        stdout = _ndjson_with_write("plan_path = /tmp/out.md\n%%ORDER_UP%%", ["/tmp/out.md"])
+        hints = _extract_missing_token_hints(stdout, [r"plan_path\s*=\s*/.+"])
+        assert hints == []
+
+    def test_returns_empty_for_non_path_patterns(self):
+        stdout = _ndjson_with_write("%%ORDER_UP%%", ["/tmp/out.md"])
+        hints = _extract_missing_token_hints(stdout, [r"verdict\s*=\s*\w+"])
+        assert hints == []
+
+    def test_uses_last_write_path(self):
+        stdout = _ndjson_with_write("%%ORDER_UP%%", ["/tmp/first.md", "/tmp/final.md"])
+        hints = _extract_missing_token_hints(stdout, [r"plan_path\s*=\s*/.+"])
+        assert hints == [("plan_path", "/tmp/final.md")]
+
+
+class TestContractNudge:
+    """Integration tests for the contract recovery nudge in run_headless_core.
+
+    The nudge fires when CONTRACT_RECOVERY is triggered with a valid session_id.
+    CONTRACT_RECOVERY requires synthesis to have failed first. For CHANNEL_A/B
+    sessions, synthesis is skipped (gated on UNMONITORED), so Write evidence
+    with file_path triggers CONTRACT_RECOVERY while _extract_missing_token_hints
+    can still find the file_path for hints.
+    """
+
+    def _main_session_ndjson(
+        self, marker: str, *, include_token: bool = False, session_id: str = "sess-main"
+    ) -> str:
+        """Build NDJSON for a CHANNEL_A-confirmed session with Write evidence."""
+        result_text = "plan summary\n"
+        if include_token:
+            result_text += "plan_path = /tmp/out.md\n"
+        result_text += marker
+        return _ndjson_with_write(result_text, ["/tmp/out.md"], session_id=session_id)
+
+    def _main_subprocess_result(
+        self, marker: str, *, session_id: str = "sess-main"
+    ) -> SubprocessResult:
+        """Build a SubprocessResult with CHANNEL_A confirmation to bypass synthesis."""
+        return SubprocessResult(
+            returncode=0,
+            stdout=self._main_session_ndjson(marker, session_id=session_id),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+
+    def _nudge_response_ndjson(self, marker: str, *, include_token: bool = True) -> str:
+        """Build NDJSON for a nudge response."""
+        if include_token:
+            result_text = f"plan_path = /tmp/out.md\n{marker}"
+        else:
+            result_text = f"I cannot do that.\n{marker}"
+        return json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": result_text,
+                "session_id": "sess-main",
+                "usage": {"input_tokens": 100, "output_tokens": 50},
+            }
+        )
+
+    @pytest.mark.anyio
+    async def test_nudge_fires_on_contract_recovery(self, tool_ctx):
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
+        tool_ctx.runner.push(
+            SubprocessResult(
+                0, self._nudge_response_ndjson(marker), "", TerminationReason.NATURAL_EXIT, pid=2
+            )
+        )
+        result = await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert result.success is True
+        assert result.needs_retry is False
+        assert "plan_path = /tmp/out.md" in result.result
+
+    @pytest.mark.anyio
+    async def test_nudge_failure_falls_through(self, tool_ctx):
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
+        tool_ctx.runner.push(
+            SubprocessResult(
+                0,
+                self._nudge_response_ndjson(marker, include_token=False),
+                "",
+                TerminationReason.NATURAL_EXIT,
+                pid=2,
+            )
+        )
+        result = await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
+        assert result.needs_retry is True
+
+    @pytest.mark.anyio
+    async def test_nudge_timeout_falls_through(self, tool_ctx):
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
+        tool_ctx.runner.push(
+            SubprocessResult(1, "", "timeout", TerminationReason.TIMED_OUT, pid=2)
+        )
+        result = await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
+        assert result.needs_retry is True
+
+    @pytest.mark.anyio
+    async def test_nudge_skips_when_budget_exhausted(self, tool_ctx):
+        from datetime import UTC, datetime
+
+        from autoskillit.core import FailureRecord
+        from autoskillit.execution.headless import run_headless_core
+        from autoskillit.pipeline.audit import DefaultAuditLog
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        audit = DefaultAuditLog()
+        for _ in range(4):
+            audit.record_failure(
+                FailureRecord(  # type: ignore[arg-type]
+                    timestamp=datetime.now(UTC).isoformat(),
+                    skill_command="/autoskillit:make-plan foo",
+                    exit_code=-1,
+                    subtype="stale",
+                    needs_retry=True,
+                    retry_reason="stale",
+                    stderr="",
+                )
+            )
+        tool_ctx.audit = audit
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
+        result = await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert result.retry_reason == RetryReason.BUDGET_EXHAUSTED
+        assert len(tool_ctx.runner.call_args_list) == 1
+
+    @pytest.mark.anyio
+    async def test_nudge_skips_when_no_session_id(self, tool_ctx):
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        ndjson = _ndjson_with_write(f"plan summary\n{marker}", ["/tmp/out.md"], session_id="")
+        tool_ctx.runner.push(
+            SubprocessResult(
+                0,
+                ndjson,
+                "",
+                TerminationReason.NATURAL_EXIT,
+                pid=1,
+                channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            )
+        )
+        result = await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
+        assert len(tool_ctx.runner.call_args_list) == 1
+
+    @pytest.mark.anyio
+    async def test_nudge_resume_cmd_uses_correct_session_id(self, tool_ctx):
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        tool_ctx.runner.push(self._main_subprocess_result(marker, session_id="sess-abc-123"))
+        tool_ctx.runner.push(
+            SubprocessResult(
+                0, self._nudge_response_ndjson(marker), "", TerminationReason.NATURAL_EXIT, pid=2
+            )
+        )
+        await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert len(tool_ctx.runner.call_args_list) == 2
+        nudge_cmd = tool_ctx.runner.call_args_list[1][0]
+        assert "--resume" in nudge_cmd
+        resume_idx = nudge_cmd.index("--resume")
+        assert nudge_cmd[resume_idx + 1] == "sess-abc-123"
+
+    @pytest.mark.anyio
+    async def test_nudge_token_usage_merged(self, tool_ctx):
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        main_ndjson_records = [
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "name": "Write",
+                                "id": "t0",
+                                "input": {"file_path": "/tmp/out.md"},
+                            }
+                        ]
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": f"plan summary\n{marker}",
+                    "session_id": "sess-tok",
+                    "usage": {"input_tokens": 1000, "output_tokens": 500},
+                }
+            ),
+        ]
+        main_ndjson = "\n".join(main_ndjson_records)
+
+        nudge_ndjson = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": f"plan_path = /tmp/out.md\n{marker}",
+                "session_id": "sess-tok",
+                "usage": {"input_tokens": 200, "output_tokens": 100},
+            }
+        )
+
+        tool_ctx.runner.push(
+            SubprocessResult(
+                0,
+                main_ndjson,
+                "",
+                TerminationReason.NATURAL_EXIT,
+                pid=1,
+                channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            )
+        )
+        tool_ctx.runner.push(
+            SubprocessResult(0, nudge_ndjson, "", TerminationReason.NATURAL_EXIT, pid=2)
+        )
+
+        result = await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            step_name="test-step",
+        )
+        assert result.success is True
+        assert result.token_usage is not None
+        assert result.token_usage.get("input_tokens", 0) >= 1200
+        assert result.token_usage.get("output_tokens", 0) >= 600
+
+    @pytest.mark.anyio
+    async def test_nudge_exception_falls_through(self, tool_ctx):
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
+        # Empty stdout nudge → patterns not found → falls through
+        tool_ctx.runner.push(
+            SubprocessResult(1, "", "RuntimeError", TerminationReason.NATURAL_EXIT, pid=2)
+        )
+        result = await run_headless_core(
+            "/autoskillit:make-plan foo",
+            cwd="/tmp",
+            ctx=tool_ctx,
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+        )
+        assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
+        assert result.needs_retry is True

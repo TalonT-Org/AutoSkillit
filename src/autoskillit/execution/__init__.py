@@ -16,6 +16,7 @@ from autoskillit.execution.commands import (
     ClaudeHeadlessCmd,
     ClaudeInteractiveCmd,
     build_headless_cmd,
+    build_headless_resume_cmd,
     build_interactive_cmd,
 )
 from autoskillit.execution.db import (
@@ -103,6 +104,7 @@ __all__ = [
     "ClaudeHeadlessCmd",
     "build_interactive_cmd",
     "build_headless_cmd",
+    "build_headless_resume_cmd",
     # process
     "DefaultSubprocessRunner",
     "run_managed_async",

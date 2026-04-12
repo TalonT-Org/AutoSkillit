@@ -506,8 +506,9 @@ def run_stale_check(home: Path | None = None) -> None:
     orphaned_cmds_all: frozenset[str] = frozenset()
     for _scope_label, _scope_path in iter_all_scope_paths(Path.cwd()):
         _d = _count_hook_registry_drift(_scope_path)
+        # max: missing in any scope is a reinstall signal (not cumulative)
         total_missing = max(total_missing, _d.missing)
-        total_orphaned += _d.orphaned
+        total_orphaned += _d.orphaned  # cumulative: display total orphan count
         orphaned_cmds_all = orphaned_cmds_all | _d.orphaned_cmds
     drift = HookDriftResult(
         missing=total_missing, orphaned=total_orphaned, orphaned_cmds=orphaned_cmds_all

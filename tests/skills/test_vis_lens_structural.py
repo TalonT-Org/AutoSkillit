@@ -15,6 +15,10 @@ VIS_LENS_P0_SLUGS = [
     "antipattern",
     "domain-norms",
     "always-on",
+    "multi-compare",
+    "temporal",
+    "color-access",
+    "figure-table",
 ]
 
 COMPOSITE_SLUGS = {"always-on"}  # emits yaml:spec-index instead of yaml:figure-spec

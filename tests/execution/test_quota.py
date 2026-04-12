@@ -1391,3 +1391,329 @@ class TestCacheSchemaVersion:
         await check_and_sleep_if_needed(config)
         new_data = json.loads(cache_path.read_text())
         assert new_data["schema_version"] == 3
+
+
+class TestPerWindowToggles:
+    """Per-window enable/disable toggles for _compute_binding."""
+
+    _LONG_PATTERNS = ["weekly", "sonnet", "opus"]
+
+    def _windows(self, five_hour_util: float, weekly_util: float) -> dict:
+        from autoskillit.execution.quota import QuotaWindowEntry
+
+        now = datetime.now(UTC)
+        return {
+            "five_hour": QuotaWindowEntry(
+                utilization=five_hour_util, resets_at=now + timedelta(hours=3)
+            ),
+            "weekly": QuotaWindowEntry(utilization=weekly_util, resets_at=now + timedelta(days=4)),
+        }
+
+    def test_compute_binding_defaults_both_enabled_preserves_behavior(self):
+        """Test 1: default call (no toggle kwargs) pins backward-compat."""
+        from autoskillit.execution.quota import _compute_binding
+
+        binding = _compute_binding(
+            self._windows(90.0, 80.0),
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+        )
+        assert binding.window_name == "five_hour"
+        assert binding.should_block is True
+        assert binding.effective_threshold == pytest.approx(85.0)
+
+    def test_compute_binding_short_disabled_drops_five_hour(self):
+        """Test 2: short_enabled=False — five_hour is dropped, weekly survives."""
+        from autoskillit.execution.quota import _compute_binding
+
+        binding = _compute_binding(
+            self._windows(90.0, 80.0),
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+            short_enabled=False,
+            long_enabled=True,
+        )
+        assert binding.window_name == "weekly"
+        assert binding.should_block is False
+        assert binding.effective_threshold == pytest.approx(98.0)
+
+    def test_compute_binding_short_disabled_and_only_short_windows_present(self):
+        """Test 3: all windows are short class → all dropped → empty sentinel."""
+        from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
+
+        now = datetime.now(UTC)
+        windows = {
+            "one_hour": QuotaWindowEntry(utilization=95.0, resets_at=now + timedelta(minutes=45)),
+            "five_hour": QuotaWindowEntry(utilization=90.0, resets_at=now + timedelta(hours=3)),
+        }
+        binding = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+            short_enabled=False,
+        )
+        assert binding.utilization == pytest.approx(0.0)
+        assert binding.resets_at is None
+        assert binding.should_block is False
+        assert binding.effective_threshold == pytest.approx(100.0)
+        assert binding.window_name == "unknown"
+
+    def test_compute_binding_long_disabled_drops_weekly(self):
+        """Test 4: long_enabled=False — weekly dropped, five_hour survives."""
+        from autoskillit.execution.quota import _compute_binding
+
+        binding = _compute_binding(
+            self._windows(80.0, 99.0),
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+            long_enabled=False,
+        )
+        assert binding.window_name == "five_hour"
+        assert binding.should_block is False
+        assert binding.effective_threshold == pytest.approx(85.0)
+
+    def test_compute_binding_long_disabled_suppresses_weekly_block(self):
+        """Test 5: long_enabled=False — weekly at 99% is ignored, five_hour at 2% passes."""
+        from autoskillit.execution.quota import _compute_binding
+
+        binding = _compute_binding(
+            self._windows(2.0, 99.0),
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+            long_enabled=False,
+        )
+        assert binding.window_name == "five_hour"
+        assert binding.should_block is False
+
+    def test_compute_binding_both_disabled_returns_sentinel(self):
+        """Test 6: both disabled → empty sentinel with should_block=False."""
+        from autoskillit.execution.quota import _compute_binding
+
+        binding = _compute_binding(
+            self._windows(90.0, 99.0),
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+            short_enabled=False,
+            long_enabled=False,
+        )
+        assert binding.utilization == pytest.approx(0.0)
+        assert binding.resets_at is None
+        assert binding.should_block is False
+        assert binding.effective_threshold == pytest.approx(100.0)
+
+    def test_compute_binding_substring_classification_respects_long_patterns(self):
+        """Test 7: weekly_sonnet is classified as long via substring match and dropped."""
+        from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
+
+        now = datetime.now(UTC)
+        windows = {
+            "weekly_sonnet": QuotaWindowEntry(utilization=99.0, resets_at=now + timedelta(days=6)),
+            "five_hour": QuotaWindowEntry(utilization=90.0, resets_at=now + timedelta(hours=3)),
+        }
+        binding = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+            long_enabled=False,
+        )
+        assert binding.window_name == "five_hour"
+
+    def test_compute_binding_both_enabled_matches_legacy_keyword_signature(self):
+        """Test 8: explicit True values produce identical output to implicit defaults."""
+        from autoskillit.execution.quota import _compute_binding
+
+        windows = self._windows(90.0, 80.0)
+        implicit = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+        )
+        explicit = _compute_binding(
+            windows,
+            short_threshold=85.0,
+            long_threshold=98.0,
+            long_patterns=self._LONG_PATTERNS,
+            short_enabled=True,
+            long_enabled=True,
+        )
+        assert explicit.window_name == implicit.window_name
+        assert explicit.should_block == implicit.should_block
+        assert explicit.effective_threshold == pytest.approx(implicit.effective_threshold)
+        assert explicit.utilization == pytest.approx(implicit.utilization)
+
+    @pytest.mark.anyio
+    async def test_check_and_sleep_respects_short_window_disabled(self, monkeypatch, tmp_path):
+        """Test 9: short_window_enabled=False — five_hour at 90% is ignored."""
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
+
+        resets_at = datetime.now(UTC) + timedelta(hours=3)
+        config = QuotaGuardConfig(
+            short_window_enabled=False,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(tmp_path / "cache.json"),
+        )
+
+        async def fake_fetch(credentials_path, **kwargs):
+            return QuotaFetchResult(
+                windows={
+                    "five_hour": QuotaWindowEntry(utilization=90.0, resets_at=resets_at),
+                    "weekly": QuotaWindowEntry(
+                        utilization=80.0, resets_at=datetime.now(UTC) + timedelta(days=4)
+                    ),
+                },
+                binding=QuotaStatus(
+                    utilization=80.0,
+                    resets_at=datetime.now(UTC) + timedelta(days=4),
+                    window_name="weekly",
+                    should_block=False,
+                    effective_threshold=98.0,
+                ),
+            )
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is False
+        assert result["window_name"] == "weekly"
+
+    @pytest.mark.anyio
+    async def test_check_and_sleep_respects_long_window_disabled(self, monkeypatch, tmp_path):
+        """Test 10: long_window_enabled=False — weekly at 99% is ignored."""
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
+
+        config = QuotaGuardConfig(
+            long_window_enabled=False,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(tmp_path / "cache.json"),
+        )
+
+        async def fake_fetch(credentials_path, **kwargs):
+            return QuotaFetchResult(
+                windows={
+                    "weekly": QuotaWindowEntry(
+                        utilization=99.0, resets_at=datetime.now(UTC) + timedelta(days=6)
+                    ),
+                    "five_hour": QuotaWindowEntry(
+                        utilization=2.0, resets_at=datetime.now(UTC) + timedelta(hours=3)
+                    ),
+                },
+                binding=QuotaStatus(
+                    utilization=2.0,
+                    resets_at=datetime.now(UTC) + timedelta(hours=3),
+                    window_name="five_hour",
+                    should_block=False,
+                    effective_threshold=85.0,
+                ),
+            )
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is False
+        assert result["window_name"] == "five_hour"
+
+    @pytest.mark.anyio
+    async def test_check_and_sleep_both_disabled_returns_sentinel_no_sleep(
+        self, monkeypatch, tmp_path
+    ):
+        """Test 11: both flags False → sentinel, no sleep, no error."""
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            check_and_sleep_if_needed,
+        )
+
+        config = QuotaGuardConfig(
+            short_window_enabled=False,
+            long_window_enabled=False,
+            credentials_path=str(tmp_path / ".credentials.json"),
+            cache_path=str(tmp_path / "cache.json"),
+        )
+
+        async def fake_fetch(credentials_path, **kwargs):
+            return QuotaFetchResult(
+                windows={
+                    "weekly": QuotaWindowEntry(
+                        utilization=99.0, resets_at=datetime.now(UTC) + timedelta(days=6)
+                    ),
+                    "five_hour": QuotaWindowEntry(
+                        utilization=99.0, resets_at=datetime.now(UTC) + timedelta(hours=3)
+                    ),
+                },
+                binding=QuotaStatus(utilization=0.0, resets_at=None, effective_threshold=100.0),
+            )
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is False
+        assert result["utilization"] == pytest.approx(0.0)
+        assert result["resets_at"] is None
+        assert "error" not in result
+
+    @pytest.mark.anyio
+    async def test_check_and_sleep_global_enabled_false_still_short_circuits(
+        self, monkeypatch, tmp_path
+    ):
+        """Test 12: global enabled=False short-circuits before _fetch_quota is called."""
+        fetch_called = []
+
+        async def sentinel_fetch(*a, **kw):
+            fetch_called.append(1)
+            raise AssertionError("_fetch_quota must not be called when enabled=False")
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", sentinel_fetch)
+        from autoskillit.execution.quota import check_and_sleep_if_needed
+
+        config = QuotaGuardConfig(
+            enabled=False,
+            short_window_enabled=True,
+            long_window_enabled=True,
+        )
+        result = await check_and_sleep_if_needed(config)
+        assert result["should_sleep"] is False
+        assert fetch_called == []
+
+    @pytest.mark.anyio
+    async def test_refresh_quota_cache_forwards_per_window_toggles(self, monkeypatch, tmp_path):
+        """Test 13: _refresh_quota_cache passes short_enabled/long_enabled to _fetch_quota."""
+        from autoskillit.execution.quota import (
+            QuotaFetchResult,
+            QuotaStatus,
+            QuotaWindowEntry,
+            _refresh_quota_cache,
+        )
+
+        captured_kwargs: dict = {}
+
+        async def fake_fetch(credentials_path, **kwargs):
+            captured_kwargs.update(kwargs)
+            return QuotaFetchResult(
+                windows={"five_hour": QuotaWindowEntry(utilization=0.1, resets_at=None)},
+                binding=QuotaStatus(utilization=0.1, resets_at=None, window_name="five_hour"),
+            )
+
+        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
+        config = QuotaGuardConfig(
+            short_window_enabled=False,
+            cache_path=str(tmp_path / "cache.json"),
+        )
+        await _refresh_quota_cache(config)
+        assert captured_kwargs["short_enabled"] is False
+        assert captured_kwargs["long_enabled"] is True

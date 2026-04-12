@@ -549,6 +549,27 @@ def test_approve_when_binding_below_threshold(tmp_path):
     assert out.strip() == ""
 
 
+# Test 18: hook reads should_block=False from a cache produced with long_enabled=False
+def test_hook_respects_should_block_false_when_class_disabled(tmp_path):
+    """Hook approves when cache binding has should_block=False, even if utilization is high.
+
+    Simulates the outcome of _compute_binding called with long_enabled=False:
+    the binding is five_hour at 30%, should_block=False, effective_threshold=85.0.
+    The hook must exit 0 with no permissionDecision deny line — zero hook code changes required.
+    """
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(
+        cache,
+        utilization=30.0,
+        window_name="five_hour",
+        should_block=False,
+        effective_threshold=85.0,
+    )
+    out, exit_code = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    assert exit_code == 0
+    assert out.strip() == ""
+
+
 def test_resolve_quota_log_dir_and_resolve_log_dir_in_sync(monkeypatch):
     """_resolve_quota_log_dir() must produce the same path as resolve_log_dir('') for
     identical env inputs. Guards against independent evolution of the two implementations.

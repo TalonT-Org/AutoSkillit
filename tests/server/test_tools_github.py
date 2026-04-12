@@ -30,7 +30,7 @@ from autoskillit.server.tools_issue_lifecycle import (
     _parse_enrich_result,
     _parse_prepare_result,
 )
-from tests.server.conftest import _skill_fail, _skill_ok
+from tests.server._helpers import _skill_fail, _skill_ok
 
 # ---------------------------------------------------------------------------
 # _parse_fingerprint unit tests

@@ -11,7 +11,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from autoskillit.cli._install_info import detect_install, upgrade_command
+from autoskillit.cli._install_info import comparison_branch, detect_install, upgrade_command
 from autoskillit.cli._terminal import terminal_guard
 
 
@@ -23,6 +23,7 @@ def run_update_command(home: Path | None = None) -> None:
     and plugin state.  Clears any active dismissal state on success.
     """
     from autoskillit.cli._update_checks import (
+        _fetch_latest_version,
         _read_dismiss_state,
         _verify_update_result,
         _write_dismiss_state,
@@ -54,11 +55,17 @@ def run_update_command(home: Path | None = None) -> None:
         subprocess.run(["autoskillit", "install"], check=False, env=_skip_env)
 
     state = _read_dismiss_state(_home)
-    succeeded = _verify_update_result(current, current, _home, state)
+    target_branch = comparison_branch(info)
+    latest: str = (
+        _fetch_latest_version(target_branch, _home) or current
+        if target_branch is not None
+        else current
+    )
+    succeeded = _verify_update_result(current, latest, _home, state)
 
     if succeeded:
         # Clear any active dismissal state so prompts are fresh
         state.pop("update_prompt", None)
-        state.pop("update_snoozed", None)
+        state.pop("binary_snoozed", None)
         _write_dismiss_state(_home, state)
         print("AutoSkillit updated successfully.", flush=True)

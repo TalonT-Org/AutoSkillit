@@ -67,7 +67,6 @@ _GITHUB_RELEASES_URL = "https://api.github.com/repos/TalonT-Org/AutoSkillit/rele
 _GITHUB_INTEGRATION_PYPROJECT_URL = (
     "https://api.github.com/repos/TalonT-Org/AutoSkillit/contents/pyproject.toml?ref=integration"
 )
-_INSTALL_FROM_INTEGRATION = "git+https://github.com/TalonT-Org/AutoSkillit.git@integration"
 
 
 @dataclass(frozen=True)
@@ -588,10 +587,16 @@ def _run_update_sequence(
     cmd = upgrade_command(info)
     if cmd is None:
         return
+    target_branch = comparison_branch(info)
+    latest: str = (
+        _fetch_latest_version(target_branch, home) or current
+        if target_branch is not None
+        else current
+    )
     with terminal_guard():
         subprocess.run(cmd, check=False, env=skip_env)
         subprocess.run(["autoskillit", "install"], check=False, env=skip_env)
-    _verify_update_result(current, current, home, state)
+    _verify_update_result(current, latest, home, state)
 
 
 # ---------------------------------------------------------------------------

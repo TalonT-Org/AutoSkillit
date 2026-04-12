@@ -18,12 +18,29 @@ class AnomalyKind(StrEnum):
     SIGNALS_PENDING = "signals_pending"
     RSS_GROWTH = "rss_growth"
     FD_HIGH = "fd_high"
+    D_STATE_SUSTAINED = "d_state_sustained"
+    HIGH_CPU_SUSTAINED = "high_cpu_sustained"
 
 
 class AnomalySeverity(StrEnum):
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
+
+
+# Kernel wait-channel values that are normal for a healthy process in
+# uninterruptible sleep.  D-state snapshots whose wchan matches any of these
+# are NOT counted toward the D_STATE_SUSTAINED threshold.
+# "" and "0" guard against missing-data snapshots (unreadable /proc/wchan).
+BENIGN_WCHANS: frozenset[str] = frozenset(
+    {
+        "do_nanosleep",
+        "do_epoll_wait",
+        "schedule_hrtimeout_range",
+        "",  # /proc returns empty when unreadable — treat as benign
+        "0",  # kernel reports literal "0" when thread is runnable
+    }
+)
 
 
 def _anomaly(
@@ -60,6 +77,8 @@ def detect_anomalies(
         return anomalies
 
     consecutive_zombie = 0
+    consecutive_d_state = 0
+    consecutive_high_cpu = 0
     prev_sig_pnd: str | None = None
     initial_rss: int | None = None
 
@@ -128,6 +147,49 @@ def detect_anomalies(
                 )
         else:
             consecutive_zombie = 0
+
+        # D-state sustained: process stuck in uninterruptible sleep
+        wchan = snap.get("wchan", "")
+        if state == "disk-sleep" and isinstance(wchan, str) and wchan not in BENIGN_WCHANS:
+            consecutive_d_state += 1
+            if consecutive_d_state >= 2:
+                anomalies.append(
+                    _anomaly(
+                        AnomalyKind.D_STATE_SUSTAINED,
+                        AnomalySeverity.WARNING,
+                        {
+                            "state": state,
+                            "wchan": wchan,
+                            "consecutive_count": consecutive_d_state,
+                        },
+                        snap,
+                        seq,
+                        pid,
+                    )
+                )
+        else:
+            consecutive_d_state = 0
+
+        # High-CPU sustained: process burning CPU >= 90% (suspected infinite loop)
+        cpu_percent = snap.get("cpu_percent", 0.0)
+        if isinstance(cpu_percent, (int, float)) and cpu_percent >= 90.0:
+            consecutive_high_cpu += 1
+            if consecutive_high_cpu >= 2:
+                anomalies.append(
+                    _anomaly(
+                        AnomalyKind.HIGH_CPU_SUSTAINED,
+                        AnomalySeverity.WARNING,
+                        {
+                            "cpu_percent": float(cpu_percent),
+                            "consecutive_count": consecutive_high_cpu,
+                        },
+                        snap,
+                        seq,
+                        pid,
+                    )
+                )
+        else:
+            consecutive_high_cpu = 0
 
         # Signals pending: transition from all-zeros to non-zero
         _all_zeros = "0000000000000000"

@@ -136,6 +136,7 @@ generic_automation_mcp/
 │   ├── db.py                #   Read-only SQLite with defence-in-depth
 │   ├── diff_annotator.py    #   Diff annotation + findings filter for review-pr
 │   ├── headless.py          #   Headless Claude session orchestration
+│   ├── _headless_scan.py    #   Write-path JSONL scanning (extracted from headless.py)
 │   ├── linux_tracing.py     #   /proc + psutil process tracing (Linux)
 │   ├── anomaly_detection.py #   Post-hoc anomaly detection over snapshots
 │   ├── session_log.py       #   XDG-aware session diagnostics log writer

@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     from autoskillit.config import (
         AutomationConfig,
     )
-    from autoskillit.core import AuditStore, SubprocessResult
+    from autoskillit.core import AuditLog, SubprocessResult
     from autoskillit.pipeline.context import (
         ToolContext,
     )
@@ -96,7 +96,7 @@ def _capture_failure(
     needs_retry: bool,
     retry_reason: str,
     stderr: str,
-    audit: AuditStore | None,
+    audit: AuditLog | None,
 ) -> None:
     """Record a failure in the audit log. No-op if skill_command is empty or audit is None."""
     if not skill_command or audit is None:
@@ -416,7 +416,7 @@ def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
 def _apply_budget_guard(
     sr: SkillResult,
     skill_command: str,
-    audit: AuditStore | None,
+    audit: AuditLog | None,
     max_consecutive_retries: int,
 ) -> SkillResult:
     """Override needs_retry to False when the consecutive-failure budget is exhausted.
@@ -462,7 +462,7 @@ def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
     skill_command: str = "",
-    audit: AuditStore | None = None,
+    audit: AuditLog | None = None,
     max_consecutive_retries: int = 3,
     expected_output_patterns: Sequence[str] = (),
     cwd: str = "",

@@ -280,9 +280,9 @@ def config_show():
 @skills_app.command(name="list")
 def skills_list():
     """List bundled skills provided by the plugin."""
-    from autoskillit.workspace import SkillResolver
+    from autoskillit.workspace import DefaultSkillResolver
 
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     skills = resolver.list_all()
 
     if not skills:

@@ -1206,3 +1206,20 @@ async def test_tools_status_routes_through_db_reader(tool_ctx, tmp_path) -> None
     tool_ctx.db_reader.query.assert_called_once()
     call_kwargs = tool_ctx.db_reader.query.call_args
     assert "SELECT 1" in str(call_kwargs)
+
+
+# T3 — read_db error paths include success: False
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_read_db_all_error_paths_include_success_false(tool_ctx, monkeypatch):
+    """Every read_db error path must return success=False."""
+    from autoskillit.server import _state
+
+    monkeypatch.setattr(_state, "_ctx", tool_ctx)
+
+    # Nonexistent db path — exercises the "does not exist" error branch
+    result = json.loads(await read_db(db_path="/nonexistent/path/db.sqlite", query="SELECT 1"))
+    assert result.get("success") is False
+    assert "error" in result

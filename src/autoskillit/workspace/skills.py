@@ -89,7 +89,7 @@ def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Pat
     )
 
 
-class SkillResolver:
+class DefaultSkillResolver:
     """List bundled skills from both the skills/ and skills_extended/ directories."""
 
     def __init__(self) -> None:

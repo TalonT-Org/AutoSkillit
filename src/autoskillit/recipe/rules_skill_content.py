@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from autoskillit.core import Severity
 
 if TYPE_CHECKING:
-    from autoskillit.core._type_protocols import TargetSkillResolver
+    from autoskillit.core import SkillResolver
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_placeholder_parser import (
     extract_bash_blocks,
@@ -38,9 +38,7 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
 )
 
 
-def _resolve_skill_md(
-    skill_name: str, *, resolver: TargetSkillResolver | None = None
-) -> Path | None:
+def _resolve_skill_md(skill_name: str, *, resolver: SkillResolver | None = None) -> Path | None:
     """Resolve a skill name to its SKILL.md path.
 
     When SKILL_SEARCH_DIRS is set (e.g., in tests), searches those directories.
@@ -53,9 +51,9 @@ def _resolve_skill_md(
                 return skill_md
         return None
     if resolver is None:
-        from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
     skill_info = resolver.resolve(skill_name)
     if skill_info is None:
         return None

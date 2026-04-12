@@ -487,9 +487,9 @@ def validate_from_path(
         }
 
     if lister is None:
-        from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
-        lister = SkillResolver()
+        lister = DefaultSkillResolver()
 
     recipe = _parse_recipe(data)
     errors = validate_recipe(recipe)
@@ -623,9 +623,9 @@ def load_and_validate(
 
             # Stage: semantic rules (builds ValidationContext once — shared computation)
             if lister is None:
-                from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+                from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
-                lister = SkillResolver()
+                lister = DefaultSkillResolver()
 
             known = frozenset(r.name for r in list_recipes(_pdir).items)
             known_skills = frozenset(s.name for s in lister.list_all())

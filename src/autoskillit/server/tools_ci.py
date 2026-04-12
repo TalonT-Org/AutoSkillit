@@ -161,7 +161,7 @@ async def set_commit_status(
     target_url: str = "",
     repo: str = "",
     cwd: str = "",
-) -> dict[str, object]:
+) -> str:
     """Post a GitHub Commit Status to a commit SHA.
 
     Use to implement review-first gating: post `pending` when review starts,
@@ -178,17 +178,19 @@ async def set_commit_status(
         cwd: Working directory for repo inference. Defaults to plugin_dir.
     """
     if (gate := _require_enabled()) is not None:
-        return json.loads(gate)  # type: ignore[return-value]
+        return gate
 
     if not sha:
-        return {"success": False, "error": "sha must not be empty"}
+        return json.dumps({"success": False, "error": "sha must not be empty"})
     if not context:
-        return {"success": False, "error": "context must not be empty"}
+        return json.dumps({"success": False, "error": "context must not be empty"})
     if len(description) > 140:
-        return {
-            "success": False,
-            "error": f"description exceeds 140 chars ({len(description)} chars)",
-        }
+        return json.dumps(
+            {
+                "success": False,
+                "error": f"description exceeds 140 chars ({len(description)} chars)",
+            }
+        )
 
     from autoskillit.server import _get_ctx
 
@@ -198,14 +200,11 @@ async def set_commit_status(
     # Resolve owner/repo if not provided
     owner_repo = repo
     if not owner_repo:
-        rc, stdout, stderr = await _run_subprocess(
-            ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
-            cwd=effective_cwd,
-            timeout=30.0,
-        )
-        if rc != 0:
-            return {"success": False, "error": f"Could not infer owner/repo: {stderr}"}
-        owner_repo = stdout.strip()
+        owner_repo = await infer_repo_from_remote(effective_cwd)
+        if not owner_repo:
+            return json.dumps(
+                {"success": False, "error": "Could not infer owner/repo from git remote"}
+            )
 
     cmd = [
         "gh",
@@ -225,9 +224,9 @@ async def set_commit_status(
 
     rc, _stdout, stderr = await _run_subprocess(cmd, cwd=effective_cwd, timeout=30.0)
     if rc != 0:
-        return {"success": False, "error": stderr}
+        return json.dumps({"success": False, "error": stderr})
 
-    return {"success": True, "sha": sha, "state": state, "context": context}
+    return json.dumps({"success": True, "sha": sha, "state": state, "context": context})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})

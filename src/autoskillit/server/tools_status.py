@@ -45,6 +45,8 @@ async def kitchen_status() -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="kitchen_status")
     from autoskillit.server import _get_config, _get_ctx, version_info
 
     info = version_info()
@@ -89,6 +91,8 @@ async def get_pipeline_report(clear: bool = False) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="get_pipeline_report")
     from autoskillit.server import _get_ctx
 
     failures = _get_ctx().audit.get_report_as_dicts()
@@ -138,6 +142,8 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="get_token_summary")
     from autoskillit.server import _get_ctx
 
     ctx = _get_ctx()
@@ -187,6 +193,8 @@ async def get_timing_summary(clear: bool = False, format: str = "json", order_id
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="get_timing_summary")
     from autoskillit.server import _get_ctx
 
     steps = _get_ctx().timing_log.get_report(order_id=order_id)
@@ -249,6 +257,8 @@ async def get_quota_events(n: int = 50) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="get_quota_events")
     from autoskillit.server import _get_ctx
 
     ctx = _get_ctx()
@@ -370,7 +380,7 @@ async def read_db(
             "autoskillit.read_db",
             extra={"error": str(exc)},
         )
-        return json.dumps({"error": f"Invalid params JSON: {exc}"})
+        return json.dumps({"success": False, "error": f"Invalid params JSON: {exc}"})
     if not isinstance(parsed_params, (list, dict)):
         await _notify(
             ctx,
@@ -379,7 +389,7 @@ async def read_db(
             "autoskillit.read_db",
             extra={},
         )
-        return json.dumps({"error": "params must be a JSON array or object"})
+        return json.dumps({"success": False, "error": "params must be a JSON array or object"})
 
     # Validate db_path
     db = Path(db_path).resolve()
@@ -391,7 +401,7 @@ async def read_db(
             "autoskillit.read_db",
             extra={"db_path": db_path},
         )
-        return json.dumps({"error": f"Database does not exist: {db}"})
+        return json.dumps({"success": False, "error": f"Database does not exist: {db}"})
     if not db.is_file():
         await _notify(
             ctx,
@@ -400,13 +410,13 @@ async def read_db(
             "autoskillit.read_db",
             extra={"db_path": db_path},
         )
-        return json.dumps({"error": f"Path is not a file: {db}"})
+        return json.dumps({"success": False, "error": f"Path is not a file: {db}"})
 
     from autoskillit.server import _get_config, _get_ctx
 
     tool_ctx = _get_ctx()
     if tool_ctx.db_reader is None:
-        return json.dumps({"error": "Database reader not configured"})
+        return json.dumps({"success": False, "error": "Database reader not configured"})
 
     # Resolve timeout
     effective_timeout = timeout if timeout > 0 else _get_config().read_db.timeout
@@ -434,7 +444,9 @@ async def read_db(
             "autoskillit.read_db",
             extra={"error": str(exc)},
         )
-        return json.dumps({"error": str(exc), "hint": "Only SELECT queries are allowed"})
+        return json.dumps(
+            {"success": False, "error": str(exc), "hint": "Only SELECT queries are allowed"}
+        )
     except TimeoutError:
         await _notify(
             ctx,
@@ -443,7 +455,9 @@ async def read_db(
             "autoskillit.read_db",
             extra={"timeout": effective_timeout},
         )
-        return json.dumps({"error": f"Query exceeded {effective_timeout}s timeout"})
+        return json.dumps(
+            {"success": False, "error": f"Query exceeded {effective_timeout}s timeout"}
+        )
     except Exception as exc:
         logger.warning("read_db query failed", error=type(exc).__name__)
         await _notify(
@@ -453,4 +467,4 @@ async def read_db(
             "autoskillit.read_db",
             extra={"error": type(exc).__name__},
         )
-        return json.dumps({"error": f"Query failed: {exc}"})
+        return json.dumps({"success": False, "error": f"Query failed: {exc}"})

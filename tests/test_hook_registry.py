@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
     _extract_script_basenames,
@@ -80,3 +82,51 @@ def test_extract_script_basenames_filters_user_hooks() -> None:
     result = _extract_script_basenames(hooks)
     assert result == canonical_script_basenames()
     assert "my_guard.py" not in result
+
+
+# ---------------------------------------------------------------------------
+# T7 — Hook file renames: new names exist, old names removed
+# ---------------------------------------------------------------------------
+
+_HOOKS_DIR = Path(__file__).parent.parent / "src" / "autoskillit" / "hooks"
+
+
+def test_renamed_hook_files_exist() -> None:
+    """New hook filenames must exist on disk after rename."""
+    for expected in [
+        "quota_guard.py",
+        "quota_post_hook.py",
+        "skill_cmd_guard.py",
+        "pretty_output_hook.py",
+        "session_start_hook.py",
+        "token_summary_hook.py",
+    ]:
+        assert (_HOOKS_DIR / expected).exists(), f"Missing renamed hook: {expected}"
+
+
+def test_old_hook_names_removed() -> None:
+    """Old hook filenames must NOT exist on disk after rename."""
+    for old in [
+        "quota_check.py",
+        "quota_post_check.py",
+        "skill_cmd_check.py",
+        "pretty_output.py",
+        "session_start_reminder.py",
+        "token_summary_appender.py",
+    ]:
+        assert not (_HOOKS_DIR / old).exists(), f"Old hook file still present: {old}"
+
+
+def test_hook_registry_uses_new_filenames() -> None:
+    """HOOK_REGISTRY must reference only the new filenames, not the old ones."""
+    all_scripts = {s for h in HOOK_REGISTRY for s in h.scripts}
+    old_names = {
+        "quota_check.py",
+        "quota_post_check.py",
+        "skill_cmd_check.py",
+        "pretty_output.py",
+        "session_start_reminder.py",
+        "token_summary_appender.py",
+    }
+    for old in old_names:
+        assert old not in all_scripts, f"HOOK_REGISTRY still references old name: {old}"

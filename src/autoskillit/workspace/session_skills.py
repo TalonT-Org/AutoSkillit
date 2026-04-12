@@ -19,12 +19,17 @@ from autoskillit.core import (
     PACK_REGISTRY,
     ClaudeDirectoryConventions,
     PackDef,
+    SkillResolver,
     SkillSource,
     ValidatedAddDir,
     atomic_write,
     get_logger,
 )
-from autoskillit.workspace.skills import SkillInfo, SkillResolver, detect_project_local_overrides
+from autoskillit.workspace.skills import (
+    DefaultSkillResolver,
+    SkillInfo,
+    detect_project_local_overrides,
+)
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -265,7 +270,7 @@ class SkillsDirectoryProvider:
     def __init__(self, temp_dir_relpath: str = ".autoskillit/temp") -> None:
         if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
             raise ValueError(f"temp_dir_relpath is YAML-unsafe: {temp_dir_relpath!r}")
-        self._resolver = SkillResolver()
+        self._resolver = DefaultSkillResolver()
         self._temp_dir_relpath = temp_dir_relpath
 
     @property

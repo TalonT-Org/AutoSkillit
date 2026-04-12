@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """MCP server for orchestrating automated skill-driven workflows.
 
 Kitchen tools (39 gated + 1 headless-tagged) are hidden at startup via FastMCP v3

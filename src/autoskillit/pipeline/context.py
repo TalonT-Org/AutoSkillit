@@ -12,27 +12,27 @@ from pathlib import Path
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
-    AuditStore,
+    AuditLog,
     BackgroundSupervisor,
     CIRunScope,
     CIWatcher,
     CloneManager,
     DatabaseReader,
-    GatePolicy,
+    GateState,
     GitHubFetcher,
     HeadlessExecutor,
-    McpResponseStore,
+    McpResponseLog,
     MergeQueueWatcher,
     MigrationService,
     OutputPatternResolver,
     QuotaRefreshTask,
     RecipeRepository,
     SessionSkillManager,
+    SkillResolver,
     SubprocessRunner,
-    TargetSkillResolver,
     TestRunner,
-    TimingStore,
-    TokenStore,
+    TimingLog,
+    TokenLog,
     WorkspaceManager,
     WriteExpectedResolver,
 )
@@ -51,11 +51,11 @@ class ToolContext:
     Fields
     ------
     config:               AutomationConfig loaded from .autoskillit/config.yaml
-    audit:                AuditStore — records pipeline failures
-    token_log:            TokenStore — per-step token tracking
-    timing_log:           TimingStore — per-step wall-clock duration tracking
-    response_log:         McpResponseStore — per-tool MCP response size tracking
-    gate:                 GatePolicy — enables/disables gated tools
+    audit:                AuditLog — records pipeline failures
+    token_log:            TokenLog — per-step token tracking
+    timing_log:           TimingLog — per-step wall-clock duration tracking
+    response_log:         McpResponseLog — per-tool MCP response size tracking
+    gate:                 GateState — enables/disables gated tools
     plugin_dir:           Absolute path string to the autoskillit package directory
     runner:               SubprocessRunner implementation (DefaultSubprocessRunner in production,
                           MockSubprocessRunner in tests)
@@ -70,7 +70,7 @@ class ToolContext:
     ci_watcher:           CIWatcher — watches GitHub Actions CI runs
     merge_queue_watcher:  MergeQueueWatcher — polls GitHub merge queue for a PR
     session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
-    skill_resolver:       TargetSkillResolver — resolves skill names to source tier
+    skill_resolver:       SkillResolver — resolves skill names to source tier
     kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry
                           to the current kitchen session lifetime.
     active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
@@ -82,10 +82,10 @@ class ToolContext:
     """
 
     config: AutomationConfig
-    audit: AuditStore
-    token_log: TokenStore
-    timing_log: TimingStore
-    gate: GatePolicy
+    audit: AuditLog
+    token_log: TokenLog
+    timing_log: TimingLog
+    gate: GateState
     plugin_dir: str
     runner: SubprocessRunner | None
     # Always supply temp_dir explicitly when constructing ToolContext directly.
@@ -95,7 +95,7 @@ class ToolContext:
     # resolves temp_dir from config via resolve_temp_dir(). Direct construction
     # (e.g. in tests) must override this field before any file I/O that uses it.
     temp_dir: Path = field(default_factory=lambda: Path.cwd() / ".autoskillit" / "temp")
-    response_log: McpResponseStore = field(default_factory=DefaultMcpResponseLog)
+    response_log: McpResponseLog = field(default_factory=DefaultMcpResponseLog)
     executor: HeadlessExecutor | None = field(default=None)
     tester: TestRunner | None = field(default=None)
     recipes: RecipeRepository | None = field(default=None)
@@ -110,7 +110,7 @@ class ToolContext:
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
     write_expected_resolver: WriteExpectedResolver | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
-    skill_resolver: TargetSkillResolver | None = field(default=None)
+    skill_resolver: SkillResolver | None = field(default=None)
     kitchen_id: str = field(default="")
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)

@@ -64,9 +64,9 @@ async def fetch_github_issue(
 
     This tool requires the kitchen to be open (gated by open_kitchen).
     """
+    if (gate := _require_enabled()) is not None:
+        return gate
     try:
-        if (gate := _require_enabled()) is not None:
-            return gate
         from autoskillit.server import _get_config, _get_ctx
 
         # Read-only query: structlog context binding is intentionally omitted.

@@ -353,13 +353,13 @@ def main() -> None:
                 f"token_summary_appender: gh api update failed"
                 f" (rc={cpe.returncode}): {cpe.stderr}\n"
             )
-            sys.exit(1)
+            sys.exit(0)
 
     except SystemExit:
         raise
     except Exception as exc:  # noqa: BLE001
         sys.stderr.write(f"token_summary_appender: unexpected error: {exc}\n")
-        sys.exit(1)
+        sys.exit(0)
 
 
 if __name__ == "__main__":

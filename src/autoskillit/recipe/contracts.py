@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.core import TargetSkillResolver
+    from autoskillit.core import SkillResolver
 
 from autoskillit.core import (
     SKILL_TOOLS,
@@ -392,7 +392,7 @@ def check_contract_staleness(
     recipe_path: Path | None = None,
     cache_path: Path | None = None,
     skills_dir: Path | None = None,
-    resolver: TargetSkillResolver | None = None,
+    resolver: SkillResolver | None = None,
 ) -> list[StaleItem]:
     """Check a pipeline contract for staleness against the current manifest.
 
@@ -438,9 +438,9 @@ def check_contract_staleness(
         effective_skills_dir: Path | None = skills_dir
     else:
         if resolver is None:
-            from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+            from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
-            resolver = SkillResolver()
+            resolver = DefaultSkillResolver()
         _resolver = resolver
         effective_skills_dir = None
     for skill_name, stored_hash in contract.get("skill_hashes", {}).items():

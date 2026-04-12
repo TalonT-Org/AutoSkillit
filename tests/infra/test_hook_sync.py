@@ -27,24 +27,16 @@ def test_hook_config_path_components_in_sync():
 
 
 def test_hook_config_path_single_source_of_truth():
-    """quota_guard and quota_post_hook must derive their path constants from
-    _fmt_primitives, not define independent copies.
+    """_hook_settings must define path constants that match _fmt_primitives.
 
-    After deduplication, HOOK_DIR_COMPONENTS + HOOK_CONFIG_FILENAME from each
-    hook module must reconstruct the tuple from _fmt_primitives exactly.
+    After consolidation, quota_guard and quota_post_hook both delegate to
+    _hook_settings for config path resolution. This test verifies that
+    _hook_settings.HOOK_DIR_COMPONENTS + HOOK_CONFIG_FILENAME reconstructs
+    _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS exactly.
     """
     from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
-    from autoskillit.hooks.quota_guard import HOOK_CONFIG_FILENAME, HOOK_DIR_COMPONENTS
-    from autoskillit.hooks.quota_post_hook import (
-        HOOK_CONFIG_FILENAME as QPC_FILENAME,
-    )
-    from autoskillit.hooks.quota_post_hook import (
-        HOOK_DIR_COMPONENTS as QPC_DIR,
-    )
+    from autoskillit.hooks._hook_settings import HOOK_CONFIG_FILENAME, HOOK_DIR_COMPONENTS
 
     assert (*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME) == _HOOK_CONFIG_PATH_COMPONENTS, (
-        "quota_guard path constants must match _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS"
-    )
-    assert (*QPC_DIR, QPC_FILENAME) == _HOOK_CONFIG_PATH_COMPONENTS, (
-        "quota_post_hook path constants must match _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS"
+        "_hook_settings path constants must match _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS"
     )

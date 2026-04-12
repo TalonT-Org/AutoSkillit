@@ -246,6 +246,7 @@ generic_automation_mcp/
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration
 │   ├── branch_protection_guard.py
+│   ├── _hook_settings.py    #   Shared stdlib-only settings resolver for quota guard hooks
 │   ├── quota_guard.py       #   Blocks run_skill when threshold exceeded
 │   ├── quota_post_hook.py   #   Appends quota warning to run_skill output
 │   ├── remove_clone_guard.py

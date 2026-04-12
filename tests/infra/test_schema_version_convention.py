@@ -124,7 +124,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # background.py — payload dict
     ("src/autoskillit/pipeline/background.py", 132),
     # tools_kitchen.py — hook config dict
-    ("src/autoskillit/server/tools_kitchen.py", 135),
+    ("src/autoskillit/server/tools_kitchen.py", 136),
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools_status.py", 333),
     # tools_github.py — bug report dict

@@ -35,6 +35,10 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     "workspace/worktree.py": "docstring example",
     # Justification: docstring referencing the canonical default path.
     "server/tools_clone.py": "docstring example",
+    # Justification: stdlib-only hook module that cannot import resolve_temp_dir().
+    # HOOK_DIR_COMPONENTS = (".autoskillit", "temp") mirrors the canonical bridge path
+    # defined by _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS.
+    "hooks/_hook_settings.py": "stdlib-only hook; cannot use resolve_temp_dir()",
 }
 
 _LITERAL = ".autoskillit/temp"

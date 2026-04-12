@@ -8,7 +8,7 @@ missing/stale/corrupt.
 import io
 import json
 from contextlib import redirect_stdout
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -205,9 +205,9 @@ def test_hook_does_not_consult_threshold_field_in_hook_config(tmp_path, monkeypa
 
 # T-CFG-2
 def test_quota_check_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
-    """Hook must read cache from hook config cache_path when AUTOSKILLIT_QUOTA_CACHE is unset."""
+    """Hook must read cache from hook config cache_path when the env var is unset."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("AUTOSKILLIT_QUOTA_CACHE", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH", raising=False)
     custom_cache = tmp_path / "my_custom_cache.json"
     _write_cache(custom_cache, utilization=95.0)
     _write_hook_config(
@@ -222,7 +222,7 @@ def test_quota_check_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
 
 # T-CFG-3
 def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypatch):
-    """AUTOSKILLIT_QUOTA_CACHE env var must take precedence over hook config cache_path.
+    """``AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH`` must beat hook config ``cache_path``.
 
     Regression test: env var path must win even when a hook config is present at the
     canonical path (.autoskillit/.hook_config.json). Writing different
@@ -240,7 +240,7 @@ def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypa
         cache_max_age=300,
         cache_path=str(wrong_cache),
     )
-    monkeypatch.setenv("AUTOSKILLIT_QUOTA_CACHE", str(correct_cache))
+    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH", str(correct_cache))
     out, _ = _run_hook(event={"tool_name": "run_skill"})
     data = json.loads(out)
     # env var must win: deny because correct_cache has utilization=95.0
@@ -256,6 +256,78 @@ def test_quota_check_falls_back_to_defaults_without_hook_config(tmp_path, monkey
     out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# T-CFG-6
+def test_quota_check_buffer_seconds_from_hook_config(tmp_path, monkeypatch):
+    """Hook uses buffer_seconds from hook config when env var is unset.
+
+    Writes a cache with ``resets_at=None`` so the hook takes the plain-buffer branch
+    (``n = settings.buffer_seconds``), making the assertion deterministic.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS", raising=False)
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=95.0, resets_at=None)
+    _write_hook_config(
+        tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS),
+        cache_max_age=300,
+        cache_path=str(cache),
+        extra={"buffer_seconds": 120},
+    )
+    out, _ = _run_hook(event={"tool_name": "run_skill"})
+    data = json.loads(out)
+    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "time.sleep(120)" in reason
+    assert "Sleeping 120s" in reason
+
+
+# T-CFG-7
+def test_quota_check_buffer_seconds_env_var_override(tmp_path, monkeypatch):
+    """``AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS`` overrides the deny-message sleep duration."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS", "180")
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=95.0, resets_at=None)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    data = json.loads(out)
+    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "time.sleep(180)" in reason
+    assert "Sleeping 180s" in reason
+
+
+# T-CFG-8
+def test_quota_check_cache_max_age_env_var_override(tmp_path, monkeypatch):
+    """AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE env var overrides the cache freshness window.
+
+    With ``cache_max_age=60`` and a 61-second-old cache, the hook must treat the
+    cache as stale and emit a cache_miss event (fail-open approve).
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE", "60")
+    cache = tmp_path / "quota_cache.json"
+    stale_fetched_at = (datetime.now(UTC) - timedelta(seconds=61)).isoformat()
+    payload = {
+        "fetched_at": stale_fetched_at,
+        "windows": {"five_hour": {"utilization": 95.0, "resets_at": None}},
+        "binding": {
+            "window_name": "five_hour",
+            "utilization": 95.0,
+            "resets_at": None,
+            "should_block": True,
+            "effective_threshold": 85.0,
+        },
+    }
+    cache.write_text(json.dumps(payload))
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    out, exit_code = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+    assert out.strip() == ""
+    assert exit_code == 0
+    events = [
+        json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()
+    ]
+    assert events[0]["event"] == "cache_miss"
 
 
 # T1

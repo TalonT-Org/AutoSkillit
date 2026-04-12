@@ -230,7 +230,7 @@ def test_qpc11_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
     locates the cache file via the hook config cache_path setting.
     """
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("AUTOSKILLIT_QUOTA_CACHE", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH", raising=False)
     cache = tmp_path / "custom_cache.json"
     _write_cache(cache, utilization=95.0)
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
@@ -339,3 +339,79 @@ def test_warns_when_binding_window_exhausted(tmp_path):
     out, _ = _run_hook(event=event, cache_path=cache)
     data = json.loads(out)
     assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
+
+
+# T-PCHK-15
+def test_qpc_buffer_seconds_from_hook_config(tmp_path, monkeypatch):
+    """Post-check warning sleep uses ``buffer_seconds`` from hook config.
+
+    Writes a cache with ``resets_at=None`` so the hook takes the plain-buffer branch
+    (``n = settings.buffer_seconds``), making the assertion deterministic.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS", raising=False)
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=95.0, resets_at=None)
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    hook_cfg_path.write_text(
+        json.dumps(
+            {
+                "quota_guard": {
+                    "cache_max_age": 300,
+                    "cache_path": str(cache),
+                    "buffer_seconds": 120,
+                }
+            }
+        )
+    )
+    event = _build_event()
+    out, _ = _run_hook(event=event)
+    data = json.loads(out)
+    output = data["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "time.sleep(120)" in output
+    assert "Sleeping 120s" in output
+
+
+# T-PCHK-16
+def test_qpc_buffer_seconds_env_var_override(tmp_path, monkeypatch):
+    """AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS env var overrides the warning sleep duration."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS", "180")
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=95.0, resets_at=None)
+    event = _build_event()
+    out, _ = _run_hook(event=event, cache_path=cache)
+    data = json.loads(out)
+    output = data["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "time.sleep(180)" in output
+    assert "Sleeping 180s" in output
+
+
+# T-PCHK-17
+def test_qpc_cache_max_age_env_var_override(tmp_path, monkeypatch):
+    """AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE env var overrides the cache freshness window.
+
+    With ``cache_max_age=60`` and a 61-second-old cache, the hook treats the cache
+    as stale and exits silently (fail-open, no warning output).
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE", "60")
+    cache = tmp_path / "quota_cache.json"
+    stale_fetched_at = (datetime.now(UTC) - timedelta(seconds=61)).isoformat()
+    payload = {
+        "fetched_at": stale_fetched_at,
+        "windows": {"five_hour": {"utilization": 95.0, "resets_at": None}},
+        "binding": {
+            "window_name": "five_hour",
+            "utilization": 95.0,
+            "resets_at": None,
+            "should_block": True,
+            "effective_threshold": 85.0,
+        },
+    }
+    cache.write_text(json.dumps(payload))
+    event = _build_event()
+    out, exit_code = _run_hook(event=event, cache_path=cache)
+    assert out.strip() == ""
+    assert exit_code == 0

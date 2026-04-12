@@ -126,6 +126,7 @@ def _write_hook_config() -> None:
         "quota_guard": {
             "cache_max_age": cfg.cache_max_age,
             "cache_path": cfg.cache_path,
+            "buffer_seconds": cfg.buffer_seconds,
         },
         "kitchen_id": ctx.kitchen_id,
     }

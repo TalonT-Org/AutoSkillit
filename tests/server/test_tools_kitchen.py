@@ -121,6 +121,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     mock_ctx.config.quota_guard.long_window_patterns = ["weekly", "sonnet", "opus"]
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "/custom/path.json"
+    mock_ctx.config.quota_guard.buffer_seconds = 60
 
     # _write_hook_config uses 'from autoskillit.server import _get_ctx' at call time.
     # Patching autoskillit.server._get_ctx correctly intercepts that deferred import;
@@ -142,6 +143,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     data = json.loads(hook_cfg.read_text())
     assert data["quota_guard"]["cache_max_age"] == 300
     assert data["quota_guard"]["cache_path"] == "/custom/path.json"
+    assert data["quota_guard"]["buffer_seconds"] == 60
     # threshold fields are pre-computed into should_block in the cache — not written to hook_config
     assert "threshold" not in data["quota_guard"]
     assert "short_window_threshold" not in data["quota_guard"]
@@ -167,6 +169,7 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
     mock_ctx.config.quota_guard.long_window_patterns = ["weekly", "sonnet", "opus"]
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "~/.claude/quota_cache.json"
+    mock_ctx.config.quota_guard.buffer_seconds = 60
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -241,6 +244,7 @@ async def test_open_kitchen_does_not_write_gate_file(tmp_path, monkeypatch):
     mock_ctx.config.quota_guard.long_window_patterns = ["weekly", "sonnet", "opus"]
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "~/.claude/quota_cache.json"
+    mock_ctx.config.quota_guard.buffer_seconds = 60
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
             with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):

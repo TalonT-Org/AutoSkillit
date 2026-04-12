@@ -203,7 +203,11 @@ skills:
     - vis-lens-always-on
     - vis-lens-antipattern
     - vis-lens-chart-select
+    - vis-lens-color-access
     - vis-lens-domain-norms
+    - vis-lens-figure-table
+    - vis-lens-multi-compare
+    - vis-lens-temporal
     - vis-lens-uncertainty
   tier3:
     - prepare-pr

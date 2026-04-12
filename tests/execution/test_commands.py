@@ -179,8 +179,10 @@ class TestBuildHeadlessResumeCmd:
         assert result.cmd[prompt_idx] == "Emit token"
 
     def test_env_includes_headless_marker(self) -> None:
+        from collections.abc import Mapping
+
         result = build_headless_resume_cmd(resume_session_id="abc-123", prompt="Emit token")
-        assert isinstance(result.env, dict)
+        assert isinstance(result.env, Mapping)
         assert len(result.env) > 0
 
     def test_no_plugin_dir_by_default(self) -> None:

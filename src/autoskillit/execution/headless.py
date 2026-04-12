@@ -320,7 +320,7 @@ async def _attempt_contract_nudge(
     logger.info(
         "nudge_recovery_success",
         session_id=skill_result.session_id,
-        nudge_output_tokens=nudge_session.token_usage.get("output_tokens", 0)
+        nudge_output_count=nudge_session.token_usage.get("output_tokens", 0)
         if nudge_session.token_usage
         else 0,
     )

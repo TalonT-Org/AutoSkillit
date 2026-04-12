@@ -3526,21 +3526,40 @@ class TestExtractMissingTokenHints:
 
 
 class TestContractNudge:
-    """Integration tests for the contract recovery nudge in run_headless_core."""
+    """Integration tests for the contract recovery nudge in run_headless_core.
+
+    The nudge fires when CONTRACT_RECOVERY is triggered with a valid session_id.
+    CONTRACT_RECOVERY requires synthesis to have failed first. For CHANNEL_A/B
+    sessions, synthesis is skipped (gated on UNMONITORED), so Write evidence
+    with file_path triggers CONTRACT_RECOVERY while _extract_missing_token_hints
+    can still find the file_path for hints.
+    """
 
     def _main_session_ndjson(
         self, marker: str, *, include_token: bool = False, session_id: str = "sess-main"
     ) -> str:
-        """Build NDJSON for a main session with Write evidence and optional token."""
+        """Build NDJSON for a CHANNEL_A-confirmed session with Write evidence."""
         result_text = "plan summary\n"
         if include_token:
             result_text += "plan_path = /tmp/out.md\n"
         result_text += marker
         return _ndjson_with_write(result_text, ["/tmp/out.md"], session_id=session_id)
 
+    def _main_subprocess_result(
+        self, marker: str, *, session_id: str = "sess-main"
+    ) -> SubprocessResult:
+        """Build a SubprocessResult with CHANNEL_A confirmation to bypass synthesis."""
+        return SubprocessResult(
+            returncode=0,
+            stdout=self._main_session_ndjson(marker, session_id=session_id),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+
     def _nudge_response_ndjson(self, marker: str, *, include_token: bool = True) -> str:
         """Build NDJSON for a nudge response."""
-        result_text = ""
         if include_token:
             result_text = f"plan_path = /tmp/out.md\n{marker}"
         else:
@@ -3561,13 +3580,7 @@ class TestContractNudge:
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
-        # Main session: Write evidence present, expected pattern missing, marker present
-        tool_ctx.runner.push(
-            SubprocessResult(
-                0, self._main_session_ndjson(marker), "", TerminationReason.NATURAL_EXIT, pid=1
-            )
-        )
-        # Nudge response: contains the missing pattern
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
         tool_ctx.runner.push(
             SubprocessResult(
                 0, self._nudge_response_ndjson(marker), "", TerminationReason.NATURAL_EXIT, pid=2
@@ -3588,12 +3601,7 @@ class TestContractNudge:
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
-        tool_ctx.runner.push(
-            SubprocessResult(
-                0, self._main_session_ndjson(marker), "", TerminationReason.NATURAL_EXIT, pid=1
-            )
-        )
-        # Nudge response does NOT contain the expected pattern
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
         tool_ctx.runner.push(
             SubprocessResult(
                 0,
@@ -3617,12 +3625,7 @@ class TestContractNudge:
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
-        tool_ctx.runner.push(
-            SubprocessResult(
-                0, self._main_session_ndjson(marker), "", TerminationReason.NATURAL_EXIT, pid=1
-            )
-        )
-        # Nudge runner raises a timeout
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
         tool_ctx.runner.push(
             SubprocessResult(1, "", "timeout", TerminationReason.TIMED_OUT, pid=2)
         )
@@ -3644,7 +3647,6 @@ class TestContractNudge:
         from autoskillit.pipeline.audit import DefaultAuditLog
 
         marker = tool_ctx.config.run_skill.completion_marker
-        # Set up budget exhaustion: 4 prior failures > max_consecutive_retries=3
         audit = DefaultAuditLog()
         for _ in range(4):
             audit.record_failure(
@@ -3659,11 +3661,7 @@ class TestContractNudge:
                 )
             )
         tool_ctx.audit = audit
-        tool_ctx.runner.push(
-            SubprocessResult(
-                0, self._main_session_ndjson(marker), "", TerminationReason.NATURAL_EXIT, pid=1
-            )
-        )
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
         result = await run_headless_core(
             "/autoskillit:make-plan foo",
             cwd="/tmp",
@@ -3671,7 +3669,6 @@ class TestContractNudge:
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
         )
         assert result.retry_reason == RetryReason.BUDGET_EXHAUSTED
-        # Runner called only once (no nudge attempt)
         assert len(tool_ctx.runner.call_args_list) == 1
 
     @pytest.mark.anyio
@@ -3679,10 +3676,16 @@ class TestContractNudge:
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
-        # Main session with empty session_id
         ndjson = _ndjson_with_write(f"plan summary\n{marker}", ["/tmp/out.md"], session_id="")
         tool_ctx.runner.push(
-            SubprocessResult(0, ndjson, "", TerminationReason.NATURAL_EXIT, pid=1)
+            SubprocessResult(
+                0,
+                ndjson,
+                "",
+                TerminationReason.NATURAL_EXIT,
+                pid=1,
+                channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            )
         )
         result = await run_headless_core(
             "/autoskillit:make-plan foo",
@@ -3691,7 +3694,6 @@ class TestContractNudge:
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
         )
         assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
-        # Runner called only once (no nudge attempt)
         assert len(tool_ctx.runner.call_args_list) == 1
 
     @pytest.mark.anyio
@@ -3699,15 +3701,7 @@ class TestContractNudge:
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
-        tool_ctx.runner.push(
-            SubprocessResult(
-                0,
-                self._main_session_ndjson(marker, session_id="sess-abc-123"),
-                "",
-                TerminationReason.NATURAL_EXIT,
-                pid=1,
-            )
-        )
+        tool_ctx.runner.push(self._main_subprocess_result(marker, session_id="sess-abc-123"))
         tool_ctx.runner.push(
             SubprocessResult(
                 0, self._nudge_response_ndjson(marker), "", TerminationReason.NATURAL_EXIT, pid=2
@@ -3730,9 +3724,7 @@ class TestContractNudge:
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
-        # Main session with token usage
-        main_ndjson_records = []
-        main_ndjson_records.append(
+        main_ndjson_records = [
             json.dumps(
                 {
                     "type": "assistant",
@@ -3747,9 +3739,7 @@ class TestContractNudge:
                         ]
                     },
                 }
-            )
-        )
-        main_ndjson_records.append(
+            ),
             json.dumps(
                 {
                     "type": "result",
@@ -3757,14 +3747,12 @@ class TestContractNudge:
                     "is_error": False,
                     "result": f"plan summary\n{marker}",
                     "session_id": "sess-tok",
-                    "total_cost_usd": 0.01,
                     "usage": {"input_tokens": 1000, "output_tokens": 500},
                 }
-            )
-        )
+            ),
+        ]
         main_ndjson = "\n".join(main_ndjson_records)
 
-        # Nudge response with token usage
         nudge_ndjson = json.dumps(
             {
                 "type": "result",
@@ -3777,7 +3765,14 @@ class TestContractNudge:
         )
 
         tool_ctx.runner.push(
-            SubprocessResult(0, main_ndjson, "", TerminationReason.NATURAL_EXIT, pid=1)
+            SubprocessResult(
+                0,
+                main_ndjson,
+                "",
+                TerminationReason.NATURAL_EXIT,
+                pid=1,
+                channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            )
         )
         tool_ctx.runner.push(
             SubprocessResult(0, nudge_ndjson, "", TerminationReason.NATURAL_EXIT, pid=2)
@@ -3791,7 +3786,6 @@ class TestContractNudge:
             step_name="test-step",
         )
         assert result.success is True
-        # Token usage should be additively merged
         assert result.token_usage is not None
         assert result.token_usage.get("input_tokens", 0) >= 1200
         assert result.token_usage.get("output_tokens", 0) >= 600
@@ -3801,15 +3795,8 @@ class TestContractNudge:
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
-        tool_ctx.runner.push(
-            SubprocessResult(
-                0, self._main_session_ndjson(marker), "", TerminationReason.NATURAL_EXIT, pid=1
-            )
-        )
-        # Make the nudge runner raise an exception by pushing a result that will
-        # fail in parse_session_result — actually, let's simulate via a custom runner.
-        # Simpler: push a result with empty stdout — the nudge will get an empty parse
-        # which means patterns won't match, so it falls through.
+        tool_ctx.runner.push(self._main_subprocess_result(marker))
+        # Empty stdout nudge → patterns not found → falls through
         tool_ctx.runner.push(
             SubprocessResult(1, "", "RuntimeError", TerminationReason.NATURAL_EXIT, pid=2)
         )

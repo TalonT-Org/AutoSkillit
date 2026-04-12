@@ -33,6 +33,11 @@ IDE_ENV_DENYLIST: frozenset[str] = frozenset(
         "VSCODE_GIT_ASKPASS_MAIN",
         "CURSOR_TRACE_ID",
         "ZED_TERM",
+        # Session-lifetime vars: stripped from base so callers control them explicitly
+        # via extras. Without stripping, a parent headless session's env would leak
+        # into child sessions even when exit_after_stop_delay_ms=0 or no step name.
+        "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
+        "SCENARIO_STEP_NAME",
     }
 )
 

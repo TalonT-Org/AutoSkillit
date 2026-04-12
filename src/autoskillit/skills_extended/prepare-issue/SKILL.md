@@ -188,7 +188,7 @@ provided (adopting an existing issue) or when `--dry-run` is active.
    ISSUE_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_${ts}.md"
    mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
 
-   grep -v 'validated: true' "{report_path}" \
+   grep -v 'validated: true' "$report_path" \
      | grep -v '\.autoskillit/' \
      | grep -v 'contested_findings_' \
      | grep -v '| CONTESTED |' \

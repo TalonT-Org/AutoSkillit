@@ -381,9 +381,7 @@ class TestRegisterCloneStatusOwner:
     """T12–T13: register_clone_status propagates kitchen_id as owner."""
 
     @pytest.mark.anyio
-    async def test_register_clone_status_propagates_kitchen_id_as_owner(
-        self, tool_ctx, tmp_path
-    ):
+    async def test_register_clone_status_propagates_kitchen_id_as_owner(self, tool_ctx, tmp_path):
         """T12 — register_clone_status writes entry with owner == kitchen_id."""
         tool_ctx.kitchen_id = "kit-xyz"
         reg = str(tmp_path / "registry.json")
@@ -400,9 +398,7 @@ class TestRegisterCloneStatusOwner:
         assert data["clones"][0]["owner"] == "kit-xyz"
 
     @pytest.mark.anyio
-    async def test_register_clone_status_rejects_when_kitchen_id_empty(
-        self, tool_ctx, tmp_path
-    ):
+    async def test_register_clone_status_rejects_when_kitchen_id_empty(self, tool_ctx, tmp_path):
         """T13 — register_clone_status returns registered=false when kitchen_id is empty."""
         tool_ctx.kitchen_id = ""
         reg = str(tmp_path / "registry.json")
@@ -453,9 +449,7 @@ class TestBatchCleanupClonesOwner:
         mock_mgr.remove_clone.return_value = {"removed": "true"}
         tool_ctx.clone_mgr = mock_mgr
 
-        result = json.loads(
-            await batch_cleanup_clones(registry_path=reg, all_owners="true")
-        )
+        result = json.loads(await batch_cleanup_clones(registry_path=reg, all_owners="true"))
 
         deleted = result["deleted"]
         assert "/clone-A" in deleted
@@ -482,13 +476,10 @@ class TestBatchCleanupClonesOwner:
         self, tool_ctx, tmp_path
     ):
         """T17 — escape hatch works even when kitchen_id is empty (legacy recovery)."""
-        from pathlib import Path as _Path
 
         reg_path = tmp_path / "registry.json"
         reg_path.write_text(
-            __import__("json").dumps(
-                {"clones": [{"path": "/legacy", "status": "success"}]}
-            )
+            __import__("json").dumps({"clones": [{"path": "/legacy", "status": "success"}]})
         )
 
         tool_ctx.kitchen_id = ""
@@ -517,9 +508,7 @@ class TestBatchCleanupClonesOwner:
         mock_mgr.remove_clone.return_value = {"removed": "true"}
         tool_ctx.clone_mgr = mock_mgr
 
-        result = json.loads(
-            await batch_cleanup_clones(registry_path=reg, all_owners="yes")
-        )
+        result = json.loads(await batch_cleanup_clones(registry_path=reg, all_owners="yes"))
 
         assert "/clone-A" in result["deleted"]
         assert "/clone-B" not in result["deleted"]

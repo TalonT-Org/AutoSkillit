@@ -5,7 +5,7 @@ After all pipelines complete, batch_cleanup_clones reads the registry and
 removes only success-status clones.
 
 Registry file format:
-    {"clones": [{"path": "/abs/path/to/clone", "status": "success|error", "owner": "kitchen-uuid"}]}
+    {"clones": [{"path": "/abs/path", "status": "success|error", "owner": "kitchen-uuid"}]}
 """
 
 from __future__ import annotations

@@ -152,9 +152,7 @@ class TestCleanupCandidatesOwnerFilter:
 
         assert sorted(to_delete) == ["/tmp/a", "/tmp/b", "/tmp/c"]
 
-    def test_cleanup_candidates_with_owner_filters_to_matching_only(
-        self, tmp_path: Path
-    ) -> None:
+    def test_cleanup_candidates_with_owner_filters_to_matching_only(self, tmp_path: Path) -> None:
         """T4 — cleanup_candidates(owner='kit-1') returns only kit-1's success entry."""
         reg = str(tmp_path / "registry.json")
         register_clone("/tmp/a", "success", "kit-1", registry_path=reg)
@@ -179,27 +177,19 @@ class TestCleanupCandidatesOwnerFilter:
         assert to_delete == ["/tmp/a"]
         assert to_preserve == []
 
-    def test_cleanup_candidates_owner_none_includes_legacy_entries(
-        self, tmp_path: Path
-    ) -> None:
+    def test_cleanup_candidates_owner_none_includes_legacy_entries(self, tmp_path: Path) -> None:
         """T6 — owner=None (all-owners mode) includes legacy entries without owner field."""
         reg_path = tmp_path / "registry.json"
-        reg_path.write_text(
-            json.dumps({"clones": [{"path": "/tmp/legacy", "status": "success"}]})
-        )
+        reg_path.write_text(json.dumps({"clones": [{"path": "/tmp/legacy", "status": "success"}]}))
 
         to_delete, _ = cleanup_candidates(registry_path=str(reg_path), owner=None)
 
         assert "/tmp/legacy" in to_delete
 
-    def test_cleanup_candidates_owner_scoped_hides_legacy_entries(
-        self, tmp_path: Path
-    ) -> None:
+    def test_cleanup_candidates_owner_scoped_hides_legacy_entries(self, tmp_path: Path) -> None:
         """T7 — owner-scoped call does not see legacy orphan entries (no owner field)."""
         reg_path = tmp_path / "registry.json"
-        reg_path.write_text(
-            json.dumps({"clones": [{"path": "/tmp/legacy", "status": "success"}]})
-        )
+        reg_path.write_text(json.dumps({"clones": [{"path": "/tmp/legacy", "status": "success"}]}))
 
         to_delete, _ = cleanup_candidates(registry_path=str(reg_path), owner="kit-1")
 
@@ -248,9 +238,7 @@ class TestBatchDeleteOwnerFilter:
         assert sorted(called_paths) == ["/tmp/a", "/tmp/b", "/tmp/legacy"]
         assert sorted(result["deleted"]) == ["/tmp/a", "/tmp/b", "/tmp/legacy"]
 
-    def test_batch_delete_preserves_other_owners_error_entries(
-        self, tmp_path: Path
-    ) -> None:
+    def test_batch_delete_preserves_other_owners_error_entries(self, tmp_path: Path) -> None:
         """T10 — kit-1's scoped batch_delete does not report kit-2's error as preserved."""
         reg = str(tmp_path / "registry.json")
         register_clone("/tmp/a", "success", "kit-1", registry_path=reg)
@@ -265,9 +253,7 @@ class TestBatchDeleteOwnerFilter:
 class TestRegisterCloneParallelWriters:
     """T11: parallel writers with distinct owners both persist correctly."""
 
-    def test_register_clone_parallel_writers_two_owners_interleaved(
-        self, tmp_path: Path
-    ) -> None:
+    def test_register_clone_parallel_writers_two_owners_interleaved(self, tmp_path: Path) -> None:
         """T11 — two sequential register_clone calls with distinct owners both persist."""
         reg = str(tmp_path / "registry.json")
         register_clone("/tmp/clone-A", "success", "owner-A", registry_path=reg)

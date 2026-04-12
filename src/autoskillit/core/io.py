@@ -81,19 +81,24 @@ def atomic_write(path: Path, content: str) -> None:
             f.flush()
             os.fsync(f.fileno())  # durable data write
         os.replace(tmp, path)
-        # Durable rename: fsync the parent directory on POSIX
-        if _sys.platform != "win32":
-            dir_fd = os.open(path.parent, os.O_RDONLY)
-            try:
-                os.fsync(dir_fd)
-            finally:
-                os.close(dir_fd)
     except Exception:
         try:
             os.unlink(tmp)
         except OSError:
             pass
         raise
+    # Durable rename: fsync the parent directory on POSIX.
+    # Best-effort: os.replace() already committed the rename; a dir_fsync
+    # failure here does not undo the write.
+    if _sys.platform != "win32":
+        try:
+            dir_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass  # Non-fatal — data is durable at path after os.replace()
 
 
 def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: int) -> None:

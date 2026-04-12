@@ -182,7 +182,8 @@ def test_investigate_synthesize_includes_historical_context(skill_text: str) -> 
     """Step 3 synthesis list must include Historical Context as a finding item."""
     step_3_idx = skill_text.find("### Step 3:")
     step_35_idx = skill_text.find("Step 3.5")
-    assert step_3_idx != -1 and step_35_idx != -1
+    assert step_3_idx != -1, "Step 3 heading ('### Step 3:') not found in investigate SKILL.md"
+    assert step_35_idx != -1, "Step 3.5 heading ('Step 3.5') not found in investigate SKILL.md"
     step_3_text = skill_text[step_3_idx:step_35_idx]
     assert "Historical Context" in step_3_text, (
         "Step 3 synthesis numbered list must include 'Historical Context' as a finding "

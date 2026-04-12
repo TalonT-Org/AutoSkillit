@@ -470,6 +470,7 @@ class TestAdjudicationCoverageMatrix:
             TerminationReason.NATURAL_EXIT,  # TestSTOPDelayPipelineAdjudication
             TerminationReason.STALE,  # TestStaleRecoveryPipelineAdjudication
             TerminationReason.TIMED_OUT,  # TestTimedOutPipelineAdjudication
+            TerminationReason.IDLE_STALL,  # TestIdleStallWatchdog in test_process_run.py
         }
     )
 

@@ -91,6 +91,8 @@ class RunSkillConfig:
     completion_marker: str = "%%ORDER_UP%%"
     completion_drain_timeout: float = 5.0
     exit_after_stop_delay_ms: int = 120000
+    idle_output_timeout: int = 600
+    max_suppression_seconds: int = 1800
 
     @property
     def output_format(self) -> OutputFormat:
@@ -373,6 +375,12 @@ class AutomationConfig:
                 ),
                 exit_after_stop_delay_ms=int(
                     val(rs, "exit_after_stop_delay_ms", _rs["exit_after_stop_delay_ms"])
+                ),
+                idle_output_timeout=int(
+                    val(rs, "idle_output_timeout", _rs["idle_output_timeout"])
+                ),
+                max_suppression_seconds=int(
+                    val(rs, "max_suppression_seconds", _rs["max_suppression_seconds"])
                 ),
             ),
             model=ModelConfig(

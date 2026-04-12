@@ -470,7 +470,9 @@ def _build_skill_result(
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
-        "stale"
+        "idle_stall"
+        if result.termination == TerminationReason.IDLE_STALL
+        else "stale"
         if result.termination == TerminationReason.STALE
         else "timed_out"
         if result.termination == TerminationReason.TIMED_OUT
@@ -545,6 +547,36 @@ def _build_skill_result(
             token_usage=None,
         )
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
+
+    if result.termination == TerminationReason.IDLE_STALL:
+        _capture_failure(
+            skill_command,
+            exit_code=result.returncode if result.returncode is not None else -1,
+            subtype="idle_stall",
+            needs_retry=True,
+            retry_reason=RetryReason.STALE,
+            stderr=result.stderr if result.stderr else "",
+            audit=audit,
+        )
+        logger.warning(
+            "Headless session killed: stdout idle for configured threshold (IDLE_STALL)"
+        )
+        idle_sr = SkillResult(
+            success=False,
+            result=(
+                "Session killed: stdout idle for configured threshold (no output growth). "
+                "Partial progress may have been made. Retry to continue."
+            ),
+            session_id=_resolve_skill_session_id(None, result),
+            subtype="idle_stall",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=True,
+            retry_reason=RetryReason.STALE,
+            stderr="",
+            token_usage=None,
+        )
+        return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
@@ -886,6 +918,8 @@ async def run_headless_core(
                 stale_threshold=effective_stale,
                 completion_drain_timeout=cfg.completion_drain_timeout,
                 linux_tracing_config=linux_tracing_cfg,
+                idle_output_timeout=cfg.idle_output_timeout,
+                max_suppression_seconds=cfg.max_suppression_seconds,
             )
         finally:
             if _result is None:

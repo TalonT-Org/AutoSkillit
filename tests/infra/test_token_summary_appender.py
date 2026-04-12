@@ -822,3 +822,22 @@ def test_e4_kitchen_id_renamed_in_hook_config(tmp_path: Path) -> None:
     cfg_path.write_text(json.dumps({"pipeline_id": "legacy-pipeline-uuid"}))
     result = _read_kitchen_id(base=tmp_path)
     assert result == "legacy-pipeline-uuid"
+
+
+def test_hook_subprocess_calls_have_timeout() -> None:
+    """All subprocess.run() calls in token_summary_appender.py must have timeout=."""
+    import ast
+
+    src = Path("src/autoskillit/hooks/token_summary_appender.py").read_text()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "run"
+        ):
+            kw_names = {kw.arg for kw in node.keywords}
+            assert "timeout" in kw_names, (
+                f"subprocess.run() at line {node.lineno} in "
+                f"token_summary_appender.py missing timeout="
+            )

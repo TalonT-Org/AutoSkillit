@@ -85,6 +85,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
         linux_tracing_config: Any | None = None,
+        idle_output_timeout: float | None = None,
+        max_suppression_seconds: float | None = None,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
@@ -108,6 +110,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
             input_data=input_data,
             completion_drain_timeout=completion_drain_timeout,
             linux_tracing_config=linux_tracing_config,
+            idle_output_timeout=idle_output_timeout,
+            max_suppression_seconds=max_suppression_seconds,
         )
 
         if step_name:
@@ -195,6 +199,8 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
         linux_tracing_config: Any | None = None,
+        idle_output_timeout: float | None = None,
+        max_suppression_seconds: float | None = None,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 

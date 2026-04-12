@@ -314,7 +314,7 @@ def clone_repo(
         if branch:
             cmd += ["--branch", branch]
         cmd += [clone_source, str(clone_path)]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
             raise RuntimeError(
                 "git clone failed:"
@@ -520,6 +520,7 @@ def push_to_remote(
         cwd=clone_path,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     if push_result.returncode != 0:
         stderr_text = push_result.stderr.strip()

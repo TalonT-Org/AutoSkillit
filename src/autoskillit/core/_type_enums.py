@@ -179,6 +179,7 @@ class TerminationReason(StrEnum):
     NATURAL_EXIT = "natural_exit"
     COMPLETED = "completed"
     STALE = "stale"
+    IDLE_STALL = "idle_stall"
     TIMED_OUT = "timed_out"
 
 
@@ -238,6 +239,7 @@ class CliSubtype(StrEnum):
     UNPARSEABLE = "unparseable"
     TIMEOUT = "timeout"
     INTERRUPTED = "interrupted"
+    IDLE_STALL = "idle_stall"
 
     @classmethod
     def from_cli(cls, raw: str) -> CliSubtype:

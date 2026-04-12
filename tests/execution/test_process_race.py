@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from autoskillit.core.types import (
@@ -172,3 +174,57 @@ class TestSubprocessResultSessionIdResolution:
         from autoskillit.execution.process import _resolve_session_id
 
         assert _resolve_session_id("", "") == ""
+
+
+class TestResolveTerminationIdleStall:
+    """Idle stall priority in resolve_termination."""
+
+    def test_resolve_termination_idle_stall_priority(self) -> None:
+        signals = RaceSignals(
+            process_exited=False,
+            process_returncode=None,
+            channel_a_confirmed=False,
+            channel_b_status=None,
+            channel_b_session_id="",
+            stdout_session_id=None,
+            idle_stall=True,
+        )
+        termination, channel = resolve_termination(signals)
+        assert termination == TerminationReason.IDLE_STALL
+        assert channel == ChannelConfirmation.UNMONITORED
+
+    def test_resolve_termination_process_exit_beats_idle_stall(self) -> None:
+        signals = RaceSignals(
+            process_exited=True,
+            process_returncode=0,
+            channel_a_confirmed=False,
+            channel_b_status=None,
+            channel_b_session_id="",
+            stdout_session_id=None,
+            idle_stall=True,
+        )
+        termination, _ = resolve_termination(signals)
+        assert termination == TerminationReason.NATURAL_EXIT
+
+    def test_resolve_termination_idle_stall_beats_stale(self) -> None:
+        signals = RaceSignals(
+            process_exited=False,
+            process_returncode=None,
+            channel_a_confirmed=False,
+            channel_b_status=ChannelBStatus.STALE,
+            channel_b_session_id="s1",
+            stdout_session_id=None,
+            idle_stall=True,
+        )
+        termination, _ = resolve_termination(signals)
+        assert termination == TerminationReason.IDLE_STALL
+
+
+class TestRaceSignalsFieldCount:
+    """Sentinel test: breaks when RaceSignals fields change."""
+
+    def test_race_signals_field_count(self) -> None:
+        assert len(dataclasses.fields(RaceSignals)) == 7, (
+            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 7). "
+            "Update tests to cover the new field."
+        )

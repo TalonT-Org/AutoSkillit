@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -37,3 +38,19 @@ def test_returns_false_when_bug_report_malformed(tmp_path: Path) -> None:
     (tmp_path / "bug_report.json").write_text("{not valid json")
     result = check_bug_report_non_empty(str(tmp_path))
     assert result == {"non_empty": "false"}
+
+
+def test_subprocess_calls_have_timeout() -> None:
+    """All subprocess.run() calls in smoke_utils.py must have a timeout= argument."""
+    src = Path("src/autoskillit/smoke_utils.py").read_text()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "run"
+        ):
+            kw_names = {kw.arg for kw in node.keywords}
+            assert "timeout" in kw_names, (
+                f"subprocess.run() at line {node.lineno} in smoke_utils.py missing timeout="
+            )

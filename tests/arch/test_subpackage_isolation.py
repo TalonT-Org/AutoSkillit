@@ -737,10 +737,16 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "circular imports; all enums/protocols/constants consolidated here",
     ),
     "headless.py": (
-        1050,
+        1100,
         "REQ-CNST-010-E2: headless session orchestration — Channel B drain-race "
-        "recovery block adds match/case dispatch; splitting would fragment the "
+        "recovery block + IDLE_STALL routing; splitting would fragment the "
         "adjudication pipeline across modules",
+    ),
+    "session.py": (
+        1050,
+        "REQ-CNST-010-E3: session adjudication pipeline — exhaustive match arms "
+        "for TerminationReason require explicit IDLE_STALL arms in _compute_success, "
+        "_compute_retry, and _normalize_subtype",
     ),
 }
 
@@ -1147,6 +1153,7 @@ class TestGroupCMigration:
             "channel_b_status",
             "channel_b_session_id",
             "stdout_session_id",
+            "idle_stall",
         }  # REQ-SIG-008
 
     def test_race_signals_still_frozen(self):

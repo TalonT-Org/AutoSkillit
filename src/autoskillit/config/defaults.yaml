@@ -44,6 +44,8 @@ run_skill:
   completion_marker: "%%ORDER_UP%%"
   completion_drain_timeout: 5.0
   exit_after_stop_delay_ms: 120000
+  idle_output_timeout: 600
+  max_suppression_seconds: 1800
 
 model:
   default: sonnet

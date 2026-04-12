@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-_HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", ".hook_config.json")
+_HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", "temp", ".hook_config.json")
 
 
 @dataclass(frozen=True)

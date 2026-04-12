@@ -116,7 +116,7 @@ def _read_kitchen_id(base: pathlib.Path | None = None) -> str:
     Falls back to 'pipeline_id' key for configs written before the rename.
     """
     root = base if base is not None else pathlib.Path.cwd()
-    path = root / ".autoskillit" / ".hook_config.json"
+    path = root / ".autoskillit" / "temp" / ".hook_config.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):

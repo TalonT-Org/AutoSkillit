@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _HOOK_CONFIG_FILENAME: str = ".hook_config.json"
-_HOOK_DIR_COMPONENTS: tuple[str, ...] = (".autoskillit",)
+_HOOK_DIR_COMPONENTS: tuple[str, ...] = (".autoskillit", "temp")
 
 
 def _hook_config_path(project_root: Path) -> Path:

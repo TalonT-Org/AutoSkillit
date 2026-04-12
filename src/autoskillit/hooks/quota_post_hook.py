@@ -19,7 +19,7 @@ _DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
 _DEFAULT_CACHE_MAX_AGE = 300  # seconds
 
 HOOK_CONFIG_FILENAME = ".hook_config.json"
-HOOK_DIR_COMPONENTS = (".autoskillit",)
+HOOK_DIR_COMPONENTS = (".autoskillit", "temp")
 
 _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
 

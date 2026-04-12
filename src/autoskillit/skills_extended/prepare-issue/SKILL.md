@@ -198,7 +198,7 @@ provided (adopting an existing issue) or when `--dry-run` is active.
      | grep -v '| VALID BUT EXCEPTION WARRANTED |' \
      | sed 's/ | \*\*Contested:\*\* [0-9][0-9]*//' \
      | sed 's/ | \*\*Exception warranted:\*\* [0-9][0-9]*//' \
-   > "${ISSUE_BODY_FILE}"
+   > "${ISSUE_BODY_FILE}" || { echo 'ERROR: failed to process report_path'; exit 1; }
 
    # Strip the ## Findings with Exceptions section entirely:
    awk '/^## Findings with Exceptions/{skip=1} skip && /^---/{skip=0; next} !skip' \

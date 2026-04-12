@@ -24,12 +24,11 @@ from autoskillit.pipeline import (  # noqa: F401
     ToolContext,
     gate_error_result,
 )
-from autoskillit.server._lifespan import _autoskillit_lifespan  # noqa: F401
+from autoskillit.server._lifespan import _autoskillit_lifespan
 from autoskillit.server._state import (  # noqa: E402, F401
     _ctx,
     _get_config,
     _get_ctx,
-    _get_ctx_or_none,
     _get_plugin_dir,
     _initialize,
     version_info,

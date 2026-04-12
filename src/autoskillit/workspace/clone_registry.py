@@ -128,18 +128,8 @@ def register_clone(
     if owner == "":
         raise ValueError("owner is required")
     path = _resolve_registry_path(registry_path, temp_dir)
-    lock_path = path.with_suffix(".lock")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(lock_path, "w") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
-        existing: list[dict[str, str]] = []
-        if path.exists():
-            try:
-                existing = json.loads(path.read_text()).get("clones", [])
-            except (json.JSONDecodeError, OSError) as exc:
-                _log.warning("clone_registry: could not read %s: %s", path, exc)
-        existing.append({"path": clone_path, "status": status, "owner": owner})
-        atomic_write(path, json.dumps({"clones": existing}, indent=2))
+    with CloneRegistry(path) as reg:
+        reg.append(clone_path, status, owner)
     return {"registered": "true", "registry_path": str(path)}
 
 

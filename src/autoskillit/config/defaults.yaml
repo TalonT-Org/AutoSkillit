@@ -62,6 +62,8 @@ token_usage:
 
 quota_guard:
   enabled: true
+  short_window_enabled: true   # Gates the 5-hour rolling window class.
+  long_window_enabled: true    # Gates the weekly / sonnet / opus class.
   short_window_threshold: 85.0
   long_window_threshold: 98.0
   long_window_patterns:

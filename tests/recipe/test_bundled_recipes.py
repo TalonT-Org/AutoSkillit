@@ -2046,10 +2046,10 @@ class TestResearchRecipeStructure:
                 f"{name}.on_failure must be research_complete for graceful degradation"
             )
 
-    def test_re_push_research_routes_to_begin_archival(self, recipe) -> None:
-        """re_push_research routes to begin_archival."""
+    def test_re_push_research_routes_to_finalize_bundle(self, recipe) -> None:
+        """re_push_research routes to finalize_bundle on success, begin_archival on failure."""
         step = recipe.steps["re_push_research"]
-        assert step.on_success == "begin_archival"
+        assert step.on_success == "finalize_bundle"
         assert step.on_failure == "begin_archival"
 
     def test_create_worktree_copies_review_cycle_artifacts(self, recipe) -> None:

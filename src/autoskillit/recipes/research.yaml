@@ -732,8 +732,6 @@ steps:
         fi
       cwd: "${{ context.worktree_path }}"
       step_name: finalize_bundle
-    capture:
-      report_path: "${{ result.report_path }}"
     on_success: begin_archival
     on_failure: begin_archival
     note: >

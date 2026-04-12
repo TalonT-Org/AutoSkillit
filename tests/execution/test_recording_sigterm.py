@@ -7,8 +7,8 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import time
-from pathlib import Path
 
 import pytest
 
@@ -25,8 +25,10 @@ def test_sigterm_writes_scenario_json(tmp_path):
         "RECORD_SCENARIO_DIR": str(output_dir),
         "RECORD_SCENARIO_RECIPE": "test-recipe",
     }
+    # Use sys.executable -m to ensure we run the worktree-installed version,
+    # not a system-wide `autoskillit` binary that may lack the lifespan fix.
     proc = subprocess.Popen(
-        ["autoskillit", "serve"],
+        [sys.executable, "-m", "autoskillit"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -34,16 +36,23 @@ def test_sigterm_writes_scenario_json(tmp_path):
     )
 
     # Allow server to start and install its signal handler
-    time.sleep(0.5)
+    time.sleep(1.0)
 
-    # SIGTERM is the exact signal Claude Code sends on /exit
+    # SIGTERM is the exact signal Claude Code sends on /exit.
+    # The handler converts SIGTERM → KeyboardInterrupt, triggering lifespan
+    # teardown which writes scenario.json. Close stdin so the stdio transport
+    # detects EOF and the event loop can fully unwind.
+    proc.stdin.close()
     proc.send_signal(signal.SIGTERM)
-    proc.wait(timeout=10)
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
 
     scenario_json = output_dir / "scenario.json"
     assert scenario_json.exists(), (
-        "scenario.json not written after SIGTERM — "
-        "finalize() likely bypassed (issue #745)"
+        "scenario.json not written after SIGTERM — finalize() likely bypassed (issue #745)"
     )
     data = json.loads(scenario_json.read_text())
     assert data.get("recipe") == "test-recipe"

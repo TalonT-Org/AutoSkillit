@@ -18,7 +18,7 @@ async def test_lifespan_calls_finalize_on_recording_runner():
     mock_ctx = MagicMock()
     mock_ctx.runner = mock_runner
 
-    with patch("autoskillit.server._get_ctx_or_none", return_value=mock_ctx):
+    with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
         async with _autoskillit_lifespan(MagicMock()):
             pass  # server running phase
 
@@ -33,7 +33,7 @@ async def test_lifespan_skips_finalize_when_not_recording():
     mock_ctx = MagicMock()
     mock_ctx.runner = MagicMock()  # plain runner, not RecordingSubprocessRunner
 
-    with patch("autoskillit.server._get_ctx_or_none", return_value=mock_ctx):
+    with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
         async with _autoskillit_lifespan(MagicMock()):
             pass  # must not raise
 
@@ -43,6 +43,6 @@ async def test_lifespan_skips_finalize_when_ctx_is_none():
     """lifespan __aexit__ is safe when _get_ctx_or_none() returns None (non-recording mode)."""
     from autoskillit.server import _autoskillit_lifespan
 
-    with patch("autoskillit.server._get_ctx_or_none", return_value=None):
+    with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=None):
         async with _autoskillit_lifespan(MagicMock()):
             pass  # must not raise

@@ -115,8 +115,16 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     plugin_dir = str(pkg_root())
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
-    mcp.run()
+
+    def _sigterm_handler(*_):
+        """Convert SIGTERM into KeyboardInterrupt so asyncio shuts down cleanly."""
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _sigterm_handler)
+    try:
+        mcp.run()
+    except KeyboardInterrupt:
+        pass
 
 
 @app.command

@@ -7,7 +7,7 @@ import pytest
 
 
 def test_serve_installs_sigterm_handler(monkeypatch, tmp_path):
-    """serve() installs signal.SIGTERM → sys.exit(0) before mcp.run()."""
+    """serve() installs signal.SIGTERM handler before mcp.run()."""
     installed_handlers = {}
 
     original_signal = signal_mod.signal
@@ -38,6 +38,5 @@ def test_serve_installs_sigterm_handler(monkeypatch, tmp_path):
     assert signal_mod.SIGTERM in installed_handlers, "SIGTERM handler not installed by serve()"
 
     handler = installed_handlers[signal_mod.SIGTERM]
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(KeyboardInterrupt):
         handler(signal_mod.SIGTERM, None)
-    assert exc_info.value.code == 0

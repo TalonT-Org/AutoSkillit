@@ -137,7 +137,7 @@ HOOK_REGISTRY_HASH: str = compute_registry_hash(HOOK_REGISTRY, RETIRED_SCRIPT_BA
 def load_hooks_json_hash(path: Path) -> str | None:
     """Read the _autoskillit_registry_hash from a hooks.json file."""
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         val = data.get("_autoskillit_registry_hash")
         return str(val) if val else None
     except (OSError, json.JSONDecodeError, AttributeError):

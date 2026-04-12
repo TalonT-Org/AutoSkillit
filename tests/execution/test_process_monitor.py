@@ -1190,3 +1190,25 @@ class TestSessionIdBasedSelection:
         )
         assert result.status == "completion"
         assert result.session_id == session_b
+
+
+class TestSessionLogMonitorDirMissing:
+    """DIR_MISSING: _session_log_monitor returns immediately when dir is absent."""
+
+    @pytest.mark.anyio
+    async def test_session_log_monitor_returns_dir_missing_when_dir_absent(self, tmp_path):
+        """When session_log_dir does not exist, monitor returns DIR_MISSING immediately
+        instead of burning phase1_timeout absorbing OSError."""
+        nonexistent = tmp_path / "does_not_exist"  # NOT created
+        t0 = time.monotonic()
+        result = await _session_log_monitor(
+            nonexistent,
+            "MARKER",
+            stale_threshold=10.0,
+            spawn_time=time.time() - 1,
+            _phase1_timeout=5.0,
+        )
+        elapsed = time.monotonic() - t0
+        assert result.status == ChannelBStatus.DIR_MISSING
+        assert elapsed < 2.0  # Must not burn 5s absorbing OSError
+        assert result.session_id == ""

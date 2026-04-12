@@ -521,13 +521,14 @@ class TestGroupDApiContractPreservation:
         assert TerminationReason.TIMED_OUT == "timed_out"
 
     def test_req_api_006_channel_confirmation_members(self):
-        """ChannelConfirmation must have exactly the 3 canonical values."""
+        """ChannelConfirmation must have exactly the 4 canonical values."""
         from autoskillit.core.types import ChannelConfirmation
 
         assert set(ChannelConfirmation) == {
             ChannelConfirmation.CHANNEL_A,
             ChannelConfirmation.CHANNEL_B,
             ChannelConfirmation.UNMONITORED,
+            ChannelConfirmation.DIR_MISSING,
         }
 
     def test_req_api_006_channel_confirmation_string_values(self):

@@ -82,3 +82,88 @@ def test_rules_inputs_terminal_targets_match_schema():
         f"rules_inputs.py hardcodes {len(hardcoded_discards)} sentinel string(s) via "
         ".discard(). Use _TERMINAL_TARGETS from schema instead."
     )
+
+
+def test_required_ingredient_without_default_emits_warning():
+    """A recipe ingredient with required=True and no default must produce
+    a validator WARNING, not pass silently."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = Recipe(
+        name="test-recipe",
+        description="Test recipe",
+        ingredients={
+            "source_dir": RecipeIngredient(
+                description="A required input",
+                required=True,
+                default=None,
+                hidden=False,
+            )
+        },
+        steps={
+            "step1": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/test"},
+            )
+        },
+    )
+    findings = run_semantic_rules(recipe)
+    warning_findings = [f for f in findings if f.rule == "required-ingredient-no-default"]
+    assert len(warning_findings) > 0
+    assert all(f.severity == Severity.WARNING for f in warning_findings)
+
+
+def test_required_ingredient_with_default_no_warning():
+    """A recipe ingredient with required=True and a default value should NOT
+    produce a required-ingredient-no-default warning."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = Recipe(
+        name="test-recipe",
+        description="Test recipe",
+        ingredients={
+            "source_dir": RecipeIngredient(
+                description="A required input with default",
+                required=True,
+                default="some-value",
+                hidden=False,
+            )
+        },
+        steps={
+            "step1": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/test"},
+            )
+        },
+    )
+    findings = run_semantic_rules(recipe)
+    warning_findings = [f for f in findings if f.rule == "required-ingredient-no-default"]
+    assert len(warning_findings) == 0
+
+
+def test_required_hidden_ingredient_without_default_no_warning():
+    """A hidden ingredient with required=True and no default should NOT trigger
+    the warning because hidden ingredients are not shown to the agent."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = Recipe(
+        name="test-recipe",
+        description="Test recipe",
+        ingredients={
+            "source_dir": RecipeIngredient(
+                description="A hidden required input",
+                required=True,
+                default=None,
+                hidden=True,
+            )
+        },
+        steps={
+            "step1": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/test"},
+            )
+        },
+    )
+    findings = run_semantic_rules(recipe)
+    warning_findings = [f for f in findings if f.rule == "required-ingredient-no-default"]
+    assert len(warning_findings) == 0

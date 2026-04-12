@@ -15,7 +15,8 @@ ingredients:
     description: >-
       Path to the git repository workspace. Must have a GitHub remote configured
       and an authenticated gh CLI available.
-    required: true
+    required: false
+    default: ""
   base_branch:
     description: Base branch for the PR target
     default: ""

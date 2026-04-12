@@ -85,11 +85,19 @@ _PATH_CAPTURE: re.Pattern[str] = re.compile(r"^(\w+)\\s\*=\\s\*/.+")
 
 
 def _session_log_dir(cwd: str) -> Path:
-    """Derive Claude Code session log directory from project cwd."""
+    """Derive Claude Code session log directory from project cwd.
+
+    Pre-creates the directory if absent so Channel B always has a directory
+    to poll.  Without this, a fresh clone path whose encoded project dir
+    doesn't exist yet causes ``_session_log_monitor`` to burn its entire
+    phase-1 timeout absorbing ``OSError``, ultimately producing a false
+    ``EMPTY_OUTPUT`` retry.
+    """
     log_dir = claude_code_project_dir(cwd)
     logger.info("session_log_dir_computed", path=str(log_dir), cwd=cwd)
     if not log_dir.exists():
-        logger.warning("session_log_dir_missing", path=str(log_dir), cwd=cwd)
+        logger.info("session_log_dir_precreating", path=str(log_dir), cwd=cwd)
+        log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 
 
@@ -771,10 +779,31 @@ def _build_skill_result(
                     original_subtype=str(original_subtype),
                     assistant_message_count=len(session.assistant_messages),
                 )
+        case ChannelConfirmation.DIR_MISSING if (
+            session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES and completion_marker
+        ):
+            # Late-bind recovery: the directory may have been created by
+            # Claude Code during the run even though it was absent at
+            # monitor start.  Attempt the same marker-based recovery as
+            # the CHANNEL_B arm.
+            cb_recovered = _recover_from_separate_marker(session, completion_marker)
+            if cb_recovered is not None:
+                original_subtype = session.subtype
+                session = dataclasses.replace(
+                    cb_recovered,
+                    subtype=CliSubtype.SUCCESS,
+                    is_error=False,
+                )
+                logger.warning(
+                    "dir_missing_late_bind_recovery",
+                    original_subtype=str(original_subtype),
+                    assistant_message_count=len(session.assistant_messages),
+                )
         case (
             ChannelConfirmation.CHANNEL_B
             | ChannelConfirmation.CHANNEL_A
             | ChannelConfirmation.UNMONITORED
+            | ChannelConfirmation.DIR_MISSING
         ):
             pass  # no drain-race recovery applicable
         case _ as _unreachable_cc:

@@ -274,6 +274,8 @@ def resolve_termination(
                 channel = ChannelConfirmation.CHANNEL_B
             case ChannelBStatus.STALE | None:
                 channel = ChannelConfirmation.UNMONITORED
+            case ChannelBStatus.DIR_MISSING:
+                channel = ChannelConfirmation.DIR_MISSING
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -284,7 +286,7 @@ def resolve_termination(
         termination = TerminationReason.IDLE_STALL
     else:
         match signals.channel_b_status:
-            case ChannelBStatus.STALE:
+            case ChannelBStatus.STALE | ChannelBStatus.DIR_MISSING:
                 termination = TerminationReason.STALE
             case ChannelBStatus.COMPLETION:
                 termination = TerminationReason.COMPLETED

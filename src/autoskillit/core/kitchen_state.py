@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -54,7 +54,7 @@ def write_marker(session_id: str, recipe_name: str | None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "session_id": session_id,
-        "opened_at": datetime.now(timezone.utc).isoformat(),
+        "opened_at": datetime.now(UTC).isoformat(),
         "recipe_name": recipe_name,
         "marker_version": 1,
     }
@@ -95,7 +95,7 @@ def read_marker(session_id: str) -> KitchenMarker | None:
 
 def is_marker_fresh(marker: KitchenMarker, ttl_hours: int = 24) -> bool:
     """Return True if the marker is within the TTL window."""
-    age = datetime.now(timezone.utc) - marker.opened_at
+    age = datetime.now(UTC) - marker.opened_at
     return age.total_seconds() < ttl_hours * 3600
 
 
@@ -109,7 +109,7 @@ def sweep_stale_markers(ttl_hours: int = 24) -> int:
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
             opened_at = datetime.fromisoformat(data["opened_at"])
-            age = datetime.now(timezone.utc) - opened_at
+            age = datetime.now(UTC) - opened_at
             if age.total_seconds() >= ttl_hours * 3600:
                 p.unlink()
                 deleted += 1

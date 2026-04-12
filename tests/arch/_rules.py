@@ -87,6 +87,7 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
         "quota_guard.py",
         "quota_post_hook.py",
         "remove_clone_guard.py",
+        "session_start_hook.py",
         "skill_cmd_guard.py",
         "skill_command_guard.py",
         "token_summary_hook.py",

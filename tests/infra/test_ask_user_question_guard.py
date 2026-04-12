@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -19,7 +19,9 @@ class RunResult:
 
 
 def run_guard(hook_input: dict, env_extra: dict | None = None) -> RunResult:
-    hook_path = Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/ask_user_question_guard.py"
+    hook_path = (
+        Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/ask_user_question_guard.py"
+    )
     env = {**os.environ, **(env_extra or {})}
     result = subprocess.run(
         [sys.executable, str(hook_path)],
@@ -54,14 +56,22 @@ def test_guard_permits_when_marker_present(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     marker_dir = tmp_path / "kitchen_state"
     marker_dir.mkdir(parents=True)
-    (marker_dir / "session-xyz.json").write_text(json.dumps({
-        "session_id": "session-xyz",
-        "opened_at": datetime.now(timezone.utc).isoformat(),
-        "recipe_name": "my_recipe",
-        "marker_version": 1,
-    }))
+    (marker_dir / "session-xyz.json").write_text(
+        json.dumps(
+            {
+                "session_id": "session-xyz",
+                "opened_at": datetime.now(UTC).isoformat(),
+                "recipe_name": "my_recipe",
+                "marker_version": 1,
+            }
+        )
+    )
     result = run_guard(
-        {"tool_name": "AskUserQuestion", "session_id": "session-xyz", "hook_event_name": "PreToolUse"},
+        {
+            "tool_name": "AskUserQuestion",
+            "session_id": "session-xyz",
+            "hook_event_name": "PreToolUse",
+        },
         env_extra={"AUTOSKILLIT_STATE_DIR": str(tmp_path)},
     )
     assert result.exit_code == 0

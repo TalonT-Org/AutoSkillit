@@ -91,6 +91,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     # Import server AFTER logging is configured so module-level loggers
     # resolve to stderr+JSON, not stdout+ConsoleRenderer (structlog default).
     from autoskillit.server import _initialize, make_context, mcp
+    from autoskillit.server._lifespan import run_startup_drift_check
 
     project_path = project_dir / ".autoskillit" / "config.yaml"
     user_path = Path.home() / ".autoskillit" / "config.yaml"
@@ -125,6 +126,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, _sigterm_handler)
+    run_startup_drift_check()
     get_logger(__name__).info("sigterm_handler_ready")
     try:
         mcp.run()

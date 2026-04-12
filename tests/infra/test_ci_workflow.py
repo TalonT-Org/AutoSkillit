@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return Path(__file__).resolve().parents[2]
 
 
 def test_ci_workflow_does_not_pre_regenerate_hooks_json() -> None:
@@ -18,14 +18,8 @@ def test_ci_workflow_does_not_pre_regenerate_hooks_json() -> None:
     """
     import yaml
 
-    workflow = yaml.safe_load(
-        (_repo_root() / ".github" / "workflows" / "tests.yml").read_text()
-    )
-    step_names = [
-        s.get("name")
-        for job in workflow["jobs"].values()
-        for s in job.get("steps", [])
-    ]
+    workflow = yaml.safe_load((_repo_root() / ".github" / "workflows" / "tests.yml").read_text())
+    step_names = [s.get("name") for job in workflow["jobs"].values() for s in job.get("steps", [])]
     assert not any("Generate hooks.json" in (n or "") for n in step_names), (
         "CI must not pre-regenerate hooks.json — this defeats drift detection. "
         "Remove the 'Generate hooks.json (if absent)' step."

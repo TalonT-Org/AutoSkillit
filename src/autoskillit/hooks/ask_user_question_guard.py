@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import UTC
 from pathlib import Path
 
 
@@ -33,9 +34,10 @@ def _read_marker(session_id: str) -> dict | None:
 
 def _is_fresh(data: dict, ttl_hours: int = 24) -> bool:
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         opened_at = datetime.fromisoformat(data["opened_at"])
-        age = datetime.now(timezone.utc) - opened_at
+        age = datetime.now(UTC) - opened_at
         return age.total_seconds() < ttl_hours * 3600
     except (KeyError, ValueError, TypeError):
         return False

@@ -4,8 +4,9 @@ Provides the async context manager wired into FastMCP via ``lifespan=``.
 The ``__aexit__`` side calls ``recorder.finalize()`` so scenario data survives
 SIGTERM (issue #745).
 
-Startup: runs a registry-hash drift check and self-heals hooks.json and
-user-scope settings.json if the on-disk hash is stale.
+The registry-hash drift check (``run_startup_drift_check``) is invoked from
+``serve()`` in ``cli/app.py`` before ``mcp.run()``, not inside this lifespan,
+so that SIGTERM received during the check cannot bypass teardown.
 """
 
 from __future__ import annotations
@@ -58,9 +59,8 @@ def run_startup_drift_check() -> None:
 
 @asynccontextmanager
 async def _autoskillit_lifespan(server: Any) -> Any:
-    """Server lifecycle: drift check on startup, teardown recording on shutdown."""
+    """Server lifecycle: teardown recording on shutdown."""
     logger.info("lifespan_started")
-    run_startup_drift_check()
     try:
         yield
     finally:

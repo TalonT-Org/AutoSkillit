@@ -69,7 +69,9 @@ def test_investigate_historical_step_positioned_after_step3(skill_text: str) -> 
     step_3_idx = skill_text.find("### Step 3:")
     step_35_idx = skill_text.find("Step 3.5")
     step_4_idx = skill_text.find("### Step 4:")
-    assert step_3_idx != -1 and step_35_idx != -1 and step_4_idx != -1
+    assert step_3_idx != -1, "Step 3 heading ('### Step 3:') not found in investigate SKILL.md"
+    assert step_35_idx != -1, "Step 3.5 heading ('Step 3.5') not found in investigate SKILL.md"
+    assert step_4_idx != -1, "Step 4 heading ('### Step 4:') not found in investigate SKILL.md"
     assert step_3_idx < step_35_idx < step_4_idx, (
         "Step 3.5 must be positioned after Step 3 and before Step 4 in investigate SKILL.md"
     )

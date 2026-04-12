@@ -234,7 +234,10 @@ implement-experiment, implement-worktree, implement-worktree-no-merge, investiga
 make-experiment-diag, make-groups, make-plan, make-req, merge-pr, mermaid, migrate-recipes, open-integration-pr,
 open-kitchen, pipeline-summary, plan-experiment, prepare-issue, prepare-pr, prepare-research-pr, process-issues, rectify, report-bug,
 resolve-claims-review, resolve-design-review, resolve-failures, resolve-merge-conflicts, resolve-research-review, resolve-review, retry-worktree, review-approach, review-design, review-pr, review-research-pr, run-experiment,
-scope, setup-project, smoke-task, sprint-planner, triage-issues, troubleshoot-experiment, validate-audit, verify-diag, write-recipe, write-report
+scope, setup-project, smoke-task, sprint-planner, triage-issues, troubleshoot-experiment,
+validate-audit, verify-diag,
+vis-lens-always-on, vis-lens-antipattern, vis-lens-chart-select, vis-lens-domain-norms, vis-lens-uncertainty,
+write-recipe, write-report
 
 ## Skill Reference Disambiguation
 

@@ -72,6 +72,9 @@ def test_read_proc_snapshot_has_all_fields():
     # context switches (psutil-sourced)
     assert snap.ctx_switches_voluntary >= 0
     assert snap.ctx_switches_involuntary >= 0
+    # cpu_percent field
+    assert isinstance(snap.cpu_percent, float)
+    assert snap.cpu_percent >= 0.0
 
 
 @pytest.mark.anyio
@@ -314,3 +317,48 @@ async def test_proc_monitor_snapshots_have_distinct_timestamps():
     assert len(result) >= 2
     timestamps = [s.captured_at for s in result]
     assert len(set(timestamps)) == len(timestamps), "All captured_at must be unique"
+
+
+# ---------------------------------------------------------------------------
+# design prerequisite — cpu_percent field
+# ---------------------------------------------------------------------------
+
+
+def test_read_proc_snapshot_returns_cpu_percent_field():
+    """read_proc_snapshot() returns a ProcSnapshot with cpu_percent as a float >= 0.0."""
+    from autoskillit.execution.linux_tracing import read_proc_snapshot
+
+    snap = read_proc_snapshot(os.getpid())
+    assert snap is not None
+    assert isinstance(snap.cpu_percent, float)
+    assert snap.cpu_percent >= 0.0
+
+
+@pytest.mark.anyio
+async def test_proc_monitor_persists_psutil_process_for_cpu_percent():
+    """proc_monitor reports cpu_percent > 0 for a CPU-bound subprocess.
+
+    This is only possible when a single psutil.Process is reused across iterations
+    and its baseline is primed before the loop. A fresh Process per iteration always
+    returns 0.0 on the first cpu_percent(interval=0) call.
+    """
+    import subprocess
+
+    from autoskillit.execution.linux_tracing import proc_monitor
+
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "while True: pass"],
+    )
+    try:
+        snaps = []
+        async for snap in proc_monitor(proc.pid, interval=0.1):
+            snaps.append(snap)
+            if len(snaps) >= 5:
+                break
+        assert len(snaps) >= 3, "Need at least 3 snapshots"
+        assert any(s.cpu_percent > 0.0 for s in snaps), (
+            "At least one snapshot must show cpu_percent > 0.0 for a CPU-bound process"
+        )
+    finally:
+        proc.kill()
+        proc.wait()

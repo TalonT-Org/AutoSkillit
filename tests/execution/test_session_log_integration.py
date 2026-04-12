@@ -70,3 +70,68 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
         "duration_seconds in summary.json must reflect monotonic elapsed, "
         "not wall-clock subtraction"
     )
+
+
+# ---------------------------------------------------------------------------
+# REQ-DIAG-001 — new anomaly kinds surface in anomalies.jsonl
+# ---------------------------------------------------------------------------
+
+_BASE_SNAP: dict[str, object] = {
+    "captured_at": "2026-01-01T00:00:00+00:00",
+    "vm_rss_kb": 100000,
+    "threads": 4,
+    "fd_count": 10,
+    "fd_soft_limit": 1024,
+    "ctx_switches_voluntary": 500,
+    "ctx_switches_involuntary": 20,
+    "sig_pnd": "0000000000000000",
+    "sig_blk": "0000000000000000",
+    "sig_cgt": "0000000000000000",
+    "oom_score": 50,
+    "cpu_percent": 0.0,
+}
+
+
+def _flush_with_snaps(tmp_path, session_id: str, snaps: list[dict]) -> None:
+    from autoskillit.execution.session_log import flush_session_log
+
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id=session_id,
+        pid=12345,
+        skill_command="/test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-01-01T00:00:00+00:00",
+        proc_snapshots=snaps,
+    )
+
+
+def test_flush_session_log_surfaces_d_state_sustained(tmp_path):
+    """flush_session_log writes d_state_sustained to anomalies.jsonl (REQ-DIAG-001)."""
+    snaps = [
+        {**_BASE_SNAP, "state": "disk-sleep", "wchan": "ext4_file_write_iter"},
+        {**_BASE_SNAP, "state": "disk-sleep", "wchan": "ext4_file_write_iter"},
+    ]
+    _flush_with_snaps(tmp_path, "diag-d-state-001", snaps)
+
+    anomalies_path = tmp_path / "sessions" / "diag-d-state-001" / "anomalies.jsonl"
+    assert anomalies_path.exists(), "anomalies.jsonl must be created when anomalies are detected"
+    kinds = [json.loads(line)["kind"] for line in anomalies_path.read_text().splitlines()]
+    assert "d_state_sustained" in kinds
+
+
+def test_flush_session_log_surfaces_high_cpu_sustained(tmp_path):
+    """flush_session_log writes high_cpu_sustained to anomalies.jsonl (REQ-DIAG-001)."""
+    snaps = [
+        {**_BASE_SNAP, "state": "sleeping", "wchan": "", "cpu_percent": 95.0},
+        {**_BASE_SNAP, "state": "sleeping", "wchan": "", "cpu_percent": 95.0},
+    ]
+    _flush_with_snaps(tmp_path, "diag-high-cpu-001", snaps)
+
+    anomalies_path = tmp_path / "sessions" / "diag-high-cpu-001" / "anomalies.jsonl"
+    assert anomalies_path.exists(), "anomalies.jsonl must be created when anomalies are detected"
+    kinds = [json.loads(line)["kind"] for line in anomalies_path.read_text().splitlines()]
+    assert "high_cpu_sustained" in kinds

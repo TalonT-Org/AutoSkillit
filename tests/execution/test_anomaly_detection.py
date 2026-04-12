@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from autoskillit.execution.anomaly_detection import (
+    BENIGN_WCHANS,
     AnomalyKind,
     AnomalySeverity,
     detect_anomalies,
@@ -23,6 +24,7 @@ def _snap(
     wchan: str = "",
     ctx_switches_voluntary: int = 500,
     ctx_switches_involuntary: int = 20,
+    cpu_percent: float = 0.0,
 ) -> dict[str, object]:
     return {
         "state": state,
@@ -37,6 +39,7 @@ def _snap(
         "wchan": wchan,
         "ctx_switches_voluntary": ctx_switches_voluntary,
         "ctx_switches_involuntary": ctx_switches_involuntary,
+        "cpu_percent": cpu_percent,
     }
 
 
@@ -137,3 +140,217 @@ def test_anomaly_record_structure():
     assert "detail" in anomaly
     assert "snapshot" in anomaly
     assert anomaly["pid"] == 1234
+
+
+# ---------------------------------------------------------------------------
+# REQ-ENUM-001, REQ-ENUM-002
+# ---------------------------------------------------------------------------
+
+
+def test_anomaly_kind_has_d_state_sustained():
+    """AnomalyKind.D_STATE_SUSTAINED is defined with the correct string value."""
+    assert AnomalyKind.D_STATE_SUSTAINED == "d_state_sustained"
+
+
+def test_anomaly_kind_has_high_cpu_sustained():
+    """AnomalyKind.HIGH_CPU_SUSTAINED is defined with the correct string value."""
+    assert AnomalyKind.HIGH_CPU_SUSTAINED == "high_cpu_sustained"
+
+
+# ---------------------------------------------------------------------------
+# REQ-WCHAN-003
+# ---------------------------------------------------------------------------
+
+
+def test_benign_wchans_is_central_frozenset():
+    """BENIGN_WCHANS is a frozenset containing the three issue-cited values."""
+    assert isinstance(BENIGN_WCHANS, frozenset)
+    assert "do_nanosleep" in BENIGN_WCHANS
+    assert "do_epoll_wait" in BENIGN_WCHANS
+    assert "schedule_hrtimeout_range" in BENIGN_WCHANS
+
+
+# ---------------------------------------------------------------------------
+# REQ-DETECT-001, REQ-TEST-001 — D_STATE_SUSTAINED fires
+# ---------------------------------------------------------------------------
+
+
+def test_d_state_sustained_fires_on_two_consecutive():
+    """Two consecutive disk-sleep snapshots with a non-benign wchan fire exactly one anomaly."""
+    snaps = [
+        _snap(state="disk-sleep", wchan="ext4_file_write_iter"),
+        _snap(state="disk-sleep", wchan="ext4_file_write_iter"),
+    ]
+    anomalies = detect_anomalies(snaps, pid=999)
+    d_state = [a for a in anomalies if a["kind"] == AnomalyKind.D_STATE_SUSTAINED]
+    assert len(d_state) == 1
+    assert d_state[0]["seq"] == 1
+
+
+# ---------------------------------------------------------------------------
+# REQ-DETECT-004, REQ-TEST-003 — single snapshot does not fire
+# ---------------------------------------------------------------------------
+
+
+def test_d_state_sustained_no_fire_on_single_snapshot():
+    """A single disk-sleep snapshot yields zero D_STATE_SUSTAINED anomalies."""
+    snaps = [_snap(state="disk-sleep", wchan="ext4_file_write_iter")]
+    anomalies = detect_anomalies(snaps, pid=999)
+    d_state = [a for a in anomalies if a["kind"] == AnomalyKind.D_STATE_SUSTAINED]
+    assert len(d_state) == 0
+
+
+# ---------------------------------------------------------------------------
+# REQ-DETECT-003, REQ-TEST-004 — counter resets on intervening non-D state
+# ---------------------------------------------------------------------------
+
+
+def test_d_state_sustained_counter_resets_on_intervening_sleep():
+    """Sequence [disk-sleep, sleeping, disk-sleep] yields zero D_STATE_SUSTAINED anomalies."""
+    snaps = [
+        _snap(state="disk-sleep", wchan="ext4_file_write_iter"),
+        _snap(state="sleeping"),
+        _snap(state="disk-sleep", wchan="ext4_file_write_iter"),
+    ]
+    anomalies = detect_anomalies(snaps, pid=999)
+    d_state = [a for a in anomalies if a["kind"] == AnomalyKind.D_STATE_SUSTAINED]
+    assert len(d_state) == 0
+
+
+# ---------------------------------------------------------------------------
+# REQ-WCHAN-002, REQ-TEST-005 — benign wchans are skipped
+# ---------------------------------------------------------------------------
+
+
+def test_d_state_sustained_benign_wchan_do_nanosleep_skipped():
+    """Two disk-sleep snapshots with wchan=do_nanosleep yield no D_STATE_SUSTAINED anomaly."""
+    snaps = [
+        _snap(state="disk-sleep", wchan="do_nanosleep"),
+        _snap(state="disk-sleep", wchan="do_nanosleep"),
+    ]
+    anomalies = detect_anomalies(snaps, pid=999)
+    d_state = [a for a in anomalies if a["kind"] == AnomalyKind.D_STATE_SUSTAINED]
+    assert len(d_state) == 0
+
+
+def test_d_state_sustained_benign_wchan_epoll_skipped():
+    """Two disk-sleep snapshots with wchan=do_epoll_wait yield no D_STATE_SUSTAINED anomaly."""
+    snaps = [
+        _snap(state="disk-sleep", wchan="do_epoll_wait"),
+        _snap(state="disk-sleep", wchan="do_epoll_wait"),
+    ]
+    anomalies = detect_anomalies(snaps, pid=999)
+    d_state = [a for a in anomalies if a["kind"] == AnomalyKind.D_STATE_SUSTAINED]
+    assert len(d_state) == 0
+
+
+def test_d_state_sustained_benign_wchan_hrtimeout_skipped():
+    """Two disk-sleep snapshots with wchan=schedule_hrtimeout_range yield no D_STATE_SUSTAINED."""
+    snaps = [
+        _snap(state="disk-sleep", wchan="schedule_hrtimeout_range"),
+        _snap(state="disk-sleep", wchan="schedule_hrtimeout_range"),
+    ]
+    anomalies = detect_anomalies(snaps, pid=999)
+    d_state = [a for a in anomalies if a["kind"] == AnomalyKind.D_STATE_SUSTAINED]
+    assert len(d_state) == 0
+
+
+# ---------------------------------------------------------------------------
+# REQ-WCHAN-001, REQ-TEST-006 — detail includes wchan
+# ---------------------------------------------------------------------------
+
+
+def test_d_state_sustained_detail_includes_wchan():
+    """The emitted D_STATE_SUSTAINED anomaly detail contains the triggering wchan value."""
+    wchan_val = "ext4_file_write_iter"
+    snaps = [
+        _snap(state="disk-sleep", wchan=wchan_val),
+        _snap(state="disk-sleep", wchan=wchan_val),
+    ]
+    anomalies = detect_anomalies(snaps, pid=999)
+    d_state = [a for a in anomalies if a["kind"] == AnomalyKind.D_STATE_SUSTAINED]
+    assert len(d_state) == 1
+    assert d_state[0]["detail"]["wchan"] == wchan_val
+
+
+# ---------------------------------------------------------------------------
+# REQ-DETECT-002, REQ-TEST-002 — HIGH_CPU_SUSTAINED fires
+# ---------------------------------------------------------------------------
+
+
+def test_high_cpu_sustained_fires_on_two_consecutive():
+    """Two consecutive snapshots with cpu_percent=95.0 produce exactly one HIGH_CPU_SUSTAINED."""
+    snaps = [_snap(cpu_percent=95.0), _snap(cpu_percent=95.0)]
+    anomalies = detect_anomalies(snaps, pid=999)
+    high_cpu = [a for a in anomalies if a["kind"] == AnomalyKind.HIGH_CPU_SUSTAINED]
+    assert len(high_cpu) == 1
+
+
+# ---------------------------------------------------------------------------
+# REQ-DETECT-004, REQ-TEST-003 — single high-CPU snapshot does not fire
+# ---------------------------------------------------------------------------
+
+
+def test_high_cpu_sustained_no_fire_on_single_snapshot():
+    """A single high-CPU snapshot yields zero HIGH_CPU_SUSTAINED anomalies."""
+    snaps = [_snap(cpu_percent=95.0)]
+    anomalies = detect_anomalies(snaps, pid=999)
+    high_cpu = [a for a in anomalies if a["kind"] == AnomalyKind.HIGH_CPU_SUSTAINED]
+    assert len(high_cpu) == 0
+
+
+# ---------------------------------------------------------------------------
+# REQ-DETECT-002 — exact threshold
+# ---------------------------------------------------------------------------
+
+
+def test_high_cpu_sustained_fires_at_exact_threshold():
+    """cpu_percent=90.0 fires; cpu_percent=89.9 does not."""
+    snaps_at = [_snap(cpu_percent=90.0), _snap(cpu_percent=90.0)]
+    anomalies_at = detect_anomalies(snaps_at, pid=999)
+    high_cpu_at = [a for a in anomalies_at if a["kind"] == AnomalyKind.HIGH_CPU_SUSTAINED]
+    assert len(high_cpu_at) == 1
+
+    snaps_below = [_snap(cpu_percent=89.9), _snap(cpu_percent=89.9)]
+    anomalies_below = detect_anomalies(snaps_below, pid=999)
+    high_cpu_below = [a for a in anomalies_below if a["kind"] == AnomalyKind.HIGH_CPU_SUSTAINED]
+    assert len(high_cpu_below) == 0
+
+
+# ---------------------------------------------------------------------------
+# REQ-DETECT-003, REQ-TEST-004 — counter resets on intervening idle
+# ---------------------------------------------------------------------------
+
+
+def test_high_cpu_sustained_counter_resets_on_intervening_idle():
+    """Sequence [95%, 10%, 95%] yields zero HIGH_CPU_SUSTAINED anomalies."""
+    snaps = [_snap(cpu_percent=95.0), _snap(cpu_percent=10.0), _snap(cpu_percent=95.0)]
+    anomalies = detect_anomalies(snaps, pid=999)
+    high_cpu = [a for a in anomalies if a["kind"] == AnomalyKind.HIGH_CPU_SUSTAINED]
+    assert len(high_cpu) == 0
+
+
+# ---------------------------------------------------------------------------
+# design — detail includes cpu_percent
+# ---------------------------------------------------------------------------
+
+
+def test_high_cpu_sustained_detail_includes_cpu_percent():
+    """The emitted HIGH_CPU_SUSTAINED anomaly detail contains the cpu_percent value."""
+    snaps = [_snap(cpu_percent=95.5), _snap(cpu_percent=95.5)]
+    anomalies = detect_anomalies(snaps, pid=999)
+    high_cpu = [a for a in anomalies if a["kind"] == AnomalyKind.HIGH_CPU_SUSTAINED]
+    assert len(high_cpu) == 1
+    assert high_cpu[0]["detail"]["cpu_percent"] == 95.5
+
+
+# ---------------------------------------------------------------------------
+# regression — existing normal session test still holds
+# ---------------------------------------------------------------------------
+
+
+def test_no_anomalies_for_normal_session_still_holds():
+    """Normal session with cpu_percent=0.0 default still produces no anomalies."""
+    snaps = [_snap(vm_rss_kb=100000 + i * 100, oom_score=50) for i in range(10)]
+    anomalies = detect_anomalies(snaps, pid=1234)
+    assert len(anomalies) == 0

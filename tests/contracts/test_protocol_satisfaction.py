@@ -22,14 +22,14 @@ from autoskillit.execution.process import (
 
 def test_nine_protocols_importable_from_core():
     from autoskillit.core import (  # noqa: F401
-        AuditStore,
+        AuditLog,
         DatabaseReader,
-        GatePolicy,
+        GateState,
         HeadlessExecutor,
         MigrationService,
         RecipeRepository,
         TestRunner,
-        TokenStore,
+        TokenLog,
         WorkspaceManager,
     )
 
@@ -56,21 +56,21 @@ def test_truncate_text_importable_from_core():
 
 def test_all_new_protocols_are_runtime_checkable():
     from autoskillit.core import (
-        AuditStore,
+        AuditLog,
         DatabaseReader,
-        GatePolicy,
+        GateState,
         HeadlessExecutor,
         MigrationService,
         RecipeRepository,
         TestRunner,
-        TokenStore,
+        TokenLog,
         WorkspaceManager,
     )
 
     for proto in [
-        GatePolicy,
-        AuditStore,
-        TokenStore,
+        GateState,
+        AuditLog,
+        TokenLog,
         TestRunner,
         HeadlessExecutor,
         RecipeRepository,
@@ -87,40 +87,40 @@ def test_all_new_protocols_are_runtime_checkable():
 
 
 def test_defaultgatestate_satisfies_gatepolicy():
-    from autoskillit.core import GatePolicy
+    from autoskillit.core import GateState
     from autoskillit.pipeline.gate import DefaultGateState
 
-    assert isinstance(DefaultGateState(), GatePolicy)
+    assert isinstance(DefaultGateState(), GateState)
 
 
 def test_defaultauditlog_satisfies_auditstore():
-    from autoskillit.core import AuditStore
+    from autoskillit.core import AuditLog
     from autoskillit.pipeline.audit import DefaultAuditLog
 
-    assert isinstance(DefaultAuditLog(), AuditStore)
+    assert isinstance(DefaultAuditLog(), AuditLog)
 
 
 def test_defaulttokenlog_satisfies_tokenstore():
-    from autoskillit.core import TokenStore
+    from autoskillit.core import TokenLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
 
-    assert isinstance(DefaultTokenLog(), TokenStore)
+    assert isinstance(DefaultTokenLog(), TokenLog)
 
 
 def test_default_timing_log_satisfies_timing_store_protocol():
-    from autoskillit.core import TimingStore
+    from autoskillit.core import TimingLog
     from autoskillit.pipeline.timings import DefaultTimingLog
 
-    assert isinstance(DefaultTimingLog(), TimingStore)
+    assert isinstance(DefaultTimingLog(), TimingLog)
 
 
 def test_default_token_log_satisfies_token_store_with_order_id():
-    """F-1: DefaultTokenLog satisfies updated TokenStore Protocol (includes order_id params)."""
-    from autoskillit.core import TokenStore
+    """F-1: DefaultTokenLog satisfies updated TokenLog Protocol (includes order_id params)."""
+    from autoskillit.core import TokenLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
 
     log = DefaultTokenLog()
-    assert isinstance(log, TokenStore)
+    assert isinstance(log, TokenLog)
     # Verify the order_id param is accepted by record/get_report/compute_total
     log.record(
         "plan",
@@ -138,12 +138,12 @@ def test_default_token_log_satisfies_token_store_with_order_id():
 
 
 def test_default_timing_log_satisfies_timing_store_with_order_id():
-    """F-2: DefaultTimingLog satisfies updated TimingStore Protocol (includes order_id params)."""
-    from autoskillit.core import TimingStore
+    """F-2: DefaultTimingLog satisfies updated TimingLog Protocol (includes order_id params)."""
+    from autoskillit.core import TimingLog
     from autoskillit.pipeline.timings import DefaultTimingLog
 
     log = DefaultTimingLog()
-    assert isinstance(log, TimingStore)
+    assert isinstance(log, TimingLog)
     # Verify the order_id param is accepted by record/get_report/compute_total
     log.record("plan", 5.0, order_id="test-order")
     assert log.get_report(order_id="test-order") != []
@@ -248,9 +248,9 @@ def test_all_ten_protocols_in_core_all():
 
     expected_protocols = {
         "SubprocessRunner",
-        "GatePolicy",
-        "AuditStore",
-        "TokenStore",
+        "GateState",
+        "AuditLog",
+        "TokenLog",
         "TestRunner",
         "HeadlessExecutor",
         "RecipeRepository",

@@ -230,7 +230,7 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
     )
-    from autoskillit.workspace.skills import SkillResolver
+    from autoskillit.workspace.skills import DefaultSkillResolver
 
     # Override exactly one extended skill to test override exclusion
     project_dir = tmp_path / "project"
@@ -248,7 +248,7 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
         "sess-invariant", cook_session=True, config=config, project_dir=project_dir
     )
 
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     all_skills = resolver.list_all()
     # Expected: all BUNDLED_EXTENDED skills except project-local overrides and
     # skills whose categories are entirely in default-disabled packs.
@@ -279,12 +279,12 @@ def test_cook_session_excludes_tier1_from_ephemeral_dir(tmp_path):
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
     )
-    from autoskillit.workspace.skills import SkillResolver
+    from autoskillit.workspace.skills import DefaultSkillResolver
 
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-tier1", cook_session=True)
 
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     tier1_names = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED}
     skills_base = skills_dir / ".claude" / "skills"
     actual_names = {d.name for d in skills_base.iterdir() if d.is_dir()}
@@ -304,7 +304,7 @@ def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
     )
-    from autoskillit.workspace.skills import SkillResolver
+    from autoskillit.workspace.skills import DefaultSkillResolver
 
     # Override exactly one extended skill
     project_dir = tmp_path / "project"
@@ -316,7 +316,7 @@ def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-retain", cook_session=True, project_dir=project_dir)
 
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     expected = {
         s.name
         for s in resolver.list_all()

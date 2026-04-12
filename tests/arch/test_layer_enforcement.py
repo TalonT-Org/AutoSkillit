@@ -994,11 +994,23 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("server/_factory.py"): {"*"},  # Composition Root
         Path("cli/_workspace.py"): {"DefaultSubprocessRunner"},  # CLI worktree listing
         Path("cli/_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
+        Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
         Path("execution/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback
         Path("pipeline/context.py"): {  # __post_init__ +
             "DefaultBackgroundSupervisor",  # field default_factory
             "DefaultMcpResponseLog",
         },
+        Path("recipe/_api.py"): {"DefaultSkillResolver"},  # deferred default factory fallback
+        Path("recipe/contracts.py"): {"DefaultSkillResolver"},  # deferred default factory fallback
+        Path("recipe/rules_skill_content.py"): {
+            "DefaultSkillResolver"
+        },  # deferred default factory fallback
+        Path("recipe/rules_skills.py"): {
+            "DefaultSkillResolver"
+        },  # deferred default factory fallback
+        Path("workspace/session_skills.py"): {
+            "DefaultSkillResolver"
+        },  # ephemeral session resolver fallback
     }
 
     violations: list[str] = []

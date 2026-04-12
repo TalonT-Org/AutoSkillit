@@ -7,7 +7,7 @@ import re
 import yaml
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.workspace.skills import SkillResolver
+from autoskillit.workspace.skills import DefaultSkillResolver
 
 
 def test_open_kitchen_skill_has_disable_model_invocation() -> None:
@@ -33,7 +33,7 @@ def test_close_kitchen_skill_has_disable_model_invocation() -> None:
 
 
 def test_open_close_kitchen_skills_listed_by_resolver() -> None:
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     names = {s.name for s in resolver.list_all()}
     assert "open-kitchen" in names
     assert "close-kitchen" in names

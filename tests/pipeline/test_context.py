@@ -187,7 +187,7 @@ def test_toolcontext_github_client_annotated_with_protocol():
 
 
 def test_toolcontext_response_log_annotated_with_mcp_response_store_protocol() -> None:
-    """ToolContext.response_log must be annotated with the McpResponseStore protocol.
+    """ToolContext.response_log must be annotated with the McpResponseLog protocol.
 
     response_log uses default_factory (Null Object pattern) not field(default=None),
     so it is excluded from test_toolcontext_optional_fields_all_have_protocol_annotations.
@@ -195,23 +195,23 @@ def test_toolcontext_response_log_annotated_with_mcp_response_store_protocol() -
     """
     from typing import get_type_hints
 
-    from autoskillit.core import McpResponseStore
+    from autoskillit.core import McpResponseLog
 
     hints = get_type_hints(ToolContext)
     assert "response_log" in hints, "ToolContext must have a response_log field"
-    assert hints["response_log"] is McpResponseStore, (
-        f"ToolContext.response_log must be annotated with McpResponseStore protocol, "
+    assert hints["response_log"] is McpResponseLog, (
+        f"ToolContext.response_log must be annotated with McpResponseLog protocol, "
         f"got: {hints['response_log']!r}"
     )
 
 
 def test_tool_context_has_timing_log_field(tmp_path):
-    """ToolContext.timing_log is a non-None TimingStore instance."""
-    from autoskillit.core import TimingStore
+    """ToolContext.timing_log is a non-None TimingLog instance."""
+    from autoskillit.core import TimingLog
 
     ctx = _make_ctx(tmp_path)
     assert ctx.timing_log is not None
-    assert isinstance(ctx.timing_log, TimingStore)
+    assert isinstance(ctx.timing_log, TimingLog)
 
 
 @pytest.mark.anyio

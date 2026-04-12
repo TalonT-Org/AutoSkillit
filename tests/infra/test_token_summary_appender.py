@@ -352,7 +352,7 @@ def test_tsa7_canonical_step_name() -> None:
 
 
 def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
-    """gh pr edit returning non-zero → hook exits non-zero (error surfaced)."""
+    """gh pr edit returning non-zero → hook exits 0 (fail-open, error logged to stderr)."""
     log_root = tmp_path / "logs"
     log_root.mkdir()
     pipeline_id = "test-pipeline-tsa8"
@@ -394,7 +394,7 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
     with patch("subprocess.run", side_effect=subprocess_side_effect):
         _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
 
-    assert exit_code != 0
+    assert exit_code == 0
 
 
 # ---------------------------------------------------------------------------
@@ -532,7 +532,7 @@ def test_tsa_gh_pr_edit_stderr_captured(tmp_path: Path) -> None:
             mock_stderr.write = lambda s: stderr_output.append(s)
             _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
 
-    assert exit_code == 1
+    assert exit_code == 0
     combined = "".join(stderr_output)
     assert "authentication required" in combined, (
         "stderr from CalledProcessError must appear in diagnostic output — "

@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.workspace.skills import SkillResolver
+from autoskillit.workspace.skills import DefaultSkillResolver
 
 _SKILLS_DIRS = [pkg_root() / "skills", pkg_root() / "skills_extended"]
 
@@ -75,7 +75,7 @@ def _all_skill_dirs() -> list[Path]:
 
 
 def _skill_text(skill_name: str) -> str:
-    result = SkillResolver().resolve(skill_name)
+    result = DefaultSkillResolver().resolve(skill_name)
     assert result is not None, f"Skill not found: {skill_name}"
     return result.path.read_text()
 

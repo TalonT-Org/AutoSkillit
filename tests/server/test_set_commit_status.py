@@ -306,13 +306,16 @@ async def test_set_commit_status_validation_errors_return_str(tool_ctx):
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_success_returns_str(tool_ctx):
+async def test_set_commit_status_success_returns_str(tool_ctx, monkeypatch):
     """Success path returns str."""
     import json
 
     from tests.conftest import _make_result
 
-    tool_ctx.runner.push(_make_result(0, "owner/repo\n", ""))
+    async def fake_infer(cwd: str, hint: object = None) -> str:
+        return "owner/repo"
+
+    monkeypatch.setattr("autoskillit.server.tools_ci.infer_repo_from_remote", fake_infer)
     tool_ctx.runner.push(_make_result(0, "", ""))
     result = await set_commit_status(sha="abc123", state="success", context="ci", cwd="/tmp")
     assert isinstance(result, str)

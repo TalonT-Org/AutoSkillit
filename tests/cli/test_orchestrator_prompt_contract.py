@@ -85,5 +85,4 @@ class TestFirstActionAskUserQuestionProhibition:
         # Find the end of the FIRST ACTION section (next major section)
         first_action_end = prompt.index("During pipeline execution", first_action_start)
         first_action_section = prompt[first_action_start:first_action_end]
-        assert "AskUserQuestion" in first_action_section
-        assert "DO NOT" in first_action_section or "NEVER" in first_action_section
+        assert "DO NOT call AskUserQuestion" in first_action_section

@@ -108,11 +108,14 @@ BUNDLED_SKILLS = [
     "verify-diag",
     "vis-lens-always-on",
     "vis-lens-antipattern",
+    "vis-lens-caption-annot",
     "vis-lens-chart-select",
     "vis-lens-color-access",
     "vis-lens-domain-norms",
     "vis-lens-figure-table",
     "vis-lens-multi-compare",
+    "vis-lens-reproducibility",
+    "vis-lens-story-arc",
     "vis-lens-temporal",
     "vis-lens-uncertainty",
     "write-recipe",
@@ -445,17 +448,17 @@ class TestSkillResolver:
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
     def test_90_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 101 SKILL.md-carrying directories."""
+        """skills_extended/ contains exactly 104 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 101
+        assert len(skills) == 104
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 103 public skills (2 Tier-1 + 101 extended)."""
-        assert len(DefaultSkillResolver().list_all()) == 103
+        """list_all() returns 106 public skills (2 Tier-1 + 104 extended)."""
+        assert len(DefaultSkillResolver().list_all()) == 106
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""

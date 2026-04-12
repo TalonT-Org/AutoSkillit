@@ -1571,3 +1571,57 @@ skills:
     - "diagram_path\\s*=\\s*/.+"
     pattern_examples:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+  vis-lens-caption-annot:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+  vis-lens-story-arc:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+  vis-lens-reproducibility:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"

@@ -1,7 +1,7 @@
 # Skill catalog
 
-The complete list of bundled skills (95 total: 3 in `src/autoskillit/skills/`,
-92 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
+The complete list of bundled skills (107 total: 3 in `src/autoskillit/skills/`,
+104 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
 ## Tier 1 — free range (3)
@@ -91,6 +91,27 @@ answers a specific question about the system:
 | `exp-lens-validity-threats` | Validity threats |
 | `exp-lens-variance-stability` | Variance stability |
 
+## vis-lens family (12)
+
+12 visualization-planning lenses orchestrated by `plan-visualization`, under
+`skills_extended/vis-lens-*/`. Each answers a specific question about a figure or the
+figure set:
+
+| # | Skill | Cognitive Mode | Primary Question | Priority |
+|---|-------|---------------|------------------|----------|
+| 1 | `vis-lens-always-on` | Composite | Is everything correct by default? | P0 |
+| 2 | `vis-lens-antipattern` | Diagnostic | What visualization antipatterns are present? | P0 |
+| 3 | `vis-lens-chart-select` | Typological | What chart type fits this data shape? | P0 |
+| 4 | `vis-lens-domain-norms` | Normative | Does the figure follow domain conventions? | P0 |
+| 5 | `vis-lens-uncertainty` | Probabilistic | Is uncertainty properly communicated? | P0 |
+| 6 | `vis-lens-color-access` | Chromatic | Is the color encoding accessible and perceptually uniform? | P1 |
+| 7 | `vis-lens-figure-table` | Decisional | Should this result be a figure or a table? | P1 |
+| 8 | `vis-lens-multi-compare` | Comparative | Are multi-condition comparisons statistically sound? | P1 |
+| 9 | `vis-lens-temporal` | Sequential | Is temporal/sequential data displayed correctly? | P1 |
+| 10 | `vis-lens-caption-annot` | Annotative | Are figure captions and axis labels fully self-contained? | P2 |
+| 11 | `vis-lens-story-arc` | Narrative | Do the figures tell a coherent story across the report? | P2 |
+| 12 | `vis-lens-reproducibility` | Replicative | Can the figures be reproduced from the data and code? | P2 |
+
 ## Rectify doctrine
 
 Several Tier 2 skills (`rectify`, `audit-bugs`, `design-guards`,
@@ -100,8 +121,8 @@ symptom, and the audit suite is updated so the same class of bug cannot
 recur. Commit messages prefix with `Rectify:` for traceability; the count of
 `Rectify:` commits is reported in `docs/developer/contributing.md`.
 
-## Total: 95
+## Total: 107
 
-3 (Tier 1) + 92 (`skills_extended/`) = 95 bundled skills. The total is
+3 (Tier 1) + 104 (`skills_extended/`) = 107 bundled skills. The total is
 verified by `tests/docs/test_doc_counts.py` against a filesystem walk so any
 addition or removal is caught immediately.

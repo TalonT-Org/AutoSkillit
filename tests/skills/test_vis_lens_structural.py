@@ -9,7 +9,7 @@ import yaml
 
 SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
 
-VIS_LENS_P0_SLUGS = [
+VIS_LENS_SLUGS = [
     "chart-select",
     "uncertainty",
     "antipattern",
@@ -19,6 +19,9 @@ VIS_LENS_P0_SLUGS = [
     "temporal",
     "color-access",
     "figure-table",
+    "caption-annot",
+    "story-arc",
+    "reproducibility",
 ]
 
 COMPOSITE_SLUGS = {"always-on"}  # emits yaml:spec-index instead of yaml:figure-spec
@@ -39,41 +42,41 @@ def _frontmatter(text: str) -> dict:
     return yaml.safe_load("\n".join(lines[1:end]))
 
 
-@pytest.mark.parametrize("slug", VIS_LENS_P0_SLUGS)
+@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_skill_md_exists(slug: str) -> None:
     path = SKILLS_DIR / f"vis-lens-{slug}" / "SKILL.md"
     assert path.exists(), f"vis-lens-{slug}/SKILL.md missing"
 
 
-@pytest.mark.parametrize("slug", VIS_LENS_P0_SLUGS)
+@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_has_arguments_section(slug: str) -> None:
     assert "## Arguments" in _read(slug), f"vis-lens-{slug} missing ## Arguments section"
 
 
-@pytest.mark.parametrize("slug", VIS_LENS_P0_SLUGS)
+@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_documents_context_path(slug: str) -> None:
     assert "context_path" in _read(slug), f"vis-lens-{slug} must document context_path"
 
 
-@pytest.mark.parametrize("slug", VIS_LENS_P0_SLUGS)
+@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_documents_experiment_plan_path(slug: str) -> None:
     assert "experiment_plan_path" in _read(slug), (
         f"vis-lens-{slug} must document experiment_plan_path"
     )
 
 
-@pytest.mark.parametrize("slug", VIS_LENS_P0_SLUGS)
+@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_has_step_0(slug: str) -> None:
     assert "Step 0" in _read(slug), f"vis-lens-{slug} must have Step 0 for argument parsing"
 
 
-@pytest.mark.parametrize("slug", VIS_LENS_P0_SLUGS)
+@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_diagram_path_in_constraints(slug: str) -> None:
     text = _read(slug)
     assert "diagram_path" in text, f"vis-lens-{slug} must mention diagram_path in constraints"
 
 
-@pytest.mark.parametrize("slug", VIS_LENS_P0_SLUGS)
+@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_figure_spec_or_spec_index_in_output(slug: str) -> None:
     text = _read(slug)
     if slug in COMPOSITE_SLUGS:
@@ -86,17 +89,17 @@ def test_figure_spec_or_spec_index_in_output(slug: str) -> None:
         )
 
 
-@pytest.mark.parametrize("slug", VIS_LENS_P0_SLUGS)
+@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_order_up_present(slug: str) -> None:
     assert "%%ORDER_UP%%" in _read(slug), f"vis-lens-{slug} missing %%ORDER_UP%% token"
 
 
-@pytest.mark.parametrize("slug", VIS_LENS_P0_SLUGS)
+@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_vis_spec_prefix_in_output_path(slug: str) -> None:
     assert "vis_spec_" in _read(slug), f"vis-lens-{slug} output path must use vis_spec_ prefix"
 
 
-@pytest.mark.parametrize("slug", VIS_LENS_P0_SLUGS)
+@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_frontmatter_categories(slug: str) -> None:
     fm = _frontmatter(_read(slug))
     assert fm.get("categories") == ["vis-lens"], (
@@ -104,7 +107,7 @@ def test_frontmatter_categories(slug: str) -> None:
     )
 
 
-@pytest.mark.parametrize("slug", VIS_LENS_P0_SLUGS)
+@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_frontmatter_activate_deps(slug: str) -> None:
     fm = _frontmatter(_read(slug))
     assert fm.get("activate_deps") == ["mermaid"], (

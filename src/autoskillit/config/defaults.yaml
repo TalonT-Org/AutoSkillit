@@ -209,6 +209,9 @@ skills:
     - vis-lens-multi-compare
     - vis-lens-temporal
     - vis-lens-uncertainty
+    - vis-lens-caption-annot
+    - vis-lens-reproducibility
+    - vis-lens-story-arc
   tier3:
     - prepare-pr
     - compose-pr

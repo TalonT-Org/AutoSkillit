@@ -386,7 +386,7 @@ steps:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
-    on_success: commit_research_artifacts
+    on_success: push_branch
     on_failure: fix_tests
 
   fix_tests:
@@ -402,61 +402,8 @@ steps:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
-    on_success: commit_research_artifacts
-    on_failure: escalate_stop
-
-  commit_research_artifacts:
-    tool: run_cmd
-    with:
-      cmd: >
-        RESEARCH_DIR="${{ context.research_dir }}" &&
-        if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
-          WT_TEMP="${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/phase-groups" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/phase-plans" &&
-          for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done;
-          for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done;
-          for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done;
-          if [ -f "${RESEARCH_DIR}/report.md" ]; then
-            cp "${RESEARCH_DIR}/report.md" "${RESEARCH_DIR}/README.md" &&
-            rm "${RESEARCH_DIR}/report.md";
-          fi &&
-          mapfile -t TAR_ITEMS < <(ls -1 "${RESEARCH_DIR}" | grep -vE '^(README\.md|artifacts\.tar\.gz)$') &&
-          if [ ${#TAR_ITEMS[@]} -gt 0 ]; then
-            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" "${TAR_ITEMS[@]}" &&
-            for item in "${TAR_ITEMS[@]}"; do rm -rf "${RESEARCH_DIR}/${item}"; done;
-          fi &&
-          if [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] && [ -f "${RESEARCH_DIR}/README.md" ]; then
-            MANIFEST=$(tar tzf "${RESEARCH_DIR}/artifacts.tar.gz" | sort) &&
-            { echo ""; echo "## Archive Manifest"; echo ""; echo "Contents of \`artifacts.tar.gz\`:"; echo ""; echo '```'; echo "${MANIFEST}"; echo '```'; } >> "${RESEARCH_DIR}/README.md";
-          fi &&
-          [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] || \
-            { echo "ERROR: artifacts.tar.gz not created in ${RESEARCH_DIR}"; exit 1; } &&
-          LEFTOVERS=$(ls -1 "${RESEARCH_DIR}" | grep -vE '^(README\.md|artifacts\.tar\.gz)$') &&
-          [ -z "${LEFTOVERS}" ] || \
-            { echo "ERROR: uncompressed entries still present in ${RESEARCH_DIR}: ${LEFTOVERS}"; exit 1; } &&
-          [ -f "${RESEARCH_DIR}/README.md" ] || \
-            { echo "ERROR: README.md not found in ${RESEARCH_DIR}"; exit 1; } &&
-          cd "${{ context.worktree_path }}" && git add "${RESEARCH_DIR}" && { git diff --cached --quiet || git commit -m "Add compressed research artifacts"; };
-          echo "report_path=${RESEARCH_DIR}/README.md";
-        else
-          echo "commit_research_artifacts: no research directory found — artifact commit skipped";
-        fi
-      cwd: "${{ context.worktree_path }}"
-      step_name: commit_research_artifacts
-    capture:
-      report_path: "${{ result.report_path }}"
     on_success: push_branch
-    on_failure: push_branch
-    note: >
-      Copies phase-group and phase-plan artifacts from worktree temp, renames
-      report.md to README.md, then archives all remaining entries (artifacts/,
-      experiment-plan.md, data/, results/, scripts/, and any other experiment
-      outputs) into artifacts.tar.gz. Generates an archive manifest appended to
-      README.md. The committed directory contains exactly two files: README.md
-      (human-readable conclusions with manifest) and artifacts.tar.gz (full
-      artifact tree). Non-fatal — proceeds to push_branch even if artifact
-      commit fails.
+    on_failure: escalate_stop
 
   push_branch:
     tool: run_cmd
@@ -489,8 +436,8 @@ steps:
       step_name: run_experiment_lenses
     capture_list:
       all_diagram_paths: "${{ result.diagram_path }}"
-    on_success: compose_research_pr
-    on_failure: compose_research_pr
+    on_success: stage_bundle
+    on_failure: stage_bundle
     note: >
       LENS ITERATION: context.selected_lenses contains comma-separated lens slugs
       (e.g. "fair-comparison,estimand-clarity"). context.lens_context_paths contains
@@ -500,6 +447,36 @@ steps:
       assistant message). Accumulate each diagram_path value into context.all_diagram_paths
       using comma separation via capture_list. If a lens fails, continue with remaining
       lenses — partial diagrams are acceptable (compose_research_pr handles empty lists).
+
+  stage_bundle:
+    tool: run_cmd
+    with:
+      cmd: >
+        RESEARCH_DIR="${{ context.research_dir }}" &&
+        if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
+          WT_TEMP="${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/phase-groups" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/phase-plans" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/images" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/scripts" &&
+          for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
+          for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
+          for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done &&
+          for f in "${WT_TEMP}"/exp-lens-*/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/images/"; done;
+          echo "stage_bundle=done";
+        else
+          echo "stage_bundle: no research directory found — skipped";
+        fi
+      cwd: "${{ context.worktree_path }}"
+      step_name: stage_bundle
+    on_success: compose_research_pr
+    on_failure: compose_research_pr
+    note: >
+      Idempotent file staging step. Copies phase-group, phase-plan, and exp-lens diagram
+      artifacts from the worktree temp directory into research/{slug}/artifacts/. Creates
+      images/ and scripts/ subdirectories. No compression, no rename, no commit. Safe to
+      run multiple times — cp overwrites are idempotent. Runs after run_experiment_lenses
+      to capture all exp-lens diagrams written to AUTOSKILLIT_TEMP/exp-lens-*/.
 
   compose_research_pr:
     tool: run_skill
@@ -664,7 +641,7 @@ steps:
       step_name: re_write_report
     capture:
       report_path: "${{ result.report_path }}"
-    on_success: re_test
+    on_success: re_stage_bundle
     on_failure: re_push_research
     on_context_limit: re_push_research
     note: >
@@ -672,6 +649,34 @@ steps:
       re-validation run. Passes context.experiment_results which was updated
       by re_run_experiment to point to the new results file. Falls through to
       push on failure.
+
+  re_stage_bundle:
+    tool: run_cmd
+    with:
+      cmd: >
+        RESEARCH_DIR="${{ context.research_dir }}" &&
+        if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
+          WT_TEMP="${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/phase-groups" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/phase-plans" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/images" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/scripts" &&
+          for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
+          for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
+          for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done &&
+          for f in "${WT_TEMP}"/exp-lens-*/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/images/"; done;
+          echo "re_stage_bundle=done";
+        else
+          echo "re_stage_bundle: no research directory found — skipped";
+        fi
+      cwd: "${{ context.worktree_path }}"
+      step_name: re_stage_bundle
+    on_success: re_test
+    on_failure: re_push_research
+    note: >
+      Idempotent re-staging after report rewrite. Same body as stage_bundle — updates
+      artifact directory with any newly written phase artifacts before re-testing. Falls
+      through to re_push_research on failure (best-effort).
 
   re_test:
     tool: test_check
@@ -690,10 +695,55 @@ steps:
       cmd: "cd '${{ context.worktree_path }}' && git push"
       cwd: "${{ context.worktree_path }}"
       step_name: re_push_research
-    on_success: begin_archival
+    on_success: finalize_bundle
     on_failure: begin_archival
 
   # --- ARCHIVAL PHASE ---
+  finalize_bundle:
+    tool: run_cmd
+    with:
+      cmd: >
+        RESEARCH_DIR="${{ context.research_dir }}" &&
+        if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
+          if [ -f "${RESEARCH_DIR}/report.md" ]; then
+            cp "${RESEARCH_DIR}/report.md" "${RESEARCH_DIR}/README.md" &&
+            rm "${RESEARCH_DIR}/report.md";
+          fi &&
+          mapfile -t TAR_ITEMS < <(ls -1 "${RESEARCH_DIR}" | grep -vE '^(README\.md|artifacts\.tar\.gz)$') &&
+          if [ ${#TAR_ITEMS[@]} -gt 0 ]; then
+            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" "${TAR_ITEMS[@]}" &&
+            for item in "${TAR_ITEMS[@]}"; do rm -rf "${RESEARCH_DIR}/${item}"; done;
+          fi &&
+          if [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] && [ -f "${RESEARCH_DIR}/README.md" ]; then
+            MANIFEST=$(tar tzf "${RESEARCH_DIR}/artifacts.tar.gz" | sort) &&
+            { echo ""; echo "## Archive Manifest"; echo ""; echo "Contents of \`artifacts.tar.gz\`:"; echo ""; echo '```'; echo "${MANIFEST}"; echo '```'; } >> "${RESEARCH_DIR}/README.md";
+          fi &&
+          [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] || \
+            { echo "ERROR: artifacts.tar.gz not created in ${RESEARCH_DIR}"; exit 1; } &&
+          LEFTOVERS=$(ls -1 "${RESEARCH_DIR}" | grep -vE '^(README\.md|artifacts\.tar\.gz)$') &&
+          [ -z "${LEFTOVERS}" ] || \
+            { echo "ERROR: uncompressed entries still present in ${RESEARCH_DIR}: ${LEFTOVERS}"; exit 1; } &&
+          [ -f "${RESEARCH_DIR}/README.md" ] || \
+            { echo "ERROR: README.md not found in ${RESEARCH_DIR}"; exit 1; } &&
+          cd "${{ context.worktree_path }}" && git add "${RESEARCH_DIR}" && { git diff --cached --quiet || git commit -m "Add compressed research artifacts"; };
+          echo "report_path=${RESEARCH_DIR}/README.md";
+        else
+          echo "finalize_bundle: no research directory found — artifact commit skipped";
+        fi
+      cwd: "${{ context.worktree_path }}"
+      step_name: finalize_bundle
+    capture:
+      report_path: "${{ result.report_path }}"
+    on_success: begin_archival
+    on_failure: begin_archival
+    note: >
+      Single compression point. Runs exactly once per recipe run, after re_push_research.
+      Renames report.md → README.md (preserves the most up-to-date report from
+      re_write_report if the revalidation path ran), archives all supporting artifacts via
+      mapfile dynamic input collection, appends Archive Manifest to README.md, commits.
+      Non-fatal — routes to begin_archival on both success and failure. GroupH will extend
+      this step with output_mode conditionals for local-report paths.
+
   begin_archival:
     action: route
     on_result:

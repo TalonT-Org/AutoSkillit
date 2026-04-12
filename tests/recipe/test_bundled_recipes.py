@@ -1731,7 +1731,7 @@ class TestResearchRecipeStructure:
         routes = {c.when: c.route for c in step.on_result.conditions if c.when}
         assert any("GO" in (w or "") for w in routes), "Missing GO route"
         go_route = next(c.route for c in step.on_result.conditions if c.when and "GO" in c.when)
-        assert go_route == "create_worktree"
+        assert go_route == "plan_visualization"
         revise_route = next(
             c.route for c in step.on_result.conditions if c.when and "REVISE" in c.when
         )

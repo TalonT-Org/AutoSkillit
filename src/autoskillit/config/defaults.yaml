@@ -212,6 +212,7 @@ skills:
     - vis-lens-caption-annot
     - vis-lens-reproducibility
     - vis-lens-story-arc
+    - plan-visualization
   tier3:
     - prepare-pr
     - compose-pr

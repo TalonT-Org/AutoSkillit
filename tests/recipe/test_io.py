@@ -913,4 +913,4 @@ def test_research_recipe_declares_requires_packs():
 
     path = pkg_root() / "recipes" / "research.yaml"
     recipe = load_recipe(path)
-    assert recipe.requires_packs == ["research", "exp-lens"]
+    assert recipe.requires_packs == ["research", "exp-lens", "vis-lens"]

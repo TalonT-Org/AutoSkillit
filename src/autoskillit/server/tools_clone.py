@@ -303,6 +303,14 @@ async def register_clone_status(
     from autoskillit.server import _get_ctx
 
     tool_ctx = _get_ctx()
+    owner = tool_ctx.kitchen_id
+    if owner == "":
+        return json.dumps(
+            {
+                "registered": "false",
+                "reason": "no active kitchen (kitchen_id empty) — cannot register clone",
+            }
+        )
     _start = time.monotonic()
     typed_status: Literal["success", "error"] = "success" if status == "success" else "error"
     try:
@@ -310,6 +318,7 @@ async def register_clone_status(
             clone_registry.register_clone,
             clone_path,
             typed_status,
+            owner,
             registry_path,
             tool_ctx.temp_dir,
         )
@@ -326,6 +335,7 @@ async def register_clone_status(
 @track_response_size("batch_cleanup_clones")
 async def batch_cleanup_clones(
     registry_path: str = "",
+    all_owners: str = "false",
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
@@ -334,11 +344,18 @@ async def batch_cleanup_clones(
     Called ONCE after all parallel pipelines have completed (after batch_confirm_cleanup
     action: confirm). Never raises — failures are reported in the result dict.
 
+    By default, deletion is scoped to the current kitchen's entries (owner = kitchen_id).
+    Pass all_owners="true" as an operator escape hatch to delete all success-status entries
+    regardless of owner, including legacy orphan entries from pre-owner-schema registries.
+
     Returns {"deleted": [...], "delete_failures": [...], "preserved": [...]}.
 
     Args:
         registry_path: Absolute path to the shared registry file. Defaults to
                        .autoskillit/temp/clone-cleanup-registry.json in cwd.
+        all_owners: "false" (default) scopes deletion to the current kitchen's entries;
+                    "true" is the operator escape hatch that ignores owner and deletes
+                    all success-status entries including legacy orphans.
         step_name: Optional YAML step key for wall-clock timing accumulation.
     """
     try:
@@ -346,7 +363,7 @@ async def batch_cleanup_clones(
             return gate
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(tool="batch_cleanup_clones")
-        logger.info("batch_cleanup_clones", registry_path=registry_path)
+        logger.info("batch_cleanup_clones", registry_path=registry_path, all_owners=all_owners)
 
         from autoskillit.server import _get_ctx
 
@@ -361,6 +378,23 @@ async def batch_cleanup_clones(
                 }
             )
 
+        is_escape_hatch = all_owners.strip().lower() == "true"
+        owner_filter: str | None
+        if is_escape_hatch:
+            owner_filter = None
+        else:
+            owner_filter = tool_ctx.kitchen_id
+            if owner_filter == "":
+                return json.dumps(
+                    {
+                        "deleted": [],
+                        "delete_failures": [],
+                        "preserved": [],
+                        "error": "no active kitchen (kitchen_id empty) — "
+                        "pass all_owners='true' to force-cleanup legacy entries",
+                    }
+                )
+
         _start = time.monotonic()
         try:
             result = await asyncio.to_thread(
@@ -368,6 +402,7 @@ async def batch_cleanup_clones(
                 registry_path,
                 tool_ctx.clone_mgr.remove_clone,
                 tool_ctx.temp_dir,
+                owner_filter,
             )
             return json.dumps(result)
         finally:

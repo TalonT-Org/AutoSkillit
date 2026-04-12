@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     from autoskillit.config import (
         AutomationConfig,
     )
-    from autoskillit.core import AuditLog, SubprocessResult
+    from autoskillit.core import AuditLog, SubprocessResult, SubprocessRunner
     from autoskillit.pipeline.context import (
         ToolContext,
     )
@@ -78,6 +78,10 @@ logger = get_logger(__name__)
 _CHANNEL_B_RECOVERABLE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {CliSubtype.UNPARSEABLE, CliSubtype.EMPTY_OUTPUT}
 )
+
+# Regex to detect path-capture patterns like ``plan_path\s*=\s*/.+`` in expected_output_patterns.
+# Used by _synthesize_from_write_artifacts and _extract_missing_token_hints.
+_PATH_CAPTURE: re.Pattern[str] = re.compile(r"^(\w+)\\s\*=\\s\*/.+")
 
 
 def _session_log_dir(cwd: str) -> Path:
@@ -188,8 +192,6 @@ def _synthesize_from_write_artifacts(
 
     # Only synthesize for path-capture patterns (token_name\s*=\s*/.+).
     # Non-path patterns (verdict=, merged=) must remain text-compliance-only.
-    # Note: re is already imported at the top of headless.py — no new import needed.
-    _PATH_CAPTURE = re.compile(r"^(\w+)\\s\*=\\s\*/.+")
 
     synthesized_lines: list[str] = []
     for pattern in expected_output_patterns:
@@ -215,6 +217,145 @@ def _synthesize_from_write_artifacts(
 
     injected = "\n".join(synthesized_lines) + "\n" + session.result
     return dataclasses.replace(session, result=injected)
+
+
+def _extract_missing_token_hints(
+    stdout: str,
+    expected_output_patterns: Sequence[str],
+) -> list[tuple[str, str]]:
+    """Extract (token_name, write_path) pairs for patterns missing from the result.
+
+    Parses raw NDJSON stdout to find Write/Edit tool_use file_path entries,
+    then matches them against path-capture patterns that are NOT satisfied in
+    the result text. Returns the hints needed to build the nudge prompt.
+    """
+    session = parse_session_result(stdout)
+    hints: list[tuple[str, str]] = []
+
+    for pattern in expected_output_patterns:
+        m = _PATH_CAPTURE.match(pattern)
+        if not m:
+            continue
+        token_name = m.group(1)
+        # Skip if already satisfied
+        if re.search(pattern, session.result):
+            continue
+        # Collect absolute Write/Edit paths; use the LAST one (final deliverable)
+        candidate_paths = [
+            t.get("file_path", "")
+            for t in session.tool_uses
+            if t.get("name") in {"Write", "Edit"} and t.get("file_path", "").startswith("/")
+        ]
+        if candidate_paths:
+            hints.append((token_name, candidate_paths[-1]))
+
+    return hints
+
+
+_NUDGE_TIMEOUT: float = 60.0
+
+
+async def _attempt_contract_nudge(
+    skill_result: SkillResult,
+    subprocess_result: SubprocessResult,
+    expected_output_patterns: Sequence[str],
+    completion_marker: str,
+    cwd: str,
+    runner: SubprocessRunner,
+) -> SkillResult | None:
+    """Attempt a lightweight resume nudge to recover missing structured output tokens.
+
+    When ``_build_skill_result`` returns CONTRACT_RECOVERY, the model wrote the artifact
+    but omitted the structured output token. Instead of a full retry, resume the same
+    session with a short feedback prompt asking the model to emit the missing token.
+
+    Returns a patched SkillResult(success=True) on success, or None to indicate the
+    nudge failed and the caller should fall through to the original CONTRACT_RECOVERY path.
+    """
+    hints = _extract_missing_token_hints(subprocess_result.stdout, expected_output_patterns)
+    if not hints:
+        logger.debug("nudge_skip_no_hints")
+        return None
+
+    # Build the feedback prompt
+    token_lines = "\n".join(f"{name} = {path}" for name, path in hints)
+    prompt = (
+        "You completed your task and wrote the output file, but you omitted the "
+        "required structured output token in your final text response.\n\n"
+        f"Please emit ONLY the following (no other text):\n"
+        f"{token_lines}\n"
+        f"{completion_marker}"
+    )
+
+    from autoskillit.execution.commands import build_headless_resume_cmd
+
+    spec = build_headless_resume_cmd(
+        resume_session_id=skill_result.session_id,
+        prompt=prompt,
+        output_format="json",
+    )
+
+    try:
+        nudge_result = await runner(
+            spec.cmd,
+            cwd=Path(cwd),
+            timeout=_NUDGE_TIMEOUT,
+            env=spec.env,
+        )
+    except Exception:
+        logger.debug("nudge_runner_failed", exc_info=True)
+        return None
+
+    # Parse the nudge response and check for the missing patterns
+    nudge_session = parse_session_result(nudge_result.stdout)
+    combined_result = skill_result.result + "\n" + nudge_session.result
+
+    if not _check_expected_patterns(combined_result, list(expected_output_patterns)):
+        logger.debug(
+            "nudge_patterns_not_found",
+            nudge_result_len=len(nudge_session.result),
+        )
+        return None
+
+    logger.info(
+        "nudge_recovery_success",
+        session_id=skill_result.session_id,
+        nudge_output_tokens=nudge_session.token_usage.get("output_tokens", 0)
+        if nudge_session.token_usage
+        else 0,
+    )
+    return dataclasses.replace(
+        skill_result,
+        success=True,
+        result=combined_result,
+        subtype="success",
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        token_usage=_merge_token_usage(skill_result.token_usage, nudge_session.token_usage),
+    )
+
+
+def _merge_token_usage(
+    base: dict[str, object] | None,
+    nudge: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Additively merge token usage dicts from main session and nudge."""
+    if base is None:
+        return nudge
+    if nudge is None:
+        return base
+    merged = dict(base)
+    for key in (
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+    ):
+        base_val = base.get(key, 0)
+        nudge_val = nudge.get(key, 0)
+        if isinstance(base_val, (int, float)) and isinstance(nudge_val, (int, float)):
+            merged[key] = base_val + nudge_val
+    return merged
 
 
 def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
@@ -963,6 +1104,25 @@ async def run_headless_core(
             cwd=cwd,
             write_behavior=write_behavior,
         )
+
+        # CONTRACT NUDGE: lightweight resume recovery before full retry.
+        # Fires only when _build_skill_result returns CONTRACT_RECOVERY with a
+        # valid session_id (budget-exhausted cases have retry_reason=BUDGET_EXHAUSTED).
+        if (
+            skill_result.retry_reason == RetryReason.CONTRACT_RECOVERY
+            and skill_result.needs_retry
+            and skill_result.session_id
+        ):
+            nudge_success = await _attempt_contract_nudge(
+                skill_result,
+                result,
+                expected_output_patterns,
+                effective_marker,
+                cwd,
+                runner,
+            )
+            if nudge_success is not None:
+                skill_result = nudge_success
 
         _clone_reverted = False
         if _clone_snapshot is not None:

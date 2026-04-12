@@ -54,7 +54,7 @@ class CloneRegistry:
         self._dirty: bool = False
         self._lock_file: IO[str] | None = None
 
-    def __enter__(self) -> "CloneRegistry":
+    def __enter__(self) -> CloneRegistry:
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock_file = open(self._lock_path, "w")
         fcntl.flock(self._lock_file, fcntl.LOCK_EX)
@@ -85,9 +85,7 @@ class CloneRegistry:
         self._entries.append({"path": path, "status": status, "owner": owner})
         self._dirty = True
 
-    def candidates(
-        self, owner: str | None
-    ) -> tuple[list[str], list[str]]:
+    def candidates(self, owner: str | None) -> tuple[list[str], list[str]]:
         """Return (to_delete, to_preserve) paths scoped to owner.
 
         to_delete: status=success entries matching owner filter.
@@ -210,9 +208,7 @@ def batch_delete(
         if result.get("removed") == "true":
             deleted.append(clone_path)
         else:
-            delete_failures.append(
-                {"path": clone_path, "reason": result.get("reason", "unknown")}
-            )
+            delete_failures.append({"path": clone_path, "reason": result.get("reason", "unknown")})
 
     # Phase 3: prune successfully-deleted entries (re-reads fresh under lock,
     # capturing any register_clone writes that arrived during Phase 2)

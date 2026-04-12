@@ -271,9 +271,7 @@ class TestBatchDeleteRegistryWriteback:
     can distinguish a correct write-back from a missing one.
     """
 
-    def test_batch_delete_removes_deleted_entry_from_registry_file(
-        self, tmp_path: Path
-    ) -> None:
+    def test_batch_delete_removes_deleted_entry_from_registry_file(self, tmp_path: Path) -> None:
         """After batch_delete, successfully-deleted entries must be absent from disk."""
         reg = str(tmp_path / "registry.json")
         register_clone("/tmp/a", "success", "kit-1", registry_path=reg)
@@ -317,9 +315,7 @@ class TestBatchDeleteRegistryWriteback:
         assert "/tmp/a" not in remaining  # succeeded: pruned
         assert "/tmp/b" in remaining  # failed: retained
 
-    def test_batch_delete_second_call_finds_no_candidates(
-        self, tmp_path: Path
-    ) -> None:
+    def test_batch_delete_second_call_finds_no_candidates(self, tmp_path: Path) -> None:
         """After batch_delete prunes the registry, a second call finds nothing to delete.
 
         Verifies idempotency — the core regression contract for issue #756.
@@ -349,9 +345,7 @@ class TestBatchDeleteRegistryWriteback:
         data = json.loads(Path(reg).read_text())
         assert data["clones"] == []
 
-    def test_batch_delete_other_owner_entries_untouched_on_disk(
-        self, tmp_path: Path
-    ) -> None:
+    def test_batch_delete_other_owner_entries_untouched_on_disk(self, tmp_path: Path) -> None:
         """Owner-scoped batch_delete must not touch entries owned by other kitchens."""
         reg = str(tmp_path / "registry.json")
         register_clone("/tmp/mine", "success", "kit-1", registry_path=reg)

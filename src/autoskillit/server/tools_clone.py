@@ -298,7 +298,12 @@ async def register_clone_status(
     logger.info("register_clone_status", clone_path=clone_path, status=status)
 
     if status not in ("success", "error"):
-        return json.dumps({"error": f"Invalid status '{status}'. Must be 'success' or 'error'."})
+        return json.dumps(
+            {
+                "registered": "false",
+                "reason": f"Invalid status '{status}'. Must be 'success' or 'error'.",
+            }
+        )
 
     from autoskillit.server import _get_ctx
 

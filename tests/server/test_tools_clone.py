@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -390,10 +391,7 @@ class TestRegisterCloneStatusOwner:
         )
         assert result["registered"] == "true"
 
-        import json as _json
-        from pathlib import Path as _Path
-
-        data = _json.loads(_Path(reg).read_text())
+        data = json.loads(Path(reg).read_text())
         assert len(data["clones"]) == 1
         assert data["clones"][0]["owner"] == "kit-xyz"
 
@@ -407,9 +405,7 @@ class TestRegisterCloneStatusOwner:
         )
         assert result["registered"] == "false"
         assert "kitchen_id" in result["reason"] or "kitchen" in result["reason"]
-        from pathlib import Path as _Path
-
-        assert not _Path(reg).exists()
+        assert not Path(reg).exists()
 
 
 class TestBatchCleanupClonesOwner:
@@ -478,9 +474,7 @@ class TestBatchCleanupClonesOwner:
         """T17 — escape hatch works even when kitchen_id is empty (legacy recovery)."""
 
         reg_path = tmp_path / "registry.json"
-        reg_path.write_text(
-            __import__("json").dumps({"clones": [{"path": "/legacy", "status": "success"}]})
-        )
+        reg_path.write_text(json.dumps({"clones": [{"path": "/legacy", "status": "success"}]}))
 
         tool_ctx.kitchen_id = ""
         mock_mgr = MagicMock()
@@ -516,20 +510,14 @@ class TestBatchCleanupClonesOwner:
     @pytest.mark.anyio
     async def test_two_kitchens_register_and_cleanup_isolated(self, tool_ctx, tmp_path):
         """T19 — kitchen A's cleanup does not touch kitchen B's registry entry."""
-        import json as _json
-        from pathlib import Path as _Path
-
         reg = str(tmp_path / "registry.json")
 
-        # Session 1: kit-1 registers
-        tool_ctx.kitchen_id = "kit-1"
-        await register_clone_status(clone_path="/clone-1", status="success", registry_path=reg)
+        # Register directly via L1 to represent two independent sessions without
+        # mutating a shared ToolContext mid-test (a ToolContext represents one session).
+        clone_registry.register_clone("/clone-1", "success", "kit-1", reg)
+        clone_registry.register_clone("/clone-2", "success", "kit-2", reg)
 
-        # Session 2: kit-2 registers
-        tool_ctx.kitchen_id = "kit-2"
-        await register_clone_status(clone_path="/clone-2", status="success", registry_path=reg)
-
-        # Session 1 cleans up
+        # Session 1 cleans up via the MCP tool
         tool_ctx.kitchen_id = "kit-1"
         mock_mgr = MagicMock()
         mock_mgr.remove_clone.return_value = {"removed": "true"}
@@ -543,7 +531,7 @@ class TestBatchCleanupClonesOwner:
         mock_mgr.remove_clone.assert_called_once_with("/clone-1", "false")
 
         # kit-2's entry is still on disk
-        data = _json.loads(_Path(reg).read_text())
+        data = json.loads(Path(reg).read_text())
         remaining = {e["path"]: e.get("owner") for e in data["clones"]}
         assert "/clone-2" in remaining
         assert remaining["/clone-2"] == "kit-2"

@@ -193,6 +193,18 @@ class LinuxTracingConfig:
     log_dir: str = ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
     tmpfs_path: str = "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
 
+    def __post_init__(self) -> None:
+        import os
+
+        if self.tmpfs_path == "/dev/shm" and os.environ.get("PYTEST_CURRENT_TEST"):
+            raise RuntimeError(
+                "LinuxTracingConfig.tmpfs_path is '/dev/shm' but PYTEST_CURRENT_TEST "
+                "is set — this test would write to the real shared tmpfs and pollute "
+                "production state. Override tmpfs_path with a test-local path, e.g.: "
+                "LinuxTracingConfig(tmpfs_path=str(tmp_path)). "
+                "Use the isolated_tracing_config fixture for new tests."
+            )
+
 
 @dataclass
 class McpResponseConfig:

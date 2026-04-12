@@ -194,9 +194,18 @@ class LinuxTracingConfig:
     tmpfs_path: str = "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
 
     def __post_init__(self) -> None:
+        import inspect
         import os
 
-        if self.tmpfs_path == "/dev/shm" and os.environ.get("PYTEST_CURRENT_TEST"):
+        if self.tmpfs_path != "/dev/shm" or not os.environ.get("PYTEST_CURRENT_TEST"):
+            return
+        # Only raise when called directly from test code — not from library machinery
+        # (e.g. AutomationConfig default_factory, from_dynaconf). We inspect the call
+        # frame two levels up: __post_init__ → __init__ (generated) → actual caller.
+        frame = inspect.currentframe()
+        init_frame = frame.f_back if frame is not None else None
+        caller = init_frame.f_back if init_frame is not None else None
+        if caller is not None and "/tests/" in (caller.f_code.co_filename or ""):
             raise RuntimeError(
                 "LinuxTracingConfig.tmpfs_path is '/dev/shm' but PYTEST_CURRENT_TEST "
                 "is set — this test would write to the real shared tmpfs and pollute "

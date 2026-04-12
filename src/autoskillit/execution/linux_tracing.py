@@ -95,7 +95,7 @@ def _write_enrollment_atomic(path: Path, record: TraceEnrollmentRecord) -> None:
         raise
 
 
-def _read_enrollment(path: Path) -> TraceEnrollmentRecord | None:
+def read_enrollment(path: Path) -> TraceEnrollmentRecord | None:
     """Read and validate an enrollment sidecar. Returns None on any error."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))

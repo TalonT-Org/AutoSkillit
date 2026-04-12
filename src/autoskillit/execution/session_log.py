@@ -22,8 +22,8 @@ import psutil
 from autoskillit.core import atomic_write, claude_code_log_path, get_logger
 from autoskillit.execution.anomaly_detection import detect_anomalies
 from autoskillit.execution.linux_tracing import (
-    _read_enrollment,
     read_boot_id,
+    read_enrollment,
     read_starttime_ticks,
 )
 
@@ -340,7 +340,7 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
 
         # Gate 1: Enrollment sidecar must exist — no sidecar means alien/test file
         enrollment_path = tmpfs / f"autoskillit_enrollment_{pid}.json"
-        enrollment = _read_enrollment(enrollment_path)
+        enrollment = read_enrollment(enrollment_path)
         if enrollment is None:
             logger.debug("Skipping %s: no enrollment sidecar", trace_file.name)
             continue

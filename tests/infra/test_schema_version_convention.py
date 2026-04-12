@@ -109,7 +109,7 @@ def _is_yaml_dump(node: ast.expr) -> bool:
 # Any new site that writes a dict payload SHOULD use write_versioned_json.
 _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # core/io.py — write_versioned_json itself (the blessed helper) uses atomic_write+json.dumps
-    ("src/autoskillit/core/io.py", 113),
+    ("src/autoskillit/core/io.py", 118),
     # session_log.py — summary dict, token_usage list, audit_log list
     ("src/autoskillit/execution/session_log.py", 206),
     ("src/autoskillit/execution/session_log.py", 219),
@@ -136,11 +136,11 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _init_helpers.py — ~/.claude.json (co-owned)
     ("src/autoskillit/cli/_init_helpers.py", 342),
     # _marketplace.py — installed_plugins.json (co-owned with Claude plugin system)
-    ("src/autoskillit/cli/_marketplace.py", 45),
+    ("src/autoskillit/cli/_marketplace.py", 44),
     # _marketplace.py — marketplace.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 88),
+    ("src/autoskillit/cli/_marketplace.py", 87),
     # _marketplace.py — hooks.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 144),
+    ("src/autoskillit/cli/_marketplace.py", 143),
     # _stale_check.py — dismissal state file
     ("src/autoskillit/cli/_stale_check.py", 99),
     # _stale_check.py — fetch cache

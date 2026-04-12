@@ -178,12 +178,13 @@ class TestBuildHeadlessResumeCmd:
         prompt_idx = result.cmd.index(ClaudeFlags.PRINT) + 1
         assert result.cmd[prompt_idx] == "Emit token"
 
-    def test_env_includes_headless_marker(self) -> None:
+    def test_env_is_populated_with_ide_suppression(self) -> None:
         from collections.abc import Mapping
 
         result = build_headless_resume_cmd(resume_session_id="abc-123", prompt="Emit token")
         assert isinstance(result.env, Mapping)
         assert len(result.env) > 0
+        assert result.env.get("CLAUDE_CODE_AUTO_CONNECT_IDE") == "0"
 
     def test_no_plugin_dir_by_default(self) -> None:
         result = build_headless_resume_cmd(resume_session_id="abc-123", prompt="Emit token")

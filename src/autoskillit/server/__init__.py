@@ -46,6 +46,7 @@ __all__ = [
     # Public utilities consumed by CLI and tests
     "version_info",
     "make_context",
+    "run_startup_drift_check",
 ]
 
 # Import all tool sub-modules to trigger @mcp.tool() registration.

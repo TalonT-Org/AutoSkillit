@@ -811,7 +811,7 @@ def test_e3_backward_compat_sessions_without_order_id_field(tmp_path: Path) -> N
 # ---------------------------------------------------------------------------
 
 
-def test_token_summary_appender_patch_failure_exits_zero(tmp_path: Path) -> None:
+def test_token_summary_hook_patch_failure_exits_zero(tmp_path: Path) -> None:
     """CalledProcessError on PATCH must exit 0, not 1 (fail-open hook)."""
     event = {
         "tool_name": "mcp__autoskillit_server__run_skill",
@@ -848,7 +848,7 @@ def test_token_summary_appender_patch_failure_exits_zero(tmp_path: Path) -> None
     assert exit_code == 0
 
 
-def test_token_summary_appender_unexpected_error_exits_zero(monkeypatch: object) -> None:
+def test_token_summary_hook_unexpected_error_exits_zero(monkeypatch: object) -> None:
     """Unhandled exception in outer except must exit 0 (fail-open)."""
 
     # Patch json.loads to raise to trigger the outer except path

@@ -22,7 +22,6 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
 
 from autoskillit.recipe.io import builtin_recipes_dir
 from autoskillit.server.tools_recipe import list_recipes, validate_recipe
@@ -116,6 +115,7 @@ class TestSmokeScriptValidation:
         result = json.loads(await list_recipes())
         names = [r["name"] for r in result["recipes"]]
         assert "smoke-test" not in names
+
 
 # ---------------------------------------------------------------------------
 # New structural tests for rewritten recipe (T_SP_NEW_1 through T_SP_NEW_12+)

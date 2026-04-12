@@ -99,7 +99,6 @@ class TestYamlConsolidationArchitecture:
         assert not violations, f"Direct yaml imports found outside core/io.py: {violations}"
 
 
-
 def test_atomic_write_is_canonical_public_name():
     """_atomic_write must not appear in core.io.__all__; atomic_write must."""
     import autoskillit.core.io as io_mod

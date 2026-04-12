@@ -128,6 +128,14 @@ tests/
 │   ├── test_core_terminal_table.py
 │   ├── test_type_constants.py
 │   └── test_types_structure.py
+├── docs/                                # Documentation integrity tests
+│   ├── __init__.py
+│   ├── test_banned_phrases.py           # Prohibited phrases not present in documentation
+│   ├── test_doc_counts.py               # Counts of tools, skills, hooks, recipes (regression guard)
+│   ├── test_doc_index.py                # Doc file index integrity
+│   ├── test_doc_links.py                # Internal and external link validity
+│   ├── test_filename_naming.py          # Documentation filename conventions
+│   └── test_glossary_spelling.py        # Glossary term spelling consistency
 ├── execution/                           # Subprocess integration + session tests
 │   ├── __init__.py
 │   ├── test_anomaly_detection.py

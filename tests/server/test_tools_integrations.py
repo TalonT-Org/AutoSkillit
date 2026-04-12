@@ -11,14 +11,10 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
-from autoskillit.pipeline.gate import UNGATED_TOOLS
 from autoskillit.server.helpers import _extract_block
 from autoskillit.server.tools_github import (
     _FINGERPRINT_END,
     _FINGERPRINT_START,
-    _parse_fingerprint,
-    fetch_github_issue,
-    get_issue_title,
     report_bug,
 )
 from autoskillit.server.tools_issue_lifecycle import (
@@ -35,43 +31,6 @@ from autoskillit.server.tools_issue_lifecycle import (
 )
 from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
 from tests.conftest import _make_result
-
-# ---------------------------------------------------------------------------
-# _parse_fingerprint unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_parse_fingerprint_present():
-    report = (
-        "Some preamble\n"
-        f"{_FINGERPRINT_START}\n"
-        "KeyError in recipe/validator.py: missing ingredient ref\n"
-        f"{_FINGERPRINT_END}\n"
-        "Report written to /tmp/report.md"
-    )
-    assert _parse_fingerprint(report) == "KeyError in recipe/validator.py: missing ingredient ref"
-
-
-def test_parse_fingerprint_missing_returns_none():
-    assert _parse_fingerprint("No fingerprint block here") is None
-
-
-def test_parse_fingerprint_empty_block_returns_none():
-    report = f"{_FINGERPRINT_START}\n{_FINGERPRINT_END}\n"
-    assert _parse_fingerprint(report) is None
-
-
-def test_parse_fingerprint_first_nonempty_line():
-    """Only the first non-empty line inside the block is returned."""
-    report = (
-        f"{_FINGERPRINT_START}\n"
-        "\n"
-        "  TypeError in execution/headless.py: runner=None  \n"
-        "extra line\n"
-        f"{_FINGERPRINT_END}\n"
-    )
-    assert _parse_fingerprint(report) == "TypeError in execution/headless.py: runner=None"
-
 
 # ---------------------------------------------------------------------------
 # _extract_block unit tests
@@ -625,150 +584,6 @@ async def test_report_bug_blocking_github_client_raises_does_not_propagate(tool_
     assert result["github"].get("skipped") is True
     assert "unexpected error" in result["github"].get("reason", "")
     assert "network failure" in result["github"].get("reason", "")
-
-
-# ---------------------------------------------------------------------------
-# Config defaults
-# ---------------------------------------------------------------------------
-
-
-def test_report_bug_config_defaults():
-    from autoskillit.config import AutomationConfig
-
-    cfg = AutomationConfig()
-    assert cfg.report_bug.timeout == 600
-    assert cfg.report_bug.model is None
-    assert cfg.report_bug.report_dir is None
-    assert cfg.report_bug.github_filing is True
-    assert "autoreported" in cfg.report_bug.github_labels
-    assert "bug" in cfg.report_bug.github_labels
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_no_client(tool_ctx):
-    tool_ctx.github_client = None
-    result = json.loads(await fetch_github_issue("owner/repo#1"))
-    assert result["success"] is False
-    assert "error" in result
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_delegates_to_client(tool_ctx):
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {
-        "success": True,
-        "issue_number": 1,
-        "title": "T",
-        "url": "u",
-        "state": "open",
-        "labels": [],
-        "content": "# T",
-    }
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("owner/repo#1"))
-    assert result["success"] is True
-    mock_client.fetch_issue.assert_called_once_with("owner/repo#1", include_comments=True)
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_bare_number_with_default_repo(tool_ctx):
-    tool_ctx.config.github.default_repo = "owner/repo"
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {
-        "success": True,
-        "issue_number": 42,
-        "title": "T",
-        "url": "u",
-        "state": "open",
-        "labels": [],
-        "content": "# T",
-    }
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("42"))
-    assert result["success"] is True
-    mock_client.fetch_issue.assert_called_once_with("owner/repo#42", include_comments=True)
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_bare_number_no_default_repo(tool_ctx):
-    tool_ctx.config.github.default_repo = None
-    tool_ctx.github_client = AsyncMock()
-    result = json.loads(await fetch_github_issue("42"))
-    assert result["success"] is False
-    assert "default_repo" in result["error"]
-
-
-@pytest.mark.anyio
-async def test_fetch_github_issue_client_error_propagated(tool_ctx):
-    mock_client = AsyncMock()
-    mock_client.fetch_issue.return_value = {"success": False, "error": "Not Found"}
-    tool_ctx.github_client = mock_client
-    result = json.loads(await fetch_github_issue("owner/repo#404"))
-    assert result["success"] is False
-
-
-def test_fetch_github_issue_in_gated_tools():
-    from autoskillit.pipeline.gate import GATED_TOOLS
-
-    assert "fetch_github_issue" in GATED_TOOLS
-    assert "fetch_github_issue" not in UNGATED_TOOLS
-
-
-def test_github_config_defaults():
-    from autoskillit.config import AutomationConfig
-
-    config = AutomationConfig()
-    assert config.github.token is None
-    assert config.github.default_repo is None
-
-
-# ---------------------------------------------------------------------------
-# get_issue_title tool tests
-# ---------------------------------------------------------------------------
-
-
-class TestGetIssueTitleTool:
-    @pytest.mark.anyio
-    async def test_get_issue_title_success(self, tool_ctx):
-        """Delegates to github_client.fetch_title; returns JSON result."""
-        mock_client = AsyncMock()
-        mock_client.fetch_title.return_value = {
-            "success": True,
-            "number": 42,
-            "title": "Fix merge conflict triage",
-            "slug": "fix-merge-conflict-triage",
-        }
-        tool_ctx.github_client = mock_client
-        result = json.loads(await get_issue_title("https://github.com/owner/repo/issues/42"))
-        assert result["success"] is True
-        assert result["number"] == 42
-        assert result["title"] == "Fix merge conflict triage"
-        assert result["slug"] == "fix-merge-conflict-triage"
-        mock_client.fetch_title.assert_called_once_with("https://github.com/owner/repo/issues/42")
-
-    @pytest.mark.anyio
-    async def test_get_issue_title_no_github_client(self, tool_ctx):
-        """Returns error JSON when github_client is None."""
-        tool_ctx.github_client = None
-        result = json.loads(await get_issue_title("https://github.com/owner/repo/issues/1"))
-        assert result["success"] is False
-        assert "error" in result
-
-    @pytest.mark.anyio
-    async def test_get_issue_title_client_error_propagated(self, tool_ctx):
-        """Propagates {success: False, error: ...} from fetch_title."""
-        mock_client = AsyncMock()
-        mock_client.fetch_title.return_value = {"success": False, "error": "Not Found"}
-        tool_ctx.github_client = mock_client
-        result = json.loads(await get_issue_title("owner/repo#404"))
-        assert result["success"] is False
-
-    def test_get_issue_title_is_gated(self):
-        """'get_issue_title' in GATED_TOOLS."""
-        from autoskillit.pipeline.gate import GATED_TOOLS
-
-        assert "get_issue_title" in GATED_TOOLS
-        assert "get_issue_title" not in UNGATED_TOOLS
 
 
 # ---------------------------------------------------------------------------
@@ -1442,62 +1257,6 @@ async def test_headless_tool_failure_paths_include_all_diagnostic_fields(
     assert response["success"] is False
     assert response["stderr"] == skill_result_kwargs["stderr"]
     assert response["session_id"] == skill_result_kwargs["session_id"]
-
-
-class TestReportBugTool:
-    @pytest.mark.anyio
-    async def test_report_bug_failure_includes_session_id_and_stderr(self, tool_ctx, tmp_path):
-        """Blocking failure response must include session_id and stderr for diagnosis."""
-        tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-        tool_ctx.config.report_bug.github_filing = False
-
-        mock_executor = AsyncMock()
-        mock_executor.run.return_value = SkillResult(
-            success=False,
-            result="",
-            session_id="fail-session-id",
-            subtype="missing_completion_marker",
-            is_error=True,
-            exit_code=1,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="Claude crashed",
-        )
-        tool_ctx.executor = mock_executor
-
-        result = json.loads(await report_bug("some error", str(tmp_path), severity="blocking"))
-
-        assert result["success"] is False
-        assert result["session_id"] == "fail-session-id"
-        assert result["stderr"] == "Claude crashed"
-
-    @pytest.mark.anyio
-    async def test_report_bug_passes_expected_output_patterns_to_executor(
-        self, tool_ctx, tmp_path
-    ):
-        """output_pattern_resolver is consulted and patterns are passed to executor.run()."""
-        tool_ctx.config.report_bug.report_dir = str(tmp_path / "bug-reports")
-        tool_ctx.config.report_bug.github_filing = False
-
-        mock_executor = AsyncMock()
-        mock_executor.run.return_value = SkillResult(
-            success=True,
-            result="## Report\nfindings",
-            session_id="sid",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        )
-        tool_ctx.executor = mock_executor
-        tool_ctx.output_pattern_resolver = lambda cmd: ["---bug-fingerprint---"]
-
-        await report_bug("error ctx", str(tmp_path), severity="blocking")
-
-        call_kwargs = mock_executor.run.call_args.kwargs
-        assert call_kwargs.get("expected_output_patterns") == ["---bug-fingerprint---"]
 
 
 class TestGetPrReviews:

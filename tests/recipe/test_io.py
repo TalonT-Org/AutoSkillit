@@ -854,20 +854,6 @@ def test_parse_step_handles_all_recipe_step_fields() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T2 — _path_mtime_ns replaces the two old helpers
-# ---------------------------------------------------------------------------
-
-
-def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
-    """recipe/_api.py must expose _path_mtime_ns; _file_mtime_ns/_dir_mtime_ns removed."""
-    import autoskillit.recipe._api as api
-
-    assert hasattr(api, "_path_mtime_ns"), "_path_mtime_ns must exist"
-    assert not hasattr(api, "_file_mtime_ns"), "_file_mtime_ns must be removed"
-    assert not hasattr(api, "_dir_mtime_ns"), "_dir_mtime_ns must be removed"
-
-
-# ---------------------------------------------------------------------------
 # REQ-ORD-003: Stable positions when project recipe added
 # ---------------------------------------------------------------------------
 

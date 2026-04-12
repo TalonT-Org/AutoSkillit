@@ -162,9 +162,8 @@ def test_investigate_historical_context_after_similar_patterns(report_section: s
     """Historical Context must appear after Similar Patterns in the report template."""
     similar_idx = report_section.find("Similar Patterns")
     historical_idx = report_section.find("Historical Context")
-    assert similar_idx != -1 and historical_idx != -1, (
-        "Both 'Similar Patterns' and 'Historical Context' must appear in the Step 4 report section"
-    )
+    assert similar_idx != -1, "'Similar Patterns' section not found in Step 4 report template"
+    assert historical_idx != -1, "'Historical Context' section not found in Step 4 report template"
     assert similar_idx < historical_idx, (
         "'Historical Context' must be positioned after 'Similar Patterns' in the "
         "report template ordering"

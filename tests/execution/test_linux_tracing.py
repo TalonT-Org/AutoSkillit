@@ -78,7 +78,7 @@ def test_read_proc_snapshot_has_all_fields():
 
 
 @pytest.mark.anyio
-async def test_tracing_handle_accumulates_snapshots():
+async def test_tracing_handle_accumulates_snapshots(tmp_path):
     """LinuxTracingHandle accumulates snapshots during monitoring."""
     import subprocess
 
@@ -88,7 +88,7 @@ async def test_tracing_handle_accumulates_snapshots():
     from autoskillit.execution.linux_tracing import start_linux_tracing
 
     proc = subprocess.Popen(["sleep", "2"])
-    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1)
+    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
 
     async with anyio.create_task_group() as tg:
         handle = start_linux_tracing(pid=proc.pid, config=cfg, tg=tg)
@@ -104,7 +104,7 @@ async def test_tracing_handle_accumulates_snapshots():
 
 
 @pytest.mark.anyio
-async def test_tracing_handle_stop_returns_snapshots():
+async def test_tracing_handle_stop_returns_snapshots(tmp_path):
     """stop() returns the accumulated snapshot list."""
     import os
 
@@ -113,7 +113,7 @@ async def test_tracing_handle_stop_returns_snapshots():
     from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing
 
-    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1)
+    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
 
     async with anyio.create_task_group() as tg:
         handle = start_linux_tracing(pid=os.getpid(), config=cfg, tg=tg)
@@ -140,13 +140,13 @@ def test_linux_tracing_unavailable_on_non_linux():
     assert LINUX_TRACING_AVAILABLE is False
 
 
-def test_noop_on_non_linux(monkeypatch):
+def test_noop_on_non_linux(monkeypatch, tmp_path):
     """start_linux_tracing is a no-op when LINUX_TRACING_AVAILABLE is False."""
     from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution import linux_tracing
 
     monkeypatch.setattr(linux_tracing, "LINUX_TRACING_AVAILABLE", False)
-    cfg = LinuxTracingConfig(enabled=True, proc_interval=1.0)
+    cfg = LinuxTracingConfig(enabled=True, proc_interval=1.0, tmpfs_path=str(tmp_path))
     result = linux_tracing.start_linux_tracing(pid=1, config=cfg, tg=None)
     assert result is None
 
@@ -304,7 +304,7 @@ def test_proc_snapshot_has_captured_at_field():
 
 
 @pytest.mark.anyio
-async def test_proc_monitor_snapshots_have_distinct_timestamps():
+async def test_proc_monitor_snapshots_have_distinct_timestamps(tmp_path):
     """Consecutive snapshots from proc_monitor must have distinct captured_at values."""
     import os
 
@@ -313,7 +313,7 @@ async def test_proc_monitor_snapshots_have_distinct_timestamps():
     from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing
 
-    config = LinuxTracingConfig(proc_interval=0.05)
+    config = LinuxTracingConfig(proc_interval=0.05, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
         handle = start_linux_tracing(os.getpid(), config, tg)
         await anyio.sleep(0.2)

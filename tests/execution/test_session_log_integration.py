@@ -21,7 +21,7 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
     from autoskillit.execution.linux_tracing import start_linux_tracing
     from autoskillit.execution.session_log import flush_session_log
 
-    config = LinuxTracingConfig(proc_interval=0.05)
+    config = LinuxTracingConfig(proc_interval=0.05, tmpfs_path=str(tmp_path))
     start_ts = datetime.now(UTC).isoformat()
     start_mono = time.monotonic()
     async with anyio.create_task_group() as tg:

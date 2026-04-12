@@ -18,12 +18,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Hooks run as ``python3 /path/to/quota_check.py`` subprocesses outside the
-# autoskillit venv (test_hooks_are_stdlib_only). To share the hook config path
-# and reader with _fmt_primitives without breaking that constraint, the sibling
-# module is imported by bare name with the script's directory placed first on
-# sys.path. Tests running inside the venv import _fmt_primitives via the
-# autoskillit.hooks package path; both point to the same file.
+# stdlib-only subprocess hook: import _fmt_primitives by bare name via sys.path
+# (test_hooks_are_stdlib_only). Venv tests use the autoskillit.hooks package path.
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)

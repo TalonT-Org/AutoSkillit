@@ -20,12 +20,8 @@ import subprocess
 import sys
 from typing import Any
 
-# Hooks run as ``python3 /path/to/token_summary_appender.py`` subprocesses outside
-# the autoskillit venv (test_hooks_are_stdlib_only). To share the hook config path
-# with _fmt_primitives without breaking that constraint, the sibling module is
-# imported by bare name with the script's directory placed first on sys.path.
-# Tests running inside the venv import _fmt_primitives via the autoskillit.hooks
-# package path; both point to the same file.
+# stdlib-only subprocess hook: import _fmt_primitives by bare name via sys.path
+# (test_hooks_are_stdlib_only). Venv tests use the autoskillit.hooks package path.
 _HOOKS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)

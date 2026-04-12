@@ -24,3 +24,27 @@ def test_hook_config_path_components_in_sync():
         f"  server/helpers: {path_from_helpers}\n"
         "Update the constants to point to the same file."
     )
+
+
+def test_hook_config_path_single_source_of_truth():
+    """quota_check and quota_post_check must derive their path constants from
+    _fmt_primitives, not define independent copies.
+
+    After deduplication, HOOK_DIR_COMPONENTS + HOOK_CONFIG_FILENAME from each
+    hook module must reconstruct the tuple from _fmt_primitives exactly.
+    """
+    from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+    from autoskillit.hooks.quota_check import HOOK_CONFIG_FILENAME, HOOK_DIR_COMPONENTS
+    from autoskillit.hooks.quota_post_check import (
+        HOOK_CONFIG_FILENAME as QPC_FILENAME,
+    )
+    from autoskillit.hooks.quota_post_check import (
+        HOOK_DIR_COMPONENTS as QPC_DIR,
+    )
+
+    assert (*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME) == _HOOK_CONFIG_PATH_COMPONENTS, (
+        "quota_check path constants must match _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS"
+    )
+    assert (*QPC_DIR, QPC_FILENAME) == _HOOK_CONFIG_PATH_COMPONENTS, (
+        "quota_post_check path constants must match _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS"
+    )

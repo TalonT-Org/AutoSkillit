@@ -43,6 +43,7 @@ def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.Functio
             isinstance(s, ast.If)
             and len(s.body) == 1
             and isinstance(s.body[0], (ast.Return, ast.Raise))
+            and not s.orelse
         ):
             idx += 1
         else:

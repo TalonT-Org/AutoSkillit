@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+
 _LONG_PATTERNS = ("weekly", "sonnet", "opus")
 
 
@@ -192,7 +194,7 @@ def test_hook_does_not_consult_threshold_field_in_hook_config(tmp_path, monkeypa
         effective_threshold=85.0,
     )
     _write_hook_config(
-        tmp_path / ".autoskillit" / "temp" / ".hook_config.json",
+        tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS),
         cache_max_age=300,
         cache_path=str(cache),
         extra={"short_window_threshold": 50.0},
@@ -209,7 +211,7 @@ def test_quota_check_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
     custom_cache = tmp_path / "my_custom_cache.json"
     _write_cache(custom_cache, utilization=95.0)
     _write_hook_config(
-        tmp_path / ".autoskillit" / "temp" / ".hook_config.json",
+        tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS),
         cache_max_age=300,
         cache_path=str(custom_cache),
     )
@@ -234,7 +236,7 @@ def test_quota_check_env_var_overrides_hook_config_cache_path(tmp_path, monkeypa
     wrong_cache = tmp_path / "wrong_cache.json"
     _write_cache(wrong_cache, utilization=50.0)
     _write_hook_config(
-        tmp_path / ".autoskillit" / "temp" / ".hook_config.json",
+        tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS),
         cache_max_age=300,
         cache_path=str(wrong_cache),
     )

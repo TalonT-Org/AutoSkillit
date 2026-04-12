@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+
 
 def _make_mock_ctx():
     """Return a minimal mock ToolContext with a gate."""
@@ -86,7 +88,7 @@ def test_close_kitchen_no_file_no_error(tmp_path, monkeypatch):
             _close_kitchen_handler()  # Should not raise
 
     # Gate file was never created — confirm it still does not exist
-    assert not (tmp_path / ".autoskillit" / "temp" / ".hook_config.json").exists()
+    assert not tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS).exists()
 
 
 # T-CACHE-1
@@ -135,7 +137,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
         "_get_ctx must be called in both _open_kitchen_handler and _write_hook_config; "
         "if call_count < 2 the patch did not cover _write_hook_config's deferred import"
     )
-    hook_cfg = tmp_path / ".autoskillit" / "temp" / ".hook_config.json"
+    hook_cfg = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     assert hook_cfg.exists(), "Hook config file must be written by open_kitchen"
     data = json.loads(hook_cfg.read_text())
     assert data["quota_guard"]["cache_max_age"] == 300
@@ -177,7 +179,7 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
                 await _open_kitchen_handler()
                 _close_kitchen_handler()
 
-    hook_cfg = tmp_path / ".autoskillit" / "temp" / ".hook_config.json"
+    hook_cfg = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     assert not hook_cfg.exists(), "Hook config must be removed by close_kitchen"
 
 

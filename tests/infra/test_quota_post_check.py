@@ -12,6 +12,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+
 _LONG_PATTERNS = ("weekly", "sonnet", "opus")
 
 
@@ -231,7 +233,7 @@ def test_qpc11_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
     monkeypatch.delenv("AUTOSKILLIT_QUOTA_CACHE", raising=False)
     cache = tmp_path / "custom_cache.json"
     _write_cache(cache, utilization=95.0)
-    hook_cfg_path = tmp_path / ".autoskillit" / "temp" / ".hook_config.json"
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
     hook_cfg_path.write_text(
         json.dumps(

@@ -67,7 +67,7 @@ projects need.
 
     autoskillit doctor
 
-Doctor runs 14 checks (12 numbered + 2 lettered sub-checks `4b` and `7b`),
+Doctor runs 15 checks (13 numbered + 2 lettered sub-checks `4b` and `7b`),
 enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
 
 | # | Check | What it verifies |
@@ -86,6 +86,9 @@ enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
 | 10 | Secret scanning hook | `gitleaks` (or equivalent) is installed as a pre-commit hook |
 | 11 | Editable install source exists | An editable install still points at a real source directory |
 | 12 | No stale entry points | No leftover `autoskillit` scripts outside `~/.local/bin` |
+| 13 | Source version drift | Installed commit SHA matches the last-known HEAD of the installed branch |
+| 14 | Quota cache schema | `autoskillit_quota_cache.json` schema version is current |
+| 15 | Claude process state | Reports D-state and CPU breakdown of running `claude` processes via `ps` |
 
 See **[Hooks](safety/hooks.md)** for what each PreToolUse / PostToolUse /
 SessionStart hook actually enforces.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,8 +33,6 @@ class DoctorResult:
 
 def _check_mcp_server_registered(claude_json_path: Path | None = None) -> DoctorResult:
     """Check that autoskillit MCP server is registered (via mcpServers or plugin)."""
-    import subprocess
-
     if claude_json_path is None:
         claude_json_path = Path.home() / ".claude.json"
 
@@ -268,8 +267,6 @@ def _check_editable_install_source_exists() -> DoctorResult:
 
 def _check_stale_entry_points() -> DoctorResult:
     """Detect autoskillit binaries on PATH outside ~/.local/bin (stale/poisoned installs)."""
-    import subprocess
-
     check_name = "stale_entry_points"
     primary = shutil.which("autoskillit")
     if not primary:
@@ -432,6 +429,67 @@ def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:
         check_name,
         f"Quota cache schema drift at {path}: observed={observed!r}, "
         f"expected={QUOTA_CACHE_SCHEMA_VERSION}.",
+    )
+
+
+def _check_claude_process_state_breakdown() -> DoctorResult:
+    """Check current D-state and CPU usage of claude processes via ps."""
+    check_name = "claude_process_state"
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid,state,pcpu,comm"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"ps unavailable ({type(exc).__name__}); skipping claude process check",
+        )
+
+    if result.returncode != 0:
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"ps exited {result.returncode}; skipping claude process check",
+        )
+
+    claude_rows: list[tuple[int, str, float]] = []
+    for line in result.stdout.splitlines()[1:]:
+        parts = line.split(maxsplit=3)
+        if len(parts) < 4:
+            continue
+        comm = parts[3]
+        if comm != "claude":
+            continue
+        try:
+            claude_rows.append((int(parts[0]), parts[1], float(parts[2])))
+        except ValueError:
+            continue
+
+    if not claude_rows:
+        return DoctorResult(Severity.OK, check_name, "No claude processes running")
+
+    breakdown: dict[str, int] = {}
+    for _, state, _ in claude_rows:
+        breakdown[state] = breakdown.get(state, 0) + 1
+
+    summary = ", ".join(f"{s}={c}" for s, c in sorted(breakdown.items()))
+
+    d_rows = [f"pid={pid} pcpu={pcpu}" for pid, state, pcpu in claude_rows if state == "D"]
+    if d_rows:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"claude processes in D state: {', '.join(d_rows)} (breakdown: {summary})",
+        )
+
+    return DoctorResult(
+        Severity.OK,
+        check_name,
+        f"claude process state breakdown: {summary}",
     )
 
 
@@ -635,6 +693,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 14: Quota cache schema version
     results.append(_check_quota_cache_schema())
+
+    # Check 15: claude process state breakdown
+    results.append(_check_claude_process_state_breakdown())
 
     # Output
     if output_json:

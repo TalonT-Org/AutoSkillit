@@ -78,6 +78,8 @@ class ProcSnapshot:
     sig_cgt: str
     oom_score: int
     wchan: str
+    # CPU utilisation (0.0 when process arg is not supplied to read_proc_snapshot)
+    cpu_percent: float
 
 
 def _parse_proc_status(content: str) -> dict[str, str]:
@@ -101,13 +103,19 @@ def _parse_proc_status(content: str) -> dict[str, str]:
     return fields
 
 
-def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
-    """Read a complete snapshot for pid. Returns None if process gone."""
+def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> ProcSnapshot | None:
+    """Read a complete snapshot for pid. Returns None if process gone.
+
+    When *process* is provided, it is reused instead of constructing a fresh
+    psutil.Process(pid); cpu_percent(interval=0) then returns a meaningful
+    delta against the baseline primed by the caller.  When *process* is None,
+    cpu_percent defaults to 0.0.
+    """
     if not LINUX_TRACING_AVAILABLE:
         return None
     captured_at = datetime.now(UTC).isoformat()
     try:
-        p = psutil.Process(pid)
+        p = process if process is not None else psutil.Process(pid)
         with p.oneshot():
             state = p.status()
             mem = p.memory_info()
@@ -115,6 +123,7 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
             num_fds = p.num_fds()
             fd_soft_limit = p.rlimit(psutil.RLIMIT_NOFILE)[0]
             ctx = p.num_ctx_switches()
+            cpu_pct = p.cpu_percent(interval=0) if process is not None else 0.0
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return None
 
@@ -149,6 +158,7 @@ def read_proc_snapshot(pid: int) -> ProcSnapshot | None:
         sig_cgt=sig_fields.get("sig_cgt", ""),
         oom_score=oom,
         wchan=wchan,
+        cpu_percent=cpu_pct,
     )
 
 
@@ -161,8 +171,13 @@ async def proc_monitor(pid: int, interval: float = 5.0) -> AsyncIterator[ProcSna
     maintain the monotonic ordering invariant at the production site.
     """
     _last_captured_at: str = ""
+    try:
+        _proc = psutil.Process(pid)
+        _proc.cpu_percent(interval=0)  # prime the psutil-internal baseline
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return
     while True:
-        snap = read_proc_snapshot(pid)
+        snap = read_proc_snapshot(pid, process=_proc)
         if snap is None:
             return
         captured_at = snap.captured_at

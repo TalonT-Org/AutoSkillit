@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import atexit
-import shutil
 import tempfile
 from collections import deque
 from collections.abc import Mapping
@@ -64,7 +62,6 @@ class RecordingSubprocessRunner(SubprocessRunner):
         inner: SubprocessRunner | None = None,
     ) -> None:
         self.recorder = recorder
-        atexit.register(recorder.finalize)
         if inner is None:
             from autoskillit.execution.process import DefaultSubprocessRunner
 
@@ -173,6 +170,8 @@ class ReplayingSubprocessRunner(SubprocessRunner):
     dispatches to the matching step queue.
     """
 
+    _tmp_replay_dir: tempfile.TemporaryDirectory[str] | None
+
     def __init__(
         self,
         session_map: dict[str, deque[tuple[Any, Any]]],
@@ -184,6 +183,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         self._non_session = non_session_results
         self.player: ScenarioPlayer | None = player
         self.call_log: list[tuple[str, list[str]]] = []
+        self._tmp_replay_dir = None
 
     async def __call__(
         self,
@@ -242,8 +242,8 @@ class ReplayingSubprocessRunner(SubprocessRunner):
 def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
     """Build a ReplayingSubprocessRunner from a scenario directory.
 
-    Creates a temporary output directory for the player, registers an atexit
-    handler to clean it up, then parses the scenario manifest and constructs
+    Creates a temporary output directory for the player, then parses the
+    scenario manifest and constructs
     the deque-based session map.  All domain logic for replay setup lives here
     (L1) rather than in the L3 composition root.
 
@@ -268,8 +268,8 @@ def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
             "Install it to enable scenario replay."
         ) from exc
 
-    tmp_replay = tempfile.mkdtemp(prefix="autoskillit-replay-")
-    atexit.register(shutil.rmtree, tmp_replay, True)
+    _tmp_replay_dir = tempfile.TemporaryDirectory(prefix="autoskillit-replay-")
+    tmp_replay = _tmp_replay_dir.name
 
     player = make_scenario_player(
         scenario_dir=replay_dir,
@@ -290,4 +290,6 @@ def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
         raise
 
     session_map = {k: deque(v) for k, v in raw_map.items()}
-    return ReplayingSubprocessRunner(session_map, non_session, player=player)
+    runner = ReplayingSubprocessRunner(session_map, non_session, player=player)
+    runner._tmp_replay_dir = _tmp_replay_dir
+    return runner

@@ -7,6 +7,7 @@ import json
 import os
 import random
 import shutil
+import signal
 import subprocess
 import sys
 from datetime import UTC
@@ -114,7 +115,17 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     plugin_dir = str(pkg_root())
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
-    mcp.run()
+
+    def _sigterm_handler(*_):
+        """Convert SIGTERM into KeyboardInterrupt so asyncio shuts down cleanly."""
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _sigterm_handler)
+    get_logger(__name__).info("sigterm_handler_ready")
+    try:
+        mcp.run()
+    except KeyboardInterrupt:
+        pass
 
 
 @app.command

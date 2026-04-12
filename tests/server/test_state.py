@@ -109,7 +109,8 @@ def test_initialize_registers_mcp_recording_middleware(tmp_path, monkeypatch):
     from autoskillit.execution.recording import RecordingSubprocessRunner
     from autoskillit.server._state import _initialize
 
-    monkeypatch.setattr("atexit.register", Mock())
+    mock_atexit = Mock()
+    monkeypatch.setattr("atexit.register", mock_atexit)
     mock_recorder = Mock()
     recording_runner = RecordingSubprocessRunner(recorder=mock_recorder)
 
@@ -131,6 +132,7 @@ def test_initialize_registers_mcp_recording_middleware(tmp_path, monkeypatch):
 
     mock_middleware_cls.assert_called_once_with(mock_recorder)
     mock_mcp.add_middleware.assert_called_once_with(mock_middleware_cls.return_value)
+    mock_atexit.assert_not_called()
 
 
 # --- T-INIT-2: No middleware registered for non-recording runner ---
@@ -162,7 +164,8 @@ def test_initialize_recording_middleware_import_error_does_not_raise(tmp_path, m
     from autoskillit.execution.recording import RecordingSubprocessRunner
     from autoskillit.server._state import _initialize
 
-    monkeypatch.setattr("atexit.register", Mock())
+    mock_atexit = Mock()
+    monkeypatch.setattr("atexit.register", mock_atexit)
     mock_recorder = Mock()
     recording_runner = RecordingSubprocessRunner(recorder=mock_recorder)
 
@@ -175,6 +178,8 @@ def test_initialize_recording_middleware_import_error_does_not_raise(tmp_path, m
 
     with patch("autoskillit.execution.recover_crashed_sessions", return_value=0):
         _initialize(mock_ctx)  # Must not raise
+
+    mock_atexit.assert_not_called()
 
 
 # --- T-INIT-4: McpReplayMiddleware registered for ReplayingSubprocessRunner ---

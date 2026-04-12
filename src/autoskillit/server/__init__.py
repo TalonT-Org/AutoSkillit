@@ -23,6 +23,7 @@ from autoskillit.pipeline import (  # noqa: F401
     ToolContext,
     gate_error_result,
 )
+from autoskillit.server._lifespan import _autoskillit_lifespan
 from autoskillit.server._state import (  # noqa: E402, F401
     _ctx,
     _get_config,
@@ -32,7 +33,7 @@ from autoskillit.server._state import (  # noqa: E402, F401
     version_info,
 )
 
-mcp: FastMCP = FastMCP("autoskillit")
+mcp: FastMCP = FastMCP("autoskillit", lifespan=_autoskillit_lifespan)
 
 logger = get_logger(__name__)
 

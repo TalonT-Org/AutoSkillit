@@ -208,6 +208,7 @@ generic_automation_mcp/
 │   ├── __init__.py          #   FastMCP app, kitchen gating, headless tool reveal
 │   ├── git.py               #   Merge workflow for merge_worktree
 │   ├── _editable_guard.py   #   Pre-deletion editable install guard (stdlib-only)
+│   ├── _lifespan.py         #   FastMCP lifespan: recorder teardown on shutdown
 │   ├── helpers.py
 │   ├── tools_kitchen.py     #   open_kitchen, close_kitchen + recipe:// resource
 │   ├── tools_ci.py          #   CI/merge-queue tool handlers

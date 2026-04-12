@@ -219,9 +219,14 @@ async def test_streaming_writes_each_snapshot_as_jsonl(tmp_path):
         await anyio.sleep(0.2)
         tg.cancel_scope.cancel()
 
+    # Save trace path and flush before stop() deletes the file on clean exit
+    trace_path = handle._trace_path
+    assert trace_path is not None
+    if handle._trace_file is not None:
+        handle._trace_file.flush()
+    content = trace_path.read_text()
     snapshots = handle.stop()
-    assert handle._trace_path is not None
-    lines = handle._trace_path.read_text().strip().split("\n")
+    lines = content.strip().split("\n")
     assert len(lines) >= 1
     for line in lines:
         record = json.loads(line)

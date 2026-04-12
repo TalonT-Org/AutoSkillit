@@ -5,7 +5,7 @@ dynaconf-backed settings system without importing third-party packages:
 
     1. Function parameter (``cache_path_override`` — for tests/DI)
     2. Environment variable (``AUTOSKILLIT_QUOTA_GUARD__<KEY>``) — highest runtime priority
-    3. Hook config snapshot (``.autoskillit/.hook_config.json``) — bridge from resolved settings
+    3. Hook config snapshot (``.autoskillit/temp/.hook_config.json``) — bridge from resolved settings
     4. Module default (matches ``config/defaults.yaml``) — lowest
 
 This module is stdlib-only: no third-party imports, no ``autoskillit.*``
@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 HOOK_CONFIG_FILENAME = ".hook_config.json"
-HOOK_DIR_COMPONENTS = (".autoskillit",)
+HOOK_DIR_COMPONENTS = (".autoskillit", "temp")
 
 DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
 DEFAULT_CACHE_MAX_AGE = 300
@@ -40,7 +40,7 @@ class QuotaHookSettings:
 
 
 def _read_hook_config() -> dict:
-    """Read the ``quota_guard`` section of ``<cwd>/.autoskillit/.hook_config.json``.
+    """Read the ``quota_guard`` section of ``<cwd>/.autoskillit/temp/.hook_config.json``.
 
     Returns ``{}`` if the file is absent or unreadable. This file is written by
     ``open_kitchen`` and removed by ``close_kitchen``.

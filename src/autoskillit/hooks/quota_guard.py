@@ -18,25 +18,16 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-# stdlib-only subprocess hook: import _fmt_primitives by bare name via sys.path
-# (test_hooks_are_stdlib_only). Venv tests use the autoskillit.hooks package path.
+# Sibling-import bootstrap: hooks run as ``python3 /path/to/quota_check.py``
+# subprocesses outside the autoskillit venv (test_hooks_are_stdlib_only).
+# Placing the script's directory first on sys.path lets the bare-name import
+# below resolve to the shared stdlib-only settings module in both subprocess
+# and package-mode invocations.
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402
-    _HOOK_CONFIG_PATH_COMPONENTS,
-    _read_hook_config,
-)
-
-_DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
-_DEFAULT_CACHE_MAX_AGE = 300  # seconds
-
-# Public names preserved for test imports and the layer enforcement test.
-# Derived from _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS so the tuple has
-# exactly one source of truth across the hooks layer.
-HOOK_CONFIG_FILENAME: str = _HOOK_CONFIG_PATH_COMPONENTS[-1]
-HOOK_DIR_COMPONENTS: tuple[str, ...] = _HOOK_CONFIG_PATH_COMPONENTS[:-1]
+from _hook_settings import resolve_quota_settings  # type: ignore[import-not-found]  # noqa: E402
 
 _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
 
@@ -108,15 +99,9 @@ def main(*, cache_path_override: str | None = None) -> None:
         )
         sys.exit(0)  # log but approve — don't block run_skill on hook bugs
 
-    hook_config = _read_hook_config()
-    cache_max_age = hook_config.get("cache_max_age", _DEFAULT_CACHE_MAX_AGE)
-    # Function parameter > env var > hook config > module default
-    cache_path_str = (
-        cache_path_override
-        or os.environ.get("AUTOSKILLIT_QUOTA_CACHE")
-        or hook_config.get("cache_path")
-        or _DEFAULT_CACHE_PATH
-    )
+    settings = resolve_quota_settings(cache_path_override=cache_path_override)
+    cache_path_str = settings.cache_path
+    cache_max_age = settings.cache_max_age
     log_dir = _resolve_quota_log_dir()
     ts = datetime.now(UTC).isoformat()
 
@@ -156,13 +141,15 @@ def main(*, cache_path_override: str | None = None) -> None:
         if resets_at_str:
             try:
                 resets_at = datetime.fromisoformat(resets_at_str)
-                buffer_seconds = 60
                 now = datetime.now(UTC)
-                n = max(0, int((resets_at - now).total_seconds()) + buffer_seconds)
+                n = max(
+                    0,
+                    int((resets_at - now).total_seconds()) + settings.buffer_seconds,
+                )
             except (ValueError, TypeError):
-                n = 60
+                n = settings.buffer_seconds
         else:
-            n = 60
+            n = settings.buffer_seconds
 
         _write_quota_log_event(
             {

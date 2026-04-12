@@ -262,3 +262,105 @@ class TestRegisterCloneParallelWriters:
         entries = {e["path"]: e["owner"] for e in data["clones"]}
         assert entries["/tmp/clone-A"] == "owner-A"
         assert entries["/tmp/clone-B"] == "owner-B"
+
+
+class TestBatchDeleteRegistryWriteback:
+    """batch_delete must persist the pruned registry to disk after successful deletions.
+
+    These tests verify ON-DISK STATE, not just return values — only disk verification
+    can distinguish a correct write-back from a missing one.
+    """
+
+    def test_batch_delete_removes_deleted_entry_from_registry_file(
+        self, tmp_path: Path
+    ) -> None:
+        """After batch_delete, successfully-deleted entries must be absent from disk."""
+        reg = str(tmp_path / "registry.json")
+        register_clone("/tmp/a", "success", "kit-1", registry_path=reg)
+        register_clone("/tmp/b", "error", "kit-1", registry_path=reg)
+
+        mock_remove = MagicMock(return_value={"removed": "true"})
+        result = batch_delete(reg, mock_remove, owner="kit-1")
+
+        assert result["deleted"] == ["/tmp/a"]
+        assert result["preserved"] == ["/tmp/b"]
+
+        data = json.loads(Path(reg).read_text())
+        remaining = [e["path"] for e in data["clones"]]
+        assert "/tmp/a" not in remaining, (
+            "batch_delete must remove successfully-deleted entries from registry"
+        )
+        assert "/tmp/b" in remaining  # error entries preserved on disk
+
+    def test_batch_delete_partial_failure_keeps_only_failed_entry_on_disk(
+        self, tmp_path: Path
+    ) -> None:
+        """Succeeded deletions are pruned; failed deletions are retained on disk."""
+        reg = str(tmp_path / "registry.json")
+        register_clone("/tmp/a", "success", "kit-1", registry_path=reg)
+        register_clone("/tmp/b", "success", "kit-1", registry_path=reg)
+
+        def remove_side_effect(path: str, _: str) -> dict:  # type: ignore[type-arg]
+            return (
+                {"removed": "true"}
+                if path == "/tmp/a"
+                else {"removed": "false", "reason": "not_found"}
+            )
+
+        result = batch_delete(reg, remove_side_effect, owner="kit-1")
+
+        assert "/tmp/a" in result["deleted"]
+        assert any(f["path"] == "/tmp/b" for f in result["delete_failures"])
+
+        data = json.loads(Path(reg).read_text())
+        remaining = [e["path"] for e in data["clones"]]
+        assert "/tmp/a" not in remaining  # succeeded: pruned
+        assert "/tmp/b" in remaining  # failed: retained
+
+    def test_batch_delete_second_call_finds_no_candidates(
+        self, tmp_path: Path
+    ) -> None:
+        """After batch_delete prunes the registry, a second call finds nothing to delete.
+
+        Verifies idempotency — the core regression contract for issue #756.
+        """
+        reg = str(tmp_path / "registry.json")
+        register_clone("/tmp/a", "success", "kit-1", registry_path=reg)
+
+        mock_remove = MagicMock(return_value={"removed": "true"})
+        batch_delete(reg, mock_remove, owner="kit-1")
+
+        mock_remove2 = MagicMock(return_value={"removed": "true"})
+        result2 = batch_delete(reg, mock_remove2, owner="kit-1")
+
+        mock_remove2.assert_not_called()
+        assert result2["deleted"] == []
+
+    def test_batch_delete_all_entries_deleted_leaves_empty_clones_list(
+        self, tmp_path: Path
+    ) -> None:
+        """If all entries are deleted, the registry file retains an empty clones list."""
+        reg = str(tmp_path / "registry.json")
+        register_clone("/tmp/a", "success", "kit-1", registry_path=reg)
+
+        mock_remove = MagicMock(return_value={"removed": "true"})
+        batch_delete(reg, mock_remove, owner="kit-1")
+
+        data = json.loads(Path(reg).read_text())
+        assert data["clones"] == []
+
+    def test_batch_delete_other_owner_entries_untouched_on_disk(
+        self, tmp_path: Path
+    ) -> None:
+        """Owner-scoped batch_delete must not touch entries owned by other kitchens."""
+        reg = str(tmp_path / "registry.json")
+        register_clone("/tmp/mine", "success", "kit-1", registry_path=reg)
+        register_clone("/tmp/theirs", "success", "kit-2", registry_path=reg)
+
+        mock_remove = MagicMock(return_value={"removed": "true"})
+        batch_delete(reg, mock_remove, owner="kit-1")
+
+        data = json.loads(Path(reg).read_text())
+        remaining = [e["path"] for e in data["clones"]]
+        assert "/tmp/mine" not in remaining  # kit-1 entry pruned
+        assert "/tmp/theirs" in remaining  # kit-2 entry untouched

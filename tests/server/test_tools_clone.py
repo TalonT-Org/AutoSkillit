@@ -312,7 +312,8 @@ class TestRegisterCloneStatusTool:
                 registry_path=registry_path,
             )
         )
-        assert "error" in result
+        assert result["registered"] == "false"
+        assert "reason" in result
         # Registry file must not have been created
         assert not (tmp_path / "registry.json").exists()
 

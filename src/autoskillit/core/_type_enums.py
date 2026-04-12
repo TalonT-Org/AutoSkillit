@@ -262,8 +262,14 @@ class ChannelBStatus(StrEnum):
 
     Replaces the raw string ``"completion"`` / ``"stale"`` convention with
     compile-time exhaustiveness enforcement via assert_never.
+
+    - COMPLETION: session JSONL marker was found; monitoring succeeded.
+    - STALE: monitoring ran but timed out with no marker found.
+    - DIR_MISSING: session log directory did not exist when monitoring started.
+      Monitoring was structurally impossible. Distinct from STALE (which
+      means monitoring ran but produced no marker).
     """
 
     COMPLETION = "completion"
     STALE = "stale"
-    DIR_MISSING = "dir_missing"  # session log directory did not exist
+    DIR_MISSING = "dir_missing"

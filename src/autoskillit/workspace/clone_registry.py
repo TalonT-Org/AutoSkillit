@@ -14,7 +14,7 @@ import fcntl
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import IO, Any, Literal
 
 from autoskillit.core import atomic_write, get_logger, resolve_temp_dir
 
@@ -35,6 +35,85 @@ def _entry_matches_owner(entry: dict[str, str], owner: str | None) -> bool:
     if owner is None:
         return True
     return entry.get("owner") == owner
+
+
+class CloneRegistry:
+    """Locked context manager for clone-cleanup-registry.json.
+
+    Acquires fcntl.LOCK_EX on __enter__, reads _entries from disk.
+    Writes _entries back atomically on __exit__ iff any mutation occurred.
+    Releases the lock unconditionally on __exit__ (even on exception).
+
+    All mutation methods set _dirty = True so __exit__ knows to persist.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        self._lock_path = path.with_suffix(".lock")
+        self._entries: list[dict[str, str]] = []
+        self._dirty: bool = False
+        self._lock_file: IO[str] | None = None
+
+    def __enter__(self) -> "CloneRegistry":
+        self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock_file = open(self._lock_path, "w")
+        fcntl.flock(self._lock_file, fcntl.LOCK_EX)
+        if self._path.exists():
+            try:
+                self._entries = json.loads(self._path.read_text()).get("clones", [])
+            except (json.JSONDecodeError, OSError):
+                self._entries = []
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
+        try:
+            if self._dirty:
+                atomic_write(
+                    self._path,
+                    json.dumps({"clones": self._entries}, indent=2),
+                )
+        finally:
+            if self._lock_file is not None:
+                self._lock_file.close()  # releases fcntl advisory lock
+
+    def append(self, path: str, status: str, owner: str) -> None:
+        self._entries.append({"path": path, "status": status, "owner": owner})
+        self._dirty = True
+
+    def candidates(
+        self, owner: str | None
+    ) -> tuple[list[str], list[str]]:
+        """Return (to_delete, to_preserve) paths.
+
+        to_delete: status=success entries matching owner filter.
+        to_preserve: all other entries (status=error or different owner).
+        """
+        to_delete: list[str] = []
+        to_preserve: list[str] = []
+        for entry in self._entries:
+            if entry.get("status") == "success" and (
+                owner is None or entry.get("owner") == owner
+            ):
+                to_delete.append(entry["path"])
+            else:
+                to_preserve.append(entry["path"])
+        return to_delete, to_preserve
+
+    def prune_deleted(self, deleted_paths: set[str]) -> None:
+        """Remove successfully-deleted entries from the in-memory list.
+
+        Entries not in deleted_paths (failed deletes, other owners) are retained.
+        Sets _dirty = True so __exit__ persists the pruned list.
+        """
+        before = len(self._entries)
+        self._entries = [e for e in self._entries if e["path"] not in deleted_paths]
+        if len(self._entries) < before:
+            self._dirty = True
 
 
 def register_clone(

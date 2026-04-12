@@ -14,7 +14,7 @@ import fcntl
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import IO, Any, Literal
 
 from autoskillit.core import atomic_write, get_logger, resolve_temp_dir
 
@@ -37,6 +37,88 @@ def _entry_matches_owner(entry: dict[str, str], owner: str | None) -> bool:
     return entry.get("owner") == owner
 
 
+class CloneRegistry:
+    """Locked context manager for clone-cleanup-registry.json.
+
+    Acquires fcntl.LOCK_EX on __enter__, reads _entries from disk.
+    Writes _entries back atomically on __exit__ iff any mutation occurred.
+    Releases the lock unconditionally on __exit__ (even on exception).
+
+    All mutation methods set _dirty = True so __exit__ knows to persist.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        self._lock_path = path.with_suffix(".lock")
+        self._entries: list[dict[str, str]] = []
+        self._dirty: bool = False
+        self._lock_file: IO[str] | None = None
+
+    def __enter__(self) -> CloneRegistry:
+        self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock_file = open(self._lock_path, "w")
+        fcntl.flock(self._lock_file, fcntl.LOCK_EX)
+        if self._path.exists():
+            try:
+                self._entries = json.loads(self._path.read_text()).get("clones", [])
+            except (json.JSONDecodeError, OSError) as exc:
+                _log.warning("clone_registry: could not read %s: %s", self._path, exc)
+                self._entries = []
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
+        try:
+            if self._dirty:
+                atomic_write(
+                    self._path,
+                    json.dumps({"clones": self._entries}, indent=2),
+                )
+        finally:
+            if self._lock_file is not None:
+                self._lock_file.close()  # releases fcntl advisory lock
+
+    def append(self, path: str, status: str, owner: str) -> None:
+        self._entries.append({"path": path, "status": status, "owner": owner})
+        self._dirty = True
+
+    def candidates(self, owner: str | None) -> tuple[list[str], list[str]]:
+        """Return (to_delete, to_preserve) paths scoped to owner.
+
+        to_delete: status=success entries matching owner filter.
+        to_preserve: status=error entries matching owner filter.
+        Entries belonging to other owners are not reported in either list.
+        """
+        to_delete: list[str] = []
+        to_preserve: list[str] = []
+        for entry in self._entries:
+            if owner is not None and entry.get("owner") != owner:
+                continue
+            path = entry.get("path")
+            if path is None:
+                continue
+            if entry.get("status") == "success":
+                to_delete.append(path)
+            else:
+                to_preserve.append(path)
+        return to_delete, to_preserve
+
+    def prune_deleted(self, deleted_paths: set[str]) -> None:
+        """Remove successfully-deleted entries from the in-memory list.
+
+        Entries not in deleted_paths (failed deletes, other owners) are retained.
+        Sets _dirty = True so __exit__ persists the pruned list.
+        """
+        before = len(self._entries)
+        self._entries = [e for e in self._entries if e["path"] not in deleted_paths]
+        if len(self._entries) < before:
+            self._dirty = True
+
+
 def register_clone(
     clone_path: str,
     status: CloneStatus,
@@ -49,18 +131,8 @@ def register_clone(
     if owner == "":
         raise ValueError("owner is required")
     path = _resolve_registry_path(registry_path, temp_dir)
-    lock_path = path.with_suffix(".lock")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(lock_path, "w") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
-        existing: list[dict[str, str]] = []
-        if path.exists():
-            try:
-                existing = json.loads(path.read_text()).get("clones", [])
-            except (json.JSONDecodeError, OSError) as exc:
-                _log.warning("clone_registry: could not read %s: %s", path, exc)
-        existing.append({"path": clone_path, "status": status, "owner": owner})
-        atomic_write(path, json.dumps({"clones": existing}, indent=2))
+    with CloneRegistry(path) as reg:
+        reg.append(clone_path, status, owner)
     return {"registered": "true", "registry_path": str(path)}
 
 
@@ -113,7 +185,12 @@ def batch_delete(
     temp_dir: Path | None = None,
     owner: str | None = None,
 ) -> dict[str, Any]:
-    """Read registry and delete success-status clones via remove_fn.
+    """Read registry and delete success-status clones via remove_fn, then prune registry.
+
+    Three-phase sequence:
+    1. Read candidates under lock (short hold — no I/O inside).
+    2. Delete outside lock (slow filesystem I/O).
+    3. Prune succeeded entries under lock (re-reads fresh, capturing concurrent appends).
 
     Calls remove_fn(path, "false") for each success clone. Error clones are
     preserved. Returns {"deleted": [...], "delete_failures": [...], "preserved": [...]}.
@@ -121,13 +198,27 @@ def batch_delete(
     When owner is provided, only entries belonging to that owner are considered.
     Pass owner=None to operate on all entries (escape hatch mode).
     """
-    to_delete, to_preserve = cleanup_candidates(registry_path, temp_dir, owner=owner)
+    path = _resolve_registry_path(registry_path, temp_dir)
+
+    # Phase 1: read candidates under lock (short hold — no I/O inside)
+    with CloneRegistry(path) as reg:
+        to_delete, to_preserve = reg.candidates(owner)
+
+    # Phase 2: delete outside lock (slow filesystem I/O)
     deleted: list[str] = []
     delete_failures: list[dict[str, str]] = []
-    for path in to_delete:
-        result = remove_fn(path, "false")
+    for clone_path in to_delete:
+        result = remove_fn(clone_path, "false")
         if result.get("removed") == "true":
-            deleted.append(path)
+            deleted.append(clone_path)
         else:
-            delete_failures.append({"path": path, "reason": result.get("reason", "unknown")})
+            delete_failures.append({"path": clone_path, "reason": result.get("reason", "unknown")})
+
+    # Phase 3: prune successfully-deleted entries (re-reads fresh under lock,
+    # capturing any register_clone writes that arrived during Phase 2)
+    if deleted:
+        with CloneRegistry(path) as reg:
+            reg.prune_deleted(set(deleted))
+            _, to_preserve = reg.candidates(owner)
+
     return {"deleted": deleted, "delete_failures": delete_failures, "preserved": to_preserve}

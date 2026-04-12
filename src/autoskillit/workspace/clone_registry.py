@@ -219,5 +219,6 @@ def batch_delete(
     if deleted:
         with CloneRegistry(path) as reg:
             reg.prune_deleted(set(deleted))
+            _, to_preserve = reg.candidates(owner)
 
     return {"deleted": deleted, "delete_failures": delete_failures, "preserved": to_preserve}

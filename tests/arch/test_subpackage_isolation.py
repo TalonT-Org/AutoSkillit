@@ -74,7 +74,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "headless",  # execution/headless.py: _OUTPUT_PATH_TOKENS = _build_path_token_set()
-        "_stale_check",  # cli/_stale_check.py: _DISMISS_WINDOW = timedelta(hours=12)
+        # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
+        "_update_checks",  # cli/_update_checks.py: window constants (see comment above)
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
     }
@@ -671,9 +672,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
         management context manager (terminal_guard) for interactive subprocess
-        sessions. _stale_check.py adds the stale-install detection surface.
-        _source_drift.py adds the source-drift boot gate.
-        Exempt at 16 files.
+        sessions. _install_info.py adds pure install classification + policy.
+        _update_checks.py adds the unified update check orchestration.
+        _update.py adds the first-class update subcommand implementation.
+        Exempt at 17 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
         file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
@@ -689,7 +691,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 30,
         "execution": 26,
         "core": 17,
-        "cli": 16,
+        "cli": 17,
         "hooks": 20,
     }
     violations: list[str] = []
@@ -1209,29 +1211,69 @@ def test_pipeline_init_no_longer_exports_domain_paths():
     assert "partition_files_by_domain" not in m.__all__
 
 
-def test_singleton_exemption_comment_matches_module_constant() -> None:
-    """The _stale_check exemption comment in SINGLETON_ALLOWED_MODULES must
-    accurately reflect the current _DISMISS_WINDOW constant value."""
+def test_singleton_exemption_comment_matches_both_windows() -> None:
+    """The _update_checks exemption comment in SINGLETON_ALLOWED_MODULES must
+    accurately reflect both the _STABLE_DISMISS_WINDOW and _DEV_DISMISS_WINDOW values."""
 
-    from autoskillit.cli._stale_check import _DISMISS_WINDOW
+    from autoskillit.cli._update_checks import _DEV_DISMISS_WINDOW, _STABLE_DISMISS_WINDOW
 
-    # Read this test file itself
     this_file = Path(__file__)
     content = this_file.read_text(encoding="utf-8")
 
-    # Build the expected Python expression from the live constant
-    total_seconds = _DISMISS_WINDOW.total_seconds()
-    if total_seconds % 86400 == 0:
-        days = int(total_seconds // 86400)
-        expected_fragment = f"timedelta(days={days})"
-    elif total_seconds % 3600 == 0:
-        hours = int(total_seconds // 3600)
-        expected_fragment = f"timedelta(hours={hours})"
-    else:
-        expected_fragment = repr(_DISMISS_WINDOW)
+    def _fmt_td(td: object) -> str:
+        import datetime
 
-    assert expected_fragment in content, (
+        if not isinstance(td, datetime.timedelta):
+            return repr(td)
+        total_seconds = td.total_seconds()
+        if total_seconds % 86400 == 0:
+            return f"timedelta(days={int(total_seconds // 86400)})"
+        if total_seconds % 3600 == 0:
+            return f"timedelta(hours={int(total_seconds // 3600)})"
+        return repr(td)
+
+    stable_fragment = _fmt_td(_STABLE_DISMISS_WINDOW)
+    dev_fragment = _fmt_td(_DEV_DISMISS_WINDOW)
+
+    assert stable_fragment in content, (
         f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
-        f"Expected to find '{expected_fragment}' (current _DISMISS_WINDOW={_DISMISS_WINDOW!r}). "
-        "Update the inline comment on the '_stale_check' entry."
+        f"Expected to find '{stable_fragment}' "
+        f"(current _STABLE_DISMISS_WINDOW={_STABLE_DISMISS_WINDOW!r}). "
+        "Update the comment on the '_update_checks' entry."
     )
+    assert dev_fragment in content, (
+        f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
+        f"Expected to find '{dev_fragment}' "
+        f"(current _DEV_DISMISS_WINDOW={_DEV_DISMISS_WINDOW!r}). "
+        "Update the comment on the '_update_checks' entry."
+    )
+
+
+def test_update_checks_docstring_describes_both_windows() -> None:
+    """The _update_checks module docstring and _is_dismissed docstring must
+    mention both branch-aware window values."""
+    import ast
+
+    src_root = Path(__file__).parent.parent.parent / "src"
+    module_path = src_root / "autoskillit" / "cli" / "_update_checks.py"
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+
+    module_doc = ast.get_docstring(tree) or ""
+    assert "timedelta(days=7)" in module_doc or "days=7" in module_doc, (
+        "_update_checks module docstring must mention the 7-day stable window"
+    )
+    assert "timedelta(hours=12)" in module_doc or "hours=12" in module_doc, (
+        "_update_checks module docstring must mention the 12-hour dev window"
+    )
+
+    # Also verify _is_dismissed has a docstring mentioning both windows
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_is_dismissed":
+            func_doc = ast.get_docstring(node) or ""
+            assert "days=7" in func_doc or "7 days" in func_doc, (
+                "_is_dismissed docstring must mention the 7-day window"
+            )
+            assert "hours=12" in func_doc or "12 hours" in func_doc, (
+                "_is_dismissed docstring must mention the 12-hour window"
+            )
+            break

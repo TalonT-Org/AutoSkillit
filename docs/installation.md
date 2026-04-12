@@ -67,7 +67,7 @@ projects need.
 
     autoskillit doctor
 
-Doctor runs 15 checks (13 numbered + 2 lettered sub-checks `4b` and `7b`),
+Doctor runs 17 checks (15 numbered + 2 lettered sub-checks `4b` and `7b`),
 enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
 
 | # | Check | What it verifies |
@@ -86,12 +86,24 @@ enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
 | 10 | Secret scanning hook | `gitleaks` (or equivalent) is installed as a pre-commit hook |
 | 11 | Editable install source exists | An editable install still points at a real source directory |
 | 12 | No stale entry points | No leftover `autoskillit` scripts outside `~/.local/bin` |
-| 13 | Source version drift | Installed commit SHA matches the last-known HEAD of the installed branch |
-| 14 | Quota cache schema | `autoskillit_quota_cache.json` schema version is current |
+| 13 | Source version drift | Installed commit SHA vs. branch HEAD (network, with cache fallback) |
+| 14 | Quota cache schema | `~/.claude/autoskillit_quota_cache.json` schema version is current |
 | 15 | Claude process state | Reports D-state and CPU breakdown of running `claude` processes via `ps` |
+| 16 | Install classification | `direct_url.json` classifies the install type and requested revision |
+| 17 | Update dismissal state | Active update-prompt dismissal window and conditions, if any |
 
 See **[Hooks](safety/hooks.md)** for what each PreToolUse / PostToolUse /
 SessionStart hook actually enforces.
+
+## Updating
+
+AutoSkillit checks for updates on every interactive invocation and shows a single
+consolidated `[Y/n]` prompt when updates are available.  For details on how update
+checks work, dismissal windows, and escape hatches, see **[Update Checks](update-checks.md)**.
+
+To update immediately without waiting for the prompt:
+
+    autoskillit update
 
 ## Troubleshooting
 

@@ -270,7 +270,7 @@ def test_quota_check_buffer_seconds_from_hook_config(tmp_path, monkeypatch):
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0, resets_at=None)
     _write_hook_config(
-        tmp_path / ".autoskillit" / ".hook_config.json",
+        tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS),
         cache_max_age=300,
         cache_path=str(cache),
         extra={"buffer_seconds": 120},

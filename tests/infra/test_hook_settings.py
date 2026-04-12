@@ -5,7 +5,7 @@ cache max age, and buffer seconds from a layered hierarchy:
 
     1. ``cache_path_override`` parameter (tests / DI)
     2. ``AUTOSKILLIT_QUOTA_GUARD__<KEY>`` env var
-    3. ``.autoskillit/.hook_config.json`` snapshot
+    3. ``.autoskillit/temp/.hook_config.json`` snapshot
     4. Module defaults (matching ``config/defaults.yaml``)
 
 These tests use ``tmp_path`` and ``monkeypatch`` for isolation — no global state.
@@ -28,7 +28,7 @@ def _clear_env(monkeypatch):
 
 
 def _write_hook_config(tmp_path, quota_guard: dict) -> None:
-    hook_cfg = tmp_path / ".autoskillit" / ".hook_config.json"
+    hook_cfg = tmp_path / ".autoskillit" / "temp" / ".hook_config.json"
     hook_cfg.parent.mkdir(parents=True, exist_ok=True)
     hook_cfg.write_text(json.dumps({"quota_guard": quota_guard}))
 

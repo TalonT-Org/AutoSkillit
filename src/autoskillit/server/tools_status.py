@@ -239,7 +239,7 @@ def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
 async def get_quota_events(n: int = 50) -> str:
     """Return the most recent quota guard events from the diagnostic log.
 
-    Events are written by the quota_check.py PreToolUse hook each time it
+    Events are written by the quota_guard.py PreToolUse hook each time it
     approves or blocks a run_skill call. Use this to diagnose quota throttling
     during long pipeline runs.
 

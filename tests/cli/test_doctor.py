@@ -629,7 +629,7 @@ def test_doctor_clears_plugin_cache(tmp_path, monkeypatch, capsys):
     cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
     cache_dir.mkdir(parents=True)
     (cache_dir / "0.3.0" / "hooks").mkdir(parents=True)
-    (cache_dir / "0.3.0" / "hooks" / "pretty_output.py").write_text("# stale")
+    (cache_dir / "0.3.0" / "hooks" / "pretty_output_hook.py").write_text("# stale")
     cli.doctor()
     assert not cache_dir.exists()
 
@@ -1034,7 +1034,7 @@ def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
     from autoskillit.cli._doctor import _check_hook_health
     from autoskillit.core import Severity
 
-    # Write a settings.json that includes token_summary_appender (PostToolUse)
+    # Write a settings.json that includes token_summary_hook (PostToolUse)
     # but point it at a non-existent path.
     settings = {
         "hooks": {
@@ -1044,7 +1044,7 @@ def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "python3 /nonexistent/token_summary_appender.py",
+                            "command": "python3 /nonexistent/token_summary_hook.py",
                         }
                     ],
                 }
@@ -1058,7 +1058,7 @@ def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
     assert result.severity != Severity.OK, (
         "hook_health must report non-OK when a PostToolUse hook script is missing"
     )
-    assert "token_summary_appender" in result.message or "PostToolUse" in result.message
+    assert "token_summary_hook" in result.message or "PostToolUse" in result.message
 
 
 # T-DRIFT-1: _count_hook_registry_drift() detects orphaned hooks

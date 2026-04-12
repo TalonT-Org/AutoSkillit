@@ -1,4 +1,4 @@
-"""Tests for the SessionStart hook — session_start_reminder.py."""
+"""Tests for the SessionStart hook — session_start_hook.py."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/session_start_reminder.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/session_start_hook.py"
 
 
 def _run(stdin_data: str) -> tuple[int, str]:

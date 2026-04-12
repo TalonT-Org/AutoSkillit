@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from autoskillit.core.types import ChannelConfirmation, TerminationReason
 from autoskillit.execution.headless import _build_skill_result
-from autoskillit.hooks.pretty_output import _format_response
+from autoskillit.hooks.pretty_output_hook import _format_response
 from tests.conftest import _make_result
 
 # Realistic recipe YAML that mirrors actual bundled recipes.
@@ -52,7 +52,7 @@ def _run_hook(
 
     Returns (stdout_output, exit_code).
     """
-    from autoskillit.hooks.pretty_output import main
+    from autoskillit.hooks.pretty_output_hook import main
 
     stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
 
@@ -64,7 +64,7 @@ def _run_hook(
         stack.enter_context(redirect_stdout(buf))
         if cwd is not None:
             stack.enter_context(
-                patch("autoskillit.hooks.pretty_output.Path.cwd", return_value=cwd)
+                patch("autoskillit.hooks.pretty_output_hook.Path.cwd", return_value=cwd)
             )
         try:
             main()
@@ -112,7 +112,7 @@ def test_hook_script_exists():
     """pretty_output.py must exist in the hooks directory."""
     from autoskillit.core.paths import pkg_root
 
-    assert (pkg_root() / "hooks" / "pretty_output.py").exists()
+    assert (pkg_root() / "hooks" / "pretty_output_hook.py").exists()
 
 
 # PHK-2
@@ -1056,7 +1056,7 @@ def test_formatter_coverage_contract():
     formatters, and forces an explicit choice when adding new tools.
     """
     from autoskillit.core.types import GATED_TOOLS, UNGATED_TOOLS
-    from autoskillit.hooks.pretty_output import _FORMATTERS, _UNFORMATTED_TOOLS
+    from autoskillit.hooks.pretty_output_hook import _FORMATTERS, _UNFORMATTED_TOOLS
 
     all_tools = GATED_TOOLS | UNGATED_TOOLS
     covered = set(_FORMATTERS.keys()) | _UNFORMATTED_TOOLS
@@ -1222,7 +1222,7 @@ def test_fmt_generic_list_of_dicts_caps_at_20_items():
 def test_hook_token_summary_output_equivalent_to_canonical():
     """1g: Hook inline _fmt_get_token_summary produces identical output to
     TelemetryFormatter.format_compact_kv for the same input data."""
-    from autoskillit.hooks.pretty_output import _fmt_get_token_summary
+    from autoskillit.hooks.pretty_output_hook import _fmt_get_token_summary
     from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 
     data = {
@@ -1424,7 +1424,7 @@ def test_fmt_run_skill_contradictory_subtype_never_renders_fail_success():
 
 def test_fmt_load_recipe_field_coverage():
     """Every LoadRecipeResult field must be in RENDERED or SUPPRESSED."""
-    from autoskillit.hooks.pretty_output import (
+    from autoskillit.hooks.pretty_output_hook import (
         _FMT_LOAD_RECIPE_RENDERED,
         _FMT_LOAD_RECIPE_SUPPRESSED,
     )
@@ -1446,7 +1446,7 @@ def test_fmt_load_recipe_field_coverage():
 def test_fmt_load_recipe_derivation_map_coverage():
     """Every key/value in _LOAD_RECIPE_CONTENT_DERIVED_FROM must be in _FMT_LOAD_RECIPE_RENDERED.
     Catches when a new derived field is added without declaring its source relationship."""
-    from autoskillit.hooks.pretty_output import (
+    from autoskillit.hooks.pretty_output_hook import (
         _FMT_LOAD_RECIPE_RENDERED,
         _LOAD_RECIPE_CONTENT_DERIVED_FROM,
     )
@@ -1518,7 +1518,7 @@ def test_fmt_load_recipe_suppresses_greeting():
 
 def test_fmt_list_recipes_field_coverage():
     """Every ListRecipesResult field must be in RENDERED or SUPPRESSED."""
-    from autoskillit.hooks.pretty_output import (
+    from autoskillit.hooks.pretty_output_hook import (
         _FMT_LIST_RECIPES_RENDERED,
         _FMT_LIST_RECIPES_SUPPRESSED,
     )
@@ -1539,7 +1539,7 @@ def test_fmt_list_recipes_field_coverage():
 
 def test_fmt_recipe_list_item_field_coverage():
     """Every RecipeListItem field must be in RENDERED or SUPPRESSED."""
-    from autoskillit.hooks.pretty_output import (
+    from autoskillit.hooks.pretty_output_hook import (
         _FMT_RECIPE_LIST_ITEM_RENDERED,
         _FMT_RECIPE_LIST_ITEM_SUPPRESSED,
     )
@@ -1640,7 +1640,7 @@ def test_wrap_plain_str_helper_produces_correct_shape():
 
 def test_unformatted_tools_and_formatters_are_disjoint():
     """_UNFORMATTED_TOOLS and _FORMATTERS must be mutually exclusive."""
-    from autoskillit.hooks.pretty_output import _FORMATTERS, _UNFORMATTED_TOOLS
+    from autoskillit.hooks.pretty_output_hook import _FORMATTERS, _UNFORMATTED_TOOLS
 
     overlap = set(_FORMATTERS) & _UNFORMATTED_TOOLS
     assert not overlap, f"Tools in both dispatch tables: {overlap}"
@@ -1670,7 +1670,7 @@ def test_fmt_recipe_body_ingredients_not_duplicated_when_table_present():
     """When ingredients_table is present, ingredient names must not appear
     in the --- RECIPE --- section. This is the canonical test for the
     raw/derived field duplication bug."""
-    from autoskillit.hooks.pretty_output import _fmt_recipe_body
+    from autoskillit.hooks.pretty_output_hook import _fmt_recipe_body
 
     data = {
         "content": REALISTIC_RECIPE_YAML,
@@ -1702,7 +1702,7 @@ def test_fmt_recipe_body_ingredients_not_duplicated_when_table_present():
 
 
 def test_strip_yaml_ingredients_block_removes_ingredients_section():
-    from autoskillit.hooks.pretty_output import _strip_yaml_ingredients_block
+    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
 
     yaml = "name: test\ningredients:\n  task:\n    description: a task\nsteps:\n  do: {}\n"
     result = _strip_yaml_ingredients_block(yaml)
@@ -1713,7 +1713,7 @@ def test_strip_yaml_ingredients_block_removes_ingredients_section():
 
 
 def test_strip_yaml_ingredients_block_noop_when_no_ingredients_key():
-    from autoskillit.hooks.pretty_output import _strip_yaml_ingredients_block
+    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
 
     yaml = "name: test\nsteps:\n  do: {}\n"
     result = _strip_yaml_ingredients_block(yaml)
@@ -1721,7 +1721,7 @@ def test_strip_yaml_ingredients_block_noop_when_no_ingredients_key():
 
 
 def test_strip_yaml_ingredients_block_at_end_of_file():
-    from autoskillit.hooks.pretty_output import _strip_yaml_ingredients_block
+    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
 
     yaml = "name: test\nsteps:\n  do: {}\ningredients:\n  foo:\n    description: bar\n"
     result = _strip_yaml_ingredients_block(yaml)
@@ -1730,7 +1730,7 @@ def test_strip_yaml_ingredients_block_at_end_of_file():
 
 
 def test_strip_yaml_ingredients_block_multiline_description():
-    from autoskillit.hooks.pretty_output import _strip_yaml_ingredients_block
+    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
 
     yaml = (
         "name: test\n"
@@ -1750,7 +1750,7 @@ def test_strip_yaml_ingredients_block_multiline_description():
 
 def test_fmt_open_kitchen_ingredients_not_duplicated_when_table_present():
     """open_kitchen routes through _fmt_recipe_body — verify same deduplication applies."""
-    from autoskillit.hooks.pretty_output import _fmt_open_kitchen
+    from autoskillit.hooks.pretty_output_hook import _fmt_open_kitchen
 
     data = {
         "content": REALISTIC_RECIPE_YAML,
@@ -1774,7 +1774,7 @@ def test_fmt_open_kitchen_ingredients_not_duplicated_when_table_present():
 def test_pretty_output_public_surface_unchanged() -> None:
     """T-5 (audit finding 8.3): the hook entrypoint and the format router are
     the only public surface; the four-way split must preserve them."""
-    import autoskillit.hooks.pretty_output as p
+    import autoskillit.hooks.pretty_output_hook as p
 
     assert callable(p.main)
     assert callable(p._format_response)

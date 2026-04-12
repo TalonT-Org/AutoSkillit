@@ -101,7 +101,7 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
                 {
                     "matcher": "mcp__.*autoskillit.*__run_skill.*",
                     "hooks": [
-                        {"type": "command", "command": "python3 -m autoskillit.hooks.quota_check"},
+                        {"type": "command", "command": "python3 -m autoskillit.hooks.quota_guard"},
                     ],
                 },
                 {
@@ -109,7 +109,7 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "python3 /old/path/hooks/quota_check.py",
+                            "command": "python3 /old/path/hooks/quota_guard.py",
                         },
                     ],
                 },
@@ -147,13 +147,13 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
     all_commands = [
         h["command"] for entry in data["hooks"]["PreToolUse"] for h in entry.get("hooks", [])
     ]
-    quota_commands = [c for c in all_commands if "quota_check" in c]
+    quota_commands = [c for c in all_commands if "quota_guard" in c]
     assert len(quota_commands) == 1
 
 
 # T-REG-1
 def test_install_production_order_includes_quota_check(tmp_path, monkeypatch):
-    """install() must register quota_check.py regardless of function call order."""
+    """install() must register quota_guard.py regardless of function call order."""
     import importlib
 
     from autoskillit.cli._marketplace import install
@@ -176,8 +176,8 @@ def test_install_production_order_includes_quota_check(tmp_path, monkeypatch):
     data = json.loads(settings_path.read_text())
     pretooluse = data.get("hooks", {}).get("PreToolUse", [])
     all_commands = [h["command"] for e in pretooluse for h in e.get("hooks", [])]
-    assert any("quota_check.py" in c for c in all_commands), (
-        "quota_check.py missing from settings.json after install() — silent drop bug present"
+    assert any("quota_guard.py" in c for c in all_commands), (
+        "quota_guard.py missing from settings.json after install() — silent drop bug present"
     )
 
 

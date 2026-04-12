@@ -102,7 +102,7 @@ def main(*, cache_path_override: str | None = None) -> None:
         sys.exit(0)  # malformed event — approve
     except Exception as e:
         print(
-            f"quota_check: unexpected error reading stdin: {type(e).__name__}: {e}",
+            f"quota_guard: unexpected error reading stdin: {type(e).__name__}: {e}",
             file=sys.stderr,
         )
         sys.exit(0)  # log but approve — don't block run_skill on hook bugs

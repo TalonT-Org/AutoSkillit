@@ -1,7 +1,7 @@
-"""Shared primitives for the pretty_output PostToolUse formatter split.
+"""Shared primitives for the pretty_output_hook PostToolUse formatter split.
 
 Stdlib-only at runtime — runs under any Python interpreter without the
-autoskillit package, so the four ``_fmt_*`` modules and ``pretty_output.py``
+autoskillit package, so the four ``_fmt_*`` modules and ``pretty_output_hook.py``
 all import directly from this module without going through any L1+ layer.
 """
 

@@ -66,7 +66,7 @@ def _run_hook(
     Returns (stdout, exit_code). stdout empty = approve, JSON string = deny.
     Uses cache_path_override parameter for DI — no module-level patching needed.
     """
-    from autoskillit.hooks.quota_check import main
+    from autoskillit.hooks.quota_guard import main
 
     stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
 
@@ -479,11 +479,11 @@ def test_resolve_quota_log_dir_and_resolve_log_dir_in_sync(monkeypatch):
     """_resolve_quota_log_dir() must produce the same path as resolve_log_dir('') for
     identical env inputs. Guards against independent evolution of the two implementations.
 
-    Constraint: these functions MUST NOT be merged — quota_check.py is stdlib-only
+    Constraint: these functions MUST NOT be merged — quota_guard.py is stdlib-only
     and self-contained. This test is the canonical drift guard.
     """
     from autoskillit.execution.session_log import resolve_log_dir
-    from autoskillit.hooks.quota_check import _resolve_quota_log_dir
+    from autoskillit.hooks.quota_guard import _resolve_quota_log_dir
 
     # Case 1: platform default (no env overrides)
     monkeypatch.delenv("AUTOSKILLIT_LOG_DIR", raising=False)

@@ -32,7 +32,7 @@ def _run_hook(
             value from that file. When absent, ``_read_kitchen_id`` reads from the
             real filesystem (returns '' if no file present in the test CWD).
     """
-    from autoskillit.hooks.token_summary_appender import main
+    from autoskillit.hooks.token_summary_hook import main
 
     stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
     exit_code = 0
@@ -44,7 +44,7 @@ def _run_hook(
         if log_root is not None:
             stack.enter_context(
                 patch(
-                    "autoskillit.hooks.token_summary_appender._log_root",
+                    "autoskillit.hooks.token_summary_hook._log_root",
                     return_value=log_root,
                 )
             )
@@ -53,7 +53,7 @@ def _run_hook(
             kitchen_id = cfg_data.get("kitchen_id") or cfg_data.get("pipeline_id", "")
             stack.enter_context(
                 patch(
-                    "autoskillit.hooks.token_summary_appender._read_kitchen_id",
+                    "autoskillit.hooks.token_summary_hook._read_kitchen_id",
                     return_value=kitchen_id,
                 )
             )
@@ -99,10 +99,10 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
 
 
 def test_tsa1_token_summary_appender_script_exists() -> None:
-    """token_summary_appender.py must exist in hooks/ on disk."""
+    """token_summary_hook.py must exist in hooks/ on disk."""
     from autoskillit.core.paths import pkg_root
 
-    assert (pkg_root() / "hooks" / "token_summary_appender.py").exists()
+    assert (pkg_root() / "hooks" / "token_summary_hook.py").exists()
 
 
 def test_tsa_rest_api_no_gh_pr_commands() -> None:
@@ -112,7 +112,7 @@ def test_tsa_rest_api_no_gh_pr_commands() -> None:
     """
     from autoskillit.core.paths import pkg_root
 
-    source = (pkg_root() / "hooks" / "token_summary_appender.py").read_text(encoding="utf-8")
+    source = (pkg_root() / "hooks" / "token_summary_hook.py").read_text(encoding="utf-8")
     assert "gh pr edit" not in source, (
         "gh pr edit found in hook — must be replaced with "
         "gh api repos/.../pulls/{N} --method PATCH --field body=..."
@@ -131,7 +131,7 @@ def test_tsa2_no_pr_url_exits_zero() -> None:
     """No GitHub PR URL in tool result → exits 0, no gh subprocess."""
     from autoskillit.core.paths import pkg_root
 
-    hook_path = pkg_root() / "hooks" / "token_summary_appender.py"
+    hook_path = pkg_root() / "hooks" / "token_summary_hook.py"
     event = _make_run_skill_event("done.\n%%ORDER_UP%%")
     stdin_text = json.dumps(event)
 
@@ -336,7 +336,7 @@ def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
 
 def test_tsa7_canonical_step_name() -> None:
     """_canonical strips trailing -N suffix; non-digit suffixes are preserved."""
-    from autoskillit.hooks.token_summary_appender import _canonical
+    from autoskillit.hooks.token_summary_hook import _canonical
 
     assert _canonical("plan-30") == "plan"
     assert _canonical("open-pr-2") == "open-pr"
@@ -591,7 +591,7 @@ def test_tsa_humanize_preserves_decimal() -> None:
     Fails before P6-2 fix (str(int(45.7)) → '45'), passes after (str(45.7) → '45.7').
     Token counts are always integers in practice, so this is a semantic correctness fix.
     """
-    from autoskillit.hooks.token_summary_appender import _humanize
+    from autoskillit.hooks.token_summary_hook import _humanize
 
     assert _humanize(999) == "999"
     assert _humanize(0) == "0"
@@ -863,7 +863,7 @@ def test_token_summary_appender_unexpected_error_exits_zero(monkeypatch: object)
             raise RuntimeError("injected failure")
         return original_loads(s)
 
-    with patch("autoskillit.hooks.token_summary_appender.json.loads", bomb_loads):
+    with patch("autoskillit.hooks.token_summary_hook.json.loads", bomb_loads):
         _, exit_code = _run_hook(event={"tool_name": "any", "tool_response": "{}"})
 
     assert exit_code == 0
@@ -871,7 +871,7 @@ def test_token_summary_appender_unexpected_error_exits_zero(monkeypatch: object)
 
 def test_e4_kitchen_id_renamed_in_hook_config(tmp_path: Path) -> None:
     """E-4: _read_kitchen_id reads 'kitchen_id' key; falls back to 'pipeline_id' for old."""
-    from autoskillit.hooks.token_summary_appender import _read_kitchen_id
+    from autoskillit.hooks.token_summary_hook import _read_kitchen_id
 
     # New format
     cfg_path = tmp_path / ".autoskillit" / ".hook_config.json"

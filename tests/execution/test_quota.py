@@ -624,10 +624,10 @@ class TestCheckAndSleepResetAtNoneBlocks:
 
 
 class TestIntegration:
-    """Integration tests: write/read contract between execution.quota and hooks.quota_check."""
+    """Integration tests: write/read contract between execution.quota and hooks.quota_guard."""
 
     def test_write_cache_then_quota_check_main_reads_it(self, tmp_path, monkeypatch):
-        """Cache written by _write_cache must be readable and actionable by quota_check.main().
+        """Cache written by _write_cache must be readable and actionable by quota_guard.main().
 
         T-INT-1: Catches format drift between _write_cache (execution layer) and
         _read_quota_cache (hook subprocess layer).
@@ -641,7 +641,7 @@ class TestIntegration:
             QuotaWindowEntry,
             _write_cache,
         )
-        from autoskillit.hooks.quota_check import main
+        from autoskillit.hooks.quota_guard import main
 
         cache_path = tmp_path / "quota_cache.json"
         _write_cache(

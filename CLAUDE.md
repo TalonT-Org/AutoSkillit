@@ -245,22 +245,22 @@ generic_automation_mcp/
 │   ├── __init__.py
 │   ├── hooks.json           #   Plugin hook registration
 │   ├── branch_protection_guard.py
-│   ├── quota_check.py       #   Blocks run_skill when threshold exceeded
-│   ├── quota_post_check.py  #   Appends quota warning to run_skill output
+│   ├── quota_guard.py       #   Blocks run_skill when threshold exceeded
+│   ├── quota_post_hook.py   #   Appends quota warning to run_skill output
 │   ├── remove_clone_guard.py
-│   ├── skill_cmd_check.py
+│   ├── skill_cmd_guard.py
 │   ├── skill_command_guard.py
 │   ├── open_kitchen_guard.py
 │   ├── unsafe_install_guard.py
 │   ├── generated_file_write_guard.py
 │   ├── headless_orchestration_guard.py
-│   ├── pretty_output.py     #   Dispatch entrypoint for MCP JSON → Markdown-KV reformatter
+│   ├── pretty_output_hook.py #  Dispatch entrypoint for MCP JSON → Markdown-KV reformatter
 │   ├── _fmt_primitives.py   #   Payload dataclasses, token formatter, pipeline-mode + short-name
 │   ├── _fmt_execution.py    #   run_skill, run_cmd, test_check, merge_worktree formatters
 │   ├── _fmt_status.py       #   token/timing summary, kitchen_status, clone_repo formatters
 │   ├── _fmt_recipe.py       #   load_recipe, open_kitchen, list_recipes formatters
-│   ├── token_summary_appender.py #  Appends Token Usage Summary to PR body
-│   └── session_start_reminder.py #  Injects open-kitchen reminder on resume
+│   ├── token_summary_hook.py #  Appends Token Usage Summary to PR body
+│   └── session_start_hook.py #  Injects open-kitchen reminder on resume
 │
 ├── migrations/              # Versioned migration YAML notes
 ├── recipes/                 # Bundled recipe YAML + contracts/, diagrams/, sub-recipes/

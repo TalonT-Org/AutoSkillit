@@ -12,7 +12,7 @@ def test_hook_config_path_components_in_sync():
     Both scripts must address the same config file. This test guards against
     independent evolution of the two constant sets.
     """
-    from autoskillit.hooks.pretty_output import _HOOK_CONFIG_PATH_COMPONENTS
+    from autoskillit.hooks.pretty_output_hook import _HOOK_CONFIG_PATH_COMPONENTS
     from autoskillit.server.helpers import _HOOK_CONFIG_FILENAME, _HOOK_DIR_COMPONENTS
 
     path_from_pretty = Path(*_HOOK_CONFIG_PATH_COMPONENTS)

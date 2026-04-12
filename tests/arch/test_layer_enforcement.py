@@ -816,9 +816,9 @@ def test_native_tool_guard_absent_from_hook_registry():
 
 
 def test_hook_config_filename_and_dir_match_quota_check():
-    """quota_check.py must agree with tools_kitchen on the hook config path constants.
+    """quota_guard.py must agree with tools_kitchen on the hook config path constants.
 
-    The server (tools_kitchen.py) writes the config; the hook (quota_check.py) reads it.
+    The server (tools_kitchen.py) writes the config; the hook (quota_guard.py) reads it.
     They must agree on both the filename and the directory components, or the quota hook
     will silently fail to read its configuration.
     """
@@ -829,7 +829,7 @@ def test_hook_config_filename_and_dir_match_quota_check():
         _HOOK_DIR_COMPONENTS,
     )
 
-    quota_mod = importlib.import_module("autoskillit.hooks.quota_check")
+    quota_mod = importlib.import_module("autoskillit.hooks.quota_guard")
 
     assert quota_mod.HOOK_CONFIG_FILENAME == _HOOK_CONFIG_FILENAME, (
         f"quota_check.HOOK_CONFIG_FILENAME={quota_mod.HOOK_CONFIG_FILENAME!r} "

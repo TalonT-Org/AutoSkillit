@@ -30,7 +30,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: SkillsDirectoryProvider default ctor arg matches canonical default.
     "workspace/session_skills.py": "SkillsDirectoryProvider default arg",
     # Justification: docstring example referencing the canonical default path.
-    "hooks/skill_cmd_check.py": "docstring example",
+    "hooks/skill_cmd_guard.py": "docstring example",
     # Justification: docstring referencing the canonical default path.
     "workspace/worktree.py": "docstring example",
     # Justification: docstring referencing the canonical default path.

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 # ---------------------------------------------------------------------------
 # T5 — Renamed protocols are importable from autoskillit.core
 # ---------------------------------------------------------------------------

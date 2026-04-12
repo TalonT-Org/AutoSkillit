@@ -32,7 +32,7 @@ class HookDef:
 HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher="mcp__.*autoskillit.*__run_skill.*",
-        scripts=["skill_cmd_check.py", "quota_check.py", "skill_command_guard.py"],
+        scripts=["skill_cmd_guard.py", "quota_guard.py", "skill_command_guard.py"],
     ),
     HookDef(
         matcher="mcp__.*autoskillit.*__remove_clone",
@@ -65,16 +65,16 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         event_type="PostToolUse",
         matcher="mcp__.*autoskillit.*",
-        scripts=["pretty_output.py"],
+        scripts=["pretty_output_hook.py"],
     ),
     HookDef(
         event_type="PostToolUse",
         matcher=r"mcp__.*autoskillit.*__run_skill.*",
-        scripts=["token_summary_appender.py", "quota_post_check.py"],
+        scripts=["token_summary_hook.py", "quota_post_hook.py"],
     ),
     HookDef(
         event_type="SessionStart",
-        scripts=["session_start_reminder.py"],
+        scripts=["session_start_hook.py"],
     ),
 ]
 

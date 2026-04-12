@@ -121,6 +121,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, _sigterm_handler)
+    get_logger(__name__).info("sigterm_handler_ready")
     try:
         mcp.run()
     except KeyboardInterrupt:

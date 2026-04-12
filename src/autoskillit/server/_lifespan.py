@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def _autoskillit_lifespan(server: Any) -> Any:
     """Server lifecycle: teardown recording on shutdown."""
+    logger.info("lifespan_started")
     yield
     ctx = _get_ctx_or_none()
     if ctx is not None and isinstance(ctx.runner, RecordingSubprocessRunner):

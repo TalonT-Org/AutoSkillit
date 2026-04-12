@@ -13,6 +13,8 @@ import time
 
 import pytest
 
+_READY_TOKEN = "lifespan_started"
+
 
 @pytest.mark.integration
 def test_sigterm_writes_scenario_json(tmp_path):
@@ -36,13 +38,25 @@ def test_sigterm_writes_scenario_json(tmp_path):
         env=env,
     )
 
-    # Poll stderr for any output (server startup log) to detect readiness,
-    # rather than using a fixed sleep. Falls back to a 5-second ceiling so
-    # the test is both responsive on fast hosts and resilient on slow CI.
+    # Poll stderr line-by-line for the "sigterm_handler_ready" token which
+    # serve() emits immediately after installing the SIGTERM handler. This
+    # guarantees the handler is active before we send SIGTERM, while still
+    # being responsive (no fixed sleep). Falls back after 5 s on slow CI.
+    stderr_lines: list[str] = []
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
-        ready, _, _ = select.select([proc.stderr], [], [], 0.1)
-        if ready or proc.poll() is not None:
+        remaining = deadline - time.monotonic()
+        readable, _, _ = select.select([proc.stderr], [], [], min(remaining, 0.2))
+        if not readable:
+            if proc.poll() is not None:
+                break
+            continue
+        line = proc.stderr.readline()
+        if not line:
+            break  # EOF — process died
+        decoded = line.decode(errors="replace")
+        stderr_lines.append(decoded)
+        if _READY_TOKEN in decoded:
             break
 
     # SIGTERM is the exact signal Claude Code sends on /exit.
@@ -53,13 +67,13 @@ def test_sigterm_writes_scenario_json(tmp_path):
     proc.stdin = None  # prevent communicate() from flushing the closed pipe
     proc.send_signal(signal.SIGTERM)
     try:
-        stdout_bytes, stderr_bytes = proc.communicate(timeout=10)
+        stdout_bytes, remaining_stderr_bytes = proc.communicate(timeout=10)
     except subprocess.TimeoutExpired:
         proc.kill()
-        stdout_bytes, stderr_bytes = proc.communicate()
+        stdout_bytes, remaining_stderr_bytes = proc.communicate()
 
     stdout = stdout_bytes.decode(errors="replace")
-    stderr = stderr_bytes.decode(errors="replace")
+    stderr = "".join(stderr_lines) + remaining_stderr_bytes.decode(errors="replace")
 
     scenario_json = output_dir / "scenario.json"
     assert scenario_json.exists(), (

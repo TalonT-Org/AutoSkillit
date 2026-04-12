@@ -14,9 +14,12 @@ Transport: stdio (default for FastMCP).
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastmcp import FastMCP
 
 from autoskillit.core import get_logger
+from autoskillit.execution.recording import RecordingSubprocessRunner
 from autoskillit.pipeline import (  # noqa: F401
     GATED_TOOLS,
     UNGATED_TOOLS,
@@ -28,12 +31,23 @@ from autoskillit.server._state import (  # noqa: E402, F401
     _ctx,
     _get_config,
     _get_ctx,
+    _get_ctx_or_none,
     _get_plugin_dir,
     _initialize,
     version_info,
 )
 
-mcp: FastMCP = FastMCP("autoskillit")
+
+@asynccontextmanager
+async def _autoskillit_lifespan(server):
+    """Server lifecycle: teardown recording on shutdown."""
+    yield
+    ctx = _get_ctx_or_none()
+    if ctx is not None and isinstance(ctx.runner, RecordingSubprocessRunner):
+        ctx.runner.recorder.finalize()
+
+
+mcp: FastMCP = FastMCP("autoskillit", lifespan=_autoskillit_lifespan)
 
 logger = get_logger(__name__)
 

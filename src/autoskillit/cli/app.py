@@ -7,6 +7,7 @@ import json
 import os
 import random
 import shutil
+import signal
 import subprocess
 import sys
 from datetime import UTC
@@ -114,6 +115,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     plugin_dir = str(pkg_root())
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     mcp.run()
 
 

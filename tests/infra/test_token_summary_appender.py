@@ -888,10 +888,10 @@ def test_e4_kitchen_id_renamed_in_hook_config(tmp_path: Path) -> None:
 
 
 def test_hook_subprocess_calls_have_timeout() -> None:
-    """All subprocess.run() calls in token_summary_appender.py must have timeout=."""
+    """All subprocess.run() calls in token_summary_hook.py must have timeout=."""
     import ast
 
-    src = Path("src/autoskillit/hooks/token_summary_appender.py").read_text()
+    src = Path("src/autoskillit/hooks/token_summary_hook.py").read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if (
@@ -901,6 +901,5 @@ def test_hook_subprocess_calls_have_timeout() -> None:
         ):
             kw_names = {kw.arg for kw in node.keywords}
             assert "timeout" in kw_names, (
-                f"subprocess.run() at line {node.lineno} in "
-                f"token_summary_appender.py missing timeout="
+                f"subprocess.run() at line {node.lineno} in token_summary_hook.py missing timeout="
             )

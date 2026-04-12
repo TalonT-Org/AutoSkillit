@@ -30,6 +30,7 @@ A Claude Code plugin that orchestrates automated skill-driven workflows using he
   * **Use Current Package Versions**: Web search for current stable versions when adding dependencies.
   * **Version Bumps**: When bumping the package version, update `pyproject.toml` and run `task sync-plugin-version && uv lock`; then search tests for hardcoded version strings (e.g. `AUTOSKILLIT_INSTALLED_VERSION` monkeypatches) and update them.
   * **Run pre-commit before committing**: Always run `pre-commit run --all-files` before committing. Do not skip this step even when code appears clean — hooks auto-fix formatting and abort the commit, requiring re-stage and retry.
+  * **Hook Renames**: Renaming a hook script under `src/autoskillit/hooks/` must update `HOOK_REGISTRY` in `hook_registry.py` AND add the old basename to `RETIRED_SCRIPT_BASENAMES` in the same commit. `test_no_retired_name_has_a_live_file` will fail otherwise.
 
 ### **3.2. File System**
 
@@ -110,7 +111,8 @@ generic_automation_mcp/
 │   ├── _terminal_table.py   #   L0 color-agnostic terminal table primitive
 │   ├── branch_guard.py
 │   ├── claude_conventions.py #  Skill discovery directory layout constants
-│   └── github_url.py        #   parse_github_repo
+│   ├── github_url.py        #   parse_github_repo
+│   └── kitchen_state.py     #   Kitchen-open session marker (stdlib-only; readable from hooks)
 │
 ├── config/                  # L1
 │   ├── __init__.py
@@ -253,6 +255,7 @@ generic_automation_mcp/
 │   ├── remove_clone_guard.py
 │   ├── skill_cmd_guard.py
 │   ├── skill_command_guard.py
+│   ├── ask_user_question_guard.py #  Blocks AskUserQuestion if kitchen is not open
 │   ├── open_kitchen_guard.py
 │   ├── unsafe_install_guard.py
 │   ├── generated_file_write_guard.py

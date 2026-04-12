@@ -109,7 +109,7 @@ def _is_yaml_dump(node: ast.expr) -> bool:
 # Any new site that writes a dict payload SHOULD use write_versioned_json.
 _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # core/io.py — write_versioned_json itself (the blessed helper) uses atomic_write+json.dumps
-    ("src/autoskillit/core/io.py", 98),
+    ("src/autoskillit/core/io.py", 118),
     # session_log.py — summary dict, token_usage list, audit_log list
     ("src/autoskillit/execution/session_log.py", 206),
     ("src/autoskillit/execution/session_log.py", 219),
@@ -123,6 +123,8 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/recipe/staleness_cache.py", 67),
     # background.py — payload dict
     ("src/autoskillit/pipeline/background.py", 132),
+    # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
+    ("src/autoskillit/server/_lifespan.py", 49),
     # tools_kitchen.py — hook config dict
     ("src/autoskillit/server/tools_kitchen.py", 136),
     # tools_status.py — mcp_data dict

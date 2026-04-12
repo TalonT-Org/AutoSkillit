@@ -49,6 +49,10 @@ app.command(recipes_app)
 app.command(workspace_app)
 
 
+class CliError(Exception):
+    """Raised by CLI helpers to signal a user-facing error that should abort the command."""
+
+
 @app.default
 def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = False):
     """Start the MCP server (default command)."""
@@ -86,7 +90,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
 
     # Import server AFTER logging is configured so module-level loggers
     # resolve to stderr+JSON, not stdout+ConsoleRenderer (structlog default).
-    from autoskillit.server import _initialize, make_context, mcp
+    from autoskillit.server import _initialize, make_context, mcp, run_startup_drift_check
 
     project_path = project_dir / ".autoskillit" / "config.yaml"
     user_path = Path.home() / ".autoskillit" / "config.yaml"
@@ -121,6 +125,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, _sigterm_handler)
+    run_startup_drift_check()
     get_logger(__name__).info("sigterm_handler_ready")
     try:
         mcp.run()
@@ -177,7 +182,11 @@ def init(
         onboarded_marker = config_dir / ".onboarded"
         onboarded_marker.unlink(missing_ok=True)
 
-    _register_all(scope, project_dir)
+    try:
+        _register_all(scope, project_dir)
+    except CliError as exc:
+        print(f"\n  ERROR: {exc}")
+        raise SystemExit(1) from None
 
 
 @app.command

@@ -780,3 +780,19 @@ def test_init_no_force_preserves_onboarded_marker(
     cli.init(force=False)
 
     assert marker.exists()
+
+
+def test_init_from_pkg_root_like_cwd_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_register_all() must refuse to run from inside the autoskillit source tree."""
+    import autoskillit.core.paths as _paths
+    from autoskillit.cli._init_helpers import _register_all
+
+    fake_pkg_root = tmp_path / "pkg"
+    fake_pkg_root.mkdir()
+    monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg_root)
+    monkeypatch.chdir(fake_pkg_root)
+
+    with pytest.raises(Exception, match="inside the autoskillit source tree"):
+        _register_all(scope="user", project_dir=fake_pkg_root)

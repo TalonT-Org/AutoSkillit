@@ -11,7 +11,9 @@ Stdlib-only — runs under any Python interpreter without the autoskillit packag
 from __future__ import annotations
 
 import json
+import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -20,6 +22,30 @@ def main() -> None:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)  # fail-open on malformed input
+
+    # Best-effort TTL sweep of stale kitchen markers. Fail-open — must not raise.
+    try:
+        _state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
+        if _state_override:
+            _state_dir = Path(_state_override) / "kitchen_state"
+        else:
+            _state_dir = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+        if _state_dir.is_dir():
+            _ttl_hours = 24
+            for _p in _state_dir.glob("*.json"):
+                try:
+                    _d = json.loads(_p.read_text(encoding="utf-8"))
+                    _opened_at = datetime.fromisoformat(_d["opened_at"])
+                    _age = datetime.now(UTC) - _opened_at
+                    if _age.total_seconds() >= _ttl_hours * 3600:
+                        _p.unlink()
+                except Exception:
+                    try:
+                        _p.unlink()
+                    except OSError:
+                        pass
+    except Exception:
+        pass  # SessionStart hooks that raise break session start for the user
 
     transcript_path = data.get("transcript_path", "")
     if not transcript_path:

@@ -402,3 +402,25 @@ def test_orchestrator_prompt_contains_quota_routing():
 
     prompt = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "QUOTA DENIAL ROUTING" in prompt
+
+
+def test_orchestrator_prompt_instructs_toolsearch_when_deferred():
+    """PR #750 added DO-NOT-ask; this test pins the recovery path instead."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
+    assert "ToolSearch" in prompt
+    assert "deferred" in prompt.lower()
+    assert "select:" in prompt
+    assert "open_kitchen" in prompt
+
+
+def test_open_kitchen_prompt_instructs_toolsearch_when_deferred():
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
+    prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
+    assert "ToolSearch" in prompt
+    assert "deferred" in prompt.lower()
+    assert "open_kitchen" in prompt

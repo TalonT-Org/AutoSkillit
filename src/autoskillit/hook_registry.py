@@ -6,7 +6,9 @@ derive from this registry.
 
 from __future__ import annotations
 
+import hashlib
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, NamedTuple
@@ -21,6 +23,7 @@ class HookDef:
     matcher: str = ""
     event_type: Literal["PreToolUse", "PostToolUse", "SessionStart"] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
+    timeout_seconds: int | None = None
 
     def __post_init__(self) -> None:
         if self.event_type != "SessionStart" and not self.matcher:
@@ -41,6 +44,12 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher=r"mcp__.*autoskillit.*__open_kitchen.*",
         scripts=["open_kitchen_guard.py"],
+        timeout_seconds=5,
+    ),
+    HookDef(
+        matcher="AskUserQuestion",
+        scripts=["ask_user_question_guard.py"],
+        timeout_seconds=5,
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__merge_worktree",
@@ -78,6 +87,62 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
 ]
 
+HOOKS_DIR: Path = pkg_root() / "hooks"
+
+RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
+    {
+        "quota_check.py",
+        "skill_cmd_check.py",
+        "quota_post_check.py",
+        "pretty_output.py",
+        "token_summary_appender.py",
+        "session_start_reminder.py",
+        # Append any future retired basenames here, atomically with the rename commit.
+    }
+)
+
+
+def _canonical_registry_payload(
+    registry: list[HookDef],
+    retired: frozenset[str],
+) -> str:
+    registry_rows = sorted(
+        [
+            {
+                "event_type": h.event_type,
+                "matcher": h.matcher,
+                "scripts": list(h.scripts),
+                "timeout_seconds": h.timeout_seconds,
+            }
+            for h in registry
+        ],
+        key=lambda row: (row["event_type"], row["matcher"], tuple(row["scripts"])),  # type: ignore[arg-type]
+    )
+    return json.dumps(
+        {"registry": registry_rows, "retired": sorted(retired)},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def compute_registry_hash(registry: list[HookDef], retired: frozenset[str]) -> str:
+    """Compute a stable sha256 over HOOK_REGISTRY + RETIRED_SCRIPT_BASENAMES."""
+    payload = _canonical_registry_payload(registry, retired)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+HOOK_REGISTRY_HASH: str = compute_registry_hash(HOOK_REGISTRY, RETIRED_SCRIPT_BASENAMES)
+
+
+def load_hooks_json_hash(path: Path) -> str | None:
+    """Read the _autoskillit_registry_hash from a hooks.json file."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        val = data.get("_autoskillit_registry_hash")
+        return str(val) if val else None
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return None
+
 
 def _build_hook_entry(hook_def: HookDef, hook_commands: list[dict]) -> dict:
     """Build the per-entry dict for a hook definition.
@@ -93,17 +158,24 @@ def _build_hook_entry(hook_def: HookDef, hook_commands: list[dict]) -> dict:
 
 def generate_hooks_json() -> dict:
     """Generate the hooks.json structure from HOOK_REGISTRY using absolute paths."""
-    hooks_dir = pkg_root() / "hooks"
     by_event: dict[str, list] = {}
     for hook_def in HOOK_REGISTRY:
         hook_commands = [
-            {"type": "command", "command": f"python3 {hooks_dir / script}"}
+            {
+                "type": "command",
+                "command": f"python3 {HOOKS_DIR / script}",
+                **(
+                    {"timeout": hook_def.timeout_seconds}
+                    if hook_def.timeout_seconds is not None
+                    else {}
+                ),
+            }
             for script in hook_def.scripts
         ]
         by_event.setdefault(hook_def.event_type, []).append(
             _build_hook_entry(hook_def, hook_commands)
         )
-    return {"hooks": by_event}
+    return {"hooks": by_event, "_autoskillit_registry_hash": HOOK_REGISTRY_HASH}
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +189,24 @@ def _claude_settings_path(scope: str) -> Path:
     if scope == "user":
         return Path.home() / ".claude" / "settings.json"
     return Path.cwd() / ".claude" / "settings.json"
+
+
+def iter_all_scope_paths(
+    project_root: Path | None = None,
+) -> Iterator[tuple[str, Path]]:
+    """Yield (scope_label, settings_path) for all Claude Code settings scopes.
+
+    Always yields the user scope. Project and local scopes are yielded only
+    when project_root is provided AND the corresponding .claude/ directory exists.
+    """
+    yield ("user", Path.home() / ".claude" / "settings.json")
+    if project_root is not None:
+        claude_dir = project_root / ".claude"
+        if claude_dir.is_dir():
+            yield ("project", claude_dir / "settings.json")
+            local_path = claude_dir / "settings.local.json"
+            if local_path.exists():
+                yield ("local", local_path)
 
 
 def _load_settings_data(settings_path: Path) -> dict:
@@ -138,8 +228,8 @@ def _is_own_hook(command: str) -> bool:
     """Check if a hook command belongs to autoskillit (any format)."""
     if "autoskillit" in command:
         return True
-    known_scripts = canonical_script_basenames()
-    return any(command.endswith(script) or f"/{script}" in command for script in known_scripts)
+    known = canonical_script_basenames() | RETIRED_SCRIPT_BASENAMES
+    return any(command.endswith(script) or f"/{script}" in command for script in known)
 
 
 def _extract_script_basenames(hooks_dict: dict) -> set[str]:

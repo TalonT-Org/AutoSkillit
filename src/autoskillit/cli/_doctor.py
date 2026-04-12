@@ -113,32 +113,41 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     )
 
 
-def _check_hook_registry_drift(settings_path: Path) -> DoctorResult:
+def _check_hook_registry_drift(
+    settings_path: Path, scope_label: str | None = None
+) -> DoctorResult:
     """Compare generate_hooks_json() with what is deployed in settings.json."""
     result = _count_hook_registry_drift(settings_path)
     if result.orphaned > 0:
         ghost_scripts = sorted(result.orphaned_cmds)
-        return DoctorResult(
-            Severity.ERROR,
-            "hook_registry_drift",
+        msg = (
             f"Orphaned hook entries detected: {', '.join(ghost_scripts)}. "
             f"These scripts are missing from HOOK_REGISTRY but present in "
             f"settings.json — every matching tool call will be denied with ENOENT. "
-            f"Run 'autoskillit install' to regenerate hooks.",
+            f"Run 'autoskillit install' to regenerate hooks."
         )
+        if scope_label:
+            msg = f"[{scope_label}] {msg}"
+        return DoctorResult(Severity.ERROR, "hook_registry_drift", msg)
     if result.missing > 0:
+        msg = (
+            f"Hook registry has changed since last install. "
+            f"Run 'autoskillit install' to deploy {result.missing} new/changed hook(s)."
+        )
+        if scope_label:
+            msg = f"[{scope_label}] {msg}"
         return DoctorResult(
             severity=Severity.WARNING,
             check="hook_registry_drift",
-            message=(
-                f"Hook registry has changed since last install. "
-                f"Run 'autoskillit install' to deploy {result.missing} new/changed hook(s)."
-            ),
+            message=msg,
         )
+    msg = "Deployed hooks match HOOK_REGISTRY."
+    if scope_label:
+        msg = f"[{scope_label}] {msg}"
     return DoctorResult(
         severity=Severity.OK,
         check="hook_registry_drift",
-        message="Deployed hooks match HOOK_REGISTRY.",
+        message=msg,
     )
 
 
@@ -542,8 +551,11 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 7: Hook registration in settings.json
     results.append(_check_hook_registration(_claude_settings_path("user")))
 
-    # Check 7b: Hook registry drift (structural comparison via generate_hooks_json())
-    results.append(_check_hook_registry_drift(_claude_settings_path("user")))
+    # Check 7b: Hook registry drift (multi-scope)
+    from autoskillit.hook_registry import iter_all_scope_paths
+
+    for scope_label, settings_path in iter_all_scope_paths(Path.cwd()):
+        results.append(_check_hook_registry_drift(settings_path, scope_label=scope_label))
 
     # Check 8: Script version health
     from autoskillit import __version__

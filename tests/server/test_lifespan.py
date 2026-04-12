@@ -1,6 +1,7 @@
 """Tests that the FastMCP lifespan calls recorder.finalize() on server shutdown."""
 
 import asyncio
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -71,3 +72,25 @@ async def test_lifespan_calls_finalize_on_cancellation():
                 raise asyncio.CancelledError
 
     mock_recorder.finalize.assert_called_once()
+
+
+def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:
+    """run_startup_drift_check() regenerates hooks.json when hash is mismatched."""
+    import json as _json
+
+    import autoskillit.core.paths as _paths
+    from autoskillit.hook_registry import HOOK_REGISTRY_HASH
+    from autoskillit.server._lifespan import run_startup_drift_check
+
+    fake_pkg_root = tmp_path / "pkg"
+    hooks_dir = fake_pkg_root / "hooks"
+    hooks_dir.mkdir(parents=True)
+    stale_json = {"_autoskillit_registry_hash": "deadbeef", "hooks": {}}
+    (hooks_dir / "hooks.json").write_text(_json.dumps(stale_json))
+
+    monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg_root)
+
+    run_startup_drift_check()
+
+    updated = _json.loads((hooks_dir / "hooks.json").read_text())
+    assert updated.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH

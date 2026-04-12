@@ -39,6 +39,10 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # HOOK_DIR_COMPONENTS = (".autoskillit", "temp") mirrors the canonical bridge path
     # defined by _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS.
     "hooks/_hook_settings.py": "stdlib-only hook; cannot use resolve_temp_dir()",
+    # Justification: stdlib-only kitchen-state module; must be importable from hook subprocesses
+    # without any autoskillit imports. Falls back to .autoskillit/temp/kitchen_state relative to
+    # CWD when AUTOSKILLIT_STATE_DIR is not set.
+    "core/kitchen_state.py": "stdlib-only kitchen state module; cannot use resolve_temp_dir()",
 }
 
 _LITERAL = ".autoskillit/temp"

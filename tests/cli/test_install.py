@@ -519,3 +519,49 @@ class TestGroupFInstall:
         assert len(remove_clone_entries) == 1, (
             f"Expected exactly 1 remove_clone hook entry, got {len(remove_clone_entries)}"
         )
+
+
+def test_install_sweeps_all_scopes_for_orphans(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """install() evicts orphaned autoskillit hooks from non-target scopes."""
+    import json as _json
+
+    from autoskillit.cli._hooks import sweep_all_scopes_for_orphans
+
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    home.mkdir()
+    project.mkdir()
+
+    project_settings = project / ".claude" / "settings.json"
+    project_settings.parent.mkdir(parents=True)
+    project_settings.write_text(
+        _json.dumps(
+            {
+                "hooks": {
+                    "PostToolUse": [
+                        {
+                            "matcher": "mcp__.*autoskillit.*",
+                            "hooks": [
+                                {"type": "command", "command": "python3 /stale/pretty_output.py"}
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
+    )
+
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.chdir(project)
+
+    sweep_all_scopes_for_orphans(project)
+
+    data = _json.loads(project_settings.read_text())
+    for event_hooks in data.get("hooks", {}).values():
+        for entry in event_hooks:
+            for hook in entry.get("hooks", []):
+                assert "pretty_output.py" not in hook["command"], (
+                    "Orphaned hook was not evicted from project scope"
+                )

@@ -497,11 +497,23 @@ def run_stale_check(home: Path | None = None) -> None:
                 }
                 _write_dismiss_state(_home, state)
 
-    # Hook drift check
+    # Hook drift check — all scopes
     from autoskillit.cli import _count_hook_registry_drift
+    from autoskillit.hook_registry import HookDriftResult, iter_all_scope_paths
 
+    total_missing = 0
+    total_orphaned = 0
+    orphaned_cmds_all: frozenset[str] = frozenset()
+    for _scope_label, _scope_path in iter_all_scope_paths(Path.cwd()):
+        _d = _count_hook_registry_drift(_scope_path)
+        # max: missing in any scope is a reinstall signal (not cumulative)
+        total_missing = max(total_missing, _d.missing)
+        total_orphaned += _d.orphaned  # cumulative: display total orphan count
+        orphaned_cmds_all = orphaned_cmds_all | _d.orphaned_cmds
+    drift = HookDriftResult(
+        missing=total_missing, orphaned=total_orphaned, orphaned_cmds=orphaned_cmds_all
+    )
     settings_path = _claude_settings_path("user")
-    drift = _count_hook_registry_drift(settings_path)
     if (
         (drift.missing > 0 or drift.orphaned > 0)
         and not _is_dismissed(state, "hooks", None)

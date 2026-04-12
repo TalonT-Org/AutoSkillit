@@ -54,13 +54,46 @@ def sync_hooks_to_settings(settings_path: Path) -> None:
     autoskillit entries are present when this function runs.
     Each HookDef becomes one entry under its event_type with all its scripts as ordered commands.
     """
+    from autoskillit.hook_registry import HOOK_REGISTRY_HASH
+
     hooks_dir = pkg_root() / "hooks"
     data = _load_settings_data(settings_path)
     for hook_def in HOOK_REGISTRY:
         event_list: list[dict] = data.setdefault("hooks", {}).setdefault(hook_def.event_type, [])
         hooks_list = [
-            {"type": "command", "command": f"python3 {hooks_dir / script}"}
+            {
+                "type": "command",
+                "command": f"python3 {hooks_dir / script}",
+                **(
+                    {"timeout": hook_def.timeout_seconds}
+                    if hook_def.timeout_seconds is not None
+                    else {}
+                ),
+            }
             for script in hook_def.scripts
         ]
         event_list.append(_build_hook_entry(hook_def, hooks_list))
+    data["_autoskillit_registry_hash"] = HOOK_REGISTRY_HASH
     _write_settings_data(settings_path, data)
+
+
+def sweep_all_scopes_for_orphans(project_root: Path | None = None) -> list[str]:
+    """Evict stale autoskillit hooks from every Claude Code settings scope.
+
+    Calls _evict_stale_autoskillit_hooks on user, project, and local scopes
+    (project and local only when project_root is given and .claude/ dir exists).
+
+    Returns a list of scope labels where evictions occurred.
+    """
+    from autoskillit.hook_registry import iter_all_scope_paths
+
+    evicted: list[str] = []
+    for scope_label, settings_path in iter_all_scope_paths(project_root):
+        before_data = _load_settings_data(settings_path)
+        before_str = json.dumps(before_data)
+        _evict_stale_autoskillit_hooks(settings_path)
+        after_data = _load_settings_data(settings_path)
+        after_str = json.dumps(after_data)
+        if before_str != after_str:
+            evicted.append(scope_label)
+    return evicted

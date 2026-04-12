@@ -23,7 +23,10 @@ from autoskillit.pipeline import (  # noqa: F401
     ToolContext,
     gate_error_result,
 )
-from autoskillit.server._lifespan import _autoskillit_lifespan
+from autoskillit.server._lifespan import (  # noqa: F401
+    _autoskillit_lifespan,
+    run_startup_drift_check,
+)
 from autoskillit.server._state import (  # noqa: E402, F401
     _ctx,
     _get_config,
@@ -43,6 +46,7 @@ __all__ = [
     # Public utilities consumed by CLI and tests
     "version_info",
     "make_context",
+    "run_startup_drift_check",
 ]
 
 # Import all tool sub-modules to trigger @mcp.tool() registration.

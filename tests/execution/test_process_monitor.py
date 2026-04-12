@@ -1210,5 +1210,5 @@ class TestSessionLogMonitorDirMissing:
         )
         elapsed = time.monotonic() - t0
         assert result.status == ChannelBStatus.DIR_MISSING
-        assert elapsed < 2.0  # Must not burn 5s absorbing OSError
+        assert elapsed < 0.5  # FileNotFoundError is immediate — no I/O wait
         assert result.session_id == ""

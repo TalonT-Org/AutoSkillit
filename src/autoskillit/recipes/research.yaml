@@ -379,7 +379,7 @@ steps:
   generate_report:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
+      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report
     capture:
@@ -391,7 +391,7 @@ steps:
   generate_report_inconclusive:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive"
+      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report
     capture:
@@ -656,7 +656,7 @@ steps:
   re_generate_report:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
+      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
       cwd: "${{ context.worktree_path }}"
       step_name: re_generate_report
     capture:

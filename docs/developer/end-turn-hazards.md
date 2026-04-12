@@ -190,7 +190,7 @@ two detectors on every SKILL.md in the project:
 | `_check_loop_boundary()` | "For each" loops with tool invocations but no anti-prose guard |
 
 These run as part of `test_no_text_then_tool_in_any_step`, a parametrized
-test that scans all 108 bundled skills. Any new skill with an unguarded
+test that scans all 107 bundled skills. Any new skill with an unguarded
 loop fails CI automatically.
 
 ## If This Gets Fixed Upstream

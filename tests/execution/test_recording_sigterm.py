@@ -50,6 +50,7 @@ def test_sigterm_writes_scenario_json(tmp_path):
     # teardown which writes scenario.json. Close stdin so the stdio transport
     # detects EOF and the event loop can fully unwind.
     proc.stdin.close()
+    proc.stdin = None  # prevent communicate() from flushing the closed pipe
     proc.send_signal(signal.SIGTERM)
     try:
         stdout_bytes, stderr_bytes = proc.communicate(timeout=10)

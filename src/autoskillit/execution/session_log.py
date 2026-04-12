@@ -336,7 +336,7 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
         try:
             pid = int(trace_file.stem.split("_")[-1])
         except (ValueError, IndexError):
-            pid = 0
+            pid = -1
 
         # Gate 1: Enrollment sidecar must exist — no sidecar means alien/test file
         enrollment_path = tmpfs / f"autoskillit_enrollment_{pid}.json"
@@ -355,7 +355,7 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
         # Gate 3: PID liveness + starttime_ticks identity
         if psutil.pid_exists(pid):
             current_ticks = read_starttime_ticks(pid)
-            if current_ticks is None or current_ticks == enrollment.starttime_ticks:
+            if current_ticks is not None and current_ticks == enrollment.starttime_ticks:
                 logger.debug("Skipping %s: PID %d still alive", trace_file.name, pid)
                 continue
             # PID recycled — original process is gone, treat as crash

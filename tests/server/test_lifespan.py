@@ -74,7 +74,7 @@ async def test_lifespan_calls_finalize_on_cancellation():
     mock_recorder.finalize.assert_called_once()
 
 
-def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path) -> None:
+def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:
     """run_startup_drift_check() regenerates hooks.json when hash is mismatched."""
     import json as _json
 
@@ -88,13 +88,9 @@ def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path) -> None:
     stale_json = {"_autoskillit_registry_hash": "deadbeef", "hooks": {}}
     (hooks_dir / "hooks.json").write_text(_json.dumps(stale_json))
 
-    original_pkg_root = _paths.pkg_root
-    _paths.pkg_root = lambda: fake_pkg_root
+    monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg_root)
 
-    try:
-        run_startup_drift_check()
-    finally:
-        _paths.pkg_root = original_pkg_root
+    run_startup_drift_check()
 
     updated = _json.loads((hooks_dir / "hooks.json").read_text())
     assert updated.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH

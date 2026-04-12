@@ -234,6 +234,9 @@ def test_output_path_tokens_synchronized() -> None:
             "revision_guidance",
             # prepare-research-pr output (decomposed research-PR flow)
             "prep_path",
+            # plan-visualization outputs (groupF Part A)
+            "visualization_plan_path",
+            "report_plan_path",
         }
     )
 

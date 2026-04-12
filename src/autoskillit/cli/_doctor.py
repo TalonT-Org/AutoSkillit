@@ -462,7 +462,7 @@ def _check_claude_process_state_breakdown() -> DoctorResult:
         if len(parts) < 4:
             continue
         comm = parts[3]
-        if comm != "claude" and not comm.endswith("/claude"):
+        if comm != "claude":
             continue
         try:
             claude_rows.append((int(parts[0]), parts[1], float(parts[2])))

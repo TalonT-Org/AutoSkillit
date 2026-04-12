@@ -527,15 +527,17 @@ def test_cli_is_package() -> None:
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 17 Python files (REQ-DSGN-002).
+    """server/ must not exceed 18 Python files (REQ-DSGN-002).
 
     Limit updated from 14 to 16 after tools_integrations was split into
     tools_github, tools_issue_lifecycle, and tools_pr_ops.
     Limit updated from 16 to 17 after _editable_guard.py was added as
     the pre-deletion editable install guard for perform_merge().
+    Limit updated from 17 to 18 after _lifespan.py was added for
+    FastMCP server lifespan teardown (#745).
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 17, f"server/ has {len(py_files)} files, max is 17"
+    assert len(py_files) <= 18, f"server/ has {len(py_files)} files, max is 18"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
@@ -678,7 +680,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         (14 hook scripts + 4 private helpers).
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 17,
+        "server": 18,
         "recipe": 30,
         "execution": 25,
         "core": 16,

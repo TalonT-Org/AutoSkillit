@@ -136,9 +136,12 @@ Your choice [C]:
 3. If **edit**:
    ```bash
    # Fetch current body and append new context using a temp file to avoid shell injection
-   gh issue view {selected_number} --json body -q .body > /tmp/issue_edit_body.txt
-   printf '\n## Additional Context\n\n%s' "{description}" >> /tmp/issue_edit_body.txt
-   gh issue edit {selected_number} --body-file /tmp/issue_edit_body.txt
+   ts=$(date +%Y-%m-%d_%H%M%S)
+   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_${ts}.md"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
+   gh issue view {selected_number} --json body -q .body > "${EDIT_BODY_FILE}"
+   printf '\n## Additional Context\n\n%s' "{description}" >> "${EDIT_BODY_FILE}"
+   gh issue edit {selected_number} --body-file "${EDIT_BODY_FILE}"
    ```
 4. Set `issue_number = selected_number` (no new issue will be created).
 5. Fetch the updated issue for triage:
@@ -296,18 +299,18 @@ If route is `recipe:implementation`:
    `gh issue edit`. Set `requirements_generated: true`, `requirements_appended: false`.
 7. Otherwise, append the Requirements section:
    ```bash
-   gh issue edit {N} --body "$(gh issue view {N} --json body -q .body)
+   ts=$(date +%Y-%m-%d_%H%M%S)
+   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/req_body_${ts}.md"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
 
-## Requirements
+   # Fetch current issue body to temp file (avoids shell interpolation):
+   gh issue view {N} --json body -q .body > "${EDIT_BODY_FILE}"
 
-### {Group Name}
+   # Append requirements section:
+   printf '\n\n## Requirements\n\n' >> "${EDIT_BODY_FILE}"
+   printf '%s\n' "{requirements_content}" >> "${EDIT_BODY_FILE}"
 
-- **REQ-{GRP}-001:** ...
-- **REQ-{GRP}-002:** ...
-
-### {Group 2 Name}
-
-- **REQ-{GRP2}-001:** ..."
+   gh issue edit {N} --body-file "${EDIT_BODY_FILE}"
    ```
 8. If the issue is too vague for clean requirement extraction (no clear goal,
    contradictory claims, or entirely implementation-prescriptive): do not force it.
@@ -367,6 +370,8 @@ gh issue edit {issue_number} --add-label "{issue_type}"
 - Use `--body` inline for the validated-report `gh issue create` — always write the
   stripped body to `{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{timestamp}.md` and
   pass `--body-file` (prevents LLM paraphrase, shell truncation, and special-character injection)
+- Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
+  `{{AUTOSKILLIT_TEMP}}/prepare-issue/req_body_{timestamp}.md` and use `--body-file`
 
 **ALWAYS:**
 - Confirm repo access with `gh repo view` before any issue operations

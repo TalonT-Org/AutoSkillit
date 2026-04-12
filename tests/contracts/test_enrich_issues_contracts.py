@@ -15,10 +15,12 @@ def test_enrich_issues_skill_exists():
 def test_enrich_issues_gh_issue_edit_uses_body_file():
     """enrich-issues gh issue edit must use --body-file, not inline --body shell substitution."""
     text = SKILL_MD.read_text()
-    edit_pos = text.find("gh issue edit")
-    assert edit_pos != -1, "Sanity: 'gh issue edit' not found in enrich-issues"
-    edit_context = text[edit_pos : edit_pos + 400]
-    assert "--body-file" in edit_context, (
+    # Find the Apply or Preview step (Step 5e) where the mutation happens
+    apply_pos = text.find("5e. Apply or Preview")
+    assert apply_pos != -1, "Sanity: 'Apply or Preview' section not found in enrich-issues"
+    apply_section = text[apply_pos : apply_pos + 800]
+    assert "gh issue edit" in apply_section, "Sanity: 'gh issue edit' not found in Step 5e"
+    assert "--body-file" in apply_section, (
         "enrich-issues 'gh issue edit' must use --body-file to prevent shell-substitution "
         "truncation and LLM body recomposition"
     )

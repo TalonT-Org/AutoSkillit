@@ -1400,3 +1400,98 @@ skills:
     write_behavior: conditional
     write_expected_when:
     - "Fixes applied:\\s*[1-9][0-9]*"
+
+  vis-lens-always-on:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-antipattern:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-chart-select:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-domain-norms:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-uncertainty:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"

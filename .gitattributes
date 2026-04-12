@@ -1,0 +1,3 @@
+# Vendored binary assets — suppress diff spam on updates
+src/autoskillit/assets/**/*.js binary
+src/autoskillit/assets/**/*.css binary

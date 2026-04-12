@@ -85,9 +85,7 @@ def main() -> None:
         if session_id:
             _write_kitchen_marker(session_id, recipe_name)
     except Exception as e:
-        import sys as _sys
-
-        print(f"[open_kitchen_guard] marker write failed: {e}", file=_sys.stderr)
+        print(f"[open_kitchen_guard] marker write failed: {e}", file=sys.stderr)
 
     sys.exit(0)
 

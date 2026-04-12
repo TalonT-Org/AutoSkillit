@@ -70,9 +70,7 @@ def _resolve_int(env_var: str, hook_value: object, default: int) -> int:
     return default
 
 
-def resolve_quota_settings(
-    *, cache_path_override: str | None = None
-) -> QuotaHookSettings:
+def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHookSettings:
     """Resolve quota hook settings from the layered hierarchy.
 
     ``cache_path``: ``cache_path_override`` > env var > hook config > default.

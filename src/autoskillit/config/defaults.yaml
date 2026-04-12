@@ -200,6 +200,11 @@ skills:
     - run-experiment
     - write-report
     - validate-audit
+    - vis-lens-always-on
+    - vis-lens-antipattern
+    - vis-lens-chart-select
+    - vis-lens-domain-norms
+    - vis-lens-uncertainty
   tier3:
     - prepare-pr
     - compose-pr

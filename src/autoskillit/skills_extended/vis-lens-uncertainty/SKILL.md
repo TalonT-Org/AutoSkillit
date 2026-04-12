@@ -53,7 +53,7 @@ hooks:
 - Label every uncertainty overlay with its exact measure (SD, SE, CI95, PI95) and n in the figure caption
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-uncertainty/vis_spec_uncertainty_{YYYY-MM-DD_HHMMSS}.md`
+- Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-uncertainty/vis_spec_uncertainty_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
 

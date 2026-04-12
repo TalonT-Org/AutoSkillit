@@ -72,7 +72,7 @@ overlays. The base lens should remain general enough to bootstrap any sub-area.
 - Sort the gap list absent-first, then partial
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-domain-norms/vis_spec_domain_norms_{YYYY-MM-DD_HHMMSS}.md`
+- Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-domain-norms/vis_spec_domain_norms_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
 

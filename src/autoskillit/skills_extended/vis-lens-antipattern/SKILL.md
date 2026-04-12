@@ -73,7 +73,7 @@ hooks:
 - Populate the `anti_patterns` field in each yaml:figure-spec with the IDs of matched patterns
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-antipattern/vis_spec_antipattern_{YYYY-MM-DD_HHMMSS}.md`
+- Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-antipattern/vis_spec_antipattern_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
 

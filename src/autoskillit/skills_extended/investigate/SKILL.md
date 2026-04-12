@@ -176,7 +176,7 @@ LOG_DIR="$HOME/.claude/projects/-${PROJECT_PATH//\//-}"
 LOG_DIR="${LOG_DIR//--/-}"
 ```
 
-Search for `.jsonl` files containing prior `/investigate` invocations, **excluding subagent log subdirectories** (`*/subagents/*`) so prior subagent conversations are not double-counted:
+Search for `.jsonl` files containing prior `/autoskillit:investigate` invocations, **excluding subagent log subdirectories** (`*/subagents/*`) so prior subagent conversations are not double-counted:
 
 ```bash
 find "$LOG_DIR" -name "*.jsonl" -not -path "*/subagents/*" | \
@@ -197,7 +197,7 @@ git log --oneline -100 --format="%H %s" \
 For each matching commit, read the diff to check for symbol-level overlap with the current root cause:
 
 ```bash
-git show {hash} -- {AFFECTED_FILES}
+git show {HASH} -- {AFFECTED_FILES}
 ```
 
 Cross-reference: if a commit message references the same error type, component name, or function that the current investigation identified as the root cause, treat it as a prior fix for the same or a closely related issue.

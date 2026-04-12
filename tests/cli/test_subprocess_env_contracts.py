@@ -102,19 +102,20 @@ def test_autoskillit_subprocess_calls_inject_skip_stale_check_guard() -> None:
     )
 
 
-def test_stale_check_all_subprocess_calls_have_env_kwarg() -> None:
-    """Every subprocess.run call in cli/_stale_check.py must carry env=.
+DRIFT_GUARD = "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK"
 
-    This is a stronger contract than the autoskillit-prefix scanner in this file,
-    which only checks ['autoskillit', ...] prefix calls. The stale check also
-    invokes ['uv', ...] commands and those must also carry env=_skip_env to
-    prevent environment pollution into child processes.
+
+def test_update_checks_all_subprocess_calls_have_env_kwarg() -> None:
+    """Every subprocess.run call in cli/_update_checks.py must carry env=.
+
+    The unified update check invokes ['uv', ...] and ['autoskillit', ...]
+    commands and must pass _skip_env to prevent re-entering the check.
     """
-    stale_check = CLI_ROOT / "_stale_check.py"
-    if not stale_check.exists():
+    update_checks = CLI_ROOT / "_update_checks.py"
+    if not update_checks.exists():
         pytest.skip("Source tree unavailable")
 
-    content = stale_check.read_text(encoding="utf-8")
+    content = update_checks.read_text(encoding="utf-8")
     tree = ast.parse(content)
 
     violations: list[str] = []
@@ -134,22 +135,20 @@ def test_stale_check_all_subprocess_calls_have_env_kwarg() -> None:
             violations.append(f"Line {node.lineno}: subprocess.{func.attr}() missing env= kwarg")
 
     assert not violations, (
-        "All subprocess calls in _stale_check.py must carry env=_skip_env.\n"
+        "All subprocess calls in _update_checks.py must carry env=_skip_env.\n"
         + "\n".join(violations)
     )
 
-    # File-level: must also define AUTOSKILLIT_SKIP_STALE_CHECK
+    # File-level: must define both guard env vars
     assert REQUIRED_GUARD in content
-
-
-DRIFT_GUARD = "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK"
+    assert DRIFT_GUARD in content
 
 
 def test_all_call_sites_set_autoskillit_skip_source_drift_check() -> None:
     """Every CLI file that defines AUTOSKILLIT_SKIP_STALE_CHECK must also define
     AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK — both guards travel together.
 
-    Rationale: a subprocess launched by the stale-check path could re-enter the
+    Rationale: a subprocess launched by the update-check path could re-enter the
     drift gate unless both skip vars are set.  This test enforces co-location.
     """
     if not CLI_ROOT.is_dir():
@@ -163,7 +162,6 @@ def test_all_call_sites_set_autoskillit_skip_source_drift_check() -> None:
         )
         if REQUIRED_GUARD not in non_comment:
             continue
-        # This file defines the stale-check guard — it must also define the drift guard
         if DRIFT_GUARD not in non_comment:
             rel = py_file.relative_to(CLI_ROOT.parents[2])
             violations.append(f"{rel}: defines '{REQUIRED_GUARD}' but not '{DRIFT_GUARD}'")
@@ -174,17 +172,13 @@ def test_all_call_sites_set_autoskillit_skip_source_drift_check() -> None:
     )
 
 
-def test_source_drift_all_subprocess_calls_have_env_kwarg() -> None:
-    """Every subprocess.run call in cli/_source_drift.py must carry env=.
-
-    The drift gate launches install commands and must pass _skip_env to avoid
-    re-entering either the stale-check or the drift gate.
-    """
-    source_drift = CLI_ROOT / "_source_drift.py"
-    if not source_drift.exists():
+def test_update_command_all_subprocess_calls_have_env_kwarg() -> None:
+    """Every subprocess.run call in cli/_update.py must carry env=."""
+    update_cmd = CLI_ROOT / "_update.py"
+    if not update_cmd.exists():
         pytest.skip("Source tree unavailable")
 
-    content = source_drift.read_text(encoding="utf-8")
+    content = update_cmd.read_text(encoding="utf-8")
     tree = ast.parse(content)
 
     violations: list[str] = []
@@ -204,14 +198,11 @@ def test_source_drift_all_subprocess_calls_have_env_kwarg() -> None:
             violations.append(f"Line {node.lineno}: subprocess.{func.attr}() missing env= kwarg")
 
     assert not violations, (
-        "All subprocess calls in _source_drift.py must carry env=_skip_env.\n"
-        + "\n".join(violations)
+        "All subprocess calls in _update.py must carry env=_skip_env.\n" + "\n".join(violations)
     )
 
-    # File-level: must define both guard env vars
-    assert DRIFT_GUARD in content, (
-        f"_source_drift.py must define '{DRIFT_GUARD}' in its _skip_env dict"
-    )
+    assert REQUIRED_GUARD in content
+    assert DRIFT_GUARD in content
 
 
 # ─────────────────────────────────────────────────────────────────────────────

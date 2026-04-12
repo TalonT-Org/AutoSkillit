@@ -1200,8 +1200,9 @@ def test_check_source_version_drift_ok_outside_source_repo(
 ) -> None:
     """GIT_VCS install with empty cache reports OK (no drift observable)."""
     import autoskillit.cli._source_drift as _sd
-    from autoskillit.cli._doctor import _check_source_version_drift
     from autoskillit.cli._source_drift import InstallInfo, InstallType
+
+    from autoskillit.cli._doctor import _check_source_version_drift
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -1224,8 +1225,9 @@ def test_check_source_version_drift_ok_for_editable_install(
 ) -> None:
     """LOCAL_EDITABLE installs are under active development — drift check is skipped."""
     import autoskillit.cli._source_drift as _sd
-    from autoskillit.cli._doctor import _check_source_version_drift
     from autoskillit.cli._source_drift import InstallInfo, InstallType
+
+    from autoskillit.cli._doctor import _check_source_version_drift
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -1247,8 +1249,9 @@ def test_check_source_version_drift_ok_for_pinned_sha(
 ) -> None:
     """When requested_revision == commit_id, resolve_reference_sha short-circuits → no drift."""
     import autoskillit.cli._source_drift as _sd
-    from autoskillit.cli._doctor import _check_source_version_drift
     from autoskillit.cli._source_drift import InstallInfo, InstallType
+
+    from autoskillit.cli._doctor import _check_source_version_drift
     from autoskillit.core import Severity
 
     sha = "abcdef1234567890abcdef1234567890"
@@ -1272,8 +1275,9 @@ def test_check_source_version_drift_ok_when_cache_empty(
 ) -> None:
     """When cache is empty (no prior online fetch), doctor reports OK with explanatory message."""
     import autoskillit.cli._source_drift as _sd
-    from autoskillit.cli._doctor import _check_source_version_drift
     from autoskillit.cli._source_drift import InstallInfo, InstallType
+
+    from autoskillit.cli._doctor import _check_source_version_drift
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -1299,8 +1303,9 @@ def test_check_source_version_drift_warning_on_drift(
 ) -> None:
     """When cache has a different reference SHA than installed, reports WARNING with short SHAs."""
     import autoskillit.cli._source_drift as _sd
-    from autoskillit.cli._doctor import _check_source_version_drift
     from autoskillit.cli._source_drift import InstallInfo, InstallType
+
+    from autoskillit.cli._doctor import _check_source_version_drift
     from autoskillit.core import Severity
 
     installed_sha = "installed123abc"
@@ -1327,11 +1332,11 @@ def test_check_source_version_drift_never_makes_network_call(
 ) -> None:
     """Doctor check must never make network calls — httpx and subprocess must not be called."""
 
-    import httpx
-
     import autoskillit.cli._source_drift as _sd
-    from autoskillit.cli._doctor import _check_source_version_drift
+    import httpx
     from autoskillit.cli._source_drift import InstallInfo, InstallType
+
+    from autoskillit.cli._doctor import _check_source_version_drift
 
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
@@ -1546,3 +1551,158 @@ class TestCheckClaudeProcessStateBreakdown:
         assert result.severity == Severity.OK
         assert "ps unavailable" in result.message
         assert "FileNotFoundError" in result.message
+
+
+class TestDoctorInstallClassification:
+    """Tests for _check_install_classification doctor check."""
+
+    @pytest.mark.parametrize(
+        "revision,expected_fragment",
+        [
+            ("stable", "stable"),
+            ("integration", "integration"),
+        ],
+    )
+    def test_doctor_reports_install_classification_git_vcs(
+        self, monkeypatch: pytest.MonkeyPatch, revision: str, expected_fragment: str
+    ) -> None:
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_install_classification
+
+        fake_direct_url = json.dumps(
+            {
+                "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+                "vcs_info": {
+                    "vcs": "git",
+                    "requested_revision": revision,
+                    "commit_id": "abc123",
+                },
+            }
+        )
+        from unittest.mock import MagicMock
+
+        fake_dist = MagicMock()
+        fake_dist.read_text.return_value = fake_direct_url
+        monkeypatch.setattr(
+            "importlib.metadata.Distribution.from_name",
+            lambda _name: fake_dist,
+        )
+        result = _check_install_classification()
+        assert result.severity == Severity.OK
+        assert expected_fragment in result.message
+
+    def test_doctor_reports_install_classification_unknown(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from autoskillit.cli._doctor import Severity, _check_install_classification
+
+        fake_dist = MagicMock()
+        fake_dist.read_text.return_value = None
+        monkeypatch.setattr(
+            "importlib.metadata.Distribution.from_name",
+            lambda _name: fake_dist,
+        )
+        result = _check_install_classification()
+        assert result.severity == Severity.WARNING
+        assert "could not be detected" in result.message
+
+
+class TestDoctorUpdateDismissalState:
+    """Tests for _check_update_dismissal_state doctor check."""
+
+    def test_doctor_reports_dismissal_state_empty(self, tmp_path: Path) -> None:
+        from autoskillit.cli._doctor import Severity, _check_update_dismissal_state
+
+        result = _check_update_dismissal_state(home=tmp_path)
+        assert result.severity == Severity.OK
+        assert "No active dismissal" in result.message
+
+    def test_doctor_reports_dismissal_state_populated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import json
+        from datetime import UTC, datetime
+        from unittest.mock import MagicMock
+
+        from autoskillit.cli._doctor import Severity, _check_update_dismissal_state
+        from autoskillit.cli._update_checks import _write_dismiss_state
+
+        # Seed state
+        dismissed_at = datetime.now(UTC).isoformat()
+        _write_dismiss_state(
+            tmp_path,
+            {
+                "update_prompt": {
+                    "dismissed_at": dismissed_at,
+                    "dismissed_version": "0.7.77",
+                    "conditions": ["binary"],
+                }
+            },
+        )
+
+        # Patch detect_install to return stable GIT_VCS
+        fake_direct_url = json.dumps(
+            {
+                "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+                "vcs_info": {
+                    "vcs": "git",
+                    "requested_revision": "stable",
+                    "commit_id": "abc123",
+                },
+            }
+        )
+        fake_dist = MagicMock()
+        fake_dist.read_text.return_value = fake_direct_url
+        monkeypatch.setattr(
+            "importlib.metadata.Distribution.from_name",
+            lambda _name: fake_dist,
+        )
+
+        result = _check_update_dismissal_state(home=tmp_path)
+        assert result.severity == Severity.OK
+        assert "dismissed until" in result.message
+        assert "binary" in result.message
+
+
+class TestDoctorSourceVersionDriftUsesNetwork:
+    """Test that source_version_drift now uses network=True."""
+
+    def test_doctor_source_version_drift_uses_network_true(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """_check_source_version_drift must call resolve_reference_sha with network=True."""
+        import json
+        from unittest.mock import MagicMock
+
+        from autoskillit.cli._doctor import _check_source_version_drift
+
+        fake_direct_url = json.dumps(
+            {
+                "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+                "vcs_info": {
+                    "vcs": "git",
+                    "requested_revision": "stable",
+                    "commit_id": "abc123",
+                },
+            }
+        )
+        fake_dist = MagicMock()
+        fake_dist.read_text.return_value = fake_direct_url
+        monkeypatch.setattr(
+            "importlib.metadata.Distribution.from_name",
+            lambda _name: fake_dist,
+        )
+
+        network_args: list[bool] = []
+        monkeypatch.setattr(
+            "autoskillit.cli._update_checks.resolve_reference_sha",
+            lambda info, home, **kw: network_args.append(kw.get("network", True)) or None,
+        )
+
+        _check_source_version_drift(home=tmp_path)
+        assert any(n is True for n in network_args), (
+            "_check_source_version_drift must call resolve_reference_sha with network=True"
+        )

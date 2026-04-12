@@ -343,21 +343,18 @@ def _check_config_layers_for_secrets(
 
 
 def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
-    """Cache-only source-drift check.
+    """Network source-drift check.
 
-    Compares the installed commit SHA against the last-known HEAD of the branch
-    the binary was installed from.  Uses the disk cache written by previous
-    online invocations — **never makes a network request**.
+    Compares the installed commit SHA against the current HEAD of the branch
+    the binary was installed from.  Uses a network request to get the latest
+    SHA (with disk-cache TTL fallback).
     """
     check_name = "source_version_drift"
     _home = home or Path.home()
 
     try:
-        from autoskillit.cli._source_drift import (
-            InstallType,
-            detect_install,
-            resolve_reference_sha,
-        )
+        from autoskillit.cli._install_info import InstallType, detect_install
+        from autoskillit.cli._update_checks import resolve_reference_sha
 
         info = detect_install()
 
@@ -373,14 +370,14 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
                 "Not a source-tracked install — drift check not applicable",
             )
 
-        # GIT_VCS: resolve SHA from disk cache only (network=False)
-        ref_sha = resolve_reference_sha(info, _home, network=False)
+        # GIT_VCS: resolve SHA via network (with disk-cache fallback)
+        ref_sha = resolve_reference_sha(info, _home, network=True)
 
         if ref_sha is None:
             return DoctorResult(
                 Severity.OK,
                 check_name,
-                "Source drift cache is empty — run a command online to populate the check",
+                "Source drift reference SHA unavailable — check network connectivity",
             )
 
         if info.commit_id == ref_sha:
@@ -399,6 +396,66 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
         _log.debug("Source drift check failed", exc_info=True)
         return DoctorResult(
             Severity.OK, check_name, "Source drift check skipped (unexpected error)"
+        )
+
+
+def _check_install_classification() -> DoctorResult:
+    """Classify the current autoskillit install type via direct_url.json."""
+    check_name = "install_classification"
+    try:
+        from autoskillit.cli._install_info import InstallType, detect_install
+
+        info = detect_install()
+        if info.install_type == InstallType.UNKNOWN:
+            return DoctorResult(
+                Severity.WARNING,
+                check_name,
+                "install type could not be detected from direct_url.json",
+            )
+        commit_short = (info.commit_id or "")[:8]
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"install_type={info.install_type}, "
+            f"requested_revision={info.requested_revision}, "
+            f"commit_id={commit_short}",
+        )
+    except Exception:
+        _log.debug("Install classification check failed", exc_info=True)
+        return DoctorResult(
+            Severity.OK, check_name, "Install classification check skipped (unexpected error)"
+        )
+
+
+def _check_update_dismissal_state(home: Path | None = None) -> DoctorResult:
+    """Report the current update-prompt dismissal state."""
+    check_name = "update_dismissal_state"
+    _home = home or Path.home()
+    try:
+        from autoskillit.cli._install_info import detect_install, dismissal_window
+        from autoskillit.cli._update_checks import _read_dismiss_state
+
+        state = _read_dismiss_state(_home)
+        entry = state.get("update_prompt")
+        if not isinstance(entry, dict) or "dismissed_at" not in entry:
+            return DoctorResult(Severity.OK, check_name, "No active dismissal")
+
+        from datetime import datetime
+
+        info = detect_install()
+        window = dismissal_window(info)
+        dismissed_at = datetime.fromisoformat(str(entry["dismissed_at"]))
+        expiry = (dismissed_at + window).strftime("%Y-%m-%d")
+        conditions = entry.get("conditions", [])
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"update_prompt dismissed until {expiry}; conditions={conditions}",
+        )
+    except Exception:
+        _log.debug("Update dismissal state check failed", exc_info=True)
+        return DoctorResult(
+            Severity.OK, check_name, "Update dismissal state check skipped (unexpected error)"
         )
 
 
@@ -688,7 +745,7 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 12: No stale autoskillit entry points outside ~/.local/bin
     results.append(_check_stale_entry_points())
 
-    # Check 13: Source version drift (cache-only, never network)
+    # Check 13: Source version drift (network, with disk-cache TTL fallback)
     results.append(_check_source_version_drift())
 
     # Check 14: Quota cache schema version
@@ -696,6 +753,12 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 15: claude process state breakdown
     results.append(_check_claude_process_state_breakdown())
+
+    # Check 16: Install classification from direct_url.json
+    results.append(_check_install_classification())
+
+    # Check 17: Update-prompt dismissal state
+    results.append(_check_update_dismissal_state())
 
     # Output
     if output_json:

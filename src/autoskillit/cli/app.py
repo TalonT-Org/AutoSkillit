@@ -211,6 +211,14 @@ def upgrade() -> None:
 
 
 @app.command
+def update() -> None:
+    """Upgrade autoskillit to the latest version on your install's branch."""
+    from autoskillit.cli._update import run_update_command
+
+    run_update_command()
+
+
+@app.command
 def doctor(*, output_json: bool = False):
     """Check project setup for common issues."""
     from autoskillit.cli._doctor import run_doctor
@@ -724,9 +732,7 @@ def main() -> None:
     """Entry point for autoskillit."""
     _first_arg = sys.argv[1] if len(sys.argv) > 1 else "serve"
     if _first_arg != "serve":
-        from autoskillit.cli._source_drift import run_source_drift_check
-        from autoskillit.cli._stale_check import run_stale_check
+        from autoskillit.cli._update_checks import run_update_checks
 
-        run_stale_check()
-        run_source_drift_check()
+        run_update_checks()
     app()

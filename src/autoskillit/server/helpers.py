@@ -17,7 +17,7 @@ from autoskillit.execution import (
     resolve_log_dir,  # noqa: F401 — used by tools_github.py, tools_status.py
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
-from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.pipeline import gate_error_result
 from autoskillit.recipe import (
     StaleItem,

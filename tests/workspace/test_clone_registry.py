@@ -325,6 +325,7 @@ class TestBatchDeleteRegistryWriteback:
 
         mock_remove = MagicMock(return_value={"removed": "true"})
         batch_delete(reg, mock_remove, owner="kit-1")
+        mock_remove.assert_called_once_with("/tmp/a", "false")
 
         mock_remove2 = MagicMock(return_value={"removed": "true"})
         result2 = batch_delete(reg, mock_remove2, owner="kit-1")

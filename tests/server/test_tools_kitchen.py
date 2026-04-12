@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+
 
 def _make_mock_ctx():
     """Return a minimal mock ToolContext with a gate."""
@@ -53,6 +55,26 @@ def test_close_kitchen_disables_gate(tmp_path, monkeypatch):
     mock_ctx.gate.disable.assert_called_once()
 
 
+def test_hook_config_path_is_inside_temp_dir(tmp_path):
+    """_hook_config_path() must resolve to a path inside the project temp directory.
+
+    This invariant ensures .hook_config.json receives automatic gitignore coverage
+    from temp/.gitignore ('*') and can never produce a gitignore gap regardless of
+    whatever entries are present in .gitignore or _AUTOSKILLIT_GITIGNORE_ENTRIES.
+    """
+    from autoskillit.core.io import resolve_temp_dir
+    from autoskillit.server.helpers import _hook_config_path
+
+    hook_path = _hook_config_path(tmp_path)
+    temp_dir = resolve_temp_dir(tmp_path, None)
+
+    assert hook_path.is_relative_to(temp_dir), (
+        f"_hook_config_path() returned {hook_path!r} which is NOT inside "
+        f"temp dir {temp_dir!r}. Session-bridge files must live in temp/ "
+        f"to receive automatic gitignore coverage via temp/.gitignore."
+    )
+
+
 # T2c
 def test_close_kitchen_no_file_no_error(tmp_path, monkeypatch):
     """_close_kitchen_handler() doesn't raise when no gate file exists."""
@@ -66,7 +88,7 @@ def test_close_kitchen_no_file_no_error(tmp_path, monkeypatch):
             _close_kitchen_handler()  # Should not raise
 
     # Gate file was never created — confirm it still does not exist
-    assert not (tmp_path / ".autoskillit" / ".hook_config.json").exists()
+    assert not tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS).exists()
 
 
 # T-CACHE-1
@@ -115,7 +137,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
         "_get_ctx must be called in both _open_kitchen_handler and _write_hook_config; "
         "if call_count < 2 the patch did not cover _write_hook_config's deferred import"
     )
-    hook_cfg = tmp_path / ".autoskillit" / ".hook_config.json"
+    hook_cfg = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     assert hook_cfg.exists(), "Hook config file must be written by open_kitchen"
     data = json.loads(hook_cfg.read_text())
     assert data["quota_guard"]["cache_max_age"] == 300
@@ -157,7 +179,7 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
                 await _open_kitchen_handler()
                 _close_kitchen_handler()
 
-    hook_cfg = tmp_path / ".autoskillit" / ".hook_config.json"
+    hook_cfg = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     assert not hook_cfg.exists(), "Hook config must be removed by close_kitchen"
 
 

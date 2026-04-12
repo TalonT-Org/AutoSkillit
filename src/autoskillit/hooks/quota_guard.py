@@ -18,26 +18,27 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+# stdlib-only subprocess hook: import _fmt_primitives by bare name via sys.path
+# (test_hooks_are_stdlib_only). Venv tests use the autoskillit.hooks package path.
+_HOOKS_DIR = str(Path(__file__).resolve().parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402
+    _HOOK_CONFIG_PATH_COMPONENTS,
+    _read_hook_config,
+)
+
 _DEFAULT_CACHE_PATH = "~/.claude/autoskillit_quota_cache.json"
 _DEFAULT_CACHE_MAX_AGE = 300  # seconds
 
-HOOK_CONFIG_FILENAME = ".hook_config.json"
-HOOK_DIR_COMPONENTS = (".autoskillit",)
+# Public names preserved for test imports and the layer enforcement test.
+# Derived from _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS so the tuple has
+# exactly one source of truth across the hooks layer.
+HOOK_CONFIG_FILENAME: str = _HOOK_CONFIG_PATH_COMPONENTS[-1]
+HOOK_DIR_COMPONENTS: tuple[str, ...] = _HOOK_CONFIG_PATH_COMPONENTS[:-1]
 
 _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
-
-
-def _read_hook_config() -> dict:
-    """Read server-written config from ``<cwd>/.autoskillit/.hook_config.json``.
-
-    Returns the quota_guard section, or {} if the file is absent or unreadable.
-    This file is written by open_kitchen and removed by close_kitchen.
-    """
-    try:
-        config_path = Path.cwd().joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME)
-        return json.loads(config_path.read_text()).get("quota_guard", {})
-    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
-        return {}
 
 
 def _read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:

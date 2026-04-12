@@ -14,6 +14,8 @@ from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+
 
 def _run_hook(
     event: dict | None = None,
@@ -874,7 +876,7 @@ def test_e4_kitchen_id_renamed_in_hook_config(tmp_path: Path) -> None:
     from autoskillit.hooks.token_summary_hook import _read_kitchen_id
 
     # New format
-    cfg_path = tmp_path / ".autoskillit" / ".hook_config.json"
+    cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     cfg_path.parent.mkdir(parents=True)
     cfg_path.write_text(json.dumps({"kitchen_id": "new-kitchen-uuid"}))
 

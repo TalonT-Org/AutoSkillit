@@ -816,28 +816,28 @@ def test_native_tool_guard_absent_from_hook_registry():
 
 
 def test_hook_config_filename_and_dir_match_quota_check():
-    """quota_guard.py must agree with tools_kitchen on the hook config path constants.
+    """server/helpers._hook_config_path must resolve to the same path as
+    _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS declares.
 
-    The server (tools_kitchen.py) writes the config; the hook (quota_guard.py) reads it.
-    They must agree on both the filename and the directory components, or the quota hook
-    will silently fail to read its configuration.
+    _fmt_primitives is the canonical hooks-layer source of truth for the hook
+    config path tuple. The server (tools_kitchen.py) writes the config via
+    server.helpers._hook_config_path; every hook reads the same tuple from
+    _fmt_primitives. They must resolve to an identical path, or the writer and
+    readers will silently disagree on the file location.
     """
-    import importlib
+    from pathlib import Path
 
-    from autoskillit.server.helpers import (
-        _HOOK_CONFIG_FILENAME,
-        _HOOK_DIR_COMPONENTS,
-    )
+    from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+    from autoskillit.server.helpers import _hook_config_path
 
-    quota_mod = importlib.import_module("autoskillit.hooks.quota_guard")
+    root = Path("/tmp/project-root")
+    expected = root.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    actual = _hook_config_path(root)
 
-    assert quota_mod.HOOK_CONFIG_FILENAME == _HOOK_CONFIG_FILENAME, (
-        f"quota_check.HOOK_CONFIG_FILENAME={quota_mod.HOOK_CONFIG_FILENAME!r} "
-        f"does not match tools_kitchen._HOOK_CONFIG_FILENAME={_HOOK_CONFIG_FILENAME!r}"
-    )
-    assert quota_mod.HOOK_DIR_COMPONENTS == _HOOK_DIR_COMPONENTS, (
-        f"quota_check.HOOK_DIR_COMPONENTS={quota_mod.HOOK_DIR_COMPONENTS!r} "
-        f"does not match tools_kitchen._HOOK_DIR_COMPONENTS={_HOOK_DIR_COMPONENTS!r}"
+    assert actual == expected, (
+        f"server.helpers._hook_config_path({root!r})={actual!r} "
+        f"does not match path derived from "
+        f"_fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS={expected!r}"
     )
 
 

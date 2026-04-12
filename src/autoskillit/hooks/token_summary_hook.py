@@ -20,6 +20,16 @@ import subprocess
 import sys
 from typing import Any
 
+# stdlib-only subprocess hook: import _fmt_primitives by bare name via sys.path
+# (test_hooks_are_stdlib_only). Venv tests use the autoskillit.hooks package path.
+_HOOKS_DIR = str(pathlib.Path(__file__).resolve().parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402
+    _HOOK_CONFIG_PATH_COMPONENTS,
+)
+
 _SUFFIX_RE = re.compile(r"-\d+$")
 _PR_PARTS_RE = re.compile(r"https://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
 
@@ -116,7 +126,7 @@ def _read_kitchen_id(base: pathlib.Path | None = None) -> str:
     Falls back to 'pipeline_id' key for configs written before the rename.
     """
     root = base if base is not None else pathlib.Path.cwd()
-    path = root / ".autoskillit" / ".hook_config.json"
+    path = root.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):

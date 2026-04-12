@@ -1845,7 +1845,7 @@ class TestResearchRecipeStructure:
         assert "re_write_report" in recipe.steps
         step = recipe.steps["re_write_report"]
         assert step.tool == "run_skill"
-        assert step.on_success == "re_test"
+        assert step.on_success == "re_stage_bundle"
 
     def test_re_test_step(self, recipe) -> None:
         assert "re_test" in recipe.steps
@@ -1858,7 +1858,7 @@ class TestResearchRecipeStructure:
         for step_name in ("re_run_experiment", "re_write_report", "re_test"):
             step = recipe.steps[step_name]
             assert step.on_failure in ("begin_archival", "re_push_research")
-        assert recipe.steps["re_push_research"].on_success == "begin_archival"
+        assert recipe.steps["re_push_research"].on_success == "finalize_bundle"
 
     def test_audit_claims_ingredient_default_false(self, recipe) -> None:
         assert "audit_claims" in recipe.ingredients
@@ -2077,37 +2077,35 @@ class TestResearchRecipeStructure:
             "create_worktree must copy plan versions to plan-versions/"
         )
 
-    def test_commit_research_artifacts_step_exists(self, recipe) -> None:
-        """A commit_research_artifacts step must exist to capture phase artifacts."""
-        assert "commit_research_artifacts" in recipe.steps, (
-            "research.yaml must have a commit_research_artifacts step for phase artifacts"
+    def test_stage_bundle_step_exists(self, recipe) -> None:
+        """A stage_bundle step must exist to organize phase artifacts."""
+        assert "stage_bundle" in recipe.steps, (
+            "research.yaml must have a stage_bundle step for phase artifact staging"
         )
-        step = recipe.steps["commit_research_artifacts"]
+        step = recipe.steps["stage_bundle"]
         cmd = step.with_args["cmd"]
         assert "phase-groups" in cmd, "Must copy make-groups output"
         assert "phase-plans" in cmd, "Must copy make-plan output"
 
-    def test_test_routes_to_commit_research_artifacts(self, recipe) -> None:
-        """test step must route to commit_research_artifacts, not directly to push_branch."""
+    def test_test_routes_to_push_branch(self, recipe) -> None:
+        """test step must route to push_branch now that commit_research_artifacts is removed."""
         step = recipe.steps["test"]
-        assert step.on_success == "commit_research_artifacts", (
-            "test.on_success must be commit_research_artifacts to capture phase artifacts"
-            " before push"
+        assert step.on_success == "push_branch", (
+            "test.on_success must be push_branch after commit_research_artifacts is removed"
         )
 
-    def test_retest_routes_to_commit_research_artifacts(self, recipe) -> None:
-        """retest step must route to commit_research_artifacts, not directly to push_branch."""
+    def test_retest_routes_to_push_branch(self, recipe) -> None:
+        """retest step must route to push_branch now that commit_research_artifacts is removed."""
         step = recipe.steps["retest"]
-        assert step.on_success == "commit_research_artifacts", (
-            "retest.on_success must be commit_research_artifacts to capture phase artifacts"
-            " before push"
+        assert step.on_success == "push_branch", (
+            "retest.on_success must be push_branch after commit_research_artifacts is removed"
         )
 
-    def test_commit_research_artifacts_routes_to_push_branch(self, recipe) -> None:
-        """commit_research_artifacts must route to push_branch on both success and failure."""
-        step = recipe.steps["commit_research_artifacts"]
-        assert step.on_success == "push_branch"
-        assert step.on_failure == "push_branch"
+    def test_stage_bundle_routes_to_compose_research_pr(self, recipe) -> None:
+        """stage_bundle must route to compose_research_pr on success and failure."""
+        step = recipe.steps["stage_bundle"]
+        assert step.on_success == "compose_research_pr"
+        assert step.on_failure == "compose_research_pr"
 
 
 # ---------------------------------------------------------------------------

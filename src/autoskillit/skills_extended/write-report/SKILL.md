@@ -1,5 +1,5 @@
 ---
-name: write-report
+name: generate-report
 categories: [research]
 description: Synthesize experiment results into a structured research report in the research/ folder. Supports --inconclusive flag.
 hooks:
@@ -28,7 +28,7 @@ results are valid findings, not failures.
 ## Arguments
 
 ```
-/autoskillit:write-report {worktree_path} {results_path} [--inconclusive]
+/autoskillit:generate-report {worktree_path} {results_path} [--inconclusive]
 ```
 
 - `{worktree_path}` — Absolute path to the worktree (required). First path-like
@@ -39,6 +39,14 @@ results are valid findings, not failures.
   (retry exhaustion or insufficient evidence). When present, the report
   emphasizes what was learned and why evidence was insufficient, rather than
   framing as a failure.
+
+## Inputs
+
+In addition to the arguments above, this skill reads from the worktree:
+- `${RESEARCH_DIR}/visualization-plan.md` — figure inventory and `yaml:figure-spec`
+  blocks produced by `plan-visualization`. Read in Step 2.5 to drive plot generation.
+- `${RESEARCH_DIR}/report-plan.md` — section outline mapping figure IDs to report
+  sections. Read in Step 3 to place figure references correctly.
 
 ## Critical Constraints
 
@@ -83,11 +91,55 @@ Based on the `--inconclusive` flag and the experiment results status:
 - Recommendations based on evidence
 
 **Inconclusive (--inconclusive flag or status = INCONCLUSIVE/FAILED):**
+- Read `visualization-plan.md` if it exists.
+- For each figure-spec: if `data_source.path` exists and has data, generate
+  the plot (run Step 2.5 normally for that figure).
+- If data is absent: emit the placeholder block instead of the figure:
+  ```
+  > **[Figure {id} not produced]** — experiment concluded inconclusively;
+  > data required for this figure was not produced.
+  ```
+  Preserve the original `yaml:figure-spec` YAML block in the report for
+  reproducibility, indented under a `<details>` collapsible.
 - Emphasize what was learned despite lack of definitive answer
 - Document boundary conditions established
 - Clearly state what additional work would produce a conclusive result
 - Distinguish between "negative result" (evidence against hypothesis) and
   "inconclusive" (insufficient evidence either way)
+
+### Step 2.5 — Produce Visualizations
+
+If `${RESEARCH_DIR}/visualization-plan.md` exists:
+
+1. Read `visualization-plan.md`. If it contains zero figure specs (empty plan),
+   skip all sub-steps and proceed to Step 3.
+
+2. Create disposable plotting venv (once per run, reuse if already exists):
+   ```bash
+   python3 -m venv "${RESEARCH_DIR}/.plot-venv"
+   "${RESEARCH_DIR}/.plot-venv/bin/pip" install --quiet matplotlib seaborn
+   # If any figure-spec declares renderer: plotly:
+   "${RESEARCH_DIR}/.plot-venv/bin/pip" install --quiet plotly kaleido
+   ```
+
+3. For each `yaml:figure-spec` block in `visualization-plan.md`:
+   a. Write a Python plotting script to
+      `${RESEARCH_DIR}/scripts/fig{N}_{slug}.py`
+      that reads from `data_source.path` (or scans `results/` and `data/` if
+      the path does not exist — treat `data_source.path` as a hint).
+   b. Run the script:
+      ```bash
+      "${RESEARCH_DIR}/.plot-venv/bin/python" \
+        "${RESEARCH_DIR}/scripts/fig${N}_${slug}.py"
+      ```
+   c. Confirm output exists at `${RESEARCH_DIR}/images/fig-${N}.{png,svg}`.
+   d. On failure: emit `MISSING: fig-${N} — {error summary}` to stdout and
+      continue with remaining figures. Do not abort the skill.
+
+4. Commit scripts and images (if any were produced):
+   ```bash
+   git add research/ && git commit -m "Add visualization scripts and figures"
+   ```
 
 ### Step 3 — Write Report
 
@@ -156,6 +208,13 @@ enough detail for independent reproduction.}
 {Present data from the experiment. Use tables, code blocks, or whatever
 format best represents the measurements. No interpretation in this
 section — just facts.}
+
+### Figure References
+
+Reference figures by ID and caption only. NEVER embed images with `![](...)` syntax.
+The HTML report rendered by `bundle-local-report` reads `yaml:figure-spec` metadata
+and inserts `<img>` tags at the correct sections. Markdown prose uses:
+> "Figure 1 shows ..."  or  "(see Figure 1)"
 
 ### Metrics Provenance Check (mandatory before including any metrics)
 
@@ -240,6 +299,12 @@ for reproducibility even after the worktree is cleaned up.}
 ```{language}
 {script content}
 ```
+
+## Appendix: Visualization Scripts
+
+{Enumerate each script in `${RESEARCH_DIR}/scripts/fig*.py` produced during
+Step 2.5. Include the full script as a fenced Python code block. These are
+preserved for figure reproducibility even after the worktree is cleaned up.}
 
 ## Appendix: Raw Data
 

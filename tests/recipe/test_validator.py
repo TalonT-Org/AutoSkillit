@@ -36,12 +36,6 @@ class TestValidateRecipe:
         errors = validate_recipe(wf)
         assert errors == []
 
-    def test_missing_name_produces_error(self) -> None:
-        data = {**VALID_RECIPE, "name": ""}
-        wf = _parse_recipe(data)
-        errors = validate_recipe(wf)
-        assert any("name" in e.lower() for e in errors)
-
     # WF2
     def test_recipe_requires_name(self, tmp_path: Path) -> None:
         data = {**VALID_RECIPE, "name": ""}

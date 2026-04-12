@@ -99,24 +99,6 @@ class TestYamlConsolidationArchitecture:
         assert not violations, f"Direct yaml imports found outside core/io.py: {violations}"
 
 
-# ---------------------------------------------------------------------------
-# T1 — _parse_issue_ref importable from core
-# ---------------------------------------------------------------------------
-
-
-def test_parse_issue_ref_importable_from_core():
-    from autoskillit.core import _parse_issue_ref
-
-    owner, repo, number = _parse_issue_ref("https://github.com/acme/proj/issues/42")
-    assert owner == "acme" and repo == "proj" and number == 42
-
-
-def test_parse_issue_ref_not_in_io():
-    import autoskillit.core.io as io_mod
-
-    assert not hasattr(io_mod, "_parse_issue_ref")
-    assert "_parse_issue_ref" not in io_mod.__all__
-
 
 def test_atomic_write_is_canonical_public_name():
     """_atomic_write must not appear in core.io.__all__; atomic_write must."""

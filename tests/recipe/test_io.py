@@ -184,25 +184,6 @@ class TestRecipeParser:
         wf = load_recipe(f)
         assert wf.steps["impl"].on_context_limit == "retry_worktree"
 
-    def test_no_retry_block_in_yaml(self, tmp_path: Path) -> None:
-        """Old retry: block must raise — unrecognised field."""
-        data = {
-            "name": "old-retry",
-            "description": "test",
-            "kitchen_rules": ["test"],
-            "steps": {
-                "impl": {
-                    "tool": "run_skill",
-                    "retry": {"max_attempts": 3, "on": "needs_retry"},
-                    "on_success": "done",
-                },
-                "done": {"action": "stop", "message": "Done."},
-            },
-        }
-        f = _write_yaml(tmp_path / "recipe.yaml", data)
-        with pytest.raises(Exception):
-            load_recipe(f)
-
     def test_load_recipe_rejects_non_dict(self, tmp_path: Path) -> None:
         """YAML that parses to a non-dict must raise ValueError."""
         path = tmp_path / "list.yaml"

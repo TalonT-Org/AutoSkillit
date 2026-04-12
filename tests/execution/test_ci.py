@@ -53,10 +53,10 @@ def _jobs_response(*jobs: tuple[str, str]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_jittered_sleep_bounded():
-    for attempt in range(10):
-        val = _jittered_sleep(attempt)
-        assert 0 <= val <= 30  # cap is 30
+@pytest.mark.parametrize("attempt", range(10))
+def test_jittered_sleep_bounded(attempt: int) -> None:
+    val = _jittered_sleep(attempt)
+    assert 0 <= val <= 30  # cap is 30
 
 
 def test_jittered_sleep_variance():

@@ -1191,6 +1191,29 @@ skills:
     - "experiment_plan = /tmp/experiment_plan.md\n%%ORDER_UP%%"
     write_behavior: always
 
+  plan-visualization:
+    inputs:
+    - name: source_dir
+      type: directory_path
+      required: true
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: scope_report_path
+      type: string
+      required: false
+    outputs:
+    - name: visualization_plan_path
+      type: file_path
+    - name: report_plan_path
+      type: file_path
+    expected_output_patterns:
+    - "visualization_plan_path\\s*=\\s*/.+"
+    - "report_plan_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\n%%ORDER_UP%%"
+    write_behavior: always
+
   implement-experiment:
     inputs:
     - name: plan_path

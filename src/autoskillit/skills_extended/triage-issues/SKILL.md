@@ -32,6 +32,8 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Skip human escalation for ambiguous issues
 - Add useless comments to the codebase — do not use the codebase as a notepad
 - Create files outside `{{AUTOSKILLIT_TEMP}}/triage-issues/` directory
+- Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
+  `{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_{timestamp}.md` and use `--body-file`
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -225,14 +227,19 @@ For each issue in the working set classified as `recipe:implementation`:
    per issue but skip `gh issue edit`. Record `requirements_generated: true` in manifest.
 5. Otherwise, append via:
    ```bash
-   gh issue edit {N} --body "$(gh issue view {N} --json body -q .body)
+   ts=$(date +%Y-%m-%d_%H%M%S)
+   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_${ts}.md"
+   REQUIREMENTS_FILE="{{AUTOSKILLIT_TEMP}}/triage-issues/requirements_${ts}.md"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/triage-issues"
 
-## Requirements
+   # Fetch current body to temp file (avoids shell interpolation):
+   gh issue view {N} --json body -q .body > "${EDIT_BODY_FILE}"
 
-### {Group Name}
+   # Populate ${REQUIREMENTS_FILE} with the generated requirements content, then:
+   printf '\n\n## Requirements\n\n' >> "${EDIT_BODY_FILE}"
+   cat "${REQUIREMENTS_FILE}" >> "${EDIT_BODY_FILE}"
 
-- **REQ-{GRP}-001:** ...
-..."
+   gh issue edit {N} --body-file "${EDIT_BODY_FILE}"
    ```
 6. If the issue is too vague for clean extraction: skip silently and record
    `requirements_generated: false` in the manifest for that issue.

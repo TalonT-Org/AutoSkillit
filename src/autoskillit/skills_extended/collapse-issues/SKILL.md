@@ -60,6 +60,10 @@ Grouping analysis is performed as in-context LLM reasoning. No parallel sessions
 - Substitute a hyperlink, URL reference, or cross-reference for inlined body content
 - Use angle-bracket placeholder syntax (`<...>`) in the combined issue body — always paste actual retrieved content from fetch_github_issue
 - Use the body field from `gh issue list` for body assembly — only fetched_content[N] from per-issue fetch is authoritative
+- Use `--body` inline for `gh issue create` when the body contains verbatim multi-issue content —
+  always write to `{{AUTOSKILLIT_TEMP}}/collapse-issues/combined_body_{timestamp}.md` and use
+  `--body-file` (the combined body can exceed shell arg limits and the inline form contradicts
+  the SWITCH TO COPY MODE verbatim guarantee)
 
 **ALWAYS:**
 - Include `--force` on all label creation calls (`gh label create --force`) for idempotency
@@ -199,6 +203,16 @@ Format: `"Combined: <descriptive scope phrase>"`
 
 **7b. Build combined issue body:**
 
+Initialize the temp file:
+```bash
+ts=$(date +%Y-%m-%d_%H%M%S)
+COMBINED_BODY="{{AUTOSKILLIT_TEMP}}/collapse-issues/combined_body_${ts}.md"
+mkdir -p "{{AUTOSKILLIT_TEMP}}/collapse-issues"
+```
+
+Write the verbatim combined body to `${COMBINED_BODY}` using the Write tool (one section at a
+time via `>>` append). Write exactly this structure:
+
 ```
 <!-- Collapses: #N, #M, #P -->
 
@@ -206,7 +220,7 @@ This issue combines related work originally tracked in #N, #M, and #P.
 
 ## From #N: {original title of issue N}
 
-{Paste the complete, unmodified text of fetched_content[N].body here exactly
+{Write the complete, unmodified text of fetched_content[N].body here exactly
 as returned by fetch_github_issue. Do not summarize, paraphrase, truncate, or
 abbreviate any part of the body. Do not substitute a hyperlink, cross-reference,
 or descriptive sentence. Every heading, list item, code block, and paragraph
@@ -220,7 +234,7 @@ generate new prose. Copy only.}
 
 ## From #M: {original title of issue M}
 
-{Paste the complete, unmodified text of fetched_content[M].body here exactly
+{Write the complete, unmodified text of fetched_content[M].body here exactly
 as returned by fetch_github_issue. Do not summarize, paraphrase, truncate, or
 abbreviate any part of the body. Do not substitute a hyperlink, cross-reference,
 or descriptive sentence. Every heading, list item, code block, and paragraph
@@ -234,7 +248,7 @@ generate new prose. Copy only.}
 
 ## From #P: {original title of issue P}
 
-{Paste the complete, unmodified text of fetched_content[P].body here exactly
+{Write the complete, unmodified text of fetched_content[P].body here exactly
 as returned by fetch_github_issue. Do not summarize, paraphrase, truncate, or
 abbreviate any part of the body. Do not substitute a hyperlink, cross-reference,
 or descriptive sentence. Every heading, list item, code block, and paragraph
@@ -264,7 +278,7 @@ Repeat for each unique label in the collected set (e.g., `recipe:remediation`, `
 ```bash
 gh issue create \
   --title "Combined: <synthesized title>" \
-  --body "<combined body>" \
+  --body-file "${COMBINED_BODY}" \
   --label "recipe:implementation" \
   --label "enhancement" \
   [--repo {repo}]

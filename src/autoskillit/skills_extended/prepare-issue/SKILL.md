@@ -301,14 +301,16 @@ If route is `recipe:implementation`:
    ```bash
    ts=$(date +%Y-%m-%d_%H%M%S)
    EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/req_body_${ts}.md"
+   REQUIREMENTS_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/requirements_${ts}.md"
    mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
 
    # Fetch current issue body to temp file (avoids shell interpolation):
    gh issue view {N} --json body -q .body > "${EDIT_BODY_FILE}"
 
-   # Append requirements section:
+   # Use the Write tool to write the generated requirements to ${REQUIREMENTS_FILE},
+   # then append requirements section to the edit body:
    printf '\n\n## Requirements\n\n' >> "${EDIT_BODY_FILE}"
-   printf '%s\n' "{requirements_content}" >> "${EDIT_BODY_FILE}"
+   cat "${REQUIREMENTS_FILE}" >> "${EDIT_BODY_FILE}"
 
    gh issue edit {N} --body-file "${EDIT_BODY_FILE}"
    ```

@@ -373,8 +373,10 @@ async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
         data = json.loads(enrollment.read_text())
         assert data["schema_version"] == 1
         assert data["pid"] == proc.pid
-        handle.stop()
-        proc.kill()
+        try:
+            handle.stop()
+        finally:
+            proc.kill()
     assert not enrollment.exists(), "Enrollment must be deleted by stop()"
 
 
@@ -440,7 +442,9 @@ async def test_stop_unlinks_trace_and_enrollment(tmp_path):
         trace = tmp_path / f"autoskillit_trace_{proc.pid}.jsonl"
         enrollment = tmp_path / f"autoskillit_enrollment_{proc.pid}.json"
         assert trace.exists()
-        handle.stop()
-        proc.kill()
+        try:
+            handle.stop()
+        finally:
+            proc.kill()
     assert not trace.exists(), "Trace file must be deleted on clean stop()"
     assert not enrollment.exists(), "Enrollment sidecar must be deleted on clean stop()"

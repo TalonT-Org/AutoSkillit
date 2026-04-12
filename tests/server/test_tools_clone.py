@@ -273,6 +273,7 @@ class TestRegisterCloneStatusTool:
     @pytest.mark.anyio
     async def test_register_clone_status_success(self, tool_ctx, tmp_path):
         """register_clone_status status='success' writes registry and returns registered=true."""
+        tool_ctx.kitchen_id = "kit-test"
         registry_path = str(tmp_path / "registry.json")
         result = json.loads(
             await register_clone_status(
@@ -287,6 +288,7 @@ class TestRegisterCloneStatusTool:
     @pytest.mark.anyio
     async def test_register_clone_status_error(self, tool_ctx, tmp_path):
         """register_clone_status status='error' writes registry and returns registered=true."""
+        tool_ctx.kitchen_id = "kit-test"
         registry_path = str(tmp_path / "registry.json")
         result = json.loads(
             await register_clone_status(
@@ -318,13 +320,14 @@ class TestBatchCleanupClonesTool:
     @pytest.mark.anyio
     async def test_batch_cleanup_clones_deletes_success_preserves_error(self, tool_ctx, tmp_path):
         """batch_cleanup_clones removes success clones, skips error clones."""
+        tool_ctx.kitchen_id = "kit-test"
         registry_path = str(tmp_path / "registry.json")
         success_path = str(tmp_path / "success_clone")
         error_path = str(tmp_path / "error_clone")
 
         # Pre-populate registry with one success and one error entry
-        clone_registry.register_clone(success_path, "success", registry_path)
-        clone_registry.register_clone(error_path, "error", registry_path)
+        clone_registry.register_clone(success_path, "success", "kit-test", registry_path)
+        clone_registry.register_clone(error_path, "error", "kit-test", registry_path)
 
         # Mock clone_mgr so remove_clone reports success for the success clone
         mock_mgr = MagicMock()
@@ -341,6 +344,7 @@ class TestBatchCleanupClonesTool:
     @pytest.mark.anyio
     async def test_batch_cleanup_clones_empty_registry(self, tool_ctx, tmp_path):
         """batch_cleanup_clones with missing registry returns deleted=[], preserved=[]."""
+        tool_ctx.kitchen_id = "kit-test"
         registry_path = str(tmp_path / "nonexistent.json")
         result = json.loads(await batch_cleanup_clones(registry_path=registry_path))
         assert result == {"deleted": [], "delete_failures": [], "preserved": []}
@@ -348,11 +352,12 @@ class TestBatchCleanupClonesTool:
     @pytest.mark.anyio
     async def test_batch_cleanup_clones_nonexistent_path_does_not_raise(self, tool_ctx, tmp_path):
         """batch_cleanup_clones reports failure gracefully when a success clone path is gone."""
+        tool_ctx.kitchen_id = "kit-test"
         registry_path = str(tmp_path / "registry.json")
         missing_path = str(tmp_path / "gone_clone")
 
         # Register a success clone whose directory does not exist on disk
-        clone_registry.register_clone(missing_path, "success", registry_path)
+        clone_registry.register_clone(missing_path, "success", "kit-test", registry_path)
 
         # Mock clone_mgr to report removal failure (path not found)
         mock_mgr = MagicMock()
@@ -365,3 +370,191 @@ class TestBatchCleanupClonesTool:
         assert result["deleted"] == []
         # Confirm no exception was raised (we received a well-formed result dict)
         assert "error" not in result
+
+
+# ---------------------------------------------------------------------------
+# New tests: T12–T19 (owner-scoping feature for server tools)
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterCloneStatusOwner:
+    """T12–T13: register_clone_status propagates kitchen_id as owner."""
+
+    @pytest.mark.anyio
+    async def test_register_clone_status_propagates_kitchen_id_as_owner(
+        self, tool_ctx, tmp_path
+    ):
+        """T12 — register_clone_status writes entry with owner == kitchen_id."""
+        tool_ctx.kitchen_id = "kit-xyz"
+        reg = str(tmp_path / "registry.json")
+        result = json.loads(
+            await register_clone_status(clone_path="/c", status="success", registry_path=reg)
+        )
+        assert result["registered"] == "true"
+
+        import json as _json
+        from pathlib import Path as _Path
+
+        data = _json.loads(_Path(reg).read_text())
+        assert len(data["clones"]) == 1
+        assert data["clones"][0]["owner"] == "kit-xyz"
+
+    @pytest.mark.anyio
+    async def test_register_clone_status_rejects_when_kitchen_id_empty(
+        self, tool_ctx, tmp_path
+    ):
+        """T13 — register_clone_status returns registered=false when kitchen_id is empty."""
+        tool_ctx.kitchen_id = ""
+        reg = str(tmp_path / "registry.json")
+        result = json.loads(
+            await register_clone_status(clone_path="/c", status="success", registry_path=reg)
+        )
+        assert result["registered"] == "false"
+        assert "kitchen_id" in result["reason"] or "kitchen" in result["reason"]
+        from pathlib import Path as _Path
+
+        assert not _Path(reg).exists()
+
+
+class TestBatchCleanupClonesOwner:
+    """T14–T19: batch_cleanup_clones owner-scoping and escape hatch."""
+
+    @pytest.mark.anyio
+    async def test_batch_cleanup_clones_default_scopes_to_current_kitchen_id(
+        self, tool_ctx, tmp_path
+    ):
+        """T14 — default call only removes current kitchen's clones."""
+        reg = str(tmp_path / "registry.json")
+        clone_registry.register_clone("/clone-A", "success", "kit-A", reg)
+        clone_registry.register_clone("/clone-B", "success", "kit-B", reg)
+
+        tool_ctx.kitchen_id = "kit-A"
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+
+        result = json.loads(await batch_cleanup_clones(registry_path=reg))
+
+        assert "/clone-A" in result["deleted"]
+        assert "/clone-B" not in result["deleted"]
+        mock_mgr.remove_clone.assert_called_once_with("/clone-A", "false")
+
+    @pytest.mark.anyio
+    async def test_batch_cleanup_clones_all_owners_true_removes_every_success(
+        self, tool_ctx, tmp_path
+    ):
+        """T15 — all_owners='true' escape hatch removes all success entries."""
+        reg = str(tmp_path / "registry.json")
+        clone_registry.register_clone("/clone-A", "success", "kit-A", reg)
+        clone_registry.register_clone("/clone-B", "success", "kit-B", reg)
+
+        tool_ctx.kitchen_id = "kit-A"
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+
+        result = json.loads(
+            await batch_cleanup_clones(registry_path=reg, all_owners="true")
+        )
+
+        deleted = result["deleted"]
+        assert "/clone-A" in deleted
+        assert "/clone-B" in deleted
+
+    @pytest.mark.anyio
+    async def test_batch_cleanup_clones_empty_kitchen_id_and_all_owners_false_returns_error(
+        self, tool_ctx, tmp_path
+    ):
+        """T16 — empty kitchen_id with default all_owners='false' returns error."""
+        tool_ctx.kitchen_id = ""
+        reg = str(tmp_path / "registry.json")
+        mock_mgr = MagicMock()
+        tool_ctx.clone_mgr = mock_mgr
+
+        result = json.loads(await batch_cleanup_clones(registry_path=reg))
+
+        assert "error" in result
+        assert "kitchen_id" in result["error"] or "kitchen" in result["error"]
+        mock_mgr.remove_clone.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_batch_cleanup_clones_empty_kitchen_id_with_all_owners_true_succeeds(
+        self, tool_ctx, tmp_path
+    ):
+        """T17 — escape hatch works even when kitchen_id is empty (legacy recovery)."""
+        from pathlib import Path as _Path
+
+        reg_path = tmp_path / "registry.json"
+        reg_path.write_text(
+            __import__("json").dumps(
+                {"clones": [{"path": "/legacy", "status": "success"}]}
+            )
+        )
+
+        tool_ctx.kitchen_id = ""
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+
+        result = json.loads(
+            await batch_cleanup_clones(registry_path=str(reg_path), all_owners="true")
+        )
+
+        assert "/legacy" in result["deleted"]
+        mock_mgr.remove_clone.assert_called_once_with("/legacy", "false")
+
+    @pytest.mark.anyio
+    async def test_batch_cleanup_clones_invalid_all_owners_literal_treated_as_false(
+        self, tool_ctx, tmp_path
+    ):
+        """T18 — all_owners='yes' is not the escape hatch; scoped behaviour applies."""
+        reg = str(tmp_path / "registry.json")
+        clone_registry.register_clone("/clone-A", "success", "kit-A", reg)
+        clone_registry.register_clone("/clone-B", "success", "kit-B", reg)
+
+        tool_ctx.kitchen_id = "kit-A"
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+
+        result = json.loads(
+            await batch_cleanup_clones(registry_path=reg, all_owners="yes")
+        )
+
+        assert "/clone-A" in result["deleted"]
+        assert "/clone-B" not in result["deleted"]
+
+    @pytest.mark.anyio
+    async def test_two_kitchens_register_and_cleanup_isolated(self, tool_ctx, tmp_path):
+        """T19 — kitchen A's cleanup does not touch kitchen B's registry entry."""
+        import json as _json
+        from pathlib import Path as _Path
+
+        reg = str(tmp_path / "registry.json")
+
+        # Session 1: kit-1 registers
+        tool_ctx.kitchen_id = "kit-1"
+        await register_clone_status(clone_path="/clone-1", status="success", registry_path=reg)
+
+        # Session 2: kit-2 registers
+        tool_ctx.kitchen_id = "kit-2"
+        await register_clone_status(clone_path="/clone-2", status="success", registry_path=reg)
+
+        # Session 1 cleans up
+        tool_ctx.kitchen_id = "kit-1"
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+
+        result = json.loads(await batch_cleanup_clones(registry_path=reg))
+
+        # Only kit-1's clone is removed
+        assert "/clone-1" in result["deleted"]
+        assert "/clone-2" not in result["deleted"]
+        mock_mgr.remove_clone.assert_called_once_with("/clone-1", "false")
+
+        # kit-2's entry is still on disk
+        data = _json.loads(_Path(reg).read_text())
+        remaining = {e["path"]: e.get("owner") for e in data["clones"]}
+        assert "/clone-2" in remaining
+        assert remaining["/clone-2"] == "kit-2"

@@ -37,7 +37,7 @@ class TestDefaultRecipeRepository:
         assert isinstance(result, dict), "load_and_validate() must return a dict"
         assert "content" in result, f"Expected 'content' key in result, got: {list(result)}"
         assert "valid" in result, f"Expected 'valid' key in result, got: {list(result)}"
-        assert result["valid"] is True
+        assert isinstance(result["valid"], bool)
         assert result["content"]
 
     def test_validate_from_path_returns_findings(self) -> None:

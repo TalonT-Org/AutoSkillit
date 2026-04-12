@@ -89,12 +89,24 @@ def build_headless_cmd(
     *,
     model: str | None = None,
     env_extras: Mapping[str, str] | None = None,
+    base: Mapping[str, str] | None = None,
 ) -> ClaudeHeadlessCmd:
     """Build a Claude headless session command for skill execution."""
     cmd = ["claude", ClaudeFlags.PRINT, prompt, ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
     if model:
         cmd += [ClaudeFlags.MODEL, model]
-    return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(extras=env_extras))
+    return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(base=base, extras=env_extras))
+
+
+# Variables that build_full_headless_cmd controls exclusively. They must not
+# leak from the host process environment — the caller opts in via explicit
+# parameters (exit_after_stop_delay_ms, scenario_step_name).
+_HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
+    {
+        "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
+        "SCENARIO_STEP_NAME",
+    }
+)
 
 
 def _ensure_skill_prefix(skill_command: str) -> str:
@@ -191,7 +203,8 @@ def build_full_headless_cmd(
     if scenario_step_name:
         extras["SCENARIO_STEP_NAME"] = scenario_step_name
 
-    spec = build_headless_cmd(prompt, model=model, env_extras=extras)
+    filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
+    spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)
     cmd: list[str] = spec.cmd + [
         ClaudeFlags.PLUGIN_DIR,
         str(plugin_dir),

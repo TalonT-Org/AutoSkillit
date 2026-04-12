@@ -5,7 +5,8 @@ dynaconf-backed settings system without importing third-party packages:
 
     1. Function parameter (``cache_path_override`` — for tests/DI)
     2. Environment variable (``AUTOSKILLIT_QUOTA_GUARD__<KEY>``) — highest runtime priority
-    3. Hook config snapshot (``.autoskillit/temp/.hook_config.json``) — bridge from resolved settings
+    3. Hook config snapshot (``.autoskillit/temp/.hook_config.json``) — bridge from
+       resolved settings
     4. Module default (matches ``config/defaults.yaml``) — lowest
 
 This module is stdlib-only: no third-party imports, no ``autoskillit.*``

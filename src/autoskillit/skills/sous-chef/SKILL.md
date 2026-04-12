@@ -241,28 +241,39 @@ Capture the result as `auto_merge_available`. If detection fails, default to `"f
 perform both detections automatically via `check_merge_queue` + `check_auto_merge` —
 **do not repeat them manually when following a recipe**.
 
-### 2. Route based on queue availability
+### 2. Route based on queue availability and auto-merge availability
 
-**When `queue_available == true`:**
-GitHub's merge queue serializes concurrent merges. Each pipeline's
-`enable_auto_merge → wait_for_queue` sequence is safe to proceed in parallel — the
-queue handles ordering. No additional sequencing is required from the orchestrator.
+The recipes route on the four-cell matrix `queue_available × auto_merge_available`:
 
-**When `queue_available == false` and `auto_merge_available == true`:**
-Use `gh pr merge --squash --auto` (direct_merge path). GitHub merges the PR once
-all required status checks pass. PRs must not be merged concurrently — never execute
-two `direct_merge` steps concurrently on a non-queue branch.
+| `queue_available` | `auto_merge_available` | Recipe path                                    |
+|-------------------|------------------------|------------------------------------------------|
+| `true`            | `true`                 | `enable_auto_merge` → `wait_for_queue`         |
+| `true`            | `false`                | `queue_enqueue_no_auto` → `wait_for_queue`     |
+| `false`           | `true`                 | `direct_merge` → `wait_for_direct_merge`       |
+| `false`           | `false`                | `immediate_merge` → `wait_for_immediate_merge` |
 
-**When `queue_available == false` and `auto_merge_available == false`:**
-Use `gh pr merge --squash` (immediate_merge path — no `--auto` flag). GitHub
-executes the merge synchronously without waiting for status checks (there are none
-to wait for when `autoMergeAllowed=false`). PRs MUST still be merged one at a time.
+**When `queue_available == true`:** GitHub's merge queue intercepts every merge
+request on the branch regardless of the `--auto` flag. Both queue cells route
+through `wait_for_queue` (the merge-queue-aware waiter). The
+`enable_auto_merge` cell uses `--auto` so the queue serializes via GitHub
+auto-merge; the `queue_enqueue_no_auto` cell (condition:
+`queue_available == true and auto_merge_available == false`) uses plain `--squash`
+because the repository's `autoMergeAllowed=false` setting causes `--auto` to be
+rejected by the API auto-merge gate **before** the queue interception.
 
-- If following a recipe: the recipe's `route_queue_mode` step routes to the correct
-  path automatically based on `context.auto_merge_available`.
-- **NEVER** use `gh pr merge --squash --auto` when `auto_merge_available == false` —
-  this command fails with "auto-merge is not allowed for this repository"; in recipe
-  context it silently routes to `confirm_cleanup`, leaving the PR unmerged.
+**When `queue_available == false`:** there is no queue, so behaviour matches
+the historical paths — `direct_merge` waits via auto-merge, `immediate_merge`
+executes synchronously.
+
+- If following a recipe: `route_queue_mode` selects the correct cell
+  automatically from `context.queue_available` and `context.auto_merge_available`.
+- **NEVER use** `gh pr merge --squash --auto` when `auto_merge_available == false`,
+  regardless of `queue_available`. The `--auto` flag is rejected by GitHub's API
+  auto-merge gate before the queue intercepts. Use plain `gh pr merge --squash`;
+  if a queue exists on the branch the queue still enqueues the call.
+- **NEVER** route a queue+no-auto enqueue call through `wait_for_immediate_merge`
+  — its 5-minute poll is too short for a busy queue and on timeout the recipe
+  reports `merge unconfirmed` even though the PR will eventually merge.
 
 For ad-hoc (off-recipe) merges:
 - If merging multiple PRs collected from parallel pipelines: route through the
@@ -272,7 +283,7 @@ For ad-hoc (off-recipe) merges:
 
 **NEVER use `run_cmd` with `gh pr merge` to merge a PR outside of a named recipe
 step.** All PR merges must flow through the recipe's `merge_pr`, `direct_merge`,
-`immediate_merge`, or `enable_auto_merge` steps. Bypassing these steps skips CI
+`immediate_merge`, `enable_auto_merge` or `queue_enqueue_no_auto` steps. Bypassing these steps skips CI
 enforcement, conflict detection, and conflict routing.
 
 ### 4. Merge conflict failure handling

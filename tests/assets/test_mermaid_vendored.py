@@ -10,9 +10,7 @@ _MERMAID_DIR = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "as
 def test_mermaid_min_js_exists_and_nontrivial() -> None:
     """mermaid.min.js must exist at the vendored path and be > 1 MB."""
     asset = _MERMAID_DIR / "mermaid.min.js"
-    assert asset.exists(), (
-        f"mermaid.min.js not vendored at {asset}; run: task vendor-mermaid"
-    )
+    assert asset.exists(), f"mermaid.min.js not vendored at {asset}; run: task vendor-mermaid"
     size = asset.stat().st_size
     assert size > 1_000_000, (
         f"mermaid.min.js is suspiciously small ({size} bytes); expected > 1 MB. "

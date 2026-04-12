@@ -98,10 +98,13 @@ class CloneRegistry:
         for entry in self._entries:
             if owner is not None and entry.get("owner") != owner:
                 continue
+            path = entry.get("path")
+            if path is None:
+                continue
             if entry.get("status") == "success":
-                to_delete.append(entry["path"])
+                to_delete.append(path)
             else:
-                to_preserve.append(entry["path"])
+                to_preserve.append(path)
         return to_delete, to_preserve
 
     def prune_deleted(self, deleted_paths: set[str]) -> None:

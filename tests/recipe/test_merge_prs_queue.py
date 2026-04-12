@@ -625,9 +625,7 @@ def test_route_queue_mode_auto_merge_available_routes_to_direct_merge(any_recipe
     cond = next(
         c
         for c in step.on_result.conditions
-        if c.when
-        and "auto_merge_available" in c.when
-        and "queue_available" not in c.when
+        if c.when and "auto_merge_available" in c.when and "queue_available" not in c.when
     )
     assert cond.when == "${{ context.auto_merge_available }} == true"
     assert cond.route == "direct_merge"
@@ -919,9 +917,7 @@ def test_route_queue_mode_no_queue_with_auto_routes_to_direct_merge(any_recipe) 
     cond = next(
         c
         for c in step.on_result.conditions
-        if c.when
-        and "auto_merge_available" in c.when
-        and "queue_available" not in c.when
+        if c.when and "auto_merge_available" in c.when and "queue_available" not in c.when
     )
     assert cond.route == "direct_merge"
 
@@ -945,7 +941,8 @@ def test_route_queue_mode_never_routes_to_enable_auto_merge_when_auto_unavailabl
             assert cond.when is not None
             assert "auto_merge_available" in cond.when
             assert "}} == true" in cond.when.split("auto_merge_available")[1], (
-                f"enable_auto_merge route must require auto_merge_available == true; got: {cond.when}"
+                "enable_auto_merge route must require auto_merge_available == true; "
+                f"got: {cond.when}"
             )
 
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import get_args, get_type_hints
 
+import pytest
+
 from autoskillit.config import AutomationConfig
 from autoskillit.core import GitHubFetcher
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
@@ -212,9 +214,9 @@ def test_tool_context_has_timing_log_field(tmp_path):
     assert isinstance(ctx.timing_log, TimingStore)
 
 
-def test_toolcontext_default_background_wired_with_audit(tmp_path):
-    """ToolContext without explicit background= must produce a supervisor
-    whose audit is the same instance as ctx.audit."""
+@pytest.mark.anyio
+async def test_toolcontext_default_background_wired_with_audit(tmp_path):
+    """ToolContext background supervisor records failures to ctx.audit."""
     from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 
     audit = DefaultAuditLog()
@@ -228,4 +230,12 @@ def test_toolcontext_default_background_wired_with_audit(tmp_path):
         runner=None,
     )
     assert isinstance(ctx.background, DefaultBackgroundSupervisor)
-    assert ctx.background._audit is audit
+
+    async def _fail() -> None:
+        raise RuntimeError("deliberate test failure")
+
+    ctx.background.submit(_fail(), label="test-task")
+    await ctx.background.drain()
+
+    records = audit.get_report()
+    assert any(r.subtype == "background_exception" for r in records)

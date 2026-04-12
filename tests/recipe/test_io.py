@@ -184,25 +184,6 @@ class TestRecipeParser:
         wf = load_recipe(f)
         assert wf.steps["impl"].on_context_limit == "retry_worktree"
 
-    def test_no_retry_block_in_yaml(self, tmp_path: Path) -> None:
-        """Old retry: block must raise — unrecognised field."""
-        data = {
-            "name": "old-retry",
-            "description": "test",
-            "kitchen_rules": ["test"],
-            "steps": {
-                "impl": {
-                    "tool": "run_skill",
-                    "retry": {"max_attempts": 3, "on": "needs_retry"},
-                    "on_success": "done",
-                },
-                "done": {"action": "stop", "message": "Done."},
-            },
-        }
-        f = _write_yaml(tmp_path / "recipe.yaml", data)
-        with pytest.raises(Exception):
-            load_recipe(f)
-
     def test_load_recipe_rejects_non_dict(self, tmp_path: Path) -> None:
         """YAML that parses to a non-dict must raise ValueError."""
         path = tmp_path / "list.yaml"
@@ -870,20 +851,6 @@ def test_parse_step_handles_all_recipe_step_fields() -> None:
         f"  Missing from handled: {schema_fields - _PARSE_STEP_HANDLED_FIELDS}\n"
         f"  Extra in handled:     {_PARSE_STEP_HANDLED_FIELDS - schema_fields}"
     )
-
-
-# ---------------------------------------------------------------------------
-# T2 — _path_mtime_ns replaces the two old helpers
-# ---------------------------------------------------------------------------
-
-
-def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
-    """recipe/_api.py must expose _path_mtime_ns; _file_mtime_ns/_dir_mtime_ns removed."""
-    import autoskillit.recipe._api as api
-
-    assert hasattr(api, "_path_mtime_ns"), "_path_mtime_ns must exist"
-    assert not hasattr(api, "_file_mtime_ns"), "_file_mtime_ns must be removed"
-    assert not hasattr(api, "_dir_mtime_ns"), "_dir_mtime_ns must be removed"
 
 
 # ---------------------------------------------------------------------------

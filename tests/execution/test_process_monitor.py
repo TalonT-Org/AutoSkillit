@@ -20,20 +20,7 @@ from autoskillit.execution.process import (
     _watch_session_log,
     run_managed_async,
 )
-
-# ---------------------------------------------------------------------------
-# Helper scripts — small Python programs that reproduce specific scenarios
-# ---------------------------------------------------------------------------
-
-# Script that writes a JSON result line then hangs (simulates Claude CLI completed-but-hung)
-WRITE_RESULT_THEN_HANG_SCRIPT = (
-    "import sys, time, json\n"
-    'result = {"type": "result", "subtype": "success", "is_error": False,\n'
-    '          "result": "done", "session_id": "s1"}\n'
-    'sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")\n'
-    "sys.stdout.flush()\n"
-    "time.sleep(3600)\n"
-)
+from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
 # Script that writes non-matching output then hangs
 PARTIAL_OUTPUT_THEN_HANG_SCRIPT = (

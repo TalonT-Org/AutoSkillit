@@ -51,15 +51,6 @@ def test_truncate_text_importable_from_core():
     assert truncate_text("short", 100) == "short"
 
 
-# ── Backward compatibility ─────────────────────────────────────────────────────
-
-
-def test_truncate_private_alias_still_available():
-    from autoskillit.execution.session import _truncate
-
-    assert _truncate("x" * 20, 10).startswith("...[truncated")
-
-
 # ── Runtime-checkable ──────────────────────────────────────────────────────────
 
 

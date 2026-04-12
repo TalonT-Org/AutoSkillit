@@ -76,9 +76,7 @@ def test_process_race_exports():
         resolve_termination,
     )
 
-    assert RaceAccumulator is not None
     assert RaceAccumulator.__module__ == "autoskillit.execution._process_race"
-    assert RaceSignals is not None
     assert RaceSignals.__module__ == "autoskillit.execution._process_race"
     assert callable(resolve_termination)
     assert resolve_termination.__module__ == "autoskillit.execution._process_race"

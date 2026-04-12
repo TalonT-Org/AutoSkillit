@@ -782,10 +782,13 @@ class TestBranchingConfig:
     def test_branching_config_promotion_target_defaults_match_yaml(self, tmp_path) -> None:
         """Python default for promotion_target matches defaults.yaml."""
         from autoskillit.config import load_config
-        from autoskillit.config.settings import BranchingConfig
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
 
         loaded = load_config(tmp_path / "settings.toml")
-        assert loaded.branching.promotion_target == BranchingConfig().promotion_target
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        expected = defaults["branching"]["promotion_target"]
+        assert loaded.branching.promotion_target == expected
 
     def test_branching_config_promotion_target_env_var_override(
         self, monkeypatch, tmp_path
@@ -801,32 +804,13 @@ class TestBranchingConfig:
 class TestBuildSubsetsConfigCustomTagsValidation:
     """CC-F2: _build_subsets_config must raise ValueError for non-dict custom_tags."""
 
-    def test_build_subsets_config_raises_for_non_dict_custom_tags(self):
+    @pytest.mark.parametrize("bad_value", [["list", "not", "dict"], "oops", 42])
+    def test_build_subsets_config_raises_for_non_dict_custom_tags(self, bad_value: object) -> None:
         """Non-dict custom_tags must raise ValueError, not silently coerce to {}."""
-        import pytest
-
         from autoskillit.config.settings import _build_subsets_config
 
         with pytest.raises(ValueError, match="custom_tags"):
-            _build_subsets_config({"custom_tags": ["list", "not", "dict"]})
-
-    def test_build_subsets_config_raises_for_string_custom_tags(self):
-        """String custom_tags must raise ValueError."""
-        import pytest
-
-        from autoskillit.config.settings import _build_subsets_config
-
-        with pytest.raises(ValueError, match="custom_tags"):
-            _build_subsets_config({"custom_tags": "oops"})
-
-    def test_build_subsets_config_raises_for_int_custom_tags(self):
-        """Integer custom_tags must raise ValueError."""
-        import pytest
-
-        from autoskillit.config.settings import _build_subsets_config
-
-        with pytest.raises(ValueError, match="custom_tags"):
-            _build_subsets_config({"custom_tags": 42})
+            _build_subsets_config({"custom_tags": bad_value})
 
     def test_build_subsets_config_dict_custom_tags_accepted(self):
         """Valid dict custom_tags must not raise."""
@@ -1117,20 +1101,20 @@ class TestWriteConfigLayer:
 class TestWorkspaceConfig:
     """WorkspaceConfig section is present in AutomationConfig with correct defaults."""
 
-    def test_workspace_config_exists_on_automation_config(self):
+    def test_workspace_config_exists_on_automation_config(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert hasattr(cfg, "workspace")
 
-    def test_workspace_worktree_root_defaults_to_none(self):
+    def test_workspace_worktree_root_defaults_to_none(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.workspace.worktree_root is None
 
-    def test_workspace_runs_root_defaults_to_none(self):
+    def test_workspace_runs_root_defaults_to_none(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.workspace.runs_root is None

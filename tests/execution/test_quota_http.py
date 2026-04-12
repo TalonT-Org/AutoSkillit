@@ -251,4 +251,4 @@ async def test_unknown_window_keys_tolerated(mock_http_server, quota_config):
     )
     result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
     assert result["should_sleep"] is False
-    assert result["utilization"] is not None
+    assert result["utilization"] == pytest.approx(50.0)

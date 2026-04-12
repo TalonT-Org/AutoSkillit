@@ -96,11 +96,11 @@ class TestIsWorktreeSkillNegative:
 # ---------------------------------------------------------------------------
 # T3: snapshot_clone_state captures SHA
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_snapshot_clone_state_captures_sha():
+@pytest.mark.anyio
+async def test_snapshot_clone_state_captures_sha(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(stdout="abc123\n"))
-    snapshot = await snapshot_clone_state("/tmp/clone", runner)
+    snapshot = await snapshot_clone_state(str(tmp_path), runner)
     assert snapshot is not None
     assert snapshot.head_sha == "abc123"
 
@@ -108,35 +108,35 @@ async def test_snapshot_clone_state_captures_sha():
 # ---------------------------------------------------------------------------
 # T4: snapshot_clone_state returns None on failure
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_snapshot_clone_state_returns_none_on_failure():
+@pytest.mark.anyio
+async def test_snapshot_clone_state_returns_none_on_failure(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(returncode=128))
-    snapshot = await snapshot_clone_state("/tmp/clone", runner)
+    snapshot = await snapshot_clone_state(str(tmp_path), runner)
     assert snapshot is None
 
 
 # ---------------------------------------------------------------------------
 # T4b: snapshot_clone_state returns None when stdout is empty after rc=0
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_snapshot_clone_state_returns_none_on_empty_stdout():
+@pytest.mark.anyio
+async def test_snapshot_clone_state_returns_none_on_empty_stdout(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(stdout="", returncode=0))
-    snapshot = await snapshot_clone_state("/tmp/clone", runner)
+    snapshot = await snapshot_clone_state(str(tmp_path), runner)
     assert snapshot is None
 
 
 # ---------------------------------------------------------------------------
 # T5: detect_contamination — uncommitted changes
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_detect_contamination_uncommitted_changes():
+@pytest.mark.anyio
+async def test_detect_contamination_uncommitted_changes(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(stdout="abc123\n"))  # git rev-parse HEAD (same)
     runner.push(_git_result(stdout=" M src/main.py\n?? new_file.txt\n"))  # git status
     snapshot = CloneSnapshot(head_sha="abc123")
-    report = await detect_contamination(snapshot, "/tmp/clone", runner)
+    report = await detect_contamination(snapshot, str(tmp_path), runner)
     assert report is not None
     assert len(report.uncommitted_files) == 2
     assert not report.direct_commits
@@ -145,13 +145,13 @@ async def test_detect_contamination_uncommitted_changes():
 # ---------------------------------------------------------------------------
 # T6: detect_contamination — direct commits
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_detect_contamination_direct_commits():
+@pytest.mark.anyio
+async def test_detect_contamination_direct_commits(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(stdout="def456\n"))  # HEAD moved
     runner.push(_git_result(stdout=""))  # clean status
     snapshot = CloneSnapshot(head_sha="abc123")
-    report = await detect_contamination(snapshot, "/tmp/clone", runner)
+    report = await detect_contamination(snapshot, str(tmp_path), runner)
     assert report is not None
     assert report.direct_commits
     assert len(report.uncommitted_files) == 0
@@ -160,13 +160,13 @@ async def test_detect_contamination_direct_commits():
 # ---------------------------------------------------------------------------
 # T7: detect_contamination — both
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_detect_contamination_both():
+@pytest.mark.anyio
+async def test_detect_contamination_both(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(stdout="def456\n"))  # HEAD moved
     runner.push(_git_result(stdout=" M dirty.py\n"))  # dirty
     snapshot = CloneSnapshot(head_sha="abc123")
-    report = await detect_contamination(snapshot, "/tmp/clone", runner)
+    report = await detect_contamination(snapshot, str(tmp_path), runner)
     assert report is not None
     assert report.direct_commits
     assert len(report.uncommitted_files) == 1
@@ -175,21 +175,21 @@ async def test_detect_contamination_both():
 # ---------------------------------------------------------------------------
 # T8: detect_contamination — clean
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_detect_contamination_clean():
+@pytest.mark.anyio
+async def test_detect_contamination_clean(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(stdout="abc123\n"))  # same HEAD
     runner.push(_git_result(stdout=""))  # clean status
     snapshot = CloneSnapshot(head_sha="abc123")
-    report = await detect_contamination(snapshot, "/tmp/clone", runner)
+    report = await detect_contamination(snapshot, str(tmp_path), runner)
     assert report is None
 
 
 # ---------------------------------------------------------------------------
 # T9: revert_contamination — uncommitted only
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_revert_uncommitted_only():
+@pytest.mark.anyio
+async def test_revert_uncommitted_only(tmp_path):
     runner = MockSubprocessRunner()
     snapshot = CloneSnapshot(head_sha="abc123")
     from autoskillit.execution.clone_guard import ContaminationReport
@@ -201,7 +201,7 @@ async def test_revert_uncommitted_only():
         direct_commits=False,
         reverted=False,
     )
-    result = await revert_contamination(snapshot, report, "/tmp/clone", runner)
+    result = await revert_contamination(snapshot, report, str(tmp_path), runner)
     assert result.reverted
     cmds = [call[0] for call in runner.call_args_list]
     assert len(cmds) == 2
@@ -212,8 +212,8 @@ async def test_revert_uncommitted_only():
 # ---------------------------------------------------------------------------
 # T9b: revert_contamination — git commands fail → reverted=False
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_revert_contamination_returns_false_when_git_fails():
+@pytest.mark.anyio
+async def test_revert_contamination_returns_false_when_git_fails(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(returncode=128))  # git reset --hard fails
     runner.push(_git_result(returncode=0))  # git clean succeeds (still reverted=False)
@@ -227,15 +227,15 @@ async def test_revert_contamination_returns_false_when_git_fails():
         direct_commits=True,
         reverted=False,
     )
-    result = await revert_contamination(snapshot, report, "/tmp/clone", runner)
+    result = await revert_contamination(snapshot, report, str(tmp_path), runner)
     assert not result.reverted
 
 
 # ---------------------------------------------------------------------------
 # T10: revert_contamination — direct commits
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_revert_direct_commits():
+@pytest.mark.anyio
+async def test_revert_direct_commits(tmp_path):
     runner = MockSubprocessRunner()
     snapshot = CloneSnapshot(head_sha="abc123")
     from autoskillit.execution.clone_guard import ContaminationReport
@@ -247,7 +247,7 @@ async def test_revert_direct_commits():
         direct_commits=True,
         reverted=False,
     )
-    result = await revert_contamination(snapshot, report, "/tmp/clone", runner)
+    result = await revert_contamination(snapshot, report, str(tmp_path), runner)
     assert result.reverted
     cmds = [call[0] for call in runner.call_args_list]
     assert ["git", "reset", "--hard", "abc123"] in cmds
@@ -257,8 +257,8 @@ async def test_revert_direct_commits():
 # ---------------------------------------------------------------------------
 # T11: guard full flow — contamination detected
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_guard_full_flow_contamination_detected():
+@pytest.mark.anyio
+async def test_guard_full_flow_contamination_detected(tmp_path):
     runner = MockSubprocessRunner()
     # detect_contamination: rev-parse HEAD (moved), status (dirty)
     runner.push(_git_result(stdout="def456\n"))
@@ -274,7 +274,7 @@ async def test_guard_full_flow_contamination_detected():
     result, reverted = await check_and_revert_clone_contamination(
         snapshot,
         skill_result,
-        "/tmp/clone",
+        str(tmp_path),
         runner,
         audit,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
@@ -291,14 +291,14 @@ async def test_guard_full_flow_contamination_detected():
 # ---------------------------------------------------------------------------
 # T12: guard skipped when success
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_guard_skipped_when_success():
+@pytest.mark.anyio
+async def test_guard_skipped_when_success(tmp_path):
     runner = MockSubprocessRunner()
     snapshot = CloneSnapshot(head_sha="abc123")
     skill_result = _make_skill_result(success=True, worktree_path=None)
 
     result, reverted = await check_and_revert_clone_contamination(
-        snapshot, skill_result, "/tmp/clone", runner, None
+        snapshot, skill_result, str(tmp_path), runner, None
     )
     assert not reverted
     assert len(runner.call_args_list) == 0
@@ -307,14 +307,14 @@ async def test_guard_skipped_when_success():
 # ---------------------------------------------------------------------------
 # T13: guard skipped when worktree created
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_guard_skipped_when_worktree_created():
+@pytest.mark.anyio
+async def test_guard_skipped_when_worktree_created(tmp_path):
     runner = MockSubprocessRunner()
     snapshot = CloneSnapshot(head_sha="abc123")
     skill_result = _make_skill_result(success=False, worktree_path="/some/worktree")
 
     result, reverted = await check_and_revert_clone_contamination(
-        snapshot, skill_result, "/tmp/clone", runner, None
+        snapshot, skill_result, str(tmp_path), runner, None
     )
     assert not reverted
     assert len(runner.call_args_list) == 0
@@ -323,13 +323,13 @@ async def test_guard_skipped_when_worktree_created():
 # ---------------------------------------------------------------------------
 # T14: guard skipped when no snapshot
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_guard_skipped_when_no_snapshot():
+@pytest.mark.anyio
+async def test_guard_skipped_when_no_snapshot(tmp_path):
     runner = MockSubprocessRunner()
     skill_result = _make_skill_result(success=False, worktree_path=None)
 
     result, reverted = await check_and_revert_clone_contamination(
-        None, skill_result, "/tmp/clone", runner, None
+        None, skill_result, str(tmp_path), runner, None
     )
     assert not reverted
     assert len(runner.call_args_list) == 0
@@ -373,8 +373,8 @@ def test_worktree_path_always_extracted():
 # ---------------------------------------------------------------------------
 # T16: audit log records contamination
 # ---------------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_audit_log_records_contamination():
+@pytest.mark.anyio
+async def test_audit_log_records_contamination(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(stdout="def456\n"))
     runner.push(_git_result(stdout=" M a.py\n M b.py\n"))
@@ -386,7 +386,7 @@ async def test_audit_log_records_contamination():
     await check_and_revert_clone_contamination(
         snapshot,
         skill_result,
-        "/tmp/clone",
+        str(tmp_path),
         runner,
         audit,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",

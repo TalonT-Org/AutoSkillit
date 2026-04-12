@@ -53,16 +53,18 @@ def _jobs_response(*jobs: tuple[str, str]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_jittered_sleep_bounded():
-    for attempt in range(10):
-        val = _jittered_sleep(attempt)
-        assert 0 <= val <= 30  # cap is 30
+@pytest.mark.parametrize("attempt", range(10))
+def test_jittered_sleep_bounded(attempt: int) -> None:
+    val = _jittered_sleep(attempt)
+    assert 0 <= val <= 30  # cap is 30
 
 
 def test_jittered_sleep_variance():
     """Two calls should not produce identical results (statistical check)."""
-    values = {_jittered_sleep(2) for _ in range(20)}
-    assert len(values) > 1
+    values = [_jittered_sleep(2) for _ in range(20)]
+    assert max(values) - min(values) > 1.0, (
+        "Jitter variance is too low — values are nearly constant"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -153,8 +155,14 @@ async def test_lookback_without_head_sha_matches_any():
 
 
 @pytest.mark.anyio
-async def test_lookback_window_filters_old_runs():
-    """Runs older than lookback_seconds should be filtered by the service."""
+async def test_wait_returns_no_runs_when_fetch_returns_empty():
+    """wait() returns no_runs or timed_out when _fetch_completed_runs returns [].
+
+    _fetch_completed_runs is mocked to return [] (no completed runs found).
+    asyncio.sleep is mocked to return immediately. With timeout_seconds=1 the
+    test may exit via either "no_runs" (poll exhausted) or "timed_out"
+    (wall-clock exceeded); both are valid outcomes for this empty-fetch scenario.
+    """
     watcher = DefaultCIWatcher(token="tok")
     # Look-back returns old run — will be filtered by cutoff time
     watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]

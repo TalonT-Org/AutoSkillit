@@ -36,7 +36,7 @@ class TestReleaseIssueStagedLifecycle:
             color="0075ca",
             description="Implementation staged and waiting for promotion to main",
         )
-        mock_client.add_labels.assert_called_once()
+        mock_client.add_labels.assert_called_once_with("owner", "repo", 42, ["staged"])
 
     @pytest.mark.anyio
     async def test_release_issue_default_branch_no_staged(self, tool_ctx, monkeypatch):
@@ -52,7 +52,7 @@ class TestReleaseIssueStagedLifecycle:
         )
         assert result["success"] is True
         assert result.get("staged") is False
-        mock_client.remove_label.assert_called_once()
+        mock_client.remove_label.assert_called_once_with("owner", "repo", 42, "in-progress")
         mock_client.ensure_label.assert_not_called()
         mock_client.add_labels.assert_not_called()
 

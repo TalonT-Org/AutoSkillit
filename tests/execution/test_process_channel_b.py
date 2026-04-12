@@ -9,20 +9,7 @@ import pytest
 
 from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
 from autoskillit.execution.process import run_managed_async
-
-# ---------------------------------------------------------------------------
-# Helper scripts — small Python programs that reproduce specific scenarios
-# ---------------------------------------------------------------------------
-
-# Script that writes a JSON result line then hangs (simulates Claude CLI completed-but-hung)
-WRITE_RESULT_THEN_HANG_SCRIPT = textwrap.dedent("""\
-    import sys, time, json
-    result = {"type": "result", "subtype": "success", "is_error": False,
-              "result": "done", "session_id": "s1"}
-    sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")
-    sys.stdout.flush()
-    time.sleep(3600)
-""")
+from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
 # Script that:
 #   (1) writes %%ORDER_UP%% to a JSONL session file (Channel B fires)
@@ -544,7 +531,4 @@ class TestChannelBSubSkillCollision:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.channel_confirmation in (
-            ChannelConfirmation.CHANNEL_A,
-            ChannelConfirmation.CHANNEL_B,
-        )
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B

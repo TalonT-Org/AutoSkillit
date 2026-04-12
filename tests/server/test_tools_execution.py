@@ -22,7 +22,7 @@ from autoskillit.execution.headless import _session_log_dir
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
 )
-from autoskillit.server.tools_execution import run_cmd, run_python, run_skill
+from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
 
 _SUCCESS_JSON = (
@@ -623,39 +623,6 @@ class TestGatedToolObservability:
         return ctx
 
     @pytest.mark.anyio
-    async def test_run_cmd_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
-        """run_cmd binds tool='run_cmd' contextvar and calls ctx.info on success."""
-        tool_ctx.runner.push(_make_result(0, "ok\n", ""))
-        with structlog.testing.capture_logs(
-            processors=[structlog.contextvars.merge_contextvars]
-        ) as logs:
-            await run_cmd(cmd="echo ok", cwd="/tmp", ctx=mock_ctx)
-        assert any(entry.get("tool") == "run_cmd" for entry in logs)
-
-    @pytest.mark.anyio
-    async def test_run_cmd_returns_failure_result_on_nonzero_exit(self, tool_ctx, mock_ctx):
-        """run_cmd reports failure (success=false) when subprocess exits non-zero."""
-        tool_ctx.runner.push(_make_result(1, "", "err"))
-        result = json.loads(await run_cmd(cmd="false", cwd="/tmp", ctx=mock_ctx))
-        assert result["success"] is False
-        assert result["exit_code"] == 1
-
-    @pytest.mark.anyio
-    async def test_run_python_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
-        """run_python binds tool='run_python' contextvar and calls ctx.info on success."""
-        with structlog.testing.capture_logs(
-            processors=[structlog.contextvars.merge_contextvars]
-        ) as logs:
-            await run_python(callable="json.dumps", args={"obj": 1}, ctx=mock_ctx)
-        assert any(entry.get("tool") == "run_python" for entry in logs)
-
-    @pytest.mark.anyio
-    async def test_run_python_returns_failure_result_on_bad_module(self, tool_ctx, mock_ctx):
-        """run_python reports failure (success=false) when callable import fails."""
-        result = json.loads(await run_python(callable="nonexistent.module.func", ctx=mock_ctx))
-        assert result["success"] is False
-
-    @pytest.mark.anyio
     async def test_run_skill_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
         """run_skill binds tool='run_skill' contextvar and calls ctx.info on success."""
         tool_ctx.runner.push(
@@ -1085,18 +1052,6 @@ class TestHeadlessGateEnforcement:
         result = json.loads(await run_skill("/autoskillit:investigate some-error", "/tmp"))
         assert result["subtype"] == "headless_error"
 
-    @pytest.mark.anyio
-    async def test_run_cmd_blocked_in_headless_session(self, tool_ctx):
-        """run_cmd returns headless_error when AUTOSKILLIT_HEADLESS=1."""
-        result = json.loads(await run_cmd("echo hello", "/tmp"))
-        assert result["subtype"] == "headless_error"
-
-    @pytest.mark.anyio
-    async def test_run_python_blocked_in_headless_session(self, tool_ctx):
-        """run_python returns headless_error when AUTOSKILLIT_HEADLESS=1."""
-        result = json.loads(await run_python("os.getcwd"))
-        assert result["subtype"] == "headless_error"
-
 
 class TestResponseFieldsAreTypeSafe:
     """Every discriminator field in MCP tool responses uses enum values."""
@@ -1132,24 +1087,6 @@ class TestResponseFieldsAreTypeSafe:
         tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
-
-
-class TestRunCmdTiming:
-    """run_cmd accumulates wall-clock timing when step_name is provided."""
-
-    @pytest.mark.anyio
-    async def test_run_cmd_step_name_records_timing(self, tool_ctx):
-        await run_cmd(cmd="echo hi", cwd="/tmp", step_name="clone")
-        report = tool_ctx.timing_log.get_report()
-        assert len(report) == 1
-        assert report[0]["step_name"] == "clone"
-        assert report[0]["total_seconds"] >= 0.0
-        assert report[0]["invocation_count"] == 1
-
-    @pytest.mark.anyio
-    async def test_run_cmd_empty_step_name_skips_timing(self, tool_ctx):
-        await run_cmd(cmd="echo hi", cwd="/tmp")
-        assert tool_ctx.timing_log.get_report() == []
 
 
 class TestRunSkillTiming:

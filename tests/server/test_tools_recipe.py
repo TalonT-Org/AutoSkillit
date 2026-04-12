@@ -1,24 +1,13 @@
-"""Tests for autoskillit server recipe tools."""
+"""Tests for autoskillit server validate_recipe tool and recipe docstring contracts."""
 
 from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from autoskillit.config import AutomationConfig
-from autoskillit.core import SkillResult
-from autoskillit.core.types import RetryReason
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
-from autoskillit.server.tools_recipe import (
-    list_recipes,
-    load_recipe,
-    migrate_recipe,
-    validate_recipe,
-)
+from autoskillit.server.tools_recipe import validate_recipe
 
 
 def _extract_docstring_sections(desc: str) -> dict[str, str]:
@@ -51,7 +40,6 @@ def _extract_docstring_sections(desc: str) -> dict[str, str]:
     for line in lines:
         stripped = line.strip()
         matched_header = None
-
         for pattern in header_patterns:
             m = pattern.match(stripped)
             if m:
@@ -74,7 +62,7 @@ def _extract_docstring_sections(desc: str) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Minimal valid script YAML used across migration suggestion tests
+# Minimal valid script YAML used in migration suggestion tests
 # ---------------------------------------------------------------------------
 
 _MINIMAL_SCRIPT_YAML = """\
@@ -102,369 +90,6 @@ steps:
 kitchen_rules:
   - "Follow routing rules"
 """
-
-
-def _write_minimal_script(scripts_dir: Path, name: str = "test-script") -> Path:
-    """Write a minimal valid workflow script with no autoskillit_version field."""
-    scripts_dir.mkdir(parents=True, exist_ok=True)
-    path = scripts_dir / f"{name}.yaml"
-    path.write_text(_MINIMAL_SCRIPT_YAML)
-    return path
-
-
-class TestRecipeTools:
-    """Tests for kitchen-gated list_recipes and load_recipe tools."""
-
-    @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
-
-    # SS1
-    @pytest.mark.anyio
-    @patch("autoskillit.recipe._api.list_recipes")
-    async def test_list_returns_json_object(self, mock_list):
-        """list_recipes returns JSON object with scripts array."""
-        from autoskillit.core.types import LoadResult, RecipeSource
-        from autoskillit.recipe.schema import RecipeInfo
-
-        mock_list.return_value = LoadResult(
-            items=[
-                RecipeInfo(
-                    name="impl",
-                    description="Implement",
-                    summary="plan > impl",
-                    path=Path("/x"),
-                    source=RecipeSource.PROJECT,
-                ),
-            ],
-            errors=[],
-        )
-        result = json.loads(await list_recipes())
-        assert isinstance(result, dict)
-        assert len(result["recipes"]) == 1
-        assert result["recipes"][0]["name"] == "impl"
-        assert result["recipes"][0]["description"] == "Implement"
-        assert result["recipes"][0]["summary"] == "plan > impl"
-        assert "errors" not in result
-
-    # SS2
-    @pytest.mark.anyio
-    async def test_load_returns_json_with_content(self, tmp_path, monkeypatch):
-        """load_recipe returns JSON with content and suggestions."""
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "test.yaml").write_text("name: test\ndescription: Test recipe\n")
-        result = json.loads(await load_recipe(name="test"))
-        assert "content" in result
-        assert "suggestions" in result
-        assert "name: test" in result["content"]
-        assert "description: Test recipe" in result["content"]
-
-    # SS3
-    @pytest.mark.anyio
-    async def test_load_unknown_returns_error(self, tmp_path, monkeypatch):
-        """load_recipe returns error JSON for unknown recipe name."""
-        monkeypatch.chdir(tmp_path)
-        result = json.loads(await load_recipe(name="nonexistent"))
-        assert "error" in result
-        assert "nonexistent" in result["error"]
-
-    # SS4
-    @pytest.mark.anyio
-    @patch("autoskillit.recipe._api.list_recipes")
-    async def test_list_reports_errors_in_response(self, mock_list):
-        """list_recipes includes errors in JSON when recipes fail to parse."""
-        from autoskillit.core.types import LoadReport, LoadResult
-
-        mock_list.return_value = LoadResult(
-            items=[],
-            errors=[LoadReport(path=Path("/recipes/broken.yaml"), error="bad yaml")],
-        )
-        result = json.loads(await list_recipes())
-        assert "errors" in result
-        assert len(result["errors"]) == 1
-        assert result["errors"][0]["file"] == "broken.yaml"
-        assert "bad yaml" in result["errors"][0]["error"]
-
-    # SS5
-    @pytest.mark.anyio
-    async def test_list_integration_discovers_project_recipe(self, tmp_path, monkeypatch):
-        """Server tool returns project recipes alongside bundled recipes."""
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "pipeline.yaml").write_text(
-            "name: test-pipe\ndescription: Test\nsummary: a > b\n"
-            "steps:\n  done:\n    action: stop\n    message: Done\n"
-        )
-        result = json.loads(await list_recipes())
-        names = {r["name"] for r in result["recipes"]}
-        assert "test-pipe" in names
-
-    # SS6
-    @pytest.mark.anyio
-    async def test_list_integration_reports_errors(self, tmp_path, monkeypatch):
-        """Server tool reports parse errors to the caller from real files."""
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "broken.yaml").write_text("[unclosed bracket\n")
-        result = json.loads(await list_recipes())
-        assert "errors" in result
-        assert len(result["errors"]) == 1
-
-    # SS7
-    @pytest.mark.anyio
-    async def test_load_returns_json_with_suggestions(self, tmp_path, monkeypatch):
-        """load_recipe response always has 'content' and 'suggestions' keys."""
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "test.yaml").write_text(
-            "name: test\ndescription: Test\nkitchen_rules:\n  - test\n"
-            "steps:\n  do:\n    tool: test_check\n    model: sonnet\n"
-            "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
-        )
-        result = json.loads(await load_recipe(name="test"))
-        assert "content" in result
-        assert "suggestions" in result
-        assert isinstance(result["suggestions"], list)
-        assert any(s["rule"] == "model-on-non-skill-step" for s in result["suggestions"])
-
-    # SS8
-    @pytest.mark.anyio
-    async def test_list_recipes_includes_builtins_with_empty_project_dir(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """list_recipes MCP returns bundled recipes when .autoskillit/recipes/ is absent."""
-        monkeypatch.chdir(tmp_path)
-        # No .autoskillit/recipes/ created — simulates a fresh project with no local recipes
-        result = json.loads(await list_recipes())
-        names = {r["name"] for r in result["recipes"]}
-        assert "implementation" in names
-        assert "remediation" in names
-        assert "smoke-test" not in names
-
-    # SS9
-    @pytest.mark.anyio
-    async def test_load_recipe_mcp_returns_builtin_recipe(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """load_recipe MCP finds bundled recipes when no project .autoskillit/recipes/ dir."""
-        monkeypatch.chdir(tmp_path)
-        result = json.loads(await load_recipe(name="implementation"))
-        assert "error" not in result, f"Unexpected error: {result.get('error')}"
-        assert "content" in result
-        assert len(result["content"]) > 0
-
-    # SS10
-    @pytest.mark.anyio
-    @patch("autoskillit.recipe._api.list_recipes")
-    async def test_list_recipes_response_includes_source_field(self, mock_list):
-        """list_recipes MCP response must include source field for each recipe entry."""
-        from autoskillit.core.types import LoadResult, RecipeSource
-        from autoskillit.recipe.schema import RecipeInfo
-
-        mock_list.return_value = LoadResult(
-            items=[
-                RecipeInfo(
-                    name="impl",
-                    description="Implement",
-                    source=RecipeSource.BUILTIN,
-                    path=Path("/recipes/impl.yaml"),
-                ),
-                RecipeInfo(
-                    name="my-recipe",
-                    description="Custom",
-                    source=RecipeSource.PROJECT,
-                    path=Path("/project/my-recipe.yaml"),
-                ),
-            ],
-            errors=[],
-        )
-        result = json.loads(await list_recipes())
-        assert "source" in result["recipes"][0], (
-            "MCP list_recipes response must include 'source' field"
-        )
-        assert result["recipes"][0]["source"] == "builtin"
-        assert result["recipes"][1]["source"] == "project"
-
-    @pytest.mark.anyio
-    async def test_load_recipe_parse_failure_is_logged_and_surfaced(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """load_recipe emits a warning log and surfaces a validation-error finding."""
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        # Recipe must have 'steps' so the run_semantic_rules code path is reached
-        (recipes_dir / "test.yaml").write_text(
-            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
-        )
-
-        with (
-            patch(
-                "autoskillit.recipe._api.run_semantic_rules",
-                side_effect=ValueError("injected crash"),
-            ),
-            patch("autoskillit.recipe._api._logger") as mock_logger,
-        ):
-            result = json.loads(await load_recipe(name="test"))
-
-        assert "content" in result, "load_recipe must be non-blocking even on parse failure"
-        mock_logger.warning.assert_called_once()
-        assert any(s.get("rule") == "validation-error" for s in result["suggestions"]), (
-            "Unexpected exception must appear as a validation-error finding in suggestions"
-        )
-        findings = [s for s in result["suggestions"] if s.get("rule") == "validation-error"]
-        assert findings, "Expected at least one validation-error finding"
-        assert findings[0]["message"] == "Invalid recipe structure: injected crash"
-
-
-class TestContractMigrationAdapterValidate:
-    """P7-2: ContractMigrationAdapter.validate uses _load_yaml, not yaml.safe_load."""
-
-    def test_valid_contract_returns_true(self, tmp_path: Path) -> None:
-        from autoskillit.migration.engine import ContractMigrationAdapter
-
-        f = tmp_path / "contract.yaml"
-        f.write_text("skill_hashes:\n  my-skill: abc123\n")
-        adapter = ContractMigrationAdapter()
-        ok, msg = adapter.validate(f)
-        assert ok is True
-        assert msg == ""
-
-    def test_missing_skill_hashes_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration.engine import ContractMigrationAdapter
-
-        f = tmp_path / "contract.yaml"
-        f.write_text("other_field: value\n")
-        adapter = ContractMigrationAdapter()
-        ok, msg = adapter.validate(f)
-        assert ok is False
-        assert "skill_hashes" in msg
-
-    def test_invalid_yaml_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration.engine import ContractMigrationAdapter
-
-        f = tmp_path / "contract.yaml"
-        f.write_bytes(b":\tbad: yaml: [unclosed\n")
-        adapter = ContractMigrationAdapter()
-        ok, msg = adapter.validate(f)
-        assert ok is False
-        assert msg != ""
-
-    def test_missing_file_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration.engine import ContractMigrationAdapter
-
-        adapter = ContractMigrationAdapter()
-        ok, msg = adapter.validate(tmp_path / "nonexistent.yaml")
-        assert ok is False
-        assert msg != ""
-
-
-class TestLoadRecipeExceptionHandling:
-    """CC-1: Outer except in load_recipe must catch anticipated exceptions only."""
-
-    @pytest.fixture(autouse=True)
-    def _setup_ctx(self, tool_ctx):
-        """Initialize ToolContext so load_recipe can call _get_config()."""
-
-    @pytest.mark.anyio
-    async def test_yaml_error_surfaces_as_suggestion(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """yaml.YAMLError is caught and returned as an error suggestion."""
-        from autoskillit.core.io import YAMLError
-
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "test.yaml").write_text("name: test\n")
-        with patch("autoskillit.recipe._api.load_yaml", side_effect=YAMLError("bad yaml")):
-            result = json.loads(await load_recipe(name="test"))
-        assert "error" not in result
-        assert any(
-            s.get("rule") == "validation-error" and s.get("severity") == "error"
-            for s in result["suggestions"]
-        )
-
-    @pytest.mark.anyio
-    async def test_value_error_surfaces_as_suggestion(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """ValueError (malformed recipe structure) is caught and returned as error suggestion."""
-        from autoskillit.core.types import RecipeSource
-        from autoskillit.recipe.schema import RecipeInfo
-
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        recipe_path = recipes_dir / "test.yaml"
-        recipe_path.write_text(
-            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
-        )
-        fake_match = RecipeInfo(
-            name="test",
-            description="Test",
-            source=RecipeSource.PROJECT,
-            path=recipe_path,
-        )
-        with (
-            patch("autoskillit.recipe.find_recipe_by_name", return_value=fake_match),
-            patch(
-                "autoskillit.recipe._api._parse_recipe", side_effect=ValueError("bad structure")
-            ),
-        ):
-            result = json.loads(await load_recipe(name="test"))
-        assert "error" not in result
-        assert any(
-            s.get("rule") == "validation-error" and s.get("severity") == "error"
-            for s in result["suggestions"]
-        )
-
-    @pytest.mark.anyio
-    async def test_file_not_found_surfaces_as_suggestion(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """FileNotFoundError is caught and returned as an error suggestion."""
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "test.yaml").write_text(
-            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
-        )
-        with patch(
-            "autoskillit.recipe._api.load_recipe_card",
-            side_effect=FileNotFoundError("missing"),
-        ):
-            result = json.loads(await load_recipe(name="test"))
-        assert "error" not in result
-        assert any(
-            s.get("rule") == "validation-error" and s.get("severity") == "error"
-            for s in result["suggestions"]
-        )
-
-    @pytest.mark.anyio
-    async def test_unexpected_exception_returns_structured_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Unexpected exceptions are caught by the exception boundary."""
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "test.yaml").write_text(
-            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
-        )
-        with patch(
-            "autoskillit.recipe._api.run_semantic_rules",
-            side_effect=AttributeError("programming error"),
-        ):
-            result = json.loads(await load_recipe(name="test"))
-        assert result["success"] is False
-        assert result["subtype"] == "tool_exception"
-        assert "programming error" in result["error"]
 
 
 class TestValidateRecipeTool:
@@ -620,194 +245,6 @@ class TestValidateRecipeTool:
         assert result["valid"] is True  # Warning does not block validity
 
 
-class TestDocstringSemantics:
-    """Section-aware semantic checks for tool descriptions.
-
-    Unlike TestToolSchemas (which checks token presence), these tests parse
-    descriptions into named sections and verify behavioral correctness,
-    routing, and cross-section consistency.
-    """
-
-    async def _get_tools(self) -> dict:
-        """Return a dict of tool_name -> tool for all visible tools including kitchen-gated."""
-        from fastmcp.client import Client
-
-        from autoskillit.server import mcp
-
-        try:
-            mcp.enable(tags={"kitchen"})
-            async with Client(mcp) as client:
-                tools = await client.list_tools()
-        finally:
-            mcp.disable(tags={"kitchen"})
-        return {t.name: t for t in tools}
-
-    @pytest.mark.anyio
-    async def test_load_recipe_action_protocol_routes_through_skill(self):
-        """After loading section must route modifications through write-recipe."""
-        tools = await self._get_tools()
-        desc = tools["load_recipe"].description or ""
-        sections = _extract_docstring_sections(desc)
-
-        after_loading = sections.get("after loading", "")
-        assert after_loading, "load_recipe missing 'After loading' section"
-
-        # Modification requests must route through write-recipe
-        assert "write-recipe" in after_loading, (
-            "After loading section must route recipe modifications through write-recipe"
-        )
-
-    @pytest.mark.anyio
-    async def test_load_recipe_after_loading_does_not_instruct_direct_modification(self):
-        """After loading section must not instruct direct file modification."""
-        tools = await self._get_tools()
-        desc = tools["load_recipe"].description or ""
-        sections = _extract_docstring_sections(desc)
-
-        after_loading = sections.get("after loading", "")
-        assert after_loading, "load_recipe missing 'After loading' section"
-
-        direct_edit_phrases = [
-            "apply them",
-            "Save changes to the original file",
-            "Save as a new recipe",
-        ]
-        found = [p for p in direct_edit_phrases if p.lower() in after_loading.lower()]
-        assert not found, f"After loading section instructs direct modification: {found}"
-
-    @pytest.mark.anyio
-    async def test_validate_recipe_has_failure_routing(self):
-        """validate_recipe must route validation failures to write-recipe."""
-        tools = await self._get_tools()
-        desc = tools["validate_recipe"].description or ""
-
-        # Must reference the failure return case
-        assert "false" in desc.lower(), (
-            "validate_recipe must document the failure case (e.g. {valid: false})"
-        )
-
-        # Failure routing must direct to write-recipe for remediation
-        desc_lower = desc.lower()
-        has_remediation_context = any(
-            phrase in desc_lower for phrase in ["fix", "remediat", "correct the"]
-        )
-        assert has_remediation_context, (
-            "validate_recipe must route failures to write-recipe for remediation"
-        )
-
-    @pytest.mark.anyio
-    async def test_validate_recipe_does_not_endorse_direct_editing(self):
-        """validate_recipe must not normalize direct recipe editing."""
-        tools = await self._get_tools()
-        desc = tools["validate_recipe"].description or ""
-
-        # "or editing a recipe" without qualifying through write-recipe
-        # normalizes the model directly editing YAML files
-        assert "or editing a recipe" not in desc, (
-            "validate_recipe normalizes direct editing with 'or editing a recipe'; "
-            "should qualify as going through write-recipe"
-        )
-
-    @pytest.mark.anyio
-    async def test_tool_description_sections_are_not_contradictory(self):
-        """After loading must not instruct what the prohibition section prohibits."""
-        tools = await self._get_tools()
-        desc = tools["load_recipe"].description or ""
-        sections = _extract_docstring_sections(desc)
-
-        after_loading = sections.get("after loading", "")
-        # Accept either old or new section header
-        prohibition = sections.get("during pipeline execution", "") or sections.get(
-            "never use native", ""
-        )
-        assert after_loading, "Missing 'After loading' section"
-        assert prohibition, (
-            "Missing prohibition section (NEVER use native / During pipeline execution)"
-        )
-
-        # If the prohibition section says Edit/Write are prohibited or "not used here",
-        # then "After loading" must not instruct behaviors requiring file writing
-        if "not used here" in prohibition.lower() or "prohibited" in prohibition.lower():
-            write_implying_phrases = ["apply them", "save changes", "save as"]
-            found = [p for p in write_implying_phrases if p.lower() in after_loading.lower()]
-            assert not found, (
-                f"Contradiction: prohibition section prohibits Edit/Write "
-                f"but 'After loading' instructs: {found}"
-            )
-
-    @pytest.mark.anyio
-    async def test_load_recipe_has_preview_format_spec(self):
-        """load_recipe must specify presentation format for loaded recipes."""
-        tools = await self._get_tools()
-        desc = tools["load_recipe"].description or ""
-
-        required_fields = ["kitchen_rules", "note", "retry", "capture"]
-        found = [f for f in required_fields if f in desc.lower()]
-        assert len(found) >= 3, (
-            f"load_recipe must specify a preview format naming critical recipe "
-            f"fields. Found only: {found}"
-        )
-
-    @pytest.mark.anyio
-    async def test_recipe_tool_descriptions_are_coherent(self):
-        """Recipe tools must form a coherent policy about recipe modification."""
-        tools = await self._get_tools()
-
-        failures = []
-
-        # load_recipe: modifications must route through write-recipe
-        load_desc = tools["load_recipe"].description or ""
-        load_sections = _extract_docstring_sections(load_desc)
-        after_loading = load_sections.get("after loading", "")
-        if "apply them" in after_loading.lower():
-            failures.append("load_recipe 'After loading' instructs direct editing ('apply them')")
-
-        # validate_recipe: failure must route through write-recipe
-        validate_desc = tools["validate_recipe"].description or ""
-        validate_lower = validate_desc.lower()
-        has_failure_routing = (
-            "write-recipe" in validate_desc
-            and any(w in validate_lower for w in ["fix", "fail", "invalid", "error"])
-            and "false" in validate_lower
-        )
-        if not has_failure_routing:
-            failures.append("validate_recipe has no failure routing through write-recipe")
-
-        # validate_recipe: must not normalize direct editing
-        if "or editing a recipe" in validate_desc:
-            failures.append("validate_recipe normalizes direct editing ('or editing a recipe')")
-
-        assert not failures, "Recipe tools lack coherent modification policy:\n" + "\n".join(
-            f"  - {f}" for f in failures
-        )
-
-
-class TestLoadSkillScriptFailurePredicates:
-    """The load_recipe tool description documents failure predicates."""
-
-    async def _get_tools(self) -> dict:
-        """Return dict of tool_name -> tool for all visible tools including kitchen-gated."""
-        from fastmcp.client import Client
-
-        from autoskillit.server import mcp
-
-        try:
-            mcp.enable(tags={"kitchen"})
-            async with Client(mcp) as client:
-                tools = await client.list_tools()
-        finally:
-            mcp.disable(tags={"kitchen"})
-        return {t.name: t for t in tools}
-
-    @pytest.mark.anyio
-    async def test_description_documents_run_skill_failure(self):
-        """The routing rules must define failure for run_skill, not just test_check."""
-        tools = await self._get_tools()
-        desc = tools["load_recipe"].description or ""
-        assert "run_skill" in desc
-        assert "success" in desc.lower()
-
-
 class TestMigrationSuggestions:
     """MSUG2: validate_recipe surfaces migration warnings."""
 
@@ -828,563 +265,181 @@ class TestMigrationSuggestions:
         assert "outdated-recipe-version" in rules
 
 
-class TestMigrationSuppression:
-    """SUP1, SUP4: load_recipe respects migration.suppressed config."""
+class TestDocstringSemantics:
+    """Section-aware semantic checks for tool descriptions.
 
-    # SUP1
+    Unlike TestToolSchemas (which checks token presence), these tests parse
+    descriptions into named sections and verify behavioral correctness,
+    routing, and cross-section consistency.
+    """
+
+    async def _get_tools(self) -> dict:
+        """Return a dict of tool_name -> tool for all visible tools including kitchen-gated."""
+        from fastmcp.client import Client
+
+        from autoskillit.server import mcp
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        return {t.name: t for t in tools}
+
     @pytest.mark.anyio
-    async def test_outdated_version_not_in_suggestions_when_suppressed(
-        self, tmp_path, monkeypatch, tool_ctx
+    async def test_load_recipe_action_protocol_routes_through_skill(self, kitchen_enabled):
+        """After loading section must route modifications through write-recipe."""
+        tools = await self._get_tools()
+        desc = tools["load_recipe"].description or ""
+        sections = _extract_docstring_sections(desc)
+
+        after_loading = sections.get("after loading", "")
+        assert after_loading, "load_recipe missing 'After loading' section"
+
+        # Modification requests must route through write-recipe
+        assert "write-recipe" in after_loading, (
+            "After loading section must route recipe modifications through write-recipe"
+        )
+
+    @pytest.mark.anyio
+    async def test_load_recipe_after_loading_does_not_instruct_direct_modification(
+        self, kitchen_enabled
     ):
-        """SUP1: outdated-recipe-version absent when recipe is suppressed; headless not called."""
-        from autoskillit.config import MigrationConfig
+        """After loading section must not instruct direct file modification."""
+        tools = await self._get_tools()
+        desc = tools["load_recipe"].description or ""
+        sections = _extract_docstring_sections(desc)
 
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        _write_minimal_script(scripts_dir, "test-script")
+        after_loading = sections.get("after loading", "")
+        assert after_loading, "load_recipe missing 'After loading' section"
 
-        tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=["test-script"]))
+        direct_edit_phrases = [
+            "apply them",
+            "Save changes to the original file",
+            "Save as a new recipe",
+        ]
+        found = [p for p in direct_edit_phrases if p.lower() in after_loading.lower()]
+        assert not found, f"After loading section instructs direct modification: {found}"
 
-        mock_headless = AsyncMock(
-            return_value=SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                stderr="",
+    @pytest.mark.anyio
+    async def test_validate_recipe_has_failure_routing(self, kitchen_enabled):
+        """validate_recipe must route validation failures to write-recipe."""
+        tools = await self._get_tools()
+        desc = tools["validate_recipe"].description or ""
+
+        assert "false" in desc.lower(), (
+            "validate_recipe must document the failure case (e.g. {valid: false})"
+        )
+
+        desc_lower = desc.lower()
+        has_remediation_context = any(
+            phrase in desc_lower for phrase in ["fix", "remediat", "correct the"]
+        )
+        assert has_remediation_context, (
+            "validate_recipe must route failures to write-recipe for remediation"
+        )
+
+    @pytest.mark.anyio
+    async def test_validate_recipe_does_not_endorse_direct_editing(self, kitchen_enabled):
+        """validate_recipe must not normalize direct recipe editing."""
+        tools = await self._get_tools()
+        desc = tools["validate_recipe"].description or ""
+
+        assert "or editing a recipe" not in desc, (
+            "validate_recipe normalizes direct editing with 'or editing a recipe'; "
+            "should qualify as going through write-recipe"
+        )
+
+    @pytest.mark.anyio
+    async def test_tool_description_sections_are_not_contradictory(self, kitchen_enabled):
+        """After loading must not instruct what the prohibition section prohibits."""
+        tools = await self._get_tools()
+        desc = tools["load_recipe"].description or ""
+        sections = _extract_docstring_sections(desc)
+
+        after_loading = sections.get("after loading", "")
+        prohibition = sections.get("during pipeline execution", "") or sections.get(
+            "never use native", ""
+        )
+        assert after_loading, "Missing 'After loading' section"
+        assert prohibition, (
+            "Missing prohibition section (NEVER use native / During pipeline execution)"
+        )
+
+        if "not used here" in prohibition.lower() or "prohibited" in prohibition.lower():
+            write_implying_phrases = ["apply them", "save changes", "save as"]
+            found = [p for p in write_implying_phrases if p.lower() in after_loading.lower()]
+            assert not found, (
+                f"Contradiction: prohibition section prohibits Edit/Write "
+                f"but 'After loading' instructs: {found}"
             )
-        )
-        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
-            result = json.loads(await load_recipe(name="test-script"))
-
-        assert "suggestions" in result
-        rules = [s["rule"] for s in result["suggestions"]]
-        assert "outdated-recipe-version" not in rules
-        mock_headless.assert_not_called()
-
-    # SUP4
-    @pytest.mark.anyio
-    async def test_validate_always_includes_outdated_version_regardless_of_suppression(
-        self, tmp_path, tool_ctx
-    ):
-        """SUP4: validate_recipe includes outdated-script-version even when suppressed."""
-        from autoskillit.config import MigrationConfig
-
-        script = tmp_path / "test-script.yaml"
-        script.write_text(_MINIMAL_SCRIPT_YAML)
-
-        # Even with script suppressed in config, validate_recipe does not filter
-        tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=["test-script"]))
-
-        result = json.loads(await validate_recipe(script_path=str(script)))
-        assert "findings" in result
-        rules = [s["rule"] for s in result["findings"]]
-        assert "outdated-recipe-version" in rules
-
-
-class TestApplyTriageGate:
-    """T3: _apply_triage_gate caches triage result and skips on second call."""
-
-    @pytest.fixture(autouse=True)
-    def _close_kitchen(self, tool_ctx):
-        tool_ctx.gate = DefaultGateState(enabled=False)
 
     @pytest.mark.anyio
-    async def test_apply_triage_gate_second_call_skips_triage(
-        self, tmp_path, monkeypatch, tool_ctx
-    ):
-        """Second _apply_triage_gate call reads from cache; triage_staleness not re-invoked."""
-        import copy
+    async def test_load_recipe_has_preview_format_spec(self, kitchen_enabled):
+        """load_recipe must specify presentation format for loaded recipes."""
+        tools = await self._get_tools()
+        desc = tools["load_recipe"].description or ""
 
-        from autoskillit.recipe.staleness_cache import read_staleness_cache
-        from autoskillit.server.helpers import _apply_triage_gate
-
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        recipe_yaml = (
-            "name: triage-test\ndescription: T\n"
-            "steps:\n  done:\n    action: stop\n    message: Done\n"
+        required_fields = ["kitchen_rules", "note", "retry", "capture"]
+        found = [f for f in required_fields if f in desc.lower()]
+        assert len(found) >= 3, (
+            f"load_recipe must specify a preview format naming critical recipe "
+            f"fields. Found only: {found}"
         )
-        recipe_path = recipes_dir / "triage-test.yaml"
-        recipe_path.write_text(recipe_yaml)
-
-        name = "triage-test"
-        result_template = {
-            "content": recipe_yaml,
-            "suggestions": [
-                {
-                    "rule": "stale-contract",
-                    "reason": "hash_mismatch",
-                    "skill": "investigate",
-                    "stored_value": "sha256:old",
-                    "current_value": "sha256:new",
-                    "message": "investigate SKILL.md changed",
-                    "severity": "info",
-                }
-            ],
-            "valid": True,
-        }
-
-        # Get real recipe_info before mocking find
-        recipe_info = tool_ctx.recipes.find(name, Path.cwd())
-        assert recipe_info is not None
-
-        # Mock _ctx.recipes.find to verify it is NOT called when recipe_info is injected
-        mock_find = AsyncMock(return_value=recipe_info)
-        monkeypatch.setattr(tool_ctx.recipes, "find", mock_find)
-
-        mock_triage = AsyncMock(
-            return_value=[{"meaningful": False, "summary": "ok", "skill": "investigate"}]
-        )
-        with patch("autoskillit._llm_triage.triage_staleness", mock_triage):
-            # First call: triage_staleness invoked once
-            await _apply_triage_gate(copy.deepcopy(result_template), name, recipe_info=recipe_info)
-
-        assert mock_triage.call_count == 1
-        assert mock_find.call_count == 0, "find() must not be called when recipe_info is injected"
-
-        cache_path = tmp_path / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
-        cached = read_staleness_cache(cache_path, name)
-        assert cached is not None
-        assert cached.triage_result == "cosmetic"
-
-        with patch("autoskillit._llm_triage.triage_staleness", mock_triage):
-            # Second call: must read from cache and skip triage_staleness entirely
-            await _apply_triage_gate(copy.deepcopy(result_template), name, recipe_info=recipe_info)
-
-        assert mock_triage.call_count == 1, (
-            "triage_staleness must not be called on second invocation"
-        )
-
-
-class TestLoadRecipeReadOnly:
-    """P4: load_recipe is strictly read-only — no migration, no contract card generation."""
-
-    @pytest.fixture(autouse=True)
-    def _ensure_ctx(self, tool_ctx):
-        """Ensure server context is initialized (gate open by default)."""
 
     @pytest.mark.anyio
-    async def test_load_recipe_does_not_call_migration_engine(self, tmp_path, monkeypatch):
-        """load_recipe must not trigger headless migration even when migrations are applicable."""
-        monkeypatch.chdir(tmp_path)
-        with (
-            patch("autoskillit.migration.loader.applicable_migrations", return_value=["v0.1.0"]),
-            patch("autoskillit.execution.headless.run_headless_core") as mock_headless,
-            patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen,
-        ):
-            result = json.loads(await load_recipe(name="implementation"))
-        assert "error" not in result
-        mock_headless.assert_not_called()
-        mock_gen.assert_not_called()
+    async def test_recipe_tool_descriptions_are_coherent(self, kitchen_enabled):
+        """Recipe tools must form a coherent policy about recipe modification."""
+        tools = await self._get_tools()
 
-    @pytest.mark.anyio
-    async def test_load_recipe_does_not_auto_generate_contract_card(self, tmp_path, monkeypatch):
-        """load_recipe must not call generate_recipe_card even when no card exists."""
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        (recipes_dir / "test.yaml").write_text(
-            "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
+        failures = []
+
+        load_desc = tools["load_recipe"].description or ""
+        load_sections = _extract_docstring_sections(load_desc)
+        after_loading = load_sections.get("after loading", "")
+        if "apply them" in after_loading.lower():
+            failures.append("load_recipe 'After loading' instructs direct editing ('apply them')")
+
+        validate_desc = tools["validate_recipe"].description or ""
+        validate_lower = validate_desc.lower()
+        has_failure_routing = (
+            "write-recipe" in validate_desc
+            and any(w in validate_lower for w in ["fix", "fail", "invalid", "error"])
+            and "false" in validate_lower
         )
-        with patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen:
-            await load_recipe(name="test")
-        mock_gen.assert_not_called()
+        if not has_failure_routing:
+            failures.append("validate_recipe has no failure routing through write-recipe")
 
+        if "or editing a recipe" in validate_desc:
+            failures.append("validate_recipe normalizes direct editing ('or editing a recipe')")
 
-class TestMigrateRecipe:
-    """P4: migrate_recipe is a gated tool that runs migration engine and regenerates cards."""
-
-    @pytest.fixture(autouse=True)
-    def _open_kitchen(self, tool_ctx):
-        """migrate_recipe requires tool activation."""
-        tool_ctx.gate = DefaultGateState(enabled=True)
-
-    def _setup_migration_env(
-        self,
-        tmp_path,
-        monkeypatch,
-        tool_ctx,
-        *,
-        suppressed: list[str] | None = None,
-    ):
-        """Create directory structure, fake migration YAML, and config."""
-        import autoskillit
-        import autoskillit.migration.loader as ml
-        from autoskillit.config import MigrationConfig
-
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        recipe_path = recipes_dir / "test-script.yaml"
-        recipe_path.write_text(_MINIMAL_SCRIPT_YAML)
-
-        installed_ver = autoskillit.__version__
-        fake_mig_dir = tmp_path / "migrations"
-        fake_mig_dir.mkdir()
-        migration_yaml = (
-            f"from_version: '0.0.0'\n"
-            f"to_version: '{installed_ver}'\n"
-            "description: Upgrade scripts\n"
-            "changes:\n"
-            "  - id: add-summary-field\n"
-            "    description: Scripts now require a summary field\n"
-            "    instruction: Add summary field to your script\n"
-        )
-        (fake_mig_dir / "0.0.0-migration.yaml").write_text(migration_yaml)
-        monkeypatch.setattr(ml, "_migrations_dir", lambda: fake_mig_dir)
-
-        tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=suppressed or []))
-
-        temp_mig_dir = tmp_path / ".autoskillit" / "temp" / "migrations"
-        temp_mig_dir.mkdir(parents=True)
-
-        migrated_content = _MINIMAL_SCRIPT_YAML + f"autoskillit_version: '{installed_ver}'\n"
-        return {
-            "recipe_path": recipe_path,
-            "temp_mig_dir": temp_mig_dir,
-            "migrated_content": migrated_content,
-            "installed_ver": installed_ver,
-        }
-
-    def test_migrate_recipe_is_in_gated_tools(self):
-        """migrate_recipe is a gated tool."""
-        assert "migrate_recipe" in GATED_TOOLS
-
-    def test_migrate_recipe_not_in_ungated_tools(self):
-        """migrate_recipe is not an ungated tool."""
-        assert "migrate_recipe" not in UNGATED_TOOLS
-
-    @pytest.mark.anyio
-    async def test_migrate_recipe_requires_gate(self, tool_ctx):
-        """migrate_recipe returns gate_error when kitchen is closed."""
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        result = json.loads(await migrate_recipe(name="test"))
-        assert result["success"] is False
-        assert result["subtype"] == "gate_error"
-
-    @pytest.mark.anyio
-    async def test_migrate_recipe_not_found(self, tmp_path, monkeypatch):
-        """migrate_recipe returns error for unknown recipe name."""
-        monkeypatch.chdir(tmp_path)
-        result = json.loads(await migrate_recipe(name="nonexistent"))
-        assert "error" in result
-        assert "nonexistent" in result["error"]
-
-    @pytest.mark.anyio
-    async def test_migrate_recipe_up_to_date(self, tmp_path, monkeypatch):  # SRV-UPD-1
-        """migrate_recipe returns up_to_date when no migrations applicable and contract fresh."""
-        monkeypatch.chdir(tmp_path)
-        with (
-            patch("autoskillit.migration.loader.applicable_migrations", return_value=[]),
-            patch("autoskillit.recipe.load_recipe_card", return_value={"skill_hashes": {}}),
-            patch("autoskillit.recipe.check_contract_staleness", return_value=[]),
-        ):
-            result = json.loads(await migrate_recipe(name="implementation"))
-        assert result.get("status") == "up_to_date"
-
-    # LR1
-    @pytest.mark.anyio
-    async def test_auto_migrates_outdated_recipe(self, tmp_path, monkeypatch, tool_ctx):
-        """LR1: When recipe version < installed, _run_headless_core is called once."""
-        ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
-        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
-
-        mock_headless = AsyncMock(
-            return_value=SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                stderr="",
-            )
-        )
-        with (
-            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
-            patch("autoskillit.recipe.generate_recipe_card", return_value=None),
-        ):
-            result = json.loads(await migrate_recipe(name="test-script"))
-
-        mock_headless.assert_awaited_once()
-        assert result.get("status") == "migrated"
-        assert "contracts_regenerated" in result
-
-    # LR4
-    @pytest.mark.anyio
-    async def test_clears_failure_record_after_successful_migration(
-        self, tmp_path, monkeypatch, tool_ctx
-    ):
-        """LR4: FailureStore.clear(name) is called when migration succeeds."""
-        from autoskillit.migration.store import FailureStore, default_store_path
-
-        ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
-        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
-
-        store = FailureStore(default_store_path(tmp_path))
-        store.record(
-            name="test-script",
-            file_path=ctx["recipe_path"],
-            file_type="recipe",
-            error="prior failure",
-            retries_attempted=1,
-        )
-        assert store.has_failure("test-script")
-
-        mock_headless = AsyncMock(
-            return_value=SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                stderr="",
-            )
-        )
-        with (
-            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
-            patch("autoskillit.recipe.contracts.generate_recipe_card", return_value=None),
-        ):
-            await migrate_recipe(name="test-script")
-
-        fresh_store = FailureStore(default_store_path(tmp_path))
-        assert not fresh_store.has_failure("test-script")
-
-    # LR5
-    @pytest.mark.anyio
-    async def test_records_failure_when_migration_fails(self, tmp_path, monkeypatch, tool_ctx):
-        """LR5: When headless returns success=False, failure is recorded to failures.json."""
-        from autoskillit.migration.store import FailureStore, default_store_path
-
-        self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
-
-        mock_headless = AsyncMock(
-            return_value=SkillResult(
-                success=False,
-                result="headless failed",
-                session_id="",
-                subtype="error",
-                is_error=True,
-                exit_code=1,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                stderr="",
-            )
-        )
-        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
-            result = json.loads(await migrate_recipe(name="test-script"))
-
-        assert "error" in result
-        store = FailureStore(default_store_path(tmp_path))
-        assert store.has_failure("test-script")
-
-    # LR7
-    @pytest.mark.anyio
-    async def test_suppressed_recipe_not_migrated(self, tmp_path, monkeypatch, tool_ctx):
-        """LR7: When name in migration.suppressed, headless is never called."""
-        self._setup_migration_env(tmp_path, monkeypatch, tool_ctx, suppressed=["test-script"])
-
-        mock_headless = AsyncMock(
-            return_value=SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                stderr="",
-            )
-        )
-        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
-            result = json.loads(await migrate_recipe(name="test-script"))
-
-        mock_headless.assert_not_called()
-        assert result.get("status") == "up_to_date"
-
-    # LR8
-    @pytest.mark.anyio
-    async def test_up_to_date_recipe_not_migrated(self, tmp_path, monkeypatch, tool_ctx):
-        """LR8: When applicable_migrations returns [], headless is never called."""
-        import autoskillit
-        import autoskillit.migration.loader as ml
-        from autoskillit.config import MigrationConfig
-
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        current_ver = autoskillit.__version__
-        (recipes_dir / "test-script.yaml").write_text(
-            _MINIMAL_SCRIPT_YAML + f"autoskillit_version: '{current_ver}'\n"
+        assert not failures, "Recipe tools lack coherent modification policy:\n" + "\n".join(
+            f"  - {f}" for f in failures
         )
 
-        empty_mig_dir = tmp_path / "migrations"
-        empty_mig_dir.mkdir()
-        monkeypatch.setattr(ml, "_migrations_dir", lambda: empty_mig_dir)
-        tool_ctx.config = AutomationConfig(migration=MigrationConfig(suppressed=[]))
 
-        mock_headless = AsyncMock(
-            return_value=SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                stderr="",
-            )
-        )
-        with (
-            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
-            patch("autoskillit.recipe.load_recipe_card", return_value={"skill_hashes": {}}),
-            patch("autoskillit.recipe.check_contract_staleness", return_value=[]),
-        ):
-            result = json.loads(await migrate_recipe(name="test-script"))
+class TestLoadSkillScriptFailurePredicates:
+    """The load_recipe tool description documents failure predicates."""
 
-        mock_headless.assert_not_called()
-        assert result.get("status") == "up_to_date"
+    async def _get_tools(self) -> dict:
+        """Return dict of tool_name -> tool for all visible tools including kitchen-gated."""
+        from fastmcp.client import Client
 
-    # SRV-NEW-1
+        from autoskillit.server import mcp
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        return {t.name: t for t in tools}
+
     @pytest.mark.anyio
-    async def test_migrate_recipe_regenerates_stale_contract(
-        self, tmp_path, monkeypatch, tool_ctx
-    ):
-        """migrate_recipe with version migration also regenerates stale contracts."""
-        ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
-        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
-
-        mock_headless = AsyncMock(
-            return_value=SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                stderr="",
-            )
-        )
-        with (
-            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
-            patch("autoskillit.recipe.load_recipe_card", return_value=None),
-            patch("autoskillit.recipe.generate_recipe_card", return_value={}),
-        ):
-            result = json.loads(await migrate_recipe(name="test-script"))
-
-        assert result.get("status") == "migrated"
-        assert result.get("contracts_regenerated") == ["test-script"]
+    async def test_description_documents_run_skill_failure(self, kitchen_enabled):
+        """The routing rules must define failure for run_skill, not just test_check."""
+        tools = await self._get_tools()
+        desc = tools["load_recipe"].description or ""
+        assert "run_skill" in desc
+        assert "success" in desc.lower()
 
 
 # ---------------------------------------------------------------------------
-# Diagram field tests (DG-12 through DG-15)
+# P5F2: Accessor pattern tests
 # ---------------------------------------------------------------------------
-
-_MINIMAL_RECIPE_FOR_DIAGRAM = """\
-name: my-recipe
-description: Test recipe for diagram tests
-summary: step1 -> done
-ingredients:
-  task:
-    description: What to do
-    required: true
-steps:
-  step1:
-    tool: run_skill
-    with:
-      skill_command: "/autoskillit:investigate ${{ inputs.task }}"
-      cwd: "."
-    on_success: done
-    on_failure: escalate
-  done:
-    action: stop
-    message: "Done."
-  escalate:
-    action: stop
-    message: "Failed."
-kitchen_rules:
-  - "Use AutoSkillit tools only"
-"""
-
-
-class TestLoadRecipeDiagram:
-    """Tests for diagram field in load_recipe responses (DG-12 through DG-15)."""
-
-    def _setup_project_recipe(self, tmp_path: Path, monkeypatch) -> Path:
-        monkeypatch.chdir(tmp_path)
-        recipes_dir = tmp_path / ".autoskillit" / "recipes"
-        recipes_dir.mkdir(parents=True)
-        recipe_path = recipes_dir / "my-recipe.yaml"
-        recipe_path.write_text(_MINIMAL_RECIPE_FOR_DIAGRAM)
-        return recipes_dir
-
-    # DG-12
-    @pytest.mark.anyio
-    async def test_load_recipe_response_has_diagram_key(self, tmp_path, monkeypatch, tool_ctx):
-        """DG-12: load_recipe response always contains a 'diagram' key."""
-        self._setup_project_recipe(tmp_path, monkeypatch)
-        result = json.loads(await load_recipe(name="my-recipe"))
-        assert "diagram" in result
-
-    # DG-13
-    @pytest.mark.anyio
-    async def test_load_recipe_diagram_none_when_not_generated(
-        self, tmp_path, monkeypatch, tool_ctx
-    ):
-        """DG-13: diagram is None when no diagram file exists."""
-        self._setup_project_recipe(tmp_path, monkeypatch)
-        result = json.loads(await load_recipe(name="my-recipe"))
-        assert result["diagram"] is None
-
-
-# ---------------------------------------------------------------------------
-# P5F2: Accessor pattern tests (gated tools use _get_ctx_or_none after gate check)
-# ---------------------------------------------------------------------------
-
-
-# P5F2-T1
-@pytest.mark.anyio
-async def test_list_recipes_no_recipes_returns_empty(tool_ctx):
-    """list_recipes returns empty-list JSON when recipes is not configured."""
-    tool_ctx.recipes = None
-    result = json.loads(await list_recipes())
-    assert result == []
-
-
-# P5F2-T1b
-@pytest.mark.anyio
-async def test_list_recipes_gate_closed_returns_gate_error(tool_ctx):
-    """list_recipes returns gate_error JSON when kitchen gate is closed."""
-    tool_ctx.gate = DefaultGateState(enabled=False)
-    result = json.loads(await list_recipes())
-    assert result.get("success") is False
-    assert result.get("subtype") == "gate_error"
-
-
-# P5F2-T2
-@pytest.mark.anyio
-async def test_load_recipe_no_ctx_returns_error(monkeypatch):
-    """load_recipe returns error JSON when server is uninitialized."""
-    import autoskillit.server._state as _state_mod
-
-    monkeypatch.setattr(_state_mod, "_ctx", None)
-    result = json.loads(await load_recipe(name="anything"))
-    assert "error" in result
 
 
 # P5F2-T3

@@ -835,7 +835,11 @@ class TestSkillCommandMissingPrefixRule:
         ), "Expected skill-command-missing-prefix WARNING for prose skill_command"
 
     def test_scp2_prose_run_skill_warns(self) -> None:
-        """SCP2: run_skill with prose skill_command → WARNING finding."""
+        """SCP2: prose skill_command with on_failure step → WARNING finding.
+
+        Distinguishing input: step has both on_success and on_failure transitions,
+        and skill_command is a plain prose string without /autoskillit: prefix.
+        """
         wf = _make_workflow(
             {
                 "step": {

@@ -208,6 +208,24 @@ class TestBuildFullHeadlessCmd:
         spec = build_full_headless_cmd("/investigate foo", **self.BASE)
         assert "CLAUDE_CODE_SSE_PORT" not in spec.env
 
+    def test_headless_exclusive_vars_stripped_from_host_env_exit_delay(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """CLAUDE_CODE_EXIT_AFTER_STOP_DELAY in host env must be stripped even when ms=0."""
+        monkeypatch.setenv("CLAUDE_CODE_EXIT_AFTER_STOP_DELAY", "99999")
+        params = {**self.BASE, "exit_after_stop_delay_ms": 0}
+        spec = build_full_headless_cmd("/investigate foo", **params)
+        assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
+
+    def test_headless_exclusive_vars_stripped_from_host_env_scenario_step(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """SCENARIO_STEP_NAME in host env must be stripped even when no step name is given."""
+        monkeypatch.setenv("SCENARIO_STEP_NAME", "outer-step")
+        params = {**self.BASE, "scenario_step_name": ""}
+        spec = build_full_headless_cmd("/investigate foo", **params)
+        assert "SCENARIO_STEP_NAME" not in spec.env
+
     def test_env_has_auto_connect_off(self):
         spec = build_full_headless_cmd("/investigate foo", **self.BASE)
         assert spec.env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"

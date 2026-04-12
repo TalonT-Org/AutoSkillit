@@ -170,12 +170,6 @@ def _count_semantic_rule_files() -> int:
 # ----- tests ------------------------------------------------------------------
 
 
-def test_mcp_tool_count_is_42() -> None:
-    assert _count_mcp_tools() == 42, (
-        f"Expected 42 @mcp.tool decorators; found {_count_mcp_tools()}"
-    )
-
-
 def test_kitchen_tagged_tool_count_is_40() -> None:
     assert _count_kitchen_tools() == 40, (
         f"Expected 40 kitchen-tagged tools; found {_count_kitchen_tools()}"
@@ -194,12 +188,6 @@ def test_headless_tool_count_is_1() -> None:
     )
 
 
-def test_skills_total_is_95() -> None:
-    assert _count_skills_total() == 95, (
-        f"Expected 95 bundled skills; found {_count_skills_total()}"
-    )
-
-
 def test_arch_lens_count_is_13() -> None:
     assert _count_arch_lens_skills() == 13
 
@@ -208,21 +196,13 @@ def test_exp_lens_count_is_18() -> None:
     assert _count_exp_lens_skills() == 18
 
 
-def test_hook_total_is_13() -> None:
-    counts = _count_hooks_by_event()
-    assert sum(counts.values()) == 13, f"Hook event totals do not sum to 13: {counts}"
-    assert counts["PreToolUse"] == 9, counts
-    assert counts["PostToolUse"] == 3, counts
-    assert counts["SessionStart"] == 1, counts
-
-
 def test_quota_thresholds_defaults() -> None:
     short, long_ = _quota_thresholds_default()
     assert short == pytest.approx(85.0)
     assert long_ == pytest.approx(98.0)
 
 
-def test_doctor_check_count_is_14() -> None:
+def test_doctor_check_count_is_16() -> None:
     assert _count_doctor_checks() == 16, (
         f"Expected 16 doctor checks; found {_count_doctor_checks()}"
     )

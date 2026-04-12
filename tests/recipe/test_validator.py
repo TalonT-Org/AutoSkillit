@@ -36,12 +36,6 @@ class TestValidateRecipe:
         errors = validate_recipe(wf)
         assert errors == []
 
-    def test_missing_name_produces_error(self) -> None:
-        data = {**VALID_RECIPE, "name": ""}
-        wf = _parse_recipe(data)
-        errors = validate_recipe(wf)
-        assert any("name" in e.lower() for e in errors)
-
     # WF2
     def test_recipe_requires_name(self, tmp_path: Path) -> None:
         data = {**VALID_RECIPE, "name": ""}
@@ -616,6 +610,9 @@ class TestIsInstanceGuards:
         recipe = _parse_recipe(data)
         result = validate_recipe(recipe)
         assert isinstance(result, list)
+        assert not any("dead" in str(f).lower() for f in result), (
+            "DEAD_OUTPUT rule fired on a valid recipe — false positive"
+        )
 
 
 # ---------------------------------------------------------------------------

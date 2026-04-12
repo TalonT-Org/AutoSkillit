@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.config import AutomationConfig
 from autoskillit.core.types import SkillResult, SubprocessResult, TerminationReason
 from autoskillit.execution.db import DefaultDatabaseReader
@@ -41,6 +43,8 @@ def _runner() -> MockSubprocessRunner:
 def test_make_context_returns_toolcontext():
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert isinstance(ctx, ToolContext)
+    assert ctx.gate is not None
+    assert ctx.runner is not None
 
 
 def test_make_context_gate_starts_closed(monkeypatch):
@@ -230,138 +234,60 @@ def test_write_expected_resolver_conditional_skill() -> None:
     assert len(spec.expected_when) > 0
 
 
-def test_write_expected_resolver_for_resolve_failures_returns_conditional() -> None:
-    """resolve-failures must declare write_behavior='conditional', not 'always'.
-
-    This test captures Issue #603: the skill has a legitimate no-write success
-    path when the worktree is already green (0 fix iterations needed).
-    'always' mode demotes that success unconditionally to zero_writes.
-    """
+@pytest.mark.parametrize(
+    "invocation,expected_mode,required_tokens",
+    [
+        (
+            "/autoskillit:resolve-failures /tmp/wt .autoskillit/temp/plan.md main",
+            "conditional",
+            ["fixes_applied"],
+        ),
+        (
+            "/autoskillit:retry-worktree .autoskillit/temp/plan.md /tmp/wt",
+            "conditional",
+            ["phases_implemented"],
+        ),
+        (
+            "/autoskillit:resolve-review feature-branch main",
+            "conditional",
+            ["fixes_applied"],
+        ),
+        (
+            "/autoskillit:audit-claims /tmp/wt main https://github.com/o/r/pull/1",
+            None,
+            [],
+        ),
+        (
+            "/autoskillit:review-research-pr /tmp/wt main https://github.com/o/r/pull/1",
+            None,
+            [],
+        ),
+        (
+            "/autoskillit:resolve-claims-review /tmp/wt main",
+            "conditional",
+            ["Fixes applied", r"[1-9][0-9]*"],
+        ),
+        (
+            "/autoskillit:resolve-research-review /tmp/wt main",
+            "conditional",
+            ["Fixes applied", r"[1-9][0-9]*"],
+        ),
+    ],
+)
+def test_write_expected_resolver_mode(
+    invocation: str, expected_mode: str | None, required_tokens: list[str]
+) -> None:
+    """write_expected_resolver returns the correct mode and token patterns per skill."""
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver(
-        "/autoskillit:resolve-failures /tmp/wt .autoskillit/temp/plan.md main"
-    )
-    assert spec.mode == "conditional", (
-        f"resolve-failures must use 'conditional' write_behavior, got '{spec.mode}'. "
-        "The skill exits with 0 writes when the worktree is already green."
-    )
-    assert len(spec.expected_when) > 0, (
-        "conditional mode requires at least one write_expected_when pattern"
-    )
-    assert any("fixes_applied" in p for p in spec.expected_when), (
-        "Pattern must gate on the fixes_applied token emitted by resolve-failures Step 4"
-    )
-
-
-def test_write_expected_resolver_for_retry_worktree_returns_conditional() -> None:
-    """retry-worktree must declare write_behavior='conditional'.
-
-    When called on a worktree where all phases are already complete,
-    the skill produces no Edit/Write calls — 'always' mode demotes it to zero_writes.
-    """
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver(
-        "/autoskillit:retry-worktree .autoskillit/temp/plan.md /tmp/wt"
-    )
-    assert spec.mode == "conditional", (
-        f"retry-worktree must use 'conditional' write_behavior, got '{spec.mode}'. "
-        "The skill exits with 0 new writes when all plan phases are already complete."
-    )
-    assert len(spec.expected_when) > 0
-    assert any("phases_implemented" in p for p in spec.expected_when)
-
-
-def test_write_expected_resolver_for_resolve_review_returns_conditional() -> None:
-    """resolve-review must declare write_behavior='conditional'.
-
-    When no PR is found (graceful degradation, Step 1 exit), the skill exits
-    0 with no files written — 'always' mode demotes it to zero_writes.
-    """
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver("/autoskillit:resolve-review feature-branch main")
-    assert spec.mode == "conditional", (
-        f"resolve-review must use 'conditional' write_behavior, got '{spec.mode}'. "
-        "The skill exits with 0 writes when no PR is found (graceful degradation)."
-    )
-    assert len(spec.expected_when) > 0
-    assert any("fixes_applied" in p for p in spec.expected_when)
-
-
-def test_write_expected_resolver_for_audit_claims_returns_unset() -> None:
-    """audit-claims must NOT declare write_behavior (gate must be inactive).
-
-    audit-claims is API-primary (gh api → Bash); write_call_count is always 0.
-    Declaring write_behavior: always demotes every successful run to zero_writes.
-    """
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver(
-        "/autoskillit:audit-claims /tmp/wt main https://github.com/o/r/pull/1"
-    )
-    assert spec.mode is None, (
-        f"audit-claims must have no write_behavior (gate inactive), got '{spec.mode}'. "
-        "It is API-primary and never produces Edit/Write calls."
-    )
-    assert spec.expected_when == ()
-
-
-def test_write_expected_resolver_for_review_research_pr_returns_unset() -> None:
-    """review-research-pr must NOT declare write_behavior (gate must be inactive).
-
-    review-research-pr is API-primary (gh api → Bash); write_call_count is always 0.
-    Declaring write_behavior: always demotes every successful run to zero_writes.
-    """
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver(
-        "/autoskillit:review-research-pr /tmp/wt main https://github.com/o/r/pull/1"
-    )
-    assert spec.mode is None, (
-        f"review-research-pr must have no write_behavior (gate inactive), got '{spec.mode}'. "
-        "It is API-primary and never produces Edit/Write calls."
-    )
-    assert spec.expected_when == ()
-
-
-def test_write_expected_resolver_for_resolve_claims_review_returns_conditional() -> None:
-    """resolve-claims-review must declare write_behavior='conditional'.
-
-    Legitimate zero-write success paths exist: Fixes applied: 0, all-escalations,
-    and graceful degradation (no PR found). The 'Fixes applied: N>=1' anchor fires
-    the gate only when the skill claims fixes were applied but produced no writes.
-    """
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver("/autoskillit:resolve-claims-review /tmp/wt main")
-    assert spec.mode == "conditional", (
-        f"resolve-claims-review must use 'conditional' write_behavior, got '{spec.mode}'. "
-        "It has legitimate no-write success paths."
-    )
-    assert len(spec.expected_when) > 0
-    assert any("Fixes applied" in p for p in spec.expected_when)
-    assert any(r"[1-9][0-9]*" in p for p in spec.expected_when)
-
-
-def test_write_expected_resolver_for_resolve_research_review_returns_conditional() -> None:
-    """resolve-research-review must declare write_behavior='conditional'.
-
-    Legitimate zero-write success paths exist: Fixes applied: 0, all-escalations,
-    and graceful degradation (no PR found). The 'Fixes applied: N>=1' anchor fires
-    the gate only when the skill claims fixes were applied but produced no writes.
-    """
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.write_expected_resolver is not None
-    spec = ctx.write_expected_resolver("/autoskillit:resolve-research-review /tmp/wt main")
-    assert spec.mode == "conditional", (
-        f"resolve-research-review must use 'conditional' write_behavior, got '{spec.mode}'. "
-        "It has legitimate no-write success paths."
-    )
-    assert len(spec.expected_when) > 0
-    assert any("Fixes applied" in p for p in spec.expected_when)
-    assert any(r"[1-9][0-9]*" in p for p in spec.expected_when)
+    spec = ctx.write_expected_resolver(invocation)
+    assert spec.mode == expected_mode
+    if expected_mode is None:
+        assert spec.expected_when == ()
+    else:
+        assert len(spec.expected_when) > 0
+        for token in required_tokens:
+            assert any(token in p for p in spec.expected_when)
 
 
 def test_cook_and_factory_session_skill_manager_ctor_args_in_sync() -> None:

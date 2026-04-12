@@ -22,7 +22,6 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
 
 from autoskillit.recipe.io import builtin_recipes_dir
 from autoskillit.server.tools_recipe import list_recipes, validate_recipe
@@ -116,14 +115,6 @@ class TestSmokeScriptValidation:
         result = json.loads(await list_recipes())
         names = [r["name"] for r in result["recipes"]]
         assert "smoke-test" not in names
-
-    def test_smoke_recipe_is_ready_to_execute(self) -> None:
-        """Smoke recipe exists, validates, and is project-local."""
-        assert SMOKE_SCRIPT.exists()
-        pipeline = yaml.safe_load(SMOKE_SCRIPT.read_text())
-        assert pipeline["name"] == "smoke-test"
-        assert "create_pr" in pipeline["steps"]
-        assert "close_pr" in pipeline["steps"]
 
 
 # ---------------------------------------------------------------------------

@@ -1410,7 +1410,7 @@ class TestPerWindowToggles:
         }
 
     def test_compute_binding_defaults_both_enabled_preserves_behavior(self):
-        """Test 1: default call (no toggle kwargs) pins backward-compat."""
+        """Test 1: default call (no toggle kwargs) — five_hour at 90% is binding and blocks."""
         from autoskillit.execution.quota import _compute_binding
 
         binding = _compute_binding(
@@ -1566,7 +1566,10 @@ class TestPerWindowToggles:
             cache_path=str(tmp_path / "cache.json"),
         )
 
+        captured_kwargs: dict = {}
+
         async def fake_fetch(credentials_path, **kwargs):
+            captured_kwargs.update(kwargs)
             return QuotaFetchResult(
                 windows={
                     "five_hour": QuotaWindowEntry(utilization=90.0, resets_at=resets_at),
@@ -1587,6 +1590,7 @@ class TestPerWindowToggles:
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
         assert result["window_name"] == "weekly"
+        assert captured_kwargs.get("short_enabled") is False
 
     @pytest.mark.anyio
     async def test_check_and_sleep_respects_long_window_disabled(self, monkeypatch, tmp_path):
@@ -1604,7 +1608,10 @@ class TestPerWindowToggles:
             cache_path=str(tmp_path / "cache.json"),
         )
 
+        captured_kwargs: dict = {}
+
         async def fake_fetch(credentials_path, **kwargs):
+            captured_kwargs.update(kwargs)
             return QuotaFetchResult(
                 windows={
                     "weekly": QuotaWindowEntry(
@@ -1627,6 +1634,7 @@ class TestPerWindowToggles:
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
         assert result["window_name"] == "five_hour"
+        assert captured_kwargs.get("long_enabled") is False
 
     @pytest.mark.anyio
     async def test_check_and_sleep_both_disabled_returns_sentinel_no_sleep(

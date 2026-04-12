@@ -3002,9 +3002,14 @@ class TestBuildSkillResultDirMissingRecovery:
             pid=12345,
             channel_confirmation=ChannelConfirmation.DIR_MISSING,
         )
-        skill = _build_skill_result(sub_result, completion_marker=marker)
+        import structlog.testing
+
+        with structlog.testing.capture_logs() as logs:
+            skill = _build_skill_result(sub_result, completion_marker=marker)
         # Recovery should succeed — marker found in assistant_messages
         assert skill.success is True
+        # Verify the recovery code path was taken, not just the outcome
+        assert any(e.get("event") == "dir_missing_late_bind_recovery" for e in logs)
 
     def test_dir_missing_without_marker_does_not_recover(self):
         """DIR_MISSING with no completion marker must not silently succeed."""

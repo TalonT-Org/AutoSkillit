@@ -19,9 +19,7 @@ def test_plan_visualization_runs_after_design_review_go(recipe) -> None:
     """review_design GO verdict must route to plan_visualization, not create_worktree."""
     step = recipe.steps["review_design"]
     assert step.on_result is not None
-    go_condition = next(
-        c for c in step.on_result.conditions if c.when and "GO" in c.when
-    )
+    go_condition = next(c for c in step.on_result.conditions if c.when and "GO" in c.when)
     assert go_condition.route == "plan_visualization", (
         "review_design GO verdict must route to plan_visualization; "
         "direct routing to create_worktree skips visualization plan generation"
@@ -53,9 +51,7 @@ def test_create_worktree_copies_viz_plan(recipe) -> None:
     assert "VISUALIZATION_PLAN" in cmd, (
         "create_worktree must reference VISUALIZATION_PLAN context variable"
     )
-    assert "REPORT_PLAN" in cmd, (
-        "create_worktree must reference REPORT_PLAN context variable"
-    )
+    assert "REPORT_PLAN" in cmd, "create_worktree must reference REPORT_PLAN context variable"
     assert "visualization-plan.md" in cmd, (
         "create_worktree must copy visualization-plan.md into the research dir"
     )
@@ -67,6 +63,4 @@ def test_create_worktree_copies_viz_plan(recipe) -> None:
 def test_plan_visualization_skill_dir_exists() -> None:
     """src/autoskillit/skills_extended/plan-visualization/SKILL.md must exist."""
     skill_path = pkg_root() / "skills_extended" / "plan-visualization" / "SKILL.md"
-    assert skill_path.exists(), (
-        f"plan-visualization skill directory not found at {skill_path}"
-    )
+    assert skill_path.exists(), f"plan-visualization skill directory not found at {skill_path}"

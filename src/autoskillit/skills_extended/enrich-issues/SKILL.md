@@ -179,14 +179,13 @@ The API layer exposes skill execution to MCP clients through the headless execut
   ```bash
   ts=$(date +%Y-%m-%d_%H%M%S)
   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/enrich-issues/edit_body_${ts}.md"
-  REQUIREMENTS_FILE="{{AUTOSKILLIT_TEMP}}/enrich-issues/requirements_${ts}.md"
+  REQUIREMENTS_FILE="${EDIT_BODY_FILE%.md}_req.md"
   mkdir -p "{{AUTOSKILLIT_TEMP}}/enrich-issues"
 
   # Fetch current body immediately before editing (avoids shell interpolation):
   gh issue view N --json body -q .body > "${EDIT_BODY_FILE}"
 
-  # Use the Write tool to write the generated requirements to ${REQUIREMENTS_FILE},
-  # then append requirements section to the edit body:
+  # Populate ${REQUIREMENTS_FILE} with generated requirements, then:
   printf '\n\n## Requirements\n\n' >> "${EDIT_BODY_FILE}"
   cat "${REQUIREMENTS_FILE}" >> "${EDIT_BODY_FILE}"
 

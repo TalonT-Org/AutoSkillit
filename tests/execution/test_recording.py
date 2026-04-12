@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -46,6 +46,21 @@ class FakeMeta:
     exit_code: int
     model: str = "test"
     duration_ms: int = 1000
+
+
+# --- T0: RecordingSubprocessRunner must NOT call atexit.register ---
+
+
+def test_recording_runner_does_not_register_atexit():
+    """
+    RecordingSubprocessRunner must not register atexit hooks.
+    Teardown is owned by the FastMCP server lifespan, not the constructor.
+    Regression guard for issue #745.
+    """
+    mock_recorder = Mock()
+    with patch("atexit.register") as mock_atexit:
+        RecordingSubprocessRunner(recorder=mock_recorder, inner=Mock())
+    mock_atexit.assert_not_called()
 
 
 # --- T1: Protocol compliance ---
@@ -224,13 +239,15 @@ def test_make_context_wraps_runner_when_record_scenario(monkeypatch, tmp_path):
     monkeypatch.setattr(
         _api_sim_claude, "make_scenario_recorder", Mock(return_value=mock_recorder), raising=False
     )
-    monkeypatch.setattr("atexit.register", Mock())
+    mock_atexit = Mock()
+    monkeypatch.setattr("atexit.register", mock_atexit)
 
     from autoskillit.config import AutomationConfig
     from autoskillit.server._factory import make_context
 
     ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
     assert isinstance(ctx.runner, RecordingSubprocessRunner)
+    mock_atexit.assert_not_called()
 
 
 # --- T11: make_context default runner unchanged without env var ---
@@ -459,7 +476,8 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
     monkeypatch.setattr(
         _api_sim_claude, "make_scenario_recorder", mock_make_recorder, raising=False
     )
-    monkeypatch.setattr("atexit.register", Mock())
+    mock_atexit = Mock()
+    monkeypatch.setattr("atexit.register", mock_atexit)
 
     from autoskillit.config import AutomationConfig
     from autoskillit.server._factory import make_context
@@ -467,6 +485,7 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
     ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
     assert isinstance(ctx.runner, ReplayingSubprocessRunner)
     mock_make_recorder.assert_not_called()  # REPLAY takes precedence over RECORD
+    mock_atexit.assert_not_called()
 
 
 # --- T22: Cross-scenario session override (integration, requires api-simulator) ---
@@ -497,10 +516,12 @@ async def test_cross_scenario_override(tmp_path):
 
 def test_recording_runner_recorder_is_public(monkeypatch):
     """RecordingSubprocessRunner exposes recorder as a public attribute."""
-    monkeypatch.setattr("atexit.register", Mock())
+    mock_atexit = Mock()
+    monkeypatch.setattr("atexit.register", mock_atexit)
     mock_recorder = Mock()
     runner = RecordingSubprocessRunner(recorder=mock_recorder)
     assert runner.recorder is mock_recorder
+    mock_atexit.assert_not_called()
 
 
 # --- T-REPLAY-PLAYER: player attribute stored ---
@@ -540,7 +561,9 @@ def test_build_replay_runner_stores_player_on_runner(tmp_path, monkeypatch):
     monkeypatch.setattr(
         _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False
     )
-    monkeypatch.setattr("atexit.register", Mock())
+    mock_atexit = Mock()
+    monkeypatch.setattr("atexit.register", mock_atexit)
 
     result = build_replay_runner(str(tmp_path))
     assert result.player is mock_player
+    mock_atexit.assert_not_called()

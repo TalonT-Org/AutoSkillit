@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import sys
+import tempfile
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -56,6 +58,59 @@ def read_starttime_ticks(pid: int) -> int | None:
     except (OSError, ValueError, IndexError):
         pass
     return None
+
+
+@dataclass(frozen=True)
+class TraceEnrollmentRecord:
+    """Identity triple written atomically at trace-open time.
+
+    (boot_id, pid, starttime_ticks) together form a collision-resistant identity:
+    - boot_id rejects pre-reboot stale files
+    - starttime_ticks detects PID recycling
+    """
+
+    schema_version: int  # always 1
+    pid: int
+    boot_id: str | None  # read_boot_id(); None if /proc unavailable
+    starttime_ticks: int | None  # read_starttime_ticks(pid); None if unavailable
+    session_id: str  # caller-provided; "" if not yet resolved
+    enrolled_at: str  # ISO 8601 UTC
+    kitchen_id: str  # ""
+    order_id: str  # ""
+
+
+def _write_enrollment_atomic(path: Path, record: TraceEnrollmentRecord) -> None:
+    """Write enrollment sidecar atomically using tempfile + os.replace."""
+    content = json.dumps(dataclasses.asdict(record))
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _read_enrollment(path: Path) -> TraceEnrollmentRecord | None:
+    """Read and validate an enrollment sidecar. Returns None on any error."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return TraceEnrollmentRecord(
+            schema_version=data["schema_version"],
+            pid=data["pid"],
+            boot_id=data.get("boot_id"),
+            starttime_ticks=data.get("starttime_ticks"),
+            session_id=data.get("session_id", ""),
+            enrolled_at=data.get("enrolled_at", ""),
+            kitchen_id=data.get("kitchen_id", ""),
+            order_id=data.get("order_id", ""),
+        )
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
 
 
 @dataclass(frozen=True)
@@ -200,6 +255,7 @@ class LinuxTracingHandle:
     _snapshots: list[ProcSnapshot] = field(default_factory=list)
     _trace_path: Path | None = field(default=None)
     _trace_file: IO[str] | None = field(default=None)
+    _enrollment_path: Path | None = field(default=None)
 
     def stop(self) -> list[ProcSnapshot]:
         """Stop tracing, flush and close the trace file, return accumulated snapshots."""
@@ -212,6 +268,12 @@ class LinuxTracingHandle:
             except OSError:
                 pass
             self._trace_file = None
+        if self._trace_path is not None:
+            self._trace_path.unlink(missing_ok=True)
+            self._trace_path = None
+        if self._enrollment_path is not None:
+            self._enrollment_path.unlink(missing_ok=True)
+            self._enrollment_path = None
         return list(self._snapshots)
 
 
@@ -219,6 +281,10 @@ def start_linux_tracing(
     pid: int,
     config: LinuxTracingConfig,
     tg: anyio.abc.TaskGroup | None,
+    *,
+    session_id: str = "",
+    kitchen_id: str = "",
+    order_id: str = "",
 ) -> LinuxTracingHandle | None:
     """Start Linux tracing if all gates pass. Returns handle or None."""
     if not LINUX_TRACING_AVAILABLE or not config.enabled:
@@ -239,6 +305,24 @@ def start_linux_tracing(
         except OSError:
             handle._trace_path = None
             handle._trace_file = None
+
+        # Write enrollment sidecar atomically for crash-recovery identity contract
+        enrollment_path = tmpfs / f"autoskillit_enrollment_{pid}.json"
+        try:
+            record = TraceEnrollmentRecord(
+                schema_version=1,
+                pid=pid,
+                boot_id=read_boot_id(),
+                starttime_ticks=read_starttime_ticks(pid),
+                session_id=session_id,
+                enrolled_at=datetime.now(UTC).isoformat(),
+                kitchen_id=kitchen_id,
+                order_id=order_id,
+            )
+            _write_enrollment_atomic(enrollment_path, record)
+            handle._enrollment_path = enrollment_path
+        except OSError:
+            handle._enrollment_path = None
 
     async def _run_monitor() -> None:
         with scope:

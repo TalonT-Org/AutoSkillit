@@ -391,15 +391,36 @@ def test_recover_crashed_sessions_skips_recent_files(tmp_path):
 
 
 def _write_old_trace(tmpfs: Path, filename: str, content: str) -> Path:
-    """Write a trace file and backdate its mtime to 60 seconds ago."""
-    import time
+    """Write a trace file (backdated 60s) and its enrollment sidecar.
 
+    The enrollment sidecar uses the current boot_id so Gate 2 passes.
+    The PID embedded in the filename is expected to be dead (so Gate 3 passes).
+    """
     trace = tmpfs / filename
     trace.write_text(content)
     old_mtime = time.time() - 60
-    import os
-
     os.utime(trace, (old_mtime, old_mtime))
+
+    # Write companion enrollment sidecar so Gate 1 passes
+    try:
+        pid = int(Path(filename).stem.split("_")[-1])
+    except (ValueError, IndexError):
+        pid = 0
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    enrollment.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": pid,
+                "boot_id": read_boot_id() or "",
+                "starttime_ticks": None,
+                "session_id": "",
+                "enrolled_at": "2026-01-01T00:00:00+00:00",
+                "kitchen_id": "",
+                "order_id": "",
+            }
+        )
+    )
     return trace
 
 

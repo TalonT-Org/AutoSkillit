@@ -17,8 +17,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import psutil
+
 from autoskillit.core import atomic_write, claude_code_log_path, get_logger
 from autoskillit.execution.anomaly_detection import detect_anomalies
+from autoskillit.execution.linux_tracing import (
+    _read_enrollment,
+    read_boot_id,
+    read_starttime_ticks,
+)
 
 logger = get_logger(__name__)
 
@@ -315,6 +322,7 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
         return 0
 
     count = 0
+    current_boot_id = read_boot_id()
     for trace_file in sorted(tmpfs.glob("autoskillit_trace_*.jsonl")):
         # Skip files modified within the last 30 seconds — may be active
         try:
@@ -324,7 +332,35 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
         if age_seconds < 30:
             continue
 
-        # Read snapshots
+        # Extract PID from filename: autoskillit_trace_{pid}.jsonl
+        try:
+            pid = int(trace_file.stem.split("_")[-1])
+        except (ValueError, IndexError):
+            pid = 0
+
+        # Gate 1: Enrollment sidecar must exist — no sidecar means alien/test file
+        enrollment_path = tmpfs / f"autoskillit_enrollment_{pid}.json"
+        enrollment = _read_enrollment(enrollment_path)
+        if enrollment is None:
+            logger.debug("Skipping %s: no enrollment sidecar", trace_file.name)
+            continue
+
+        # Gate 2: Boot ID must match current boot — mismatch means pre-reboot stale file
+        if current_boot_id and enrollment.boot_id and enrollment.boot_id != current_boot_id:
+            logger.debug("Skipping %s: boot_id mismatch", trace_file.name)
+            trace_file.unlink(missing_ok=True)
+            enrollment_path.unlink(missing_ok=True)
+            continue
+
+        # Gate 3: PID liveness + starttime_ticks identity
+        if psutil.pid_exists(pid):
+            current_ticks = read_starttime_ticks(pid)
+            if current_ticks is None or current_ticks == enrollment.starttime_ticks:
+                logger.debug("Skipping %s: PID %d still alive", trace_file.name, pid)
+                continue
+            # PID recycled — original process is gone, treat as crash
+
+        # All gates passed — read snapshots and emit crashed row
         snapshots: list[dict[str, object]] = []
         try:
             for line in trace_file.read_text().splitlines():
@@ -334,12 +370,6 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
                     continue
         except OSError:
             continue
-
-        # Extract PID from filename: autoskillit_trace_{pid}.jsonl
-        try:
-            pid = int(trace_file.stem.split("_")[-1])
-        except (ValueError, IndexError):
-            pid = 0
 
         # Compute start_ts from file mtime
         try:
@@ -365,10 +395,8 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
             logger.debug("recover_crashed_sessions: failed to finalize %s", trace_file)
             continue
 
-        try:
-            trace_file.unlink()
-        except OSError:
-            pass
+        trace_file.unlink(missing_ok=True)
+        enrollment_path.unlink(missing_ok=True)
 
         count += 1
 

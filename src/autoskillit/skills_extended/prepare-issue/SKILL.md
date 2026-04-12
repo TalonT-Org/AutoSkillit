@@ -300,7 +300,7 @@ If route is `recipe:implementation`:
 7. Otherwise, append the Requirements section:
    ```bash
    ts=$(date +%Y-%m-%d_%H%M%S)
-   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/req_body_${ts}.md"
+   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_${ts}.md"
    REQUIREMENTS_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/requirements_${ts}.md"
    mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
 

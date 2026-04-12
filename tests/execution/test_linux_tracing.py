@@ -123,14 +123,18 @@ async def test_tracing_handle_stop_returns_snapshots():
     assert len(result) >= 1
 
 
-def test_linux_tracing_available_flag():
-    """LINUX_TRACING_AVAILABLE is True on Linux, False elsewhere."""
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
+def test_linux_tracing_available_on_linux():
     from autoskillit.execution.linux_tracing import LINUX_TRACING_AVAILABLE
 
-    if sys.platform == "linux":
-        assert LINUX_TRACING_AVAILABLE is True
-    else:
-        assert LINUX_TRACING_AVAILABLE is False
+    assert LINUX_TRACING_AVAILABLE is True
+
+
+@pytest.mark.skipif(sys.platform == "linux", reason="Non-Linux only")
+def test_linux_tracing_unavailable_on_non_linux():
+    from autoskillit.execution.linux_tracing import LINUX_TRACING_AVAILABLE
+
+    assert LINUX_TRACING_AVAILABLE is False
 
 
 def test_noop_on_non_linux(monkeypatch):
@@ -159,17 +163,6 @@ async def test_proc_monitor_detects_death():
 
 
 # --- captured_at tests ---
-
-
-def test_proc_snapshot_has_captured_at():
-    """read_proc_snapshot stamps captured_at on the returned snapshot."""
-    from autoskillit.execution.linux_tracing import read_proc_snapshot
-
-    snap = read_proc_snapshot(os.getpid())
-    assert snap is not None
-    assert snap.captured_at != ""
-    # Must be a valid ISO-8601 UTC timestamp
-    datetime.fromisoformat(snap.captured_at)
 
 
 @pytest.mark.anyio
@@ -290,7 +283,6 @@ async def test_streaming_graceful_when_tmpfs_missing(tmp_path):
 def test_proc_snapshot_has_captured_at_field():
     """ProcSnapshot must have a captured_at field populated at creation time."""
     import os
-    from datetime import datetime
 
     from autoskillit.execution.linux_tracing import read_proc_snapshot
 

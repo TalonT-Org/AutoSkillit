@@ -596,7 +596,9 @@ class TestIsInstanceGuards:
         }
         recipe = _parse_recipe(data)
         report = analyze_dataflow(recipe)
-        assert report is not None
+        assert not any(w.code == "DEAD_OUTPUT" for w in report.warnings), (
+            "DEAD_OUTPUT rule fired on a valid recipe — false positive"
+        )
 
     def test_gv1_validate_recipe_no_raise_on_bool_with_arg(self) -> None:
         """T_GV1: validate_recipe does not raise TypeError for boolean with_args."""
@@ -616,6 +618,9 @@ class TestIsInstanceGuards:
         recipe = _parse_recipe(data)
         result = validate_recipe(recipe)
         assert isinstance(result, list)
+        assert not any("dead" in str(f).lower() for f in result), (
+            "DEAD_OUTPUT rule fired on a valid recipe — false positive"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -106,8 +106,6 @@ def test_fidelity_gap_is_actionable():
         "requires_decision": False,
     }
     assert is_valid_fidelity_finding(gap) is True
-    assert gap["severity"] == "critical"
-    assert gap["requires_decision"] is False
 
 
 def test_fidelity_drift_is_warning():
@@ -121,7 +119,6 @@ def test_fidelity_drift_is_warning():
         "requires_decision": False,
     }
     assert is_valid_fidelity_finding(drift) is True
-    assert drift["severity"] == "warning"
 
 
 def test_fidelity_gap_with_no_file_is_valid():

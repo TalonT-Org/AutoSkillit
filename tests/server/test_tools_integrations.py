@@ -896,7 +896,7 @@ class TestClaimIssueTool:
         assert result["success"] is True
         assert result["claimed"] is True
         assert result.get("reentry", False) is False
-        mock_client.add_labels.assert_called_once()
+        mock_client.add_labels.assert_called_once_with("owner", "repo", 42, ["in-progress"])
 
 
 class TestReleaseIssueTool:

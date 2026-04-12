@@ -40,8 +40,10 @@ class TestRunSkillRetryRemoved:
         """run_skill_retry is not in tools_execution.__all__ (if defined)."""
         import autoskillit.server.tools_execution as module
 
-        all_exports = getattr(module, "__all__", [])
-        assert "run_skill_retry" not in all_exports
+        # tools_execution does not define __all__; verify via direct attribute check
+        assert not hasattr(module, "run_skill_retry"), (
+            "run_skill_retry should not be a public attribute of tools_execution"
+        )
 
 
 class TestRunSkillSessionOutcome:

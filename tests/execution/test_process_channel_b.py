@@ -544,7 +544,4 @@ class TestChannelBSubSkillCollision:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.channel_confirmation in (
-            ChannelConfirmation.CHANNEL_A,
-            ChannelConfirmation.CHANNEL_B,
-        )
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B

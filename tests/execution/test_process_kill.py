@@ -9,6 +9,7 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
+import os
 import sys
 import textwrap
 
@@ -115,6 +116,9 @@ class TestCancellationKillsProcess:
         script = tmp_path / "sleep.py"
         script.write_text("import time; time.sleep(3600)")
 
+        parent = psutil.Process(os.getpid())
+        children_before = set(c.pid for c in parent.children(recursive=True))
+
         async with anyio.create_task_group() as tg:
 
             async def _run() -> None:
@@ -130,6 +134,10 @@ class TestCancellationKillsProcess:
 
         # Give the kernel a moment
         await anyio.sleep(0.5)
+
+        children_after = set(c.pid for c in parent.children(recursive=True))
+        leaked = children_after - children_before
+        assert not leaked, f"Child processes not cleaned up after cancellation: {leaked}"
 
 
 class TestAsyncKillDoesNotBlockLoop:

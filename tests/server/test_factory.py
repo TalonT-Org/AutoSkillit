@@ -41,6 +41,8 @@ def _runner() -> MockSubprocessRunner:
 def test_make_context_returns_toolcontext():
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert isinstance(ctx, ToolContext)
+    assert ctx.gate is not None
+    assert ctx.runner is not None
 
 
 def test_make_context_gate_starts_closed(monkeypatch):

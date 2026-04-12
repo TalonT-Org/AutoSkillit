@@ -1,25 +1,6 @@
 # test_gate.py — unit tests for _gate.py constants and functions
 
 
-def test_gated_tools_is_frozenset():
-    from autoskillit.pipeline.gate import GATED_TOOLS
-
-    assert isinstance(GATED_TOOLS, frozenset)
-
-
-def test_ungated_tools_is_frozenset():
-    from autoskillit.pipeline.gate import UNGATED_TOOLS
-
-    assert isinstance(UNGATED_TOOLS, frozenset)
-
-
-def test_tool_sets_total_count():
-    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
-
-    assert len(GATED_TOOLS) == 39
-    assert len(UNGATED_TOOLS) == 2
-
-
 def test_gated_tools_contains_expected_names():
     from autoskillit.pipeline.gate import GATED_TOOLS
 
@@ -187,22 +168,10 @@ def test_gated_tools_does_not_contain_run_recipe():
     assert "run_recipe" not in GATED_TOOLS
 
 
-def test_headless_tools_is_frozenset():
-    from autoskillit.core.types import HEADLESS_TOOLS
-
-    assert isinstance(HEADLESS_TOOLS, frozenset)
-
-
 def test_headless_tools_contains_expected_names():
     from autoskillit.core.types import HEADLESS_TOOLS
 
     assert HEADLESS_TOOLS == {"test_check"}
-
-
-def test_free_range_tools_is_frozenset():
-    from autoskillit.core.types import FREE_RANGE_TOOLS
-
-    assert isinstance(FREE_RANGE_TOOLS, frozenset)
 
 
 def test_free_range_tools_contains_expected_names():
@@ -224,7 +193,6 @@ def test_all_tool_sets_disjoint_and_complete():
     assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
     assert GATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert UNGATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
-    assert len(GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS) == 42
 
 
 def test_worker_tools_removed_from_core():

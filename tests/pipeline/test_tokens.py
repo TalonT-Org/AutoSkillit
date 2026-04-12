@@ -247,7 +247,7 @@ class TestDefaultTokenLog:
             end_ts="2026-01-01T12:00:00+00:00",  # earlier
         )
         entries = log.get_report()
-        assert entries[0]["elapsed_seconds"] >= 0
+        assert entries[0]["elapsed_seconds"] == pytest.approx(0.0)
 
     def test_record_uses_elapsed_seconds_param_over_iso_subtraction(self):
         """When elapsed_seconds kwarg is provided, it is used directly, not ISO subtraction."""

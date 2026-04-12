@@ -48,6 +48,4 @@ def test_parse_issue_ref_shorthand_in_github_url():
 
 
 def test_parse_issue_ref_still_importable_via_core_gateway():
-    from autoskillit.core import _parse_issue_ref
-
-    assert callable(_parse_issue_ref)
+    from autoskillit.core import _parse_issue_ref  # noqa: F401

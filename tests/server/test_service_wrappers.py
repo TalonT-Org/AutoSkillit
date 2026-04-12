@@ -28,6 +28,8 @@ class TestDefaultRecipeRepository:
         result = self.repo.list_all(project_dir=tmp_path)
         assert isinstance(result, dict), "list_all() must return a dict"
         assert "recipes" in result, f"Expected 'recipes' key, got: {list(result)}"
+        assert isinstance(result["recipes"], list)
+        assert len(result["recipes"]) >= 1
 
     def test_load_and_validate_returns_content_and_valid(self, tmp_path: Path) -> None:
         """load_and_validate() for a bundled recipe returns 'content' and 'valid' keys."""
@@ -35,6 +37,8 @@ class TestDefaultRecipeRepository:
         assert isinstance(result, dict), "load_and_validate() must return a dict"
         assert "content" in result, f"Expected 'content' key in result, got: {list(result)}"
         assert "valid" in result, f"Expected 'valid' key in result, got: {list(result)}"
+        assert result["valid"] is True
+        assert result["content"]
 
     def test_validate_from_path_returns_findings(self) -> None:
         """validate_from_path() returns a dict with 'valid' and 'findings' keys."""
@@ -45,6 +49,8 @@ class TestDefaultRecipeRepository:
         assert isinstance(result, dict), "validate_from_path() must return a dict"
         assert "valid" in result, f"Expected 'valid' key in result, got: {list(result)}"
         assert "findings" in result, f"Expected 'findings' key in result, got: {list(result)}"
+        assert isinstance(result["valid"], bool)
+        assert isinstance(result["findings"], list)
 
 
 class TestDefaultMigrationService:

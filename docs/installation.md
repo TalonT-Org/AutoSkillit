@@ -99,7 +99,7 @@ SessionStart hook actually enforces.
 
 AutoSkillit checks for updates on every interactive invocation and shows a single
 consolidated `[Y/n]` prompt when updates are available.  For details on how update
-checks work, dismissal windows, and escape hatches, see **[Updating](updating.md)**.
+checks work, dismissal windows, and escape hatches, see **[Update Checks](update-checks.md)**.
 
 To update immediately without waiting for the prompt:
 

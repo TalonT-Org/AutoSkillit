@@ -8,32 +8,22 @@ from __future__ import annotations
 
 import io
 import json
-import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from autoskillit.cli._install_info import InstallInfo, InstallType
 from autoskillit.cli._update_checks import (
-    _DEV_DISMISS_WINDOW,
-    _STABLE_DISMISS_WINDOW,
-    _api_sha,
     _fetch_with_cache,
     _is_dismissed,
     _read_dismiss_state,
-    _read_fetch_cache,
-    _verify_update_result,
     _write_dismiss_state,
-    _write_fetch_cache,
-    find_source_repo,
-    resolve_reference_sha,
     run_update_checks,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -106,7 +96,12 @@ def test_run_update_checks_skips_on_guard_env_var(
 ) -> None:
     monkeypatch.setenv(env_var, value)
     # Ensure no other guard vars are set
-    for other in ["CLAUDECODE", "CI", "AUTOSKILLIT_SKIP_STALE_CHECK", "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK"]:
+    for other in [
+        "CLAUDECODE",
+        "CI",
+        "AUTOSKILLIT_SKIP_STALE_CHECK",
+        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK",
+    ]:
         if other != env_var:
             monkeypatch.delenv(other, raising=False)
     fetched: list[str] = []
@@ -288,7 +283,7 @@ def test_hooks_signal_fires_on_missing_hooks(
 
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._count_hook_registry_drift",
-        lambda path: HookDriftResult(missing=3, orphaned=0, ok=0),
+        lambda path: HookDriftResult(missing=3, orphaned=0),
     )
     sig = _hooks_signal(tmp_path / "settings.json")
     assert sig is not None
@@ -304,7 +299,7 @@ def test_hooks_signal_fires_on_orphaned_hooks(
 
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._count_hook_registry_drift",
-        lambda path: HookDriftResult(missing=0, orphaned=2, ok=0),
+        lambda path: HookDriftResult(missing=0, orphaned=2),
     )
     sig = _hooks_signal(tmp_path / "settings.json")
     assert sig is not None
@@ -320,7 +315,7 @@ def test_hooks_signal_silent_when_no_drift(
 
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._count_hook_registry_drift",
-        lambda path: HookDriftResult(missing=0, orphaned=0, ok=5),
+        lambda path: HookDriftResult(missing=0, orphaned=0),
     )
     assert _hooks_signal(tmp_path / "settings.json") is None
 
@@ -415,26 +410,33 @@ def _setup_run_checks(
 
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._binary_signal",
-        lambda info, home, current: Signal("binary", "New release: 0.9.0 (you have 0.7.77)")
-        if binary_signal
-        else None,
+        lambda info, home, current: (
+            Signal("binary", "New release: 0.9.0 (you have 0.7.77)") if binary_signal else None
+        ),
     )
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._hooks_signal",
-        lambda settings_path: Signal("hooks", "1 new/changed hook(s) detected")
-        if hooks_signal
-        else None,
+        lambda settings_path: (
+            Signal("hooks", "1 new/changed hook(s) detected") if hooks_signal else None
+        ),
     )
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._source_drift_signal",
-        lambda info, home: Signal("source_drift", "A newer version is available on the stable branch (aaa..bbb)")
-        if source_drift_signal
-        else None,
+        lambda info, home: (
+            Signal("source_drift", "A newer version is available on the stable branch (aaa..bbb)")
+            if source_drift_signal
+            else None
+        ),
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks._claude_settings_path", lambda scope: tmp_path / "settings.json")
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._claude_settings_path",
+        lambda scope: tmp_path / "settings.json",
+    )
 
     printed: list[str] = []
-    monkeypatch.setattr("builtins.print", lambda *args, **kw: printed.append(" ".join(str(a) for a in args)))
+    monkeypatch.setattr(
+        "builtins.print", lambda *args, **kw: printed.append(" ".join(str(a) for a in args))
+    )
 
     input_calls: list[str] = []
     monkeypatch.setattr("builtins.input", lambda _="": input_calls.append("called") or answer)
@@ -525,16 +527,16 @@ def test_prompt_uses_friendly_branch_language(
 def test_yes_runs_upgrade_command_from_install_info_not_hardcoded(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    printed, input_calls = _setup_run_checks(
-        monkeypatch, tmp_path, binary_signal=True, answer="y"
-    )
+    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, answer="y")
     run_calls: list[list[str]] = []
     monkeypatch.setattr(
         "autoskillit.cli._update_checks.subprocess.run",
         lambda cmd, **kw: run_calls.append(cmd),
     )
     monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", MagicMock())
-    monkeypatch.setattr("autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+    )
     run_update_checks(home=tmp_path)
     # Should have called upgrade command (uv tool upgrade) and autoskillit install
     assert any("uv" in " ".join(cmd) or "autoskillit" in " ".join(cmd) for cmd in run_calls)
@@ -543,9 +545,7 @@ def test_yes_runs_upgrade_command_from_install_info_not_hardcoded(
 def test_yes_runs_autoskillit_install_after_upgrade_command(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    printed, input_calls = _setup_run_checks(
-        monkeypatch, tmp_path, binary_signal=True, answer="y"
-    )
+    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, answer="y")
     run_calls: list[list[str]] = []
 
     class FakeTG:
@@ -560,7 +560,9 @@ def test_yes_runs_autoskillit_install_after_upgrade_command(
         "autoskillit.cli._update_checks.subprocess.run",
         lambda cmd, **kw: run_calls.append(list(cmd)),
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+    )
     run_update_checks(home=tmp_path)
     # ["autoskillit", "install"] must be among the calls
     assert any(cmd[:2] == ["autoskillit", "install"] for cmd in run_calls)
@@ -569,9 +571,7 @@ def test_yes_runs_autoskillit_install_after_upgrade_command(
 def test_yes_passes_skip_env_to_subprocess(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    printed, input_calls = _setup_run_checks(
-        monkeypatch, tmp_path, binary_signal=True, answer="y"
-    )
+    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, answer="y")
     env_passed: list[dict] = []
 
     class FakeTG:
@@ -586,7 +586,9 @@ def test_yes_passes_skip_env_to_subprocess(
         "autoskillit.cli._update_checks.subprocess.run",
         lambda cmd, **kw: env_passed.append(kw.get("env", {})),
     )
-    monkeypatch.setattr("autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+    )
     run_update_checks(home=tmp_path)
     for env in env_passed:
         assert env.get("AUTOSKILLIT_SKIP_STALE_CHECK") == "1"
@@ -609,7 +611,9 @@ def test_yes_single_invocation_exits_without_any_other_prompt(
 
     monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", FakeTG)
     monkeypatch.setattr("autoskillit.cli._update_checks.subprocess.run", lambda *a, **kw: None)
-    monkeypatch.setattr("autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
+    )
     run_update_checks(home=tmp_path)
     assert len(input_calls) == 1
 
@@ -622,9 +626,7 @@ def test_yes_single_invocation_exits_without_any_other_prompt(
 def test_no_writes_single_unified_dismissal_entry(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    printed, input_calls = _setup_run_checks(
-        monkeypatch, tmp_path, binary_signal=True, answer="n"
-    )
+    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, answer="n")
     run_update_checks(home=tmp_path)
     state = _read_dismiss_state(tmp_path)
     assert "update_prompt" in state
@@ -652,9 +654,7 @@ def test_no_records_conditions_list_in_dismissal_entry(
 def test_no_prints_expiry_date_line_with_correct_date(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    printed, input_calls = _setup_run_checks(
-        monkeypatch, tmp_path, binary_signal=True, answer="n"
-    )
+    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, answer="n")
     run_update_checks(home=tmp_path)
     combined = " ".join(printed)
     # Should mention "Dismissed until"
@@ -663,12 +663,8 @@ def test_no_prints_expiry_date_line_with_correct_date(
     assert "autoskillit update" in combined or "AUTOSKILLIT_SKIP_STALE_CHECK" in combined
 
 
-def test_no_prints_escape_hatch_hint(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    printed, input_calls = _setup_run_checks(
-        monkeypatch, tmp_path, binary_signal=True, answer="n"
-    )
+def test_no_prints_escape_hatch_hint(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, answer="n")
     run_update_checks(home=tmp_path)
     combined = " ".join(printed)
     assert "autoskillit update" in combined
@@ -919,7 +915,9 @@ def test_is_dismissed_condition_not_in_list() -> None:
 
 
 def test_is_dismissed_empty_state() -> None:
-    assert not _is_dismissed({}, window=timedelta(days=7), current_version="0.7.77", condition="binary")
+    assert not _is_dismissed(
+        {}, window=timedelta(days=7), current_version="0.7.77", condition="binary"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -928,10 +926,10 @@ def test_is_dismissed_empty_state() -> None:
 
 
 def test_fetch_latest_version_uses_cache_within_ttl(tmp_path: Path) -> None:
-    from autoskillit.cli._update_checks import _fetch_latest_version
-
     # Seed a cache entry that is fresh (1 second old, TTL = 30 min)
     import time
+
+    from autoskillit.cli._update_checks import _fetch_latest_version
 
     cache_data = {
         "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest": {
@@ -945,8 +943,6 @@ def test_fetch_latest_version_uses_cache_within_ttl(tmp_path: Path) -> None:
         json.dumps(cache_data), encoding="utf-8"
     )
     call_count = [0]
-
-    orig_client = __import__("httpx").Client
 
     class CountingClient:
         def __init__(self, **kw):
@@ -970,9 +966,9 @@ def test_fetch_latest_version_uses_cache_within_ttl(tmp_path: Path) -> None:
 
 
 def test_fetch_cache_expires_after_ttl(tmp_path: Path) -> None:
-    from autoskillit.cli._update_checks import _fetch_latest_version
-
     import time
+
+    from autoskillit.cli._update_checks import _fetch_latest_version
 
     cache_data = {
         "https://api.github.com/repos/TalonT-Org/AutoSkillit/releases/latest": {
@@ -997,12 +993,10 @@ def test_fetch_cache_expires_after_ttl(tmp_path: Path) -> None:
     assert result == "0.9.0"
 
 
-def test_fetch_cache_respects_env_var_ttl(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from autoskillit.cli._update_checks import _fetch_latest_version
-
+def test_fetch_cache_respects_env_var_ttl(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     import time
+
+    from autoskillit.cli._update_checks import _fetch_latest_version
 
     # Entry is 61 seconds old — older than the custom 60s TTL
     cache_data = {
@@ -1031,7 +1025,6 @@ def test_fetch_cache_respects_env_var_ttl(
 def test_fetch_sends_github_token_auth_header(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    import time
 
     monkeypatch.setenv("GITHUB_TOKEN", "my-secret-token")
     (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
@@ -1244,9 +1237,9 @@ def test_fetch_scrubs_authorization_header_from_logged_errors(
 
 
 def test_fetch_fails_fast_offline(tmp_path: Path) -> None:
-    from autoskillit.cli._update_checks import _fetch_latest_version
-
     import httpx as _httpx
+
+    from autoskillit.cli._update_checks import _fetch_latest_version
 
     (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
 

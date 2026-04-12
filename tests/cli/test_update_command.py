@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.cli._install_info import InstallInfo, InstallType, _INSTALL_FROM_INTEGRATION
+from autoskillit.cli._install_info import InstallInfo, InstallType
 
 
 def _make_info(
@@ -108,9 +105,9 @@ def test_update_runs_upgrade_command_for_local_editable(
     info = _make_info(InstallType.LOCAL_EDITABLE, editable_source=editable_source)
     run_calls = _setup_run_update(monkeypatch, info, tmp_path)
     run_update_command(home=tmp_path)
-    assert any(
-        cmd[:4] == ["uv", "pip", "install", "-e"] for cmd in run_calls
-    ), f"Expected uv pip install -e in calls {run_calls}"
+    assert any(cmd[:4] == ["uv", "pip", "install", "-e"] for cmd in run_calls), (
+        f"Expected uv pip install -e in calls {run_calls}"
+    )
 
 
 def test_update_runs_autoskillit_install_after_upgrade_command(
@@ -173,7 +170,9 @@ def test_update_verifies_version_advance_and_warns_on_failure(
     monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.7.77")
 
     printed: list[str] = []
-    monkeypatch.setattr("builtins.print", lambda *args, **kw: printed.append(" ".join(str(a) for a in args)))
+    monkeypatch.setattr(
+        "builtins.print", lambda *args, **kw: printed.append(" ".join(str(a) for a in args))
+    )
     run_update_command(home=tmp_path)
     combined = " ".join(printed)
     assert "still" in combined or "unchanged" in combined or "still 0.7.77" in combined
@@ -225,7 +224,9 @@ def test_update_reports_actionable_error_on_unknown_install_type(
     info = _make_info(InstallType.UNKNOWN)
     monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
     printed: list[str] = []
-    monkeypatch.setattr("builtins.print", lambda *args, **kw: printed.append(" ".join(str(a) for a in args)))
+    monkeypatch.setattr(
+        "builtins.print", lambda *args, **kw: printed.append(" ".join(str(a) for a in args))
+    )
     with pytest.raises(SystemExit) as exc_info:
         run_update_command(home=tmp_path)
     assert exc_info.value.code == 2

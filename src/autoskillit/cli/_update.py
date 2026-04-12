@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 from pathlib import Path
+
+from autoskillit.cli._install_info import detect_install, upgrade_command
+from autoskillit.cli._terminal import terminal_guard
 
 
 def run_update_command(home: Path | None = None) -> None:
@@ -20,8 +22,6 @@ def run_update_command(home: Path | None = None) -> None:
     appropriate upgrade command, then runs ``autoskillit install`` to sync hooks
     and plugin state.  Clears any active dismissal state on success.
     """
-    from autoskillit.cli._install_info import InstallType, detect_install, upgrade_command
-    from autoskillit.cli._terminal import terminal_guard
     from autoskillit.cli._update_checks import (
         _read_dismiss_state,
         _verify_update_result,

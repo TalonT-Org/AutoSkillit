@@ -10,15 +10,14 @@ from unittest.mock import MagicMock
 import pytest
 
 from autoskillit.cli._install_info import (
+    _INSTALL_FROM_INTEGRATION,
     InstallInfo,
     InstallType,
-    _INSTALL_FROM_INTEGRATION,
     comparison_branch,
     detect_install,
     dismissal_window,
     upgrade_command,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -166,9 +165,7 @@ def test_detect_install_unknown_malformed_json(monkeypatch: pytest.MonkeyPatch) 
         (None, "releases/latest"),  # UNKNOWN has no revision
     ],
 )
-def test_comparison_branch_stable_variants(
-    requested_revision: str | None, expected: str
-) -> None:
+def test_comparison_branch_stable_variants(requested_revision: str | None, expected: str) -> None:
     info = InstallInfo(
         install_type=InstallType.GIT_VCS,
         commit_id="abc123",

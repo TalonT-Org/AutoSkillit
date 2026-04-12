@@ -13,7 +13,7 @@ two-tier orchestrator. The bundled recipes implement issue → plan → worktree
 ## Quick reference
 
 - [cli.md](cli.md) — every `autoskillit` command
-- [updating.md](updating.md) — update checks, dismissal windows, `autoskillit update`
+- [update-checks.md](update-checks.md) — update checks, dismissal windows, `autoskillit update`
 - [faq.md](faq.md) — common questions
 - [glossary.md](glossary.md) — canonical terms
 

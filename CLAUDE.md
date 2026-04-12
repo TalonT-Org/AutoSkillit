@@ -233,17 +233,18 @@ generic_automation_mcp/
 │   ├── _terminal.py         #   terminal_guard() TTY restore
 │   ├── _terminal_table.py   #   Re-export shim from core/_terminal_table
 │   ├── _cook.py             #   cook: ephemeral skill session launcher
-│   ├── _doctor.py           #   12 project setup checks
+│   ├── _doctor.py           #   16 project setup checks
 │   ├── _hooks.py            #   PreToolUse hook registration helpers
 │   ├── _init_helpers.py
+│   ├── _install_info.py     #   InstallInfo, InstallType, detect_install(), comparison_branch(), dismissal_window(), upgrade_command()
 │   ├── _marketplace.py      #   Plugin install/upgrade
 │   ├── _mcp_names.py        #   MCP prefix detection
 │   ├── _onboarding.py       #   First-run detection + guided menu
 │   ├── _prompts.py          #   Orchestrator prompt builder
-│   ├── _source_drift.py     #   Source-drift boot gate: install-type detection, reference-SHA resolution, dismissal-aware CLI gate
-│   ├── _stale_check.py      #   Version comparison, hook-drift prompt
+│   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`
+│   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal
 │   ├── _workspace.py        #   Workspace clean helpers
-│   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, etc.
+│   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
 │
 ├── hooks/                   # Claude Code PreToolUse/PostToolUse/SessionStart scripts
 │   ├── __init__.py

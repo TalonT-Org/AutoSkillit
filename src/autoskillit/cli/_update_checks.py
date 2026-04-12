@@ -27,6 +27,7 @@ from typing import Any, Literal
 
 import httpx
 
+from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli._install_info import (
     InstallInfo,
     InstallType,
@@ -37,6 +38,7 @@ from autoskillit.cli._install_info import (
 )
 from autoskillit.cli._terminal import terminal_guard
 from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION, atomic_write, get_logger
+from autoskillit.hook_registry import _count_hook_registry_drift
 
 logger = get_logger(__name__)
 
@@ -484,8 +486,6 @@ def _binary_signal(info: InstallInfo, home: Path, current: str) -> Signal | None
 def _hooks_signal(settings_path: Path) -> Signal | None:
     """Return a Signal if hook registry drift is detected, else None."""
     try:
-        from autoskillit.hook_registry import _count_hook_registry_drift
-
         drift = _count_hook_registry_drift(settings_path)
         if drift.orphaned > 0:
             return Signal(
@@ -516,8 +516,7 @@ def _source_drift_signal(info: InstallInfo, home: Path) -> Signal | None:
         ref_short = ref_sha[:8]
         return Signal(
             "source_drift",
-            f"A newer version is available on the {rev} branch "
-            f"({installed_short}..{ref_short})",
+            f"A newer version is available on the {rev} branch ({installed_short}..{ref_short})",
         )
     except Exception:
         logger.debug("source drift signal check failed", exc_info=True)
@@ -542,6 +541,8 @@ def _is_dismissed(
 
     1. ``dismissed_at`` is within the branch-aware ``window`` (time-based,
        never SHA-keyed — a new upstream commit does NOT break the window).
+       Window values: 7 days for stable/main/release-tag/UNKNOWN installs;
+       12 hours for integration/LOCAL_EDITABLE installs.
     2. ``current_version <= dismissed_version`` (version-delta expiry: when the
        running version advances past what was dismissed, the dismissal expires
        uniformly for all three conditions).
@@ -629,11 +630,14 @@ def run_update_checks(home: Path | None = None) -> None:
     }
 
     info = detect_install()
-    if info.install_type in (InstallType.UNKNOWN, InstallType.LOCAL_PATH, InstallType.LOCAL_EDITABLE):
+    if info.install_type in (
+        InstallType.UNKNOWN,
+        InstallType.LOCAL_PATH,
+        InstallType.LOCAL_EDITABLE,
+    ):
         return
 
     import autoskillit as _pkg
-    from autoskillit.cli._hooks import _claude_settings_path
 
     current: str = getattr(_pkg, "__version__", "0.0.0")
     _home = home or Path.home()

@@ -160,7 +160,9 @@ def test_update_verifies_version_advance_and_warns_on_failure(
     monkeypatch.setattr("autoskillit.cli._update.detect_install", lambda: info)
     monkeypatch.setattr("autoskillit.cli._update.terminal_guard", FakeTG)
     monkeypatch.setattr("autoskillit.cli._update.subprocess.run", lambda *a, **kw: None)
-    monkeypatch.setattr("autoskillit.cli._update._fetch_latest_version", lambda *a, **kw: "0.9.0")
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.0"
+    )
 
     import autoskillit as _pkg
 

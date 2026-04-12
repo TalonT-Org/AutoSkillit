@@ -189,6 +189,8 @@ For each matching log file, extract the investigation topic, root cause conclusi
 
 Using the affected components from Step 3, extract the primary source file paths. Then search bounded recent history (last 100 commits) for commits whose messages signal a prior fix or revert on those files:
 
+> `{AFFECTED_FILES}` expands to a space-separated list of file paths relative to the repo root (e.g. `src/autoskillit/execution/headless.py tests/execution/test_headless.py`). Pass each path as a separate argument — do not wrap the list in quotes as a single string.
+
 ```bash
 git log --oneline -100 --format="%H %s" \
   --grep="fix\|revert\|remove\|replace" -- {AFFECTED_FILES}

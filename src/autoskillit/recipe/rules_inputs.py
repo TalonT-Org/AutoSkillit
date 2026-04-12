@@ -344,7 +344,7 @@ def _check_required_without_default(
     for name, ing in (ctx.recipe.ingredients or {}).items():
         if getattr(ing, "hidden", False):
             continue
-        if getattr(ing, "required", False) and not getattr(ing, "default", None):
+        if getattr(ing, "required", False) and getattr(ing, "default", None) is None:
             findings.append(
                 RuleFinding(
                     rule="required-ingredient-no-default",

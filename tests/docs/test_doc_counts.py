@@ -264,8 +264,8 @@ def test_docs_state_40_kitchen_tools(doc_path: Path) -> None:
     _assert_doc_states_number(doc_path, "kitchen tools", 40)
 
 
-def test_skill_visibility_states_95_skills() -> None:
-    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 95)
+def test_skill_visibility_states_100_skills() -> None:
+    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 100)
 
 
 def test_safety_hooks_states_13_hooks() -> None:

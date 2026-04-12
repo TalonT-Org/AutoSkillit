@@ -106,6 +106,11 @@ BUNDLED_SKILLS = [
     "troubleshoot-experiment",
     "validate-audit",
     "verify-diag",
+    "vis-lens-always-on",
+    "vis-lens-antipattern",
+    "vis-lens-chart-select",
+    "vis-lens-domain-norms",
+    "vis-lens-uncertainty",
     "write-recipe",
     "write-report",
 ]
@@ -442,11 +447,11 @@ class TestSkillResolver:
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 92
+        assert len(skills) == 97
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 94 public skills (2 Tier-1 + 92 extended)."""
-        assert len(DefaultSkillResolver().list_all()) == 94
+        """list_all() returns 99 public skills (2 Tier-1 + 97 extended)."""
+        assert len(DefaultSkillResolver().list_all()) == 99
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""

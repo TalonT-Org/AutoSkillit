@@ -803,6 +803,12 @@ def _build_skill_result(
                     original_subtype=str(original_subtype),
                     assistant_message_count=len(session.assistant_messages),
                 )
+            else:
+                logger.warning(
+                    "dir_missing_late_bind_recovery_failed",
+                    subtype=str(session.subtype),
+                    assistant_message_count=len(session.assistant_messages),
+                )
         case (
             ChannelConfirmation.CHANNEL_B
             | ChannelConfirmation.CHANNEL_A

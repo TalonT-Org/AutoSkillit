@@ -674,8 +674,10 @@ steps:
     on_result:
       - when: "${{ inputs.auto_merge }} != 'true'"
         route: register_clone_success
-      - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true"
+      - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true and ${{ context.auto_merge_available }} == true"
         route: enable_auto_merge
+      - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true and ${{ context.auto_merge_available }} == false"
+        route: queue_enqueue_no_auto
       - when: "${{ context.auto_merge_available }} == true"
         route: direct_merge
       - route: immediate_merge
@@ -693,6 +695,24 @@ steps:
     note: >
       Submits the PR to the merge queue. On failure (PR not mergeable, already merged),
       degrades to register_clone_success.
+
+  queue_enqueue_no_auto:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash"
+      cwd: "${{ context.work_dir }}"
+      step_name: "queue_enqueue_no_auto"
+    on_success: wait_for_queue
+    on_failure: register_clone_success
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Submits the PR to the merge queue when the target branch has a configured
+      merge queue but the repository disallows auto-merge (autoMergeAllowed=false).
+      Uses plain `gh pr merge --squash` (no --auto, which would be rejected by
+      GitHub's API auto-merge gate). GitHub intercepts the call and enqueues
+      the PR because the branch has a queue. Routes to wait_for_queue (the
+      shared queue waiter) — never to wait_for_immediate_merge, whose 5-minute
+      poll is too short for queue serialization.
 
   wait_for_queue:
     tool: wait_for_merge_queue

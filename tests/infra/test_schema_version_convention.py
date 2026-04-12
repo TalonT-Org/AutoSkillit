@@ -117,8 +117,8 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # migration/store.py — failure store dicts
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),
-    # clone_registry.py — clones dict
-    ("src/autoskillit/workspace/clone_registry.py", 63),
+    # clone_registry.py — clones dict (CloneRegistry.__exit__ atomic write-back)
+    ("src/autoskillit/workspace/clone_registry.py", 76),
     # staleness_cache.py — cache dict
     ("src/autoskillit/recipe/staleness_cache.py", 67),
     # background.py — payload dict

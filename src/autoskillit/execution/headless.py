@@ -44,7 +44,7 @@ from autoskillit.execution.clone_guard import (
     is_worktree_skill,
     snapshot_clone_state,
 )
-from autoskillit.execution.commands import build_full_headless_cmd
+from autoskillit.execution.commands import build_full_headless_cmd, build_headless_resume_cmd
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
@@ -287,8 +287,6 @@ async def _attempt_contract_nudge(
         f"{completion_marker}"
     )
 
-    from autoskillit.execution.commands import build_headless_resume_cmd
-
     spec = build_headless_resume_cmd(
         resume_session_id=skill_result.session_id,
         prompt=prompt,
@@ -302,8 +300,11 @@ async def _attempt_contract_nudge(
             timeout=_NUDGE_TIMEOUT,
             env=spec.env,
         )
-    except Exception:
+    except OSError:
         logger.debug("nudge_runner_failed", exc_info=True)
+        return None
+    except Exception:
+        logger.warning("nudge_runner_failed_unexpected", exc_info=True)
         return None
 
     # Parse the nudge response and check for the missing patterns

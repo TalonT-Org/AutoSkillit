@@ -161,8 +161,7 @@ class TestCleanupCandidatesOwnerFilter:
         to_delete, to_preserve = cleanup_candidates(registry_path=reg, owner="kit-1")
 
         assert to_delete == ["/tmp/a"]
-        assert "/tmp/b" not in to_delete
-        assert "/tmp/b" not in to_preserve
+        assert to_preserve == []
 
     def test_cleanup_candidates_owner_filter_ignores_other_owners_error_entries(
         self, tmp_path: Path

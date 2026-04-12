@@ -348,3 +348,48 @@ async def test_proc_monitor_persists_psutil_process_for_cpu_percent():
     finally:
         proc.kill()
         proc.wait()
+
+
+@pytest.mark.anyio
+async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
+    """start_linux_tracing must write autoskillit_enrollment_{pid}.json immediately."""
+    import anyio
+
+    from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import start_linux_tracing
+
+    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
+    async with anyio.create_task_group() as tg:
+        proc = await anyio.open_process(["sleep", "2"])
+        handle = start_linux_tracing(proc.pid, cfg, tg)
+        assert handle is not None
+        enrollment = tmp_path / f"autoskillit_enrollment_{proc.pid}.json"
+        assert enrollment.exists()
+        data = json.loads(enrollment.read_text())
+        assert data["schema_version"] == 1
+        assert data["pid"] == proc.pid
+        handle.stop()
+        proc.kill()
+    assert not enrollment.exists(), "Enrollment must be deleted by stop()"
+
+
+@pytest.mark.anyio
+async def test_stop_unlinks_trace_and_enrollment(tmp_path):
+    """stop() must delete both trace JSONL and enrollment sidecar on clean exit."""
+    import anyio
+
+    from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import start_linux_tracing
+
+    cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
+    async with anyio.create_task_group() as tg:
+        proc = await anyio.open_process(["sleep", "2"])
+        handle = start_linux_tracing(proc.pid, cfg, tg)
+        assert handle is not None
+        trace = tmp_path / f"autoskillit_trace_{proc.pid}.jsonl"
+        enrollment = tmp_path / f"autoskillit_enrollment_{proc.pid}.json"
+        assert trace.exists()
+        handle.stop()
+        proc.kill()
+    assert not trace.exists(), "Trace file must be deleted on clean stop()"
+    assert not enrollment.exists(), "Enrollment sidecar must be deleted on clean stop()"

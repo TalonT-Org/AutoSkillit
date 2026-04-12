@@ -97,7 +97,11 @@ def _session_log_dir(cwd: str) -> Path:
     logger.info("session_log_dir_computed", path=str(log_dir), cwd=cwd)
     if not log_dir.exists():
         logger.info("session_log_dir_precreating", path=str(log_dir), cwd=cwd)
-        log_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.warning("session_log_dir_mkdir_failed", path=str(log_dir), cwd=cwd)
+            raise
     return log_dir
 
 

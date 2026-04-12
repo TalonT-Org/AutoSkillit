@@ -21,11 +21,11 @@ from ._type_results import (
 )
 
 __all__ = [
-    "GatePolicy",
-    "AuditStore",
-    "TokenStore",
-    "TimingStore",
-    "McpResponseStore",
+    "GateState",
+    "AuditLog",
+    "TokenLog",
+    "TimingLog",
+    "McpResponseLog",
     "TestRunner",
     "HeadlessExecutor",
     "RecipeRepository",
@@ -40,14 +40,14 @@ __all__ = [
     "MergeQueueWatcher",
     "SessionSkillManager",
     "SkillLister",
-    "TargetSkillResolver",
+    "SkillResolver",
     "BackgroundSupervisor",
     "QuotaRefreshTask",
 ]
 
 
 @runtime_checkable
-class GatePolicy(Protocol):
+class GateState(Protocol):
     """Protocol for gate enable/disable state."""
 
     @property
@@ -59,7 +59,7 @@ class GatePolicy(Protocol):
 
 
 @runtime_checkable
-class AuditStore(Protocol):
+class AuditLog(Protocol):
     """Protocol for pipeline failure accumulation."""
 
     def record_failure(self, record: FailureRecord) -> None: ...
@@ -85,7 +85,7 @@ class AuditStore(Protocol):
 
 
 @runtime_checkable
-class TokenStore(Protocol):
+class TokenLog(Protocol):
     """Protocol for per-step token usage accumulation."""
 
     def record(
@@ -116,7 +116,7 @@ class TokenStore(Protocol):
 
 
 @runtime_checkable
-class TimingStore(Protocol):
+class TimingLog(Protocol):
     """Protocol for per-step wall-clock timing accumulation."""
 
     def record(self, step_name: str, duration_seconds: float, *, order_id: str = "") -> None: ...
@@ -138,7 +138,7 @@ class TimingStore(Protocol):
 
 
 @runtime_checkable
-class McpResponseStore(Protocol):
+class McpResponseLog(Protocol):
     """Protocol for per-tool MCP response size accumulation."""
 
     def record(
@@ -446,7 +446,7 @@ class SessionSkillManager(Protocol):
 
 
 @runtime_checkable
-class TargetSkillResolver(Protocol):
+class SkillResolver(Protocol):
     """Protocol for resolving skill names to their source tier."""
 
     def resolve(self, name: str) -> Any: ...
@@ -459,7 +459,7 @@ class SkillLister(Protocol):
     Allows L2 recipe rules to type their skill-listing dependency
     against an L0 protocol instead of binding to the L1 workspace
     concrete class. The default implementation lives at
-    autoskillit.workspace.skills.SkillResolver and satisfies this
+    autoskillit.workspace.skills.DefaultSkillResolver and satisfies this
     protocol structurally.
     """
 

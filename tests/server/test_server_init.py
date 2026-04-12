@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -419,3 +420,17 @@ def test_initialize_skips_subset_disable_when_empty(monkeypatch):
         _initialize(ctx)
 
     mock_mcp.disable.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# T9 — server/__init__.py has no shebang
+# ---------------------------------------------------------------------------
+
+
+def test_server_init_no_shebang() -> None:
+    """server/__init__.py must not have a shebang line."""
+    import autoskillit.server as server_pkg
+
+    src_path = Path(server_pkg.__file__)  # type: ignore[arg-type]
+    src = src_path.read_text(encoding="utf-8")
+    assert not src.startswith("#!"), "server/__init__.py must not have a shebang"

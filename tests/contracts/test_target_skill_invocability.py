@@ -16,7 +16,7 @@ from autoskillit.recipe import load_recipe
 from autoskillit.recipe.io import builtin_recipes_dir
 from autoskillit.workspace import (
     DefaultSessionSkillManager,
-    SkillResolver,
+    DefaultSkillResolver,
     SkillsDirectoryProvider,
 )
 
@@ -95,7 +95,7 @@ class TestResolvedNamespaceMatchesSkillLocation:
     """Namespace resolution must match physical skill location."""
 
     def test_bundled_extended_skill_uses_bare_namespace(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         info = resolver.resolve("make-plan")
         assert info is not None
         assert info.source == SkillSource.BUNDLED_EXTENDED
@@ -104,7 +104,7 @@ class TestResolvedNamespaceMatchesSkillLocation:
         assert resolved == "/make-plan arg1"
 
     def test_bundled_skill_uses_autoskillit_namespace(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         info = resolver.resolve("open-kitchen")
         assert info is not None
         assert info.source == SkillSource.BUNDLED
@@ -113,13 +113,13 @@ class TestResolvedNamespaceMatchesSkillLocation:
         assert resolved == "/autoskillit:open-kitchen"
 
     def test_already_correct_namespace_is_preserved(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         resolved, name = resolve_target_skill("/make-plan arg1 arg2", resolver)
         assert name == "make-plan"
         assert resolved == "/make-plan arg1 arg2"
 
     def test_non_slash_command_passes_through(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         resolved, name = resolve_target_skill("Fix the bug", resolver)
         assert name is None
         assert resolved == "Fix the bug"
@@ -167,7 +167,7 @@ class TestAllRecipeSkillCommandsInvocable:
     ) -> None:
         config = load_config()
         tier2 = frozenset(config.skills.tier2)
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         provider = SkillsDirectoryProvider()
 
         for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):

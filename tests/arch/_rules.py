@@ -67,11 +67,11 @@ _PRINT_EXEMPT = frozenset(
         "_prompts.py",
         "_workspace.py",
         "branch_protection_guard.py",
-        "pretty_output.py",
-        "quota_check.py",
-        "quota_post_check.py",
+        "pretty_output_hook.py",
+        "quota_guard.py",
+        "quota_post_hook.py",
         "remove_clone_guard.py",
-        "skill_cmd_check.py",
+        "skill_cmd_guard.py",
         "skill_command_guard.py",
     }
 )
@@ -81,13 +81,13 @@ _PRINT_EXEMPT = frozenset(
 _BROAD_EXCEPT_EXEMPT = frozenset(
     {
         "_onboarding.py",
-        "pretty_output.py",
-        "quota_check.py",
-        "quota_post_check.py",
+        "pretty_output_hook.py",
+        "quota_guard.py",
+        "quota_post_hook.py",
         "remove_clone_guard.py",
-        "skill_cmd_check.py",
+        "skill_cmd_guard.py",
         "skill_command_guard.py",
-        "token_summary_appender.py",
+        "token_summary_hook.py",
     }
 )
 

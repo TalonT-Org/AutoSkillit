@@ -409,23 +409,23 @@ class TestGroupFInstall:
         import autoskillit
 
         pkg_dir = Path(autoskillit.__file__).parent
-        hook_script = pkg_dir / "hooks" / "quota_check.py"
+        hook_script = pkg_dir / "hooks" / "quota_guard.py"
         assert hook_script.exists(), f"Expected hook script at {hook_script}"
 
     def test_generate_hooks_json_includes_quota_hook(self):
-        """generate_hooks_json() must include quota_check.py in PreToolUse and pretty_output.py in PostToolUse."""  # noqa: E501
+        """generate_hooks_json() must include quota_guard.py in PreToolUse and pretty_output_hook.py in PostToolUse."""  # noqa: E501
         from autoskillit.hook_registry import generate_hooks_json
 
         data = generate_hooks_json()
         pretooluse_commands = [
             hook["command"] for entry in data["hooks"]["PreToolUse"] for hook in entry["hooks"]
         ]
-        assert any(cmd.endswith("quota_check.py") for cmd in pretooluse_commands)
+        assert any(cmd.endswith("quota_guard.py") for cmd in pretooluse_commands)
         assert "PostToolUse" in data["hooks"]
         posttooluse_commands = [
             hook["command"] for entry in data["hooks"]["PostToolUse"] for hook in entry["hooks"]
         ]
-        assert any(cmd.endswith("pretty_output.py") for cmd in posttooluse_commands)
+        assert any(cmd.endswith("pretty_output_hook.py") for cmd in posttooluse_commands)
 
     def test_install_writes_pretooluse_hooks(self, tmp_path, monkeypatch):
         """install must register the quota PreToolUse hook in .claude/settings.json."""

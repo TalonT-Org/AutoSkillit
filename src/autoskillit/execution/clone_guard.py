@@ -28,7 +28,7 @@ from autoskillit.core import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import AuditStore, SubprocessRunner
+    from autoskillit.core import AuditLog, SubprocessRunner
 
 logger = get_logger(__name__)
 
@@ -174,7 +174,7 @@ async def check_and_revert_clone_contamination(
     skill_result: SkillResult,
     cwd: str,
     runner: SubprocessRunner,
-    audit: AuditStore | None,
+    audit: AuditLog | None,
     skill_command: str = "",
 ) -> tuple[SkillResult, bool]:
     """Top-level guard: detect and revert clone contamination after a failed session.

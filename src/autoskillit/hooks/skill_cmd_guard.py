@@ -16,10 +16,10 @@ Detection logic:
 - If the first token is already path-like → allow (correct format).
 
 Output format follows the Claude Code hookSpecificOutput spec, matching
-the pattern established by quota_check.py in the same hooks/ package.
+the pattern established by quota_guard.py in the same hooks/ package.
 
 Exit strategy: uses exit 0 + JSON permissionDecision "deny" (same as
-quota_check.py). If the deny is found to be ignored in practice (see
+quota_guard.py). If the deny is found to be ignored in practice (see
 GitHub Issue #4669 — closed as "not planned"), switch to exit 2 + stderr
 message. The two-pronged design (hook + SKILL.md path-detection instructions)
 provides defence in depth: even if the hook deny is occasionally ignored,

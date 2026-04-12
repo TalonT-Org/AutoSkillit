@@ -23,7 +23,11 @@ def _repo_root() -> Path:
 
 
 def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.FunctionDef) -> bool:
-    """Return True if the function body's first substantive statement is a try/except Exception."""
+    """Return True if the function has a top-level try/except Exception.
+
+    A leading gate-check guard (if ... return/raise ...) before the try is permitted,
+    matching the canonical gated-tool pattern used across the server layer.
+    """
     body = func_node.body
     # Skip docstring
     stmts = [
@@ -31,7 +35,22 @@ def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.Functio
     ]
     if not stmts:
         return False
-    first = stmts[0]
+    # Skip leading guard `if ... return` statements (gate checks, early validation exits)
+    idx = 0
+    while idx < len(stmts):
+        s = stmts[idx]
+        if (
+            isinstance(s, ast.If)
+            and len(s.body) == 1
+            and isinstance(s.body[0], (ast.Return, ast.Raise))
+            and not s.orelse
+        ):
+            idx += 1
+        else:
+            break
+    if idx >= len(stmts):
+        return False
+    first = stmts[idx]
     if not isinstance(first, ast.Try):
         return False
     # Check that at least one handler catches Exception or BaseException

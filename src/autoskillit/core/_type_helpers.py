@@ -10,7 +10,7 @@ import re
 
 from ._type_constants import AUTOSKILLIT_SKILL_PREFIX, SKILL_COMMAND_PREFIX
 from ._type_enums import SkillSource
-from ._type_protocols import TargetSkillResolver
+from ._type_protocols import SkillResolver
 
 __all__ = [
     "extract_skill_name",
@@ -33,7 +33,7 @@ def extract_skill_name(skill_command: str) -> str | None:
 
 def resolve_target_skill(
     skill_command: str,
-    resolver: TargetSkillResolver,
+    resolver: SkillResolver,
 ) -> tuple[str, str | None]:
     """Resolve a skill_command to the correct invocation namespace.
 

@@ -148,9 +148,9 @@ def test_review_design_experiment_type_output_has_allowed_values() -> None:
 
 def test_all_exp_lens_skills_have_contracts(skills):
     """Every exp-lens skill must have an entry in skill_contracts.yaml."""
-    from autoskillit.workspace.skills import SkillResolver
+    from autoskillit.workspace.skills import DefaultSkillResolver
 
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     exp_lens = [
         s.name
         for s in resolver.list_all()

@@ -22,7 +22,7 @@ def test_skill_lister_protocol_defined() -> None:
 
 def test_skill_resolver_satisfies_skill_lister() -> None:
     from autoskillit.core._type_protocols import SkillLister
-    from autoskillit.workspace.skills import SkillResolver
+    from autoskillit.workspace.skills import DefaultSkillResolver
 
-    instance: SkillLister = SkillResolver()
+    instance: SkillLister = DefaultSkillResolver()
     assert callable(instance.list_all)

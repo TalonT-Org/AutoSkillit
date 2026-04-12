@@ -79,7 +79,7 @@ def _run_hook(
 
     Returns (stdout, exit_code). stdout empty = no warning, JSON string = warning.
     """
-    from autoskillit.hooks.quota_post_check import main
+    from autoskillit.hooks.quota_post_hook import main
 
     stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
 
@@ -251,13 +251,13 @@ def test_qpc11_reads_cache_path_from_hook_config(tmp_path, monkeypatch):
 
 # T12: Hook registered in HOOK_REGISTRY
 def test_qpc12_registered_in_hook_registry():
-    """quota_post_check.py is registered as PostToolUse in HOOK_REGISTRY."""
+    """quota_post_hook.py is registered as PostToolUse in HOOK_REGISTRY."""
     from autoskillit.hook_registry import HOOK_REGISTRY
 
     post_tool_scripts = [
         s for h in HOOK_REGISTRY if h.event_type == "PostToolUse" for s in h.scripts
     ]
-    assert "quota_post_check.py" in post_tool_scripts
+    assert "quota_post_hook.py" in post_tool_scripts
 
 
 # T13: Fail-open on malformed stdin
@@ -280,7 +280,7 @@ def test_qpc14_only_run_skill_matcher():
     entry = next(
         h
         for h in HOOK_REGISTRY
-        if h.event_type == "PostToolUse" and "quota_post_check.py" in h.scripts
+        if h.event_type == "PostToolUse" and "quota_post_hook.py" in h.scripts
     )
     assert re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_skill")
     assert not re.match(entry.matcher, "mcp__plugin_autoskillit_autoskillit__run_cmd")

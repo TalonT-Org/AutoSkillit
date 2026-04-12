@@ -20,7 +20,7 @@ logger = get_logger(__name__)
     description="sub_recipe step must reference a known sub-recipe name",
     severity=Severity.ERROR,
 )
-def _unknown_sub_recipe(ctx: ValidationContext) -> list[RuleFinding]:
+def _check_unknown_sub_recipe(ctx: ValidationContext) -> list[RuleFinding]:
     if not ctx.available_sub_recipes:
         return []  # fail open when registry is unavailable
     findings: list[RuleFinding] = []
@@ -46,7 +46,7 @@ def _unknown_sub_recipe(ctx: ValidationContext) -> list[RuleFinding]:
     description="sub_recipe references must not form a cycle",
     severity=Severity.ERROR,
 )
-def _circular_sub_recipe(ctx: ValidationContext) -> list[RuleFinding]:
+def _check_circular_sub_recipe(ctx: ValidationContext) -> list[RuleFinding]:
     """Detect circular sub-recipe references using DFS."""
     findings: list[RuleFinding] = []
     _detect_cycles(ctx.recipe, [], findings, project_dir=ctx.project_dir)

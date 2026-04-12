@@ -74,19 +74,16 @@ class TestClaimIssueTool:
     # P5F4-T1
     @pytest.mark.anyio
     async def test_claim_issue_binds_structlog_context(self, tool_ctx, monkeypatch):
-        """claim_issue must bind structlog context vars via bound_contextvars."""
-        import contextlib
-
+        """claim_issue must bind structlog context vars via bind_contextvars."""
         import structlog
 
         captured = {}
 
-        @contextlib.contextmanager
-        def fake_bound_contextvars(**kwargs):
+        def fake_bind_contextvars(**kwargs):
             captured.update(kwargs)
-            yield
 
-        monkeypatch.setattr(structlog.contextvars, "bound_contextvars", fake_bound_contextvars)
+        monkeypatch.setattr(structlog.contextvars, "bind_contextvars", fake_bind_contextvars)
+        monkeypatch.setattr(structlog.contextvars, "clear_contextvars", lambda: None)
 
         tool_ctx.github_client = None  # triggers early return after bind
 
@@ -182,19 +179,16 @@ class TestReleaseIssueTool:
     # P5F4-T2
     @pytest.mark.anyio
     async def test_release_issue_binds_structlog_context(self, tool_ctx, monkeypatch):
-        """release_issue must bind structlog context vars via bound_contextvars."""
-        import contextlib
-
+        """release_issue must bind structlog context vars via bind_contextvars."""
         import structlog
 
         captured = {}
 
-        @contextlib.contextmanager
-        def fake_bound_contextvars(**kwargs):
+        def fake_bind_contextvars(**kwargs):
             captured.update(kwargs)
-            yield
 
-        monkeypatch.setattr(structlog.contextvars, "bound_contextvars", fake_bound_contextvars)
+        monkeypatch.setattr(structlog.contextvars, "bind_contextvars", fake_bind_contextvars)
+        monkeypatch.setattr(structlog.contextvars, "clear_contextvars", lambda: None)
 
         tool_ctx.github_client = None  # triggers early return after bind
 

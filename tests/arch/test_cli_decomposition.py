@@ -81,9 +81,9 @@ def test_skill_command_guard_no_silent_broad_except():
 
 # CD4
 def test_quota_check_no_silent_broad_except():
-    """CC-2: quota_check.py must not have bare 'except Exception: sys.exit(0)'.
+    """CC-2: quota_guard.py must not have bare 'except Exception: sys.exit(0)'.
     Each except must be narrowed to specific errors or log before approving."""
-    src = (SRC_ROOT / "hooks" / "quota_check.py").read_text()
+    src = (SRC_ROOT / "hooks" / "quota_guard.py").read_text()
     tree = ast.parse(src)
     violations = []
     for node in ast.walk(tree):
@@ -91,5 +91,5 @@ def test_quota_check_no_silent_broad_except():
             if _is_bare_except_exception(node) and _body_is_only_sys_exit(node):
                 violations.append(node.lineno)
     assert not violations, (
-        f"quota_check.py has silent broad except at lines {violations} -- CC-2 fix required"
+        f"quota_guard.py has silent broad except at lines {violations} -- CC-2 fix required"
     )

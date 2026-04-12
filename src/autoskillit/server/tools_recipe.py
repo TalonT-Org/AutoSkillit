@@ -44,6 +44,8 @@ async def list_recipes() -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="list_recipes")
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps([])
@@ -168,6 +170,8 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="load_recipe")
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"error": "Server not initialized"})
@@ -212,6 +216,8 @@ async def validate_recipe(script_path: str) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="validate_recipe")
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is None or tool_ctx.recipes is None:
         return json.dumps({"valid": False, "errors": ["Server not initialized"]})

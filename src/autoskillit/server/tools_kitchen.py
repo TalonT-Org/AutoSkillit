@@ -115,7 +115,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
 def _write_hook_config() -> None:
     """Write user-configured quota values to temp/.autoskillit_hook_config.json.
 
-    The hook subprocess (quota_check.py) reads this file to apply user settings
+    The hook subprocess (quota_guard.py) reads this file to apply user settings
     without importing the autoskillit package.
     """
     from autoskillit.server import _get_ctx, logger

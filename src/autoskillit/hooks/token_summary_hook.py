@@ -315,7 +315,7 @@ def main() -> None:
         )
         if view_proc.returncode != 0:
             sys.stderr.write(
-                f"token_summary_appender: gh api read failed (rc={view_proc.returncode}): "
+                f"token_summary_hook: gh api read failed (rc={view_proc.returncode}): "
                 f"{view_proc.stderr.strip() if view_proc.stderr else 'no stderr'}\n"
             )
             sys.exit(0)
@@ -324,9 +324,7 @@ def main() -> None:
 
         current_body = view_proc.stdout.rstrip()
         if not current_body.strip():
-            sys.stderr.write(
-                "token_summary_appender: empty PR body from gh api — aborting update\n"
-            )
+            sys.stderr.write("token_summary_hook: empty PR body from gh api — aborting update\n")
             sys.exit(0)
 
         token_table = _format_table(aggregated)
@@ -350,16 +348,15 @@ def main() -> None:
             )
         except subprocess.CalledProcessError as cpe:
             sys.stderr.write(
-                f"token_summary_appender: gh api update failed"
-                f" (rc={cpe.returncode}): {cpe.stderr}\n"
+                f"token_summary_hook: gh api update failed (rc={cpe.returncode}): {cpe.stderr}\n"
             )
-            sys.exit(1)
+            sys.exit(0)
 
     except SystemExit:
         raise
     except Exception as exc:  # noqa: BLE001
-        sys.stderr.write(f"token_summary_appender: unexpected error: {exc}\n")
-        sys.exit(1)
+        sys.stderr.write(f"token_summary_hook: unexpected error: {exc}\n")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

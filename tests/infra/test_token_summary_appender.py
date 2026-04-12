@@ -32,7 +32,7 @@ def _run_hook(
             value from that file. When absent, ``_read_kitchen_id`` reads from the
             real filesystem (returns '' if no file present in the test CWD).
     """
-    from autoskillit.hooks.token_summary_appender import main
+    from autoskillit.hooks.token_summary_hook import main
 
     stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
     exit_code = 0
@@ -44,7 +44,7 @@ def _run_hook(
         if log_root is not None:
             stack.enter_context(
                 patch(
-                    "autoskillit.hooks.token_summary_appender._log_root",
+                    "autoskillit.hooks.token_summary_hook._log_root",
                     return_value=log_root,
                 )
             )
@@ -53,7 +53,7 @@ def _run_hook(
             kitchen_id = cfg_data.get("kitchen_id") or cfg_data.get("pipeline_id", "")
             stack.enter_context(
                 patch(
-                    "autoskillit.hooks.token_summary_appender._read_kitchen_id",
+                    "autoskillit.hooks.token_summary_hook._read_kitchen_id",
                     return_value=kitchen_id,
                 )
             )
@@ -99,10 +99,10 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
 
 
 def test_tsa1_token_summary_appender_script_exists() -> None:
-    """token_summary_appender.py must exist in hooks/ on disk."""
+    """token_summary_hook.py must exist in hooks/ on disk."""
     from autoskillit.core.paths import pkg_root
 
-    assert (pkg_root() / "hooks" / "token_summary_appender.py").exists()
+    assert (pkg_root() / "hooks" / "token_summary_hook.py").exists()
 
 
 def test_tsa_rest_api_no_gh_pr_commands() -> None:
@@ -112,7 +112,7 @@ def test_tsa_rest_api_no_gh_pr_commands() -> None:
     """
     from autoskillit.core.paths import pkg_root
 
-    source = (pkg_root() / "hooks" / "token_summary_appender.py").read_text(encoding="utf-8")
+    source = (pkg_root() / "hooks" / "token_summary_hook.py").read_text(encoding="utf-8")
     assert "gh pr edit" not in source, (
         "gh pr edit found in hook — must be replaced with "
         "gh api repos/.../pulls/{N} --method PATCH --field body=..."
@@ -131,7 +131,7 @@ def test_tsa2_no_pr_url_exits_zero() -> None:
     """No GitHub PR URL in tool result → exits 0, no gh subprocess."""
     from autoskillit.core.paths import pkg_root
 
-    hook_path = pkg_root() / "hooks" / "token_summary_appender.py"
+    hook_path = pkg_root() / "hooks" / "token_summary_hook.py"
     event = _make_run_skill_event("done.\n%%ORDER_UP%%")
     stdin_text = json.dumps(event)
 
@@ -336,7 +336,7 @@ def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
 
 def test_tsa7_canonical_step_name() -> None:
     """_canonical strips trailing -N suffix; non-digit suffixes are preserved."""
-    from autoskillit.hooks.token_summary_appender import _canonical
+    from autoskillit.hooks.token_summary_hook import _canonical
 
     assert _canonical("plan-30") == "plan"
     assert _canonical("open-pr-2") == "open-pr"
@@ -352,7 +352,7 @@ def test_tsa7_canonical_step_name() -> None:
 
 
 def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
-    """gh pr edit returning non-zero → hook exits non-zero (error surfaced)."""
+    """gh pr edit returning non-zero → hook exits 0 (fail-open, error logged to stderr)."""
     log_root = tmp_path / "logs"
     log_root.mkdir()
     pipeline_id = "test-pipeline-tsa8"
@@ -394,7 +394,7 @@ def test_tsa8_gh_pr_edit_failure_exits_nonzero(tmp_path: Path) -> None:
     with patch("subprocess.run", side_effect=subprocess_side_effect):
         _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
 
-    assert exit_code != 0
+    assert exit_code == 0
 
 
 # ---------------------------------------------------------------------------
@@ -532,7 +532,7 @@ def test_tsa_gh_pr_edit_stderr_captured(tmp_path: Path) -> None:
             mock_stderr.write = lambda s: stderr_output.append(s)
             _, exit_code = _run_hook(event, log_root=log_root, hook_config_path=hook_config)
 
-    assert exit_code == 1
+    assert exit_code == 0
     combined = "".join(stderr_output)
     assert "authentication required" in combined, (
         "stderr from CalledProcessError must appear in diagnostic output — "
@@ -591,7 +591,7 @@ def test_tsa_humanize_preserves_decimal() -> None:
     Fails before P6-2 fix (str(int(45.7)) → '45'), passes after (str(45.7) → '45.7').
     Token counts are always integers in practice, so this is a semantic correctness fix.
     """
-    from autoskillit.hooks.token_summary_appender import _humanize
+    from autoskillit.hooks.token_summary_hook import _humanize
 
     assert _humanize(999) == "999"
     assert _humanize(0) == "0"
@@ -806,9 +806,72 @@ def test_e3_backward_compat_sessions_without_order_id_field(tmp_path: Path) -> N
     assert len(patch_calls) == 0, "Old sessions without order_id should be skipped"
 
 
+# ---------------------------------------------------------------------------
+# T4 — token_summary_appender is fail-open (exit 0 on errors)
+# ---------------------------------------------------------------------------
+
+
+def test_token_summary_hook_patch_failure_exits_zero(tmp_path: Path) -> None:
+    """CalledProcessError on PATCH must exit 0, not 1 (fail-open hook)."""
+    event = {
+        "tool_name": "mcp__autoskillit_server__run_skill",
+        "tool_response": json.dumps({"result": json.dumps({"success": True})}),
+    }
+    # Use a valid-enough PR URL to trigger the gh api PATCH path
+    pr_event = {
+        **event,
+        "tool_response": json.dumps(
+            {
+                "result": json.dumps(
+                    {
+                        "success": True,
+                        "pr_url": "https://github.com/owner/repo/pull/1",
+                    }
+                )
+            }
+        ),
+    }
+
+    original_run = subprocess.run
+
+    def failing_run(cmd, **kwargs):
+        if "PATCH" in (cmd if isinstance(cmd, str) else " ".join(str(c) for c in cmd)):
+            raise subprocess.CalledProcessError(1, cmd, stderr="API error")
+        return original_run(cmd, **kwargs)
+
+    with patch("autoskillit.hooks.token_summary_hook.subprocess.run", failing_run):
+        _, exit_code = _run_hook(
+            event=pr_event,
+            log_root=tmp_path,
+        )
+    # hook must exit 0 even when gh api PATCH raises CalledProcessError
+    assert exit_code == 0
+
+
+def test_token_summary_hook_unexpected_error_exits_zero(monkeypatch: object) -> None:
+    """Unhandled exception in outer except must exit 0 (fail-open)."""
+
+    # Patch json.loads to raise to trigger the outer except path
+
+    original_loads = json.loads
+
+    call_count = [0]
+
+    def bomb_loads(s: str) -> object:
+        call_count[0] += 1
+        if call_count[0] == 1:
+            raise RuntimeError("injected failure")
+        return original_loads(s)
+
+    with patch("autoskillit.hooks.token_summary_hook.json.loads", bomb_loads):
+        _, exit_code = _run_hook(event={"tool_name": "any", "tool_response": "{}"})
+
+    assert exit_code == 0
+
+
 def test_e4_kitchen_id_renamed_in_hook_config(tmp_path: Path) -> None:
     """E-4: _read_kitchen_id reads 'kitchen_id' key; falls back to 'pipeline_id' for old."""
-    from autoskillit.hooks.token_summary_appender import _read_kitchen_id
+    from autoskillit.hooks.token_summary_hook import _read_kitchen_id
 
     # New format
     cfg_path = tmp_path / ".autoskillit" / ".hook_config.json"
@@ -825,10 +888,10 @@ def test_e4_kitchen_id_renamed_in_hook_config(tmp_path: Path) -> None:
 
 
 def test_hook_subprocess_calls_have_timeout() -> None:
-    """All subprocess.run() calls in token_summary_appender.py must have timeout=."""
+    """All subprocess.run() calls in token_summary_hook.py must have timeout=."""
     import ast
 
-    src = Path("src/autoskillit/hooks/token_summary_appender.py").read_text()
+    src = Path("src/autoskillit/hooks/token_summary_hook.py").read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if (
@@ -838,6 +901,5 @@ def test_hook_subprocess_calls_have_timeout() -> None:
         ):
             kw_names = {kw.arg for kw in node.keywords}
             assert "timeout" in kw_names, (
-                f"subprocess.run() at line {node.lineno} in "
-                f"token_summary_appender.py missing timeout="
+                f"subprocess.run() at line {node.lineno} in token_summary_hook.py missing timeout="
             )

@@ -4,6 +4,7 @@ Re-exports the full public surface of cleanup.py, skills.py, and clone.py.
 All sub-modules depend only on autoskillit.core.*.
 """
 
+from autoskillit.core import SkillResolver
 from autoskillit.workspace.cleanup import (
     CleanupResult,
     DefaultWorkspaceManager,
@@ -36,7 +37,7 @@ from autoskillit.workspace.session_skills import (
     resolve_ephemeral_root,
 )
 from autoskillit.workspace.skills import (
-    SkillResolver,
+    DefaultSkillResolver,
     bundled_skills_dir,
     bundled_skills_extended_dir,
     detect_project_local_overrides,
@@ -64,6 +65,7 @@ __all__ = [
     "remove_git_worktree",
     "remove_worktree_sidecar",
     "RUNS_DIR",
+    "DefaultSkillResolver",
     "SkillResolver",
     "SkillsDirectoryProvider",
     "bundled_skills_dir",

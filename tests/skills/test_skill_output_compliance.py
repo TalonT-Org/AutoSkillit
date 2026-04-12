@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from autoskillit.core import pkg_root
-from autoskillit.workspace.skills import SkillResolver
+from autoskillit.workspace.skills import DefaultSkillResolver
 
 # Skills whose output files are intentionally fixed-name (no timestamp needed).
 # These are idempotent by design — the filename IS the identity.
@@ -75,7 +75,7 @@ UNSPACED_OUTPUT_TOKEN = re.compile(
 
 def _get_file_producing_skills() -> list[str]:
     """Return skill names whose SKILL.md contains temp/ output path instructions."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     producing = []
     for info in resolver.list_all():
         if info.name not in FIXED_NAME_SKILLS:
@@ -87,7 +87,7 @@ def _get_file_producing_skills() -> list[str]:
 
 def _get_skills_with_output_tokens() -> list[str]:
     """Return skill names whose SKILL.md contains structured output tokens."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     token_skills = []
     # Simple check for key = value or key=value pattern in unlabeled code blocks
     token_pattern = re.compile(
@@ -114,7 +114,7 @@ def _get_skills_with_output_tokens() -> list[str]:
 @pytest.mark.parametrize("skill_name", _get_file_producing_skills())
 def test_skill_output_uses_hhmmss_timestamp(skill_name: str) -> None:
     """Every file-producing skill must use {YYYY-MM-DD_HHMMSS} in output paths."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     info = resolver.resolve(skill_name)
     assert info is not None
     content = info.path.read_text()
@@ -138,7 +138,7 @@ def test_skill_output_uses_hhmmss_timestamp(skill_name: str) -> None:
 @pytest.mark.parametrize("skill_name", _get_skills_with_output_tokens())
 def test_structured_output_tokens_have_spaces(skill_name: str) -> None:
     """Structured output tokens must use 'key = value' format (spaces around =)."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     info = resolver.resolve(skill_name)
     assert info is not None
     content = info.path.read_text()
@@ -154,7 +154,7 @@ def test_structured_output_tokens_have_spaces(skill_name: str) -> None:
 @pytest.mark.parametrize("skill_name", _get_file_producing_skills())
 def test_no_shared_scratch_files(skill_name: str) -> None:
     """Skills must not write to shared fixed-name scratch files."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     info = resolver.resolve(skill_name)
     assert info is not None
     content = info.path.read_text()
@@ -169,7 +169,7 @@ def test_no_shared_scratch_files(skill_name: str) -> None:
 @pytest.mark.parametrize("skill_name", _get_file_producing_skills())
 def test_no_namespace_prefix_in_output_paths(skill_name: str) -> None:
     """Output paths must not include the autoskillit: namespace prefix."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     info = resolver.resolve(skill_name)
     assert info is not None
     content = info.path.read_text()
@@ -187,7 +187,7 @@ def test_no_namespace_prefix_in_output_paths(skill_name: str) -> None:
 @pytest.mark.parametrize("skill_name", _get_file_producing_skills())
 def test_file_producing_skills_have_cwd_anchor(skill_name: str) -> None:
     """Every file-producing skill must anchor temp/ writes to the current working directory."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     info = resolver.resolve(skill_name)
     assert info is not None
     content = info.path.read_text()

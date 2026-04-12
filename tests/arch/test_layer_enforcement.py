@@ -816,9 +816,9 @@ def test_native_tool_guard_absent_from_hook_registry():
 
 
 def test_hook_config_filename_and_dir_match_quota_check():
-    """quota_check.py must agree with tools_kitchen on the hook config path constants.
+    """quota_guard.py must agree with tools_kitchen on the hook config path constants.
 
-    The server (tools_kitchen.py) writes the config; the hook (quota_check.py) reads it.
+    The server (tools_kitchen.py) writes the config; the hook (quota_guard.py) reads it.
     They must agree on both the filename and the directory components, or the quota hook
     will silently fail to read its configuration.
     """
@@ -829,7 +829,7 @@ def test_hook_config_filename_and_dir_match_quota_check():
         _HOOK_DIR_COMPONENTS,
     )
 
-    quota_mod = importlib.import_module("autoskillit.hooks.quota_check")
+    quota_mod = importlib.import_module("autoskillit.hooks.quota_guard")
 
     assert quota_mod.HOOK_CONFIG_FILENAME == _HOOK_CONFIG_FILENAME, (
         f"quota_check.HOOK_CONFIG_FILENAME={quota_mod.HOOK_CONFIG_FILENAME!r} "
@@ -994,11 +994,23 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("server/_factory.py"): {"*"},  # Composition Root
         Path("cli/_workspace.py"): {"DefaultSubprocessRunner"},  # CLI worktree listing
         Path("cli/_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
+        Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
         Path("execution/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback
         Path("pipeline/context.py"): {  # __post_init__ +
             "DefaultBackgroundSupervisor",  # field default_factory
             "DefaultMcpResponseLog",
         },
+        Path("recipe/_api.py"): {"DefaultSkillResolver"},  # deferred default factory fallback
+        Path("recipe/contracts.py"): {"DefaultSkillResolver"},  # deferred default factory fallback
+        Path("recipe/rules_skill_content.py"): {
+            "DefaultSkillResolver"
+        },  # deferred default factory fallback
+        Path("recipe/rules_skills.py"): {
+            "DefaultSkillResolver"
+        },  # deferred default factory fallback
+        Path("workspace/session_skills.py"): {
+            "DefaultSkillResolver"
+        },  # ephemeral session resolver fallback
     }
 
     violations: list[str] = []

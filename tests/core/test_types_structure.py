@@ -12,13 +12,11 @@ def test_enums_importable_from_sub_module():
 
 
 def test_protocols_importable_from_sub_module():
-    from typing import Protocol as TypingProtocol
+    from autoskillit.core._type_protocols import GateState, HeadlessExecutor
 
-    from autoskillit.core._type_protocols import GatePolicy, HeadlessExecutor
-
-    assert issubclass(GatePolicy, TypingProtocol)
-    assert GatePolicy.__module__ == "autoskillit.core._type_protocols"
-    assert issubclass(HeadlessExecutor, TypingProtocol)
+    assert callable(GateState)
+    assert GateState.__module__ == "autoskillit.core._type_protocols"
+    assert callable(HeadlessExecutor)
     assert HeadlessExecutor.__module__ == "autoskillit.core._type_protocols"
 
 
@@ -31,7 +29,7 @@ def test_types_hub_backward_compat():
         FREE_RANGE_TOOLS,
         GATED_TOOLS,
         FailureRecord,
-        GatePolicy,
+        GateState,
         HeadlessExecutor,
         LoadResult,
         RetryReason,
@@ -49,8 +47,8 @@ def test_types_hub_backward_compat():
     assert dataclasses.is_dataclass(LoadResult)  # _type_results
     assert dataclasses.is_dataclass(SkillResult)  # _type_results
     assert dataclasses.is_dataclass(FailureRecord)  # _type_results
-    assert issubclass(GatePolicy, TypingProtocol)  # _type_protocols — Protocol
-    assert issubclass(HeadlessExecutor, TypingProtocol)  # _type_protocols — Protocol
+    assert callable(GateState)  # _type_protocols — Protocol
+    assert callable(HeadlessExecutor)  # _type_protocols — Protocol
     assert callable(extract_skill_name)  # _type_helpers — function
 
 

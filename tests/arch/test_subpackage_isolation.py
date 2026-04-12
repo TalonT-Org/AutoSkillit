@@ -670,11 +670,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
         Exempt at 16 files.
       hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
         (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
-        file so Claude Code can invoke it directly as a subprocess. pretty_output.py
+        file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
         additionally owns a set of underscore-prefixed private formatter modules
         (_fmt_primitives.py, _fmt_execution.py, _fmt_status.py, _fmt_recipe.py)
         that are imported helpers — not standalone hook scripts — split out to
-        keep pretty_output.py under its line budget. Exempt at 18 files
+        keep pretty_output_hook.py under its line budget. Exempt at 18 files
         (14 hook scripts + 4 private helpers).
     """
     EXEMPTIONS: dict[str, int] = {
@@ -1020,10 +1020,10 @@ def test_default_recipe_repository_in_repository_module() -> None:
 def test_recipe_lister_callsites_use_protocol_typing() -> None:
     """REQ-ARCH-006: callsites in recipe/ that consume the skill listing
     must reference the SkillLister Protocol (parameter type), so the
-    deferred SkillResolver() instantiation is a default-factory fallback
+    deferred DefaultSkillResolver() instantiation is a default-factory fallback
     rather than the only path.
 
-    contracts.py uses .resolve() and therefore references TargetSkillResolver,
+    contracts.py uses .resolve() and therefore references SkillResolver,
     not SkillLister. That is checked separately below.
     """
     lister_targets = {
@@ -1039,10 +1039,10 @@ def test_recipe_lister_callsites_use_protocol_typing() -> None:
     assert not missing, (
         f"These files still consume SkillResolver without SkillLister Protocol typing: {missing}"
     )
-    # contracts.py uses .resolve() — must reference TargetSkillResolver, not SkillLister
+    # contracts.py uses .resolve() — must reference SkillResolver, not SkillLister
     contracts_text = (src_root / "src/autoskillit/recipe/contracts.py").read_text()
-    assert "TargetSkillResolver" in contracts_text, (
-        "contracts.py must reference TargetSkillResolver for the resolver parameter"
+    assert "SkillResolver" in contracts_text, (
+        "contracts.py must reference SkillResolver for the resolver parameter"
     )
 
 

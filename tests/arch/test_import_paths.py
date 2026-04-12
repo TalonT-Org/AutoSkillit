@@ -239,16 +239,16 @@ def test_req_imp_006_prompts_no_gate_state_import() -> None:
 
 
 def test_req_imp_007_pretty_output_no_private_recipe_api_import() -> None:
-    """hooks/pretty_output.py TYPE_CHECKING must not use recipe._api.
+    """hooks/pretty_output_hook.py TYPE_CHECKING must not use recipe._api.
 
     ListRecipesResult and LoadRecipeResult are re-exported via autoskillit.recipe.__all__.
     Importing from the private recipe._api sub-module bypasses the canonical surface (P14-1).
     """
-    path = SRC / "hooks" / "pretty_output.py"
+    path = SRC / "hooks" / "pretty_output_hook.py"
     for mod, in_tc in _parse_imports(path):
         if in_tc and mod == "autoskillit.recipe._api":
             pytest.fail(
-                "hooks/pretty_output.py TYPE_CHECKING must use "
+                "hooks/pretty_output_hook.py TYPE_CHECKING must use "
                 "'from autoskillit.recipe import ...' "
                 "instead of 'from autoskillit.recipe._api import ...' (P14-1). "
                 "Both ListRecipesResult and LoadRecipeResult are in recipe.__all__."

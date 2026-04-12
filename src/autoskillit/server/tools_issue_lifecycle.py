@@ -388,78 +388,79 @@ async def claim_issue(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    with structlog.contextvars.bound_contextvars(tool="claim_issue", issue_url=issue_url):
-        logger.info("claim_issue", issue_url=issue_url)
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="claim_issue", issue_url=issue_url)
+    logger.info("claim_issue", issue_url=issue_url)
 
-        from autoskillit.server import _get_ctx
+    from autoskillit.server import _get_ctx
 
-        tool_ctx = _get_ctx()
-        if tool_ctx.github_client is None:
-            return json.dumps(
-                {"success": False, "error": "GitHub token required for label management"}
-            )
+    tool_ctx = _get_ctx()
+    if tool_ctx.github_client is None:
+        return json.dumps(
+            {"success": False, "error": "GitHub token required for label management"}
+        )
 
-        effective_label = label or tool_ctx.config.github.in_progress_label
+    effective_label = label or tool_ctx.config.github.in_progress_label
 
-        try:
-            owner, repo, issue_number = _parse_issue_ref(issue_url)
-        except ValueError as exc:
-            return json.dumps({"success": False, "error": str(exc)})
+    try:
+        owner, repo, issue_number = _parse_issue_ref(issue_url)
+    except ValueError as exc:
+        return json.dumps({"success": False, "error": str(exc)})
 
-        if err := tool_ctx.config.github.check_label_allowed(effective_label):
-            return json.dumps({"success": False, "error": err})
+    if err := tool_ctx.config.github.check_label_allowed(effective_label):
+        return json.dumps({"success": False, "error": err})
 
-        result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
-        if not result.get("success"):
-            return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
+    result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
+    if not result.get("success"):
+        return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
 
-        current_labels = _extract_label_names(result.get("labels", []))
-        if effective_label in current_labels:
-            if allow_reentry:
-                return json.dumps(
-                    {
-                        "success": True,
-                        "claimed": True,
-                        "reentry": True,
-                        "issue_number": issue_number,
-                        "label": effective_label,
-                    }
-                )
+    current_labels = _extract_label_names(result.get("labels", []))
+    if effective_label in current_labels:
+        if allow_reentry:
             return json.dumps(
                 {
                     "success": True,
-                    "claimed": False,
-                    "reason": (
-                        f"Issue #{issue_number} already has '{effective_label}' label"
-                        " — another session may be processing it"
-                    ),
+                    "claimed": True,
+                    "reentry": True,
+                    "issue_number": issue_number,
+                    "label": effective_label,
                 }
             )
-
-        await tool_ctx.github_client.ensure_label(
-            owner,
-            repo,
-            effective_label,
-            color="fbca04",
-            description="Issue is actively being processed by a pipeline session",
-        )
-
-        add_result = await tool_ctx.github_client.add_labels(
-            owner, repo, issue_number, [effective_label]
-        )
-        if not add_result.get("success"):
-            return json.dumps(
-                {"success": False, "error": add_result.get("error", "add_labels failed")}
-            )
-
         return json.dumps(
             {
                 "success": True,
-                "claimed": True,
-                "issue_number": issue_number,
-                "label": effective_label,
+                "claimed": False,
+                "reason": (
+                    f"Issue #{issue_number} already has '{effective_label}' label"
+                    " — another session may be processing it"
+                ),
             }
         )
+
+    await tool_ctx.github_client.ensure_label(
+        owner,
+        repo,
+        effective_label,
+        color="fbca04",
+        description="Issue is actively being processed by a pipeline session",
+    )
+
+    add_result = await tool_ctx.github_client.add_labels(
+        owner, repo, issue_number, [effective_label]
+    )
+    if not add_result.get("success"):
+        return json.dumps(
+            {"success": False, "error": add_result.get("error", "add_labels failed")}
+        )
+
+    return json.dumps(
+        {
+            "success": True,
+            "claimed": True,
+            "issue_number": issue_number,
+            "label": effective_label,
+        }
+    )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -490,97 +491,92 @@ async def release_issue(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    with structlog.contextvars.bound_contextvars(tool="release_issue", issue_url=issue_url):
-        logger.info("release_issue", issue_url=issue_url)
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(tool="release_issue", issue_url=issue_url)
+    logger.info("release_issue", issue_url=issue_url)
 
-        from autoskillit.server import _get_ctx
+    from autoskillit.server import _get_ctx
 
-        tool_ctx = _get_ctx()
-        if tool_ctx.github_client is None:
+    tool_ctx = _get_ctx()
+    if tool_ctx.github_client is None:
+        return json.dumps(
+            {"success": False, "error": "GitHub token required for label management"}
+        )
+
+    effective_label = label or tool_ctx.config.github.in_progress_label
+
+    try:
+        owner, repo, issue_number = _parse_issue_ref(issue_url)
+    except ValueError as exc:
+        return json.dumps({"success": False, "error": str(exc)})
+
+    result = await tool_ctx.github_client.remove_label(owner, repo, issue_number, effective_label)
+    if not result.get("success", False):
+        return json.dumps(
+            {
+                "success": False,
+                "issue_number": issue_number,
+                "label": effective_label,
+                "staged": False,
+                "staged_label": None,
+            }
+        )
+
+    # Determine if staging is needed
+    promotion_target = tool_ctx.config.branching.promotion_target
+    should_stage = target_branch is not None and target_branch != promotion_target
+
+    staged = False
+    effective_staged_label = staged_label or tool_ctx.config.github.staged_label
+
+    if should_stage:
+        if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
             return json.dumps(
-                {"success": False, "error": "GitHub token required for label management"}
+                {
+                    "success": False,
+                    "issue_number": issue_number,
+                    "label": effective_staged_label,
+                    "error": err,
+                }
             )
 
-        effective_label = label or tool_ctx.config.github.in_progress_label
-
-        try:
-            owner, repo, issue_number = _parse_issue_ref(issue_url)
-        except ValueError as exc:
-            return json.dumps({"success": False, "error": str(exc)})
-
-        result = await tool_ctx.github_client.remove_label(
-            owner, repo, issue_number, effective_label
+        ensure_result = await tool_ctx.github_client.ensure_label(
+            owner,
+            repo,
+            effective_staged_label,
+            color="0075ca",
+            description=(f"Implementation staged and waiting for promotion to {promotion_target}"),
         )
-        if not result.get("success", False):
+        if not ensure_result.get("success"):
             return json.dumps(
                 {
                     "success": False,
                     "issue_number": issue_number,
                     "label": effective_label,
-                    "staged": False,
-                    "staged_label": None,
+                    "error": (f"Failed to ensure staged label: {ensure_result.get('error', '?')}"),
                 }
             )
 
-        # Determine if staging is needed
-        promotion_target = tool_ctx.config.branching.promotion_target
-        should_stage = target_branch is not None and target_branch != promotion_target
-
-        staged = False
-        effective_staged_label = staged_label or tool_ctx.config.github.staged_label
-
-        if should_stage:
-            if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "issue_number": issue_number,
-                        "label": effective_staged_label,
-                        "error": err,
-                    }
-                )
-
-            ensure_result = await tool_ctx.github_client.ensure_label(
-                owner,
-                repo,
-                effective_staged_label,
-                color="0075ca",
-                description=(
-                    f"Implementation staged and waiting for promotion to {promotion_target}"
-                ),
-            )
-            if not ensure_result.get("success"):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "issue_number": issue_number,
-                        "label": effective_label,
-                        "error": (
-                            f"Failed to ensure staged label: {ensure_result.get('error', '?')}"
-                        ),
-                    }
-                )
-
-            apply_result = await tool_ctx.github_client.add_labels(
-                owner, repo, issue_number, [effective_staged_label]
-            )
-            if not apply_result.get("success"):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "issue_number": issue_number,
-                        "label": effective_label,
-                        "error": f"Failed to apply staged label: {apply_result.get('error', '?')}",
-                    }
-                )
-            staged = True
-
-        return json.dumps(
-            {
-                "success": True,
-                "issue_number": issue_number,
-                "label": effective_label,
-                "staged": staged,
-                "staged_label": effective_staged_label if staged else None,
-            }
+        apply_result = await tool_ctx.github_client.add_labels(
+            owner, repo, issue_number, [effective_staged_label]
         )
+        if not apply_result.get("success"):
+            return json.dumps(
+                {
+                    "success": False,
+                    "issue_number": issue_number,
+                    "label": effective_label,
+                    "error": f"Failed to apply staged label: {apply_result.get('error', '?')}",
+                }
+            )
+        staged = True
+
+    return json.dumps(
+        {
+            "success": True,
+            "issue_number": issue_number,
+            "label": effective_label,
+            "staged": staged,
+            "staged_label": effective_staged_label if staged else None,
+        }
+    )

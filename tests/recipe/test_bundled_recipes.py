@@ -1839,11 +1839,11 @@ class TestResearchRecipeStructure:
         step = recipe.steps["re_run_experiment"]
         assert step.tool == "run_skill"
         assert "--adjust" in step.with_args.get("skill_command", "")
-        assert step.on_success == "re_write_report"
+        assert step.on_success == "re_generate_report"
 
     def test_re_write_report_step(self, recipe) -> None:
-        assert "re_write_report" in recipe.steps
-        step = recipe.steps["re_write_report"]
+        assert "re_generate_report" in recipe.steps
+        step = recipe.steps["re_generate_report"]
         assert step.tool == "run_skill"
         assert step.on_success == "re_stage_bundle"
 
@@ -1855,7 +1855,7 @@ class TestResearchRecipeStructure:
 
     def test_revalidation_loop_all_paths_reach_begin_archival(self, recipe) -> None:
         """Every path from merge_escalations reaches begin_archival."""
-        for step_name in ("re_run_experiment", "re_write_report", "re_test"):
+        for step_name in ("re_run_experiment", "re_generate_report", "re_test"):
             step = recipe.steps[step_name]
             assert step.on_failure in ("begin_archival", "re_push_research")
         assert recipe.steps["re_push_research"].on_success == "finalize_bundle"

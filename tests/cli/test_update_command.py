@@ -61,9 +61,10 @@ def _setup_run_update(
 def test_update_subcommand_registered_in_help() -> None:
     """autoskillit update --help must exit 0."""
     import subprocess as _sp
+    import sys
 
     result = _sp.run(
-        ["autoskillit", "update", "--help"],
+        [sys.executable, "-m", "autoskillit", "update", "--help"],
         capture_output=True,
         text=True,
     )

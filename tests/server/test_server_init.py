@@ -300,7 +300,7 @@ class TestOpenKitchenVersionReporting:
 
 
 class TestOpenKitchenSousChef:
-    """sous-chef/SKILL.MD content is injected at open_kitchen activation time."""
+    """sous-chef/SKILL.md content is injected at open_kitchen activation time."""
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, tool_ctx):

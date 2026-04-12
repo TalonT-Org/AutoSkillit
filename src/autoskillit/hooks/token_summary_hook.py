@@ -20,6 +20,20 @@ import subprocess
 import sys
 from typing import Any
 
+# Hooks run as ``python3 /path/to/token_summary_appender.py`` subprocesses outside
+# the autoskillit venv (test_hooks_are_stdlib_only). To share the hook config path
+# with _fmt_primitives without breaking that constraint, the sibling module is
+# imported by bare name with the script's directory placed first on sys.path.
+# Tests running inside the venv import _fmt_primitives via the autoskillit.hooks
+# package path; both point to the same file.
+_HOOKS_DIR = str(pathlib.Path(__file__).resolve().parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402
+    _HOOK_CONFIG_PATH_COMPONENTS,
+)
+
 _SUFFIX_RE = re.compile(r"-\d+$")
 _PR_PARTS_RE = re.compile(r"https://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
 
@@ -116,7 +130,7 @@ def _read_kitchen_id(base: pathlib.Path | None = None) -> str:
     Falls back to 'pipeline_id' key for configs written before the rename.
     """
     root = base if base is not None else pathlib.Path.cwd()
-    path = root / ".autoskillit" / "temp" / ".hook_config.json"
+    path = root.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):

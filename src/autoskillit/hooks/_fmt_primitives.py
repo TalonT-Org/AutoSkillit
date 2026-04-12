@@ -7,11 +7,28 @@ all import directly from this module without going through any L1+ layer.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 _HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", "temp", ".hook_config.json")
+
+
+def _read_hook_config() -> dict[str, Any]:
+    """Read the quota_guard section from the session-bridge config file.
+
+    Returns an empty dict on any error (file absent, malformed JSON, wrong type).
+    Single shared implementation for all hook scripts that need quota_guard
+    data. Fail-open: absence of the file means no kitchen is active, handled
+    gracefully by all callers.
+    """
+    path = Path.cwd().joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data.get("quota_guard", {}) if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
+        return {}
 
 
 @dataclass(frozen=True)

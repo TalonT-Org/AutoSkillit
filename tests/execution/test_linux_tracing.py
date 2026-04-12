@@ -378,6 +378,52 @@ async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
     assert not enrollment.exists(), "Enrollment must be deleted by stop()"
 
 
+# --- LinuxTracingConfig guard tests ---
+
+
+def test_tracing_config_rejects_dev_shm_in_test_env(monkeypatch):
+    """LinuxTracingConfig.__post_init__ must raise when tmpfs_path is /dev/shm
+    and PYTEST_CURRENT_TEST env var is set."""
+    from autoskillit.config import LinuxTracingConfig
+
+    monkeypatch.setenv(
+        "PYTEST_CURRENT_TEST",
+        "tests/execution/test_linux_tracing.py::fake_test",
+    )
+    with pytest.raises(RuntimeError, match="tmpfs_path|PYTEST_CURRENT_TEST"):
+        LinuxTracingConfig(tmpfs_path="/dev/shm")
+
+
+def test_tracing_config_allows_custom_tmpfs_in_test_env(monkeypatch, tmp_path):
+    """LinuxTracingConfig must not raise when a non-/dev/shm path is provided."""
+    from autoskillit.config import LinuxTracingConfig
+
+    monkeypatch.setenv(
+        "PYTEST_CURRENT_TEST",
+        "tests/execution/test_linux_tracing.py::fake_test",
+    )
+    cfg = LinuxTracingConfig(tmpfs_path=str(tmp_path))  # must not raise
+    assert cfg.tmpfs_path == str(tmp_path)
+
+
+def test_tracing_config_allows_dev_shm_outside_test_env(monkeypatch):
+    """LinuxTracingConfig must not raise for /dev/shm when not running under pytest."""
+    from autoskillit.config import LinuxTracingConfig
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    cfg = LinuxTracingConfig(tmpfs_path="/dev/shm")  # production path — must not raise
+    assert cfg.tmpfs_path == "/dev/shm"
+
+
+def test_isolated_tracing_config_fixture_returns_non_dev_shm(isolated_tracing_config):
+    """The isolated_tracing_config fixture must return a config pointing to a
+    temp dir, not /dev/shm."""
+    from pathlib import Path
+
+    assert isolated_tracing_config.tmpfs_path != "/dev/shm"
+    assert Path(isolated_tracing_config.tmpfs_path).is_dir()
+
+
 @pytest.mark.anyio
 async def test_stop_unlinks_trace_and_enrollment(tmp_path):
     """stop() must delete both trace JSONL and enrollment sidecar on clean exit."""

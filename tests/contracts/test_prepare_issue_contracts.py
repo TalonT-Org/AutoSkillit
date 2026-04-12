@@ -348,3 +348,26 @@ def test_prepare_issue_never_constraint_prohibits_inline_body():
         "prepare-issue NEVER block must prohibit inline '--body' for validated-report "
         "issue creation. Add: 'Use --body inline for the path — always use --body-file'"
     )
+
+
+def test_prepare_issue_requirements_append_uses_body_file():
+    """prepare-issue Step 7a (requirements append via gh issue edit) must use --body-file."""
+    import re
+
+    text = SKILL_MD.read_text()
+    # Ensure no gh issue edit call uses inline --body with shell substitution ($(...))
+    inline_pattern = re.compile(r'gh issue edit[^\n]+--body\s+"\$\(')
+    matches = inline_pattern.findall(text)
+    assert not matches, (
+        "prepare-issue 'gh issue edit' (requirements append) must use --body-file, "
+        "not inline --body shell substitution"
+    )
+
+
+def test_prepare_issue_no_tmp_paths():
+    """prepare-issue must not use /tmp/ paths — all temp files go in {{AUTOSKILLIT_TEMP}}."""
+    text = SKILL_MD.read_text()
+    assert "/tmp/" not in text, (
+        "prepare-issue uses /tmp/ path(s). All temp files must live in "
+        "{{AUTOSKILLIT_TEMP}}/prepare-issue/ per project convention"
+    )

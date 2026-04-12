@@ -151,3 +151,129 @@ def test_domain_paths_has_no_duplicates() -> None:
     for prefixes in DOMAIN_PATHS.values():
         all_prefixes.extend(prefixes)
     assert len(all_prefixes) == len(set(all_prefixes))
+
+
+# ---------------------------------------------------------------------------
+# extract_linked_issues — additional coverage (migrated from pipeline/test_fidelity.py)
+# ---------------------------------------------------------------------------
+
+
+def test_extract_linked_issues_case_insensitive() -> None:
+    """Extraction is case-insensitive: CLOSES, fixes, Resolves all match."""
+    result = extract_linked_issues("CLOSES #10\nfixes #20\nResolves #30")
+    assert sorted(result, key=int) == ["10", "20", "30"]
+
+
+def test_extract_linked_issues_commit_concatenation() -> None:
+    """PR body and commit messages concatenated together yield combined results."""
+    pr_body = "Closes #100"
+    commits = "Fixes #200"
+    combined = f"{pr_body}\n{commits}"
+    result = extract_linked_issues(combined)
+    assert sorted(result, key=int) == ["100", "200"]
+
+
+# ---------------------------------------------------------------------------
+# is_valid_fidelity_finding — edge cases (migrated from pipeline/test_fidelity.py)
+# ---------------------------------------------------------------------------
+
+
+def test_fidelity_gap_with_empty_file_and_zero_line() -> None:
+    """Gap finding with file='' and line=0 is valid (unpostable — summary only)."""
+    gap = {
+        "file": "",
+        "line": 0,
+        "dimension": "fidelity",
+        "severity": "critical",
+        "message": "Gap: entire feature section 'notifications' not implemented.",
+        "requires_decision": False,
+    }
+    assert is_valid_fidelity_finding(gap) is True
+
+
+def test_fidelity_skipped_when_no_linked_issues() -> None:
+    """extract_linked_issues returns [] for PRs with no Closes/Fixes/Resolves refs.
+
+    The fidelity skip condition is len(linked_issues) == 0. This test confirms
+    that a PR body without issue references produces an empty list, which is the
+    signal the review-pr skill uses to skip fidelity subagent launch.
+    """
+    pr_body = "This PR adds a minor cleanup, no issue references."
+    linked = extract_linked_issues(pr_body)
+    assert linked == []
+
+
+# ---------------------------------------------------------------------------
+# partition_files_by_domain — domain-key coverage
+# (migrated from pipeline/test_pr_domain_partitioner.py)
+# ---------------------------------------------------------------------------
+
+
+def test_partition_files_execution_prefix() -> None:
+    result = partition_files_by_domain(["src/autoskillit/execution/headless.py"])
+    assert "Pipeline/Execution" in result
+    assert "src/autoskillit/execution/headless.py" in result["Pipeline/Execution"]
+
+
+def test_partition_files_pipeline_prefix() -> None:
+    result = partition_files_by_domain(["src/autoskillit/pipeline/pr_gates.py"])
+    assert "Pipeline/Execution" in result
+    assert "src/autoskillit/pipeline/pr_gates.py" in result["Pipeline/Execution"]
+
+
+def test_partition_files_recipe_prefix() -> None:
+    result = partition_files_by_domain(["src/autoskillit/recipe/schema.py"])
+    assert "Recipe/Validation" in result
+
+
+def test_partition_files_cli_prefix() -> None:
+    result = partition_files_by_domain(["src/autoskillit/cli/app.py"])
+    assert "CLI/Workspace" in result
+
+
+def test_partition_files_workspace_prefix() -> None:
+    result = partition_files_by_domain(["src/autoskillit/workspace/skills.py"])
+    assert "CLI/Workspace" in result
+
+
+def test_partition_files_skills_prefix() -> None:
+    result = partition_files_by_domain(["src/autoskillit/skills_extended/open-pr/SKILL.md"])
+    assert "Skills" in result
+
+
+def test_partition_files_core_prefix() -> None:
+    result = partition_files_by_domain(["src/autoskillit/core/types.py"])
+    assert "Core/Config/Infra" in result
+
+
+def test_partition_files_config_prefix() -> None:
+    result = partition_files_by_domain(["src/autoskillit/config/settings.py"])
+    assert "Core/Config/Infra" in result
+
+
+def test_partition_files_hooks_prefix() -> None:
+    result = partition_files_by_domain(["src/autoskillit/hooks/quota_check.py"])
+    assert "Core/Config/Infra" in result
+
+
+def test_partition_files_empty_input() -> None:
+    result = partition_files_by_domain([])
+    assert result == {}
+
+
+def test_partition_files_only_non_empty_domains_returned() -> None:
+    result = partition_files_by_domain(["src/autoskillit/server/tools_execution.py"])
+    assert "Tests" not in result
+    assert "Skills" not in result
+
+
+def test_partition_files_mixed_domains() -> None:
+    files = [
+        "src/autoskillit/server/tools_execution.py",
+        "src/autoskillit/execution/headless.py",
+        "tests/test_something.py",
+    ]
+    result = partition_files_by_domain(files)
+    assert "Server/MCP Tools" in result
+    assert "Pipeline/Execution" in result
+    assert "Tests" in result

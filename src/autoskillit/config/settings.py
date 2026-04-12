@@ -11,7 +11,9 @@ Resolution order (low → high priority):
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import logging
+import os
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -194,9 +196,6 @@ class LinuxTracingConfig:
     tmpfs_path: str = "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
 
     def __post_init__(self) -> None:
-        import inspect
-        import os
-
         if self.tmpfs_path != "/dev/shm" or not os.environ.get("PYTEST_CURRENT_TEST"):
             return
         # Only raise when called directly from test code — not from library machinery
@@ -213,6 +212,7 @@ class LinuxTracingConfig:
                 "LinuxTracingConfig(tmpfs_path=str(tmp_path)). "
                 "Use the isolated_tracing_config fixture for new tests."
             )
+        del frame, init_frame, caller
 
 
 @dataclass

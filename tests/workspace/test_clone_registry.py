@@ -298,7 +298,7 @@ class TestBatchDeleteRegistryWriteback:
         register_clone("/tmp/a", "success", "kit-1", registry_path=reg)
         register_clone("/tmp/b", "success", "kit-1", registry_path=reg)
 
-        def remove_side_effect(path: str, _: str) -> dict:  # type: ignore[type-arg]
+        def remove_side_effect(path: str, _: str) -> dict[str, str]:
             return (
                 {"removed": "true"}
                 if path == "/tmp/a"

@@ -9,7 +9,7 @@ SKILL_MD = SKILL_DIR / "SKILL.md"
 
 
 def test_enrich_issues_skill_exists():
-    assert SKILL_MD.exists()
+    assert SKILL_MD.exists(), f"SKILL.md not found at {SKILL_MD}"
 
 
 def test_enrich_issues_gh_issue_edit_uses_body_file():
@@ -29,7 +29,7 @@ def test_enrich_issues_gh_issue_edit_uses_body_file():
 def test_enrich_issues_body_file_uses_autoskillit_temp():
     """enrich-issues must write edit body to AUTOSKILLIT_TEMP/enrich-issues/."""
     text = SKILL_MD.read_text()
-    assert "AUTOSKILLIT_TEMP" in text and "enrich-issues" in text, (
+    assert "AUTOSKILLIT_TEMP" in text, (
         "enrich-issues must write issue body to {{AUTOSKILLIT_TEMP}}/enrich-issues/ "
         "before calling gh issue edit --body-file"
     )

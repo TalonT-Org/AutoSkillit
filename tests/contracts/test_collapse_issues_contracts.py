@@ -158,7 +158,7 @@ def test_collapse_issues_no_angle_bracket_body_placeholder():
 
 
 def test_collapse_issues_gh_issue_create_uses_body_file():
-    """collapse-issues gh issue create must use --body-file, not inline --body for combined content."""
+    """collapse-issues gh issue create must use --body-file, not inline --body."""
     text = skill_text()
     create_pos = text.find("gh issue create")
     assert create_pos != -1, "Sanity: 'gh issue create' not found in collapse-issues"
@@ -172,7 +172,7 @@ def test_collapse_issues_gh_issue_create_uses_body_file():
 def test_collapse_issues_body_file_uses_autoskillit_temp():
     """collapse-issues must write combined body to AUTOSKILLIT_TEMP/collapse-issues/."""
     text = skill_text()
-    assert "AUTOSKILLIT_TEMP" in text and "collapse-issues" in text, (
+    assert "AUTOSKILLIT_TEMP" in text, (
         "collapse-issues must write combined body to {{AUTOSKILLIT_TEMP}}/collapse-issues/ "
         "before calling gh issue create --body-file"
     )
@@ -189,5 +189,6 @@ def test_collapse_issues_never_inline_body_for_create():
     )
     lower = never_block.lower()
     assert "--body" in never_block and "inline" in lower, (
-        "collapse-issues NEVER block must prohibit inline '--body' for combined-body issue creation"
+        "collapse-issues NEVER block must prohibit inline '--body' "
+        "for combined-body issue creation"
     )

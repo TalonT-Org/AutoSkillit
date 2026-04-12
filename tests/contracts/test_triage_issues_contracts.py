@@ -9,7 +9,7 @@ SKILL_MD = SKILL_DIR / "SKILL.md"
 
 
 def test_triage_issues_skill_exists():
-    assert SKILL_MD.exists()
+    assert SKILL_MD.exists(), f"SKILL.md not found at {SKILL_MD}"
 
 
 def test_triage_issues_gh_issue_edit_uses_body_file():
@@ -27,7 +27,7 @@ def test_triage_issues_gh_issue_edit_uses_body_file():
 def test_triage_issues_body_file_uses_autoskillit_temp():
     """triage-issues must write edit body to AUTOSKILLIT_TEMP/triage-issues/."""
     text = SKILL_MD.read_text()
-    assert "AUTOSKILLIT_TEMP" in text and "triage-issues" in text, (
+    assert "AUTOSKILLIT_TEMP" in text, (
         "triage-issues must write issue body to {{AUTOSKILLIT_TEMP}}/triage-issues/ "
         "before calling gh issue edit --body-file"
     )

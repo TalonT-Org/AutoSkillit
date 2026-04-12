@@ -839,12 +839,12 @@ def test_token_summary_appender_patch_failure_exits_zero(tmp_path: Path) -> None
             raise subprocess.CalledProcessError(1, cmd, stderr="API error")
         return original_run(cmd, **kwargs)
 
-    _, exit_code = _run_hook(
-        event=pr_event,
-        log_root=tmp_path,
-    )
-    # hook must exit 0 whether or not the PATCH actually fires
-    # (the real assertion is in the unit test below)
+    with patch("autoskillit.hooks.token_summary_hook.subprocess.run", failing_run):
+        _, exit_code = _run_hook(
+            event=pr_event,
+            log_root=tmp_path,
+        )
+    # hook must exit 0 even when gh api PATCH raises CalledProcessError
     assert exit_code == 0
 
 

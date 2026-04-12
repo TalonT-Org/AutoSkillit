@@ -149,6 +149,11 @@ class TestChannelBDrainWait:
           t=0.16s  Channel B fires → drain wait starts with 0.5s timeout
           t=0.66s  drain times out (script never wrote to stdout)
           t=0.66s  process killed with empty stdout
+
+        timeout=60s: guards against the outer wall-clock expiring under xdist -n 4 load.
+        _watch_session_log waits up to 1s for stdout_session_id_ready before Phase 1 starts;
+        under CI load both the preamble and Phase 1 polls can overrun, so the outer
+        timeout must exceed 1s + _phase1_timeout (30s default) + drain (0.5s) = 31.5s.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -158,7 +163,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=30,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,

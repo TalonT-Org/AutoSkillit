@@ -1657,3 +1657,42 @@ class TestDoctorSourceVersionDriftUsesNetwork:
         assert any(n is True for n in network_args), (
             "_check_source_version_drift must call resolve_reference_sha with network=True"
         )
+
+    def test_check_source_version_drift_returns_ok_when_network_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Network error (resolve_reference_sha returns None) → OK, not hard failure."""
+        import json
+        from unittest.mock import MagicMock
+
+        from autoskillit.cli._doctor import _check_source_version_drift
+
+        fake_direct_url = json.dumps(
+            {
+                "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+                "vcs_info": {
+                    "vcs": "git",
+                    "requested_revision": "stable",
+                    "commit_id": "abc123",
+                },
+            }
+        )
+        fake_dist = MagicMock()
+        fake_dist.read_text.return_value = fake_direct_url
+        monkeypatch.setattr(
+            "importlib.metadata.Distribution.from_name",
+            lambda _name: fake_dist,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._update_checks.resolve_reference_sha",
+            lambda info, home, **kw: None,
+        )
+
+        from autoskillit.cli._doctor import Severity
+
+        result = _check_source_version_drift(home=tmp_path)
+        assert result.severity == Severity.OK, (
+            f"Expected OK (fail-open) when network unavailable, "
+            f"got {result.severity}: {result.message}"
+        )
+        assert "unavailable" in result.message.lower() or "network" in result.message.lower()

@@ -334,7 +334,7 @@ def test_source_drift_signal_fires_when_commit_lags_ref(
     assert sig is not None
     assert sig.kind == "source_drift"
     # "source drift" must NOT appear in user-visible text (per plan verification item 11)
-    assert "source drift" not in sig.message.lower() or "source_drift" == sig.kind
+    assert "source drift" not in sig.message.lower()
 
 
 def test_source_drift_signal_silent_when_sha_matches(
@@ -361,6 +361,68 @@ def test_source_drift_signal_silent_when_ref_sha_none(
         lambda info, home, **kw: None,
     )
     assert _source_drift_signal(info, tmp_path) is None
+
+
+# ---------------------------------------------------------------------------
+# find_source_repo behavioral tests
+# ---------------------------------------------------------------------------
+
+
+def test_find_source_repo_env_var_override_valid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """AUTOSKILLIT_SOURCE_REPO env var pointing to a valid repo root is returned."""
+    from autoskillit.cli._update_checks import find_source_repo
+
+    src_dir = tmp_path / "src" / "autoskillit"
+    src_dir.mkdir(parents=True)
+    monkeypatch.setenv("AUTOSKILLIT_SOURCE_REPO", str(tmp_path))
+    result = find_source_repo()
+    assert result == tmp_path
+
+
+def test_find_source_repo_env_var_override_invalid_falls_through(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """AUTOSKILLIT_SOURCE_REPO pointing to a path without src/autoskillit/ is ignored."""
+    from autoskillit.cli._update_checks import find_source_repo
+
+    monkeypatch.setenv("AUTOSKILLIT_SOURCE_REPO", str(tmp_path / "nonexistent"))
+    monkeypatch.setattr("autoskillit.cli._update_checks.Path.cwd", lambda: tmp_path)
+    result = find_source_repo()
+    assert result is None
+
+
+def test_find_source_repo_cwd_walk_finds_pyproject(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """CWD walk finds the project root when pyproject.toml has name=autoskillit."""
+    from autoskillit.cli._update_checks import find_source_repo
+
+    project_root = tmp_path / "project"
+    src_dir = project_root / "src" / "autoskillit"
+    src_dir.mkdir(parents=True)
+    pyproject = project_root / "pyproject.toml"
+    pyproject.write_text('[project]\nname = "autoskillit"\n', encoding="utf-8")
+
+    nested_cwd = project_root / "src" / "autoskillit" / "cli"
+    nested_cwd.mkdir(parents=True)
+    monkeypatch.delenv("AUTOSKILLIT_SOURCE_REPO", raising=False)
+    monkeypatch.setattr("autoskillit.cli._update_checks.Path.cwd", lambda: nested_cwd)
+    result = find_source_repo()
+    assert result == project_root
+
+
+def test_find_source_repo_cwd_walk_no_match_returns_none(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """CWD walk returns None when no autoskillit project is found."""
+    from autoskillit.cli._update_checks import find_source_repo
+
+    monkeypatch.delenv("AUTOSKILLIT_SOURCE_REPO", raising=False)
+    monkeypatch.setattr("autoskillit.cli._update_checks.Path.cwd", lambda: tmp_path)
+    result = find_source_repo()
+    assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -527,19 +589,29 @@ def test_prompt_uses_friendly_branch_language(
 def test_yes_runs_upgrade_command_from_install_info_not_hardcoded(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, answer="y")
+    from autoskillit.cli._install_info import upgrade_command
+
+    info = _make_stable_info()
+    printed, input_calls = _setup_run_checks(
+        monkeypatch, tmp_path, binary_signal=True, answer="y", info=info
+    )
     run_calls: list[list[str]] = []
     monkeypatch.setattr(
         "autoskillit.cli._update_checks.subprocess.run",
-        lambda cmd, **kw: run_calls.append(cmd),
+        lambda cmd, **kw: run_calls.append(list(cmd)),
     )
     monkeypatch.setattr("autoskillit.cli._update_checks.terminal_guard", MagicMock())
     monkeypatch.setattr(
         "autoskillit.cli._update_checks._verify_update_result", lambda *a, **kw: True
     )
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.0"
+    )
+    expected_cmd = upgrade_command(info)
     run_update_checks(home=tmp_path)
-    # Should have called upgrade command (uv tool upgrade) and autoskillit install
-    assert any("uv" in " ".join(cmd) or "autoskillit" in " ".join(cmd) for cmd in run_calls)
+    assert expected_cmd in run_calls, (
+        f"Expected upgrade command {expected_cmd!r} from upgrade_command(info); got {run_calls!r}"
+    )
 
 
 def test_yes_runs_autoskillit_install_after_upgrade_command(

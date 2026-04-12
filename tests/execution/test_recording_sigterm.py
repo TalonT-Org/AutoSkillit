@@ -5,6 +5,7 @@ and writes scenario.json to disk. Regression guard for issue #745.
 
 import json
 import os
+import select
 import signal
 import subprocess
 import sys
@@ -35,8 +36,14 @@ def test_sigterm_writes_scenario_json(tmp_path):
         env=env,
     )
 
-    # Allow server to start and install its signal handler
-    time.sleep(1.0)
+    # Poll stderr for any output (server startup log) to detect readiness,
+    # rather than using a fixed sleep. Falls back to a 5-second ceiling so
+    # the test is both responsive on fast hosts and resilient on slow CI.
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        ready, _, _ = select.select([proc.stderr], [], [], 0.1)
+        if ready or proc.poll() is not None:
+            break
 
     # SIGTERM is the exact signal Claude Code sends on /exit.
     # The handler converts SIGTERM → KeyboardInterrupt, triggering lifespan
@@ -45,14 +52,19 @@ def test_sigterm_writes_scenario_json(tmp_path):
     proc.stdin.close()
     proc.send_signal(signal.SIGTERM)
     try:
-        proc.wait(timeout=10)
+        stdout_bytes, stderr_bytes = proc.communicate(timeout=10)
     except subprocess.TimeoutExpired:
         proc.kill()
-        proc.wait()
+        stdout_bytes, stderr_bytes = proc.communicate()
+
+    stdout = stdout_bytes.decode(errors="replace")
+    stderr = stderr_bytes.decode(errors="replace")
 
     scenario_json = output_dir / "scenario.json"
     assert scenario_json.exists(), (
-        "scenario.json not written after SIGTERM — finalize() likely bypassed (issue #745)"
+        "scenario.json not written after SIGTERM — finalize() likely bypassed (issue #745)\n"
+        f"stdout: {stdout!r}\n"
+        f"stderr: {stderr!r}"
     )
     data = json.loads(scenario_json.read_text())
     assert data.get("recipe") == "test-recipe"

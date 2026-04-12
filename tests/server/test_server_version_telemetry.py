@@ -59,10 +59,11 @@ class TestPluginDirConstant:
 class TestVersionInfo:
     """version_info() returns package and plugin.json versions."""
 
-    def test_version_info_returns_package_and_plugin_versions(self):
+    def test_version_info_returns_package_and_plugin_versions(self, monkeypatch):
         from autoskillit import __version__
-        from autoskillit.server import version_info
+        from autoskillit.server import _state, version_info
 
+        monkeypatch.setattr(_state, "_ctx", None)
         info = version_info()
         assert isinstance(info["package_version"], str)
         assert isinstance(info["plugin_json_version"], str)
@@ -91,10 +92,12 @@ class TestVersionInfo:
         assert info["plugin_json_version"] is None
         assert info["match"] is False
 
-    def test_version_info_is_public(self):
+    def test_version_info_is_public(self, monkeypatch):
         """version_info must be a public function — no underscore prefix."""
         from autoskillit import server
+        from autoskillit.server import _state
 
+        monkeypatch.setattr(_state, "_ctx", None)
         assert hasattr(server, "version_info"), "server.version_info must exist"
         assert not hasattr(server, "_version_info"), "server._version_info must be removed"
         result = server.version_info()

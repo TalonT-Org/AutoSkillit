@@ -18,6 +18,16 @@ def kitchen_enabled():
     mcp.disable(tags={"kitchen"})
 
 
+@pytest.fixture()
+def headless_enabled():
+    """Enable the headless tag on the MCP server for the duration of the test."""
+    from autoskillit.server import mcp
+
+    mcp.enable(tags={"headless"})
+    yield
+    mcp.disable(tags={"headless"})
+
+
 # ---------------------------------------------------------------------------
 # Shared SkillResult builders (used by report_bug and prepare/enrich_issues tests)
 # ---------------------------------------------------------------------------

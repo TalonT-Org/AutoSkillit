@@ -17,7 +17,6 @@ from autoskillit.server.tools_recipe import (
     migrate_recipe,
 )
 
-
 # ---------------------------------------------------------------------------
 # Minimal valid script YAML used across migration suggestion tests
 # ---------------------------------------------------------------------------

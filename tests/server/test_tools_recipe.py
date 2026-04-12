@@ -279,16 +279,12 @@ class TestDocstringSemantics:
 
         from autoskillit.server import mcp
 
-        try:
-            mcp.enable(tags={"kitchen"})
-            async with Client(mcp) as client:
-                tools = await client.list_tools()
-        finally:
-            mcp.disable(tags={"kitchen"})
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
         return {t.name: t for t in tools}
 
     @pytest.mark.anyio
-    async def test_load_recipe_action_protocol_routes_through_skill(self):
+    async def test_load_recipe_action_protocol_routes_through_skill(self, kitchen_enabled):
         """After loading section must route modifications through write-recipe."""
         tools = await self._get_tools()
         desc = tools["load_recipe"].description or ""
@@ -303,7 +299,9 @@ class TestDocstringSemantics:
         )
 
     @pytest.mark.anyio
-    async def test_load_recipe_after_loading_does_not_instruct_direct_modification(self):
+    async def test_load_recipe_after_loading_does_not_instruct_direct_modification(
+        self, kitchen_enabled
+    ):
         """After loading section must not instruct direct file modification."""
         tools = await self._get_tools()
         desc = tools["load_recipe"].description or ""
@@ -321,7 +319,7 @@ class TestDocstringSemantics:
         assert not found, f"After loading section instructs direct modification: {found}"
 
     @pytest.mark.anyio
-    async def test_validate_recipe_has_failure_routing(self):
+    async def test_validate_recipe_has_failure_routing(self, kitchen_enabled):
         """validate_recipe must route validation failures to write-recipe."""
         tools = await self._get_tools()
         desc = tools["validate_recipe"].description or ""
@@ -339,7 +337,7 @@ class TestDocstringSemantics:
         )
 
     @pytest.mark.anyio
-    async def test_validate_recipe_does_not_endorse_direct_editing(self):
+    async def test_validate_recipe_does_not_endorse_direct_editing(self, kitchen_enabled):
         """validate_recipe must not normalize direct recipe editing."""
         tools = await self._get_tools()
         desc = tools["validate_recipe"].description or ""
@@ -350,7 +348,7 @@ class TestDocstringSemantics:
         )
 
     @pytest.mark.anyio
-    async def test_tool_description_sections_are_not_contradictory(self):
+    async def test_tool_description_sections_are_not_contradictory(self, kitchen_enabled):
         """After loading must not instruct what the prohibition section prohibits."""
         tools = await self._get_tools()
         desc = tools["load_recipe"].description or ""
@@ -374,7 +372,7 @@ class TestDocstringSemantics:
             )
 
     @pytest.mark.anyio
-    async def test_load_recipe_has_preview_format_spec(self):
+    async def test_load_recipe_has_preview_format_spec(self, kitchen_enabled):
         """load_recipe must specify presentation format for loaded recipes."""
         tools = await self._get_tools()
         desc = tools["load_recipe"].description or ""
@@ -387,7 +385,7 @@ class TestDocstringSemantics:
         )
 
     @pytest.mark.anyio
-    async def test_recipe_tool_descriptions_are_coherent(self):
+    async def test_recipe_tool_descriptions_are_coherent(self, kitchen_enabled):
         """Recipe tools must form a coherent policy about recipe modification."""
         tools = await self._get_tools()
 
@@ -426,16 +424,12 @@ class TestLoadSkillScriptFailurePredicates:
 
         from autoskillit.server import mcp
 
-        try:
-            mcp.enable(tags={"kitchen"})
-            async with Client(mcp) as client:
-                tools = await client.list_tools()
-        finally:
-            mcp.disable(tags={"kitchen"})
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
         return {t.name: t for t in tools}
 
     @pytest.mark.anyio
-    async def test_description_documents_run_skill_failure(self):
+    async def test_description_documents_run_skill_failure(self, kitchen_enabled):
         """The routing rules must define failure for run_skill, not just test_check."""
         tools = await self._get_tools()
         desc = tools["load_recipe"].description or ""

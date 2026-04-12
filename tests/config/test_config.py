@@ -1101,20 +1101,20 @@ class TestWriteConfigLayer:
 class TestWorkspaceConfig:
     """WorkspaceConfig section is present in AutomationConfig with correct defaults."""
 
-    def test_workspace_config_exists_on_automation_config(self):
+    def test_workspace_config_exists_on_automation_config(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert hasattr(cfg, "workspace")
 
-    def test_workspace_worktree_root_defaults_to_none(self):
+    def test_workspace_worktree_root_defaults_to_none(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.workspace.worktree_root is None
 
-    def test_workspace_runs_root_defaults_to_none(self):
+    def test_workspace_runs_root_defaults_to_none(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.workspace.runs_root is None

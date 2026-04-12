@@ -133,16 +133,11 @@ class TestToolRegistration:
             )
 
     @pytest.mark.anyio
-    async def test_all_tools_tagged_autoskillit(self):
+    async def test_all_tools_tagged_autoskillit(self, kitchen_enabled, headless_enabled):
         """Every registered tool carries the 'autoskillit' tag."""
         from autoskillit.server import mcp
 
-        try:
-            mcp.enable(tags={"kitchen", "headless"})
-            all_tools = await mcp.list_tools()
-        finally:
-            mcp.disable(tags={"kitchen"})
-            mcp.disable(tags={"headless"})
+        all_tools = await mcp.list_tools()
         for tool in all_tools:
             assert "autoskillit" in tool.tags, f"Tool '{tool.name}' missing 'autoskillit' tag"
             assert "automation" not in tool.tags, f"Tool '{tool.name}' still has 'automation' tag"
@@ -168,18 +163,14 @@ class TestToolRegistration:
         assert "autoskillit" in tc.tags
 
     @pytest.mark.anyio
-    async def test_headless_enable_reveals_only_headless_tagged_tools(self):
+    async def test_headless_enable_reveals_only_headless_tagged_tools(self, headless_enabled):
         from fastmcp.client import Client
 
         from autoskillit.pipeline.gate import GATED_TOOLS
         from autoskillit.server import mcp
 
-        try:
-            mcp.enable(tags={"headless"})
-            async with Client(mcp) as client:
-                visible = {t.name for t in await client.list_tools()}
-        finally:
-            mcp.disable(tags={"headless"})
+        async with Client(mcp) as client:
+            visible = {t.name for t in await client.list_tools()}
         assert "test_check" in visible
         # Kitchen-only tools (no headless tag) must NOT be revealed
         kitchen_only = GATED_TOOLS - {"test_check"}

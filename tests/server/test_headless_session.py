@@ -6,7 +6,7 @@ import pytest
 
 
 @pytest.mark.anyio
-async def test_mcp_enable_kitchen_reveals_gated_tools() -> None:
+async def test_mcp_enable_kitchen_reveals_gated_tools(kitchen_enabled) -> None:
     """mcp.enable(tags={'kitchen'}) reveals all GATED_TOOLS to the client.
 
     Uses FastMCP Client to assert that every tool in GATED_TOOLS is visible
@@ -18,10 +18,6 @@ async def test_mcp_enable_kitchen_reveals_gated_tools() -> None:
     from autoskillit.pipeline.gate import GATED_TOOLS
     from autoskillit.server import mcp
 
-    mcp.enable(tags={"kitchen"})
-    try:
-        async with Client(mcp) as client:
-            tool_names = {t.name for t in await client.list_tools()}
-        assert GATED_TOOLS.issubset(tool_names), f"Missing gated tools: {GATED_TOOLS - tool_names}"
-    finally:
-        mcp.disable(tags={"kitchen"})
+    async with Client(mcp) as client:
+        tool_names = {t.name for t in await client.list_tools()}
+    assert GATED_TOOLS.issubset(tool_names), f"Missing gated tools: {GATED_TOOLS - tool_names}"

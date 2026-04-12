@@ -278,8 +278,16 @@ batch_cleanup_clones()
 ```
 
 This reads the shared registry at `{{AUTOSKILLIT_TEMP}}/clone-cleanup-registry.json`,
-deletes all clones registered with `status=success` (their pipelines completed cleanly),
-and leaves all `status=error` clones on disk for investigation.
+deletes all clones registered with `status=success` by the **current kitchen** (their
+pipelines completed cleanly), and leaves all `status=error` clones on disk for investigation.
+
+The call is scoped to the current kitchen's entries by default — entries registered by other
+parallel orchestrator sessions are not touched.
+
+**Operator escape hatch (recovery only):** `batch_cleanup_clones(all_owners="true")` ignores
+owner scoping and deletes all success-status entries, including legacy orphan entries from
+registries created before the owner field was introduced. Do not use this on the normal happy
+path — it is intended for manual recovery of stale registry files only.
 
 ### Step 4: Write Summary Report
 

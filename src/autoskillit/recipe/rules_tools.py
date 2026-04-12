@@ -61,6 +61,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
     "batch_cleanup_clones": frozenset(
         {
             "registry_path",
+            "all_owners",
             "step_name",
         }
     ),

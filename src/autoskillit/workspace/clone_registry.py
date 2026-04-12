@@ -88,17 +88,18 @@ class CloneRegistry:
     def candidates(
         self, owner: str | None
     ) -> tuple[list[str], list[str]]:
-        """Return (to_delete, to_preserve) paths.
+        """Return (to_delete, to_preserve) paths scoped to owner.
 
         to_delete: status=success entries matching owner filter.
-        to_preserve: all other entries (status=error or different owner).
+        to_preserve: status=error entries matching owner filter.
+        Entries belonging to other owners are not reported in either list.
         """
         to_delete: list[str] = []
         to_preserve: list[str] = []
         for entry in self._entries:
-            if entry.get("status") == "success" and (
-                owner is None or entry.get("owner") == owner
-            ):
+            if owner is not None and entry.get("owner") != owner:
+                continue
+            if entry.get("status") == "success":
                 to_delete.append(entry["path"])
             else:
                 to_preserve.append(entry["path"])
@@ -182,7 +183,12 @@ def batch_delete(
     temp_dir: Path | None = None,
     owner: str | None = None,
 ) -> dict[str, Any]:
-    """Read registry and delete success-status clones via remove_fn.
+    """Read registry and delete success-status clones via remove_fn, then prune registry.
+
+    Three-phase sequence:
+    1. Read candidates under lock (short hold — no I/O inside).
+    2. Delete outside lock (slow filesystem I/O).
+    3. Prune succeeded entries under lock (re-reads fresh, capturing concurrent appends).
 
     Calls remove_fn(path, "false") for each success clone. Error clones are
     preserved. Returns {"deleted": [...], "delete_failures": [...], "preserved": [...]}.
@@ -190,13 +196,28 @@ def batch_delete(
     When owner is provided, only entries belonging to that owner are considered.
     Pass owner=None to operate on all entries (escape hatch mode).
     """
-    to_delete, to_preserve = cleanup_candidates(registry_path, temp_dir, owner=owner)
+    path = _resolve_registry_path(registry_path, temp_dir)
+
+    # Phase 1: read candidates under lock (short hold — no I/O inside)
+    with CloneRegistry(path) as reg:
+        to_delete, to_preserve = reg.candidates(owner)
+
+    # Phase 2: delete outside lock (slow filesystem I/O)
     deleted: list[str] = []
     delete_failures: list[dict[str, str]] = []
-    for path in to_delete:
-        result = remove_fn(path, "false")
+    for clone_path in to_delete:
+        result = remove_fn(clone_path, "false")
         if result.get("removed") == "true":
-            deleted.append(path)
+            deleted.append(clone_path)
         else:
-            delete_failures.append({"path": path, "reason": result.get("reason", "unknown")})
+            delete_failures.append(
+                {"path": clone_path, "reason": result.get("reason", "unknown")}
+            )
+
+    # Phase 3: prune successfully-deleted entries (re-reads fresh under lock,
+    # capturing any register_clone writes that arrived during Phase 2)
+    if deleted:
+        with CloneRegistry(path) as reg:
+            reg.prune_deleted(set(deleted))
+
     return {"deleted": deleted, "delete_failures": delete_failures, "preserved": to_preserve}

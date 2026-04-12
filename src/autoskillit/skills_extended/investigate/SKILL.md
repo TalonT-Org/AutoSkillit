@@ -179,8 +179,8 @@ LOG_DIR="${LOG_DIR//--/-}"
 Search for `.jsonl` files containing prior `/autoskillit:investigate` invocations, **excluding subagent log subdirectories** (`*/subagents/*`) so prior subagent conversations are not double-counted:
 
 ```bash
-find "$LOG_DIR" -name "*.jsonl" -not -path "*/subagents/*" | \
-  xargs grep -l '"skill".*"investigate"\|/autoskillit:investigate' 2>/dev/null
+find "$LOG_DIR" -name "*.jsonl" -not -path "*/subagents/*" -print0 | \
+  xargs -0 grep -l '"skill".*"investigate"\|/autoskillit:investigate' 2>/dev/null
 ```
 
 For each matching log file, extract the investigation topic, root cause conclusion, and affected components by scanning for keywords `"root cause"`, `"Root Cause"`, `"fix"`, and `"summary"` in assistant messages. Compare against the current investigation's root cause and affected components — overlapping components or error patterns indicate a recurrence.

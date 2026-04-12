@@ -31,8 +31,12 @@ import anyio
 import anyio.abc
 import psutil
 
+from autoskillit.core import get_logger
+
 if TYPE_CHECKING:
     from autoskillit.config import LinuxTracingConfig
+
+logger = get_logger(__name__)
 
 LINUX_TRACING_AVAILABLE = sys.platform == "linux"
 
@@ -269,6 +273,8 @@ class LinuxTracingHandle:
                 pass
             self._trace_file = None
         if self._trace_path is not None:
+            # Intentional: stop() cleans up its own trace file. Crash-recovery only reads
+            # files left behind by processes that never called stop() — so this is correct.
             self._trace_path.unlink(missing_ok=True)
             self._trace_path = None
         if self._enrollment_path is not None:
@@ -321,7 +327,8 @@ def start_linux_tracing(
             )
             _write_enrollment_atomic(enrollment_path, record)
             handle._enrollment_path = enrollment_path
-        except OSError:
+        except OSError as e:
+            logger.warning("Failed to write enrollment sidecar for pid %d: %s", pid, e)
             handle._enrollment_path = None
 
     async def _run_monitor() -> None:

@@ -267,7 +267,7 @@ executes synchronously.
 
 - If following a recipe: `route_queue_mode` selects the correct cell
   automatically from `context.queue_available` and `context.auto_merge_available`.
-- **NEVER** use `gh pr merge --squash --auto` when `auto_merge_available == false`,
+- **NEVER use** `gh pr merge --squash --auto` when `auto_merge_available == false`,
   regardless of `queue_available`. The `--auto` flag is rejected by GitHub's API
   auto-merge gate before the queue intercepts. Use plain `gh pr merge --squash`;
   if a queue exists on the branch the queue still enqueues the call.

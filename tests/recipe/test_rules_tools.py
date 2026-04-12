@@ -262,6 +262,21 @@ def test_wait_for_ci_rejects_poll_interval() -> None:
     assert dead, "phantom param 'poll_interval' must trigger dead-with-param on wait_for_ci"
 
 
+def test_rules_tools_batch_cleanup_clones_accepts_all_owners_param() -> None:
+    """T20 — batch_cleanup_clones with all_owners param must not trigger dead-with-param."""
+    from autoskillit.recipe.rules_tools import _TOOL_PARAMS
+
+    assert "all_owners" in _TOOL_PARAMS["batch_cleanup_clones"]
+
+    recipe = _make_recipe_with_args(
+        "batch_cleanup_clones",
+        {"all_owners": "true", "registry_path": "/tmp/reg.json"},
+    )
+    findings = run_semantic_rules(recipe)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert not dead, f"all_owners must not trigger dead-with-param: {dead}"
+
+
 # ---------------------------------------------------------------------------
 # rebase-then-push-requires-force rule tests (T6, T7)
 # ---------------------------------------------------------------------------

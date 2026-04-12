@@ -202,9 +202,9 @@ def test_quota_thresholds_defaults() -> None:
     assert long_ == pytest.approx(98.0)
 
 
-def test_doctor_check_count_is_16() -> None:
-    assert _count_doctor_checks() == 16, (
-        f"Expected 16 doctor checks; found {_count_doctor_checks()}"
+def test_doctor_check_count_is_17() -> None:
+    assert _count_doctor_checks() == 17, (
+        f"Expected 17 doctor checks; found {_count_doctor_checks()}"
     )
 
 
@@ -277,8 +277,8 @@ def test_configuration_states_quota_thresholds() -> None:
     )
 
 
-def test_installation_states_14_doctor_checks() -> None:
-    _assert_doc_states_number(DOCS_DIR / "installation.md", "doctor checks", 14)
+def test_installation_states_15_doctor_checks() -> None:
+    _assert_doc_states_number(DOCS_DIR / "installation.md", "doctor checks", 15)
 
 
 def test_recipes_overview_states_5_recipes() -> None:

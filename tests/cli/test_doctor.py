@@ -1466,3 +1466,83 @@ def test_doctor_reports_drift_in_project_scope(
     assert result.severity == Severity.ERROR
     assert "[project]" in result.message
     assert "pretty_output.py" in result.message
+
+
+# ---------------------------------------------------------------------------
+# REQ-DOCTOR-001 — _check_claude_process_state_breakdown
+# ---------------------------------------------------------------------------
+
+
+class TestCheckClaudeProcessStateBreakdown:
+    """Tests for the claude_process_state doctor check (Check 15)."""
+
+    def _ps_result(self, stdout: str, returncode: int = 0):
+        return type(
+            "CompletedProcess",
+            (),
+            {"returncode": returncode, "stdout": stdout},
+        )()
+
+    def test_ok_when_only_sleeping(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Single sleeping claude process → Severity.OK with state breakdown."""
+        import subprocess
+
+        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._ps_result(header + "1234 S 0.5 claude"),
+        )
+        result = _check_claude_process_state_breakdown()
+        assert result.severity == Severity.OK
+        assert "S=1" in result.message
+
+    def test_warns_on_d_state(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """claude process in D state → Severity.WARNING with pid and pcpu in message."""
+        import subprocess
+
+        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._ps_result(header + "1234 D 99.0 claude"),
+        )
+        result = _check_claude_process_state_breakdown()
+        assert result.severity == Severity.WARNING
+        assert "D=1" in result.message
+        assert "99.0" in result.message
+
+    def test_ok_when_no_claude_processes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Empty ps output (no claude rows) → Severity.OK, 'No claude processes running'."""
+        import subprocess
+
+        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._ps_result(header + "5678 S 0.1 python"),
+        )
+        result = _check_claude_process_state_breakdown()
+        assert result.severity == Severity.OK
+        assert result.message == "No claude processes running"
+
+    def test_ok_when_ps_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """FileNotFoundError from ps → Severity.OK explaining ps unavailability."""
+        import subprocess
+
+        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+
+        def _raise(*a, **kw):
+            raise FileNotFoundError("ps")
+
+        monkeypatch.setattr(subprocess, "run", _raise)
+        result = _check_claude_process_state_breakdown()
+        assert result.severity == Severity.OK
+        assert "ps unavailable" in result.message
+        assert "FileNotFoundError" in result.message

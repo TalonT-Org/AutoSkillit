@@ -124,6 +124,8 @@ class TokenUsageConfig:
 @dataclass
 class QuotaGuardConfig:
     enabled: bool = True
+    short_window_enabled: bool = True
+    long_window_enabled: bool = True
     short_window_threshold: float = 85.0
     long_window_threshold: float = 98.0
     long_window_patterns: list[str] = field(default_factory=lambda: ["weekly", "sonnet", "opus"])
@@ -398,6 +400,12 @@ class AutomationConfig:
             ),
             quota_guard=QuotaGuardConfig(
                 enabled=bool(val(qg, "enabled", _qg["enabled"])),
+                short_window_enabled=bool(
+                    val(qg, "short_window_enabled", _qg["short_window_enabled"])
+                ),
+                long_window_enabled=bool(
+                    val(qg, "long_window_enabled", _qg["long_window_enabled"])
+                ),
                 short_window_threshold=float(
                     val(qg, "short_window_threshold", _qg["short_window_threshold"])
                 ),

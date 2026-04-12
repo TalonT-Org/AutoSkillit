@@ -43,6 +43,8 @@ def quota_config(credentials, tmp_path):
     """Minimal config namespace for check_and_sleep_if_needed."""
     return SimpleNamespace(
         enabled=True,
+        short_window_enabled=True,
+        long_window_enabled=True,
         credentials_path=credentials,
         cache_path=str(tmp_path / "quota_cache.json"),
         cache_max_age=120,

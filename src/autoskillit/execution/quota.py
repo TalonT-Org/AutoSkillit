@@ -72,6 +72,12 @@ def _parse_resets_at(resets_at_str: str | None) -> datetime | None:
     return datetime.fromisoformat(resets_at_str.replace("Z", "+00:00"))
 
 
+def _is_long_window(name: str, long_patterns: list[str]) -> bool:
+    """Return True if the window name matches any long-window pattern."""
+    lowered = name.lower()
+    return any(pat.lower() in lowered for pat in long_patterns)
+
+
 def _threshold_for_window(
     name: str,
     *,
@@ -84,10 +90,8 @@ def _threshold_for_window(
     Long-window classification is substring match (case-insensitive) against
     long_patterns. Unknown windows fall through to short_threshold.
     """
-    lowered = name.lower()
-    for pat in long_patterns:
-        if pat.lower() in lowered:
-            return long_threshold
+    if _is_long_window(name, long_patterns):
+        return long_threshold
     return short_threshold
 
 
@@ -97,16 +101,27 @@ def _compute_binding(
     short_threshold: float,
     long_threshold: float,
     long_patterns: list[str],
+    short_enabled: bool = True,
+    long_enabled: bool = True,
 ) -> QuotaStatus:
     """Select the worst-case (binding) window using per-window thresholds.
 
     Each window is classified by name into short or long via long_patterns.
+    Windows whose class is disabled are dropped before threshold evaluation.
     Among windows at or above their own threshold, returns the one with the
     latest resets_at. If none are exhausted, returns the window with highest
     utilization (for diagnostic display; should_block will be False).
-    Returns QuotaStatus(0.0, None, ...) when windows is empty.
+    Returns QuotaStatus(0.0, None, ...) when windows is empty or all dropped.
     """
     if not windows:
+        return QuotaStatus(0.0, None, effective_threshold=100.0)
+
+    filtered = {
+        name: w
+        for name, w in windows.items()
+        if (long_enabled if _is_long_window(name, long_patterns) else short_enabled)
+    }
+    if not filtered:
         return QuotaStatus(0.0, None, effective_threshold=100.0)
 
     def threshold_of(name: str) -> float:
@@ -117,14 +132,14 @@ def _compute_binding(
             long_patterns=long_patterns,
         )
 
-    exhausted = [(name, w) for name, w in windows.items() if w.utilization >= threshold_of(name)]
+    exhausted = [(name, w) for name, w in filtered.items() if w.utilization >= threshold_of(name)]
     if exhausted:
         name, w = max(
             exhausted,
             key=lambda nw: nw[1].resets_at or datetime.min.replace(tzinfo=UTC),
         )
     else:
-        name, w = max(windows.items(), key=lambda nw: nw[1].utilization)
+        name, w = max(filtered.items(), key=lambda nw: nw[1].utilization)
 
     effective = threshold_of(name)
     return QuotaStatus(
@@ -218,6 +233,8 @@ async def _fetch_quota(
     short_threshold: float,
     long_threshold: float,
     long_patterns: list[str],
+    short_enabled: bool = True,
+    long_enabled: bool = True,
     base_url: str = _DEFAULT_BASE_URL,
     _httpx_timeout: float = 10,
 ) -> QuotaFetchResult:
@@ -252,6 +269,8 @@ async def _fetch_quota(
         short_threshold=short_threshold,
         long_threshold=long_threshold,
         long_patterns=long_patterns,
+        short_enabled=short_enabled,
+        long_enabled=long_enabled,
     )
     return QuotaFetchResult(windows=windows, binding=binding)
 
@@ -276,6 +295,8 @@ async def _refresh_quota_cache(
         short_threshold=config.short_window_threshold,
         long_threshold=config.long_window_threshold,
         long_patterns=list(config.long_window_patterns),
+        short_enabled=config.short_window_enabled,
+        long_enabled=config.long_window_enabled,
         base_url=base_url,
         _httpx_timeout=_httpx_timeout,
     )
@@ -319,6 +340,8 @@ async def check_and_sleep_if_needed(
         "short_threshold": config.short_window_threshold,
         "long_threshold": config.long_window_threshold,
         "long_patterns": list(config.long_window_patterns),
+        "short_enabled": config.short_window_enabled,
+        "long_enabled": config.long_window_enabled,
         "base_url": base_url,
         "_httpx_timeout": _httpx_timeout,
     }

@@ -19,7 +19,7 @@ def test_renamed_protocols_importable() -> None:
     )
 
     assert all(
-        p is not None
+        isinstance(p, type)
         for p in [AuditLog, TokenLog, TimingLog, McpResponseLog, GateState, SkillResolver]
     )
 

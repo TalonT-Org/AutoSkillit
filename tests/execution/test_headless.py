@@ -2973,40 +2973,50 @@ class TestBuildSkillResultDirMissingRecovery:
 
     def test_dir_missing_with_recoverable_subtype_attempts_recovery(self):
         """When channel_confirmation is DIR_MISSING and subtype is recoverable,
-        the recovery gate must attempt marker-based recovery."""
+        the recovery gate must attempt marker-based recovery.
+
+        Setup: termination=COMPLETED (bypasses stale branch), subtype=empty_output
+        (in _CHANNEL_B_RECOVERABLE_SUBTYPES), marker on a standalone line in the
+        assistant message (required by _marker_is_standalone).
+        """
+        import structlog.testing
+
         marker = "===DONE==="
+        # Marker must appear as a standalone line for _marker_is_standalone to match
         assistant_line = json.dumps(
             {
                 "type": "assistant",
                 "message": {
-                    "content": [{"type": "text", "text": f"ok {marker}"}],
+                    "content": [{"type": "text", "text": f"Task complete.\n\n{marker}"}],
                 },
             }
         )
+        # subtype=empty_output places the session in _CHANNEL_B_RECOVERABLE_SUBTYPES,
+        # triggering the DIR_MISSING recovery guard in _build_skill_result
         result_line = json.dumps(
             {
                 "type": "result",
-                "subtype": "success",
-                "is_error": False,
-                "result": f"ok {marker}",
+                "subtype": "empty_output",
+                "is_error": True,
+                "result": "",
                 "session_id": "s1",
                 "errors": [],
             }
         )
         stdout = assistant_line + "\n" + result_line
+        # termination=COMPLETED skips the stale-branch early return so execution
+        # reaches the Channel B / DIR_MISSING recovery gate
         sub_result = SubprocessResult(
             returncode=0,
             stdout=stdout,
             stderr="",
-            termination=TerminationReason.STALE,
+            termination=TerminationReason.COMPLETED,
             pid=12345,
             channel_confirmation=ChannelConfirmation.DIR_MISSING,
         )
-        import structlog.testing
-
         with structlog.testing.capture_logs() as logs:
             skill = _build_skill_result(sub_result, completion_marker=marker)
-        # Recovery should succeed — marker found in assistant_messages
+        # Recovery should succeed — marker found as standalone line in assistant_messages
         assert skill.success is True
         # Verify the recovery code path was taken, not just the outcome
         assert any(e.get("event") == "dir_missing_late_bind_recovery" for e in logs)

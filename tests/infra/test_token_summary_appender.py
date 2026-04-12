@@ -874,7 +874,7 @@ def test_e4_kitchen_id_renamed_in_hook_config(tmp_path: Path) -> None:
     from autoskillit.hooks.token_summary_hook import _read_kitchen_id
 
     # New format
-    cfg_path = tmp_path / ".autoskillit" / ".hook_config.json"
+    cfg_path = tmp_path / ".autoskillit" / "temp" / ".hook_config.json"
     cfg_path.parent.mkdir(parents=True)
     cfg_path.write_text(json.dumps({"kitchen_id": "new-kitchen-uuid"}))
 

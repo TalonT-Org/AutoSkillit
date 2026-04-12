@@ -49,6 +49,10 @@ app.command(recipes_app)
 app.command(workspace_app)
 
 
+class CliError(Exception):
+    """Raised by CLI helpers to signal a user-facing error that should abort the command."""
+
+
 @app.default
 def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = False):
     """Start the MCP server (default command)."""
@@ -177,7 +181,11 @@ def init(
         onboarded_marker = config_dir / ".onboarded"
         onboarded_marker.unlink(missing_ok=True)
 
-    _register_all(scope, project_dir)
+    try:
+        _register_all(scope, project_dir)
+    except CliError as exc:
+        print(f"\n  ERROR: {exc}")
+        raise SystemExit(1) from None
 
 
 @app.command

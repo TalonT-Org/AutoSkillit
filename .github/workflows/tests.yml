@@ -84,21 +84,6 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --extra dev
 
-      - name: Generate hooks.json (if absent)
-        run: |
-          uv run python -c "
-          from autoskillit.hooks import generate_hooks_json
-          from autoskillit.core.io import atomic_write
-          from autoskillit.core.paths import pkg_root
-          import json
-          path = pkg_root() / 'hooks' / 'hooks.json'
-          if not path.exists():
-              atomic_write(path, json.dumps(generate_hooks_json(), indent=2) + '\n')
-              print(f'Generated: {path}')
-          else:
-              print(f'Skipped (already exists): {path}')
-          "
-
       - name: Generate recipe diagrams
         run: uv run autoskillit recipes render
 

@@ -66,13 +66,28 @@ def temp_dir_display_str(override: str | None) -> str:
 
 
 def atomic_write(path: Path, content: str) -> None:
-    """Crash-safe write: write to a temp file then os.replace."""
+    """Crash-safe write: write to a temp file then os.replace.
+
+    Includes data fsync and directory fsync for durability on ext4/xfs.
+    The directory fsync is skipped on Windows (no O_RDONLY semantics).
+    """
+    import sys as _sys
+
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
+            f.flush()
+            os.fsync(f.fileno())  # durable data write
         os.replace(tmp, path)
+        # Durable rename: fsync the parent directory on POSIX
+        if _sys.platform != "win32":
+            dir_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
     except Exception:
         try:
             os.unlink(tmp)

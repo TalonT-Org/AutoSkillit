@@ -76,6 +76,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "headless",  # execution/headless.py: _OUTPUT_PATH_TOKENS = _build_path_token_set()
         "_stale_check",  # cli/_stale_check.py: _DISMISS_WINDOW = timedelta(hours=12)
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
+        "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -663,8 +664,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _terminal_table.py as the L0 shared terminal rendering primitive so that
         both cli/ (L3) and pipeline/ (L1) can import it without layer violations.
         _claude_env.py adds the canonical IDE-scrubbing env builder for all
-        claude subprocess launches.
-        Exempt at 16 files.
+        claude subprocess launches. kitchen_state.py adds the stdlib-only
+        kitchen-open session marker reader for hook subprocesses.
+        Exempt at 17 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -678,16 +680,17 @@ def test_no_subpackage_exceeds_10_files() -> None:
         additionally owns a set of underscore-prefixed private formatter modules
         (_fmt_primitives.py, _fmt_execution.py, _fmt_status.py, _fmt_recipe.py)
         that are imported helpers — not standalone hook scripts — split out to
-        keep pretty_output_hook.py under its line budget. Exempt at 18 files
-        (14 hook scripts + 4 private helpers).
+        keep pretty_output_hook.py under its line budget. ask_user_question_guard.py
+        gates AskUserQuestion on kitchen-open state. Exempt at 20 files
+        (15 hook scripts + 4 private helpers + 1 __init__).
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 18,
         "recipe": 30,
         "execution": 26,
-        "core": 16,
+        "core": 17,
         "cli": 16,
-        "hooks": 19,
+        "hooks": 20,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):

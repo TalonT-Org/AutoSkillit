@@ -70,6 +70,14 @@ def _build_orchestrator_prompt(recipe_name: str, mcp_prefix: str) -> str:
     return f"""\
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
+DEFERRED-TOOL RECOVERY — If the session's deferred-tool list (the system-reminder \
+that says "schemas NOT loaded — calling directly will fail with InputValidationError") \
+includes {mcp_prefix}open_kitchen:
+  1. Call ToolSearch with query='select:{mcp_prefix}open_kitchen' to load its schema.
+  2. Only then call {mcp_prefix}open_kitchen(name='{recipe_name}').
+  Do NOT call AskUserQuestion — the tool is not unavailable; it only needs its \
+schema loaded on demand via ToolSearch.
+
 FIRST ACTION — before prompting for any inputs:
 0. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to open the kitchen and load the recipe.
    DO NOT call AskUserQuestion or any other tool before open_kitchen.
@@ -198,6 +206,12 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
+        f"DEFERRED-TOOL RECOVERY — If the session's deferred-tool list includes "
+        f"{mcp_prefix}open_kitchen:\n"
+        f"  1. Call ToolSearch with query='select:{mcp_prefix}open_kitchen' to load its schema.\n"
+        f"  2. Only then call {mcp_prefix}open_kitchen.\n"
+        "  Do NOT call AskUserQuestion — the tool is not unavailable; it only needs "
+        "its schema loaded on demand via ToolSearch.\n\n"
         f"Call the {mcp_prefix}open_kitchen tool to open the AutoSkillit kitchen "
         "and gain access to all automation tools.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"

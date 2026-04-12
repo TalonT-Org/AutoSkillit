@@ -67,6 +67,7 @@ _PRINT_EXEMPT = frozenset(
         "_prompts.py",
         "_workspace.py",
         "branch_protection_guard.py",
+        "open_kitchen_guard.py",
         "pretty_output_hook.py",
         "quota_guard.py",
         "quota_post_hook.py",
@@ -81,6 +82,7 @@ _PRINT_EXEMPT = frozenset(
 _BROAD_EXCEPT_EXEMPT = frozenset(
     {
         "_onboarding.py",
+        "open_kitchen_guard.py",
         "pretty_output_hook.py",
         "quota_guard.py",
         "quota_post_hook.py",

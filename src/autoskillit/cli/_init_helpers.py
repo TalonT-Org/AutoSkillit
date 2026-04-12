@@ -363,12 +363,28 @@ def _print_next_steps(*, context: str = "install") -> None:
 
 def _register_all(scope: str, project_dir: Path) -> None:
     """Ensure project temp dir, register hooks and MCP server, print summary."""
+    import autoskillit.core.paths as _core_paths
     from autoskillit.cli._hooks import (
         _claude_settings_path,
         _evict_stale_autoskillit_hooks,
+        sweep_all_scopes_for_orphans,
         sync_hooks_to_settings,
     )
     from autoskillit.core import ensure_project_temp
+
+    # Refuse to register from inside the autoskillit source tree — this would
+    # plant source-tree absolute paths in the project scope.
+    if project_dir.resolve().is_relative_to(_core_paths.pkg_root().resolve()):
+        from autoskillit.cli.app import CliError
+
+        raise CliError(
+            "Refusing to run `autoskillit init` from inside the autoskillit source tree — "
+            "this would plant source-tree absolute paths in your project scope. "
+            "`cd` to a different directory first."
+        )
+
+    # Cross-scope sweep: evict stale hooks from all scopes before writing canonical entries.
+    sweep_all_scopes_for_orphans(project_dir)
 
     _B, _C, _D, _G, _Y, _R = _colors()
 

@@ -1431,3 +1431,38 @@ class TestCheckQuotaCacheSchema:
         assert result.severity == Severity.WARNING
         assert str(cache) in result.message
         assert "observed=1" in result.message
+
+
+def test_doctor_reports_drift_in_project_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_check_hook_registry_drift must report drift found in project scope."""
+    import json as _json
+
+    from autoskillit.cli._doctor import _check_hook_registry_drift
+    from autoskillit.core import Severity
+
+    # Seed a stale pretty_output.py in project scope
+    project_settings = tmp_path / ".claude" / "settings.json"
+    project_settings.parent.mkdir(parents=True)
+    project_settings.write_text(
+        _json.dumps(
+            {
+                "hooks": {
+                    "PostToolUse": [
+                        {
+                            "matcher": "mcp__.*autoskillit.*",
+                            "hooks": [
+                                {"type": "command", "command": "python3 /stale/pretty_output.py"}
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
+    )
+
+    result = _check_hook_registry_drift(project_settings, scope_label="project")
+    assert result.severity == Severity.ERROR
+    assert "[project]" in result.message
+    assert "pretty_output.py" in result.message

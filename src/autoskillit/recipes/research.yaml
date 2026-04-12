@@ -1,6 +1,6 @@
 name: research
 autoskillit_version: "0.7.5"
-requires_packs: [research, exp-lens]
+requires_packs: [research, exp-lens, vis-lens]
 description: >
   Single-phase technical research recipe. Scopes a research question, plans an
   experiment, optionally reviews the design, then always decomposes into phases,
@@ -130,12 +130,28 @@ steps:
     on_failure: create_worktree
     on_result:
       - when: "${{ result.verdict }} == GO"
-        route: create_worktree
+        route: plan_visualization
       - when: "${{ result.verdict }} == REVISE"
         route: revise_design
       - when: "${{ result.verdict }} == STOP"
         route: resolve_design_review
       - route: create_worktree
+
+  plan_visualization:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: plan_visualization
+    capture:
+      visualization_plan_path: "${{ result.visualization_plan_path }}"
+      report_plan_path: "${{ result.report_plan_path }}"
+    on_success: create_worktree
+    on_failure: escalate_stop
+    note: >
+      Selects 2–4 vis-lens skills via three-tier logic, runs them in parallel, and
+      synthesizes outputs into visualization-plan.md and report-plan.md.
+      Runs before worktree creation so outputs can be committed into the research dir.
 
   revise_design:
     action: route
@@ -197,6 +213,10 @@ steps:
         EVAL_DASHBOARD="${{ context.evaluation_dashboard }}" &&
         if [ -n "${SCOPE_REPORT}" ] && [ -f "${SCOPE_REPORT}" ]; then cp "${SCOPE_REPORT}" "${RESEARCH_DIR}/artifacts/scope-report.md"; fi &&
         if [ -n "${EVAL_DASHBOARD}" ] && [ -f "${EVAL_DASHBOARD}" ]; then cp "${EVAL_DASHBOARD}" "${RESEARCH_DIR}/artifacts/design-evaluation.md"; fi &&
+        VISUALIZATION_PLAN="${{ context.visualization_plan_path }}" &&
+        REPORT_PLAN="${{ context.report_plan_path }}" &&
+        if [ -n "${VISUALIZATION_PLAN}" ] && [ -f "${VISUALIZATION_PLAN}" ]; then cp "${VISUALIZATION_PLAN}" "${RESEARCH_DIR}/visualization-plan.md"; fi &&
+        if [ -n "${REPORT_PLAN}" ] && [ -f "${REPORT_PLAN}" ]; then cp "${REPORT_PLAN}" "${RESEARCH_DIR}/report-plan.md"; fi &&
         SRC_TEMP="${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}" &&
         mkdir -p "${RESEARCH_DIR}/artifacts/review-cycles" &&
         mkdir -p "${RESEARCH_DIR}/artifacts/plan-versions" &&
@@ -318,7 +338,7 @@ steps:
     capture:
       experiment_results: "${{ result.results_path }}"
     retries: 2
-    on_success: write_report
+    on_success: generate_report
     on_failure: adjust_experiment
     on_exhausted: ensure_results
 
@@ -349,31 +369,31 @@ steps:
       step_name: ensure_results
     capture:
       experiment_results: "${{ result.experiment_results }}"
-    on_success: write_report_inconclusive
+    on_success: generate_report_inconclusive
     on_failure: escalate_stop
     note: >
       Ensures context.experiment_results is a valid file path before calling
-      write_report_inconclusive. Creates a minimal placeholder results file when
+      generate_report_inconclusive. Creates a minimal placeholder results file when
       run-experiment never produced output (retries exhausted or adjust failed).
 
-  write_report:
+  generate_report:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
       cwd: "${{ context.worktree_path }}"
-      step_name: write_report
+      step_name: generate_report
     capture:
       report_path: "${{ result.report_path }}"
     on_success: test
     on_failure: escalate_stop
     note: "Writes a conclusive research report to research/ in the worktree."
 
-  write_report_inconclusive:
+  generate_report_inconclusive:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive"
       cwd: "${{ context.worktree_path }}"
-      step_name: write_report
+      step_name: generate_report
     capture:
       report_path: "${{ result.report_path }}"
     on_success: test
@@ -623,22 +643,22 @@ steps:
       step_name: re_run_experiment
     capture:
       experiment_results: "${{ result.results_path }}"
-    on_success: re_write_report
+    on_success: re_generate_report
     on_failure: re_push_research
     on_context_limit: re_push_research
     note: >
       Targeted re-run of affected benchmarks after review resolution applied
       code fixes. Uses --adjust to read previous results and re-run only what
-      changed. Captures the updated results_path so re_write_report uses the
+      changed. Captures the updated results_path so re_generate_report uses the
       new results. on_failure falls through to push as best-effort — the code
       fixes from resolve are already committed and should still be pushed.
 
-  re_write_report:
+  re_generate_report:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
       cwd: "${{ context.worktree_path }}"
-      step_name: re_write_report
+      step_name: re_generate_report
     capture:
       report_path: "${{ result.report_path }}"
     on_success: re_stage_bundle
@@ -737,7 +757,7 @@ steps:
     note: >
       Single compression point. Runs exactly once per recipe run, after re_push_research.
       Renames report.md → README.md (preserves the most up-to-date report from
-      re_write_report if the revalidation path ran), archives all supporting artifacts via
+      re_generate_report if the revalidation path ran), archives all supporting artifacts via
       mapfile dynamic input collection, appends Archive Manifest to README.md, commits.
       Non-fatal — routes to begin_archival on both success and failure. GroupH will extend
       this step with output_mode conditionals for local-report paths.

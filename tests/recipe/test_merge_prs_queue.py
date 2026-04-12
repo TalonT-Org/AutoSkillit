@@ -623,7 +623,11 @@ def test_route_queue_mode_has_auto_merge_available_condition(any_recipe) -> None
 def test_route_queue_mode_auto_merge_available_routes_to_direct_merge(any_recipe) -> None:
     step = any_recipe.steps["route_queue_mode"]
     cond = next(
-        c for c in step.on_result.conditions if c.when and "auto_merge_available" in c.when
+        c
+        for c in step.on_result.conditions
+        if c.when
+        and "auto_merge_available" in c.when
+        and "queue_available" not in c.when
     )
     assert cond.when == "${{ context.auto_merge_available }} == true"
     assert cond.route == "direct_merge"
@@ -870,3 +874,125 @@ def test_wait_for_queue_ejected_ci_failure_precedes_ejected(recipe_fixture, requ
         "ejected_ci_failure route must appear before generic ejected route "
         "to prevent CI failure ejections from being handled as conflict ejections"
     )
+
+
+# ---------------------------------------------------------------------------
+# Routing matrix exhaustiveness — queue_available × auto_merge_available
+# ---------------------------------------------------------------------------
+
+
+def test_route_queue_mode_queue_with_auto_routes_to_enable_auto_merge(any_recipe) -> None:
+    """queue+auto cell must route to enable_auto_merge."""
+    step = any_recipe.steps["route_queue_mode"]
+    cond = next(
+        c
+        for c in step.on_result.conditions
+        if c.when
+        and "queue_available" in c.when
+        and "merge_group_trigger" in c.when
+        and "auto_merge_available" in c.when
+        and "== true" in c.when.split("auto_merge_available")[1]
+    )
+    assert cond.route == "enable_auto_merge"
+
+
+def test_route_queue_mode_queue_without_auto_routes_to_queue_enqueue_no_auto(
+    any_recipe,
+) -> None:
+    """queue+no-auto cell must route to queue_enqueue_no_auto."""
+    step = any_recipe.steps["route_queue_mode"]
+    cond = next(
+        c
+        for c in step.on_result.conditions
+        if c.when
+        and "queue_available" in c.when
+        and "merge_group_trigger" in c.when
+        and "auto_merge_available" in c.when
+        and "== false" in c.when.split("auto_merge_available")[1]
+    )
+    assert cond.route == "queue_enqueue_no_auto"
+
+
+def test_route_queue_mode_no_queue_with_auto_routes_to_direct_merge(any_recipe) -> None:
+    """no-queue+auto cell must route to direct_merge."""
+    step = any_recipe.steps["route_queue_mode"]
+    cond = next(
+        c
+        for c in step.on_result.conditions
+        if c.when
+        and "auto_merge_available" in c.when
+        and "queue_available" not in c.when
+    )
+    assert cond.route == "direct_merge"
+
+
+def test_route_queue_mode_no_queue_no_auto_falls_through_to_immediate_merge(
+    any_recipe,
+) -> None:
+    """Default (when is None) condition must route to immediate_merge."""
+    step = any_recipe.steps["route_queue_mode"]
+    cond = next(c for c in step.on_result.conditions if c.when is None)
+    assert cond.route == "immediate_merge"
+
+
+def test_route_queue_mode_never_routes_to_enable_auto_merge_when_auto_unavailable(
+    any_recipe,
+) -> None:
+    """Every condition routing to enable_auto_merge must require auto_merge_available == true."""
+    step = any_recipe.steps["route_queue_mode"]
+    for cond in step.on_result.conditions:
+        if cond.route == "enable_auto_merge":
+            assert cond.when is not None
+            assert "auto_merge_available" in cond.when
+            assert "}} == true" in cond.when.split("auto_merge_available")[1], (
+                f"enable_auto_merge route must require auto_merge_available == true; got: {cond.when}"
+            )
+
+
+def test_enable_auto_merge_route_count(any_recipe) -> None:
+    """Exactly one condition must route to enable_auto_merge."""
+    step = any_recipe.steps["route_queue_mode"]
+    count = sum(1 for c in step.on_result.conditions if c.route == "enable_auto_merge")
+    assert count == 1, f"Expected exactly 1 enable_auto_merge route, got {count}"
+
+
+# ---------------------------------------------------------------------------
+# New step: queue_enqueue_no_auto
+# ---------------------------------------------------------------------------
+
+
+def test_queue_enqueue_no_auto_step_exists(any_recipe) -> None:
+    assert "queue_enqueue_no_auto" in any_recipe.steps
+
+
+def test_queue_enqueue_no_auto_is_run_cmd(any_recipe) -> None:
+    step = any_recipe.steps["queue_enqueue_no_auto"]
+    assert step.tool == "run_cmd"
+
+
+def test_queue_enqueue_no_auto_uses_plain_squash(any_recipe) -> None:
+    """queue_enqueue_no_auto must use --squash without --auto."""
+    step = any_recipe.steps["queue_enqueue_no_auto"]
+    cmd = step.with_args.get("cmd", "")
+    assert "--squash" in cmd
+    assert "--auto" not in cmd
+
+
+def test_queue_enqueue_no_auto_routes_to_wait_for_queue(any_recipe) -> None:
+    step = any_recipe.steps["queue_enqueue_no_auto"]
+    assert step.on_success == "wait_for_queue"
+
+
+def test_queue_enqueue_no_auto_failure_routes_to_register_clone_success(any_recipe) -> None:
+    step = any_recipe.steps["queue_enqueue_no_auto"]
+    assert step.on_failure == "register_clone_success"
+
+
+def test_queue_enqueue_no_auto_skip_when_false(any_recipe) -> None:
+    step = any_recipe.steps["queue_enqueue_no_auto"]
+    assert step.skip_when_false == "inputs.open_pr"
+
+
+def test_queue_enqueue_no_auto_step_name(any_recipe) -> None:
+    step = any_recipe.steps["queue_enqueue_no_auto"]
+    assert step.with_args["step_name"] == "queue_enqueue_no_auto"

@@ -5,9 +5,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-SKILL_MD = Path("src/autoskillit/skills_extended/bundle-local-report/SKILL.md")
-MERMAID_JS = Path("src/autoskillit/assets/mermaid/mermaid.min.js")
-MERMAID_VERSION = Path("src/autoskillit/assets/mermaid/VERSION")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+SKILL_MD = _REPO_ROOT / "src/autoskillit/skills_extended/bundle-local-report/SKILL.md"
+MERMAID_JS = _REPO_ROOT / "src/autoskillit/assets/mermaid/mermaid.min.js"
+MERMAID_VERSION = _REPO_ROOT / "src/autoskillit/assets/mermaid/VERSION"
 
 
 def _extract_renderer(tmp_path: Path) -> Path:
@@ -22,7 +23,7 @@ def _extract_renderer(tmp_path: Path) -> Path:
         "SKILL.md must contain a fenced python block"
         " starting with '# bundle-local-report renderer'"
     )
-    script = match.group(0).lstrip("```python\n").rstrip("\n```")
+    script = match.group(1)
     out = tmp_path / "renderer.py"
     out.write_text(script)
     return out

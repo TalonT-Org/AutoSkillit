@@ -58,3 +58,21 @@ def test_plan_experiment_environment_mentions_pytest() -> None:
         "plan-experiment/SKILL.md must reference pytest in the environment section so "
         "agents know to include it in environment.yml for test runner availability"
     )
+
+
+def test_plan_experiment_layout_includes_dockerfile() -> None:
+    """plan-experiment/SKILL.md Experiment Directory Layout must include Dockerfile."""
+    content = SKILL_PATH.read_text()
+    assert "Dockerfile" in content, (
+        "plan-experiment/SKILL.md Experiment Directory Layout must include a Dockerfile "
+        "so the agent plans Docker container build as part of the experiment"
+    )
+
+
+def test_plan_experiment_layout_includes_taskfile() -> None:
+    """plan-experiment/SKILL.md Experiment Directory Layout must include Taskfile.yml."""
+    content = SKILL_PATH.read_text()
+    assert "Taskfile.yml" in content, (
+        "plan-experiment/SKILL.md Experiment Directory Layout must include Taskfile.yml "
+        "with standardized build-env / run-experiment / test tasks"
+    )

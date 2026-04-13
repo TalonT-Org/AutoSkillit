@@ -46,7 +46,7 @@ BENIGN_WCHANS: frozenset[str] = frozenset(
 
 def _safe_int(value: object, *, default: int) -> int:
     try:
-        return int(value)  # type: ignore[arg-type]
+        return int(value)  # type: ignore[call-overload]
     except (ValueError, TypeError):
         return default
 

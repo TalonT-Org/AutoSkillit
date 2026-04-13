@@ -23,8 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from autoskillit.core import GENERATED_FILES, get_logger, is_protected_branch
-from autoskillit.core._type_results import CloneResult
+from autoskillit.core import GENERATED_FILES, CloneResult, get_logger, is_protected_branch
 
 logger = get_logger(__name__)
 
@@ -265,7 +264,6 @@ def _probe_origin_url(source: Path) -> CloneSourceResolution:
     _no_origin_markers = (
         "no such remote",
         "does not exist",
-        "not a git repository",
     )
     try:
         result = subprocess.run(

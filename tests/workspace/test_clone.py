@@ -114,7 +114,7 @@ def git_repo(tmp_path: Path) -> Path:
 class TestCloneRepo:
     def test_success_result_and_directory_layout(self, git_repo: Path) -> None:
         """Clone creates a sibling directory with expected keys, parent, and git repo."""
-        result = clone_repo(str(git_repo), "myrun")
+        result = clone_repo(str(git_repo), "myrun", strategy="clone_local")
         clone_path = Path(result["clone_path"])
         assert clone_path.is_dir()
         assert (clone_path / ".git").is_dir()
@@ -127,7 +127,7 @@ class TestCloneRepo:
 
     def test_clone_path_name_format(self, git_repo: Path) -> None:
         """Clone directory name follows run_name-YYYYMMDD-HHMMSS-ffffff format."""
-        result = clone_repo(str(git_repo), "myrun")
+        result = clone_repo(str(git_repo), "myrun", strategy="clone_local")
         clone_path = Path(result["clone_path"])
         assert re.match(r"myrun-\d{8}-\d{6}-\d{6}$", clone_path.name), clone_path.name
 
@@ -136,8 +136,8 @@ class TestCloneRepo:
             clone_repo("/nonexistent/path/that/does/not/exist", "name")
 
     def test_non_git_dir_raises_runtime_error(self, tmp_path: Path) -> None:
-        # tmp_path exists but is not a git repo
-        with pytest.raises(RuntimeError, match="git clone failed"):
+        # tmp_path exists but is not a git repo — probe fails with reason="error"
+        with pytest.raises(RuntimeError, match="clone_origin_probe_failed"):
             clone_repo(str(tmp_path), "name")
 
     def test_cb1_explicit_branch_is_checked_out_in_clone(self, git_repo: Path) -> None:
@@ -152,7 +152,7 @@ class TestCloneRepo:
             check=True,
             capture_output=True,
         )
-        result = clone_repo(str(git_repo), "test", branch="dev")
+        result = clone_repo(str(git_repo), "test", branch="dev", strategy="clone_local")
         clone_path = Path(result["clone_path"])
         head = subprocess.run(
             ["git", "-C", str(clone_path), "rev-parse", "--abbrev-ref", "HEAD"],
@@ -174,7 +174,7 @@ class TestCloneRepo:
             check=True,
             capture_output=True,
         )
-        result = clone_repo(str(git_repo), "test", branch="")
+        result = clone_repo(str(git_repo), "test", branch="", strategy="clone_local")
         clone_path = Path(result["clone_path"])
         head = subprocess.run(
             ["git", "-C", str(clone_path), "rev-parse", "--abbrev-ref", "HEAD"],
@@ -192,10 +192,10 @@ class TestCloneRepo:
         assert "changed_files" in result
         assert "clone_path" not in result
 
-    def test_cb4_strategy_proceed_skips_uncommitted_check(self, git_repo: Path) -> None:
+    def test_cb4_strategy_proceed_skips_uncommitted_check(self, local_with_remote: Path) -> None:
         """T_CB4: strategy='proceed' clones without uncommitted changes check."""
-        (git_repo / "untracked.txt").write_text("dirty")
-        result = clone_repo(str(git_repo), "test", strategy="proceed")
+        (local_with_remote / "untracked.txt").write_text("dirty")
+        result = clone_repo(str(local_with_remote), "test", branch="main", strategy="proceed")
         assert "clone_path" in result
         clone_path = Path(result["clone_path"])
         assert not (clone_path / "untracked.txt").exists()
@@ -221,7 +221,7 @@ class TestCloneRepo:
             check=True,
             capture_output=True,
         )
-        result = clone_repo(str(git_repo), "test", branch="")
+        result = clone_repo(str(git_repo), "test", branch="", strategy="clone_local")
         assert "clone_path" in result
         clone_path = Path(result["clone_path"])
         assert clone_path.is_dir()
@@ -267,7 +267,7 @@ def test_clone_output_stays_within_test_isolation_boundary(tmp_path: Path, git_r
     places autoskillit-runs/ at source.parent = tmp_path.parent (worker-shared).
     Passes once git_repo returns tmp_path / 'repo' (a subdirectory).
     """
-    result = clone_repo(str(git_repo), "isolation-check")
+    result = clone_repo(str(git_repo), "isolation-check", strategy="clone_local")
     clone_path = Path(result["clone_path"])
     assert clone_path.is_relative_to(tmp_path), (
         f"clone_repo placed output at {clone_path!r}, which is outside "
@@ -530,7 +530,7 @@ class TestCloneRepoRemoteUrlOverride:
 
 class TestRemoveClone:
     def test_keep_false_removes_directory(self, git_repo: Path) -> None:
-        result = clone_repo(str(git_repo), "test")
+        result = clone_repo(str(git_repo), "test", strategy="clone_local")
         clone_path = result["clone_path"]
         remove_result = remove_clone(clone_path, keep="false")
         assert remove_result == {"removed": "true"}
@@ -541,7 +541,7 @@ class TestRemoveClone:
         shutil.rmtree(Path(clone_path), ignore_errors=True)
 
     def test_keep_true_preserves_directory(self, git_repo: Path) -> None:
-        result = clone_repo(str(git_repo), "test")
+        result = clone_repo(str(git_repo), "test", strategy="clone_local")
         clone_path = result["clone_path"]
         remove_result = remove_clone(clone_path, keep="true")
         assert remove_result == {"removed": "false", "reason": "keep=true"}
@@ -1335,7 +1335,7 @@ class TestCloneDecontamination:
             capture_output=True,
         )
 
-        result = clone_repo(str(repo), "decontam-test", strategy="proceed")
+        result = clone_repo(str(repo), "decontam-test", strategy="clone_local")
         clone_path = Path(result["clone_path"])
         try:
             ls_result = subprocess.run(
@@ -1384,7 +1384,7 @@ class TestCloneDecontamination:
 
     def test_clone_repo_noop_when_no_generated_files_tracked(self, git_repo: Path) -> None:
         """Clean repo with no tracked generated files clones without errors."""
-        result = clone_repo(str(git_repo), "clean-test", strategy="proceed")
+        result = clone_repo(str(git_repo), "clean-test", strategy="clone_local")
         clone_path = Path(result["clone_path"])
         try:
             assert clone_path.is_dir()

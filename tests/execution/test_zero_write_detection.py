@@ -139,16 +139,23 @@ class TestZeroWriteDetection:
         assert sr.retry_reason == RetryReason.ZERO_WRITES
 
     def test_conditional_already_green_worktree_not_demoted(self) -> None:
-        """resolve-failures conditional + 'fixes_applied = 0' output → success preserved.
+        """resolve-failures conditional + 'verdict = already_green' → success preserved.
 
         This is the Issue #603 false-positive scenario: worktree is already green,
-        skill emits 'fixes_applied = 0', and the gate must NOT demote to zero_writes.
+        skill emits 'fixes_applied = 0' AND 'verdict = already_green', and the gate
+        must NOT demote to zero_writes.
+
+        With the new write_expected_when pattern (verdict = real_fix), the gate only
+        triggers when the skill declares it actually applied a real fix.
         """
         result_record = {
             "type": "result",
             "subtype": "success",
             "is_error": False,
-            "result": "Tests are green. fixes_applied = 0\nno changes needed\n%%ORDER_UP%%",
+            "result": (
+                "Tests are green. fixes_applied = 0\nverdict = already_green\n"
+                "no changes needed\n%%ORDER_UP%%"
+            ),
             "session_id": "test-sess",
         }
         stdout = json.dumps(result_record)
@@ -157,14 +164,73 @@ class TestZeroWriteDetection:
             skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
             write_behavior=WriteBehaviorSpec(
                 mode="conditional",
-                expected_when=(r"fixes_applied\s*=\s*[1-9][0-9]*",),
+                expected_when=(r"verdict\s*=\s*real_fix",),
             ),
         )
         assert sr.success is True, (
-            "Already-green worktree (fixes_applied = 0) must NOT be demoted to zero_writes. "
-            "The pattern [1-9][0-9]* must not match '0'."
+            "Already-green worktree (verdict = already_green) must NOT be demoted. "
+            "The pattern 'verdict = real_fix' must not match 'verdict = already_green'."
         )
         assert sr.subtype != "zero_writes"
+
+    def test_conditional_no_verdict_not_demoted_but_write_not_expected(self) -> None:
+        """resolve-failures with no verdict token: write gate does not fire, result passes.
+
+        With the new write_expected_when (verdict = real_fix), a result emitting only
+        fixes_applied = 0 (no verdict token) does NOT trigger write expectation.
+        The verdict is now the load-bearing routing signal: fixes_applied alone is
+        insufficient to declare a real fix.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "fixes_applied = 0\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"verdict\s*=\s*real_fix",),
+            ),
+        )
+        # Write not expected (no verdict = real_fix) → success, NOT demoted
+        assert sr.success is True, (
+            "fixes_applied = 0 without verdict token must NOT be demoted — "
+            "the new gate only fires on 'verdict = real_fix'"
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_conditional_real_fix_verdict_without_writes_demoted(self) -> None:
+        """resolve-failures emitting verdict=real_fix but 0 writes → demoted to zero_writes.
+
+        When the skill declares 'verdict = real_fix', writes are expected.
+        If no Edit/Write calls were made, the write gate must fire and demote the result.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "verdict = real_fix\nfixes_applied = 1\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"verdict\s*=\s*real_fix",),
+            ),
+        )
+        assert sr.success is False, (
+            "verdict = real_fix with 0 writes must be demoted to zero_writes"
+        )
+        assert sr.subtype == "zero_writes"
+        assert sr.retry_reason == RetryReason.ZERO_WRITES
 
     def test_conditional_fix_applied_but_no_writes_demoted(self) -> None:
         """Conditional + 'fixes_applied = 1' + 0 writes → zero_writes (Bash-only fix, no artifact).

@@ -152,12 +152,13 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
     _Y = "\x1b[33m" if color else ""
     _R = "\x1b[0m" if color else ""
 
+    from autoskillit.cli._timed_input import timed_prompt
+
     print(f"\n{_B}It looks like this is your first time using AutoSkillit in this project.{_R}")
-    try:
-        ans = input("Would you like help getting started? [Y/n]: ").strip().lower()
-    except EOFError:
-        ans = ""
-    if ans in ("n", "no"):
+    ans = timed_prompt(
+        "Would you like help getting started? [Y/n]", default="", timeout=120, label="onboarding"
+    )
+    if ans.lower() in ("n", "no"):
         mark_onboarded(project_dir)
         return None
 
@@ -175,10 +176,7 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
     print(f"  {_Y}D{_R} — {_C}Write a custom recipe{_R}        (runs /autoskillit:write-recipe)")
     print(f"  {_Y}E{_R} — {_C}Skip{_R}                         (start a normal session)")
 
-    try:
-        choice = input(f"\n{_B}[A/B/C/D/E]: {_R}").strip().upper()
-    except EOFError:
-        choice = ""
+    choice = timed_prompt("\n[A/B/C/D/E]", default="E", timeout=120, label="onboarding").upper()
 
     # Wait up to 5s for gather_intel to complete, then shut down cleanly
     try:
@@ -193,10 +191,7 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
         return "/autoskillit:setup-project"
 
     if choice == "B":
-        try:
-            ref = input("Issue URL or number: ").strip()
-        except EOFError:
-            ref = ""
+        ref = timed_prompt("Issue URL or number:", default="", timeout=120, label="onboarding")
         if ref:
             return f"/autoskillit:prepare-issue {ref}"
         return "/autoskillit:setup-project"

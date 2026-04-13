@@ -169,6 +169,7 @@ def test_run_update_checks_skips_local_and_unknown_install_types(
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_FORCE_UPDATE_CHECK", raising=False)
 
     fake_stdin = MagicMock()
     fake_stdin.isatty.return_value = True
@@ -443,12 +444,15 @@ def _setup_run_checks(
     state: dict | None = None,
 ) -> tuple[list[str], list[str]]:
     """Set up mocks for run_update_checks and return (printed_lines, input_calls)."""
+    import select as _select_mod
+
     from autoskillit.cli._update_checks import Signal
 
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_FORCE_UPDATE_CHECK", raising=False)
 
     fake_stdin = MagicMock()
     fake_stdin.isatty.return_value = True
@@ -456,6 +460,12 @@ def _setup_run_checks(
     fake_stdout.isatty.return_value = True
     monkeypatch.setattr(sys, "stdin", fake_stdin)
     monkeypatch.setattr(sys, "stdout", fake_stdout)
+
+    # timed_prompt uses select.select to implement timeout; mock it to
+    # report "stdin is ready" so tests proceed without real file descriptors.
+    monkeypatch.setattr(
+        _select_mod, "select", lambda rlist, wlist, xlist, timeout=None: (rlist, [], [])
+    )
 
     _info = info or _make_stable_info()
     monkeypatch.setattr("autoskillit.cli._update_checks.detect_install", lambda: _info)
@@ -1129,6 +1139,199 @@ def test_fetch_sends_github_token_auth_header(
 
     assert "Authorization" in received_headers
     assert received_headers["Authorization"] == "Bearer my-secret-token"
+
+
+# ---------------------------------------------------------------------------
+# timed_prompt primitive tests
+# ---------------------------------------------------------------------------
+
+
+def test_timed_prompt_returns_default_on_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """timed_prompt returns the default value when select.select times out."""
+    import select as _select_mod
+
+    from autoskillit.cli._timed_input import timed_prompt
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+
+    # select.select returns empty list = timeout
+    monkeypatch.setattr(
+        _select_mod, "select", lambda rlist, wlist, xlist, timeout=None: ([], [], [])
+    )
+
+    printed: list[str] = []
+    monkeypatch.setattr("builtins.print", lambda *args, **kw: printed.append(str(args)))
+
+    result = timed_prompt("Test prompt?", default="n", timeout=30, label="test")
+    assert result == "n"
+    assert any("timed out" in p for p in printed)
+
+
+def test_timed_prompt_applies_ansi_formatting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """timed_prompt output includes ANSI escape sequences when color is supported."""
+    import select as _select_mod
+
+    from autoskillit.cli._timed_input import timed_prompt
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("TERM", raising=False)
+
+    monkeypatch.setattr(
+        _select_mod, "select", lambda rlist, wlist, xlist, timeout=None: (rlist, [], [])
+    )
+    monkeypatch.setattr("builtins.input", lambda _="": "y")
+
+    raw_output: list[str] = []
+    monkeypatch.setattr(
+        "builtins.print",
+        lambda *args, **kw: raw_output.append(" ".join(str(a) for a in args)),
+    )
+
+    timed_prompt("Update now? [Y/n]", default="n", timeout=30, label="test")
+    combined = " ".join(raw_output)
+    assert "\x1b[" in combined  # ANSI escape present
+
+
+def test_timed_prompt_respects_no_color(monkeypatch: pytest.MonkeyPatch) -> None:
+    """timed_prompt output has no ANSI sequences when NO_COLOR is set."""
+    import select as _select_mod
+
+    from autoskillit.cli._timed_input import timed_prompt
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.setenv("NO_COLOR", "1")
+
+    monkeypatch.setattr(
+        _select_mod, "select", lambda rlist, wlist, xlist, timeout=None: (rlist, [], [])
+    )
+    monkeypatch.setattr("builtins.input", lambda _="": "y")
+
+    raw_output: list[str] = []
+    monkeypatch.setattr(
+        "builtins.print",
+        lambda *args, **kw: raw_output.append(" ".join(str(a) for a in args)),
+    )
+
+    timed_prompt("Update now? [Y/n]", default="n", timeout=30, label="test")
+    combined = " ".join(raw_output)
+    assert "\x1b[" not in combined  # No ANSI escapes
+
+
+# ---------------------------------------------------------------------------
+# Pre-flight feedback ordering test
+# ---------------------------------------------------------------------------
+
+
+def test_run_update_checks_emits_status_before_network(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The first print() call in run_update_checks occurs before any signal
+    gatherer is invoked (the 'time to first output' structural test)."""
+    import select as _select_mod
+
+    from autoskillit.cli._update_checks import Signal
+
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_FORCE_UPDATE_CHECK", raising=False)
+
+    fake_stdin = MagicMock()
+    fake_stdin.isatty.return_value = True
+    fake_stdout = MagicMock()
+    fake_stdout.isatty.return_value = True
+    monkeypatch.setattr(sys, "stdin", fake_stdin)
+    monkeypatch.setattr(sys, "stdout", fake_stdout)
+
+    monkeypatch.setattr(
+        _select_mod,
+        "select",
+        lambda rlist, wlist, xlist, timeout=None: (rlist, [], []),
+    )
+
+    info = _make_stable_info()
+    monkeypatch.setattr("autoskillit.cli._update_checks.detect_install", lambda: info)
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._claude_settings_path",
+        lambda scope: tmp_path / "settings.json",
+    )
+
+    import autoskillit as _pkg
+
+    monkeypatch.setattr(_pkg, "__version__", "0.7.77")
+
+    # Track call order: print vs signal gatherers
+    call_log: list[str] = []
+
+    def tracking_print(*args: Any, **kw: Any) -> None:
+        call_log.append("print")
+
+    monkeypatch.setattr("builtins.print", tracking_print)
+
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._binary_signal",
+        lambda info, home, current: (
+            call_log.append("binary_signal")
+            or Signal("binary", "New release: 0.9.0 (you have 0.7.77)")
+        ),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._hooks_signal",
+        lambda settings_path: call_log.append("hooks_signal"),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._source_drift_signal",
+        lambda info, home: call_log.append("source_drift_signal"),
+    )
+
+    monkeypatch.setattr("builtins.input", lambda _="": "n")
+
+    run_update_checks(home=tmp_path)
+
+    # The first print (status_line) must come before any signal gatherer
+    assert call_log[0] == "print", (
+        f"Expected first call to be print() (status_line), got: {call_log}"
+    )
+    signal_calls = [c for c in call_log if c.endswith("_signal")]
+    assert signal_calls, f"No signal gatherers were called — call_log: {call_log}"
+    first_signal_idx = call_log.index(signal_calls[0])
+    first_print_idx = call_log.index("print")
+    assert first_print_idx < first_signal_idx, (
+        f"print() must occur before signal gatherers. Order: {call_log}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# AUTOSKILLIT_FORCE_UPDATE_CHECK override
+# ---------------------------------------------------------------------------
+
+
+def test_force_update_check_env_overrides_local_editable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """AUTOSKILLIT_FORCE_UPDATE_CHECK=1 bypasses the LOCAL_EDITABLE early return."""
+    info = InstallInfo(
+        install_type=InstallType.LOCAL_EDITABLE,
+        commit_id=None,
+        requested_revision=None,
+        url=None,
+        editable_source=Path(tmp_path),
+    )
+    printed, input_calls = _setup_run_checks(
+        monkeypatch, tmp_path, info=info, binary_signal=True, answer="n"
+    )
+    monkeypatch.setenv("AUTOSKILLIT_FORCE_UPDATE_CHECK", "1")
+    run_update_checks(home=tmp_path)
+    # The prompt should have been reached (not early-returned)
+    assert len(input_calls) == 1
 
 
 def test_fetch_sends_if_none_match_when_cached_etag(tmp_path: Path) -> None:

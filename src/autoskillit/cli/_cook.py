@@ -115,12 +115,13 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     print()
 
     from autoskillit.cli._ansi import permissions_warning
-    from autoskillit.cli._init_helpers import _require_interactive_stdin
+    from autoskillit.cli._timed_input import timed_prompt
 
     print(permissions_warning())
-    _require_interactive_stdin("autoskillit cook")
-    confirm = input("\nLaunch session? [Enter/n]: ").strip().lower()
-    if confirm in ("n", "no"):
+    confirm = timed_prompt(
+        "\nLaunch session? [Enter/n]", default="", timeout=120, label="autoskillit cook"
+    )
+    if confirm.lower() in ("n", "no"):
         return
 
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu

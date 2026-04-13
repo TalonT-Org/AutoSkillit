@@ -198,18 +198,18 @@ All experiment artifacts live in one self-contained folder:
 
 ```
 research/YYYY-MM-DD-{slug}/
-├── environment.yml           # Micromamba/conda env (if needed)
+├── Dockerfile               # Docker image spec — builds from environment.yml
+├── Taskfile.yml             # build-env, run-experiment, test tasks
+├── environment.yml          # Micromamba/conda env (required)
 ├── scripts/
 │   ├── {script_1}            # {description}
-│   ├── {script_2}            # {description}
 │   └── ...
 ├── tests/                    # Test suite for experiment scripts
-│   ├── conftest.py           # Pytest fixtures and configuration
-│   ├── test_{script_1}.py    # Tests for {script_1}
-│   └── ...
-├── data/                     # Generated/input data
-├── results/                  # Experiment output (metrics, logs)
-└── report.md                 # Final report (written by generate-report)
+│   ├── conftest.py
+│   └── test_{script_1}.py
+├── data/
+├── results/
+└── report.md
 ```
 
 {Describe each planned file and its purpose.}
@@ -223,9 +223,11 @@ research/YYYY-MM-DD-{slug}/
 environment.yml will be created.}
 Verify that `pytest` is available in the existing toolchain (`pytest --version`). If not, note that test_check requires pytest to pass.
 
-**Option B — Custom environment required:**
-{The experiment requires {tools/libraries} that are not part of the project.
-An environment.yml will be created with the following specification:}
+**Option B — Custom environment required (standard for research experiments):**
+{The experiment requires {tools/libraries} not available in the project toolchain.
+An environment.yml will be created. The implement-experiment skill builds a Docker
+image from this YAML — all experiment code runs inside the container. Nothing is
+installed on the host.}
 
 ```yaml
 name: {experiment-slug}

@@ -224,6 +224,16 @@ def _extract_mq_when_values(on_result: object) -> set[str]:
     return values
 
 
+def _recipe_uses_release_issue_timeout(ctx: ValidationContext) -> bool:
+    """Return True if this recipe family uses release_issue_timeout as its error escalation step.
+
+    The two new wait_for_merge_queue rules only apply to implementation/remediation-family
+    recipes that define release_issue_timeout.  merge-prs.yaml and other recipe families
+    route queue timeouts/errors differently (e.g. register_clone_failure) and are exempt.
+    """
+    return _MQ_EXPECTED_FALLBACK in ctx.recipe.steps
+
+
 @semantic_rule(
     name="wait-for-merge-queue-routing-covers-all-pr-states",
     description=(
@@ -235,6 +245,8 @@ def _extract_mq_when_values(on_result: object) -> set[str]:
 def _check_wait_for_merge_queue_routing_covers_all_pr_states(
     ctx: ValidationContext,
 ) -> list[RuleFinding]:
+    if not _recipe_uses_release_issue_timeout(ctx):
+        return []
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "wait_for_merge_queue":
@@ -270,6 +282,8 @@ def _check_wait_for_merge_queue_routing_covers_all_pr_states(
 def _check_wait_for_merge_queue_routing_conforms_to_expected_targets(
     ctx: ValidationContext,
 ) -> list[RuleFinding]:
+    if not _recipe_uses_release_issue_timeout(ctx):
+        return []
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "wait_for_merge_queue":

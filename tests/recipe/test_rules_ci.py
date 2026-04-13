@@ -411,14 +411,27 @@ def _make_mq_step(
     )
 
 
-def test_coverage_rule_flags_missing_pr_state_arm() -> None:
-    """T11: coverage rule fires when an explicit PRState arm is missing."""
-    recipe = _make_recipe(
+def _make_mq_recipe(
+    *,
+    exclude: set[str] | None = None,
+    fallback_route: str = "release_issue_timeout",
+    on_failure: str = "release_issue_timeout",
+) -> Recipe:
+    """Build a recipe that includes release_issue_timeout so the new rules activate."""
+    return _make_recipe(
         {
-            "wait_for_queue": _make_mq_step(exclude={"dropped_healthy"}),
+            "wait_for_queue": _make_mq_step(
+                exclude=exclude, fallback_route=fallback_route, on_failure=on_failure
+            ),
+            "release_issue_timeout": RecipeStep(action="stop", message="timeout"),
             "done": RecipeStep(action="stop", message="done"),
         }
     )
+
+
+def test_coverage_rule_flags_missing_pr_state_arm() -> None:
+    """T11: coverage rule fires when an explicit PRState arm is missing."""
+    recipe = _make_mq_recipe(exclude={"dropped_healthy"})
     findings = run_semantic_rules(recipe)
     coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
     assert len(coverage_findings) >= 1, f"Expected coverage rule finding, got: {findings}"
@@ -428,12 +441,7 @@ def test_coverage_rule_flags_missing_pr_state_arm() -> None:
 
 def test_coverage_rule_clean_when_all_pr_states_present() -> None:
     """T11 negative: coverage rule is silent when all non-error PRState values are present."""
-    recipe = _make_recipe(
-        {
-            "wait_for_queue": _make_mq_step(),
-            "done": RecipeStep(action="stop", message="done"),
-        }
-    )
+    recipe = _make_mq_recipe()
     findings = run_semantic_rules(recipe)
     coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
     assert coverage_findings == [], (
@@ -443,12 +451,7 @@ def test_coverage_rule_clean_when_all_pr_states_present() -> None:
 
 def test_conformance_rule_flags_wrong_fallback_target() -> None:
     """T11: conformance rule fires when fallback routes to wrong target."""
-    recipe = _make_recipe(
-        {
-            "wait_for_queue": _make_mq_step(fallback_route="register_clone_success"),
-            "done": RecipeStep(action="stop", message="done"),
-        }
-    )
+    recipe = _make_mq_recipe(fallback_route="register_clone_success")
     findings = run_semantic_rules(recipe)
     conformance_findings = [f for f in findings if f.rule == _CONFORMANCE_RULE]
     assert len(conformance_findings) >= 1, (
@@ -459,12 +462,7 @@ def test_conformance_rule_flags_wrong_fallback_target() -> None:
 
 def test_conformance_rule_flags_wrong_on_failure_target() -> None:
     """T11: conformance rule fires when on_failure routes to wrong target."""
-    recipe = _make_recipe(
-        {
-            "wait_for_queue": _make_mq_step(on_failure="register_clone_success"),
-            "done": RecipeStep(action="stop", message="done"),
-        }
-    )
+    recipe = _make_mq_recipe(on_failure="register_clone_success")
     findings = run_semantic_rules(recipe)
     conformance_findings = [f for f in findings if f.rule == _CONFORMANCE_RULE]
     assert len(conformance_findings) >= 1, (
@@ -475,12 +473,7 @@ def test_conformance_rule_flags_wrong_on_failure_target() -> None:
 
 def test_conformance_rule_clean_when_targets_correct() -> None:
     """T11 negative: conformance rule is silent when targets are correct."""
-    recipe = _make_recipe(
-        {
-            "wait_for_queue": _make_mq_step(),
-            "done": RecipeStep(action="stop", message="done"),
-        }
-    )
+    recipe = _make_mq_recipe()
     findings = run_semantic_rules(recipe)
     conformance_findings = [f for f in findings if f.rule == _CONFORMANCE_RULE]
     assert conformance_findings == [], (
@@ -490,12 +483,7 @@ def test_conformance_rule_clean_when_targets_correct() -> None:
 
 def test_coverage_rule_flags_missing_pr_state_arm_via_run_semantic_rules() -> None:
     """T13: coverage rule fires via run_semantic_rules when DROPPED_HEALTHY is absent."""
-    recipe = _make_recipe(
-        {
-            "wait_for_queue": _make_mq_step(exclude={"dropped_healthy"}),
-            "done": RecipeStep(action="stop", message="done"),
-        }
-    )
+    recipe = _make_mq_recipe(exclude={"dropped_healthy"})
     findings = run_semantic_rules(recipe)
     coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
     assert any(f.rule == _COVERAGE_RULE for f in findings), (

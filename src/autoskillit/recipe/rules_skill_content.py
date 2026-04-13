@@ -34,6 +34,12 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("implement-worktree", "test_command"),
         ("implement-worktree-no-merge", "test_command"),
         ("resolve-failures", "test_command"),
+        # ── research experiment skills: slug is the experiment directory name ─────────
+        # Derived at runtime from the `name:` field of the experiment's environment.yml.
+        # The prose in both skills explicitly describes how to derive it before the
+        # bash blocks that reference it.
+        ("implement-experiment", "slug"),
+        ("generate-report", "slug"),
     }
 )
 

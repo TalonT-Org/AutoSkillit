@@ -141,30 +141,103 @@ required** — launch as many additional subagents as needed.
 > will need to reference or call. Report imports, interfaces, and patterns
 > the scripts should follow.
 
-**Subagent B — Build & Test Infrastructure:**
-> Understand how the project builds, tests, and runs. Identify the build
-> system, test framework, benchmark infrastructure, and any relevant
-> configuration. Report what the experiment scripts need to integrate with.
+**Subagent B — Compute Environment Requirements:**
+> Assess the compute environment needed to execute the experiment. Determine
+> what system-level tools, libraries, or runtime capabilities the experiment
+> requires. If the experiment plan specifies an environment.yml, examine it —
+> identify any non-standard dependencies that need system packages installed
+> alongside the micromamba environment. Report what the Dockerfile or
+> container setup needs to provide beyond the base micromamba image.
 
 **Additional subagents (launch as many as needed):**
 - Deeper exploration of specific code areas referenced in the plan
 - Understanding specific APIs, types, or interfaces the scripts will use
 - Any other codebase investigation needed to write correct experiment code
 
-### Step 3 — Set Up Worktree Environment
+### Step 3 — Set Up Container Environment
 
-Set up the project's development environment in the worktree. Check for
-`worktree_setup.command` in `.autoskillit/config.yaml`, a Taskfile with
-`install-worktree` task, or detect the project type and run appropriate setup.
+The research worktree is isolated via Docker. All experiment code runs inside
+a container built from the experiment's `environment.yml`. Nothing is installed
+on the host.
 
-```bash
-cd "${WORKTREE_PATH}"
-# If worktree_setup.command is configured, run it. Otherwise:
-task install-worktree   # or equivalent for the project type
+**3a — Write the Dockerfile:**
+
+Locate the `environment.yml` in the planned research directory. The YAML's
+`name:` field is the `MAMBA_ENV` slug (e.g., `2026-04-13-my-experiment`).
+
+Write `${RESEARCH_DIR}/Dockerfile` based on the canonical template at
+`src/autoskillit/assets/research/Dockerfile.template` in the project root,
+substituting `${MAMBA_ENV}` with the actual environment name from `environment.yml`:
+
+```dockerfile
+FROM mambaorg/micromamba:1.0-bullseye-slim
+SHELL ["/bin/bash", "-c"]
+ARG MAMBA_ENV="{slug}"
+
+USER root
+RUN apt-get --allow-releaseinfo-change update \
+    && apt-get install -y --no-install-recommends procps git curl build-essential \
+    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+
+RUN curl -sL https://taskfile.dev/install.sh | sh -s -- -b /usr/local/bin
+
+RUN rm -f /root/.bashrc \
+    && echo "source /etc/container.bashrc" >> /etc/bash.bashrc \
+    && echo "set +u" > /etc/container.bashrc \
+    && echo 'eval "$(micromamba shell hook --shell=bash)"' >> /etc/container.bashrc
+
+ENV BASH_ENV=/etc/container.bashrc
+ENV ENV=/etc/container.bashrc
+
+COPY {slug}.yaml /opt/research/env/
+RUN micromamba create -f /opt/research/env/{slug}.yaml && micromamba clean -afy
+RUN echo "micromamba activate {slug}" >> /etc/container.bashrc
 ```
 
-**All commands from this point must run from `${WORKTREE_PATH}`.** Use
-absolute paths to avoid CWD drift across Bash tool calls.
+**3b — Write `${RESEARCH_DIR}/Taskfile.yml`:**
+
+```yaml
+version: '3'
+vars:
+  SLUG: "{slug}"
+  IMAGE: "research-{{.SLUG}}"
+  RESEARCH_DIR:
+    sh: pwd
+
+tasks:
+  build-env:
+    desc: Build Docker image for this experiment
+    cmds:
+      - docker build --build-arg MAMBA_ENV={{.SLUG}} -t {{.IMAGE}} .
+    dir: "{{.RESEARCH_DIR}}"
+
+  run-experiment:
+    desc: Run experiment inside container (volume-mounts research dir)
+    cmds:
+      - docker run --rm -v "{{.RESEARCH_DIR}}:/workspace" {{.IMAGE}} bash -c "cd /workspace && python scripts/run.py"
+    dir: "{{.RESEARCH_DIR}}"
+
+  test:
+    desc: Run pytest test suite inside container
+    cmds:
+      - docker run --rm -v "{{.RESEARCH_DIR}}:/workspace" {{.IMAGE}} bash -c "cd /workspace && pytest tests/ -v"
+    dir: "{{.RESEARCH_DIR}}"
+```
+
+Adjust the `run-experiment` command to match the actual entry-point script from the experiment plan.
+
+**3c — Build the Docker image:**
+
+```bash
+cd "${RESEARCH_DIR}"
+docker build --build-arg MAMBA_ENV={slug} -t "research-{slug}" .
+```
+
+Verify the build succeeds before proceeding. If the build fails due to missing
+system packages, add them to the `apt-get install` layer and rebuild.
+
+**All commands from this point must run from `${WORKTREE_PATH}`.** Use absolute
+paths to avoid CWD drift across Bash tool calls.
 
 ### Step 4 — Implement Phase by Phase
 
@@ -215,13 +288,19 @@ cp "${PLAN_PATH}" "${RESEARCH_DIR}experiment-plan.md"
 git -C "${WORKTREE_PATH}" add research/ && git -C "${WORKTREE_PATH}" commit -m "Add experiment plan to research folder"
 ```
 
-### Step 6 — Pre-commit Checks
+### Step 6 — Pre-commit Checks (Conditional)
+
+Pre-commit is only relevant when the worktree has a `.pre-commit-config.yaml`.
+Research worktrees do not — skip pre-commit for them.
 
 ```bash
-cd "${WORKTREE_PATH}" && pre-commit run --all-files
+if [ -f "${WORKTREE_PATH}/.pre-commit-config.yaml" ]; then
+    cd "${WORKTREE_PATH}" && pre-commit run --all-files
+    # Fix any formatting or linting issues, then re-stage and re-commit.
+else
+    echo "No .pre-commit-config.yaml found — skipping pre-commit (research worktree)."
+fi
 ```
-
-Fix any formatting or linting issues.
 
 ### Step 7 — Handoff Report
 

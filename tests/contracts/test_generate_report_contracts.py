@@ -80,3 +80,80 @@ def test_recommendations_or_discussion_framing() -> None:
         "generate-report/SKILL.md does not offer 'Discussion and Future Directions' "
         "as an alternative framing for the Recommendations section."
     )
+
+
+def test_generate_report_step25_no_host_venv() -> None:
+    """Step 2.5 must not create a .plot-venv on the host filesystem."""
+    text = SKILL_PATH.read_text()
+    assert "### Step 2.5" in text, (
+        "generate-report/SKILL.md is missing '### Step 2.5' section header"
+    )
+    assert "### Step 3" in text, "generate-report/SKILL.md is missing '### Step 3' section header"
+    step25_section = text.split("### Step 2.5")[1].split("### Step 3")[0]
+    assert ".plot-venv" not in step25_section, (
+        "generate-report/SKILL.md Step 2.5 must not create a .plot-venv on the host — "
+        "all package installation must happen inside the Docker container"
+    )
+
+
+def test_generate_report_step25_uses_docker_run() -> None:
+    """Step 2.5 must use docker run to execute visualization scripts."""
+    text = SKILL_PATH.read_text()
+    assert "### Step 2.5" in text, (
+        "generate-report/SKILL.md is missing '### Step 2.5' section header"
+    )
+    assert "### Step 3" in text, "generate-report/SKILL.md is missing '### Step 3' section header"
+    step25_section = text.split("### Step 2.5")[1].split("### Step 3")[0]
+    assert "docker run" in step25_section.lower(), (
+        "generate-report/SKILL.md Step 2.5 must reference 'docker run' for executing "
+        "visualization scripts inside the experiment container"
+    )
+
+
+def test_dockerfile_template_asset_exists() -> None:
+    """assets/research/Dockerfile.template must exist."""
+    asset_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "assets"
+        / "research"
+        / "Dockerfile.template"
+    )
+    assert asset_path.exists(), (
+        "src/autoskillit/assets/research/Dockerfile.template must exist — "
+        "this is the canonical Docker template for research worktrees"
+    )
+
+
+def test_dockerfile_template_uses_micromamba_base() -> None:
+    """Dockerfile.template must use mambaorg/micromamba base image."""
+    asset_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "assets"
+        / "research"
+        / "Dockerfile.template"
+    )
+    content = asset_path.read_text()
+    assert "mambaorg/micromamba" in content, (
+        "assets/research/Dockerfile.template must use mambaorg/micromamba as the base image"
+    )
+
+
+def test_dockerfile_template_wires_bash_env() -> None:
+    """Dockerfile.template must set BASH_ENV to wire micromamba activation into every shell."""
+    asset_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "assets"
+        / "research"
+        / "Dockerfile.template"
+    )
+    content = asset_path.read_text()
+    assert "BASH_ENV" in content, (
+        "assets/research/Dockerfile.template must set BASH_ENV to wire micromamba "
+        "activation into every shell context (including non-interactive)"
+    )

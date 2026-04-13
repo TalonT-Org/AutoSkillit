@@ -15,9 +15,7 @@ import ast
 import re
 from pathlib import Path
 
-_APP_PATH = (
-    Path(__file__).parent.parent.parent / "src" / "autoskillit" / "cli" / "app.py"
-)
+_APP_PATH = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "cli" / "app.py"
 _SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
 
@@ -49,12 +47,13 @@ class TestNoRawSignalHandler:
         source = _APP_PATH.read_text(encoding="utf-8")
         tree = ast.parse(source)
         bad_calls = [
-            node for node in ast.walk(tree)
+            node
+            for node in ast.walk(tree)
             if isinstance(node, ast.Call) and _is_sigterm_call(node)
         ]
         assert not bad_calls, (
             f"Found {len(bad_calls)} raw signal.signal(SIGTERM, ...) call(s) in cli/app.py. "
-            "Use anyio.open_signal_receiver(signal.SIGTERM) instead — see _serve_with_signal_guard."
+            "Use anyio.open_signal_receiver instead — see _serve_with_signal_guard."
         )
 
     def test_grep_no_signal_signal_sigterm_in_src(self):

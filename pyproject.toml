@@ -104,6 +104,7 @@ select = ["E", "F", "I", "UP", "TID251"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging.getLogger" = {msg = "Use get_logger() from autoskillit._logging instead."}
+"signal.signal" = {msg = "Use anyio.open_signal_receiver instead of signal.signal — see _serve_with_signal_guard in cli/app.py."}
 
 [tool.importlinter]
 root_packages = ["autoskillit"]

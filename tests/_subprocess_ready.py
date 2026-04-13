@@ -52,7 +52,9 @@ def wait_for_subprocess_ready(
         if exit_code is not None:
             # Process died before writing sentinel — capture stderr for diagnosis
             try:
-                remaining_stderr = proc.stderr.read().decode(errors="replace") if proc.stderr else ""
+                remaining_stderr = (
+                    proc.stderr.read().decode(errors="replace") if proc.stderr else ""
+                )
             except Exception:
                 remaining_stderr = "<stderr read failed>"
             raise RuntimeError(

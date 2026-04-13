@@ -14,6 +14,8 @@ from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
+import anyio
+
 if TYPE_CHECKING:
     from autoskillit.recipe import Recipe, RecipeInfo
 
@@ -119,16 +121,38 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
 
-    def _sigterm_handler(*_):
-        """Convert SIGTERM into KeyboardInterrupt so asyncio shuts down cleanly."""
-        raise KeyboardInterrupt
+    run_startup_drift_check()
 
-    signal.signal(signal.SIGTERM, _sigterm_handler)
-    get_logger(__name__).info("sigterm_handler_ready")
+    async def _serve_with_signal_guard() -> None:
+        """Run the MCP server with event-loop-routed SIGTERM/SIGINT handling.
+
+        Arms an anyio signal receiver *before* mcp.run_async() starts so that
+        SIGTERM and SIGINT are delivered as scheduled asyncio callbacks rather
+        than frame-interrupting KeyboardInterrupt exceptions. ``tg.start()``
+        blocks until ``task_status.started()`` fires inside the receiver context
+        manager — guaranteeing the handler is active before any readiness
+        sentinel can be observed by a test.
+        """
+
+        async def _watch(
+            scope: anyio.CancelScope,
+            *,
+            task_status: anyio.abc.TaskStatus = anyio.TASK_STATUS_IGNORED,
+        ) -> None:
+            with anyio.open_signal_receiver(signal.SIGTERM, signal.SIGINT) as signals:
+                task_status.started()  # signal receiver is now armed
+                async for _ in signals:
+                    scope.cancel()
+                    return
+
+        async with anyio.create_task_group() as tg:
+            await tg.start(_watch, tg.cancel_scope)
+            # SIGTERM and SIGINT are armed via event-loop callback; mcp starts here
+            await mcp.run_async()
     try:
-        mcp.run()
+        anyio.run(_serve_with_signal_guard)
     except KeyboardInterrupt:
-        pass
+        pass  # Ctrl+C before anyio loop starts — rare during heavy import phase
 
 
 @app.command

@@ -20,20 +20,13 @@ import pytest
 from autoskillit.core._type_constants import RETIRED_READINESS_TOKENS
 
 _LIFESPAN_PATH = (
-    Path(__file__).parent.parent.parent
-    / "src"
-    / "autoskillit"
-    / "server"
-    / "_lifespan.py"
+    Path(__file__).parent.parent.parent / "src" / "autoskillit" / "server" / "_lifespan.py"
 )
 
 
 def _find_lifespan_func(tree: ast.Module) -> ast.AsyncFunctionDef:
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.AsyncFunctionDef)
-            and node.name == "_autoskillit_lifespan"
-        ):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_autoskillit_lifespan":
             return node
     pytest.fail("_autoskillit_lifespan not found in _lifespan.py")
 
@@ -110,7 +103,9 @@ class TestLifespanReadinessStructural:
                 continue
             first_arg = _first_arg_str(node)
             if first_arg in RETIRED_READINESS_TOKENS:
-                bad_calls.append(f"logger call with retired token {first_arg!r} at col {node.col_offset}")
+                bad_calls.append(
+                    f"logger call with retired token {first_arg!r} at col {node.col_offset}"
+                )
         assert not bad_calls, (
             "Found logger call(s) using retired readiness tokens in _autoskillit_lifespan:\n"
             + "\n".join(f"  {c}" for c in bad_calls)

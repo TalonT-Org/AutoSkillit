@@ -175,6 +175,7 @@ generic_automation_mcp/
 │   ├── loader.py            #   Path-based recipe metadata utilities
 │   ├── _api.py              #   Orchestration API
 │   ├── diagrams.py          #   Flow diagram generation + staleness detection
+│   ├── experiment_type_registry.py #  ExperimentTypeSpec, load_all_experiment_types
 │   ├── registry.py          #   RuleFinding, RuleSpec, semantic_rule decorator
 │   ├── repository.py
 │   ├── _analysis.py         #   Step graph building + dataflow analysis

@@ -560,9 +560,10 @@ def test_agent_implementability_l4_step5_placement(skill_text: str) -> None:
 
 
 def test_weight_matrix_has_eight_dimensions(skill_text: str) -> None:
-    """Weight matrix must have exactly 8 dimension rows after adding agent_implementability."""
-    in_table = False
-    dim_count = 0
+    """All 8 dimension rows must exist across the bundled experiment type YAML files."""
+    import yaml
+
+    exp_types_dir = SKILL_MD.parents[4] / "recipes" / "experiment-types"
     known_dims = {
         "causal_structure",
         "variance_protocol",
@@ -573,16 +574,10 @@ def test_weight_matrix_has_eight_dimensions(skill_text: str) -> None:
         "data_acquisition",
         "agent_implementability",
     }
-    for line in skill_text.splitlines():
-        if "| Dimension |" in line:
-            in_table = True
-            continue
-        if in_table and "|---" in line:
-            continue
-        if in_table and "|" in line:
-            cells = [c.strip() for c in line.split("|") if c.strip()]
-            if cells and cells[0] in known_dims:
-                dim_count += 1
-        elif in_table and line.strip() and not line.strip().startswith("|"):
-            break
-    assert dim_count == 8, f"Weight matrix must have exactly 8 dimension rows, found {dim_count}"
+    dims_found: set[str] = set()
+    for yaml_path in sorted(exp_types_dir.glob("*.yaml")):
+        data = yaml.safe_load(yaml_path.read_text())
+        dims_found.update(data.get("dimension_weights", {}).keys())
+    missing = known_dims - dims_found
+    assert not missing, f"Dimensions missing from bundled YAML files: {missing}"
+    assert dims_found >= known_dims, f"Expected 8 dimensions, found: {dims_found}"

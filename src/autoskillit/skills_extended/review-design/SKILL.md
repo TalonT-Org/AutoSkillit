@@ -144,8 +144,8 @@ trigger description matches the plan is selected. If no trigger matches, default
 **Dimension weights:**
 
 Use the `dimension_weights` dict from the matched type's registry entry (loaded in Step 0).
-Each key is a dimension name; each value is one of H (High), M (Medium), L (Low),
-or S (SILENT — dimension not spawned, not mentioned in output). Pass the full
+Each key is a dimension name; each value is one of weight=H (High), weight=M (Medium), weight=L (Low),
+or weight=S (SILENT — dimension not spawned, not mentioned in output). Pass the full
 `dimension_weights` dict to the triage subagent so it can return the complete weight
 matrix for this plan.
 
@@ -193,7 +193,8 @@ Each L1 subagent receives as explicit inputs:
 
 Use the `l1_severity` dict from the matched experiment type's registry entry (loaded in
 Step 0). Keys are `estimand_clarity` and `hypothesis_falsifiability`; values are severity
-levels (`critical`, `warning`, `info`).
+levels (`critical`, `warning`, `info`). Calibration anchors: `causal_inference` → critical;
+`benchmark`, `configuration_study`, `robustness_audit` → warning; `exploratory` → info.
 
 - `estimand_clarity` agent: "Can the claim be written as a formal contrast (A vs B on Y in Z)?"
   Reference the exp-lens-estimand-clarity philosophical mode as guidance (do NOT invoke

@@ -63,10 +63,13 @@ def test_sigterm_writes_scenario_json(tmp_path):
 
     # SIGTERM is the exact signal Claude Code sends on /exit.
     # The handler converts SIGTERM → KeyboardInterrupt, triggering lifespan
-    # teardown which writes scenario.json. Close stdin so the stdio transport
-    # detects EOF and the event loop can fully unwind.
-    proc.stdin.close()
-    proc.stdin = None  # prevent communicate() from flushing the closed pipe
+    # teardown which writes scenario.json.
+    #
+    # Order matters: SIGTERM must arrive before stdin EOF so the asyncio event
+    # loop receives KeyboardInterrupt and runs lifespan __aexit__ (which calls
+    # recorder.finalize()).  If stdin is closed first, the MCP stdio transport
+    # detects EOF and may tear down the event loop before the signal handler
+    # fires, bypassing lifespan cleanup entirely.
     proc.send_signal(signal.SIGTERM)
     try:
         stdout_bytes, remaining_stderr_bytes = proc.communicate(timeout=10)

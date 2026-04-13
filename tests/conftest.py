@@ -261,4 +261,5 @@ def tool_ctx(monkeypatch, tmp_path):
     # tmp directory rather than the cwd captured at fixture-init time.
     ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
     monkeypatch.setattr(_state, "_ctx", ctx)
+    monkeypatch.setattr(_state, "_startup_ready", None)
     return ctx

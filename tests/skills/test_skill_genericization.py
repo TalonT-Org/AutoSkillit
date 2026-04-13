@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 SKILLS_DIR = Path(__file__).parent.parent.parent / "src/autoskillit/skills"
+SKILLS_EXTENDED_DIR = Path(__file__).parent.parent.parent / "src/autoskillit/skills_extended"
 
 
 def _skill_content(name: str) -> str:
@@ -71,8 +72,7 @@ def test_code_index_examples_are_generic() -> None:
 
 def test_scope_has_no_hardcoded_metrics_rs() -> None:
     """scope/SKILL.md must not reference the hardcoded src/metrics.rs path."""
-    skill_dir = Path(__file__).parent.parent.parent / "src/autoskillit/skills_extended"
-    content = (skill_dir / "scope" / "SKILL.md").read_text()
+    content = (SKILLS_EXTENDED_DIR / "scope" / "SKILL.md").read_text()
     assert "src/metrics.rs" not in content, (
         "scope/SKILL.md hardcodes 'src/metrics.rs'. "
         "Use generic evaluation framework search (REQ-GEN-005)."
@@ -85,8 +85,7 @@ def test_scope_has_no_hardcoded_metrics_rs() -> None:
 
 def test_plan_experiment_has_no_hardcoded_metrics_rs() -> None:
     """plan-experiment/SKILL.md must not reference the hardcoded src/metrics.rs path."""
-    skill_dir = Path(__file__).parent.parent.parent / "src/autoskillit/skills_extended"
-    content = (skill_dir / "plan-experiment" / "SKILL.md").read_text()
+    content = (SKILLS_EXTENDED_DIR / "plan-experiment" / "SKILL.md").read_text()
     assert "src/metrics.rs" not in content, (
         "plan-experiment/SKILL.md hardcodes 'src/metrics.rs'. "
         "Use generic evaluation framework language (REQ-GEN-005)."

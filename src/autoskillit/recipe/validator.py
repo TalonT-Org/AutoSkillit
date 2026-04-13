@@ -161,6 +161,14 @@ def validate_recipe(recipe: Recipe) -> list[str]:
                 f"when set, got {step.stale_threshold!r}"
             )
 
+        if step.idle_output_timeout is not None and (
+            not isinstance(step.idle_output_timeout, int) or step.idle_output_timeout < 0
+        ):
+            errors.append(
+                f"Step {step_name!r}: 'idle_output_timeout' must be a non-negative integer "
+                f"when set (0 = disabled), got {step.idle_output_timeout!r}"
+            )
+
         if step.on_result is not None:
             if step.on_success is not None:
                 errors.append(

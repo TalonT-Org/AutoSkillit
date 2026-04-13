@@ -25,6 +25,7 @@ __all__ = [
     "TOOL_SUBSET_TAGS",
     "SKILL_COMMAND_PREFIX",
     "AUTOSKILLIT_SKILL_PREFIX",
+    "RETIRED_READINESS_TOKENS",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
@@ -218,3 +219,15 @@ SKILL_COMMAND_PREFIX: str = "/"
 
 # Canonical prefix for bundled autoskillit slash commands.
 AUTOSKILLIT_SKILL_PREFIX: str = "/autoskillit:"
+
+# Log message tokens that were once used as subprocess readiness sync primitives
+# and have since been retired. Any logger call using these tokens as its first
+# positional argument is a structural anti-pattern — the lifespan's try: block
+# and the anyio signal receiver replaced them with a filesystem sentinel.
+# Consumed by test_lifespan_readiness_structural.py (AST Assertion C).
+RETIRED_READINESS_TOKENS: frozenset[str] = frozenset(
+    {
+        "lifespan_started",
+        "sigterm_handler_ready",
+    }
+)

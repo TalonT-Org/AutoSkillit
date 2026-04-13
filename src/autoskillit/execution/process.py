@@ -353,6 +353,7 @@ async def run_managed_async(
                 "kill_decision",
                 termination=str(termination),
                 action=str(action),
+                reason=str(action),
                 process_exited=signals.process_exited,
                 channel_a=signals.channel_a_confirmed,
                 channel_b=signals.channel_b_status,

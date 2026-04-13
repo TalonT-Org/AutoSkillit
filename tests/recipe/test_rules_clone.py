@@ -11,6 +11,11 @@ from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
+_BUNDLED_RECIPE_YAMLS = list(builtin_recipes_dir().rglob("*.yaml"))
+assert _BUNDLED_RECIPE_YAMLS, (
+    "builtin_recipes_dir() returned no YAMLs — parametrize would silently vacuous-pass"
+)
+
 
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
     """Minimal recipe factory for rules_clone tests."""
@@ -395,7 +400,7 @@ def test_rule_does_not_fire_when_capture_reads_different_field() -> None:
     assert matching == []
 
 
-@pytest.mark.parametrize("recipe_path", list(builtin_recipes_dir().rglob("*.yaml")))
+@pytest.mark.parametrize("recipe_path", _BUNDLED_RECIPE_YAMLS)
 def test_bundled_recipes_pass_new_rule(recipe_path: Path) -> None:
     """Every bundled recipe YAML must emit zero clone-local-strategy findings (B7)."""
     recipe = load_recipe(recipe_path)

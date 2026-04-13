@@ -18,10 +18,12 @@ cross-user hardlink risk (CVE-2024-32020).
 import os
 import shutil
 import subprocess
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
-from autoskillit.core import GENERATED_FILES, get_logger, is_protected_branch
+from autoskillit.core import GENERATED_FILES, CloneResult, get_logger, is_protected_branch
 
 logger = get_logger(__name__)
 
@@ -183,17 +185,109 @@ def _add_or_set_upstream(clone_path: Path, url: str) -> None:
             )
 
 
-def _resolve_clone_source(source: Path, detected_url: str) -> str:
-    """Select the clone source for the proceed git-clone strategy.
+def _ensure_origin_isolated(clone_path: Path, known_url: str) -> None:
+    """Rewrite origin to a self-referential file:// URL unconditionally.
 
-    Always uses the remote URL when source has a configured origin.
-    Falls back to the local filesystem path only when no remote origin
-    is configured. Never falls back based on branch availability or
-    network reachability — when a remote URL is known, it is always
-    used as the clone source. The clone_local strategy bypasses this
-    function entirely (shutil.copytree, always local).
+    Claude Code reads 'origin' to resolve the project root; a file:// URL
+    cannot match any registered GitHub project, so the clone is treated as
+    a fresh project rooted at clone_path — not aliased to the source repo.
+
+    This must fire for every successful clone regardless of URL availability.
+    The conditional guard that previously skipped this for clone_local and
+    empty-URL cases was the #377 compounding regression.
+
+    After setting origin, calls _add_or_set_upstream with known_url only
+    if known_url is truthy — the real remote URL is stored in 'upstream'
+    when available.
     """
-    return detected_url if detected_url else str(source)
+    file_url = f"file://{clone_path}"
+    add_origin = subprocess.run(
+        ["git", "remote", "add", "origin", file_url],
+        cwd=str(clone_path),
+        capture_output=True,
+    )
+    if add_origin.returncode != 0:
+        add_stderr = (
+            add_origin.stderr.decode(errors="replace")
+            if isinstance(add_origin.stderr, bytes)
+            else add_origin.stderr
+        )
+        if "already exists" not in add_stderr:
+            raise RuntimeError(
+                f"git remote add origin failed: {add_stderr.strip()}\nclone_path={clone_path}"
+            )
+        # origin already exists (cloned from remote); rewrite it
+        set_origin = subprocess.run(
+            ["git", "remote", "set-url", "origin", file_url],
+            cwd=str(clone_path),
+            capture_output=True,
+        )
+        if set_origin.returncode != 0:
+            set_origin_stderr = (
+                set_origin.stderr.decode(errors="replace")
+                if isinstance(set_origin.stderr, bytes)
+                else set_origin.stderr
+            )
+            raise RuntimeError(
+                f"git remote set-url origin failed: {set_origin_stderr.strip()}"
+                f"\nclone_path={clone_path}"
+            )
+    if known_url:
+        _add_or_set_upstream(clone_path, known_url)
+
+
+@dataclass(frozen=True)
+class CloneSourceResolution:
+    """Result of probing a source directory for its origin URL.
+
+    reason:
+        "ok"        — origin is configured and subprocess returned a URL
+        "no_origin" — no origin remote is configured in this repo
+        "timeout"   — subprocess.run timed out (30 s)
+        "error"     — subprocess returned non-zero exit code
+    url: the remote URL (empty string unless reason == "ok")
+    stderr: subprocess stderr (empty unless reason == "error")
+    """
+
+    reason: Literal["ok", "no_origin", "timeout", "error"]
+    url: str
+    stderr: str
+
+
+def _probe_origin_url(source: Path) -> CloneSourceResolution:
+    """Probe source for its origin remote URL.
+
+    Runs ``git remote get-url origin`` with a 30-second timeout and
+    classifies the result into one of four typed reasons so callers
+    cannot collapse the outcomes into a single empty string.
+    """
+    _no_origin_markers = ("no such remote",)
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=str(source),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return CloneSourceResolution(reason="timeout", url="", stderr="")
+    except OSError as exc:
+        return CloneSourceResolution(reason="error", url="", stderr=str(exc))
+
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        stderr_lower = stderr.lower()
+        if any(marker in stderr_lower for marker in _no_origin_markers):
+            return CloneSourceResolution(reason="no_origin", url="", stderr=stderr)
+        return CloneSourceResolution(reason="error", url="", stderr=stderr)
+
+    url = result.stdout.strip()
+    if not url:
+        # git normally returns non-zero for missing origin, but guard defensively
+        return CloneSourceResolution(reason="no_origin", url="", stderr="")
+
+    return CloneSourceResolution(reason="ok", url=url, stderr="")
 
 
 def clone_repo(
@@ -202,7 +296,7 @@ def clone_repo(
     branch: str = "",
     strategy: str = "",
     remote_url: str = "",
-) -> dict[str, str]:
+) -> CloneResult:
     """Clone source_dir into ../autoskillit-runs/<run_name>-<timestamp>/.
 
     Used as a run_python entry point in pipeline recipes. Raises ValueError if
@@ -221,9 +315,10 @@ def clone_repo(
     committed state only) or strategy="clone_local" (copytree — includes working-tree
     changes).
 
-    When using the ``proceed`` strategy, the git clone is always performed from the
-    remote URL when source_dir has a configured origin. Falls back to the local path
-    only when no remote origin is configured. If a branch is requested that does not
+    When using the ``proceed`` strategy, the git clone is performed from the remote
+    URL. If origin is not configured, the subprocess times out, or the probe returns
+    a non-zero exit code, RuntimeError is raised — use ``strategy="clone_local"``
+    to clone a repo without a remote origin. If a branch is requested that does not
     exist on the remote, git clone will fail with RuntimeError — use
     ``strategy="clone_local"`` to clone a local-only branch. The ``clone_local``
     strategy always copies directly from the local filesystem path regardless of
@@ -233,7 +328,13 @@ def clone_repo(
     reading its remote URL. See module docstring for the full SOURCE ISOLATION contract.
 
     Returns:
-        On success: {"clone_path": str, "source_dir": str, "remote_url": str}
+        On success: {
+            "clone_path": str,
+            "source_dir": str,
+            "remote_url": str,
+            "clone_source_type": "remote" | "local",
+            "clone_source_reason": str,
+        }
         On uncommitted changes (strategy=""): {
             "uncommitted_changes": "true",
             "source_dir": str,
@@ -289,31 +390,30 @@ def clone_repo(
     clone_path = runs_parent / f"{run_name}-{timestamp}"
     runs_parent.mkdir(parents=True, exist_ok=True)
 
-    try:
-        _pre_url_result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            cwd=str(source),
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except subprocess.TimeoutExpired:
-        _pre_url_result = None
-    detected_url = (
-        _pre_url_result.stdout.strip()
-        if _pre_url_result is not None and _pre_url_result.returncode == 0
-        else ""
-    )
+    resolution = _probe_origin_url(source)
 
     if strategy == "clone_local":
         shutil.copytree(str(source), str(clone_path))
         logger.info("clone_created_local_copy", clone_path=str(clone_path), source=str(source))
+        source_type: Literal["remote", "local"] = "local"
+        source_reason = "strategy_clone_local"
     else:
-        clone_source = _resolve_clone_source(source, detected_url)
+        if resolution.reason != "ok":
+            logger.warning(
+                "clone_origin_probe_failed",
+                source=str(source),
+                reason=resolution.reason,
+                stderr=resolution.stderr,
+            )
+            raise RuntimeError(
+                f"clone_origin_probe_failed: reason={resolution.reason};"
+                f" source={source}; stderr={resolution.stderr};"
+                f' if a local-only clone is intended, pass strategy="clone_local".'
+            )
         cmd = ["git", "clone"]
         if branch:
             cmd += ["--branch", branch]
-        cmd += [clone_source, str(clone_path)]
+        cmd += [resolution.url, str(clone_path)]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
             raise RuntimeError(
@@ -322,31 +422,16 @@ def clone_repo(
                 f"\nstdout: {result.stdout.strip()}"
             )
         logger.info("clone_created", clone_path=str(clone_path), source=str(source), branch=branch)
+        source_type = "remote"
+        source_reason = "ok"
 
-    # Use caller-supplied override if provided; fall back to pre-clone detected URL
-    effective_url = remote_url if remote_url else detected_url
+    # Use caller-supplied override if provided; fall back to probed URL
+    effective_url = remote_url if remote_url else resolution.url
 
-    # Isolate the clone: store the real URL in 'upstream', set 'origin' to a local file:// URL
-    # that is unique to this clone path. Claude Code reads 'origin' to resolve the project root;
-    # a file:// URL cannot match any registered GitHub project, so the clone is treated as a
-    # fresh project rooted at clone_path — not aliased to the source repo.
-    if effective_url:
-        _add_or_set_upstream(clone_path, effective_url)
-        set_origin = subprocess.run(
-            ["git", "remote", "set-url", "origin", f"file://{clone_path}"],
-            cwd=str(clone_path),
-            capture_output=True,
-        )
-        if set_origin.returncode != 0:
-            set_origin_stderr = (
-                set_origin.stderr.decode(errors="replace")
-                if isinstance(set_origin.stderr, bytes)
-                else set_origin.stderr
-            )
-            raise RuntimeError(
-                f"git remote set-url origin failed: {set_origin_stderr.strip()}"
-                f"\nclone_path={clone_path}"
-            )
+    # Unconditionally isolate the clone: set 'origin' to file://<clone_path> for every
+    # successful clone regardless of URL availability. This closes the #377 compounding
+    # regression where the isolation rewrite was skipped when effective_url was empty.
+    _ensure_origin_isolated(clone_path, effective_url)
 
     # Decontaminate: untrack inherited generated files
     ls_gen = subprocess.run(
@@ -391,7 +476,13 @@ def clone_repo(
         except FileNotFoundError:
             pass
 
-    return {"clone_path": str(clone_path), "source_dir": str(source), "remote_url": effective_url}
+    return {
+        "clone_path": str(clone_path),
+        "source_dir": str(source),
+        "remote_url": effective_url,
+        "clone_source_type": source_type,
+        "clone_source_reason": source_reason,
+    }
 
 
 def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
@@ -560,7 +651,7 @@ class DefaultCloneManager:
         branch: str = "",
         strategy: str = "",
         remote_url: str = "",
-    ) -> dict[str, str]:
+    ) -> CloneResult:
         return clone_repo(
             source_dir, run_name, branch=branch, strategy=strategy, remote_url=remote_url
         )

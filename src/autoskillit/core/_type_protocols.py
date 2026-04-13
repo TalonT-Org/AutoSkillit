@@ -13,6 +13,7 @@ from typing import Any, Protocol, runtime_checkable
 from ._type_results import (
     CIRunScope,
     CleanupResult,
+    CloneResult,
     FailureRecord,
     SkillResult,
     TestResult,
@@ -273,7 +274,7 @@ class CloneManager(Protocol):
         branch: str = "",
         strategy: str = "",
         remote_url: str = "",
-    ) -> dict[str, str]: ...
+    ) -> CloneResult: ...
 
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]: ...
 

@@ -38,14 +38,13 @@ class TestComputationalComplexitySection:
             f"Scope SKILL.md missing '{field}' in Computational Complexity section"
         )
 
-    def test_section_between_technical_context_and_hypotheses(self) -> None:
+    def test_section_between_domain_context_and_hypotheses(self) -> None:
         content = _read_scope_skill_md()
-        tc_idx = content.index("## Technical Context")
+        dc_idx = content.index("## Domain Context")
         cc_idx = content.index("## Computational Complexity")
         hyp_idx = content.index("## Hypotheses")
-        assert tc_idx < cc_idx < hyp_idx, (
-            "## Computational Complexity must appear between "
-            "## Technical Context and ## Hypotheses"
+        assert dc_idx < cc_idx < hyp_idx, (
+            "## Computational Complexity must appear between ## Domain Context and ## Hypotheses"
         )
 
     def test_baseline_computation_instruction(self) -> None:

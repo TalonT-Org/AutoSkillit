@@ -164,11 +164,12 @@ measurable outcome}
 
 | Metric | Unit | Collection Method | Canonical Name |
 |--------|------|-------------------|----------------|
-| {metric1} | {unit} | {how collected} | {name in src/metrics.rs, or "NEW"} |
+| {metric1} | {unit} | {how collected} | {canonical name in evaluation framework, or "NEW"} |
 
-Canonical names must match entries in `src/metrics.rs`. For any metric marked
-"NEW", include: formula, unit, threshold value, and a note that it must be added
-to the catalog before the experiment is finalized.
+Canonical names must match entries in the project's evaluation framework (if one
+exists). For any metric marked "NEW", include: formula, unit, threshold value, and
+a note that it must be registered in whatever evaluation catalog the project uses
+before the experiment is finalized.
 
 ## Controlled Variables
 {What is held constant and how}
@@ -310,7 +311,7 @@ hypothesis_h1: "{alt hypothesis with measurable threshold}"    # REQUIRED
 metrics:                              # REQUIRED, min 1
   - name: "{metric_name}"
     unit: "{unit}"
-    canonical_name: "{src/metrics.rs entry or NEW}"
+    canonical_name: "{canonical name from evaluation framework, or NEW}"
     collection_method: "{exact command or code path}"
     threshold: "{success threshold}"
     direction: "higher_is_better"     # higher_is_better | lower_is_better | target_value
@@ -407,7 +408,7 @@ V5: len(metrics) >= 2 → exactly one metric has primary: true
     WARNING: "Multiple metrics but no primary designated; H1 threshold ambiguous"
 
 V6: any metric.canonical_name = "NEW"
-    WARNING: "Plan includes NEW metrics not yet in src/metrics.rs"
+    WARNING: "Plan includes NEW metrics not yet in any registered evaluation framework"
 
 V7: hypothesis_h1 has no numeric threshold
     WARNING: "H1 should include a measurable numeric threshold"

@@ -237,6 +237,8 @@ def test_output_path_tokens_synchronized() -> None:
             # plan-visualization outputs (groupF Part A)
             "visualization_plan_path",
             "report_plan_path",
+            # bundle-local-report output (groupG)
+            "html_path",
         }
     )
 

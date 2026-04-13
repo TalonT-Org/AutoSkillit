@@ -213,6 +213,7 @@ skills:
     - vis-lens-reproducibility
     - vis-lens-story-arc
     - plan-visualization
+    - bundle-local-report
   tier3:
     - prepare-pr
     - compose-pr

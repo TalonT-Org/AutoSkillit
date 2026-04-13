@@ -533,6 +533,14 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                 # step consumes it — consumption happens outside the recipe pipeline.
                 if cap_key == "pr_url" and "compose-pr" in step.with_args.get("skill_command", ""):
                     continue
+                # Exempt bundle-local-report html_path captures: html_path is captured for
+                # observability and future groupH local-mode export (route_archive_or_export
+                # step). No current downstream recipe step consumes it — static analysis
+                # cannot yet verify the future consumption point.
+                if cap_key == "html_path" and "bundle-local-report" in step.with_args.get(
+                    "skill_command", ""
+                ):
+                    continue
                 warnings.append(
                     DataFlowWarning(
                         code="DEAD_OUTPUT",

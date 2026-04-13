@@ -5,8 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 SKILL_MD = Path("src/autoskillit/skills_extended/bundle-local-report/SKILL.md")
 MERMAID_JS = Path("src/autoskillit/assets/mermaid/mermaid.min.js")
 MERMAID_VERSION = Path("src/autoskillit/assets/mermaid/VERSION")
@@ -20,7 +18,10 @@ def _extract_renderer(tmp_path: Path) -> Path:
         text,
         re.DOTALL,
     )
-    assert match, "SKILL.md must contain a fenced python block starting with '# bundle-local-report renderer'"
+    assert match, (
+        "SKILL.md must contain a fenced python block"
+        " starting with '# bundle-local-report renderer'"
+    )
     script = match.group(0).lstrip("```python\n").rstrip("\n```")
     out = tmp_path / "renderer.py"
     out.write_text(script)
@@ -87,9 +88,7 @@ def test_renders_with_mermaid_diagram(tmp_path: Path) -> None:
     )
 
     renderer = _extract_renderer(tmp_path)
-    rc, stdout, stderr = _run_renderer(
-        renderer, research_dir, report, str(diag), viz_plan
-    )
+    rc, stdout, stderr = _run_renderer(renderer, research_dir, report, str(diag), viz_plan)
     assert rc == 0, stderr
 
     html = (research_dir / "report.html").read_text()
@@ -111,9 +110,7 @@ def test_skips_invalid_mermaid_diagram(tmp_path: Path) -> None:
     diag.write_text("```mermaid\ngraph LR\n  A --> B\n```\n")  # no validation keywords
 
     renderer = _extract_renderer(tmp_path)
-    rc, stdout, stderr = _run_renderer(
-        renderer, research_dir, report, str(diag), viz_plan
-    )
+    rc, stdout, stderr = _run_renderer(renderer, research_dir, report, str(diag), viz_plan)
     assert rc == 0, stderr
 
     html = (research_dir / "report.html").read_text()
@@ -143,9 +140,7 @@ def test_images_inserted_from_figure_spec(tmp_path: Path) -> None:
     (research_dir / "mermaid.min.js").write_text("/* stub */")
 
     renderer = _extract_renderer(tmp_path)
-    rc, stdout, stderr = _run_renderer(
-        renderer, research_dir, report, "", viz_plan
-    )
+    rc, stdout, stderr = _run_renderer(renderer, research_dir, report, "", viz_plan)
     assert rc == 0, stderr
 
     html = (research_dir / "report.html").read_text()
@@ -164,9 +159,7 @@ def test_html_includes_mermaid_version_comment(tmp_path: Path) -> None:
     (research_dir / "mermaid.min.js").write_text("/* stub */")
 
     renderer = _extract_renderer(tmp_path)
-    rc, stdout, stderr = _run_renderer(
-        renderer, research_dir, report, "", viz_plan
-    )
+    rc, stdout, stderr = _run_renderer(renderer, research_dir, report, "", viz_plan)
     assert rc == 0, stderr
 
     html = (research_dir / "report.html").read_text()

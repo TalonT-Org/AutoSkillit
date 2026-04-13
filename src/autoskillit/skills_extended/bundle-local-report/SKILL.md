@@ -1,4 +1,5 @@
 ---
+name: bundle-local-report
 categories: [rendering]
 ---
 
@@ -6,6 +7,18 @@ categories: [rendering]
 
 Convert a research markdown report into a self-contained `report.html` with inlined
 mermaid diagrams and inserted plot images from `yaml:figure-spec` blocks.
+
+## Critical Constraints
+
+**NEVER:**
+- Raise a fatal error on missing diagrams or missing visualization-plan — log and continue.
+- Use the ESM mermaid build — ESM triggers CORS under `file://`; always use the UMD bundle (`mermaid.min.js`).
+- Exit without emitting `html_path = ` (even empty) before `%%ORDER_UP%%` — the recipe `capture:` block expects it.
+
+**ALWAYS:**
+- Emit `html_path = {path}` (or `html_path = ` if report_path is absent) before `%%ORDER_UP%%`.
+- Use `{AUTOSKILLIT_TEMP}` as the base for temp files.
+- Using ONLY classDef styles from the mermaid skill (no invented colors).
 
 ## Arguments
 
@@ -32,11 +45,11 @@ If `report_path` does not exist, emit `html_path = ` (empty) and `%%ORDER_UP%%` 
 
 ### Step 1 — Write and execute the embedded renderer
 
-Write the Python renderer block below to `.autoskillit/temp/bundle-local-report-render.py`
+Write the Python renderer block below to `{AUTOSKILLIT_TEMP}/bundle-local-report-render.py`
 in the current working directory (the worktree), then execute it:
 
 ```bash
-python3 .autoskillit/temp/bundle-local-report-render.py "$1" "$2" "$3" "$4"
+python3 {AUTOSKILLIT_TEMP}/bundle-local-report-render.py "$1" "$2" "$3" "$4"
 ```
 
 Capture the stdout line `html_path = ...` and emit it as the structured output token
@@ -113,7 +126,8 @@ def _count_keywords(text: str) -> int:
 
 def _extract_mermaid_blocks(text: str) -> list[str]:
     """Return list of mermaid diagram source strings from a markdown file."""
-    return re.findall(r"```mermaid\n(.*?)```", text, re.DOTALL)
+    _T3 = chr(96) * 3
+    return re.findall(rf"{_T3}mermaid\n(.*?){_T3}", text, re.DOTALL)
 
 
 def _validate_diagram_paths(paths_str: str) -> list[str]:
@@ -138,7 +152,8 @@ def _parse_figure_specs(viz_plan_path: str) -> list[dict]:
     if not viz_plan_path or not Path(viz_plan_path).exists():
         return specs
     text = Path(viz_plan_path).read_text()
-    raw_blocks = re.findall(r"```yaml:figure-spec\n(.*?)```", text, re.DOTALL)
+    _T3 = chr(96) * 3
+    raw_blocks = re.findall(rf"{_T3}yaml:figure-spec\n(.*?){_T3}", text, re.DOTALL)
     for block in raw_blocks:
         spec = {}
         for line in block.splitlines():

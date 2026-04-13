@@ -953,6 +953,7 @@ async def run_headless_core(
     add_dirs: Sequence[ValidatedAddDir] = (),
     timeout: float | None = None,
     stale_threshold: float | None = None,
+    idle_output_timeout: float | None = None,
     expected_output_patterns: Sequence[str] = (),
     write_behavior: WriteBehaviorSpec | None = None,
     completion_marker: str = "",
@@ -988,6 +989,12 @@ async def run_headless_core(
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
+        _raw_idle = (
+            idle_output_timeout
+            if idle_output_timeout is not None
+            else float(cfg.idle_output_timeout)
+        )
+        effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
 
         logger.debug(
             "run_headless_core_entry",
@@ -1023,7 +1030,7 @@ async def run_headless_core(
                 stale_threshold=effective_stale,
                 completion_drain_timeout=cfg.completion_drain_timeout,
                 linux_tracing_config=linux_tracing_cfg,
-                idle_output_timeout=cfg.idle_output_timeout,
+                idle_output_timeout=effective_idle,
                 max_suppression_seconds=cfg.max_suppression_seconds,
             )
         finally:
@@ -1181,6 +1188,7 @@ class DefaultHeadlessExecutor:
         add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
+        idle_output_timeout: float | None = None,
         expected_output_patterns: Sequence[str] = (),
         write_behavior: WriteBehaviorSpec | None = None,
         completion_marker: str = "",
@@ -1199,6 +1207,7 @@ class DefaultHeadlessExecutor:
             add_dirs=add_dirs,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
+            idle_output_timeout=idle_output_timeout,
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_behavior,
             completion_marker=completion_marker,

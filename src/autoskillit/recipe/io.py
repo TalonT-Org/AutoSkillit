@@ -148,6 +148,7 @@ _PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
         "gate",
         "optional_context_refs",
         "stale_threshold",
+        "idle_output_timeout",
     }
 )
 if _PARSE_STEP_HANDLED_FIELDS != frozenset(RecipeStep.__dataclass_fields__):
@@ -254,6 +255,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         gate=data.get("gate"),
         optional_context_refs=data.get("optional_context_refs", []),
         stale_threshold=data.get("stale_threshold"),
+        idle_output_timeout=data.get("idle_output_timeout"),
     )
 
 

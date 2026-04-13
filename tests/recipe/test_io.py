@@ -443,6 +443,21 @@ class TestRecipeParser:
         step = _parse_step(data)
         assert step.stale_threshold is None
 
+    def test_parse_step_reads_idle_output_timeout(self) -> None:
+        data = {"tool": "run_skill", "idle_output_timeout": 120, "on_success": "done"}
+        step = _parse_step(data)
+        assert step.idle_output_timeout == 120
+
+    def test_parse_step_idle_output_timeout_defaults_to_none(self) -> None:
+        data = {"tool": "run_skill", "on_success": "done"}
+        step = _parse_step(data)
+        assert step.idle_output_timeout is None
+
+    def test_parse_step_idle_output_timeout_zero_means_disabled(self) -> None:
+        data = {"tool": "run_skill", "idle_output_timeout": 0, "on_success": "done"}
+        step = _parse_step(data)
+        assert step.idle_output_timeout == 0
+
     # MOD4
     def test_bundled_resolve_failures_steps_use_config_default(self) -> None:
         bd = builtin_recipes_dir()

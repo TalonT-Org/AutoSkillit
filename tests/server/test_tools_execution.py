@@ -796,6 +796,7 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
             order_id: str = "",
             timeout: float | None = None,
             stale_threshold: float | None = None,
+            idle_output_timeout: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
             write_behavior=None,
             completion_marker: str = "",
@@ -843,6 +844,7 @@ async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> Non
             order_id: str = "",
             timeout: float | None = None,
             stale_threshold: float | None = None,
+            idle_output_timeout: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
             write_behavior=None,
             completion_marker: str = "",
@@ -1441,3 +1443,56 @@ async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, mon
     assert "mermaid" in closure
     arch_members = {n for n in closure if n.startswith("arch-lens-")}
     assert len(arch_members) >= 1
+
+
+def _make_capturing_executor():
+    """Return (executor, captured_dict) for testing idle_output_timeout propagation."""
+    from autoskillit.core import SkillResult
+
+    captured: dict = {}
+
+    class MockExecutor:
+        async def run(
+            self, skill_command, cwd, *, idle_output_timeout=None, **kwargs
+        ) -> SkillResult:
+            captured["idle_output_timeout"] = idle_output_timeout
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    return MockExecutor(), captured
+
+
+@pytest.mark.anyio
+async def test_run_skill_passes_idle_output_timeout(tool_ctx, monkeypatch) -> None:
+    """run_skill passes idle_output_timeout (as float) to executor.run()."""
+    executor, captured = _make_capturing_executor()
+    tool_ctx.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/test skill", "/tmp", idle_output_timeout=120)
+    assert captured["idle_output_timeout"] == 120.0  # int→float conversion
+
+
+@pytest.mark.anyio
+async def test_run_skill_idle_output_timeout_defaults_to_none(tool_ctx, monkeypatch) -> None:
+    """run_skill passes None to executor.run() when idle_output_timeout is not set."""
+    executor, captured = _make_capturing_executor()
+    tool_ctx.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/test skill", "/tmp")
+    assert captured["idle_output_timeout"] is None

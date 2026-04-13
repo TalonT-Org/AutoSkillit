@@ -13,7 +13,15 @@ _ALL_TOOLS: frozenset[str] = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
 _TOOL_PARAMS: dict[str, frozenset[str]] = {
     # --- Execution tools ---
     "run_skill": frozenset(
-        {"skill_command", "cwd", "model", "step_name", "order_id", "stale_threshold"}
+        {
+            "skill_command",
+            "cwd",
+            "model",
+            "step_name",
+            "order_id",
+            "stale_threshold",
+            "idle_output_timeout",
+        }
     ),
     "run_cmd": frozenset({"cmd", "cwd", "timeout", "step_name"}),
     "run_python": frozenset({"callable", "args", "timeout"}),

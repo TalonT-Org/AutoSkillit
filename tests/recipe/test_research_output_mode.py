@@ -165,8 +165,8 @@ def test_finalize_bundle_preserves_html_in_local_mode(recipe):
     """finalize_bundle tar exclusion must include report.html for local mode browsing."""
     step = recipe.steps["finalize_bundle"]
     cmd = step.with_args.get("cmd", "")
-    assert "report.html" in cmd, (
-        "finalize_bundle must reference report.html in tar exclusion for local mode"
+    assert r"report\.html" in cmd, (
+        r"finalize_bundle must reference report\.html (escaped) in tar exclusion for local mode"
     )
 
 

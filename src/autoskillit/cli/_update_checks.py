@@ -45,7 +45,6 @@ logger = get_logger(__name__)
 _DISMISS_FILE = "update_check.json"
 _STABLE_DISMISS_WINDOW = timedelta(days=7)
 _DEV_DISMISS_WINDOW = timedelta(hours=12)
-_SNOOZE_WINDOW = timedelta(hours=1)
 
 # Disposable on-disk cache for GitHub API GETs.  This is intentionally a plain
 # JSON dict (not ``write_versioned_json``) — it is a transient performance
@@ -639,7 +638,7 @@ def run_update_checks(home: Path | None = None) -> None:
         InstallType.UNKNOWN,
         InstallType.LOCAL_PATH,
         InstallType.LOCAL_EDITABLE,
-    ):
+    ) and not os.environ.get("AUTOSKILLIT_FORCE_UPDATE_CHECK"):
         return
 
     import autoskillit as _pkg
@@ -648,6 +647,11 @@ def run_update_checks(home: Path | None = None) -> None:
     _home = home or Path.home()
     window = dismissal_window(info)
     state = _read_dismiss_state(_home)
+
+    # Pre-flight feedback: ensure the terminal is never silent during network I/O
+    from autoskillit.cli._timed_input import status_line
+
+    status_line("Checking for updates...")
 
     # Gather signals
     raw_signals: list[Signal | None] = [
@@ -673,10 +677,17 @@ def run_update_checks(home: Path | None = None) -> None:
         return
 
     # Consolidated prompt
+    from autoskillit.cli._timed_input import timed_prompt
+
+    _TIMEOUT_SENTINEL = "__timeout__"
     bullet_lines = "\n".join(f"  - {s.message}" for s in firing_signals)
-    prompt_text = f"\nAutoSkillit has updates available:\n{bullet_lines}\nUpdate now? [Y/n] "
-    print(prompt_text, end="", flush=True)
-    answer = input("").strip().lower()
+    prompt_text = f"\nAutoSkillit has updates available:\n{bullet_lines}\nUpdate now? [Y/n]"
+    answer = timed_prompt(prompt_text, default=_TIMEOUT_SENTINEL, timeout=30, label="update check")
+
+    # On timeout: proceed to app() without writing a dismissal record so the
+    # prompt reappears on the next invocation.
+    if answer == _TIMEOUT_SENTINEL:
+        return
 
     if answer in ("", "y", "yes"):
         _run_update_sequence(info, current, _home, state, _skip_env)

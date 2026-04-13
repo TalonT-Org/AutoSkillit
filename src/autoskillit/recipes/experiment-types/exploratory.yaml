@@ -1,0 +1,21 @@
+name: exploratory
+classification_triggers:
+  - "Default — no prior rule fires, or hypothesis absent"
+dimension_weights:
+  causal_structure: L
+  variance_protocol: L
+  statistical_corrections: S
+  ecological_validity: M
+  measurement_alignment: M
+  resource_proportionality: L
+  data_acquisition: M
+  agent_implementability: L
+applicable_lenses:
+  primary: exp-lens-estimand-clarity
+  secondary: null
+red_team_focus:
+  specific: HARKing vulnerability
+  severity_cap: info
+l1_severity:
+  estimand_clarity: info
+  hypothesis_falsifiability: info

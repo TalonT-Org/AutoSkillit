@@ -217,7 +217,9 @@ class DefaultMergeQueueWatcher:
     Never raises; all errors are returned as structured dicts.
     """
 
-    def __init__(self, token: str | None | Callable[[], str | None], max_inconclusive_retries: int = 5) -> None:
+    def __init__(
+        self, token: str | None | Callable[[], str | None], max_inconclusive_retries: int = 5
+    ) -> None:
         self._token_factory: Callable[[], str | None] | None
         if callable(token):
             self._token_factory = token

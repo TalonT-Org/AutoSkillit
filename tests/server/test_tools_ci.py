@@ -693,6 +693,11 @@ async def test_wait_for_merge_queue_serializes_every_pr_state(pr_state, tool_ctx
     assert result["pr_state"] == pr_state.value, (
         f"Expected pr_state={pr_state.value!r} in response, got: {result.get('pr_state')!r}"
     )
+    expected_success = pr_state == PRState.MERGED
+    assert result["success"] == expected_success, (
+        f"Expected success={expected_success!r} for pr_state={pr_state.value!r}, "
+        f"got: {result.get('success')!r}"
+    )
 
 
 def test_pr_state_docstring_documents_all_members():

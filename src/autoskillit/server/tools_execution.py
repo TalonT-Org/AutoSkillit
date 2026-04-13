@@ -300,7 +300,9 @@ async def run_skill(
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_spec,
             stale_threshold=float(stale_threshold) if stale_threshold is not None else None,
-            idle_output_timeout=float(idle_output_timeout) if idle_output_timeout is not None else None,
+            idle_output_timeout=float(idle_output_timeout)
+            if idle_output_timeout is not None
+            else None,
             completion_marker=invocation_marker,
         )
         if skill_result.success:

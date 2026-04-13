@@ -3601,9 +3601,7 @@ class TestHeadlessExecutorIdleOutputTimeout:
         assert kwargs["idle_output_timeout"] == 120.0
 
     @pytest.mark.anyio
-    async def test_default_headless_executor_converts_zero_to_none(
-        self, tool_ctx
-    ) -> None:
+    async def test_default_headless_executor_converts_zero_to_none(self, tool_ctx) -> None:
         """idle_output_timeout=0 is converted to None (disabled) before passing to runner."""
         from autoskillit.execution.headless import run_headless_core
 

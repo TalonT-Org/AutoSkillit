@@ -166,7 +166,9 @@ def test_headless_executor_protocol_accepts_idle_output_timeout() -> None:
 
     sig = inspect.signature(HeadlessExecutor.run)
     params = sig.parameters
-    assert "idle_output_timeout" in params, "HeadlessExecutor.run missing idle_output_timeout param"
+    assert "idle_output_timeout" in params, (
+        "HeadlessExecutor.run missing idle_output_timeout param"
+    )
     assert params["idle_output_timeout"].default is None
 
 

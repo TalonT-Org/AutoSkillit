@@ -1453,7 +1453,9 @@ async def test_run_skill_passes_idle_output_timeout(tool_ctx, monkeypatch) -> No
     captured: dict = {}
 
     class MockExecutor:
-        async def run(self, skill_command, cwd, *, idle_output_timeout=None, **kwargs) -> SkillResult:
+        async def run(
+            self, skill_command, cwd, *, idle_output_timeout=None, **kwargs
+        ) -> SkillResult:
             captured["idle_output_timeout"] = idle_output_timeout
             return SkillResult(
                 success=True,
@@ -1485,7 +1487,9 @@ async def test_run_skill_idle_output_timeout_defaults_to_none(tool_ctx, monkeypa
     captured: dict = {}
 
     class MockExecutor:
-        async def run(self, skill_command, cwd, *, idle_output_timeout=None, **kwargs) -> SkillResult:
+        async def run(
+            self, skill_command, cwd, *, idle_output_timeout=None, **kwargs
+        ) -> SkillResult:
             captured["idle_output_timeout"] = idle_output_timeout
             return SkillResult(
                 success=True,

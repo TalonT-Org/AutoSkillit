@@ -989,7 +989,11 @@ async def run_headless_core(
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
-        _raw_idle = idle_output_timeout if idle_output_timeout is not None else float(cfg.idle_output_timeout)
+        _raw_idle = (
+            idle_output_timeout
+            if idle_output_timeout is not None
+            else float(cfg.idle_output_timeout)
+        )
         effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
 
         logger.debug(
@@ -1192,7 +1196,11 @@ class DefaultHeadlessExecutor:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
-        _raw_idle = idle_output_timeout if idle_output_timeout is not None else float(cfg.idle_output_timeout)
+        _raw_idle = (
+            idle_output_timeout
+            if idle_output_timeout is not None
+            else float(cfg.idle_output_timeout)
+        )
         effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
         return await run_headless_core(
             skill_command,

@@ -22,7 +22,10 @@ from autoskillit.recipe.registry import BlockContext, RuleFinding, block_rule
 def _block_budgets() -> Mapping[str, Mapping[str, Any]]:
     """Load block_budgets.yaml, cached for the lifetime of the process."""
     path = pkg_root() / "recipe" / "block_budgets.yaml"
-    data = load_yaml(path)
+    try:
+        data = load_yaml(path)
+    except FileNotFoundError:
+        return {}
     if not isinstance(data, dict):
         return {}
     return data  # type: ignore[return-value]
@@ -40,7 +43,10 @@ def _budget_for(block_name: str) -> dict[str, Any]:
     severity=Severity.ERROR,
 )
 def _check_block_run_cmd_budget(bctx: BlockContext) -> list[RuleFinding]:
-    budget = _budget_for(bctx.block.name).get("run_cmd", 1)
+    budget_entry = _budget_for(bctx.block.name)
+    if "run_cmd" not in budget_entry:
+        return []  # No run_cmd budget declared for this block — skip check
+    budget = int(budget_entry["run_cmd"])
     actual = bctx.block.tool_counts.get("run_cmd", 0)
     if actual <= budget:
         return []
@@ -154,11 +160,8 @@ def _check_block_single_producer(bctx: BlockContext) -> list[RuleFinding]:
 )
 def _check_block_entry_exit_reachable(bctx: BlockContext) -> list[RuleFinding]:
     step_graph = bctx.parent.step_graph
-    # Build predecessor map over the block's step_graph slice
-    predecessors: dict[str, set[str]] = {}
-    for src, successors in step_graph.items():
-        for dst in successors:
-            predecessors.setdefault(dst, set()).add(src)
+    # Use the pre-computed predecessor map from ValidationContext (built once per pass).
+    predecessors = bctx.parent.predecessors
 
     member_names = {s.name for s in bctx.block.members}
     entry_candidates = [

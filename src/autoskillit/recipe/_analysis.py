@@ -222,6 +222,7 @@ class ValidationContext:
     skill_category_map: dict[str, frozenset[str]] | None = None
     overridden_skills: frozenset[str] | None = None
     blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
+    predecessors: dict[str, set[str]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -806,6 +807,10 @@ def make_validation_context(
     """
     step_graph = _build_step_graph(recipe)
     dataflow = analyze_dataflow(recipe, step_graph=step_graph)
+    predecessors: dict[str, set[str]] = {}
+    for src, successors in step_graph.items():
+        for dst in successors:
+            predecessors.setdefault(dst, set()).add(src)
     return ValidationContext(
         recipe=recipe,
         step_graph=step_graph,
@@ -816,4 +821,5 @@ def make_validation_context(
         project_dir=project_dir,
         disabled_subsets=disabled_subsets,
         blocks=extract_blocks(recipe, step_graph),
+        predecessors=predecessors,
     )

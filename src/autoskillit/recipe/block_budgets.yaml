@@ -11,6 +11,9 @@
 # version: enables future staleness detection via _llm_triage.py
 version: 1
 
+DEFAULT:
+  run_cmd: 1          # fallback budget for blocks not explicitly listed
+
 pre_queue_gate:
   run_cmd: 0          # MCP-only block — shell gh api calls are prohibited
   mcp_tools: 1        # exactly one consolidated tool call for all three captures

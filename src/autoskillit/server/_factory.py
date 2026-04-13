@@ -200,7 +200,6 @@ def make_context(
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
         quota_refresh_task=None,
-        github_token=github_token,
     )
 
     def _resolve_output_patterns(skill_command: str) -> list[str]:

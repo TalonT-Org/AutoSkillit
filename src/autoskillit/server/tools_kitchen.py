@@ -94,7 +94,13 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "CI & Automation",
-        ("wait_for_ci", "wait_for_merge_queue", "toggle_auto_merge", "get_ci_status"),
+        (
+            "wait_for_ci",
+            "wait_for_merge_queue",
+            "check_repo_merge_state",
+            "toggle_auto_merge",
+            "get_ci_status",
+        ),
     ),
     (
         "Telemetry & Diagnostics",

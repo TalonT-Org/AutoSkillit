@@ -13,12 +13,12 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import CIRunScope, get_logger
-from autoskillit.execution.merge_queue import fetch_repo_merge_state
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
     _require_enabled,
     _run_subprocess,
+    fetch_repo_merge_state,
     infer_repo_from_remote,
     track_response_size,
 )
@@ -494,7 +494,7 @@ async def check_repo_merge_state(
             owner=owner,
             repo=repo,
             branch=branch,
-            token=tool_ctx.github_token,
+            token=tool_ctx.config.github.token,
         )
         return json.dumps(state)
     except Exception as exc:

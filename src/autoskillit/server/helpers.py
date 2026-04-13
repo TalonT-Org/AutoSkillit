@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
 from autoskillit.execution import (
     _refresh_quota_cache,  # noqa: F401 — re-exported for tools_execution.py; patched by tests
+    fetch_repo_merge_state,  # noqa: F401 — re-exported for tools_ci.py
     resolve_log_dir,  # noqa: F401 — used by tools_github.py, tools_status.py
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )

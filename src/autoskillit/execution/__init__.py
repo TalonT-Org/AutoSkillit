@@ -48,7 +48,7 @@ from autoskillit.execution.linux_tracing import (
     read_starttime_ticks,
     start_linux_tracing,
 )
-from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
+from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, fetch_repo_merge_state
 from autoskillit.execution.pr_analysis import (
     DOMAIN_PATHS,
     extract_linked_issues,
@@ -141,6 +141,7 @@ __all__ = [
     "DefaultCIWatcher",
     # merge_queue
     "DefaultMergeQueueWatcher",
+    "fetch_repo_merge_state",
     # remote_resolver
     "REMOTE_PRECEDENCE",
     "resolve_remote_repo",

@@ -14,9 +14,7 @@ from collections.abc import Mapping
 from functools import lru_cache
 from typing import Any
 
-from autoskillit.core import Severity
-from autoskillit.core.io import load_yaml
-from autoskillit.core.paths import pkg_root
+from autoskillit.core import Severity, load_yaml, pkg_root
 from autoskillit.recipe.registry import BlockContext, RuleFinding, block_rule
 
 

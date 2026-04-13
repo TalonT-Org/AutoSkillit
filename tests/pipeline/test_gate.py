@@ -30,6 +30,7 @@ def test_gated_tools_contains_expected_names():
         "check_pr_mergeable",
         "set_commit_status",
         "wait_for_merge_queue",
+        "check_repo_merge_state",
         "toggle_auto_merge",
         # formerly ungated — now kitchen-gated:
         "fetch_github_issue",

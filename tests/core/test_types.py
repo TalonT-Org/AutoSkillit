@@ -359,3 +359,19 @@ def test_ci_run_scope_event_defaults_to_none():
     """CIRunScope.event defaults to None when not specified."""
     scope = CIRunScope()
     assert scope.event is None
+
+
+def test_pr_state_enum_members_are_locked():
+    """PRState enum has exactly the expected members — prevents silent addition/removal."""
+    from autoskillit.core.types import PRState
+
+    assert set(PRState) == {
+        PRState.MERGED,
+        PRState.EJECTED,
+        PRState.EJECTED_CI_FAILURE,
+        PRState.STALLED,
+        PRState.DROPPED_HEALTHY,
+        PRState.TIMEOUT,
+        PRState.ERROR,
+    }
+    assert PRState.DROPPED_HEALTHY.value == "dropped_healthy"

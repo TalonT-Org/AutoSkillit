@@ -8,7 +8,13 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, PRFetchState
+import autoskillit.execution.merge_queue as _mq
+from autoskillit.core.types import PRState
+from autoskillit.execution.merge_queue import (
+    ClassifierInconclusive,
+    DefaultMergeQueueWatcher,
+    PRFetchState,
+)
 
 
 def _make_watcher() -> DefaultMergeQueueWatcher:
@@ -19,7 +25,9 @@ def _queue_state(
     *,
     merged: bool = False,
     state: str = "OPEN",
+    mergeable: str = "MERGEABLE",
     merge_state_status: str = "CLEAN",
+    auto_merge_present: bool = False,
     auto_merge_enabled_at: datetime | None = None,
     pr_node_id: str = "PR_kwDO_test",
     in_queue: bool = False,
@@ -29,7 +37,9 @@ def _queue_state(
     return {
         "merged": merged,
         "state": state,
+        "mergeable": mergeable,
         "merge_state_status": merge_state_status,
+        "auto_merge_present": auto_merge_present,
         "auto_merge_enabled_at": auto_merge_enabled_at,
         "pr_node_id": pr_node_id,
         "in_queue": in_queue,
@@ -67,14 +77,14 @@ class TestDefaultMergeQueueWatcher:
         assert result["pr_state"] == "merged"
 
     @pytest.mark.anyio
-    async def test_returns_ejected_when_not_in_queue_not_stuck(self):
-        """Two consecutive 'open, not in queue, no auto_merge' cycles → ejected."""
+    async def test_returns_ejected_when_mergeable_conflicting_and_not_in_queue(self):
+        """mergeable=CONFLICTING + not in queue → ejected via positive conflicting signal."""
         watcher = _make_watcher()
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=_queue_state(
                 merged=False,
                 in_queue=False,
-                auto_merge_enabled_at=None,
+                mergeable="CONFLICTING",
                 merge_state_status="BLOCKED",
             )
         )
@@ -274,10 +284,10 @@ class TestMergeQueueReliability:
 
     @pytest.mark.anyio
     async def test_confirmation_window_delays_ejection_by_one_cycle(self):
-        """Two consecutive 'not in queue' cycles with no auto_merge → ejected, not on cycle 1."""
+        """Two consecutive not-in-queue cycles required before acting on CONFLICTING ejection."""
         watcher = _make_watcher()
         state = _queue_state(
-            merged=False, in_queue=False, auto_merge_enabled_at=None, merge_state_status="BLOCKED"
+            merged=False, in_queue=False, mergeable="CONFLICTING", merge_state_status="BLOCKED"
         )
         watcher._fetch_pr_and_queue_state = AsyncMock(return_value=state)  # type: ignore[method-assign]
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
@@ -679,13 +689,37 @@ class TestPendingCIGuard:
         assert call_count >= 3
 
     @pytest.mark.anyio
-    async def test_returns_ejected_when_checks_terminal_and_not_in_queue(self):
-        """checks_state=SUCCESS + not in queue → genuine ejection (guard must not block it)."""
+    async def test_returns_dropped_healthy_when_checks_success_and_mergeable(self):
+        """Healthy PR (SUCCESS + MERGEABLE + CLEAN + auto_merge cleared) → dropped_healthy.
+
+        This is the exact issue #802 failure mode: the old elimination classifier returned
+        'ejected' for this state because no other gate matched. The new classifier returns
+        DROPPED_HEALTHY via positive signal — auto_merge was cleared while the PR was healthy.
+        """
         watcher = _make_watcher()
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=_queue_state(
                 in_queue=False,
-                auto_merge_enabled_at=None,
+                mergeable="MERGEABLE",
+                merge_state_status="CLEAN",
+                checks_state="SUCCESS",
+                auto_merge_present=False,
+            )
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(pr_number=1, target_branch="main", repo="owner/repo")
+
+        assert result["success"] is False
+        assert result["pr_state"] == "dropped_healthy"
+
+    @pytest.mark.anyio
+    async def test_returns_ejected_when_checks_success_but_mergeable_conflicting(self):
+        """checks_state=SUCCESS + mergeable=CONFLICTING → ejected via positive CONFLICTING gate."""
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(
+                in_queue=False,
+                mergeable="CONFLICTING",
                 merge_state_status="BLOCKED",
                 checks_state="SUCCESS",
             )
@@ -697,12 +731,18 @@ class TestPendingCIGuard:
         assert result["pr_state"] == "ejected"
 
     @pytest.mark.anyio
-    async def test_returns_ejected_when_no_status_checks_configured(self):
-        """checks_state=None (no required checks) → ejected; unchanged for repos without CI."""
+    async def test_returns_ejected_when_no_checks_configured_but_conflicting(self):
+        """checks_state=None + mergeable=CONFLICTING → ejected via positive CONFLICTING signal.
+
+        For repos without required CI checks, ejection requires a positive mergeable=CONFLICTING
+        signal rather than the absence of checks. ClassifierInconclusive handles the ambiguous
+        case (no CI, no conflict signal) by continuing to poll.
+        """
         watcher = _make_watcher()
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=_queue_state(
                 in_queue=False,
+                mergeable="CONFLICTING",
                 merge_state_status="BLOCKED",
                 checks_state=None,
             )
@@ -835,7 +875,7 @@ class TestEjectionEnrichment:
 
     @pytest.mark.anyio
     async def test_ejected_when_checks_state_is_none(self):
-        """When checks_state=None at ejection, pr_state='ejected' with no ejection_cause."""
+        """checks_state=None + mergeable=CONFLICTING → pr_state='ejected', no ejection_cause."""
         watcher = _make_watcher()
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=_queue_state(
@@ -843,6 +883,7 @@ class TestEjectionEnrichment:
                 in_queue=False,
                 checks_state=None,
                 merge_state_status="BLOCKED",
+                mergeable="CONFLICTING",
                 auto_merge_enabled_at=None,
             )
         )
@@ -860,7 +901,7 @@ class TestEjectionEnrichment:
 
     @pytest.mark.anyio
     async def test_ejected_when_checks_state_is_success(self):
-        """When checks_state=SUCCESS at ejection, pr_state='ejected' (no enrichment)."""
+        """checks_state=SUCCESS + mergeable=CONFLICTING → pr_state='ejected', no enrichment."""
         watcher = _make_watcher()
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=_queue_state(
@@ -868,6 +909,7 @@ class TestEjectionEnrichment:
                 in_queue=False,
                 checks_state="SUCCESS",
                 merge_state_status="BLOCKED",
+                mergeable="CONFLICTING",
                 auto_merge_enabled_at=None,
             )
         )
@@ -933,3 +975,164 @@ class TestEjectionEnrichment:
         assert result["success"] is False
         assert result["pr_state"] == "ejected_ci_failure"
         assert result.get("ejection_cause") == "ci_failure"
+
+
+# ---------------------------------------------------------------------------
+# Part A: New classifier immunity tests (T1–T6)
+# ---------------------------------------------------------------------------
+
+
+class TestClassifierImmunity:
+    """Positive-signal immunity tests for the extracted _classify_pr_state function."""
+
+    # --- T1: Reproduces the reported bug ---
+
+    def test_classifier_returns_dropped_healthy_when_auto_merge_cleared_on_healthy_pr(self):
+        """Exact issue #802 state: healthy PR with auto_merge cleared → DROPPED_HEALTHY."""
+        state = _queue_state(
+            merged=False,
+            state="OPEN",
+            mergeable="MERGEABLE",
+            merge_state_status="CLEAN",
+            checks_state="SUCCESS",
+            in_queue=False,
+            auto_merge_present=False,
+        )
+        result = _mq._classify_pr_state(state)
+        assert result.terminal == PRState.DROPPED_HEALTHY
+
+    # --- T2: Positive-signal contract: EJECTED requires positive signal ---
+
+    @pytest.mark.parametrize(
+        "state",
+        [
+            # open + MERGEABLE + CLEAN + PENDING checks
+            _queue_state(
+                mergeable="MERGEABLE",
+                merge_state_status="CLEAN",
+                checks_state="PENDING",
+                auto_merge_present=True,
+            ),
+            # open + UNKNOWN mergeable + CLEAN + SUCCESS
+            _queue_state(
+                mergeable="UNKNOWN",
+                merge_state_status="CLEAN",
+                checks_state="SUCCESS",
+            ),
+            # open + MERGEABLE + HAS_HOOKS + SUCCESS + auto_merge_present=True
+            _queue_state(
+                mergeable="MERGEABLE",
+                merge_state_status="HAS_HOOKS",
+                checks_state="SUCCESS",
+                auto_merge_present=True,
+            ),
+        ],
+    )
+    def test_classifier_never_returns_ejected_without_positive_signal(self, state):
+        """For ambiguous-but-healthy states, classifier must NOT return EJECTED."""
+        try:
+            result = _mq._classify_pr_state(state)
+            assert result.terminal != PRState.EJECTED, (
+                f"Classifier returned EJECTED without a positive signal for state: {state}"
+            )
+        except ClassifierInconclusive:
+            pass  # expected — no positive signal matched
+
+    # --- T3: Classifier raises ClassifierInconclusive — no silent fall-through ---
+
+    def test_classifier_raises_inconclusive_when_no_positive_signal_matches(self):
+        """ClassifierInconclusive raised when no positive gate matches; .state exposes fields."""
+        state = _queue_state(
+            merged=False,
+            state="OPEN",
+            mergeable="UNKNOWN",
+            merge_state_status="BEHIND",
+            checks_state=None,
+            auto_merge_present=True,
+            in_queue=False,
+        )
+        with pytest.raises(ClassifierInconclusive) as exc_info:
+            _mq._classify_pr_state(state)
+        assert exc_info.value.state is state
+        assert exc_info.value.reason
+
+    # --- T4: Exhaustive PRState coverage ---
+
+    @pytest.mark.parametrize(
+        "expected_terminal,state",
+        [
+            (
+                PRState.MERGED,
+                _queue_state(merged=True),
+            ),
+            (
+                PRState.EJECTED,
+                _queue_state(
+                    merged=False,
+                    state="OPEN",
+                    mergeable="CONFLICTING",
+                    in_queue=False,
+                ),
+            ),
+            (
+                PRState.EJECTED_CI_FAILURE,
+                _queue_state(
+                    merged=False,
+                    state="OPEN",
+                    checks_state="FAILURE",
+                    in_queue=False,
+                ),
+            ),
+            (
+                PRState.STALLED,
+                _queue_state(
+                    merged=False,
+                    state="OPEN",
+                    mergeable="MERGEABLE",
+                    merge_state_status="CLEAN",
+                    auto_merge_enabled_at=datetime.now(UTC) - timedelta(seconds=120),
+                    auto_merge_present=True,
+                    in_queue=False,
+                ),
+            ),
+            (
+                PRState.DROPPED_HEALTHY,
+                _queue_state(
+                    merged=False,
+                    state="OPEN",
+                    mergeable="MERGEABLE",
+                    merge_state_status="CLEAN",
+                    checks_state="SUCCESS",
+                    auto_merge_present=False,
+                    in_queue=False,
+                ),
+            ),
+        ],
+    )
+    def test_classifier_returns_expected_terminal_for_canonical_fixture(
+        self, expected_terminal, state
+    ):
+        """Every classifier-reachable PRState terminal has at least one positive fixture."""
+        result = _mq._classify_pr_state(state)
+        assert result.terminal == expected_terminal
+
+    # --- T5: Import-time schema round-trip guard ---
+
+    def test_query_field_map_matches_prfetchstate_required_keys(self):
+        """_QUERY_FIELD_MAP keys must exactly match PRFetchState required+optional keys."""
+        all_keys = PRFetchState.__required_keys__ | PRFetchState.__optional_keys__
+        assert set(_mq._QUERY_FIELD_MAP) == all_keys, (
+            f"Mismatch — missing from map: {all_keys - set(_mq._QUERY_FIELD_MAP)}, "
+            f"extra in map: {set(_mq._QUERY_FIELD_MAP) - all_keys}"
+        )
+
+    # --- T6: Fixture immunity ---
+
+    def test_queue_state_fixture_populates_all_prfetchstate_fields(self):
+        """_queue_state() must cover every PRFetchState key so new fields are caught at once."""
+        all_keys = PRFetchState.__required_keys__ | PRFetchState.__optional_keys__
+        fixture_keys = set(_queue_state().keys())
+        assert fixture_keys == all_keys, (
+            f"_queue_state() missing keys: {all_keys - fixture_keys}, "
+            f"extra keys: {fixture_keys - all_keys}"
+        )

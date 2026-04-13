@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from autoskillit.core import Severity
+from autoskillit.core import PRState, Severity
 from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
-from autoskillit.recipe.schema import Recipe, RecipeStep
+from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
 
 
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
@@ -358,3 +358,124 @@ def test_wait_for_ci_no_workflow_is_clean() -> None:
     findings = run_semantic_rules(recipe)
     wf_findings = [f for f in findings if f.rule == "ci-hardcoded-workflow"]
     assert wf_findings == []
+
+
+# ---------------------------------------------------------------------------
+# T11 + T13: wait-for-merge-queue-routing-covers-all-pr-states rule
+# ---------------------------------------------------------------------------
+
+_COVERAGE_RULE = "wait-for-merge-queue-routing-covers-all-pr-states"
+_CONFORMANCE_RULE = "wait-for-merge-queue-routing-conforms-to-expected-targets"
+
+
+def _make_mq_conditions(
+    *,
+    exclude: set[str] | None = None,
+    fallback_route: str = "release_issue_timeout",
+) -> list[StepResultCondition]:
+    """Build a complete wait_for_merge_queue on_result conditions list.
+
+    Args:
+        exclude: set of PRState.value strings to leave out of the explicit arms.
+        fallback_route: the route for the catch-all (when=None) condition.
+    """
+    exclude = exclude or set()
+    conditions = []
+    for state in PRState:
+        if state == PRState.ERROR:
+            continue
+        if state.value in exclude:
+            continue
+        conditions.append(
+            StepResultCondition(
+                when=f"${{{{ result.pr_state }}}} == {state.value}",
+                route="some_target",
+            )
+        )
+    conditions.append(StepResultCondition(when=None, route=fallback_route))
+    return conditions
+
+
+def _make_mq_step(
+    *,
+    exclude: set[str] | None = None,
+    fallback_route: str = "release_issue_timeout",
+    on_failure: str = "release_issue_timeout",
+) -> RecipeStep:
+    return RecipeStep(
+        tool="wait_for_merge_queue",
+        on_result=StepResultRoute(
+            conditions=_make_mq_conditions(exclude=exclude, fallback_route=fallback_route)
+        ),
+        on_failure=on_failure,
+    )
+
+
+def _make_mq_recipe(
+    *,
+    exclude: set[str] | None = None,
+    fallback_route: str = "release_issue_timeout",
+    on_failure: str = "release_issue_timeout",
+) -> Recipe:
+    """Build a recipe that includes release_issue_timeout so the new rules activate."""
+    return _make_recipe(
+        {
+            "wait_for_queue": _make_mq_step(
+                exclude=exclude, fallback_route=fallback_route, on_failure=on_failure
+            ),
+            "release_issue_timeout": RecipeStep(action="stop", message="timeout"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+
+def test_coverage_rule_flags_missing_pr_state_arm() -> None:
+    """T11: coverage rule fires when an explicit PRState arm is missing."""
+    recipe = _make_mq_recipe(exclude={"dropped_healthy"})
+    findings = run_semantic_rules(recipe)
+    coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
+    assert len(coverage_findings) >= 1, f"Expected coverage rule finding, got: {findings}"
+    assert coverage_findings[0].severity == Severity.ERROR
+    assert "dropped_healthy" in coverage_findings[0].message
+
+
+def test_coverage_rule_clean_when_all_pr_states_present() -> None:
+    """T11 negative: coverage rule is silent when all non-error PRState values are present."""
+    recipe = _make_mq_recipe()
+    findings = run_semantic_rules(recipe)
+    coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
+    assert coverage_findings == [], (
+        f"Expected no coverage findings for complete routing, got: {coverage_findings}"
+    )
+
+
+def test_conformance_rule_flags_wrong_fallback_target() -> None:
+    """T11: conformance rule fires when fallback routes to wrong target."""
+    recipe = _make_mq_recipe(fallback_route="register_clone_success")
+    findings = run_semantic_rules(recipe)
+    conformance_findings = [f for f in findings if f.rule == _CONFORMANCE_RULE]
+    assert len(conformance_findings) >= 1, (
+        f"Expected conformance finding for wrong fallback, got: {findings}"
+    )
+    assert conformance_findings[0].severity == Severity.ERROR
+
+
+def test_conformance_rule_flags_wrong_on_failure_target() -> None:
+    """T11: conformance rule fires when on_failure routes to wrong target."""
+    recipe = _make_mq_recipe(on_failure="register_clone_success")
+    findings = run_semantic_rules(recipe)
+    conformance_findings = [f for f in findings if f.rule == _CONFORMANCE_RULE]
+    assert len(conformance_findings) >= 1, (
+        f"Expected conformance finding for wrong on_failure, got: {findings}"
+    )
+    assert conformance_findings[0].severity == Severity.ERROR
+
+
+def test_conformance_rule_clean_when_targets_correct() -> None:
+    """T11 negative: conformance rule is silent when targets are correct."""
+    recipe = _make_mq_recipe()
+    findings = run_semantic_rules(recipe)
+    conformance_findings = [f for f in findings if f.rule == _CONFORMANCE_RULE]
+    assert conformance_findings == [], (
+        f"Expected no conformance findings for correct targets, got: {conformance_findings}"
+    )

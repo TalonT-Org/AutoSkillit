@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import PRState
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import validate_recipe
 
@@ -993,3 +994,122 @@ def test_queue_enqueue_no_auto_skip_when_false(any_recipe) -> None:
 def test_queue_enqueue_no_auto_step_name(any_recipe) -> None:
     step = any_recipe.steps["queue_enqueue_no_auto"]
     assert step.with_args["step_name"] == "queue_enqueue_no_auto"
+
+
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# T12: Regression — remediation.yaml timeout arm and correct fallback
+# ---------------------------------------------------------------------------
+
+
+def test_remediation_wait_for_queue_has_timeout_arm_and_release_timeout_fallback(
+    remed_recipe,
+) -> None:
+    """remediation.yaml wait_for_queue must have explicit timeout arm and correct fallback."""
+    step = remed_recipe.steps["wait_for_queue"]
+    assert step.on_result is not None, "wait_for_queue must have on_result"
+    conditions = step.on_result.conditions
+
+    # Must have an explicit timeout arm routing to release_issue_timeout
+    timeout_conditions = [
+        c
+        for c in conditions
+        if c.when is not None and "timeout" in c.when and c.route == "release_issue_timeout"
+    ]
+    assert timeout_conditions, (
+        "remediation.yaml wait_for_queue must have explicit "
+        "'${{ result.pr_state }} == timeout -> release_issue_timeout' arm"
+    )
+
+    # Fallback (when=None) must route to release_issue_timeout, not register_clone_success
+    fallback_conditions = [c for c in conditions if c.when is None]
+    assert fallback_conditions, "wait_for_queue must have a fallback condition (when=None)"
+    assert fallback_conditions[0].route == "release_issue_timeout", (
+        f"remediation.yaml wait_for_queue fallback must be release_issue_timeout, "
+        f"got: {fallback_conditions[0].route!r}"
+    )
+
+    # on_failure must route to release_issue_timeout, not register_clone_success
+    assert step.on_failure == "release_issue_timeout", (
+        f"remediation.yaml wait_for_queue on_failure must be release_issue_timeout, "
+        f"got: {step.on_failure!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T9: Full routing parity — every PRState covered, fallback and on_failure identical
+# ---------------------------------------------------------------------------
+
+_REQUIRED_PR_STATE_VALUES = frozenset(s.value for s in PRState if s != PRState.ERROR)
+
+
+@pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
+def test_wait_for_queue_routing_covers_every_pr_state(recipe_fixture, request) -> None:
+    """wait_for_queue.on_result must cover every non-error PRState with explicit when arms."""
+    recipe = request.getfixturevalue(recipe_fixture)
+    step = recipe.steps["wait_for_queue"]
+    assert step.on_result is not None, "wait_for_queue must have on_result"
+    conditions = step.on_result.conditions
+
+    # Collect the explicit when values by extracting the value after '=='
+    import re
+
+    _PR_STATE_WHEN_RE = re.compile(r"\$\{\{\s*result\.pr_state\s*\}\}\s*==\s*(\w+)")
+    covered: set[str] = set()
+    for c in conditions:
+        if c.when is None:
+            continue
+        m = _PR_STATE_WHEN_RE.search(c.when)
+        if m:
+            covered.add(m.group(1))
+
+    missing = _REQUIRED_PR_STATE_VALUES - covered
+    assert not missing, (
+        f"{recipe_fixture}: wait_for_queue.on_result is missing explicit routing arms "
+        f"for PRState values: {sorted(missing)}. Every non-error PRState must have a "
+        f"when condition."
+    )
+
+    # Fallback target must be release_issue_timeout
+    fallback_conditions = [c for c in conditions if c.when is None]
+    assert fallback_conditions, (
+        f"{recipe_fixture}: wait_for_queue.on_result must have a fallback condition"
+    )
+    assert fallback_conditions[0].route == "release_issue_timeout", (
+        f"{recipe_fixture}: wait_for_queue fallback must route to release_issue_timeout, "
+        f"got: {fallback_conditions[0].route!r}"
+    )
+
+    # on_failure target must be release_issue_timeout
+    assert step.on_failure == "release_issue_timeout", (
+        f"{recipe_fixture}: wait_for_queue on_failure must be release_issue_timeout, "
+        f"got: {step.on_failure!r}"
+    )
+
+    # ejected_ci_failure must precede generic ejected (existing invariant preserved)
+    whens = [c.when or "" for c in conditions]
+    ci_fail_idx = next((i for i, w in enumerate(whens) if "ejected_ci_failure" in w), None)
+    ejected_idx = next(
+        (i for i, w in enumerate(whens) if w.strip() == "${{ result.pr_state }} == ejected"),
+        None,
+    )
+    assert ci_fail_idx is not None, f"{recipe_fixture}: ejected_ci_failure route must exist"
+    assert ejected_idx is not None, f"{recipe_fixture}: ejected route must exist"
+    assert ci_fail_idx < ejected_idx, (
+        f"{recipe_fixture}: ejected_ci_failure route must appear before generic ejected route"
+    )
+
+    # reenter_merge_queue_cheap must exist and be reachable from dropped_healthy
+    assert "reenter_merge_queue_cheap" in recipe.steps, (
+        f"{recipe_fixture}: reenter_merge_queue_cheap step must exist"
+    )
+    dropped_routes = [
+        c
+        for c in conditions
+        if c.when is not None
+        and "dropped_healthy" in c.when
+        and c.route == "reenter_merge_queue_cheap"
+    ]
+    assert dropped_routes, (
+        f"{recipe_fixture}: dropped_healthy must route to reenter_merge_queue_cheap"
+    )

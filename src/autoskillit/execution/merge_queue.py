@@ -6,14 +6,16 @@ Never raises. All errors are returned as structured results.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, TypedDict
+from typing import Any, TypedDict, assert_never
 
 import httpx
 
-from autoskillit.core import get_logger
+from autoskillit.core import PRState, get_logger
 from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
@@ -24,7 +26,9 @@ class PRFetchState(TypedDict):
 
     merged: bool
     state: str
+    mergeable: str  # "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
     merge_state_status: str
+    auto_merge_present: bool  # True when autoMergeRequest is not null
     auto_merge_enabled_at: datetime | None
     pr_node_id: str
     in_queue: bool
@@ -41,6 +45,7 @@ query GetPRAndQueueState($owner: String!, $repo: String!, $prNumber: Int!, $bran
       id
       merged
       state
+      mergeable
       mergeStateStatus
       autoMergeRequest {
         enabledAt
@@ -61,6 +66,40 @@ query GetPRAndQueueState($owner: String!, $repo: String!, $prNumber: Int!, $bran
 }
 """
 
+# Maps every PRFetchState key to its GraphQL source path.
+# "<computed>" means the field is derived from query results, not directly selected.
+# This constant is validated at import time against PRFetchState.__required_keys__
+# (mirroring the pattern in recipe/io.py:126-161).
+_QUERY_FIELD_MAP: dict[str, str] = {
+    "merged": "merged",
+    "state": "state",
+    "mergeable": "mergeable",
+    "merge_state_status": "mergeStateStatus",
+    "auto_merge_present": "autoMergeRequest",
+    "auto_merge_enabled_at": "autoMergeRequest.enabledAt",
+    "pr_node_id": "id",
+    "in_queue": "<computed>",
+    "queue_state": "<computed>",
+    "checks_state": "statusCheckRollup.state",
+}
+
+_ALL_FETCH_STATE_KEYS = PRFetchState.__required_keys__ | PRFetchState.__optional_keys__
+if set(_QUERY_FIELD_MAP) != _ALL_FETCH_STATE_KEYS:
+    raise RuntimeError(
+        "_QUERY_FIELD_MAP is out of sync with PRFetchState keys.\n"
+        f"Missing from map: {_ALL_FETCH_STATE_KEYS - set(_QUERY_FIELD_MAP)}\n"
+        f"Missing from state: {set(_QUERY_FIELD_MAP) - _ALL_FETCH_STATE_KEYS}"
+    )
+for _key, _path in _QUERY_FIELD_MAP.items():
+    if _path.startswith("<"):
+        continue
+    _head = _path.split(".", 1)[0]
+    # Word-boundary search prevents "state" from matching inside "mergeStateStatus".
+    if not re.search(r"\b" + re.escape(_head) + r"\b", _QUERY):
+        raise RuntimeError(
+            f"_QUERY is missing GraphQL field {_head!r} required by PRFetchState[{_key!r}]"
+        )
+
 _MUTATION_DISABLE_AUTO_MERGE = """
 mutation DisableAutoMerge($prId: ID!) {
   disablePullRequestAutoMerge(input: {pullRequestId: $prId}) {
@@ -78,6 +117,96 @@ mutation EnableAutoMerge($prId: ID!, $mergeMethod: PullRequestMergeMethod!) {
 """
 
 
+# ---------------------------------------------------------------------------
+# Classifier primitives (pure functions — no I/O, no async)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ClassificationResult:
+    """Positive-signal classification outcome from _classify_pr_state."""
+
+    terminal: PRState
+    reason: str
+
+
+class ClassifierInconclusive(Exception):
+    """Raised when no positive gate matched — caller must continue polling.
+
+    The .state attribute exposes the full PRFetchState that was inspected,
+    enabling callers to log or surface the ambiguous fields.
+    """
+
+    def __init__(self, state: PRFetchState, reason: str) -> None:
+        super().__init__(reason)
+        self.state = state
+        self.reason = reason
+
+
+def _is_positive_stall(state: PRFetchState) -> bool:
+    """True when auto-merge is enabled and merge_state_status indicates the PR is
+    stuck in a state where it should be in queue but is not."""
+    return state["auto_merge_enabled_at"] is not None and state["merge_state_status"] in {
+        "CLEAN",
+        "HAS_HOOKS",
+    }
+
+
+def _is_positive_dropped_healthy(state: PRFetchState) -> bool:
+    """True when the PR is fully healthy but auto_merge was cleared externally."""
+    return (
+        state["state"] == "OPEN"
+        and state["mergeable"] == "MERGEABLE"
+        and state["merge_state_status"] == "CLEAN"
+        and state["checks_state"] in (None, "SUCCESS")
+        and state["auto_merge_present"] is False
+        and state["in_queue"] is False
+    )
+
+
+def _classify_pr_state(state: PRFetchState) -> ClassificationResult:
+    """Classify PR state using positive signals only — no fall-through to EJECTED.
+
+    Every return originates from a direct positive signal. When no positive gate
+    matches, raises ClassifierInconclusive so the caller can continue polling
+    within a bounded retry budget rather than silently misclassifying.
+
+    Args:
+        state: Current PR fetch state snapshot.
+
+    Returns:
+        ClassificationResult with the matched terminal PRState.
+
+    Raises:
+        ClassifierInconclusive: When no positive signal matched. .state exposes
+            the full snapshot for logging/surfacing.
+    """
+    if state["merged"]:
+        return ClassificationResult(PRState.MERGED, "PR merged")
+
+    if state["state"] == "CLOSED":
+        if state["checks_state"] in {"FAILURE", "ERROR"}:
+            return ClassificationResult(PRState.EJECTED_CI_FAILURE, "PR closed after CI failure")
+        return ClassificationResult(PRState.EJECTED, "PR closed while not merged")
+
+    if state["checks_state"] in {"FAILURE", "ERROR"}:
+        return ClassificationResult(PRState.EJECTED_CI_FAILURE, "checks terminal failure")
+
+    if _is_positive_stall(state):
+        return ClassificationResult(PRState.STALLED, "stall signals present")
+
+    if state["mergeable"] == "CONFLICTING":
+        return ClassificationResult(PRState.EJECTED, "conflicting changes prevent merge")
+
+    if _is_positive_dropped_healthy(state):
+        return ClassificationResult(PRState.DROPPED_HEALTHY, "PR healthy but auto_merge cleared")
+
+    if state["checks_state"] in {"PENDING", "EXPECTED"}:
+        raise ClassifierInconclusive(state, "checks still running")
+
+    raise ClassifierInconclusive(state, "no positive signal matched")
+
+
 class DefaultMergeQueueWatcher:
     """Polls GitHub merge queue state until merged, ejected, stalled, or timed out.
 
@@ -88,7 +217,9 @@ class DefaultMergeQueueWatcher:
     Never raises; all errors are returned as structured dicts.
     """
 
-    def __init__(self, token: str | None | Callable[[], str | None]) -> None:
+    def __init__(
+        self, token: str | None | Callable[[], str | None], max_inconclusive_retries: int = 5
+    ) -> None:
         self._token_factory: Callable[[], str | None] | None
         if callable(token):
             self._token_factory = token
@@ -100,6 +231,7 @@ class DefaultMergeQueueWatcher:
                 limits=httpx.Limits(keepalive_expiry=60),
                 timeout=30.0,
             )
+        self._max_inconclusive_retries = max_inconclusive_retries
 
     def _ensure_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -127,7 +259,7 @@ class DefaultMergeQueueWatcher:
         max_stall_retries: int = 3,
         not_in_queue_confirmation_cycles: int = 2,
     ) -> dict[str, Any]:
-        """Poll until PR is merged, ejected, stalled, or timeout expires.
+        """Poll until PR is merged, ejected, stalled, dropped, or timeout expires.
 
         Args:
             pr_number: PR number to monitor.
@@ -148,7 +280,7 @@ class DefaultMergeQueueWatcher:
         Returns:
             {
                 "success": bool,
-                "pr_state": "merged" | "ejected" | "stalled" | "timeout" | "error",
+                "pr_state": PRState value string,
                 "reason": str,
                 "stall_retries_attempted": int,
             }
@@ -156,7 +288,7 @@ class DefaultMergeQueueWatcher:
         if not repo or "/" not in repo:
             return {
                 "success": False,
-                "pr_state": "error",
+                "pr_state": PRState.ERROR.value,
                 "reason": f"Invalid repo format: {repo!r}. Expected 'owner/name'.",
                 "stall_retries_attempted": 0,
             }
@@ -165,13 +297,14 @@ class DefaultMergeQueueWatcher:
         deadline = time.monotonic() + timeout_seconds
         stall_retries_attempted: int = 0
         not_in_queue_cycles: int = 0
+        inconclusive_count: int = 0
 
         def _make_result(
-            success: bool, pr_state: str, reason: str, ejection_cause: str = ""
+            success: bool, pr_state: PRState, reason: str, ejection_cause: str = ""
         ) -> dict[str, Any]:
             result: dict[str, Any] = {
                 "success": success,
-                "pr_state": pr_state,
+                "pr_state": pr_state.value,
                 "reason": reason,
                 "stall_retries_attempted": stall_retries_attempted,
             }
@@ -189,54 +322,62 @@ class DefaultMergeQueueWatcher:
                 await asyncio.sleep(poll_interval)
                 continue
 
-            # Terminal: merged
-            if state["merged"]:
-                return _make_result(True, "merged", "PR merged successfully")
-
-            # Terminal: closed without merge
-            if state["state"] == "CLOSED":
-                if state["checks_state"] in ("FAILURE", "ERROR"):
-                    return _make_result(
-                        False,
-                        "ejected_ci_failure",
-                        "PR was closed without merging — CI checks had failed",
-                        ejection_cause="ci_failure",
-                    )
-                return _make_result(False, "ejected", "PR was closed without merging")
-
-            # In queue
+            # In queue: reset window and continue
             if state["in_queue"]:
-                not_in_queue_cycles = 0  # reset confirmation window
+                not_in_queue_cycles = 0
                 if state["queue_state"] == "UNMERGEABLE":
-                    return _make_result(False, "ejected", "PR is UNMERGEABLE in merge queue")
+                    return _make_result(False, PRState.EJECTED, "PR is UNMERGEABLE in merge queue")
                 await asyncio.sleep(poll_interval)
                 continue
 
-            # Confirmation window: guard against race between queue exit and
-            # merged=true propagation
             not_in_queue_cycles += 1
-            if not_in_queue_cycles < not_in_queue_confirmation_cycles:
-                # One extra cycle: gives time for merge-in-progress to reflect merged=true
-                await asyncio.sleep(poll_interval)
-                continue
 
-            # Confirmed: not in queue for 2+ cycles — check stall
-            enabled_at = state["auto_merge_enabled_at"]
-            merge_status = state["merge_state_status"]
-            now = datetime.now(UTC)
-
-            is_stall_candidate = enabled_at is not None and merge_status in {"CLEAN", "HAS_HOOKS"}
-
-            if is_stall_candidate:
-                assert enabled_at is not None  # guaranteed by is_stall_candidate
-                stall_duration = max(0.0, (now - enabled_at).total_seconds())
-
-                if stall_duration < stall_grace_period:
-                    # Within grace period — wait without intervening
+            # Classify state using positive-signal gates
+            try:
+                classification = _classify_pr_state(state)
+            except ClassifierInconclusive as exc:
+                # Apply confirmation window before consuming inconclusive budget
+                if not_in_queue_cycles < not_in_queue_confirmation_cycles:
                     await asyncio.sleep(poll_interval)
                     continue
+                inconclusive_count += 1
+                if inconclusive_count >= self._max_inconclusive_retries:
+                    return _make_result(
+                        False,
+                        PRState.TIMEOUT,
+                        f"Inconclusive after {self._max_inconclusive_retries} retries:"
+                        f" {exc.reason}",
+                    )
+                await asyncio.sleep(poll_interval)
+                continue
 
-                # Grace expired: attempt toggle if budget remains
+            # MERGED: definitive — bypasses confirmation window
+            if classification.terminal == PRState.MERGED:
+                return _make_result(True, PRState.MERGED, classification.reason)
+
+            # CLOSED: definitive — bypasses confirmation window
+            if state["state"] == "CLOSED":
+                ejection_cause = (
+                    "ci_failure" if classification.terminal == PRState.EJECTED_CI_FAILURE else ""
+                )
+                return _make_result(
+                    False, classification.terminal, classification.reason, ejection_cause
+                )
+
+            # All other positive terminals require the confirmation window
+            if not_in_queue_cycles < not_in_queue_confirmation_cycles:
+                await asyncio.sleep(poll_interval)
+                continue
+
+            # Post-confirmation terminal dispatch
+            if classification.terminal == PRState.STALLED:
+                enabled_at = state["auto_merge_enabled_at"]
+                assert enabled_at is not None  # guaranteed by _is_positive_stall
+                now = datetime.now(UTC)
+                stall_duration = max(0.0, (now - enabled_at).total_seconds())
+                if stall_duration < stall_grace_period:
+                    await asyncio.sleep(poll_interval)
+                    continue
                 if stall_retries_attempted < max_stall_retries:
                     backoff = min(30 * (2**stall_retries_attempted), 120)
                     _log.info(
@@ -253,38 +394,36 @@ class DefaultMergeQueueWatcher:
                     not_in_queue_cycles = 0
                     await asyncio.sleep(backoff)
                     continue
-
-                # Budget exhausted — return distinct stalled state
                 return _make_result(
                     False,
-                    "stalled",
+                    PRState.STALLED,
                     f"PR #{pr_number} stall unresolved after {max_stall_retries} toggle attempts",
                 )
 
-            # D6: checks_state guard — CI still running, PR not yet eligible for queue
-            if state["checks_state"] in {"PENDING", "EXPECTED"}:
-                await asyncio.sleep(poll_interval)
-                continue
-
-            # Positive confirmation: checks are terminal (SUCCESS/FAILURE/ERROR) or absent (None).
-            # PR confirmed not in queue, not merged, checks not pending → genuine ejection.
-            if state["checks_state"] in ("FAILURE", "ERROR"):
+            elif classification.terminal == PRState.EJECTED_CI_FAILURE:
                 return _make_result(
                     False,
-                    "ejected_ci_failure",
-                    "PR was ejected from merge queue — CI checks failed on merge-group commit",
+                    PRState.EJECTED_CI_FAILURE,
+                    classification.reason,
                     ejection_cause="ci_failure",
                 )
-            return _make_result(
-                False,
-                "ejected",
-                "PR was ejected from merge queue (not in queue and not merged)",
-            )
+
+            elif classification.terminal == PRState.EJECTED:
+                return _make_result(False, PRState.EJECTED, classification.reason)
+
+            elif classification.terminal == PRState.DROPPED_HEALTHY:
+                return _make_result(False, PRState.DROPPED_HEALTHY, classification.reason)
+
+            else:
+                # Unreachable: _classify_pr_state never returns TIMEOUT or ERROR.
+                # The assert_never call provides static exhaustiveness for future
+                # additions to PRState (pyright/mypy will flag any new unhandled member).
+                assert_never(classification.terminal)  # type: ignore[arg-type]
 
         # Deadline exceeded
         return _make_result(
             False,
-            "timeout",
+            PRState.TIMEOUT,
             f"Timed out after {timeout_seconds}s waiting for PR #{pr_number}",
         )
 
@@ -317,7 +456,9 @@ class DefaultMergeQueueWatcher:
         nodes_raw = (entries.get("entries") or {}).get("nodes")
         nodes = nodes_raw if isinstance(nodes_raw, list) else []
 
-        auto_merge = pr.get("autoMergeRequest") or {}
+        auto_merge_raw = pr.get("autoMergeRequest")
+        auto_merge_present: bool = auto_merge_raw is not None
+        auto_merge = auto_merge_raw or {}
         enabled_at_raw = auto_merge.get("enabledAt")
         enabled_at: datetime | None = None
         if enabled_at_raw:
@@ -335,7 +476,9 @@ class DefaultMergeQueueWatcher:
         return PRFetchState(
             merged=pr["merged"],
             state=pr["state"],
+            mergeable=pr.get("mergeable") or "UNKNOWN",
             merge_state_status=pr.get("mergeStateStatus", "UNKNOWN"),
+            auto_merge_present=auto_merge_present,
             auto_merge_enabled_at=enabled_at,
             pr_node_id=pr["id"],
             in_queue=queue_entry is not None,

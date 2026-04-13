@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from autoskillit.core import SubprocessResult, TerminationReason
+from autoskillit.core import PRState, SubprocessResult, TerminationReason
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
 from autoskillit.server.tools_ci import get_ci_status, wait_for_ci, wait_for_merge_queue
 
@@ -653,3 +653,61 @@ async def test_wait_for_ci_omits_head_sha_when_git_fails(tool_ctx):
 
     assert "head_sha" not in result
     assert "exit_code" not in result
+
+
+# ---------------------------------------------------------------------------
+# T10: MCP round-trip exhaustiveness — parametrized over list(PRState)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("pr_state", list(PRState))
+async def test_wait_for_merge_queue_serializes_every_pr_state(pr_state, tool_ctx):
+    """Every PRState value round-trips faithfully through the MCP handler.
+
+    Adding a new PRState member without a handler test fails this parametrized suite.
+    """
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={
+            "success": pr_state == PRState.MERGED,
+            "pr_state": pr_state.value,
+            "reason": f"test reason for {pr_state.value}",
+        }
+    )
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    with patch(
+        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_proc:
+        proc_inst = AsyncMock()
+        proc_inst.communicate = AsyncMock(
+            return_value=(b"https://github.com/owner/repo.git\n", b"")
+        )
+        proc_inst.returncode = 0
+        mock_proc.return_value = proc_inst
+
+        result = json.loads(await wait_for_merge_queue(pr_number=1, target_branch="main", cwd="."))
+
+    assert result["pr_state"] == pr_state.value, (
+        f"Expected pr_state={pr_state.value!r} in response, got: {result.get('pr_state')!r}"
+    )
+    expected_success = pr_state == PRState.MERGED
+    assert result["success"] == expected_success, (
+        f"Expected success={expected_success!r} for pr_state={pr_state.value!r}, "
+        f"got: {result.get('success')!r}"
+    )
+
+
+def test_pr_state_docstring_documents_all_members():
+    """T10: wait_for_merge_queue docstring must name every PRState member value.
+
+    Prevents silent docstring drift when new PRState members are added.
+    """
+    doc = wait_for_merge_queue.__doc__ or ""
+    for state in PRState:
+        assert state.value in doc, (
+            f"PRState.{state.name} ({state.value!r}) is not documented in the "
+            f"wait_for_merge_queue docstring. Update the Returns section to include it."
+        )

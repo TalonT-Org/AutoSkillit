@@ -729,12 +729,16 @@ steps:
         route: release_issue_success
       - when: "${{ result.pr_state }} == ejected_ci_failure"
         route: diagnose_ci
+      - when: "${{ result.pr_state }} == dropped_healthy"
+        route: reenter_merge_queue_cheap
       - when: "${{ result.pr_state }} == ejected"
         route: queue_ejected_fix
       - when: "${{ result.pr_state }} == stalled"
         route: reenroll_stalled_pr
-      - route: register_clone_success
-    on_failure: register_clone_success
+      - when: "${{ result.pr_state }} == timeout"
+        route: release_issue_timeout
+      - route: release_issue_timeout
+    on_failure: release_issue_timeout
     skip_when_false: "inputs.open_pr"
     note: >
       Waits up to 15 minutes for the PR to merge through the queue.
@@ -744,7 +748,7 @@ steps:
       ejected_ci_failure → diagnose_ci (CI failure; conflict resolution cannot fix this).
       ejected → conflict fix cycle then re-enter.
       stalled → lightweight re-enrollment (disable then re-enable auto-merge).
-      timeout → register_clone_success (pipeline done; human monitors queue).
+      timeout → release_issue_timeout (release claim without staged label; merge unconfirmed).
 
   reenroll_stalled_pr:
     tool: toggle_auto_merge
@@ -821,6 +825,20 @@ steps:
     note: >
       Re-submits the PR after conflict resolution. Routes back to wait_for_queue.
       If re-entry fails, release_issue_failure preserves the clone for debugging.
+
+  reenter_merge_queue_cheap:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "reenter_merge_queue_cheap"
+    on_success: wait_for_queue
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Re-submits a healthy PR into the merge queue after auto_merge was cleared
+      externally (DROPPED_HEALTHY state). No conflict-resolution CI wait needed.
+      Routes back to wait_for_queue on success.
 
   direct_merge:
     tool: run_cmd

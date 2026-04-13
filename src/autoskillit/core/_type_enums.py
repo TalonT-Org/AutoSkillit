@@ -24,6 +24,7 @@ __all__ = [
     "SessionOutcome",
     "CliSubtype",
     "ChannelBStatus",
+    "PRState",
 ]
 
 
@@ -305,3 +306,20 @@ class ChannelBStatus(StrEnum):
     COMPLETION = "completion"
     STALE = "stale"
     DIR_MISSING = "dir_missing"
+
+
+class PRState(StrEnum):
+    """Terminal state of a PR as classified by the merge queue watcher.
+
+    Each member is returned only when a positive signal confirms the state.
+    EJECTED requires either state=CLOSED or mergeable=CONFLICTING.
+    DROPPED_HEALTHY means auto_merge was cleared on an otherwise healthy PR.
+    """
+
+    MERGED = "merged"
+    EJECTED = "ejected"
+    EJECTED_CI_FAILURE = "ejected_ci_failure"
+    STALLED = "stalled"
+    DROPPED_HEALTHY = "dropped_healthy"
+    TIMEOUT = "timeout"
+    ERROR = "error"

@@ -754,6 +754,8 @@ steps:
         route: release_issue_success
       - when: "${{ result.pr_state }} == ejected_ci_failure"
         route: diagnose_ci
+      - when: "${{ result.pr_state }} == dropped_healthy"
+        route: reenter_merge_queue_cheap
       - when: "${{ result.pr_state }} == ejected"
         route: queue_ejected_fix
       - when: "${{ result.pr_state }} == stalled"
@@ -846,6 +848,20 @@ steps:
     note: >
       Re-submits the PR after conflict resolution. Routes back to wait_for_queue.
       If re-entry fails, release_issue_failure preserves the clone for debugging.
+
+  reenter_merge_queue_cheap:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "reenter_merge_queue_cheap"
+    on_success: wait_for_queue
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Re-submits a healthy PR into the merge queue after auto_merge was cleared
+      externally (DROPPED_HEALTHY state). No conflict-resolution CI wait needed.
+      Routes back to wait_for_queue on success.
 
   direct_merge:
     tool: run_cmd

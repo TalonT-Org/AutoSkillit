@@ -45,7 +45,8 @@ tokens after the skill name for the first path-like token (starts with `/`,
 - Force push or perform destructive git operations
 - Merge the worktree branch into any branch
 - Delete or remove the worktree
-- Run the full test suite (the orchestrator handles testing)
+- Run the full test suite — `pytest` with no args or targeting the entire repo
+  (the orchestrator handles full test execution via test_check)
 - Create experiment files outside the planned `research/` subfolder
 - Execute `git merge` commands (all branch content must be applied via
   `git cherry-pick` or `git checkout <branch> -- <file>`)
@@ -58,6 +59,8 @@ tokens after the skill name for the first path-like token (starts with `/`,
 - Put all experiment artifacts in one self-contained `research/` subfolder
 - Commit per phase with descriptive messages
 - Leave the worktree intact when done
+- Write `tests/test_{script_name}.py` alongside each experiment script created in Step 4
+- Run `pytest --collect-only` after creating tests to verify discovery before committing
 
 ## Context Limit Behavior
 
@@ -185,6 +188,21 @@ For each phase:
 4. Commit with a descriptive message. If the project has pre-commit hooks,
    run `pre-commit run --all-files` and stage any auto-fixed files before
    each commit.
+
+**Test creation (required alongside each script phase):**
+
+When implementing experiment scripts in Phases 2 and 3, also create a corresponding
+`tests/test_{script_name}.py` for each script:
+
+1. Create `{WORKTREE_PATH}/research/{slug}/tests/` and `conftest.py` if not yet present
+2. For each script (e.g., `analysis.py`), create `tests/test_analysis.py` covering:
+   - Data loads without error and has the expected shape/type
+   - Key output values fall in expected ranges (sanity checks, not exact match)
+   - At least one test per public function or entry point
+3. Run `pytest --collect-only {WORKTREE_PATH}/research/{slug}/tests/` to confirm
+   pytest can discover all test files. Fix any import errors before committing.
+
+Do NOT run the full test suite — that is the orchestrator's responsibility via `test_check`.
 
 The plan is the authority on what phases exist and what each phase creates.
 Follow it.

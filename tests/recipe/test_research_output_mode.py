@@ -191,3 +191,67 @@ def test_research_bundles_documented_in_kitchen_rules(recipe):
     assert "research-bundles" in rules_text, (
         "kitchen_rules must document the research-bundles/ output directory"
     )
+
+
+# --- REQ-R741-H02: semantic validator rule ---
+
+
+def test_research_output_mode_enum_rule_fires_for_invalid_value():
+    """research_output_mode_enum rule must fire ERROR when output_mode.default is invalid."""
+    import yaml
+
+    from autoskillit.core import Severity
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.io import _parse_recipe
+    from autoskillit.recipe.validator import run_semantic_rules
+
+    src = RESEARCH_RECIPE_PATH.read_text()
+    data = yaml.safe_load(src)
+    data["ingredients"]["output_mode"] = {"default": "bogus", "required": False}
+    bad_recipe = _parse_recipe(data)
+    ctx = make_validation_context(bad_recipe)
+    findings = run_semantic_rules(ctx)
+    rule_findings = [f for f in findings if f.rule == "research_output_mode_enum"]
+    assert rule_findings, (
+        "research_output_mode_enum rule must fire for invalid output_mode default"
+    )
+    assert any(f.severity == Severity.ERROR for f in rule_findings), (
+        "research_output_mode_enum finding must be ERROR severity"
+    )
+
+
+def test_research_output_mode_enum_rule_clean_for_valid_values():
+    """research_output_mode_enum rule must NOT fire for 'local' or 'pr'."""
+    import yaml
+
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.io import _parse_recipe
+    from autoskillit.recipe.validator import run_semantic_rules
+
+    for valid in ("local", "pr"):
+        src = RESEARCH_RECIPE_PATH.read_text()
+        data = yaml.safe_load(src)
+        data["ingredients"]["output_mode"] = {"default": valid, "required": False}
+        recipe = _parse_recipe(data)
+        ctx = make_validation_context(recipe)
+        findings = run_semantic_rules(ctx)
+        rule_findings = [f for f in findings if f.rule == "research_output_mode_enum"]
+        assert not rule_findings, (
+            f"research_output_mode_enum must not fire for valid value {valid!r}"
+        )
+
+
+def test_generate_report_steps_pass_output_mode(recipe):
+    """All generate_report steps must pass --output-mode flag in skill_command."""
+    for step_name in ("generate_report", "generate_report_inconclusive", "re_generate_report"):
+        step = recipe.steps[step_name]
+        cmd = step.with_args.get("skill_command", "")
+        assert "--output-mode" in cmd, f"{step_name} skill_command must include --output-mode flag"
+
+
+def test_generate_report_steps_pass_issue_url(recipe):
+    """generate_report, generate_report_inconclusive, re_generate_report must pass --issue-url."""
+    for step_name in ("generate_report", "generate_report_inconclusive", "re_generate_report"):
+        step = recipe.steps[step_name]
+        cmd = step.with_args.get("skill_command", "")
+        assert "--issue-url" in cmd, f"{step_name} skill_command must include --issue-url flag"

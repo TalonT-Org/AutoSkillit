@@ -1,5 +1,5 @@
 name: research
-autoskillit_version: "0.7.5"
+autoskillit_version: "0.8.0"
 requires_packs: [research, exp-lens, vis-lens]
 description: >
   Single-phase technical research recipe. Scopes a research question, plans an
@@ -391,7 +391,7 @@ steps:
   generate_report:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report
     capture:
@@ -403,7 +403,7 @@ steps:
   generate_report_inconclusive:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: generate_report
     capture:
@@ -680,7 +680,7 @@ steps:
   re_generate_report:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
       step_name: re_generate_report
     capture:

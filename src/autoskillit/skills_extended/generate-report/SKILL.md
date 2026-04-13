@@ -39,6 +39,11 @@ results are valid findings, not failures.
   (retry exhaustion or insufficient evidence). When present, the report
   emphasizes what was learned and why evidence was insufficient, rather than
   framing as a failure.
+- `--output-mode {local|pr}` — Optional. When 'local', the report header must include an
+  issue reference link if `--issue-url` is also provided.
+- `--issue-url {url}` — Optional. GitHub issue URL. When output_mode=local and this is
+  supplied, inject a blockquote reference at the top of report.md. In pr mode, skip —
+  the PR body handles the issue link.
 
 ## Inputs
 
@@ -80,6 +85,21 @@ Read all available artifacts from the worktree:
    section of the report.
 6. Experiment code: scan the worktree for scripts, fixtures, and tools
    added during implementation
+
+### Step 1.5 — Inject Issue Reference Header (local mode only)
+
+Parse arguments for `--output-mode` and `--issue-url`.
+
+If `--output-mode local` AND `--issue-url {url}` is present:
+1. Parse the issue number from the URL (last numeric path segment).
+2. Prepend this line to the **top** of `report.md`, before the title:
+   ```
+   > This research addresses [Issue #{N}]({url})
+
+   ```
+   (Include a blank line after the blockquote before the title.)
+
+In pr mode: skip this step entirely — the PR body contains the issue link.
 
 ### Step 2 — Determine Report Type
 

@@ -359,3 +359,36 @@ def _check_required_without_default(
                 )
             )
     return findings
+
+
+@semantic_rule(
+    name="research_output_mode_enum",
+    severity=Severity.ERROR,
+    description=(
+        "The research recipe's output_mode ingredient default must be 'pr' or 'local'. "
+        "Any other value is rejected at validation time."
+    ),
+)
+def _check_research_output_mode_enum(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    wf = ctx.recipe
+    if wf.name != "research":
+        return []
+    ing = (wf.ingredients or {}).get("output_mode")
+    if ing is None:
+        return []
+    default = getattr(ing, "default", None)
+    if default not in {"pr", "local"}:
+        return [
+            RuleFinding(
+                rule="research_output_mode_enum",
+                severity=Severity.ERROR,
+                step_name="output_mode",
+                message=(
+                    f"output_mode.default must be 'pr' or 'local', got {default!r}. "
+                    "Only two modes are supported (issue body overrides gist §1)."
+                ),
+            )
+        ]
+    return []

@@ -10,7 +10,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypedDict, TypeVar
 
 from ._type_enums import RetryReason, SessionOutcome
 
@@ -26,6 +26,10 @@ __all__ = [
     "SkillResult",
     "CleanupResult",
     "CIRunScope",
+    "CloneSuccessResult",
+    "CloneGateUncommitted",
+    "CloneGateUnpublished",
+    "CloneResult",
 ]
 
 
@@ -213,3 +217,38 @@ class CIRunScope:
     workflow: str | None = None  # workflow filename, e.g. "tests.yml"
     head_sha: str | None = None  # commit SHA to pin results to
     event: str | None = None  # trigger event, e.g. "push", "pull_request"
+
+
+class CloneSuccessResult(TypedDict):
+    """Typed return contract for a successful clone_repo invocation.
+
+    Precedent: PRFetchState(TypedDict) in execution/merge_queue.py for
+    typed discriminated returns in the same codebase.
+    """
+
+    clone_path: str
+    source_dir: str
+    remote_url: str
+    clone_source_type: Literal["remote", "local"]
+    clone_source_reason: str
+
+
+class CloneGateUncommitted(TypedDict):
+    """Returned by clone_repo when uncommitted changes are detected (strategy="")."""
+
+    uncommitted_changes: Literal["true"]
+    source_dir: str
+    branch: str
+    changed_files: str
+    total_changed: str
+
+
+class CloneGateUnpublished(TypedDict):
+    """Returned by clone_repo when the branch is unpublished (strategy="")."""
+
+    unpublished_branch: Literal["true"]
+    branch: str
+    source_dir: str
+
+
+CloneResult = CloneSuccessResult | CloneGateUncommitted | CloneGateUnpublished

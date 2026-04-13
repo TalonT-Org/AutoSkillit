@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import structlog.testing
 
 from autoskillit.workspace.clone import (
     DefaultCloneManager,
@@ -344,10 +345,12 @@ class TestCloneOriginContract:
         finally:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
 
-    def test_clone_origin_unchanged_when_no_upstream(self, tmp_path: Path) -> None:
-        """When source has no origin, clone still succeeds and remote_url is empty.
+    def test_clone_local_strategy_rewrites_origin_to_file_url(self, tmp_path: Path) -> None:
+        """clone_local strategy (copytree) rewrites origin to file:// unconditionally.
 
-        Contract test — passes on main before the fix (no origin means no rewrite).
+        Covers the #377 compounding regression: the isolation rewrite was previously
+        skipped when effective_url was empty (no remote origin). After the fix,
+        _ensure_origin_isolated fires unconditionally for every successful clone.
         """
         source = tmp_path / "source"
         subprocess.run(["git", "init", str(source)], check=True)
@@ -357,10 +360,18 @@ class TestCloneOriginContract:
         subprocess.run(["git", "-C", str(source), "add", "."], check=True)
         subprocess.run(["git", "-C", str(source), "commit", "-m", "init"], check=True)
 
-        result = clone_repo(str(source), "no-upstream-test")
+        result = clone_repo(str(source), "no-upstream-test", strategy="clone_local")
         try:
-            assert result["remote_url"] == ""
-            # No assertion on clone's origin — no upstream exists, contract vacuously holds
+            clone_path = Path(result["clone_path"])
+            origin_in_clone = subprocess.run(
+                ["git", "-C", str(clone_path), "remote", "get-url", "origin"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            assert origin_in_clone == f"file://{clone_path}", (
+                f"Expected file://{clone_path!r}, got {origin_in_clone!r}"
+            )
         finally:
             shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
 
@@ -1150,8 +1161,10 @@ class TestPushToRemoteNonBare:
 
         shutil.rmtree(Path(result["clone_path"]).parent, ignore_errors=True)
 
-    def test_clone_repo_returns_empty_remote_url_when_no_origin(self, tmp_path: Path) -> None:
-        """clone_repo returns remote_url='' when source_dir has no remote configured."""
+    def test_clone_repo_local_strategy_returns_discriminator_when_no_origin(
+        self, tmp_path: Path
+    ) -> None:
+        """clone_local strategy returns discriminator with clone_source_type=local."""
         source = tmp_path / "source"
         subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
         subprocess.run(
@@ -1170,10 +1183,13 @@ class TestPushToRemoteNonBare:
             capture_output=True,
         )
 
-        result = clone_repo(str(source), "test-noremote", strategy="proceed")
+        result = clone_repo(str(source), "test-noremote", strategy="clone_local")
 
-        assert "remote_url" in result
+        assert "clone_path" in result
         assert result["remote_url"] == ""
+        assert result["clone_source_type"] == "local"
+        assert result["clone_source_reason"] == "strategy_clone_local"
+        assert Path(result["clone_path"]).exists()
 
         import shutil
 
@@ -1407,33 +1423,23 @@ class TestCloneRemoteUrlResolution:
                 f"Expected clone source to be remote URL {bare_remote!r}, "
                 f"got {clone_source!r} (local path was used instead)"
             )
+            assert result["clone_source_type"] == "remote", (
+                f"Expected clone_source_type='remote', got {result.get('clone_source_type')!r}"
+            )
         finally:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
 
     # T1-B
-    def test_clone_falls_back_to_local_when_no_remote(self, git_repo: Path) -> None:
-        """clone_repo falls back to local path when no remote origin is configured."""
-        with patch(
-            "autoskillit.workspace.clone.subprocess.run",
-            wraps=subprocess.run,
-        ) as spy:
-            result = clone_repo(str(git_repo), "test", strategy="proceed")
-        clone_path = Path(result["clone_path"])
-        try:
-            clone_calls = [
-                call
-                for call in spy.call_args_list
-                if call[0] and isinstance(call[0][0], list) and call[0][0][:2] == ["git", "clone"]
-            ]
-            assert len(clone_calls) == 1
-            clone_args = clone_calls[0][0][0]
-            clone_source = clone_args[-2]
-            assert clone_source == str(git_repo), (
-                f"Expected local path fallback {git_repo!r}, got {clone_source!r}"
-            )
-            assert "clone_path" in result
-        finally:
-            shutil.rmtree(clone_path.parent, ignore_errors=True)
+    def test_clone_raises_on_no_origin_with_proceed_strategy(self, git_repo: Path) -> None:
+        """clone_repo raises RuntimeError when no remote origin and strategy=proceed.
+
+        Previously the code silently fell back to cloning from the local path
+        (git clone /abs/path via local transport). After the fix, the no_origin
+        probe result causes an immediate RuntimeError, instructing the caller to
+        use strategy="clone_local" for an intentional local-only clone.
+        """
+        with pytest.raises(RuntimeError, match="clone_origin_probe_failed.*no_origin"):
+            clone_repo(str(git_repo), "test", strategy="proceed")
 
     # T1-C
     def test_clone_result_remote_url_correct_after_remote_clone(
@@ -1444,6 +1450,8 @@ class TestCloneRemoteUrlResolution:
         clone_path = Path(result["clone_path"])
         try:
             assert result["remote_url"] == str(bare_remote)
+            assert result["clone_source_type"] == "remote"
+            assert result["clone_source_reason"] == "ok"
         finally:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
 
@@ -1453,10 +1461,10 @@ class TestCloneRemoteUrlResolution:
     ) -> None:
         """Regression: clone always uses remote URL even when branch not on remote.
 
-        Previously _resolve_clone_source fell back to the local path when ls-remote
-        did not find the branch on the remote. After the fix it always uses the
-        remote URL when one is configured, so git clone fails (correctly) instead
-        of silently cloning local state.
+        Previously the origin probe collapse allowed falling back to the local path
+        when ls-remote did not find the branch on the remote. After the fix the probe
+        always uses the remote URL when one is configured, so git clone fails (correctly)
+        instead of silently cloning local state.
         """
         with patch(
             "autoskillit.workspace.clone.subprocess.run",
@@ -1495,26 +1503,212 @@ class TestCloneRemoteUrlResolution:
         )
 
 
-class TestResolveCloneSource:
-    """Unit tests for _resolve_clone_source."""
+class TestProbeOriginUrl:
+    """Unit tests for _probe_origin_url (replaces TestResolveCloneSource)."""
 
-    def test_returns_url_when_configured(self, tmp_path: Path) -> None:
-        from autoskillit.workspace.clone import _resolve_clone_source
+    def test_probe_origin_url_returns_ok_reason_when_remote_configured(
+        self, local_with_remote: Path, bare_remote: Path
+    ) -> None:
+        from autoskillit.workspace.clone import _probe_origin_url
 
-        source = tmp_path / "repo"
-        url = "https://github.com/example/repo.git"
-        assert _resolve_clone_source(source, url) == url
+        resolution = _probe_origin_url(local_with_remote)
+        assert resolution.reason == "ok"
+        assert resolution.url == str(bare_remote)
+        assert resolution.stderr == ""
 
-    def test_returns_local_path_when_no_url(self, tmp_path: Path) -> None:
-        from autoskillit.workspace.clone import _resolve_clone_source
+    def test_probe_origin_url_returns_no_origin_reason_when_no_remote(
+        self, git_repo: Path
+    ) -> None:
+        from autoskillit.workspace.clone import _probe_origin_url
 
-        source = tmp_path / "repo"
-        assert _resolve_clone_source(source, "") == str(source)
+        resolution = _probe_origin_url(git_repo)
+        assert resolution.reason == "no_origin"
+        assert resolution.url == ""
 
-    def test_url_returned_regardless_of_branch_existence(self, tmp_path: Path) -> None:
-        """No branch parameter — URL is always returned when available."""
-        from autoskillit.workspace.clone import _resolve_clone_source
+    def test_probe_origin_url_returns_timeout_reason_on_timeout(self, tmp_path: Path) -> None:
+        from autoskillit.workspace.clone import _probe_origin_url
 
-        source = tmp_path / "repo"
-        url = "git@github.com:example/repo.git"
-        assert _resolve_clone_source(source, url) == url
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=["git"], timeout=30),
+        ):
+            resolution = _probe_origin_url(tmp_path)
+        assert resolution.reason == "timeout"
+        assert resolution.url == ""
+
+    def test_probe_origin_url_returns_error_reason_on_non_zero_rc(self, tmp_path: Path) -> None:
+        from autoskillit.workspace.clone import _probe_origin_url
+
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = "fatal: not a git repository"
+        with patch("autoskillit.workspace.clone.subprocess.run", return_value=mock_result):
+            resolution = _probe_origin_url(tmp_path)
+        assert resolution.reason == "error"
+        assert resolution.url == ""
+        assert resolution.stderr == "fatal: not a git repository"
+
+
+class TestCloneOriginProbeFailFast:
+    """Tests 2A-2C: clone_repo raises RuntimeError when origin probe fails."""
+
+    def test_clone_repo_raises_on_timeout_when_source_has_origin(
+        self, local_with_remote: Path
+    ) -> None:
+        """The reported bug reproduced: timeout on origin probe raises RuntimeError.
+
+        Patches subprocess.run to raise TimeoutExpired only on get-url origin
+        while delegating all other calls to the real subprocess.run.
+        """
+        _real_run = subprocess.run
+
+        def _selective_side_effect(cmd, **kwargs):  # type: ignore[no-untyped-def]
+            if isinstance(cmd, list) and cmd == ["git", "remote", "get-url", "origin"]:
+                raise subprocess.TimeoutExpired(cmd=cmd, timeout=30)
+            return _real_run(cmd, **kwargs)
+
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run",
+            side_effect=_selective_side_effect,
+        ):
+            with structlog.testing.capture_logs() as cap:
+                with pytest.raises(RuntimeError, match="clone_origin_probe_failed.*timeout"):
+                    clone_repo(str(local_with_remote), "t", strategy="proceed")
+
+        warning_events = [e for e in cap if e.get("event") == "clone_origin_probe_failed"]
+        assert warning_events, "Expected clone_origin_probe_failed warning to be emitted"
+        assert warning_events[0].get("reason") == "timeout"
+
+    def test_clone_repo_raises_on_non_zero_get_url_when_source_has_origin(
+        self, local_with_remote: Path
+    ) -> None:
+        """Non-zero returncode on get-url origin raises RuntimeError."""
+        _real_run = subprocess.run
+
+        def _selective_side_effect(cmd, **kwargs):  # type: ignore[no-untyped-def]
+            if isinstance(cmd, list) and cmd == ["git", "remote", "get-url", "origin"]:
+                mock = MagicMock()
+                mock.returncode = 1
+                mock.stdout = ""
+                mock.stderr = "fatal: some error"
+                return mock
+            return _real_run(cmd, **kwargs)
+
+        with patch(
+            "autoskillit.workspace.clone.subprocess.run",
+            side_effect=_selective_side_effect,
+        ):
+            with pytest.raises(RuntimeError, match="clone_origin_probe_failed"):
+                clone_repo(str(local_with_remote), "t", strategy="proceed")
+
+    def test_clone_repo_raises_on_no_origin_without_explicit_local_strategy(
+        self, git_repo: Path
+    ) -> None:
+        """clone_repo raises RuntimeError when source has no origin and strategy=proceed.
+
+        Error message must instruct the caller to pass strategy="clone_local".
+        """
+        with pytest.raises(
+            RuntimeError,
+            match=r"clone_origin_probe_failed.*no_origin.*strategy=.?clone_local",
+        ):
+            clone_repo(str(git_repo), "t", strategy="proceed")
+
+
+class TestCloneDiscriminator:
+    """Tests 3A-3B and 5: typed return contract with clone_source_type discriminator."""
+
+    def test_clone_local_strategy_succeeds_on_no_origin_with_discriminator(
+        self, git_repo: Path
+    ) -> None:
+        """strategy=clone_local returns clone_source_type=local with discriminator."""
+        result = clone_repo(str(git_repo), "t", strategy="clone_local")
+        clone_path = Path(result["clone_path"])
+        try:
+            assert result["clone_source_type"] == "local"
+            assert result["clone_source_reason"] == "strategy_clone_local"
+            assert result["remote_url"] == ""
+            assert clone_path.exists()
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    def test_clone_proceed_strategy_succeeds_with_remote_discriminator(
+        self, local_with_remote: Path, bare_remote: Path
+    ) -> None:
+        """strategy=proceed returns clone_source_type=remote with discriminator."""
+        result = clone_repo(str(local_with_remote), "t", branch="main", strategy="proceed")
+        clone_path = Path(result["clone_path"])
+        try:
+            assert result["clone_source_type"] == "remote"
+            assert result["clone_source_reason"] == "ok"
+            assert result["remote_url"] == str(bare_remote)
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    @pytest.mark.parametrize(
+        "fixture_name,strategy",
+        [
+            ("local_with_remote", "proceed"),
+            ("git_repo", "clone_local"),
+        ],
+    )
+    def test_clone_result_always_has_discriminator_key(
+        self, fixture_name: str, strategy: str, request: pytest.FixtureRequest
+    ) -> None:
+        """Structural invariant: every success result carries clone_source_type."""
+        source = request.getfixturevalue(fixture_name)
+        kwargs = {"strategy": strategy}
+        if fixture_name == "local_with_remote":
+            kwargs["branch"] = "main"
+        result = clone_repo(str(source), "t", **kwargs)  # type: ignore[arg-type]
+        clone_path = Path(result["clone_path"])
+        try:
+            assert "clone_source_type" in result
+            assert result["clone_source_type"] in ("remote", "local")
+            assert "clone_source_reason" in result
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+
+class TestOriginIsolationUnconditional:
+    """Tests 4A-4B: _ensure_origin_isolated fires unconditionally."""
+
+    def test_clone_local_strategy_still_rewrites_origin_to_file_url(self, git_repo: Path) -> None:
+        """clone_local (no remote) rewrites origin to file:// — covers #377 regression.
+
+        Inverts the deleted test_clone_origin_unchanged_when_no_upstream.
+        """
+        result = clone_repo(str(git_repo), "t", strategy="clone_local")
+        clone_path = Path(result["clone_path"])
+        try:
+            origin = subprocess.run(
+                ["git", "-C", str(clone_path), "remote", "get-url", "origin"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            assert origin == f"file://{clone_path}", (
+                f"Expected file://{clone_path!r}, got {origin!r}"
+            )
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+
+    def test_clone_remote_strategy_rewrites_origin_to_file_url(
+        self, local_with_remote: Path
+    ) -> None:
+        """clone via remote URL also rewrites origin to file:// unconditionally."""
+        result = clone_repo(str(local_with_remote), "t", branch="main", strategy="proceed")
+        clone_path = Path(result["clone_path"])
+        try:
+            origin = subprocess.run(
+                ["git", "-C", str(clone_path), "remote", "get-url", "origin"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            assert origin == f"file://{clone_path}", (
+                f"Expected file://{clone_path!r}, got {origin!r}"
+            )
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)

@@ -44,6 +44,13 @@ BENIGN_WCHANS: frozenset[str] = frozenset(
 )
 
 
+def _safe_int(value: object, *, default: int) -> int:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (ValueError, TypeError):
+        return default
+
+
 def _anomaly(
     kind: AnomalyKind,
     severity: AnomalySeverity,
@@ -291,7 +298,7 @@ def detect_identity_drift(
                     },
                     snap,
                     seq,
-                    int(snap.get("pid") or 0),  # type: ignore[call-overload]
+                    _safe_int(snap.get("pid"), default=0),
                 )
             )
             # Report on first occurrence only — one anomaly is enough to diagnose the drift

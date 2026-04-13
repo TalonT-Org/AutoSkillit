@@ -63,7 +63,7 @@ class TestDrainWindowPermitsNaturalExit:
 
         with patch(
             "autoskillit.execution.process.async_kill_process_tree",
-            new_callable=lambda: lambda: _mock_kill,
+            side_effect=_mock_kill,
         ):
             import structlog
 

@@ -202,8 +202,6 @@ When implementing experiment scripts in Phases 2 and 3, also create a correspond
 3. Run `pytest --collect-only {WORKTREE_PATH}/research/{slug}/tests/` to confirm
    pytest can discover all test files. Fix any import errors before committing.
 
-Do NOT run the full test suite — that is the orchestrator's responsibility via `test_check`.
-
 The plan is the authority on what phases exist and what each phase creates.
 Follow it.
 
@@ -223,7 +221,7 @@ git -C "${WORKTREE_PATH}" add research/ && git -C "${WORKTREE_PATH}" commit -m "
 cd "${WORKTREE_PATH}" && pre-commit run --all-files
 ```
 
-Fix any formatting or linting issues. Do NOT run the full test suite.
+Fix any formatting or linting issues.
 
 ### Step 7 — Handoff Report
 

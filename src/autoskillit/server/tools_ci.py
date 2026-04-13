@@ -386,10 +386,20 @@ async def wait_for_merge_queue(
     Returns:
         JSON: {
             "success": bool,
-            "pr_state": "merged"|"ejected"|"stalled"|"timeout"|"error",
+            "pr_state": "merged"|"ejected"|"ejected_ci_failure"|"stalled"|
+                        "dropped_healthy"|"timeout"|"error",
             "reason": str,
             "stall_retries_attempted": int,
         }
+
+        pr_state values:
+          merged           — PR successfully merged through the queue.
+          ejected          — PR removed from queue (conflict or other non-CI reason).
+          ejected_ci_failure — PR removed from queue because CI checks failed.
+          stalled          — PR stuck in queue; max stall retries exhausted.
+          dropped_healthy  — auto-merge disabled on a PR with no CI/conflict issues.
+          timeout          — polling budget exhausted before a terminal state was reached.
+          error            — watcher raised an unexpected exception.
     """
     if (gate := _require_enabled()) is not None:
         return gate

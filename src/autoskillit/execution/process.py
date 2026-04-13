@@ -247,7 +247,6 @@ async def run_managed_async(
             if linux_tracing_config is not None:
                 from autoskillit.execution.linux_tracing import (
                     LINUX_TRACING_AVAILABLE,
-                    TraceTargetResolutionError,  # noqa: F401 — used by raise below
                     resolve_trace_target,
                     trace_target_from_pid,
                 )

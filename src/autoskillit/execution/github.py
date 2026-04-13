@@ -7,6 +7,7 @@ Never raises — all errors are captured and returned as {"success": False, "err
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -122,16 +123,29 @@ class DefaultGitHubFetcher:
     Never raises — errors are returned as {"success": False, "error": "..."}.
     """
 
-    def __init__(self, *, token: str | None = None) -> None:
-        self._token = token
+    _UNRESOLVED = object()
+
+    def __init__(self, *, token: str | None | Callable[[], str | None] = None) -> None:
+        self._token_factory: Callable[[], str | None] | None
+        if callable(token):
+            self._token_factory = token
+            self._token: str | None = self._UNRESOLVED  # type: ignore[assignment]
+        else:
+            self._token_factory = None
+            self._token = token
+
+    def _resolve_token(self) -> str | None:
+        if self._token is self._UNRESOLVED:
+            self._token = self._token_factory() if self._token_factory is not None else None
+        return self._token
 
     @property
     def has_token(self) -> bool:
-        """True if this fetcher was constructed with an authentication token."""
-        return bool(self._token)
+        """True if this fetcher has an authentication token (resolves lazily)."""
+        return bool(self._resolve_token())
 
     def _headers(self) -> dict[str, str]:
-        return github_headers(self._token)
+        return github_headers(self._resolve_token())
 
     async def fetch_issue(
         self,
@@ -370,7 +384,7 @@ class DefaultGitHubFetcher:
                     hint = (
                         " Set github.token in .autoskillit/.secrets.yaml,"
                         " set GITHUB_TOKEN, or log in with gh auth login."
-                        if not self._token
+                        if not self.has_token
                         else ""
                     )
                     return {

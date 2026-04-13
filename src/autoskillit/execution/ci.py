@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import random
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -69,11 +70,24 @@ class DefaultCIWatcher:
     Never raises — errors are returned as structured dicts.
     """
 
-    def __init__(self, *, token: str | None = None) -> None:
-        self._token = token
+    _UNRESOLVED = object()
+
+    def __init__(self, *, token: str | None | Callable[[], str | None] = None) -> None:
+        self._token_factory: Callable[[], str | None] | None
+        if callable(token):
+            self._token_factory = token
+            self._token: str | None = self._UNRESOLVED  # type: ignore[assignment]
+        else:
+            self._token_factory = None
+            self._token = token
+
+    def _resolve_token(self) -> str | None:
+        if self._token is self._UNRESOLVED:
+            self._token = self._token_factory() if self._token_factory is not None else None
+        return self._token
 
     def _headers(self) -> dict[str, str]:
-        return github_headers(self._token)
+        return github_headers(self._resolve_token())
 
     async def _resolve_repo(self, repo: str | None, cwd: str) -> str | None:
         """Resolve owner/repo from argument or git remote."""

@@ -20,7 +20,7 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.repository import DefaultRecipeRepository
-from autoskillit.server._factory import _gh_cli_token, make_context
+from autoskillit.server._factory import TokenFactory, _gh_cli_token, make_context
 from autoskillit.workspace import DefaultCloneManager, SkillResolver
 from autoskillit.workspace.cleanup import DefaultWorkspaceManager
 from tests.conftest import MockSubprocessRunner
@@ -126,7 +126,8 @@ def test_make_context_github_client_config_token_takes_priority_over_gh_cli(monk
     config.github.token = "config-token"
     ctx = make_context(config, runner=None, plugin_dir=".")
     assert ctx.github_client.has_token is True
-    assert ctx.github_client._token == "config-token"
+    # After lazy resolution via has_token, verify the resolved value
+    assert ctx.github_client._resolve_token() == "config-token"
 
 
 def test_make_context_github_client_token_snapshot_is_immutable(monkeypatch):

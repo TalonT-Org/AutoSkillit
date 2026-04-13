@@ -426,6 +426,58 @@ def test_isolated_tracing_config_fixture_returns_non_dev_shm(isolated_tracing_co
     assert Path(isolated_tracing_config.tmpfs_path).is_dir()
 
 
+# --- Test 1.2: ProcSnapshot carries a comm field ---
+
+
+def test_proc_snapshot_has_comm_field():
+    """ProcSnapshot.comm is populated from /proc/{pid}/comm on every snapshot.
+
+    Test 1.2: guards against regression of the self-identifying snapshot invariant.
+    comm provides identity anchoring so every snapshot in proc_trace.jsonl can be
+    cross-checked against the expected workload process.
+    """
+    import os
+
+    from autoskillit.execution.linux_tracing import read_proc_snapshot
+
+    snap = read_proc_snapshot(os.getpid())
+    assert snap is not None
+    assert hasattr(snap, "comm"), (
+        "ProcSnapshot must have a 'comm' field populated from /proc/{pid}/comm"
+    )
+    assert isinstance(snap.comm, str) and snap.comm, "ProcSnapshot.comm must be a non-empty string"
+    # /proc/self/comm contains the process name (typically 'python' or 'pytest')
+    expected_comm = open(f"/proc/{os.getpid()}/comm").read().strip()  # noqa: SIM115
+    assert snap.comm == expected_comm, (
+        f"snap.comm {snap.comm!r} must match /proc/{os.getpid()}/comm {expected_comm!r}"
+    )
+
+
+# --- Test 1.5: start_linux_tracing rejects raw int ---
+
+
+def test_start_linux_tracing_requires_trace_target():
+    """start_linux_tracing(target=...) must accept TraceTarget, reject raw int.
+
+    Test 1.5: locks the type contract. Any future caller that passes an int gets
+    a hard failure rather than silent wrong-process observation.
+    """
+    import typing
+
+    from autoskillit.execution.linux_tracing import TraceTarget, start_linux_tracing
+
+    hints = typing.get_type_hints(start_linux_tracing)
+    assert hints.get("target") is TraceTarget, (
+        f"start_linux_tracing 'target' parameter must be annotated as TraceTarget, "
+        f"got {hints.get('target')!r}"
+    )
+
+    # Passing a raw int as target must raise TypeError — the type system enforces this
+    # at import time but we verify the annotation is correct
+    with pytest.raises(TypeError):
+        start_linux_tracing(target=123, config=None, tg=None)  # type: ignore[arg-type]
+
+
 @pytest.mark.anyio
 async def test_stop_unlinks_trace_and_enrollment(tmp_path):
     """stop() must delete both trace JSONL and enrollment sidecar on clean exit."""

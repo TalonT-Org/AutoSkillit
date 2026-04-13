@@ -592,6 +592,128 @@ def test_flush_writes_step_timing_json(tmp_path):
     assert (session_dir / "step_timing.json").is_file()
 
 
+# ---------------------------------------------------------------------------
+# Test 1.10 — proc_trace.jsonl rows self-identify with comm field
+# ---------------------------------------------------------------------------
+
+
+def test_proc_trace_jsonl_rows_include_comm(tmp_path):
+    """proc_trace.jsonl rows must include a 'comm' field for post-hoc drift detection.
+
+    Test 1.10: after flush_session_log, every row in proc_trace.jsonl must carry
+    the process identity (comm). This makes any drift visible to anyone triaging
+    a session log — any row lacking comm is a drift indicator.
+    """
+    snaps = [
+        {**_snap(), "comm": "claude"},
+        {**_snap(), "comm": "claude"},
+        {**_snap(), "comm": "claude"},
+    ]
+    _flush(tmp_path, proc_snapshots=snaps, session_id="comm-test-001")
+
+    trace_path = tmp_path / "sessions" / "comm-test-001" / "proc_trace.jsonl"
+    assert trace_path.exists()
+    rows = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    for i, row in enumerate(rows):
+        assert "comm" in row, (
+            f"Row {i} in proc_trace.jsonl is missing 'comm' field. "
+            "Every snapshot row must self-identify the traced process."
+        )
+        assert row["comm"] == "claude", f"Expected comm='claude' in row {i}, got {row['comm']!r}"
+
+
+# ---------------------------------------------------------------------------
+# Test 1.11 — recovery path reads comm and excludes alien files
+# ---------------------------------------------------------------------------
+
+
+def _write_old_trace_with_comm(tmpfs: Path, pid: int, comm: str, *, n_snaps: int = 2) -> Path:
+    """Write a backdated trace file with snapshots that have a specific comm."""
+    filename = f"autoskillit_trace_{pid}.jsonl"
+    trace = tmpfs / filename
+    snaps = []
+    for _ in range(n_snaps):
+        snap_dict = {**_snap(), "comm": comm}
+        snaps.append(json.dumps(snap_dict))
+    trace.write_text("\n".join(snaps) + "\n")
+
+    # Backdate so Gate 1 (age > 30s) passes
+    old_mtime = time.time() - 60
+    os.utime(trace, (old_mtime, old_mtime))
+
+    # Write enrollment sidecar so Gate 1 (sidecar present) passes
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    enrollment.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": pid,
+                "boot_id": read_boot_id() or "",
+                "starttime_ticks": None,
+                "session_id": "",
+                "enrolled_at": "2026-01-01T00:00:00+00:00",
+                "kitchen_id": "",
+                "order_id": "",
+            }
+        )
+    )
+    return trace
+
+
+def test_recover_crashed_sessions_excludes_non_claude_trace_files(tmp_path):
+    """recover_crashed_sessions tags alien trace files (non-claude comm) and excludes them.
+
+    Test 1.11: place two trace files — one with comm='claude' and one with
+    comm='sleep'. The 'sleep' file is an alien artifact (test pollution or a
+    non-autoskillit process). After the fix, recovery recognises it via comm
+    and either skips it or marks it with alien=true in the recovered record.
+    """
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    log_dir = tmp_path / "logs"
+
+    # One legitimate claude trace
+    _write_old_trace_with_comm(tmpfs, pid=20001, comm="claude")
+    # One alien trace (e.g., leftover from a test or wrong process)
+    _write_old_trace_with_comm(tmpfs, pid=20002, comm="sleep")
+
+    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(log_dir))
+
+    sessions_dir = log_dir / "sessions"
+    recovered = list(sessions_dir.iterdir()) if sessions_dir.exists() else []
+    session_summaries = []
+    for s in recovered:
+        summary_file = s / "summary.json"
+        if summary_file.exists():
+            session_summaries.append(json.loads(summary_file.read_text()))
+
+    # The alien (sleep) session must be identified as non-claude.
+    # It should either be skipped entirely OR marked with alien=true / pre_fix_data
+    alien_sessions = [
+        s
+        for s in session_summaries
+        if s.get("alien") or s.get("pre_fix_data") or "20002" in s.get("session_id", "")
+    ]
+    claude_sessions = [s for s in session_summaries if "20001" in s.get("session_id", "")]
+
+    # The claude trace must be recovered (not excluded)
+    assert claude_sessions or count >= 1, (
+        "The claude trace file must be recovered by recover_crashed_sessions"
+    )
+
+    # The alien trace should not produce a normal session — it should be excluded
+    # or marked as alien so it doesn't pollute capacity planning / anomaly analytics
+    alien_included_normally = [
+        s
+        for s in session_summaries
+        if "20002" in s.get("session_id", "") and not s.get("alien") and not s.get("pre_fix_data")
+    ]
+    assert not alien_included_normally, (
+        "Alien trace (comm='sleep') must not be recovered as a normal session. "
+        "It should be skipped or marked alien=true to prevent #771-style mis-attribution."
+    )
+
+
 def test_flush_writes_audit_log_json(tmp_path):
     """audit_log.json written to session dir when step_name and audit_record dict provided."""
     record = {

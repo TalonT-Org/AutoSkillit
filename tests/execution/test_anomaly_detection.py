@@ -280,3 +280,65 @@ def test_no_anomalies_for_normal_session_still_holds():
     snaps = [_snap(vm_rss_kb=100000 + i * 100, oom_score=50) for i in range(10)]
     anomalies = detect_anomalies(snaps, pid=1234)
     assert len(anomalies) == 0
+
+
+# ---------------------------------------------------------------------------
+# Test 1.7 — Anomaly-detection liveness canary
+# ---------------------------------------------------------------------------
+
+
+def test_anomaly_canary_fires_on_synthetic_stream():
+    """detect_anomalies fires OOM_CRITICAL on a stream with oom_score=100→900 spike.
+
+    Test 1.7: liveness canary — fails loudly if anomaly detection is silently gutted.
+    Universal anomaly_count==0 across production sessions was unreadable before #806.
+    """
+    snaps = [
+        _snap(oom_score=100),
+        _snap(oom_score=900),  # exceeds OOM_CRITICAL threshold (>=800)
+    ]
+    anomalies = detect_anomalies(snaps, pid=999)
+    oom_critical = [a for a in anomalies if a["kind"] == AnomalyKind.OOM_CRITICAL]
+    assert len(oom_critical) >= 1, (
+        "detect_anomalies must fire OOM_CRITICAL when oom_score >= 800. "
+        "If this test fails, anomaly detection has been silently disabled."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 1.8 — Identity-drift detection fires when comm disagrees
+# ---------------------------------------------------------------------------
+
+
+def test_identity_drift_anomaly_fires_when_comm_mismatches():
+    """detect_identity_drift fires IDENTITY_DRIFT when snap.comm != expected_comm.
+
+    Test 1.8: architectural immunity check. If PTY wrapping ever bypasses the
+    resolver, the drift detector surfaces it rather than letting it rot for months.
+    """
+    from autoskillit.execution.anomaly_detection import AnomalyKind, detect_identity_drift
+
+    # Simulate: expected process is 'claude' but every snapshot has comm='script'
+    snaps = [
+        {**_snap().__class__.__dict__, "comm": "script"},  # wrong process
+        {**_snap().__class__.__dict__, "comm": "script"},
+    ]
+    # Use plain dicts (as flush_session_log passes to detect_anomalies)
+    snap_dicts = [{"comm": "script", "vm_rss_kb": 2048, "oom_score": 10} for _ in range(2)]
+    anomalies = detect_identity_drift(snap_dicts, expected_comm="claude")
+    assert len(anomalies) >= 1, (
+        "detect_identity_drift must fire when snap.comm != expected_comm. "
+        "This is the architectural immunity check for PTY wrapper tracer drift."
+    )
+    drift_anomalies = [a for a in anomalies if a["kind"] == AnomalyKind.IDENTITY_DRIFT]
+    assert drift_anomalies, (
+        f"Expected IDENTITY_DRIFT anomaly kind. Got: {[a['kind'] for a in anomalies]}"
+    )
+
+
+def test_identity_drift_kind_exists():
+    """AnomalyKind.IDENTITY_DRIFT must exist as a StrEnum member."""
+    assert hasattr(AnomalyKind, "IDENTITY_DRIFT"), (
+        "AnomalyKind must have IDENTITY_DRIFT member for PTY wrapper drift detection"
+    )
+    assert AnomalyKind.IDENTITY_DRIFT == "identity_drift"

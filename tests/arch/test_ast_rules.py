@@ -682,3 +682,86 @@ def test_no_direct_termination_dispatch_ifelse_in_run_managed() -> None:
         "run_managed_async must not inspect TerminationReason or signals.process_exited directly."
         "\nUse decide_termination_action to make the kill decision:\n" + "\n".join(violations)
     )
+
+
+# ---------------------------------------------------------------------------
+# ARCH-008: no-raw-pid-to-start-linux-tracing — Test 1.9 calibration tests
+# ---------------------------------------------------------------------------
+
+
+def test_arch008_detects_raw_pid_attribute_passed_as_target(tmp_path: Path) -> None:
+    """ARCH-008 calibration: start_linux_tracing(target=proc.pid) is a violation.
+
+    The .pid attribute on an anyio/subprocess Process object is the wrapper PID when
+    PTY mode is active. Passing it directly to start_linux_tracing caused issue #806.
+    """
+    f = tmp_path / "bad.py"
+    f.write_text(
+        "from autoskillit.execution.linux_tracing import start_linux_tracing\n"
+        "start_linux_tracing(target=proc.pid, config=cfg, tg=tg)\n"
+    )
+    violations = _scan(f)
+    arch008 = [v for v in violations if v.rule_id == "ARCH-008"]
+    assert arch008, (
+        "ARCH-008 must fire when start_linux_tracing is called with target=<expr>.pid. "
+        f"All violations found: {violations}"
+    )
+    assert "pid" in arch008[0].message.lower() or "raw" in arch008[0].message.lower(), (
+        f"ARCH-008 violation message must mention the raw pid issue. Got: {arch008[0].message!r}"
+    )
+
+
+def test_arch008_accepts_resolve_trace_target_result(tmp_path: Path) -> None:
+    """ARCH-008 calibration: start_linux_tracing(target=resolve_trace_target(...)) is allowed.
+
+    Calling resolve_trace_target() returns a TraceTarget (not a raw int), so it
+    satisfies the type contract.
+    """
+    f = tmp_path / "good.py"
+    f.write_text(
+        "from autoskillit.execution.linux_tracing import start_linux_tracing, resolve_trace_target\n"
+        "target = resolve_trace_target(root_pid=proc.pid, expected_basename='claude', timeout=2.0)\n"
+        "start_linux_tracing(target=target, config=cfg, tg=tg)\n"
+    )
+    violations = _scan(f)
+    arch008 = [v for v in violations if v.rule_id == "ARCH-008"]
+    assert not arch008, (
+        f"ARCH-008 must NOT fire when target is a Name (variable), not an Attribute. "
+        f"Violations found: {arch008}"
+    )
+
+
+def test_arch008_accepts_trace_target_from_pid_result(tmp_path: Path) -> None:
+    """ARCH-008 calibration: start_linux_tracing(target=trace_target_from_pid(...)) is allowed."""
+    f = tmp_path / "good_direct.py"
+    f.write_text(
+        "from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid\n"
+        "target = trace_target_from_pid(proc.pid)\n"
+        "start_linux_tracing(target=target, config=cfg, tg=tg)\n"
+    )
+    violations = _scan(f)
+    arch008 = [v for v in violations if v.rule_id == "ARCH-008"]
+    assert not arch008, (
+        f"ARCH-008 must NOT fire when target is a Name variable, not an Attribute. "
+        f"Violations found: {arch008}"
+    )
+
+
+def test_no_raw_pid_attr_to_start_linux_tracing() -> None:
+    """ARCH-008 (Test 1.9): no production file passes <expr>.pid as target to start_linux_tracing.
+
+    Enforces the PTY wrapper tracer PID immunity contract from issue #806:
+    any call site that tries to pass proc.pid (or any .pid Attribute) directly
+    to start_linux_tracing is caught in CI before it ships.
+    """
+    violations = []
+    for src_file in _SOURCE_FILES:
+        file_violations = _scan(src_file)
+        arch008 = [v for v in file_violations if v.rule_id == "ARCH-008"]
+        violations.extend(arch008)
+
+    assert not violations, (
+        "ARCH-008: start_linux_tracing called with a raw .pid attribute as target. "
+        "Use resolve_trace_target() (PTY mode) or trace_target_from_pid() (direct mode) "
+        "to get a TraceTarget first (issue #806):\n" + "\n".join(f"  {v}" for v in violations)
+    )

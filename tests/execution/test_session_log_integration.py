@@ -135,3 +135,69 @@ def test_flush_session_log_surfaces_high_cpu_sustained(tmp_path):
     assert anomalies_path.exists(), "anomalies.jsonl must be created when anomalies are detected"
     kinds = [json.loads(line)["kind"] for line in anomalies_path.read_text().splitlines()]
     assert "high_cpu_sustained" in kinds
+
+
+# ---------------------------------------------------------------------------
+# Test 1.6 — Sanity lower bound on peak RSS for a real workload
+# ---------------------------------------------------------------------------
+
+_ALLOCATE_60MB_SCRIPT = """\
+import time
+data = bytearray(60 * 1024 * 1024)  # 60 MB resident allocation
+time.sleep(3)
+"""
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(
+    __import__("shutil").which("script") is None,
+    reason="script(1) not available",
+)
+async def test_peak_rss_kb_above_sanity_floor(tmp_path):
+    """End-to-end: PTY-wrapped tracing produces peak_rss_kb > 30_000 in summary.json.
+
+    Test 1.6: a deliberate lower bound that script(1) (~2 MB) cannot satisfy.
+    If this ever fails, the test name points directly at the PTY wrapper tracer bug class.
+    """
+    from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.process import run_managed_async
+    from autoskillit.execution.session_log import flush_session_log
+
+    cfg = LinuxTracingConfig(proc_interval=0.1, tmpfs_path=str(tmp_path / "shm"))
+    (tmp_path / "shm").mkdir(parents=True)
+
+    helper = tmp_path / "alloc.py"
+    helper.write_text(_ALLOCATE_60MB_SCRIPT)
+
+    result = await run_managed_async(
+        ["python3", str(helper)],
+        cwd=tmp_path,
+        timeout=30.0,
+        pty_mode=True,
+        linux_tracing_config=cfg,
+    )
+
+    assert result.proc_snapshots is not None, "Snapshots must be present"
+
+    flush_session_log(
+        log_dir=str(tmp_path / "logs"),
+        cwd=str(tmp_path),
+        session_id="sanity-floor-001",
+        pid=result.pid,
+        skill_command="/test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts=result.start_ts or "2026-01-01T00:00:00+00:00",
+        proc_snapshots=result.proc_snapshots,
+    )
+
+    summary_path = tmp_path / "logs" / "sessions" / "sanity-floor-001" / "summary.json"
+    assert summary_path.exists()
+    summary = json.loads(summary_path.read_text())
+
+    assert summary["peak_rss_kb"] > 30_000, (
+        f"peak_rss_kb is {summary['peak_rss_kb']} KB — too low for a 60 MB allocation. "
+        "script(1) only uses ~2 MB RSS. If this fails, the PTY wrapper tracer bug (#806) "
+        "has returned."
+    )

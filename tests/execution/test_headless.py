@@ -3620,14 +3620,13 @@ class TestHeadlessExecutorIdleOutputTimeout:
         """idle_output_timeout=None falls back to float(cfg.idle_output_timeout)."""
         from autoskillit.execution.headless import run_headless_core
 
-        cfg_value = float(tool_ctx.config.run_skill.idle_output_timeout)
         marker = tool_ctx.config.run_skill.completion_marker
         tool_ctx.runner.push(self._success_payload(marker))
         await run_headless_core(
             "/investigate foo", cwd="/tmp", ctx=tool_ctx, idle_output_timeout=None
         )
         _, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
-        assert kwargs["idle_output_timeout"] == cfg_value
+        assert kwargs["idle_output_timeout"] == 600.0
 
 
 def _ndjson_with_write(result_text: str, file_paths: list[str], session_id: str = "test-session"):

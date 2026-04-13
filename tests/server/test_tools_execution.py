@@ -1445,9 +1445,8 @@ async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, mon
     assert len(arch_members) >= 1
 
 
-@pytest.mark.anyio
-async def test_run_skill_passes_idle_output_timeout(tool_ctx, monkeypatch) -> None:
-    """run_skill passes idle_output_timeout (as float) to executor.run()."""
+def _make_capturing_executor():
+    """Return (executor, captured_dict) for testing idle_output_timeout propagation."""
     from autoskillit.core import SkillResult
 
     captured: dict = {}
@@ -1470,7 +1469,14 @@ async def test_run_skill_passes_idle_output_timeout(tool_ctx, monkeypatch) -> No
                 token_usage=None,
             )
 
-    tool_ctx.executor = MockExecutor()
+    return MockExecutor(), captured
+
+
+@pytest.mark.anyio
+async def test_run_skill_passes_idle_output_timeout(tool_ctx, monkeypatch) -> None:
+    """run_skill passes idle_output_timeout (as float) to executor.run()."""
+    executor, captured = _make_capturing_executor()
+    tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
@@ -1482,29 +1488,8 @@ async def test_run_skill_passes_idle_output_timeout(tool_ctx, monkeypatch) -> No
 @pytest.mark.anyio
 async def test_run_skill_idle_output_timeout_defaults_to_none(tool_ctx, monkeypatch) -> None:
     """run_skill passes None to executor.run() when idle_output_timeout is not set."""
-    from autoskillit.core import SkillResult
-
-    captured: dict = {}
-
-    class MockExecutor:
-        async def run(
-            self, skill_command, cwd, *, idle_output_timeout=None, **kwargs
-        ) -> SkillResult:
-            captured["idle_output_timeout"] = idle_output_timeout
-            return SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason="none",
-                stderr="",
-                token_usage=None,
-            )
-
-    tool_ctx.executor = MockExecutor()
+    executor, captured = _make_capturing_executor()
+    tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill

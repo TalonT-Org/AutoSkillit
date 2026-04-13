@@ -20,8 +20,7 @@ class TestFmtCloneRepo:
             },
             False,
         )
-        assert "clone_source_type" in result
-        assert "remote" in result
+        assert "clone_source_type: remote" in result
 
     def test_fmt_clone_repo_renders_local_source_type(self) -> None:
         """clone_source_type=local is rendered correctly."""
@@ -37,6 +36,5 @@ class TestFmtCloneRepo:
             },
             False,
         )
-        assert "clone_source_type" in result
-        assert "local" in result
-        assert "clone_source_reason" in result
+        assert "clone_source_type: local" in result
+        assert "clone_source_reason: strategy_clone_local" in result

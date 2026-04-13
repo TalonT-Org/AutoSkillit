@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 
 def _make_mock_ctx(tmp_path: Path) -> MagicMock:
@@ -211,3 +214,59 @@ def test_initialize_registers_mcp_replay_middleware(tmp_path, monkeypatch):
 
     mock_middleware_cls.assert_called_once_with(mock_player)
     mock_mcp.add_middleware.assert_called_once_with(mock_middleware_cls.return_value)
+
+
+# --- T-INIT-5: Critical _initialize does not perform deferrable I/O ---
+
+
+def test_initialize_critical_does_not_call_recovery(tmp_path, monkeypatch):
+    """Critical _initialize path must not perform deferrable I/O."""
+    from autoskillit.server._state import _initialize
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "autoskillit.execution.recover_crashed_sessions",
+        lambda **kw: calls.append("recover") or 0,
+    )
+
+    mock_ctx = _make_mock_ctx(tmp_path)
+    mock_ctx.config.subsets.disabled = []
+    mock_ctx.session_skill_manager = MagicMock()
+
+    monkeypatch.setattr(
+        mock_ctx.audit,
+        "load_from_log_dir",
+        lambda *a, **kw: calls.append("audit_load") or 0,
+    )
+    monkeypatch.setattr(
+        mock_ctx.session_skill_manager,
+        "cleanup_stale",
+        lambda: calls.append("cleanup_stale") or [],
+    )
+
+    _initialize(mock_ctx)
+
+    assert "recover" not in calls, "Critical _initialize called recover_crashed_sessions"
+    assert "audit_load" not in calls, "Critical _initialize called audit.load_from_log_dir"
+    assert "cleanup_stale" not in calls, "Critical _initialize called cleanup_stale"
+
+
+# --- T-INIT-6: deferred_initialize runs recovery operations ---
+
+
+@pytest.mark.asyncio
+async def test_deferred_initialize_runs_recovery_operations(tmp_path):
+    """deferred_initialize() must run recovery, audit load, and stale cleanup."""
+    from autoskillit.server._state import deferred_initialize
+
+    mock_ctx = _make_mock_ctx(tmp_path)
+    mock_ctx.config.subsets.disabled = []
+    mock_ctx.session_skill_manager = MagicMock()
+    mock_ctx.session_skill_manager.cleanup_stale.return_value = []
+    mock_ctx.audit.load_from_log_dir.return_value = 0
+
+    event = asyncio.Event()
+    with patch("autoskillit.execution.recover_crashed_sessions", return_value=0):
+        await deferred_initialize(mock_ctx, ready_event=event)
+
+    assert event.is_set(), "deferred_initialize did not signal readiness"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -193,6 +194,22 @@ class TestGetPipelineReport:
         assert result["total_failures"] == 1
         result2 = json.loads(await get_pipeline_report())
         assert result2["total_failures"] == 0
+
+    @pytest.mark.anyio
+    async def test_get_pipeline_report_awaits_startup_ready(self, tool_ctx, monkeypatch):
+        """get_pipeline_report must await _startup_ready before accessing audit data."""
+        import autoskillit.server._state as _state_mod
+
+        ready = asyncio.Event()
+        monkeypatch.setattr(_state_mod, "_startup_ready", ready)
+
+        task = asyncio.create_task(get_pipeline_report())
+        await asyncio.sleep(0.05)
+        assert not task.done(), "get_pipeline_report returned before _startup_ready was set"
+
+        ready.set()
+        await asyncio.sleep(0.05)
+        assert task.done(), "get_pipeline_report did not unblock after _startup_ready was set"
 
 
 class TestGetTokenSummary:

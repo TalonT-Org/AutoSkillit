@@ -157,14 +157,14 @@ tasks:
         # Detect if we're in a git worktree (worktrees have .git as a file, not a directory)
         if [[ -f ".git" ]]; then
           echo "Worktree detected — creating isolated venv"
-          uv venv .venv
+          uv venv --clear .venv
           uv pip install -e '.[dev]' --python .venv/bin/python
         elif [[ -d ".venv" ]]; then
           echo "Main directory — installing into existing venv"
           uv pip install -e '.[dev]' --python .venv/bin/python
         else
           echo "Main directory — creating venv and installing"
-          uv venv .venv
+          uv venv --clear .venv
           uv pip install -e '.[dev]' --python .venv/bin/python
         fi
         echo "Done: $(python --version 2>/dev/null || .venv/bin/python --version)"

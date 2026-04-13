@@ -78,6 +78,11 @@ includes {mcp_prefix}open_kitchen:
   Do NOT call AskUserQuestion — the tool is not unavailable; it only needs its \
 schema loaded on demand via ToolSearch.
 
+SERVER-STARTUP RECOVERY — If open_kitchen returns "No such tool available", \
+the MCP server may still be starting. Wait 10 seconds and retry the call. \
+If the second attempt also fails, wait another 15 seconds and try once more. \
+Do NOT call AskUserQuestion or abort — transient startup delays are normal.
+
 FIRST ACTION — before prompting for any inputs:
 0. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to open the kitchen and load the recipe.
    DO NOT call AskUserQuestion or any other tool before open_kitchen.

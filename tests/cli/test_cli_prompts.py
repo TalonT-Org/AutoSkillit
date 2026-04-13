@@ -424,3 +424,13 @@ def test_open_kitchen_prompt_instructs_toolsearch_when_deferred():
     assert "ToolSearch" in prompt
     assert "deferred" in prompt.lower()
     assert "open_kitchen" in prompt
+
+
+def test_prompt_builder_includes_startup_retry():
+    """Prompt must include retry instruction for 'No such tool available'."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
+    assert "SERVER-STARTUP RECOVERY" in prompt
+    assert "No such tool available" in prompt

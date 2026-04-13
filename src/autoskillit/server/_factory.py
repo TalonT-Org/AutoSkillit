@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,33 @@ logger = get_logger(__name__)
 
 # Sentinel: distinguish "caller passed runner=None explicitly" from "not provided"
 _UNSET: Any = object()
+
+
+class TokenFactory:
+    """Lazy-resolving, caching token factory.
+
+    Wraps the config -> env -> gh CLI token resolution chain.  Does NOT
+    resolve at construction time.  First call resolves and caches the
+    result; subsequent calls return the cached value.
+
+    Thread-safe for single-writer scenarios (GIL-safe sentinel + assignment
+    pattern; the MCP server is single-threaded asyncio).
+    """
+
+    _UNRESOLVED = object()
+
+    def __init__(self, resolver: Callable[[], str | None]) -> None:
+        self._resolver = resolver
+        self._resolved: str | None = self._UNRESOLVED  # type: ignore[assignment]
+
+    def __call__(self) -> str | None:
+        if self._resolved is self._UNRESOLVED:
+            self._resolved = self._resolver()
+        return self._resolved
+
+    @property
+    def is_resolved(self) -> bool:
+        return self._resolved is not self._UNRESOLVED
 
 
 def _default_plugin_dir() -> str:
@@ -164,8 +192,13 @@ def make_context(
                 recorder = make_scenario_recorder(output_dir=scenario_dir, recipe_name=recipe_name)
                 runner = RecordingSubprocessRunner(recorder=recorder, inner=runner)
 
-    # Resolve token: config → GITHUB_TOKEN env var → gh CLI → None (unauthenticated)
-    github_token = config.github.token or os.environ.get("GITHUB_TOKEN") or _gh_cli_token()
+    # Lazy token resolution: config → GITHUB_TOKEN env var → gh CLI → None.
+    # The _gh_cli_token() subprocess (up to 5s) is deferred until the first
+    # gated tool actually needs a GitHub token, keeping the MCP server startup
+    # path free of subprocess calls (REQ-STARTUP-001).
+    token_factory = TokenFactory(
+        lambda: config.github.token or os.environ.get("GITHUB_TOKEN") or _gh_cli_token()
+    )
 
     resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
     gate = DefaultGateState(enabled=False)
@@ -194,9 +227,9 @@ def make_context(
         db_reader=DefaultDatabaseReader(),
         workspace_mgr=DefaultWorkspaceManager(),
         clone_mgr=DefaultCloneManager(),
-        github_client=DefaultGitHubFetcher(token=github_token),
-        ci_watcher=DefaultCIWatcher(token=github_token),
-        merge_queue_watcher=DefaultMergeQueueWatcher(token=github_token),
+        github_client=DefaultGitHubFetcher(token=token_factory),
+        ci_watcher=DefaultCIWatcher(token=token_factory),
+        merge_queue_watcher=DefaultMergeQueueWatcher(token_factory),
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
         quota_refresh_task=None,

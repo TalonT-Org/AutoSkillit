@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
@@ -87,15 +88,32 @@ class DefaultMergeQueueWatcher:
     Never raises; all errors are returned as structured dicts.
     """
 
-    def __init__(self, token: str | None) -> None:
-        self._client = httpx.AsyncClient(
-            headers=github_headers(token),
-            limits=httpx.Limits(keepalive_expiry=60),
-            timeout=30.0,
-        )
+    def __init__(self, token: str | None | Callable[[], str | None]) -> None:
+        self._token_factory: Callable[[], str | None] | None
+        if callable(token):
+            self._token_factory = token
+            self._client: httpx.AsyncClient | None = None
+        else:
+            self._token_factory = None
+            self._client = httpx.AsyncClient(
+                headers=github_headers(token),
+                limits=httpx.Limits(keepalive_expiry=60),
+                timeout=30.0,
+            )
+
+    def _ensure_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            resolved = self._token_factory() if self._token_factory is not None else None
+            self._client = httpx.AsyncClient(
+                headers=github_headers(resolved),
+                limits=httpx.Limits(keepalive_expiry=60),
+                timeout=30.0,
+            )
+        return self._client
 
     async def aclose(self) -> None:
-        await self._client.aclose()
+        if self._client is not None:
+            await self._client.aclose()
 
     async def wait(
         self,
@@ -280,7 +298,7 @@ class DefaultMergeQueueWatcher:
             "prNumber": pr_number,
             "branch": target_branch,
         }
-        resp = await self._client.post(
+        resp = await self._ensure_client().post(
             _GRAPHQL_ENDPOINT, json={"query": _QUERY, "variables": variables}
         )
         resp.raise_for_status()
@@ -362,7 +380,7 @@ class DefaultMergeQueueWatcher:
             (_MUTATION_ENABLE_AUTO_MERGE, {"prId": pr_node_id, "mergeMethod": "SQUASH"}),
         ]
         for i, (mutation, variables) in enumerate(mutations):
-            resp = await self._client.post(
+            resp = await self._ensure_client().post(
                 _GRAPHQL_ENDPOINT, json={"query": mutation, "variables": variables}
             )
             resp.raise_for_status()

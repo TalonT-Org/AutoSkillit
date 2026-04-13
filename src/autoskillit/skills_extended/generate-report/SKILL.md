@@ -163,6 +163,30 @@ If `${RESEARCH_DIR}/visualization-plan.md` exists:
 
 ### Step 3 — Write Report
 
+### Domain-Adaptive Section Ordering
+
+The default section order below suits software engineering and computational
+research. Adjust to match domain conventions when the research question
+originates from a non-engineering field:
+
+- **Default (engineering / computational):** Executive Summary → Background and
+  Research Question → Methodology → Results → Observations → Analysis →
+  What We Learned → Conclusions → Recommendations
+- **Biology / biomedical:** Follow IMRaD order: Background → Methodology →
+  Results → Analysis → Discussion and Future Directions. Use "Discussion and
+  Future Directions" instead of "Recommendations". For journals that move
+  Methods to supplementary material (e.g., Nature style), omit the Methodology
+  section from the main body and note its location.
+- **Economics / social science:** Background → Methodology → Results → Analysis →
+  Discussion and Future Directions.
+
+**Rules:**
+- Executive Summary is always first; Appendices are always last.
+- All mandatory sections (Data Scope Statement, Metrics Provenance Check, Gate
+  Enforcement, What We Learned) must appear regardless of reordering.
+- When reordering, only the section position changes — content requirements are
+  unchanged.
+
 Create the report directory and file:
 ```
 research/YYYY-MM-DD-{slug}/
@@ -216,7 +240,7 @@ enough detail for independent reproduction.}
 ### Environment
 - **Repository commit:** {output of `git rev-parse HEAD` — the exact commit this experiment ran against}
 - **Branch:** {current branch name}
-- **Package versions:** {output of the project's package manager — e.g., `cargo tree`, `pip freeze`, `conda list`, or the contents of lock files. Include ALL relevant dependency versions, not just top-level.}
+- **Package versions:** {output of the project's package manager — e.g., `pip freeze`, `conda list`, or the contents of lock files (e.g., `requirements.txt`, `environment.yml`). Include ALL relevant dependency versions, not just top-level.}
 - **Hardware/OS:** {if relevant to the experiment}
 - **Custom environment:** {if a micromamba/conda environment.yml was used, note it and its location}
 
@@ -305,10 +329,20 @@ analysis if relevant to the experiment type.}
 
 {Direct answer to the research question.}
 
-## Recommendations
+## Recommendations *(or "Discussion and Future Directions" for biology/social science)*
 
 {Actionable next steps based on findings — what to keep, revert, modify,
-or investigate further. Include justification for each recommendation.}
+or investigate further. Include justification for each recommendation.
+In non-engineering domains, frame this section as "Discussion and Future Directions":
+interpret findings in the context of existing literature, explain implications,
+and propose follow-on studies rather than prescriptive next steps.}
+
+## Data Availability
+
+{Optional — include when required by the target journal or domain conventions
+(biology, medical, social science). State where datasets, code, and supplementary
+materials are available, or explain any access restrictions (e.g., patient data,
+proprietary datasets). Omit this section for internal engineering reports.}
 
 ## Appendix: Experiment Scripts
 

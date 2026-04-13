@@ -15,7 +15,7 @@ import subprocess
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, assert_never
+from typing import TYPE_CHECKING, assert_never
 
 import anyio
 import anyio.abc
@@ -58,6 +58,8 @@ from autoskillit.execution._process_race import (
 )
 
 if TYPE_CHECKING:
+    import structlog
+
     from autoskillit.config import LinuxTracingConfig
 
 logger = get_logger(__name__)
@@ -144,7 +146,7 @@ async def execute_termination_action(
     proc: anyio.abc.Process,
     process_exited_event: anyio.Event,
     grace_seconds: float,
-    proc_log: Any,
+    proc_log: structlog.BoundLogger,
 ) -> KillReason:
     """Single authorized executor for all kill decisions in run_managed_async.
 

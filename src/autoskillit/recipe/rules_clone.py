@@ -146,10 +146,6 @@ def _check_clone_local_remote_url_capture(ctx: ValidationContext) -> list[RuleFi
 
     The rule inspects template *expressions* (capture values), not just capture key
     names, so aliasing (e.g. ``alt_url: "${{ result.remote_url }}"``) is caught.
-
-    Related future candidates (out of scope, noted for reference):
-    - push_to_remote captures stderr without checking success
-    - detect_uncommitted_changes captures changed_files used as if non-empty
     """
     recipe = ctx.recipe
     findings: list[RuleFinding] = []

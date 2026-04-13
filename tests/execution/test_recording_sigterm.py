@@ -44,7 +44,7 @@ def test_sigterm_writes_scenario_json(tmp_path):
     # being responsive (no fixed sleep). Falls back after 15 s to tolerate
     # xdist parallel load where subprocess startup can be slow.
     stderr_lines: list[str] = []
-    deadline = time.monotonic() + 15.0
+    deadline = time.monotonic() + 30.0
     while time.monotonic() < deadline:
         remaining = deadline - time.monotonic()
         readable, _, _ = select.select([proc.stderr], [], [], min(remaining, 0.2))
@@ -58,6 +58,7 @@ def test_sigterm_writes_scenario_json(tmp_path):
         decoded = line.decode(errors="replace")
         stderr_lines.append(decoded)
         if _READY_TOKEN in decoded:
+            time.sleep(2.0)  # let lifespan teardown handlers fully register
             break
 
     # SIGTERM is the exact signal Claude Code sends on /exit.

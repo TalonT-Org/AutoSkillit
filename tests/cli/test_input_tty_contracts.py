@@ -1,7 +1,10 @@
 """
-Structural enforcement: every input() call in src/autoskillit/cli/ must be
-preceded by _require_interactive_stdin(), or the function must be in the
-allowlist (_TTY_EXEMPT_FUNCTIONS).
+Structural enforcement: every input() call in src/autoskillit/cli/ must go
+through timed_prompt() in _timed_input.py, or the function must be in the
+allowlist (_RAW_INPUT_EXEMPT_FILES).
+
+Legacy test kept for the old _require_interactive_stdin contract is now
+superseded by the stricter timed_prompt enforcement.
 """
 
 from __future__ import annotations
@@ -11,77 +14,62 @@ from pathlib import Path
 
 import pytest
 
-# Functions exempt from the _require_interactive_stdin() contract.
-# Two allowlist categories:
-# - call-site-guarded: only called from contexts that already guarantee isatty()
-# - custom-handled: implement their own non-interactive path (return a result,
-#   not SystemExit) — cannot use _require_interactive_stdin by design
-_TTY_EXEMPT_FUNCTIONS: frozenset[str] = frozenset(
+# Files that are *allowed* to contain raw input() calls.
+# _timed_input.py is the sole module that wraps input() with timeout/TTY/ANSI.
+_RAW_INPUT_EXEMPT_FILES: frozenset[str] = frozenset(
     {
-        "_prompt_github_repo",  # call-site-guarded: only caller (_register_all) wraps in isatty()
-        "_check_secret_scanning",  # custom-handled: returns _ScanResult(False) non-interactively
-        "run_onboarding_menu",  # custom-handled: catches EOFError on each input()
-        "run_update_checks",  # custom-handled: guards with isatty() check at entry
+        "_timed_input.py",  # the prompt primitive itself
     }
 )
 
 _CLI_DIR = Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit" / "cli"
 
 
-def _has_tty_guard_before_input(func_body: list[ast.stmt]) -> bool:
-    """Return True if the function body contains a _require_interactive_stdin() call.
-
-    The canonical TTY guard is exclusively _require_interactive_stdin(). Inline
-    isatty() checks are NOT accepted — they are too permissive: a function with
-    multiple input() calls passes even when only one call site is guarded, and
-    the enforcement silently breaks when the guard is removed.
-    """
-    for node in ast.walk(ast.Module(body=func_body, type_ignores=[])):
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "_require_interactive_stdin":
-                return True
-    return False
+# ---------------------------------------------------------------------------
+# Test 1a — no raw input() outside _timed_input.py
+# ---------------------------------------------------------------------------
 
 
-def test_all_input_calls_in_cli_are_tty_guarded() -> None:
-    """Every function in src/autoskillit/cli/ that calls input() must call
-    _require_interactive_stdin() in its body, OR be listed in _TTY_EXEMPT_FUNCTIONS.
+def test_all_cli_prompts_use_timed_prompt_or_are_exempt() -> None:
+    """No function in src/autoskillit/cli/ may call input() directly except
+    those inside files listed in _RAW_INPUT_EXEMPT_FILES.
 
-    This prevents silent EOFError crashes in non-interactive environments and makes
-    the class of bugs in issue #470 structurally impossible to re-introduce.
+    All user-facing prompts must go through timed_prompt() which composes
+    TTY guard, ANSI formatting, and timeout into a single call.
     """
     violations: list[str] = []
 
     for py_file in sorted(_CLI_DIR.rglob("*.py")):
+        if py_file.name in _RAW_INPUT_EXEMPT_FILES:
+            continue
         source = py_file.read_text()
         tree = ast.parse(source, filename=str(py_file))
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             func_name = node.name
-            if func_name in _TTY_EXEMPT_FUNCTIONS:
-                continue
-            # Check if this function contains any input() call
             has_input = any(
                 isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "input"
                 for n in ast.walk(ast.Module(body=node.body, type_ignores=[]))
             )
-            if not has_input:
-                continue
-            # Function has input() — verify TTY guard
-            if not _has_tty_guard_before_input(node.body):
+            if has_input:
                 rel_path = py_file.relative_to(Path("src"))
                 violations.append(
-                    f"{rel_path}:{node.lineno}: {func_name}() calls input() "
-                    f"without _require_interactive_stdin()"
+                    f"{rel_path}:{node.lineno}: {func_name}() calls raw input() — "
+                    f"use timed_prompt() from _timed_input.py instead"
                 )
 
     assert not violations, (
-        "The following CLI functions call input() without _require_interactive_stdin().\n"
-        "Add _require_interactive_stdin(context) at the start of each function,\n"
-        "or add the function to _TTY_EXEMPT_FUNCTIONS with a justification comment:\n\n"
+        "The following CLI functions call input() directly instead of timed_prompt().\n"
+        "All user-facing prompts must use timed_prompt() which composes TTY guard,\n"
+        "ANSI formatting, and select.select timeout into a single call:\n\n"
         + "\n".join(f"  • {v}" for v in violations)
     )
+
+
+# ---------------------------------------------------------------------------
+# _require_interactive_stdin behavioural tests (kept for regression coverage)
+# ---------------------------------------------------------------------------
 
 
 def test_require_interactive_stdin_raises_system_exit_when_not_tty(

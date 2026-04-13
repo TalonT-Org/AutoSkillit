@@ -62,6 +62,21 @@ class TestTaskfile:
         assert "@integration" in cmds, "install-dev must install from @integration branch"
         assert "autoskillit install" in cmds, "install-dev must run autoskillit install after uv"
 
+    def test_vendor_mermaid_task_exists(self) -> None:
+        """REQ-R741-A02 — vendor-mermaid task must be declared in Taskfile.yml."""
+        data = self._load()
+        assert "vendor-mermaid" in data["tasks"], "vendor-mermaid task missing from Taskfile.yml"
+
+    def test_vendor_mermaid_task_targets_v11(self) -> None:
+        """REQ-R741-A02 — vendor-mermaid task must reference mermaid@11 and the asset path."""
+        data = self._load()
+        task = data["tasks"]["vendor-mermaid"]
+        cmds = " ".join(str(c) for c in task.get("cmds", []))
+        assert "mermaid@11" in cmds, "vendor-mermaid must curl mermaid@11"
+        assert "assets/mermaid/mermaid.min.js" in cmds, (
+            "vendor-mermaid must write to src/autoskillit/assets/mermaid/mermaid.min.js"
+        )
+
 
 def test_taskfile_pytest_paths_exist() -> None:
     """All pytest file paths in Taskfile.yml must exist."""

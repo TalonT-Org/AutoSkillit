@@ -1731,7 +1731,7 @@ class TestResearchRecipeStructure:
         routes = {c.when: c.route for c in step.on_result.conditions if c.when}
         assert any("GO" in (w or "") for w in routes), "Missing GO route"
         go_route = next(c.route for c in step.on_result.conditions if c.when and "GO" in c.when)
-        assert go_route == "create_worktree"
+        assert go_route == "plan_visualization"
         revise_route = next(
             c.route for c in step.on_result.conditions if c.when and "REVISE" in c.when
         )
@@ -1839,13 +1839,13 @@ class TestResearchRecipeStructure:
         step = recipe.steps["re_run_experiment"]
         assert step.tool == "run_skill"
         assert "--adjust" in step.with_args.get("skill_command", "")
-        assert step.on_success == "re_write_report"
+        assert step.on_success == "re_generate_report"
 
-    def test_re_write_report_step(self, recipe) -> None:
-        assert "re_write_report" in recipe.steps
-        step = recipe.steps["re_write_report"]
+    def test_re_generate_report_step(self, recipe) -> None:
+        assert "re_generate_report" in recipe.steps
+        step = recipe.steps["re_generate_report"]
         assert step.tool == "run_skill"
-        assert step.on_success == "re_test"
+        assert step.on_success == "re_stage_bundle"
 
     def test_re_test_step(self, recipe) -> None:
         assert "re_test" in recipe.steps
@@ -1855,10 +1855,10 @@ class TestResearchRecipeStructure:
 
     def test_revalidation_loop_all_paths_reach_begin_archival(self, recipe) -> None:
         """Every path from merge_escalations reaches begin_archival."""
-        for step_name in ("re_run_experiment", "re_write_report", "re_test"):
+        for step_name in ("re_run_experiment", "re_generate_report", "re_test"):
             step = recipe.steps[step_name]
             assert step.on_failure in ("begin_archival", "re_push_research")
-        assert recipe.steps["re_push_research"].on_success == "begin_archival"
+        assert recipe.steps["re_push_research"].on_success == "finalize_bundle"
 
     def test_audit_claims_ingredient_default_false(self, recipe) -> None:
         assert "audit_claims" in recipe.ingredients
@@ -2046,11 +2046,24 @@ class TestResearchRecipeStructure:
                 f"{name}.on_failure must be research_complete for graceful degradation"
             )
 
-    def test_re_push_research_routes_to_begin_archival(self, recipe) -> None:
-        """re_push_research routes to begin_archival."""
+    def test_re_push_research_routes_to_finalize_bundle(self, recipe) -> None:
+        """re_push_research routes to finalize_bundle on success, begin_archival on failure."""
         step = recipe.steps["re_push_research"]
-        assert step.on_success == "begin_archival"
+        assert step.on_success == "finalize_bundle"
         assert step.on_failure == "begin_archival"
+
+    def test_finalize_bundle_routes_to_finalize_bundle_render(self, recipe) -> None:
+        """finalize_bundle on_success routes to finalize_bundle_render (not begin_archival)."""
+        step = recipe.steps["finalize_bundle"]
+        assert step.on_success == "finalize_bundle_render"
+        assert step.on_failure == "begin_archival"
+
+    def test_finalize_bundle_render_step_exists_and_routes(self, recipe) -> None:
+        """finalize_bundle_render routes to route_archive_or_export on both outcomes."""
+        assert "finalize_bundle_render" in recipe.steps
+        step = recipe.steps["finalize_bundle_render"]
+        assert step.on_success == "route_archive_or_export"
+        assert step.on_failure == "route_archive_or_export"
 
     def test_create_worktree_copies_review_cycle_artifacts(self, recipe) -> None:
         """create_worktree must copy review-design dashboards and revision guidance."""
@@ -2077,37 +2090,35 @@ class TestResearchRecipeStructure:
             "create_worktree must copy plan versions to plan-versions/"
         )
 
-    def test_commit_research_artifacts_step_exists(self, recipe) -> None:
-        """A commit_research_artifacts step must exist to capture phase artifacts."""
-        assert "commit_research_artifacts" in recipe.steps, (
-            "research.yaml must have a commit_research_artifacts step for phase artifacts"
+    def test_stage_bundle_step_exists(self, recipe) -> None:
+        """A stage_bundle step must exist to organize phase artifacts."""
+        assert "stage_bundle" in recipe.steps, (
+            "research.yaml must have a stage_bundle step for phase artifact staging"
         )
-        step = recipe.steps["commit_research_artifacts"]
+        step = recipe.steps["stage_bundle"]
         cmd = step.with_args["cmd"]
         assert "phase-groups" in cmd, "Must copy make-groups output"
         assert "phase-plans" in cmd, "Must copy make-plan output"
 
-    def test_test_routes_to_commit_research_artifacts(self, recipe) -> None:
-        """test step must route to commit_research_artifacts, not directly to push_branch."""
+    def test_test_routes_to_push_branch(self, recipe) -> None:
+        """test step must route to push_branch now that commit_research_artifacts is removed."""
         step = recipe.steps["test"]
-        assert step.on_success == "commit_research_artifacts", (
-            "test.on_success must be commit_research_artifacts to capture phase artifacts"
-            " before push"
+        assert step.on_success == "push_branch", (
+            "test.on_success must be push_branch after commit_research_artifacts is removed"
         )
 
-    def test_retest_routes_to_commit_research_artifacts(self, recipe) -> None:
-        """retest step must route to commit_research_artifacts, not directly to push_branch."""
+    def test_retest_routes_to_push_branch(self, recipe) -> None:
+        """retest step must route to push_branch now that commit_research_artifacts is removed."""
         step = recipe.steps["retest"]
-        assert step.on_success == "commit_research_artifacts", (
-            "retest.on_success must be commit_research_artifacts to capture phase artifacts"
-            " before push"
+        assert step.on_success == "push_branch", (
+            "retest.on_success must be push_branch after commit_research_artifacts is removed"
         )
 
-    def test_commit_research_artifacts_routes_to_push_branch(self, recipe) -> None:
-        """commit_research_artifacts must route to push_branch on both success and failure."""
-        step = recipe.steps["commit_research_artifacts"]
-        assert step.on_success == "push_branch"
-        assert step.on_failure == "push_branch"
+    def test_stage_bundle_routes_to_route_pr_or_local(self, recipe) -> None:
+        """stage_bundle must route to route_pr_or_local on success and failure."""
+        step = recipe.steps["stage_bundle"]
+        assert step.on_success == "route_pr_or_local"
+        assert step.on_failure == "route_pr_or_local"
 
 
 # ---------------------------------------------------------------------------

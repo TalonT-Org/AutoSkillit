@@ -198,8 +198,22 @@ skills:
     - plan-experiment
     - implement-experiment
     - run-experiment
-    - write-report
+    - generate-report
     - validate-audit
+    - vis-lens-always-on
+    - vis-lens-antipattern
+    - vis-lens-chart-select
+    - vis-lens-color-access
+    - vis-lens-domain-norms
+    - vis-lens-figure-table
+    - vis-lens-multi-compare
+    - vis-lens-temporal
+    - vis-lens-uncertainty
+    - vis-lens-caption-annot
+    - vis-lens-reproducibility
+    - vis-lens-story-arc
+    - plan-visualization
+    - bundle-local-report
   tier3:
     - prepare-pr
     - compose-pr

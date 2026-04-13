@@ -504,12 +504,12 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                     "skill_command", ""
                 ):
                     continue
-                # Exempt write-report report_path captures in terminal re-validation steps:
-                # when report_path is captured from write-report but no downstream step
-                # references it (e.g. re_write_report in a post-review re-validation loop
+                # Exempt generate-report report_path captures in terminal re-validation steps:
+                # when report_path is captured from generate-report but no downstream step
+                # references it (e.g. re_generate_report in a post-review re-validation loop
                 # that routes directly to test then push), the capture satisfies the
                 # implicit-handoff contract for observability — not downstream threading.
-                if cap_key == "report_path" and "write-report" in step.with_args.get(
+                if cap_key == "report_path" and "generate-report" in step.with_args.get(
                     "skill_command", ""
                 ):
                     continue
@@ -532,6 +532,20 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                 # post-tool hooks (e.g. token_summary_appender). No downstream recipe
                 # step consumes it — consumption happens outside the recipe pipeline.
                 if cap_key == "pr_url" and "compose-pr" in step.with_args.get("skill_command", ""):
+                    continue
+                # Exempt bundle-local-report html_path captures: html_path is captured for
+                # observability and future groupH local-mode export (route_archive_or_export
+                # step). No current downstream recipe step consumes it — static analysis
+                # cannot yet verify the future consumption point.
+                if cap_key == "html_path" and "bundle-local-report" in step.with_args.get(
+                    "skill_command", ""
+                ):
+                    continue
+                # Exempt export_local_bundle local_bundle_path captures: local_bundle_path
+                # is captured for orchestrator observability. The route_archive_or_export
+                # local-mode path ends at research_complete (a stop action), so no
+                # downstream recipe step can consume it via template syntax.
+                if cap_key == "local_bundle_path" and step_name == "export_local_bundle":
                     continue
                 warnings.append(
                     DataFlowWarning(

@@ -1191,6 +1191,29 @@ skills:
     - "experiment_plan = /tmp/experiment_plan.md\n%%ORDER_UP%%"
     write_behavior: always
 
+  plan-visualization:
+    inputs:
+    - name: source_dir
+      type: directory_path
+      required: true
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: scope_report_path
+      type: string
+      required: false
+    outputs:
+    - name: visualization_plan_path
+      type: file_path
+    - name: report_plan_path
+      type: file_path
+    expected_output_patterns:
+    - "visualization_plan_path\\s*=\\s*/.+"
+    - "report_plan_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\n%%ORDER_UP%%"
+    write_behavior: always
+
   implement-experiment:
     inputs:
     - name: plan_path
@@ -1221,7 +1244,7 @@ skills:
     - "results_path = /tmp/run-experiment/results.md\n%%ORDER_UP%%"
     write_behavior: always
 
-  write-report:
+  generate-report:
     inputs:
     - name: worktree_path
       type: directory_path
@@ -1400,3 +1423,250 @@ skills:
     write_behavior: conditional
     write_expected_when:
     - "Fixes applied:\\s*[1-9][0-9]*"
+
+  vis-lens-always-on:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-antipattern:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-chart-select:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-domain-norms:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-uncertainty:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-multi-compare:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-temporal:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-color-access:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+
+  vis-lens-figure-table:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+  vis-lens-caption-annot:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+  vis-lens-story-arc:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+  vis-lens-reproducibility:
+    inputs:
+    - name: context_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: false
+    - name: project_context
+      type: string
+      required: false
+    outputs:
+    - name: diagram_path
+      type: file_path
+    expected_output_patterns:
+    - "diagram_path\\s*=\\s*/.+"
+    pattern_examples:
+    - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
+  bundle-local-report:
+    inputs:
+    - name: research_dir
+      type: directory_path
+      required: true
+    - name: report_path
+      type: file_path
+      required: true
+    - name: all_diagram_paths
+      type: string
+      required: false
+    - name: visualization_plan_path
+      type: file_path
+      required: false
+    outputs:
+    - name: html_path
+      type: file_path
+    expected_output_patterns:
+    - "html_path\\s*=\\s*\\S+"
+    pattern_examples:
+    - "html_path = /tmp/research/report.html\n%%ORDER_UP%%"
+    write_behavior: always

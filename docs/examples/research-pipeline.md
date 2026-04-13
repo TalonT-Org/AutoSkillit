@@ -20,7 +20,7 @@ fifth example, update the test fixture in the same commit.
 The first run exercised the `research` recipe end to end against an empty
 target repository. The orchestrator collected ingredients, ran
 `scope` → `plan-experiment` → `implement-experiment` → `run-experiment` →
-`write-report`, and committed both the experiment results and the auxiliary
+`generate-report`, and committed both the experiment results and the auxiliary
 artifacts in two separate PRs so reviewers could read the report without
 diffing the data.
 

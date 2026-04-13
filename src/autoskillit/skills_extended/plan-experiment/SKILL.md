@@ -204,7 +204,7 @@ research/YYYY-MM-DD-{slug}/
 │   └── ...
 ├── data/                     # Generated/input data
 ├── results/                  # Experiment output (metrics, logs)
-└── report.md                 # Final report (written by write-report)
+└── report.md                 # Final report (written by generate-report)
 ```
 
 {Describe each planned file and its purpose.}

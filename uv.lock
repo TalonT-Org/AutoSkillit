@@ -73,7 +73,7 @@ wheels = [
 
 [[package]]
 name = "autoskillit"
-version = "0.7.84"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -82,6 +82,7 @@ dependencies = [
     { name = "fastmcp" },
     { name = "httpx" },
     { name = "igraph" },
+    { name = "markdown-it-py" },
     { name = "packaging" },
     { name = "psutil" },
     { name = "pygments" },
@@ -113,6 +114,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28,<0.29" },
     { name = "igraph", specifier = ">=1.0,<2.0" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.1" },
+    { name = "markdown-it-py", specifier = ">=3.0" },
     { name = "packaging", specifier = ">=23.0" },
     { name = "packaging", marker = "extra == 'dev'", specifier = ">=25.0" },
     { name = "psutil", specifier = ">=7.2.0" },

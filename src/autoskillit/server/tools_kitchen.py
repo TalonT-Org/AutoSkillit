@@ -292,6 +292,18 @@ async def open_kitchen(
             )
         suppressed = tool_ctx.config.migration.suppressed
         _defaults = resolve_ingredient_defaults(Path.cwd())
+        # Runtime enum check: output_mode must be validated before recipe loading
+        if name == "research":
+            _om_value = (overrides or {}).get("output_mode")
+            if _om_value is not None and _om_value not in {"pr", "local"}:
+                return json.dumps(
+                    {
+                        "error": (
+                            f"output_mode must be 'pr' or 'local', got {_om_value!r}. "
+                            "Only two modes are supported for the research recipe."
+                        )
+                    }
+                )
         try:
             result = tool_ctx.recipes.load_and_validate(
                 name,

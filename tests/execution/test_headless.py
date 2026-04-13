@@ -3130,6 +3130,7 @@ class TestOutputPathTokensDerivedFromContracts:
             "recipe_path",
             "remediation_path",
             "report_path",
+            "report_plan_path",
             "results_path",
             "review_path",
             "revision_guidance",
@@ -3137,6 +3138,8 @@ class TestOutputPathTokensDerivedFromContracts:
             "summary_path",
             "triage_manifest",
             "triage_report",
+            "visualization_plan_path",
+            "html_path",
         }
     )
 

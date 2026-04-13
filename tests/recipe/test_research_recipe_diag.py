@@ -72,16 +72,16 @@ def test_prepare_research_pr_routes_to_run_experiment_lenses(recipe):
     assert step.on_success == "run_experiment_lenses"
 
 
-def test_run_experiment_lenses_routes_to_compose_on_success(recipe):
-    """run_experiment_lenses.on_success routes to compose_research_pr."""
+def test_run_experiment_lenses_routes_to_stage_bundle_on_success(recipe):
+    """run_experiment_lenses.on_success routes to stage_bundle."""
     step = recipe.steps["run_experiment_lenses"]
-    assert step.on_success == "compose_research_pr"
+    assert step.on_success == "stage_bundle"
 
 
-def test_run_experiment_lenses_routes_to_compose_on_failure(recipe):
-    """run_experiment_lenses.on_failure routes to compose_research_pr (partial diagrams OK)."""
+def test_run_experiment_lenses_routes_to_stage_bundle_on_failure(recipe):
+    """run_experiment_lenses.on_failure routes to stage_bundle (partial diagrams OK)."""
     step = recipe.steps["run_experiment_lenses"]
-    assert step.on_failure == "compose_research_pr"
+    assert step.on_failure == "stage_bundle"
 
 
 def test_compose_research_pr_routes_to_guard_pr_url(recipe):
@@ -110,7 +110,6 @@ def test_run_experiment_lenses_has_capture_list_for_diagram_paths(recipe):
     assert "all_diagram_paths" in (step.capture_list or {})
 
 
-def test_commit_research_artifacts_captures_report_path(recipe):
-    """commit_research_artifacts must emit and capture the post-rename report path."""
-    step = recipe.steps["commit_research_artifacts"]
-    assert "report_path" in (step.capture or {})
+def test_stage_bundle_exists(recipe):
+    """stage_bundle step must exist in the recipe."""
+    assert "stage_bundle" in recipe.steps, "research.yaml must have a stage_bundle step"

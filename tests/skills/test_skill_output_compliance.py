@@ -234,6 +234,11 @@ def test_output_path_tokens_synchronized() -> None:
             "revision_guidance",
             # prepare-research-pr output (decomposed research-PR flow)
             "prep_path",
+            # plan-visualization outputs (groupF Part A)
+            "visualization_plan_path",
+            "report_plan_path",
+            # bundle-local-report output (groupG)
+            "html_path",
         }
     )
 
@@ -289,6 +294,18 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "arch-lens-scenarios": ["diagram_path"],
     "arch-lens-state-lifecycle": ["diagram_path"],
     "arch-lens-deployment": ["diagram_path"],
+    "vis-lens-always-on": ["diagram_path"],
+    "vis-lens-antipattern": ["diagram_path"],
+    "vis-lens-caption-annot": ["diagram_path"],
+    "vis-lens-chart-select": ["diagram_path"],
+    "vis-lens-color-access": ["diagram_path"],
+    "vis-lens-domain-norms": ["diagram_path"],
+    "vis-lens-figure-table": ["diagram_path"],
+    "vis-lens-multi-compare": ["diagram_path"],
+    "vis-lens-reproducibility": ["diagram_path"],
+    "vis-lens-story-arc": ["diagram_path"],
+    "vis-lens-temporal": ["diagram_path"],
+    "vis-lens-uncertainty": ["diagram_path"],
     "review-design": ["evaluation_dashboard", "revision_guidance"],
 }
 

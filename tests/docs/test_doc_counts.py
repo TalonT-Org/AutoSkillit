@@ -97,6 +97,14 @@ def _count_exp_lens_skills() -> int:
     )
 
 
+def _count_vis_lens_skills() -> int:
+    return sum(
+        1
+        for p in (SRC_DIR / "skills_extended").iterdir()
+        if p.is_dir() and p.name.startswith("vis-lens-")
+    )
+
+
 def _hook_files() -> list[Path]:
     return sorted(f for f in (SRC_DIR / "hooks").glob("*.py") if f.name not in {"__init__.py"})
 
@@ -196,6 +204,10 @@ def test_exp_lens_count_is_18() -> None:
     assert _count_exp_lens_skills() == 18
 
 
+def test_vis_lens_count_is_12() -> None:
+    assert _count_vis_lens_skills() == 12
+
+
 def test_quota_thresholds_defaults() -> None:
     short, long_ = _quota_thresholds_default()
     assert short == pytest.approx(85.0)
@@ -264,8 +276,8 @@ def test_docs_state_40_kitchen_tools(doc_path: Path) -> None:
     _assert_doc_states_number(doc_path, "kitchen tools", 40)
 
 
-def test_skill_visibility_states_95_skills() -> None:
-    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 95)
+def test_skill_visibility_states_108_skills() -> None:
+    _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 108)
 
 
 def test_safety_hooks_states_13_hooks() -> None:
@@ -308,3 +320,11 @@ def test_catalog_states_arch_and_exp_lens_counts() -> None:
     text = _read(catalog)
     assert "13" in text, "skills/catalog.md does not state 13 arch-lens skills"
     assert "18" in text, "skills/catalog.md does not state 18 exp-lens skills"
+
+
+def test_catalog_states_vis_lens_count_is_12() -> None:
+    catalog = DOCS_DIR / "skills" / "catalog.md"
+    if not catalog.exists():
+        pytest.skip("docs/skills/catalog.md not present")
+    text = _read(catalog)
+    assert "12" in text, "skills/catalog.md does not state 12 vis-lens skills"

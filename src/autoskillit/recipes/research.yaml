@@ -1,6 +1,6 @@
 name: research
-autoskillit_version: "0.7.5"
-requires_packs: [research, exp-lens]
+autoskillit_version: "0.8.0"
+requires_packs: [research, exp-lens, vis-lens]
 description: >
   Single-phase technical research recipe. Scopes a research question, plans an
   experiment, optionally reviews the design, then always decomposes into phases,
@@ -52,6 +52,14 @@ ingredients:
       When 'true', run audit-claims after review_research_pr to verify citation
       integrity and claim backing in the research report. Emits a verdict that
       routes to resolve-claims-review when changes are needed.
+  output_mode:
+    required: false
+    default: "local"
+    description: >
+      Where research outputs land. 'local' (default) produces a self-contained
+      report.html bundle under {source_dir}/research-bundles/{date-slug}/ with
+      no GitHub interaction. 'pr' opens a GitHub PR alongside the HTML bundle
+      and runs the full review/archival flow.
 
 kitchen_rules:
   - >
@@ -86,6 +94,10 @@ kitchen_rules:
     experiment branch under archive/research/, and closes the original PR.
     Every archival step degrades gracefully — failures route to
     research_complete without blocking the pipeline.
+  - >
+    LOCAL MODE OUTPUT: In local mode, the finalized bundle (report.html, report.md,
+    artifacts.tar.gz) is exported to {source_dir}/research-bundles/{date-slug}/.
+    This directory is created only when output_mode=local and is not committed to git.
 
 steps:
   # --- DESIGN PHASE ---
@@ -130,12 +142,28 @@ steps:
     on_failure: create_worktree
     on_result:
       - when: "${{ result.verdict }} == GO"
-        route: create_worktree
+        route: plan_visualization
       - when: "${{ result.verdict }} == REVISE"
         route: revise_design
       - when: "${{ result.verdict }} == STOP"
         route: resolve_design_review
       - route: create_worktree
+
+  plan_visualization:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: plan_visualization
+    capture:
+      visualization_plan_path: "${{ result.visualization_plan_path }}"
+      report_plan_path: "${{ result.report_plan_path }}"
+    on_success: create_worktree
+    on_failure: escalate_stop
+    note: >
+      Selects 2–4 vis-lens skills via three-tier logic, runs them in parallel, and
+      synthesizes outputs into visualization-plan.md and report-plan.md.
+      Runs before worktree creation so outputs can be committed into the research dir.
 
   revise_design:
     action: route
@@ -197,6 +225,10 @@ steps:
         EVAL_DASHBOARD="${{ context.evaluation_dashboard }}" &&
         if [ -n "${SCOPE_REPORT}" ] && [ -f "${SCOPE_REPORT}" ]; then cp "${SCOPE_REPORT}" "${RESEARCH_DIR}/artifacts/scope-report.md"; fi &&
         if [ -n "${EVAL_DASHBOARD}" ] && [ -f "${EVAL_DASHBOARD}" ]; then cp "${EVAL_DASHBOARD}" "${RESEARCH_DIR}/artifacts/design-evaluation.md"; fi &&
+        VISUALIZATION_PLAN="${{ context.visualization_plan_path }}" &&
+        REPORT_PLAN="${{ context.report_plan_path }}" &&
+        if [ -n "${VISUALIZATION_PLAN}" ] && [ -f "${VISUALIZATION_PLAN}" ]; then cp "${VISUALIZATION_PLAN}" "${RESEARCH_DIR}/visualization-plan.md"; fi &&
+        if [ -n "${REPORT_PLAN}" ] && [ -f "${REPORT_PLAN}" ]; then cp "${REPORT_PLAN}" "${RESEARCH_DIR}/report-plan.md"; fi &&
         SRC_TEMP="${{ inputs.source_dir }}/{{AUTOSKILLIT_TEMP}}" &&
         mkdir -p "${RESEARCH_DIR}/artifacts/review-cycles" &&
         mkdir -p "${RESEARCH_DIR}/artifacts/plan-versions" &&
@@ -318,7 +350,7 @@ steps:
     capture:
       experiment_results: "${{ result.results_path }}"
     retries: 2
-    on_success: write_report
+    on_success: generate_report
     on_failure: adjust_experiment
     on_exhausted: ensure_results
 
@@ -349,31 +381,31 @@ steps:
       step_name: ensure_results
     capture:
       experiment_results: "${{ result.experiment_results }}"
-    on_success: write_report_inconclusive
+    on_success: generate_report_inconclusive
     on_failure: escalate_stop
     note: >
       Ensures context.experiment_results is a valid file path before calling
-      write_report_inconclusive. Creates a minimal placeholder results file when
+      generate_report_inconclusive. Creates a minimal placeholder results file when
       run-experiment never produced output (retries exhausted or adjust failed).
 
-  write_report:
+  generate_report:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
-      step_name: write_report
+      step_name: generate_report
     capture:
       report_path: "${{ result.report_path }}"
     on_success: test
     on_failure: escalate_stop
     note: "Writes a conclusive research report to research/ in the worktree."
 
-  write_report_inconclusive:
+  generate_report_inconclusive:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
-      step_name: write_report
+      step_name: generate_report
     capture:
       report_path: "${{ result.report_path }}"
     on_success: test
@@ -386,7 +418,7 @@ steps:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
-    on_success: commit_research_artifacts
+    on_success: push_branch
     on_failure: fix_tests
 
   fix_tests:
@@ -402,61 +434,8 @@ steps:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
-    on_success: commit_research_artifacts
-    on_failure: escalate_stop
-
-  commit_research_artifacts:
-    tool: run_cmd
-    with:
-      cmd: >
-        RESEARCH_DIR="${{ context.research_dir }}" &&
-        if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
-          WT_TEMP="${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/phase-groups" &&
-          mkdir -p "${RESEARCH_DIR}/artifacts/phase-plans" &&
-          for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done;
-          for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done;
-          for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done;
-          if [ -f "${RESEARCH_DIR}/report.md" ]; then
-            cp "${RESEARCH_DIR}/report.md" "${RESEARCH_DIR}/README.md" &&
-            rm "${RESEARCH_DIR}/report.md";
-          fi &&
-          mapfile -t TAR_ITEMS < <(ls -1 "${RESEARCH_DIR}" | grep -vE '^(README\.md|artifacts\.tar\.gz)$') &&
-          if [ ${#TAR_ITEMS[@]} -gt 0 ]; then
-            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" "${TAR_ITEMS[@]}" &&
-            for item in "${TAR_ITEMS[@]}"; do rm -rf "${RESEARCH_DIR}/${item}"; done;
-          fi &&
-          if [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] && [ -f "${RESEARCH_DIR}/README.md" ]; then
-            MANIFEST=$(tar tzf "${RESEARCH_DIR}/artifacts.tar.gz" | sort) &&
-            { echo ""; echo "## Archive Manifest"; echo ""; echo "Contents of \`artifacts.tar.gz\`:"; echo ""; echo '```'; echo "${MANIFEST}"; echo '```'; } >> "${RESEARCH_DIR}/README.md";
-          fi &&
-          [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] || \
-            { echo "ERROR: artifacts.tar.gz not created in ${RESEARCH_DIR}"; exit 1; } &&
-          LEFTOVERS=$(ls -1 "${RESEARCH_DIR}" | grep -vE '^(README\.md|artifacts\.tar\.gz)$') &&
-          [ -z "${LEFTOVERS}" ] || \
-            { echo "ERROR: uncompressed entries still present in ${RESEARCH_DIR}: ${LEFTOVERS}"; exit 1; } &&
-          [ -f "${RESEARCH_DIR}/README.md" ] || \
-            { echo "ERROR: README.md not found in ${RESEARCH_DIR}"; exit 1; } &&
-          cd "${{ context.worktree_path }}" && git add "${RESEARCH_DIR}" && { git diff --cached --quiet || git commit -m "Add compressed research artifacts"; };
-          echo "report_path=${RESEARCH_DIR}/README.md";
-        else
-          echo "commit_research_artifacts: no research directory found — artifact commit skipped";
-        fi
-      cwd: "${{ context.worktree_path }}"
-      step_name: commit_research_artifacts
-    capture:
-      report_path: "${{ result.report_path }}"
     on_success: push_branch
-    on_failure: push_branch
-    note: >
-      Copies phase-group and phase-plan artifacts from worktree temp, renames
-      report.md to README.md, then archives all remaining entries (artifacts/,
-      experiment-plan.md, data/, results/, scripts/, and any other experiment
-      outputs) into artifacts.tar.gz. Generates an archive manifest appended to
-      README.md. The committed directory contains exactly two files: README.md
-      (human-readable conclusions with manifest) and artifacts.tar.gz (full
-      artifact tree). Non-fatal — proceeds to push_branch even if artifact
-      commit fails.
+    on_failure: escalate_stop
 
   push_branch:
     tool: run_cmd
@@ -489,8 +468,8 @@ steps:
       step_name: run_experiment_lenses
     capture_list:
       all_diagram_paths: "${{ result.diagram_path }}"
-    on_success: compose_research_pr
-    on_failure: compose_research_pr
+    on_success: stage_bundle
+    on_failure: stage_bundle
     note: >
       LENS ITERATION: context.selected_lenses contains comma-separated lens slugs
       (e.g. "fair-comparison,estimand-clarity"). context.lens_context_paths contains
@@ -500,6 +479,48 @@ steps:
       assistant message). Accumulate each diagram_path value into context.all_diagram_paths
       using comma separation via capture_list. If a lens fails, continue with remaining
       lenses — partial diagrams are acceptable (compose_research_pr handles empty lists).
+
+  stage_bundle:
+    tool: run_cmd
+    with:
+      cmd: >
+        RESEARCH_DIR="${{ context.research_dir }}" &&
+        if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
+          WT_TEMP="${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/phase-groups" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/phase-plans" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/images" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/scripts" &&
+          for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
+          for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
+          for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done &&
+          for f in "${WT_TEMP}"/exp-lens-*/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/images/"; done &&
+          echo "stage_bundle=done";
+        else
+          echo "stage_bundle: no research directory found — skipped";
+        fi
+      cwd: "${{ context.worktree_path }}"
+      step_name: stage_bundle
+    on_success: route_pr_or_local
+    on_failure: route_pr_or_local
+    note: >
+      Idempotent file staging step. Copies phase-group, phase-plan, and exp-lens diagram
+      artifacts from the worktree temp directory into research/{slug}/artifacts/. Creates
+      images/ and scripts/ subdirectories. No compression, no rename, no commit. Safe to
+      run multiple times — cp overwrites are idempotent. Runs after run_experiment_lenses
+      to capture all exp-lens diagrams written to AUTOSKILLIT_TEMP/exp-lens-*/.
+
+  route_pr_or_local:
+    action: route
+    on_result:
+      - when: "${{ inputs.output_mode }} == local"
+        route: finalize_bundle
+      - route: compose_research_pr
+    note: >
+      Branches on output_mode after bundle staging. local → bypass PR pipeline entirely,
+      jump to finalize_bundle. pr (fall-through) → compose_research_pr to open PR and run
+      the full review/archival flow. Uses predicate route because skip_when_false only
+      accepts bare inputs.<name> with no expression evaluation.
 
   compose_research_pr:
     tool: run_skill
@@ -646,25 +667,25 @@ steps:
       step_name: re_run_experiment
     capture:
       experiment_results: "${{ result.results_path }}"
-    on_success: re_write_report
+    on_success: re_generate_report
     on_failure: re_push_research
     on_context_limit: re_push_research
     note: >
       Targeted re-run of affected benchmarks after review resolution applied
       code fixes. Uses --adjust to read previous results and re-run only what
-      changed. Captures the updated results_path so re_write_report uses the
+      changed. Captures the updated results_path so re_generate_report uses the
       new results. on_failure falls through to push as best-effort — the code
       fixes from resolve are already committed and should still be pushed.
 
-  re_write_report:
+  re_generate_report:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:write-report ${{ context.worktree_path }} ${{ context.experiment_results }}"
+      skill_command: "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}"
       cwd: "${{ context.worktree_path }}"
-      step_name: re_write_report
+      step_name: re_generate_report
     capture:
       report_path: "${{ result.report_path }}"
-    on_success: re_test
+    on_success: re_stage_bundle
     on_failure: re_push_research
     on_context_limit: re_push_research
     note: >
@@ -672,6 +693,34 @@ steps:
       re-validation run. Passes context.experiment_results which was updated
       by re_run_experiment to point to the new results file. Falls through to
       push on failure.
+
+  re_stage_bundle:
+    tool: run_cmd
+    with:
+      cmd: >
+        RESEARCH_DIR="${{ context.research_dir }}" &&
+        if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
+          WT_TEMP="${{ context.worktree_path }}/{{AUTOSKILLIT_TEMP}}" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/phase-groups" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/phase-plans" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/images" &&
+          mkdir -p "${RESEARCH_DIR}/artifacts/scripts" &&
+          for f in "${WT_TEMP}"/make-groups/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
+          for f in "${WT_TEMP}"/make-groups/*.yaml; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-groups/"; done &&
+          for f in "${WT_TEMP}"/make-plan/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/phase-plans/"; done &&
+          for f in "${WT_TEMP}"/exp-lens-*/*.md; do [ -f "$f" ] && cp "$f" "${RESEARCH_DIR}/artifacts/images/"; done &&
+          echo "re_stage_bundle=done";
+        else
+          echo "re_stage_bundle: no research directory found — skipped";
+        fi
+      cwd: "${{ context.worktree_path }}"
+      step_name: re_stage_bundle
+    on_success: re_test
+    on_failure: re_push_research
+    note: >
+      Idempotent re-staging after report rewrite. Same body as stage_bundle — updates
+      artifact directory with any newly written phase artifacts before re-testing. Falls
+      through to re_push_research on failure (best-effort).
 
   re_test:
     tool: test_check
@@ -690,10 +739,121 @@ steps:
       cmd: "cd '${{ context.worktree_path }}' && git push"
       cwd: "${{ context.worktree_path }}"
       step_name: re_push_research
-    on_success: begin_archival
+    on_success: finalize_bundle
     on_failure: begin_archival
 
   # --- ARCHIVAL PHASE ---
+  finalize_bundle:
+    tool: run_cmd
+    with:
+      cmd: >
+        OUTPUT_MODE="${{ inputs.output_mode }}" &&
+        RESEARCH_DIR="${{ context.research_dir }}" &&
+        if [ -n "${RESEARCH_DIR}" ] && [ -d "${RESEARCH_DIR}" ]; then
+          if [ "${OUTPUT_MODE}" != "local" ]; then
+            if [ -f "${RESEARCH_DIR}/report.md" ]; then
+              cp "${RESEARCH_DIR}/report.md" "${RESEARCH_DIR}/README.md" &&
+              rm "${RESEARCH_DIR}/report.md";
+            fi;
+          fi &&
+          REPORT_FILE=$( [ "${OUTPUT_MODE}" = "local" ] && echo "report.md" || echo "README.md" ) &&
+          if [ "${OUTPUT_MODE}" = "local" ]; then
+            EXCLUDE_PATTERN='^(report\.html|mermaid\.min\.js|images|report\.md|artifacts\.tar\.gz)$';
+          else
+            EXCLUDE_PATTERN='^(README\.md|artifacts\.tar\.gz)$';
+          fi &&
+          mapfile -t TAR_ITEMS < <(ls -1 "${RESEARCH_DIR}" | grep -vE "${EXCLUDE_PATTERN}") &&
+          if [ ${#TAR_ITEMS[@]} -gt 0 ]; then
+            tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" "${TAR_ITEMS[@]}" &&
+            for item in "${TAR_ITEMS[@]}"; do rm -rf "${RESEARCH_DIR}/${item}"; done;
+          fi &&
+          if [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] && [ -f "${RESEARCH_DIR}/${REPORT_FILE}" ]; then
+            MANIFEST=$(tar tzf "${RESEARCH_DIR}/artifacts.tar.gz" | sort) &&
+            { echo ""; echo "## Archive Manifest"; echo ""; echo "Contents of \`artifacts.tar.gz\`:"; echo ""; echo '```'; echo "${MANIFEST}"; echo '```'; } >> "${RESEARCH_DIR}/${REPORT_FILE}";
+          fi &&
+          [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] || \
+            { echo "ERROR: artifacts.tar.gz not created in ${RESEARCH_DIR}"; exit 1; } &&
+          if [ "${OUTPUT_MODE}" = "local" ]; then
+            LEFTOVER_PATTERN='^(report\.md|report\.html|mermaid\.min\.js|images|artifacts\.tar\.gz)$';
+          else
+            LEFTOVER_PATTERN='^(README\.md|artifacts\.tar\.gz)$';
+          fi &&
+          LEFTOVERS=$(ls -1 "${RESEARCH_DIR}" | grep -vE "${LEFTOVER_PATTERN}") &&
+          [ -z "${LEFTOVERS}" ] || \
+            { echo "ERROR: uncompressed entries still present in ${RESEARCH_DIR}: ${LEFTOVERS}"; exit 1; } &&
+          [ -f "${RESEARCH_DIR}/${REPORT_FILE}" ] || \
+            { echo "ERROR: ${REPORT_FILE} not found in ${RESEARCH_DIR}"; exit 1; } &&
+          if [ "${OUTPUT_MODE}" != "local" ]; then
+            cd "${{ context.worktree_path }}" && git add "${RESEARCH_DIR}" && { git diff --cached --quiet || git commit -m "Add compressed research artifacts"; };
+          fi;
+          echo "report_path=${RESEARCH_DIR}/${REPORT_FILE}";
+          echo "report_path_after_finalize=${RESEARCH_DIR}/${REPORT_FILE}";
+        else
+          echo "finalize_bundle: no research directory found — artifact commit skipped";
+        fi
+      cwd: "${{ context.worktree_path }}"
+      step_name: finalize_bundle
+    capture:
+      report_path_after_finalize: "${{ result.report_path_after_finalize }}"
+    on_success: finalize_bundle_render
+    on_failure: begin_archival
+    note: >
+      Single compression point. Runs exactly once per recipe run. In pr mode: renames
+      report.md → README.md, archives supporting artifacts, appends Archive Manifest,
+      commits. In local mode: keeps report.md, excludes report.html/mermaid.min.js/images
+      from the tar (they stay for local browsing), skips git commit. finalize_bundle_render
+      always runs after this step regardless of mode.
+
+  finalize_bundle_render:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:bundle-local-report ${{ context.research_dir }} ${{ context.report_path_after_finalize }} ${{ context.all_diagram_paths }} ${{ context.visualization_plan_path }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: finalize_bundle_render
+    capture:
+      html_path: "${{ result.html_path }}"
+    on_success: route_archive_or_export
+    on_failure: route_archive_or_export
+    note: >
+      HTML report rendering. Always runs after finalize_bundle on_success. Non-fatal:
+      routes to route_archive_or_export on both outcomes, which branches on output_mode
+      to either export_local_bundle (local) or begin_archival (pr).
+
+  route_archive_or_export:
+    action: route
+    on_result:
+      - when: "${{ inputs.output_mode }} == local"
+        route: export_local_bundle
+      - route: begin_archival
+    note: >
+      Branches after HTML bundle rendering. local → export_local_bundle (copy to
+      {source_dir}/research-bundles/). pr (fall-through) → begin_archival to run
+      the existing archival phase.
+
+  export_local_bundle:
+    tool: run_cmd
+    with:
+      cmd: >
+        LOCAL_ROOT="${{ inputs.source_dir }}/research-bundles" &&
+        mkdir -p "${LOCAL_ROOT}" &&
+        SLUG=$(basename "${{ context.research_dir }}") &&
+        DEST="${LOCAL_ROOT}/${SLUG}" &&
+        rm -rf "${DEST}" &&
+        cp -a "${{ context.research_dir }}/." "${DEST}/" &&
+        echo "local_bundle_path=${DEST}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: export_local_bundle
+    capture:
+      local_bundle_path: "${{ result.local_bundle_path }}"
+    on_success: research_complete
+    on_failure: research_complete
+    note: >
+      Local mode terminal export. Copies the finalized research_dir (containing
+      report.html, mermaid.min.js, images/, report.md, artifacts.tar.gz) to
+      {source_dir}/research-bundles/{slug}/. Non-fatal — routes to research_complete
+      on both outcomes. The captured local_bundle_path is available to the orchestrator
+      via research_complete.
+
   begin_archival:
     action: route
     on_result:
@@ -822,7 +982,10 @@ steps:
 
   research_complete:
     action: stop
-    message: "Research complete. Report added to research/ folder and PR opened for review."
+    message: >
+      Research complete. pr mode: report added to research/ folder and PR opened for
+      review. local mode: bundle exported to {source_dir}/research-bundles/{slug}/
+      (context.local_bundle_path).
 
   escalate_stop:
     action: stop

@@ -37,6 +37,7 @@ BUNDLED_SKILLS = [
     "audit-friction",
     "audit-impl",
     "audit-tests",
+    "bundle-local-report",
     "close-kitchen",
     "collapse-issues",
     "design-guards",
@@ -81,6 +82,7 @@ BUNDLED_SKILLS = [
     "open-research-pr",
     "pipeline-summary",
     "plan-experiment",
+    "plan-visualization",
     "prepare-issue",
     "process-issues",
     "rectify",
@@ -106,8 +108,20 @@ BUNDLED_SKILLS = [
     "troubleshoot-experiment",
     "validate-audit",
     "verify-diag",
+    "vis-lens-always-on",
+    "vis-lens-antipattern",
+    "vis-lens-caption-annot",
+    "vis-lens-chart-select",
+    "vis-lens-color-access",
+    "vis-lens-domain-norms",
+    "vis-lens-figure-table",
+    "vis-lens-multi-compare",
+    "vis-lens-reproducibility",
+    "vis-lens-story-arc",
+    "vis-lens-temporal",
+    "vis-lens-uncertainty",
     "write-recipe",
-    "write-report",
+    "generate-report",
 ]
 
 # Internal-only skill documents: injected programmatically, never invocable as slash commands.
@@ -436,17 +450,17 @@ class TestSkillResolver:
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
     def test_90_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 92 SKILL.md-carrying directories."""
+        """skills_extended/ contains exactly 106 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 92
+        assert len(skills) == 106
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 94 public skills (2 Tier-1 + 92 extended)."""
-        assert len(DefaultSkillResolver().list_all()) == 94
+        """list_all() returns 108 public skills (2 Tier-1 + 106 extended)."""
+        assert len(DefaultSkillResolver().list_all()) == 108
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
@@ -596,7 +610,7 @@ RESEARCH_SKILL_NAMES = {
     "plan-experiment",
     "implement-experiment",
     "run-experiment",
-    "write-report",
+    "generate-report",
     "review-research-pr",
     "prepare-research-pr",
     "compose-research-pr",

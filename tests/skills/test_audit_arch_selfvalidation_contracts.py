@@ -12,8 +12,8 @@ def test_selfvalidation_pass_section_exists():
     )
 
 
-def test_selfvalidation_precedes_write_report():
-    """T-AA-012: Self-Validation Pass appears before 'Write report'."""
+def test_selfvalidation_precedes_generate_report():
+    """T-AA-012: Self-Validation Pass appears before 'Write report' step."""
     text = SKILL_MD.read_text()
     selfval_idx = text.index("Self-Validation Pass")
     report_idx = text.index("**Write report**")

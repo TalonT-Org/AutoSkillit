@@ -169,6 +169,7 @@ PACK_REGISTRY: dict[str, PackDef] = {
     "audit": PackDef(True, "Codebase audit skills"),
     "research": PackDef(False, "Research recipe and experiment skills"),
     "exp-lens": PackDef(False, "Experimental design audit lenses"),
+    "vis-lens": PackDef(False, "Visualization planning lenses"),
 }
 
 CATEGORY_TAGS: frozenset[str] = frozenset(PACK_REGISTRY.keys())

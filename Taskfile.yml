@@ -174,3 +174,16 @@ tasks:
     cmds:
       - uv tool install --force "autoskillit[dev] @ git+https://github.com/TalonT-Org/AutoSkillit.git@integration"
       - "$(uv tool dir)/autoskillit/bin/autoskillit install"
+
+  vendor-mermaid:
+    desc: Download latest mermaid v11 UMD bundle to src/autoskillit/assets/mermaid/
+    cmds:
+      - mkdir -p src/autoskillit/assets/mermaid
+      - |
+        VERSION=$(curl -sfL https://unpkg.com/mermaid@11/package.json \
+          | python3 -c "import sys, json; print(json.load(sys.stdin)['version'])")
+        echo "Fetching mermaid ${VERSION}..."
+        curl -sfL "https://unpkg.com/mermaid@${VERSION}/dist/mermaid.min.js" \
+          -o src/autoskillit/assets/mermaid/mermaid.min.js
+        echo "${VERSION}" > src/autoskillit/assets/mermaid/VERSION
+        echo "Vendored mermaid ${VERSION} ($(wc -c < src/autoskillit/assets/mermaid/mermaid.min.js) bytes)"

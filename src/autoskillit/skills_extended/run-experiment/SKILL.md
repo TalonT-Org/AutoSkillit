@@ -151,7 +151,7 @@ best represents the measurements. Include raw data when feasible.}
 
 ## Recommendation
 {Based on the evidence collected, what does this suggest? This is the
-experimenter's interpretation — the write-report skill will synthesize
+experimenter's interpretation — the generate-report skill will synthesize
 the final conclusions.}
 
 ## Status
@@ -167,8 +167,8 @@ the final conclusions.}
 2. Also save any raw data files (CSV, JSON, logs) to the same directory.
 3. Do NOT `git add` or commit files under `{{AUTOSKILLIT_TEMP}}/`. This directory
    is gitignored working space. The files persist on the worktree filesystem
-   for `write-report` to read. Final results are published to `research/` by
-   the `write-report` skill.
+   for `generate-report` to read. Final results are published to `research/` by
+   the `generate-report` skill.
 
 After saving, emit the structured output token as the very last line of your
 text output:

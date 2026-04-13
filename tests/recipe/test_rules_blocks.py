@@ -1,12 +1,4 @@
-"""Block-budget regression guards for the pre_queue_gate block.
-
-Tests in this file will FAIL against the current codebase:
-- recipe.blocks does not exist until schema.py gains RecipeBlock + Recipe.blocks
-- RecipeStep.block does not exist until schema.py adds the field
-- rules_blocks._block_budgets does not exist until rules_blocks.py is created
-They become green once the schema primitive, extract_blocks, rules_blocks, and recipe
-YAML consolidation are all implemented (Steps 2.1–2.5 of the plan).
-"""
+"""Block-budget regression guards for the pre_queue_gate block."""
 
 from __future__ import annotations
 

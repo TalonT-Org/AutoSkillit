@@ -4,12 +4,6 @@ Tests verify that:
 1. Bundled recipes produce zero inversion findings after Part B remediation.
 2. Synthetic recipes with inversions are correctly flagged.
 3. _bfs_with_facts correctly intersects facts at join points.
-
-Tests in this file will FAIL against the pre-Part-B state:
-- Rules capture-inversion-detection and event-scope-requires-upstream-capture
-  do not exist until rules_reachability.py is created.
-- _bfs_with_facts does not exist until _analysis.py gains it.
-- Bundled recipes still have event: "push" until recipe YAML changes land.
 """
 
 from __future__ import annotations
@@ -35,11 +29,10 @@ _QUEUE_CAPABLE = ("implementation.yaml", "remediation.yaml", "implementation-gro
 
 
 @pytest.mark.parametrize("recipe_name", _QUEUE_CAPABLE)
-def test_wait_for_ci_event_push_without_upstream_capture_is_flagged(recipe_name):
-    """Before remediation: ci_watch hardcodes event='push' but merge_group_trigger is
-    only captured later (check_repo_merge_state.on_success). After Part B: the capture
-    is upstream AND ci_watch reads ${{ context.ci_event }} — no finding. This test
-    enforces the correct end state."""
+def test_bundled_recipe_wait_for_ci_has_no_inversion_findings(recipe_name):
+    """Post-Part-B: ci_watch reads ${{ context.ci_event }} and the producer
+    (check_repo_merge_state) is upstream — no capture-inversion or event-scope
+    finding is expected. This test enforces the correct end state."""
     recipe = load_recipe(builtin_recipes_dir() / recipe_name)
     findings = run_semantic_rules(recipe)
     inversions = [

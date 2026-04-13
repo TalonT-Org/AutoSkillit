@@ -1,14 +1,4 @@
-"""Bundled-recipe regression guard: no capture inversions or hardcoded event literals.
-
-Tests in this file will FAIL against the pre-Part-B state where:
-- wait_for_ci steps hardcode event='push' without upstream merge_group_trigger capture
-- diagnose-ci skill_command calls hardcode 'push' as the 5th positional argument
-
-They become green once:
-- rules_reachability.py is created with event-scope-requires-upstream-capture rule
-- Bundled recipes replace event: "push" with event: "${{ context.ci_event }}"
-- diagnose-ci calls replace hardcoded 'push' with ${{ context.ci_event }}
-"""
+"""Bundled-recipe regression guard: no capture inversions or hardcoded event literals."""
 
 from __future__ import annotations
 
@@ -30,9 +20,8 @@ def test_bundled_recipe_has_no_capture_inversions(recipe_path):
     recipe = load_recipe(recipe_path)
     findings = run_semantic_rules(recipe)
     inversions = [f for f in findings if "inversion" in f.rule]
-    assert inversions == [], (
-        f"{recipe_path.stem} has inversions: "
-        + "\n".join(f"  {f.rule}: {f.message}" for f in inversions)
+    assert inversions == [], f"{recipe_path.stem} has inversions: " + "\n".join(
+        f"  {f.rule}: {f.message}" for f in inversions
     )
 
 
@@ -44,6 +33,10 @@ def test_diagnose_ci_skill_command_uses_captured_ci_event(recipe_path):
     for step_name, step in recipe.get("steps", {}).items():
         cmd = step.get("skill_command") or step.get("with", {}).get("skill_command", "")
         if "diagnose-ci" in cmd:
-            assert "${{ context.ci_event }}" in cmd or "push" not in cmd.split(), (
-                f"{recipe_path.stem}:{step_name} — diagnose-ci call hardcodes 'push'"
+            hardcoded_events = {"push", "merge_group"}
+            assert "${{ context.ci_event }}" in cmd or not any(
+                ev in cmd.split() for ev in hardcoded_events
+            ), (
+                f"{recipe_path.stem}:{step_name} — diagnose-ci call hardcodes a trigger "
+                f"event literal instead of threading ${{{{ context.ci_event }}}}"
             )

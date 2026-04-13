@@ -1,25 +1,8 @@
-"""Block fingerprint drift detection tests.
-
-Tests in this file will FAIL against the pre-Part-B state where:
-- BlockFingerprint dataclass does not exist in contracts.py
-- generate_recipe_card does not accept a Recipe object directly
-- check_contract_staleness does not accept a stored_card parameter
-- RecipeCard does not have a block_fingerprints field
-
-They become green once contracts.py gains BlockFingerprint, the Recipe-accepting
-overloads, and the stored_card comparison path.
-"""
+"""Block fingerprint drift detection tests."""
 
 from __future__ import annotations
 
-import copy
-
-import pytest
-
 from autoskillit.recipe.contracts import (
-    BlockFingerprint,
-    RecipeCard,
-    StaleItem,
     check_contract_staleness,
     generate_recipe_card,
 )

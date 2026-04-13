@@ -3,10 +3,6 @@
 Mirrors test_single_graphql_call_per_poll_cycle at the consolidated-tool layer.
 All three booleans (queue_available, merge_group_trigger, auto_merge_available)
 must come from a single HTTP round-trip to the GitHub GraphQL endpoint.
-
-Tests will FAIL until:
-- _REPO_STATE_QUERY constant added to merge_queue.py (Step 2.4)
-- fetch_repo_merge_state async function added to merge_queue.py (Step 2.4)
 """
 
 from __future__ import annotations
@@ -75,6 +71,7 @@ async def test_check_repo_merge_state_handles_null_blob_text(httpx_mock):
     result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
     assert result["merge_group_trigger"] is False
     assert result["queue_available"] is True
+    assert result["ci_event"] is None  # no parseable trigger in null blobs
 
 
 @pytest.mark.anyio
@@ -98,6 +95,7 @@ async def test_check_repo_merge_state_handles_missing_workflows_dir(httpx_mock):
     result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
     assert result["merge_group_trigger"] is False
     assert result["queue_available"] is False
+    assert result["ci_event"] is None  # null object → no workflows → no trigger
 
 
 def test_repo_state_query_is_distinct_module_constant_from_pr_state_query():

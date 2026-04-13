@@ -244,12 +244,36 @@ steps:
     capture:
       worktree_path: "${{ result.worktree_path }}"
       research_dir: "${{ result.research_dir }}"
-    on_success: decompose_phases
+    on_success: stage_data
     on_failure: escalate_stop
     note: >
       Creates the shared worktree and commits the experiment plan and scope report
       to research/ as permanent artifacts. All phases and experiment implementation
       share this worktree.
+
+  stage_data:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:stage-data ${{ context.experiment_plan }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: stage_data
+    capture:
+      verdict: "${{ result.verdict }}"
+      resource_report: "${{ result.resource_report }}"
+    on_result:
+      field: verdict
+      routes:
+        PASS: decompose_phases
+        WARN: decompose_phases
+        FAIL: escalate_stop
+    on_failure: escalate_stop
+    note: >
+      Pre-flight resource gate. Reads the experiment plan's data_manifest, checks
+      available disk space and network connectivity for external/gitignored data
+      entries, and creates the required directory structure in the worktree. PASS
+      and WARN proceed to decompose_phases. FAIL escalates immediately with a
+      detailed resource feasibility report rather than wasting compute on doomed
+      downloads.
 
   decompose_phases:
     tool: run_skill

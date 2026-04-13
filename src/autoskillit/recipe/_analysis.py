@@ -547,6 +547,14 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                 # downstream recipe step can consume it via template syntax.
                 if cap_key == "local_bundle_path" and step_name == "export_local_bundle":
                     continue
+                # Exempt stage-data resource_report captures: resource_report is the
+                # path to the resource feasibility report in {{AUTOSKILLIT_TEMP}}/stage-data/.
+                # It is captured for human-readable observability only — no downstream
+                # recipe step consumes it via template syntax.
+                if cap_key == "resource_report" and "stage-data" in step.with_args.get(
+                    "skill_command", ""
+                ):
+                    continue
                 warnings.append(
                     DataFlowWarning(
                         code="DEAD_OUTPUT",

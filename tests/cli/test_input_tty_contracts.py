@@ -19,7 +19,8 @@ _RAW_INPUT_EXEMPT_FILES: frozenset[str] = frozenset(
     }
 )
 
-_CLI_DIR = Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit" / "cli"
+_SRC_DIR = Path(__file__).resolve().parent.parent.parent / "src"
+_CLI_DIR = _SRC_DIR / "autoskillit" / "cli"
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +42,7 @@ def test_all_cli_prompts_use_timed_prompt_or_are_exempt() -> None:
             continue
         source = py_file.read_text()
         tree = ast.parse(source, filename=str(py_file))
-        rel_path = py_file.relative_to(Path("src"))
+        rel_path = py_file.relative_to(_SRC_DIR)
 
         # Check inside function/method bodies
         for node in ast.walk(tree):

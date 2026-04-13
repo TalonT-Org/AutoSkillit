@@ -2,9 +2,6 @@
 Structural enforcement: every input() call in src/autoskillit/cli/ must go
 through timed_prompt() in _timed_input.py, or the function must be in the
 allowlist (_RAW_INPUT_EXEMPT_FILES).
-
-Legacy test kept for the old _require_interactive_stdin contract is now
-superseded by the stricter timed_prompt enforcement.
 """
 
 from __future__ import annotations

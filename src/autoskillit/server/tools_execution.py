@@ -151,6 +151,7 @@ async def run_skill(
     step_name: str = "",
     order_id: str = "",
     stale_threshold: int | None = None,
+    idle_output_timeout: int | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Run a Claude Code headless session with a skill command.
@@ -190,6 +191,9 @@ async def run_skill(
         stale_threshold: Override the staleness kill threshold in seconds. When set on
             a RecipeStep, the recipe orchestrator passes it here. None uses the global
             config default (RunSkillConfig.stale_threshold, default 1200s).
+        idle_output_timeout: Override the idle stdout kill threshold in seconds.
+            0 = disabled for this step. None = use global config
+            (RunSkillConfig.idle_output_timeout, default 600s).
     """
     if (headless := _require_not_headless("run_skill")) is not None:
         return headless
@@ -296,6 +300,7 @@ async def run_skill(
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_spec,
             stale_threshold=float(stale_threshold) if stale_threshold is not None else None,
+            idle_output_timeout=float(idle_output_timeout) if idle_output_timeout is not None else None,
             completion_marker=invocation_marker,
         )
         if skill_result.success:

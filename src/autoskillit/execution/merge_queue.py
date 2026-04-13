@@ -6,6 +6,7 @@ Never raises. All errors are returned as structured results.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -24,7 +25,9 @@ class PRFetchState(TypedDict):
 
     merged: bool
     state: str
+    mergeable: str  # "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
     merge_state_status: str
+    auto_merge_present: bool  # True when autoMergeRequest is not null
     auto_merge_enabled_at: datetime | None
     pr_node_id: str
     in_queue: bool
@@ -41,6 +44,7 @@ query GetPRAndQueueState($owner: String!, $repo: String!, $prNumber: Int!, $bran
       id
       merged
       state
+      mergeable
       mergeStateStatus
       autoMergeRequest {
         enabledAt
@@ -60,6 +64,40 @@ query GetPRAndQueueState($owner: String!, $repo: String!, $prNumber: Int!, $bran
   }
 }
 """
+
+# Maps every PRFetchState key to its GraphQL source path.
+# "<computed>" means the field is derived from query results, not directly selected.
+# This constant is validated at import time against PRFetchState.__required_keys__
+# (mirroring the pattern in recipe/io.py:126-161).
+_QUERY_FIELD_MAP: dict[str, str] = {
+    "merged": "merged",
+    "state": "state",
+    "mergeable": "mergeable",
+    "merge_state_status": "mergeStateStatus",
+    "auto_merge_present": "autoMergeRequest",
+    "auto_merge_enabled_at": "autoMergeRequest.enabledAt",
+    "pr_node_id": "id",
+    "in_queue": "<computed>",
+    "queue_state": "<computed>",
+    "checks_state": "statusCheckRollup.state",
+}
+
+_ALL_FETCH_STATE_KEYS = PRFetchState.__required_keys__ | PRFetchState.__optional_keys__
+if set(_QUERY_FIELD_MAP) != _ALL_FETCH_STATE_KEYS:
+    raise RuntimeError(
+        "_QUERY_FIELD_MAP is out of sync with PRFetchState keys.\n"
+        f"Missing from map: {_ALL_FETCH_STATE_KEYS - set(_QUERY_FIELD_MAP)}\n"
+        f"Missing from state: {set(_QUERY_FIELD_MAP) - _ALL_FETCH_STATE_KEYS}"
+    )
+for _key, _path in _QUERY_FIELD_MAP.items():
+    if _path.startswith("<"):
+        continue
+    _head = _path.split(".", 1)[0]
+    # Word-boundary search prevents "state" from matching inside "mergeStateStatus".
+    if not re.search(r"\b" + re.escape(_head) + r"\b", _QUERY):
+        raise RuntimeError(
+            f"_QUERY is missing GraphQL field {_head!r} required by PRFetchState[{_key!r}]"
+        )
 
 _MUTATION_DISABLE_AUTO_MERGE = """
 mutation DisableAutoMerge($prId: ID!) {
@@ -317,7 +355,9 @@ class DefaultMergeQueueWatcher:
         nodes_raw = (entries.get("entries") or {}).get("nodes")
         nodes = nodes_raw if isinstance(nodes_raw, list) else []
 
-        auto_merge = pr.get("autoMergeRequest") or {}
+        auto_merge_raw = pr.get("autoMergeRequest")
+        auto_merge_present: bool = auto_merge_raw is not None
+        auto_merge = auto_merge_raw or {}
         enabled_at_raw = auto_merge.get("enabledAt")
         enabled_at: datetime | None = None
         if enabled_at_raw:
@@ -335,7 +375,9 @@ class DefaultMergeQueueWatcher:
         return PRFetchState(
             merged=pr["merged"],
             state=pr["state"],
+            mergeable=pr.get("mergeable") or "UNKNOWN",
             merge_state_status=pr.get("mergeStateStatus", "UNKNOWN"),
+            auto_merge_present=auto_merge_present,
             auto_merge_enabled_at=enabled_at,
             pr_node_id=pr["id"],
             in_queue=queue_entry is not None,

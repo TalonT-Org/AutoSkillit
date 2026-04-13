@@ -203,6 +203,10 @@ research/YYYY-MM-DD-{slug}/
 │   ├── {script_1}            # {description}
 │   ├── {script_2}            # {description}
 │   └── ...
+├── tests/                    # Test suite for experiment scripts
+│   ├── conftest.py           # Pytest fixtures and configuration
+│   ├── test_{script_1}.py    # Tests for {script_1}
+│   └── ...
 ├── data/                     # Generated/input data
 ├── results/                  # Experiment output (metrics, logs)
 └── report.md                 # Final report (written by generate-report)
@@ -217,6 +221,7 @@ research/YYYY-MM-DD-{slug}/
 **Option A — No custom environment needed:**
 {The project's existing toolchain is sufficient because {reason}. No
 environment.yml will be created.}
+Verify that `pytest` is available in the existing toolchain (`pytest --version`). If not, note that test_check requires pytest to pass.
 
 **Option B — Custom environment required:**
 {The experiment requires {tools/libraries} that are not part of the project.
@@ -229,6 +234,7 @@ channels:
 dependencies:
   - {package1}={version}
   - {package2}={version}
+  - pytest  # Required: enables test_check to discover and run experiment tests
 ```
 
 {Rationale for each dependency.}
@@ -254,6 +260,14 @@ dependencies:
 - Execute the full experiment procedure with minimal inputs
 - Verify metrics are collected correctly
 - Confirm end-to-end pipeline works before committing to full runs
+
+### Phase 5: Test Infrastructure
+- Create `tests/` directory and `tests/conftest.py` with shared fixtures
+- For each experiment script in `scripts/`, create a corresponding `tests/test_{script_name}.py`
+- Tests must cover: data loading without error, output shape/type validation, key metric
+  value sanity checks (e.g., result is non-empty, values are in expected range)
+- Run `pytest --collect-only` in the research directory to verify test discovery
+- Commit the test suite
 
 {Adapt phases as needed — not all experiments require all phases. Add or
 remove phases to match the specific experiment. Each phase should list the

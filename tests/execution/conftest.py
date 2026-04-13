@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pathlib
 import textwrap
+from typing import Any
 
 import pytest
 
@@ -29,3 +30,32 @@ def isolated_tracing_config(tmp_path: pathlib.Path) -> LinuxTracingConfig:
     shm = tmp_path / "shm"
     shm.mkdir(parents=True, exist_ok=True)
     return LinuxTracingConfig(enabled=True, proc_interval=0.05, tmpfs_path=str(shm))
+
+
+@pytest.fixture
+def merge_group_only_repo_state() -> dict[str, Any]:
+    """A fixture modelling a repo whose CI only triggers on merge_group.
+
+    Forces the merge-group-only scenario to exist as a first-class test input.
+    Used by reachability tests and test_check_repo_merge_state_returns_merge_group_as_ci_event.
+    """
+    return {
+        "graphql_response": {
+            "data": {
+                "repository": {
+                    "mergeQueue": None,
+                    "autoMergeAllowed": True,
+                    "object": {
+                        "entries": [
+                            {
+                                "name": "tests.yml",
+                                "object": {"text": "on: [merge_group]\njobs: {}"},
+                            },
+                        ]
+                    },
+                }
+            }
+        },
+        "rest_completed_runs": {"workflow_runs": []},
+        "rest_active_runs": {"workflow_runs": []},
+    }

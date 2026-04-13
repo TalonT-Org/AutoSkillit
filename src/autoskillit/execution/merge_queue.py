@@ -405,28 +405,51 @@ class DefaultMergeQueueWatcher:
 # ---------------------------------------------------------------------------
 
 
+def _text_has_push_trigger(text: str) -> bool:
+    """Return True if a workflow file text declares a push trigger.
+
+    Checks for the three YAML forms GitHub supports for a push trigger:
+    - ``on: [push, ...]``  (list form)
+    - ``on: push``         (scalar form)
+    - ``push:``            (mapping form under ``on:``)
+
+    Note: does not trigger on ``git push`` in comments or step bodies
+    because those forms do not start with ``on:`` or appear as bare YAML keys.
+    """
+    return any(pat in text for pat in ("on: [push", "on: push", "push:"))
+
+
 async def fetch_repo_merge_state(
     owner: str,
     repo: str,
     branch: str,
     token: str | None,
-) -> dict[str, bool]:
+) -> dict[str, bool | str | None]:
     """Fetch repository merge-state in a single GraphQL round-trip.
 
-    Returns a dict with three boolean keys:
-    - ``queue_available``: the branch has an active GitHub merge queue.
+    Returns a dict with four keys:
+    - ``queue_available``: the branch has an active GitHub merge queue (bool).
     - ``merge_group_trigger``: at least one CI workflow declares the
-      ``merge_group`` event trigger.
-    - ``auto_merge_available``: the repository has auto-merge enabled.
+      ``merge_group`` event trigger (bool).
+    - ``auto_merge_available``: the repository has auto-merge enabled (bool).
+    - ``ci_event``: the recommended CI event to poll — ``"push"`` when any
+      workflow declares a push trigger, ``"merge_group"`` when only merge_group
+      triggers are found, or ``None`` when no push/merge_group triggers exist
+      (ci.py scope.event=None matches any trigger).
 
     Null-handling:
     - ``mergeQueue is null`` → ``queue_available: False``  (no queue)
-    - ``object is null`` → ``merge_group_trigger: False``  (no workflows dir)
+    - ``object is null`` → ``merge_group_trigger: False``, ``ci_event: None``  (no workflows dir)
     - ``entry.object.text is null`` → skip entry (binary/large file)
     - GraphQL ``autoMergeAllowed`` field error (GHES 3.0.x) → ``auto_merge_available: False``
 
     Only transport-level failures (network timeout, non-200 HTTP status) are
     allowed to propagate; callers are expected to handle them.
+
+    Historical note: Issue #498 ("Merge queue detection should validate workflow has
+    merge_group trigger") established the merge_group_trigger field. The ci_event
+    field is a closely related extension — verify that the push-trigger scan does
+    not regress the merge_group-only detection that #498 established.
     """
     async with httpx.AsyncClient(
         headers=github_headers(token),
@@ -453,19 +476,33 @@ async def fetch_repo_merge_state(
         False if auto_merge_field_missing else bool(repo_data.get("autoMergeAllowed", False))
     )
 
-    # Detect merge_group trigger: check each workflow file's text content.
+    # Scan workflow files for push and merge_group trigger declarations.
+    # Both flags are derived from the same Blob.text scan — no extra round-trips.
     merge_group_trigger = False
+    has_push_trigger = False
     workflows_tree = repo_data.get("object")
     if workflows_tree is not None:
         for entry in workflows_tree.get("entries", []):
             blob = entry.get("object") or {}
             text = blob.get("text")
-            if text is not None and "merge_group" in text:
+            if text is None:
+                continue  # binary or oversized blob — skip
+            if "merge_group" in text:
                 merge_group_trigger = True
-                break
+            if _text_has_push_trigger(text):
+                has_push_trigger = True
+
+    # Derive ci_event: prefer push for historical compatibility when both are present.
+    if has_push_trigger:
+        ci_event: str | None = "push"
+    elif merge_group_trigger:
+        ci_event = "merge_group"
+    else:
+        ci_event = None  # schedule-only or workflow_dispatch-only: match any
 
     return {
         "queue_available": queue_available,
         "merge_group_trigger": merge_group_trigger,
         "auto_merge_available": auto_merge_available,
+        "ci_event": ci_event,
     }

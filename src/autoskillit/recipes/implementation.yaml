@@ -586,7 +586,6 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.merge_target }}"
-      event: "push"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
@@ -618,12 +617,13 @@ steps:
       queue_available: "${{ result.queue_available }}"
       merge_group_trigger: "${{ result.merge_group_trigger }}"
       auto_merge_available: "${{ result.auto_merge_available }}"
+      ci_event: "${{ result.ci_event }}"
     on_success: route_queue_mode
     on_failure: release_issue_success
     skip_when_false: "inputs.open_pr"
     note: >
       Single GraphQL round-trip that captures queue_available, merge_group_trigger,
-      and auto_merge_available for the target branch. Consolidates the former three
+      auto_merge_available, and ci_event for the target branch. Consolidates the former three
       sequential run_cmd steps (check_merge_queue, check_merge_group_trigger,
       check_auto_merge) into one MCP tool call. On failure (network error, auth failure),
       falls through to release_issue_success (non-queue path).
@@ -755,7 +755,7 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.merge_target }}"
-      event: "push"
+      event: "${{ context.ci_event }}"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
@@ -962,7 +962,7 @@ steps:
   diagnose_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - - push"
+      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - - ${{ context.ci_event }}"
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
       ci_failed_jobs: "${{ context.ci_failed_jobs }}"

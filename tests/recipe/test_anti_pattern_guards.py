@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 import yaml
-from autoskillit.recipe.rules_blocks import _block_budgets  # re-use the cached loader
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.rules_blocks import _block_budgets  # re-use the cached loader
 
 
 def _budget_for(block_name: str) -> dict:  # type: ignore[type-arg]

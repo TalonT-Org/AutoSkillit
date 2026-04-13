@@ -15,6 +15,9 @@ import pytest
 
 from autoskillit.execution.merge_queue import fetch_repo_merge_state
 
+# Reminder: fetch_repo_merge_state now returns ci_event in addition to the
+# three boolean fields. Tests below check for the ci_event field explicitly.
+
 
 @pytest.mark.anyio
 async def test_check_repo_merge_state_uses_single_graphql_call(httpx_mock):
@@ -42,11 +45,11 @@ async def test_check_repo_merge_state_uses_single_graphql_call(httpx_mock):
         },
     )
     result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
-    assert result == {
-        "queue_available": False,
-        "merge_group_trigger": True,
-        "auto_merge_available": True,
-    }
+    assert result["queue_available"] is False
+    assert result["merge_group_trigger"] is True
+    assert result["auto_merge_available"] is True
+    # ci_event: both push and merge_group present — prefer push for historical compat
+    assert result["ci_event"] == "push"
     assert len(httpx_mock.get_requests()) == 1  # NOT 3, NOT N+2
 
 
@@ -111,3 +114,46 @@ def test_repo_state_query_is_distinct_module_constant_from_pr_state_query():
     assert "mergeQueue(branch" in merge_queue._REPO_STATE_QUERY
     assert "autoMergeAllowed" in merge_queue._REPO_STATE_QUERY
     assert "object(expression:" in merge_queue._REPO_STATE_QUERY
+
+
+@pytest.mark.anyio
+async def test_check_repo_merge_state_returns_merge_group_as_ci_event(
+    httpx_mock, merge_group_only_repo_state
+):
+    """check_repo_merge_state must derive ci_event='merge_group' when the only
+    workflow trigger is merge_group. This capture is what ci_watch reads to avoid
+    the event='push' timeout on repos that only trigger on merge_group."""
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json=merge_group_only_repo_state["graphql_response"],
+    )
+    result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
+    assert result["ci_event"] == "merge_group"
+    assert result["merge_group_trigger"] is True
+
+
+@pytest.mark.anyio
+async def test_check_repo_merge_state_returns_null_ci_event_for_no_trigger(httpx_mock):
+    """When no push or merge_group trigger is found (e.g. schedule-only), ci_event
+    must be None — the ci.py default (scope.event=None) matches any trigger."""
+    httpx_mock.add_response(
+        url="https://api.github.com/graphql",
+        json={
+            "data": {
+                "repository": {
+                    "mergeQueue": None,
+                    "autoMergeAllowed": False,
+                    "object": {
+                        "entries": [
+                            {
+                                "name": "nightly.yml",
+                                "object": {"text": "on:\n  schedule:\n    - cron: '0 0 * * *'"},
+                            },
+                        ]
+                    },
+                }
+            }
+        },
+    )
+    result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
+    assert result["ci_event"] is None

@@ -454,7 +454,7 @@ async def check_repo_merge_state(
     ctx: Context = CurrentContext(),
 ) -> str:
     """Single GraphQL round-trip returning queue_available, merge_group_trigger,
-    and auto_merge_available for the given repository branch.
+    auto_merge_available, and ci_event for the given repository branch.
 
     Consolidates the three former run_cmd shell steps in the pre_queue_gate block
     into a single MCP tool call, eliminating N+2 REST/GraphQL round-trips and
@@ -470,7 +470,9 @@ async def check_repo_merge_state(
     - ``queue_available``: branch has an active GitHub merge queue.
     - ``merge_group_trigger``: a CI workflow declares the merge_group event.
     - ``auto_merge_available``: repository has auto-merge enabled.
-    On any error, returns an error field alongside the three boolean defaults.
+    - ``ci_event``: ``"push"`` | ``"merge_group"`` | ``null`` — recommended
+      event to use when polling CI via wait_for_ci.
+    On any error, returns an error field alongside the four boolean/null defaults.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -487,6 +489,7 @@ async def check_repo_merge_state(
                     "queue_available": False,
                     "merge_group_trigger": False,
                     "auto_merge_available": False,
+                    "ci_event": None,
                 }
             )
         owner, repo = resolved_repo.split("/", 1)
@@ -505,6 +508,7 @@ async def check_repo_merge_state(
                 "queue_available": False,
                 "merge_group_trigger": False,
                 "auto_merge_available": False,
+                "ci_event": None,
             }
         )
     finally:

@@ -747,12 +747,15 @@ steps:
             { echo "ERROR: README.md not found in ${RESEARCH_DIR}"; exit 1; } &&
           cd "${{ context.worktree_path }}" && git add "${RESEARCH_DIR}" && { git diff --cached --quiet || git commit -m "Add compressed research artifacts"; };
           echo "report_path=${RESEARCH_DIR}/README.md";
+          echo "report_path_after_finalize=${RESEARCH_DIR}/README.md";
         else
           echo "finalize_bundle: no research directory found — artifact commit skipped";
         fi
       cwd: "${{ context.worktree_path }}"
       step_name: finalize_bundle
-    on_success: begin_archival
+    capture:
+      report_path_after_finalize: "${{ result.report_path_after_finalize }}"
+    on_success: finalize_bundle_render
     on_failure: begin_archival
     note: >
       Single compression point. Runs exactly once per recipe run, after re_push_research.
@@ -761,6 +764,21 @@ steps:
       mapfile dynamic input collection, appends Archive Manifest to README.md, commits.
       Non-fatal — routes to begin_archival on both success and failure. GroupH will extend
       this step with output_mode conditionals for local-report paths.
+
+  finalize_bundle_render:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:bundle-local-report ${{ context.research_dir }} ${{ context.report_path_after_finalize }} ${{ context.all_diagram_paths }} ${{ context.visualization_plan_path }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: finalize_bundle_render
+    capture:
+      html_path: "${{ result.html_path }}"
+    on_success: begin_archival
+    on_failure: begin_archival
+    note: >
+      HTML report rendering. Always runs after finalize_bundle on_success. Non-fatal:
+      routes to begin_archival on both outcomes. groupH will insert route_archive_or_export
+      between this step and begin_archival for local-mode export.
 
   begin_archival:
     action: route

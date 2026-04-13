@@ -2052,6 +2052,19 @@ class TestResearchRecipeStructure:
         assert step.on_success == "finalize_bundle"
         assert step.on_failure == "begin_archival"
 
+    def test_finalize_bundle_routes_to_finalize_bundle_render(self, recipe) -> None:
+        """finalize_bundle on_success routes to finalize_bundle_render (not begin_archival)."""
+        step = recipe.steps["finalize_bundle"]
+        assert step.on_success == "finalize_bundle_render"
+        assert step.on_failure == "begin_archival"
+
+    def test_finalize_bundle_render_step_exists_and_routes(self, recipe) -> None:
+        """finalize_bundle_render routes to begin_archival on both outcomes."""
+        assert "finalize_bundle_render" in recipe.steps
+        step = recipe.steps["finalize_bundle_render"]
+        assert step.on_success == "begin_archival"
+        assert step.on_failure == "begin_archival"
+
     def test_create_worktree_copies_review_cycle_artifacts(self, recipe) -> None:
         """create_worktree must copy review-design dashboards and revision guidance."""
         step = recipe.steps["create_worktree"]

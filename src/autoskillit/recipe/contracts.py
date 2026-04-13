@@ -330,7 +330,8 @@ def generate_recipe_card(
     if isinstance(pipeline_path, Recipe):
         return _generate_recipe_card_for_recipe(pipeline_path)
 
-    assert recipes_dir is not None, "recipes_dir required when pipeline_path is a file path"
+    if recipes_dir is None:
+        raise ValueError("recipes_dir required when pipeline_path is a file path")
     pipeline_path = Path(pipeline_path)
     recipes_dir = Path(recipes_dir)
 
@@ -499,6 +500,10 @@ def check_contract_staleness(
 
     When ``skills_dir`` is None, the bundled skills directory is used for hash
     comparison.
+
+    When ``contract`` is a ``Recipe`` but ``stored_card`` is ``None``, no
+    comparison baseline is available and [] is returned immediately.  This is
+    expected during initial card generation before a stored card exists.
 
     Returns a list of StaleItem entries indicating what changed.
     """

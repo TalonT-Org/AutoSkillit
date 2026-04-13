@@ -56,6 +56,24 @@ def _first_arg_str(node: ast.Call) -> str | None:
     return None
 
 
+def _first_real_stmt(body: list) -> ast.stmt | None:
+    """Return the first non-docstring statement in a function body.
+
+    A leading docstring is an ast.Expr whose value is an ast.Constant string.
+    It is not executable code, so tests that guard against "code before try:"
+    must skip it.
+    """
+    for stmt in body:
+        if (
+            isinstance(stmt, ast.Expr)
+            and isinstance(stmt.value, ast.Constant)
+            and isinstance(stmt.value.value, str)
+        ):
+            continue  # skip leading docstring
+        return stmt
+    return None
+
+
 class TestLifespanReadinessStructural:
     def setup_method(self):
         source = _LIFESPAN_PATH.read_text(encoding="utf-8")
@@ -63,10 +81,11 @@ class TestLifespanReadinessStructural:
         self.func = _find_lifespan_func(self.tree)
 
     def test_first_statement_is_try(self):
-        """Assertion A: first statement of _autoskillit_lifespan must be try:."""
+        """Assertion A: first real statement of _autoskillit_lifespan must be try:."""
         body = self.func.body
         assert body, "_autoskillit_lifespan has an empty body"
-        first_stmt = body[0]
+        first_stmt = _first_real_stmt(body)
+        assert first_stmt is not None, "_autoskillit_lifespan has no non-docstring statements"
         assert isinstance(first_stmt, (ast.Try, ast.TryStar)), (
             f"Expected the first statement of _autoskillit_lifespan to be a try: block, "
             f"got {type(first_stmt).__name__}. "
@@ -76,10 +95,11 @@ class TestLifespanReadinessStructural:
     def test_try_body_contains_sentinel_call(self):
         """Assertion B: try: body must call a sentinel/readiness write helper."""
         body = self.func.body
-        assert body and isinstance(body[0], (ast.Try, ast.TryStar)), (
-            "Pre-condition failed: first stmt is not try: (see test_first_statement_is_try)"
+        first_stmt = _first_real_stmt(body)
+        assert first_stmt is not None and isinstance(first_stmt, (ast.Try, ast.TryStar)), (
+            "Pre-condition failed: first real stmt is not try: (see test_first_statement_is_try)"
         )
-        try_node = body[0]
+        try_node = first_stmt
         sentinel_calls = []
         for node in ast.walk(try_node):
             if isinstance(node, ast.Call):

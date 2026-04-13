@@ -43,6 +43,11 @@ from .paths import (
     is_git_worktree,
     pkg_root,
 )
+from .readiness import (
+    cleanup_readiness_sentinel,
+    readiness_sentinel_path,
+    write_readiness_sentinel,
+)
 from .types import (
     AUTOSKILLIT_INSTALLED_VERSION,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
@@ -149,6 +154,10 @@ __all__ = [
     # logging
     "configure_logging",
     "get_logger",
+    # readiness
+    "cleanup_readiness_sentinel",
+    "readiness_sentinel_path",
+    "write_readiness_sentinel",
     # paths
     "GENERATED_FILES",
     "claude_code_log_path",

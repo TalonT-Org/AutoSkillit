@@ -112,7 +112,8 @@ generic_automation_mcp/
 │   ├── branch_guard.py
 │   ├── claude_conventions.py #  Skill discovery directory layout constants
 │   ├── github_url.py        #   parse_github_repo
-│   └── kitchen_state.py     #   Kitchen-open session marker (stdlib-only; readable from hooks)
+│   ├── kitchen_state.py     #   Kitchen-open session marker (stdlib-only; readable from hooks)
+│   └── readiness.py         #   Filesystem readiness sentinel primitives for MCP server startup (L0)
 │
 ├── config/                  # L1
 │   ├── __init__.py
@@ -247,6 +248,7 @@ generic_automation_mcp/
 │   ├── _timed_input.py      #   timed_prompt() and status_line() CLI primitives
 │   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`
 │   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal
+│   ├── _serve_guard.py      #   Async signal-guarded MCP server bootstrap (extracted from app.py)
 │   ├── _workspace.py        #   Workspace clean helpers
 │   └── app.py               #   CLI entry: serve, init, config, skills, recipes, doctor, update, etc.
 │

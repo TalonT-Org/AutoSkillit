@@ -37,7 +37,7 @@ def test_serve_uses_anyio_run_not_mcp_run(monkeypatch, tmp_path):
         anyio_calls.append(coro_fn)
         # Do not actually run it — just record the call
 
-    monkeypatch.setattr("autoskillit.cli.app.anyio.run", capture_anyio_run)
+    monkeypatch.setattr("anyio.run", capture_anyio_run)
 
     from autoskillit.cli.app import serve
 

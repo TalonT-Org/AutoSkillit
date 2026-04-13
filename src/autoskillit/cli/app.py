@@ -7,7 +7,6 @@ import json
 import os
 import random
 import shutil
-import signal
 import subprocess
 import sys
 from datetime import UTC
@@ -15,6 +14,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import anyio
+
+from autoskillit.cli._serve_guard import serve_with_signal_guard
 
 if TYPE_CHECKING:
     from autoskillit.recipe import Recipe, RecipeInfo
@@ -123,34 +124,8 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
 
     run_startup_drift_check()
 
-    async def _serve_with_signal_guard() -> None:
-        """Run the MCP server with event-loop-routed SIGTERM/SIGINT handling.
-
-        Arms an anyio signal receiver *before* mcp.run_async() starts so that
-        SIGTERM and SIGINT are delivered as scheduled asyncio callbacks rather
-        than frame-interrupting KeyboardInterrupt exceptions. ``tg.start()``
-        blocks until ``task_status.started()`` fires inside the receiver context
-        manager — guaranteeing the handler is active before any readiness
-        sentinel can be observed by a test.
-        """
-
-        async def _watch(
-            scope: anyio.CancelScope,
-            *,
-            task_status: anyio.abc.TaskStatus = anyio.TASK_STATUS_IGNORED,
-        ) -> None:
-            with anyio.open_signal_receiver(signal.SIGTERM, signal.SIGINT) as signals:
-                task_status.started()  # signal receiver is now armed
-                async for _ in signals:
-                    scope.cancel()
-                    return
-
-        async with anyio.create_task_group() as tg:
-            await tg.start(_watch, tg.cancel_scope)
-            # SIGTERM and SIGINT are armed via event-loop callback; mcp starts here
-            await mcp.run_async()
     try:
-        anyio.run(_serve_with_signal_guard)
+        anyio.run(serve_with_signal_guard, mcp)
     except KeyboardInterrupt:
         pass  # Ctrl+C before anyio loop starts — rare during heavy import phase
 

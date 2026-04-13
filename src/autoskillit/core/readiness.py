@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from autoskillit.core.io import atomic_write
+from .io import atomic_write
 
 __all__ = [
     "readiness_sentinel_path",

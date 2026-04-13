@@ -690,9 +690,7 @@ def test_recover_crashed_sessions_excludes_non_claude_trace_files(tmp_path):
     claude_sessions = [s for s in session_summaries if "20001" in s.get("session_id", "")]
 
     # The claude trace must be recovered (not excluded)
-    assert claude_sessions or count >= 1, (
-        "The claude trace file must be recovered by recover_crashed_sessions"
-    )
+    assert claude_sessions, "The claude trace file must be recovered by recover_crashed_sessions"
 
     # The alien trace should not produce a normal session — it should be excluded
     # or marked as alien so it doesn't pollute capacity planning / anomaly analytics

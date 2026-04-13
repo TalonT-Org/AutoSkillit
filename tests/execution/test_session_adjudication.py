@@ -1648,3 +1648,81 @@ def test_parse_session_result_non_write_tools_no_file_path(make_ndjson):
     session = parse_session_result(ndjson)
     assert session.tool_uses == [{"name": "Bash", "id": "tu3"}]
     assert "file_path" not in session.tool_uses[0]
+
+
+class TestMinus9ReturncodeCoverage:
+    """Specification tests: returncode=-9 under COMPLETED is a valid success (1c).
+
+    Before the fix, channel_won unconditionally sent SIGKILL (-9) to every
+    COMPLETED session. These tests document that the adjudicator correctly
+    classifies -9 under COMPLETED as successful — the bug was in the kill logic,
+    not the adjudicator.
+    """
+
+    def test_compute_success_completed_returncode_minus_9_is_success(self) -> None:
+        """COMPLETED + CHANNEL_A + returncode=-9 + content → success=True."""
+        session = _make_success_session("ok")
+        result = _compute_success(
+            session,
+            returncode=-9,
+            termination=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+        assert result is True
+
+    def test_compute_success_completed_minus_9_channel_b_is_success(self) -> None:
+        """COMPLETED + CHANNEL_B + returncode=-9 → success=True (bypass)."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="",
+            is_error=False,
+            session_id="b9",
+        )
+        result = _compute_success(
+            session,
+            returncode=-9,
+            termination=TerminationReason.COMPLETED,
+            channel_confirmation=ChannelConfirmation.CHANNEL_B,
+        )
+        assert result is True
+
+    @pytest.mark.parametrize("returncode", [0, -15, -9])
+    @pytest.mark.parametrize("termination", list(TerminationReason))
+    def test_compute_retry_handles_minus_9_for_all_termination_reasons(
+        self,
+        termination: TerminationReason,
+        returncode: int,
+    ) -> None:
+        """_compute_retry must not raise for any (TerminationReason, returncode) pair."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="done. %%ORDER_UP%%",
+            is_error=False,
+            session_id="rc9",
+            errors=[],
+        )
+        result = _compute_retry(session, returncode=returncode, termination=termination)
+        assert isinstance(result, tuple) and len(result) == 2
+
+    @pytest.mark.parametrize("returncode", [0, -15, -9])
+    @pytest.mark.parametrize("termination", list(TerminationReason))
+    def test_compute_success_handles_minus_9_for_all_termination_reasons(
+        self,
+        termination: TerminationReason,
+        returncode: int,
+    ) -> None:
+        """_compute_success must not raise for any (TerminationReason, returncode) pair."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            result="done. %%ORDER_UP%%",
+            is_error=False,
+            session_id="rc9",
+            errors=[],
+        )
+        result = _compute_success(
+            session,
+            returncode=returncode,
+            termination=termination,
+            completion_marker="%%ORDER_UP%%",
+        )
+        assert isinstance(result, bool)

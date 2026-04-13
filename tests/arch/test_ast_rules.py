@@ -572,3 +572,113 @@ def test_get_logger_no_bind() -> None:
             )
             return
     pytest.fail("get_logger() function not found in core/logging.py")
+
+
+# ── Kill-path structural guards (1f) ─────────────────────────────────────────
+
+
+def test_no_direct_async_kill_process_tree_outside_executor() -> None:
+    """No src file may call async_kill_process_tree or kill_process_tree
+    outside the designated kill helper functions.
+
+    Allowed call sites:
+    - src/autoskillit/execution/_process_kill.py (defines the helpers)
+    - execute_termination_action in src/autoskillit/execution/process.py
+    - BaseException handler in run_managed_async in process.py (cleanup path)
+    - run_managed_sync in process.py (sync cleanup path)
+    """
+    allowed_files = {
+        SRC_ROOT / "execution" / "_process_kill.py",
+        SRC_ROOT / "execution" / "process.py",
+    }
+    violations: list[str] = []
+
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        if py_file in allowed_files:
+            continue
+        try:
+            tree = ast.parse(py_file.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in {"async_kill_process_tree", "kill_process_tree"}
+            ):
+                violations.append(
+                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                    f"direct call to {node.func.id}() outside allowed files"
+                )
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"async_kill_process_tree", "kill_process_tree"}
+            ):
+                violations.append(
+                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                    f"direct call to .{node.func.attr}() outside allowed files"
+                )
+
+    assert not violations, (
+        "Direct async_kill_process_tree/kill_process_tree calls found outside allowed files.\n"
+        "All kill calls must go through execute_termination_action in process.py:\n"
+        + "\n".join(violations)
+    )
+
+
+def test_no_direct_termination_dispatch_ifelse_in_run_managed() -> None:
+    """run_managed_async must not contain an if/elif chain that inspects
+    TerminationReason.* or signals.process_exited directly.
+
+    The dispatch must be delegated to decide_termination_action.
+    """
+    process_py = SRC_ROOT / "execution" / "process.py"
+    tree = ast.parse(process_py.read_text())
+
+    # Find run_managed_async function body
+    run_managed_node: ast.AsyncFunctionDef | None = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "run_managed_async":
+            run_managed_node = node
+            break
+
+    assert run_managed_node is not None, "run_managed_async not found in process.py"
+
+    # Walk the function body and detect any If node whose test references
+    # TerminationReason.* attribute or signals.process_exited
+    violations: list[str] = []
+    for node in ast.walk(run_managed_node):
+        if not isinstance(node, ast.If):
+            continue
+        test = node.test
+        # Detect: timeout_scope.cancelled_caught (allowed), but TerminationReason.* is banned
+        # Walk the test expression for TerminationReason attribute access
+        for subnode in ast.walk(test):
+            if (
+                isinstance(subnode, ast.Attribute)
+                and isinstance(subnode.value, ast.Name)
+                and subnode.value.id == "TerminationReason"
+            ):
+                violations.append(
+                    f"process.py:{getattr(node, 'lineno', '?')}: "
+                    f"run_managed_async uses if/elif on TerminationReason.{subnode.attr} "
+                    "— dispatch must go through decide_termination_action"
+                )
+            # Detect: signals.process_exited in if test
+            if (
+                isinstance(subnode, ast.Attribute)
+                and isinstance(subnode.value, ast.Name)
+                and subnode.value.id == "signals"
+                and subnode.attr == "process_exited"
+            ):
+                violations.append(
+                    f"process.py:{getattr(node, 'lineno', '?')}: "
+                    "run_managed_async branches on signals.process_exited directly "
+                    "— dispatch must go through decide_termination_action"
+                )
+
+    assert not violations, (
+        "run_managed_async must not inspect TerminationReason or signals.process_exited directly."
+        "\nUse decide_termination_action to make the kill decision:\n" + "\n".join(violations)
+    )

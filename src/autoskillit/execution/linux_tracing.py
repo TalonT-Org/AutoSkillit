@@ -21,6 +21,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -50,18 +51,166 @@ def read_boot_id() -> str | None:
 
 
 def read_starttime_ticks(pid: int) -> int | None:
-    """Read process starttime ticks from /proc/pid/stat."""
+    """Read process starttime ticks from /proc/pid/stat.
+
+    Uses rfind(")") to correctly locate the field boundary even when the
+    process comm contains a ")" character. Matches psutil's own _parse_stat_file()
+    which uses rfind(b")") for the same reason.
+    """
     try:
         stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain spaces; find the closing paren to parse fields after it
-        after_paren = stat.split(")", 1)
-        if len(after_paren) >= 2:
-            fields = after_paren[1].strip().split()
-            # starttime is field 22 in /proc/stat (0-indexed position 19 after state)
-            return int(fields[19])
+        # comm may contain ")" — use rfind to find the *last* ")" as the boundary
+        rpar = stat.rfind(")")
+        if rpar == -1:
+            return None
+        fields = stat[rpar + 2 :].split()
+        # starttime is field 22 (1-indexed per man page), offset 19 from the field after ")"
+        return int(fields[19])
     except (OSError, ValueError, IndexError):
         pass
     return None
+
+
+# ---------------------------------------------------------------------------
+# TraceTarget: workload process identity with provenance
+# ---------------------------------------------------------------------------
+
+
+class TraceTargetResolutionError(RuntimeError):
+    """Raised when resolve_trace_target cannot find the expected workload within timeout.
+
+    Attributes:
+        root_pid: The spawn PID (e.g., script(1)) that was walked.
+        expected_basename: The basename we were looking for (e.g., 'claude').
+    """
+
+    def __init__(self, root_pid: int, expected_basename: str) -> None:
+        self.root_pid = root_pid
+        self.expected_basename = expected_basename
+        super().__init__(
+            f"resolve_trace_target: timeout waiting for '{expected_basename}' "
+            f"to appear as a descendant of PID {root_pid}. "
+            f"The workload process did not start within the resolution window. "
+            f"Cannot trace: falling back to wrapper PID would recreate issue #806."
+        )
+
+
+@dataclass(frozen=True)
+class TraceTarget:
+    """Workload process identity with provenance — the correct target for the tracer.
+
+    Can only be produced by resolve_trace_target() (PTY mode, walks descendants)
+    or trace_target_from_pid() (non-PTY mode, direct PID). Never from a raw int.
+
+    Fields:
+        pid: PID of the workload process (not the spawn wrapper).
+        comm: /proc/{pid}/comm value — process name, max 15 chars.
+        cmdline: Full command line as a tuple of strings.
+        starttime_ticks: /proc/{pid}/stat field 22 — collision-resistant identity.
+        resolved_at: UTC datetime when this target was resolved.
+    """
+
+    pid: int
+    comm: str
+    cmdline: tuple[str, ...]
+    starttime_ticks: int
+    resolved_at: datetime
+
+
+def resolve_trace_target(
+    root_pid: int,
+    expected_basename: str,
+    timeout: float = 2.0,
+) -> TraceTarget:
+    """Walk descendants of root_pid to find the workload process by basename.
+
+    Used after anyio.open_process() in PTY mode: root_pid is the script(1) wrapper;
+    we need to find the actual workload (e.g., 'claude') in its subtree.
+
+    Polls at 50 ms intervals up to timeout. Raises TraceTargetResolutionError on miss
+    — never falls back to root_pid to prevent silent re-introduction of issue #806.
+
+    Args:
+        root_pid: Spawn PID (e.g., script(1) when PTY mode is active).
+        expected_basename: Basename to match (e.g., 'claude', 'python3').
+        timeout: Maximum seconds to wait for the workload to appear.
+
+    Returns:
+        TraceTarget with the workload's pid, comm, cmdline, starttime_ticks.
+
+    Raises:
+        TraceTargetResolutionError: When workload not found within timeout.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            root_proc = psutil.Process(root_pid)
+            children = root_proc.children(recursive=True)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            break
+
+        for child in children:
+            try:
+                name = child.name()
+                cmdline = child.cmdline()
+                basename_matches = name == expected_basename or (
+                    cmdline and Path(cmdline[0]).name == expected_basename
+                )
+                if not basename_matches:
+                    continue
+                # Found the workload — read identity fields from /proc
+                try:
+                    comm = Path(f"/proc/{child.pid}/comm").read_text().strip()
+                except OSError:
+                    comm = name
+                starttime = read_starttime_ticks(child.pid) or 0
+                return TraceTarget(
+                    pid=child.pid,
+                    comm=comm,
+                    cmdline=tuple(cmdline),
+                    starttime_ticks=starttime,
+                    resolved_at=datetime.now(UTC),
+                )
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
+                continue
+
+        time.sleep(0.05)
+
+    raise TraceTargetResolutionError(root_pid=root_pid, expected_basename=expected_basename)
+
+
+def trace_target_from_pid(pid: int) -> TraceTarget:
+    """Build a TraceTarget directly from a PID without child walking.
+
+    Used for pty_mode=False (direct child, no wrapper) and in tests where the
+    spawn PID is already the workload.
+
+    Does a single /proc read to populate comm, cmdline, and starttime_ticks.
+    Never raises — returns empty strings/tuples on /proc read errors (process
+    may have already exited when this is called).
+    """
+    try:
+        comm = Path(f"/proc/{pid}/comm").read_text().strip()
+    except OSError:
+        comm = ""
+    try:
+        proc = psutil.Process(pid)
+        cmdline: tuple[str, ...] = tuple(proc.cmdline())
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
+        cmdline = ()
+    starttime = read_starttime_ticks(pid) or 0
+    return TraceTarget(
+        pid=pid,
+        comm=comm,
+        cmdline=cmdline,
+        starttime_ticks=starttime,
+        resolved_at=datetime.now(UTC),
+    )
+
+
+# ---------------------------------------------------------------------------
+# TraceEnrollmentRecord: schema version 2 (adds comm field)
+# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -71,9 +220,12 @@ class TraceEnrollmentRecord:
     (boot_id, pid, starttime_ticks) together form a collision-resistant identity:
     - boot_id rejects pre-reboot stale files
     - starttime_ticks detects PID recycling
+
+    Schema version 2 adds 'comm' to the enrollment record so that crash recovery
+    can verify the process identity (not just its PID) and reject alien trace files.
     """
 
-    schema_version: int  # always 1
+    schema_version: int  # 2 for post-#806 records; 1 for pre-fix records
     pid: int
     boot_id: str | None  # read_boot_id(); None if /proc unavailable
     starttime_ticks: int | None  # read_starttime_ticks(pid); None if unavailable
@@ -81,6 +233,7 @@ class TraceEnrollmentRecord:
     enrolled_at: str  # ISO 8601 UTC
     kitchen_id: str  # ""
     order_id: str  # ""
+    comm: str = ""  # /proc/{pid}/comm value; "" for pre-fix (schema_version=1) records
 
 
 def _write_enrollment_atomic(path: Path, record: TraceEnrollmentRecord) -> None:
@@ -112,17 +265,30 @@ def read_enrollment(path: Path) -> TraceEnrollmentRecord | None:
             enrolled_at=data.get("enrolled_at", ""),
             kitchen_id=data.get("kitchen_id", ""),
             order_id=data.get("order_id", ""),
+            comm=data.get("comm", ""),  # "" for pre-fix schema_version=1 records
         )
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
         return None
 
 
+# ---------------------------------------------------------------------------
+# ProcSnapshot: point-in-time snapshot with self-identifying comm field
+# ---------------------------------------------------------------------------
+
+
 @dataclass(frozen=True)
 class ProcSnapshot:
-    """Point-in-time snapshot of process state."""
+    """Point-in-time snapshot of process state.
+
+    The 'comm' field (added in #806 fix) self-identifies the process each snapshot
+    describes. Post-hoc drift detection becomes trivial: any row in proc_trace.jsonl
+    where comm != expected_comm is a drift indicator.
+    """
 
     # Temporal anchor — set at capture time, never reassigned
     captured_at: str
+    # Process identity — populated from /proc/{pid}/comm (max 15 chars kernel truncation)
+    comm: str
     # psutil-sourced fields
     state: str
     vm_rss_kb: int
@@ -186,6 +352,12 @@ def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> Pr
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return None
 
+    # Read process name from /proc/{pid}/comm (max 15 chars, kernel-truncated)
+    try:
+        comm = Path(f"/proc/{pid}/comm").read_text().strip()
+    except (FileNotFoundError, PermissionError):
+        comm = ""
+
     # Hand-rolled /proc reads for fields psutil doesn't expose
     try:
         status_content = Path(f"/proc/{pid}/status").read_text()
@@ -205,6 +377,7 @@ def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> Pr
 
     return ProcSnapshot(
         captured_at=captured_at,
+        comm=comm,
         state=state,
         vm_rss_kb=mem.rss // 1024,
         threads=num_threads,
@@ -284,7 +457,7 @@ class LinuxTracingHandle:
 
 
 def start_linux_tracing(
-    pid: int,
+    target: TraceTarget,
     config: LinuxTracingConfig,
     tg: anyio.abc.TaskGroup | None,
     *,
@@ -292,12 +465,26 @@ def start_linux_tracing(
     kitchen_id: str = "",
     order_id: str = "",
 ) -> LinuxTracingHandle | None:
-    """Start Linux tracing if all gates pass. Returns handle or None."""
+    """Start Linux tracing if all gates pass. Returns handle or None.
+
+    Args:
+        target: TraceTarget produced by resolve_trace_target() (PTY mode) or
+                trace_target_from_pid() (non-PTY mode). Never pass a raw int PID —
+                use the appropriate resolver to get a TraceTarget first (ARCH-008).
+    """
+    if not isinstance(target, TraceTarget):
+        raise TypeError(
+            f"start_linux_tracing: 'target' must be a TraceTarget, "
+            f"got {type(target).__name__!r}. "
+            "Use resolve_trace_target() (PTY mode) or trace_target_from_pid() (non-PTY mode) "
+            "instead of passing a raw int pid. (ARCH-008 / issue #806)"
+        )
     if not LINUX_TRACING_AVAILABLE or not config.enabled:
         return None
     if tg is None:
         return None
 
+    pid = target.pid
     handle = LinuxTracingHandle()
     scope = anyio.CancelScope()
 
@@ -313,17 +500,19 @@ def start_linux_tracing(
             handle._trace_file = None
 
         # Write enrollment sidecar atomically for crash-recovery identity contract
+        # Schema version 2: includes comm field for alien-file rejection in recovery
         enrollment_path = tmpfs / f"autoskillit_enrollment_{pid}.json"
         try:
             record = TraceEnrollmentRecord(
-                schema_version=1,
+                schema_version=2,
                 pid=pid,
                 boot_id=read_boot_id(),
-                starttime_ticks=read_starttime_ticks(pid),
+                starttime_ticks=target.starttime_ticks,
                 session_id=session_id,
                 enrolled_at=datetime.now(UTC).isoformat(),
                 kitchen_id=kitchen_id,
                 order_id=order_id,
+                comm=target.comm,
             )
             _write_enrollment_atomic(enrollment_path, record)
             handle._enrollment_path = enrollment_path

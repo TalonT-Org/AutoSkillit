@@ -85,13 +85,13 @@ async def test_tracing_handle_accumulates_snapshots(tmp_path):
     import anyio
 
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.execution.linux_tracing import start_linux_tracing
+    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
 
     proc = subprocess.Popen(["sleep", "2"])
     cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
 
     async with anyio.create_task_group() as tg:
-        handle = start_linux_tracing(pid=proc.pid, config=cfg, tg=tg)
+        handle = start_linux_tracing(target=trace_target_from_pid(proc.pid), config=cfg, tg=tg)
         assert handle is not None
         await anyio.sleep(0.5)
         snapshots = handle.stop()
@@ -111,12 +111,12 @@ async def test_tracing_handle_stop_returns_snapshots(tmp_path):
     import anyio
 
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.execution.linux_tracing import start_linux_tracing
+    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
 
     cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
 
     async with anyio.create_task_group() as tg:
-        handle = start_linux_tracing(pid=os.getpid(), config=cfg, tg=tg)
+        handle = start_linux_tracing(target=trace_target_from_pid(os.getpid()), config=cfg, tg=tg)
         assert handle is not None
         await anyio.sleep(0.3)
         result = handle.stop()
@@ -142,12 +142,16 @@ def test_linux_tracing_unavailable_on_non_linux():
 
 def test_noop_on_non_linux(monkeypatch, tmp_path):
     """start_linux_tracing is a no-op when LINUX_TRACING_AVAILABLE is False."""
+    import os
+
     from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution import linux_tracing
 
     monkeypatch.setattr(linux_tracing, "LINUX_TRACING_AVAILABLE", False)
     cfg = LinuxTracingConfig(enabled=True, proc_interval=1.0, tmpfs_path=str(tmp_path))
-    result = linux_tracing.start_linux_tracing(pid=1, config=cfg, tg=None)
+    result = linux_tracing.start_linux_tracing(
+        target=linux_tracing.trace_target_from_pid(os.getpid()), config=cfg, tg=None
+    )
     assert result is None
 
 
@@ -188,11 +192,11 @@ async def test_proc_monitor_stamps_unique_captured_at():
 async def test_start_linux_tracing_creates_trace_file(tmp_path):
     """When tmpfs_path is configured, start_linux_tracing opens a trace file."""
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.execution.linux_tracing import start_linux_tracing
+    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
 
     config = LinuxTracingConfig(enabled=True, proc_interval=0.01, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
-        handle = start_linux_tracing(os.getpid(), config, tg)
+        handle = start_linux_tracing(trace_target_from_pid(os.getpid()), config, tg)
         assert handle is not None
         await anyio.sleep(0.05)
         tg.cancel_scope.cancel()
@@ -208,13 +212,13 @@ async def test_streaming_writes_each_snapshot_as_jsonl(tmp_path):
     import subprocess
 
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.execution.linux_tracing import start_linux_tracing
+    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
 
     proc = subprocess.Popen(["sleep", "2"])
     config = LinuxTracingConfig(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
 
     async with anyio.create_task_group() as tg:
-        handle = start_linux_tracing(proc.pid, config, tg)
+        handle = start_linux_tracing(trace_target_from_pid(proc.pid), config, tg)
         assert handle is not None
         await anyio.sleep(0.2)
         tg.cancel_scope.cancel()
@@ -268,7 +272,7 @@ def test_stop_idempotent(tmp_path):
 async def test_streaming_graceful_when_tmpfs_missing(tmp_path):
     """If tmpfs_path does not exist, tracing still works in-memory."""
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.execution.linux_tracing import start_linux_tracing
+    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
 
     config = LinuxTracingConfig(
         enabled=True,
@@ -276,7 +280,7 @@ async def test_streaming_graceful_when_tmpfs_missing(tmp_path):
         tmpfs_path=str(tmp_path / "nonexistent"),
     )
     async with anyio.create_task_group() as tg:
-        handle = start_linux_tracing(os.getpid(), config, tg)
+        handle = start_linux_tracing(trace_target_from_pid(os.getpid()), config, tg)
         assert handle is not None
         await anyio.sleep(0.05)
         tg.cancel_scope.cancel()
@@ -311,11 +315,11 @@ async def test_proc_monitor_snapshots_have_distinct_timestamps(tmp_path):
     import anyio
 
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.execution.linux_tracing import start_linux_tracing
+    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
 
     config = LinuxTracingConfig(proc_interval=0.05, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
-        handle = start_linux_tracing(os.getpid(), config, tg)
+        handle = start_linux_tracing(trace_target_from_pid(os.getpid()), config, tg)
         await anyio.sleep(0.2)
         result = handle.stop()
         tg.cancel_scope.cancel()
@@ -361,17 +365,17 @@ async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
     import anyio
 
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.execution.linux_tracing import start_linux_tracing
+    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
 
     cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
         proc = await anyio.open_process(["sleep", "2"])
-        handle = start_linux_tracing(proc.pid, cfg, tg)
+        handle = start_linux_tracing(trace_target_from_pid(proc.pid), cfg, tg)
         assert handle is not None
         enrollment = tmp_path / f"autoskillit_enrollment_{proc.pid}.json"
         assert enrollment.exists()
         data = json.loads(enrollment.read_text())
-        assert data["schema_version"] == 1
+        assert data["schema_version"] == 2
         assert data["pid"] == proc.pid
         try:
             handle.stop()
@@ -426,18 +430,69 @@ def test_isolated_tracing_config_fixture_returns_non_dev_shm(isolated_tracing_co
     assert Path(isolated_tracing_config.tmpfs_path).is_dir()
 
 
+# --- Test 1.2: ProcSnapshot carries a comm field ---
+
+
+def test_proc_snapshot_has_comm_field():
+    """ProcSnapshot.comm is populated from /proc/{pid}/comm on every snapshot.
+
+    Test 1.2: guards against regression of the self-identifying snapshot invariant.
+    comm provides identity anchoring so every snapshot in proc_trace.jsonl can be
+    cross-checked against the expected workload process.
+    """
+    import os
+
+    from autoskillit.execution.linux_tracing import read_proc_snapshot
+
+    snap = read_proc_snapshot(os.getpid())
+    assert snap is not None
+    assert hasattr(snap, "comm"), (
+        "ProcSnapshot must have a 'comm' field populated from /proc/{pid}/comm"
+    )
+    assert isinstance(snap.comm, str) and snap.comm, "ProcSnapshot.comm must be a non-empty string"
+    # /proc/self/comm contains the process name (typically 'python' or 'pytest')
+    expected_comm = open(f"/proc/{os.getpid()}/comm").read().strip()  # noqa: SIM115
+    assert snap.comm == expected_comm, (
+        f"snap.comm {snap.comm!r} must match /proc/{os.getpid()}/comm {expected_comm!r}"
+    )
+
+
+# --- Test 1.5: start_linux_tracing rejects raw int ---
+
+
+def test_start_linux_tracing_requires_trace_target():
+    """start_linux_tracing(target=...) must accept TraceTarget, reject raw int.
+
+    Test 1.5: locks the type contract. Any future caller that passes an int gets
+    a hard failure rather than silent wrong-process observation.
+    """
+    from autoskillit.execution.linux_tracing import start_linux_tracing
+
+    # Annotation must reference TraceTarget by name (from __future__ import annotations
+    # makes annotations lazy strings; verify the string contains "TraceTarget")
+    ann = start_linux_tracing.__annotations__.get("target", "")
+    assert "TraceTarget" in str(ann), (
+        f"start_linux_tracing 'target' parameter must be annotated as TraceTarget, "
+        f"got annotation {ann!r}"
+    )
+
+    # Passing a raw int as target must raise TypeError at runtime
+    with pytest.raises(TypeError):
+        start_linux_tracing(target=123, config=None, tg=None)  # type: ignore[arg-type]
+
+
 @pytest.mark.anyio
 async def test_stop_unlinks_trace_and_enrollment(tmp_path):
     """stop() must delete both trace JSONL and enrollment sidecar on clean exit."""
     import anyio
 
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.execution.linux_tracing import start_linux_tracing
+    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
 
     cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
         proc = await anyio.open_process(["sleep", "2"])
-        handle = start_linux_tracing(proc.pid, cfg, tg)
+        handle = start_linux_tracing(trace_target_from_pid(proc.pid), cfg, tg)
         assert handle is not None
         trace = tmp_path / f"autoskillit_trace_{proc.pid}.jsonl"
         enrollment = tmp_path / f"autoskillit_enrollment_{proc.pid}.json"

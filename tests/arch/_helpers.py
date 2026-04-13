@@ -132,6 +132,28 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
                                     f"'{var_name}' -- use structlog kwargs instead",
                                 )
 
+        # Rule ARCH-008 (visitor): start_linux_tracing must not receive a raw .pid Attribute
+        # Resolve function name: bare Name or trailing Attribute.attr
+        called_name: str | None = None
+        if isinstance(func, ast.Name):
+            called_name = func.id
+        elif isinstance(func, ast.Attribute):
+            called_name = func.attr
+        if called_name == "start_linux_tracing":
+            for kw in node.keywords:
+                if (
+                    kw.arg == "target"
+                    and isinstance(kw.value, ast.Attribute)
+                    and kw.value.attr == "pid"
+                ):
+                    self._add(
+                        node,
+                        _RULE["ARCH-008"],
+                        "start_linux_tracing(target=<expr>.pid) passes a raw .pid attribute; "
+                        "use resolve_trace_target() or trace_target_from_pid() to get a "
+                        "TraceTarget first (issue #806)",
+                    )
+
         self.generic_visit(node)
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:

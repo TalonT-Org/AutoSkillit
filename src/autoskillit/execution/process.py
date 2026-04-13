@@ -61,6 +61,7 @@ if TYPE_CHECKING:
     import structlog
 
     from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import TraceTarget
 
 logger = get_logger(__name__)
 
@@ -208,6 +209,9 @@ async def run_managed_async(
     6. read_temp_output for results
     7. cleanup temp files via context manager
     """
+    # Capture workload basename before PTY wrapping rewrites cmd (#806)
+    _workload_basename = Path(cmd[0]).name if cmd else ""
+
     if pty_mode:
         cmd = pty_wrap_command(cmd)
 
@@ -232,10 +236,39 @@ async def run_managed_async(
                 start_new_session=True,
             )
 
+            # Resolve the workload TraceTarget — the PID that should be observed.
+            # anyio.open_process returns the spawn PID, which in PTY mode is the
+            # script(1) wrapper, not claude. resolve_trace_target walks descendants
+            # to find the actual workload by basename. Raising here (on miss) is
+            # intentional: a silent fallback to proc.pid recreates issue #806.
+            _target: TraceTarget | None = None
+            _observed_pid: int = proc.pid
+            _tracked_comm: str | None = None
+            if linux_tracing_config is not None:
+                from autoskillit.execution.linux_tracing import (
+                    LINUX_TRACING_AVAILABLE,
+                    resolve_trace_target,
+                    trace_target_from_pid,
+                )
+
+                if pty_mode and LINUX_TRACING_AVAILABLE:
+                    # PTY mode: proc.pid is the script(1) wrapper — resolve to workload
+                    _target = resolve_trace_target(
+                        root_pid=proc.pid,
+                        expected_basename=_workload_basename,
+                        timeout=2.0,
+                    )
+                else:
+                    # Non-PTY mode: proc.pid IS the workload (direct child)
+                    _target = trace_target_from_pid(proc.pid)
+                assert _target is not None
+                _observed_pid = _target.pid
+                _tracked_comm = _target.comm
+
             termination = TerminationReason.NATURAL_EXIT
             _channel_confirmation = ChannelConfirmation.UNMONITORED
 
-            proc_log = logger.bind(pid=proc.pid)
+            proc_log = logger.bind(pid=_observed_pid, comm=_tracked_comm)
             proc_log.debug(
                 "run_managed_async_entry",
                 cmd_summary=cmd[0] if cmd else "<empty>",
@@ -277,7 +310,7 @@ async def run_managed_async(
                         stale_threshold,
                         time.time(),
                         session_record_types,
-                        proc.pid,
+                        _observed_pid,
                         completion_drain_timeout,
                         acc,
                         trigger,
@@ -297,11 +330,11 @@ async def run_managed_async(
                         trigger,
                     )
                 tracing_handle = None
-                if linux_tracing_config is not None:
+                if linux_tracing_config is not None and _target is not None:
                     from autoskillit.execution.linux_tracing import start_linux_tracing
 
                     tracing_handle = start_linux_tracing(
-                        pid=proc.pid,
+                        target=_target,
                         config=linux_tracing_config,
                         tg=tg,
                     )
@@ -337,7 +370,7 @@ async def run_managed_async(
                 from autoskillit.execution.linux_tracing import read_proc_snapshot
 
                 accumulated = tracing_handle.stop()
-                final_snap = read_proc_snapshot(proc.pid)
+                final_snap = read_proc_snapshot(_observed_pid)
                 if final_snap:
                     accumulated.append(final_snap)
                 snapshots_data = [s.__dict__ for s in accumulated]
@@ -377,7 +410,7 @@ async def run_managed_async(
                 stdout=stdout,
                 stderr=stderr,
                 termination=termination,
-                pid=proc.pid,
+                pid=_observed_pid,
                 channel_confirmation=_channel_confirmation,
                 proc_snapshots=snapshots_data,
                 channel_b_session_id=signals.channel_b_session_id,
@@ -385,6 +418,7 @@ async def run_managed_async(
                     signals.stdout_session_id, signals.channel_b_session_id
                 ),
                 kill_reason=kill_reason,
+                tracked_comm=_tracked_comm,
             )
             proc_log.debug(
                 "run_managed_async_result",

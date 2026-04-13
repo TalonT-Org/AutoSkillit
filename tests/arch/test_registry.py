@@ -85,7 +85,16 @@ def test_rule_registry_completeness() -> None:
     # (c) exact set of IDs must match the visitor's rule set
     # Add a RuleDescriptor for every new visitor rule and update this set.
     expected_ids = frozenset(
-        {"ARCH-001", "ARCH-002", "ARCH-003", "ARCH-004", "ARCH-005", "ARCH-006", "ARCH-007"}
+        {
+            "ARCH-001",
+            "ARCH-002",
+            "ARCH-003",
+            "ARCH-004",
+            "ARCH-005",
+            "ARCH-006",
+            "ARCH-007",
+            "ARCH-008",
+        }
     )
     actual_ids = frozenset(rule_ids)
     assert actual_ids == expected_ids, (

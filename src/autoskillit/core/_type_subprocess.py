@@ -109,6 +109,14 @@ class SubprocessResult:
     Set by run_managed_async via execute_termination_action. Surfaces to SkillResult
     so the formatter can annotate exit_code with the kill cause.
     """
+    tracked_comm: str | None = None
+    """Process identity comm of the observed workload, or None when tracing disabled.
+
+    Populated from TraceTarget.comm after resolve_trace_target() resolves the workload
+    PID from the spawn PID. Propagated to flush_session_log and anomaly detection so
+    that downstream telemetry (sessions.jsonl, summary.json, GitHub issue bodies) can
+    self-identify which process was actually observed. (Issue #806)
+    """
 
 
 @runtime_checkable

@@ -2059,11 +2059,11 @@ class TestResearchRecipeStructure:
         assert step.on_failure == "begin_archival"
 
     def test_finalize_bundle_render_step_exists_and_routes(self, recipe) -> None:
-        """finalize_bundle_render routes to begin_archival on both outcomes."""
+        """finalize_bundle_render routes to route_archive_or_export on both outcomes."""
         assert "finalize_bundle_render" in recipe.steps
         step = recipe.steps["finalize_bundle_render"]
-        assert step.on_success == "begin_archival"
-        assert step.on_failure == "begin_archival"
+        assert step.on_success == "route_archive_or_export"
+        assert step.on_failure == "route_archive_or_export"
 
     def test_create_worktree_copies_review_cycle_artifacts(self, recipe) -> None:
         """create_worktree must copy review-design dashboards and revision guidance."""
@@ -2114,11 +2114,11 @@ class TestResearchRecipeStructure:
             "retest.on_success must be push_branch after commit_research_artifacts is removed"
         )
 
-    def test_stage_bundle_routes_to_compose_research_pr(self, recipe) -> None:
-        """stage_bundle must route to compose_research_pr on success and failure."""
+    def test_stage_bundle_routes_to_route_pr_or_local(self, recipe) -> None:
+        """stage_bundle must route to route_pr_or_local on success and failure."""
         step = recipe.steps["stage_bundle"]
-        assert step.on_success == "compose_research_pr"
-        assert step.on_failure == "compose_research_pr"
+        assert step.on_success == "route_pr_or_local"
+        assert step.on_failure == "route_pr_or_local"
 
 
 # ---------------------------------------------------------------------------

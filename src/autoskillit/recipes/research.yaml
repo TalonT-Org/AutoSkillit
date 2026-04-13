@@ -515,12 +515,12 @@ steps:
     on_result:
       - when: "${{ inputs.output_mode }} == local"
         route: finalize_bundle
-      - route: push_branch
+      - route: compose_research_pr
     note: >
       Branches on output_mode after bundle staging. local → bypass PR pipeline entirely,
-      jump to finalize_bundle. pr (fall-through) → push_branch to open PR and run the
-      full review/archival flow. Uses predicate route because skip_when_false only accepts
-      bare inputs.<name> with no expression evaluation.
+      jump to finalize_bundle. pr (fall-through) → compose_research_pr to open PR and run
+      the full review/archival flow. Uses predicate route because skip_when_false only
+      accepts bare inputs.<name> with no expression evaluation.
 
   compose_research_pr:
     tool: run_skill
@@ -758,7 +758,7 @@ steps:
           fi &&
           REPORT_FILE=$( [ "${OUTPUT_MODE}" = "local" ] && echo "report.md" || echo "README.md" ) &&
           if [ "${OUTPUT_MODE}" = "local" ]; then
-            EXCLUDE_PATTERN='^(report\.html|mermaid\.min\.js|images|report\.md|artifacts\.tar\.gz)$';
+            EXCLUDE_PATTERN='^(report.html|mermaid\.min\.js|images|report\.md|artifacts\.tar\.gz)$';
           else
             EXCLUDE_PATTERN='^(README\.md|artifacts\.tar\.gz)$';
           fi &&
@@ -774,7 +774,7 @@ steps:
           [ -f "${RESEARCH_DIR}/artifacts.tar.gz" ] || \
             { echo "ERROR: artifacts.tar.gz not created in ${RESEARCH_DIR}"; exit 1; } &&
           if [ "${OUTPUT_MODE}" = "local" ]; then
-            LEFTOVER_PATTERN='^(report\.md|report\.html|mermaid\.min\.js|images|artifacts\.tar\.gz)$';
+            LEFTOVER_PATTERN='^(report\.md|report.html|mermaid\.min\.js|images|artifacts\.tar\.gz)$';
           else
             LEFTOVER_PATTERN='^(README\.md|artifacts\.tar\.gz)$';
           fi &&

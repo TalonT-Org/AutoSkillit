@@ -13,6 +13,7 @@ def recipe():
 
 # --- REQ-R741-H01: ingredient exists with default "local" ---
 
+
 def test_default_mode_is_local(recipe):
     """ingredients.output_mode must exist with default == 'local' (issue body)."""
     assert "output_mode" in recipe.ingredients, "output_mode ingredient missing"
@@ -24,12 +25,13 @@ def test_default_mode_is_local(recipe):
 
 # --- REQ-R741-H04/H05: route_pr_or_local exists and is wired ---
 
+
 def test_route_pr_or_local_exists(recipe):
     assert "route_pr_or_local" in recipe.steps, "route_pr_or_local step missing"
 
 
 def test_stage_bundle_routes_to_route_pr_or_local(recipe):
-    """stage_bundle.on_success must be route_pr_or_local (groupH changes this from compose_research_pr)."""
+    """stage_bundle.on_success must be route_pr_or_local after groupH."""
     stage = recipe.steps["stage_bundle"]
     assert stage.on_success == "route_pr_or_local", (
         f"stage_bundle.on_success must be 'route_pr_or_local', got {stage.on_success!r}"
@@ -49,16 +51,17 @@ def test_route_pr_or_local_local_branch(recipe):
 
 
 def test_route_pr_or_local_pr_fallthrough(recipe):
-    """route_pr_or_local fall-through (no when) must route to push_branch."""
+    """route_pr_or_local fall-through (no when) must route to compose_research_pr."""
     step = recipe.steps["route_pr_or_local"]
     conditions = step.on_result.conditions if step.on_result else []
     fallthrough = [c for c in conditions if c.when is None]
-    assert len(fallthrough) == 1 and fallthrough[0].route == "push_branch", (
-        "route_pr_or_local must fall through to push_branch for pr mode"
+    assert len(fallthrough) == 1 and fallthrough[0].route == "compose_research_pr", (
+        "route_pr_or_local must fall through to compose_research_pr for pr mode"
     )
 
 
 # --- REQ-R741-H06/H07: route_archive_or_export exists and is wired ---
+
 
 def test_route_archive_or_export_exists(recipe):
     assert "route_archive_or_export" in recipe.steps, "route_archive_or_export step missing"
@@ -68,10 +71,12 @@ def test_finalize_bundle_render_routes_to_route_archive_or_export(recipe):
     """finalize_bundle_render.on_success and on_failure must be route_archive_or_export."""
     fbr = recipe.steps["finalize_bundle_render"]
     assert fbr.on_success == "route_archive_or_export", (
-        f"finalize_bundle_render.on_success must be 'route_archive_or_export', got {fbr.on_success!r}"
+        "finalize_bundle_render.on_success must be 'route_archive_or_export',"
+        f" got {fbr.on_success!r}"
     )
     assert fbr.on_failure == "route_archive_or_export", (
-        f"finalize_bundle_render.on_failure must be 'route_archive_or_export', got {fbr.on_failure!r}"
+        "finalize_bundle_render.on_failure must be 'route_archive_or_export',"
+        f" got {fbr.on_failure!r}"
     )
 
 
@@ -97,6 +102,7 @@ def test_route_archive_or_export_pr_fallthrough(recipe):
 
 
 # --- REQ-R741-H09: export_local_bundle step ---
+
 
 def test_export_local_bundle_exists(recipe):
     assert "export_local_bundle" in recipe.steps, "export_local_bundle step missing"
@@ -131,12 +137,13 @@ def test_export_local_bundle_routes_to_research_complete(recipe):
 
 # --- REQ-R741-H08: finalize_bundle local mode ---
 
+
 def test_finalize_bundle_reads_output_mode(recipe):
     """finalize_bundle cmd must read OUTPUT_MODE from inputs.output_mode."""
     step = recipe.steps["finalize_bundle"]
     cmd = step.with_args.get("cmd", "")
     assert "OUTPUT_MODE" in cmd, "finalize_bundle must set OUTPUT_MODE from inputs.output_mode"
-    assert "inputs.output_mode" in cmd or 'inputs.output_mode' in cmd, (
+    assert "inputs.output_mode" in cmd or "inputs.output_mode" in cmd, (
         "finalize_bundle cmd must reference ${{ inputs.output_mode }}"
     )
 
@@ -176,6 +183,7 @@ def test_finalize_bundle_render_always_runs(recipe):
 
 
 # --- REQ-R741-H15: research-bundles kitchen rule ---
+
 
 def test_research_bundles_documented_in_kitchen_rules(recipe):
     """research.yaml kitchen_rules must document research-bundles/ directory."""

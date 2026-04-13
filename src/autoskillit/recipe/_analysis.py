@@ -541,6 +541,12 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                     "skill_command", ""
                 ):
                     continue
+                # Exempt export_local_bundle local_bundle_path captures: local_bundle_path
+                # is captured for orchestrator observability. The route_archive_or_export
+                # local-mode path ends at research_complete (a stop action), so no
+                # downstream recipe step can consume it via template syntax.
+                if cap_key == "local_bundle_path" and step_name == "export_local_bundle":
+                    continue
                 warnings.append(
                     DataFlowWarning(
                         code="DEAD_OUTPUT",

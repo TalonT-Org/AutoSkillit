@@ -580,4 +580,3 @@ def test_weight_matrix_has_eight_dimensions(skill_text: str) -> None:
         dims_found.update(data.get("dimension_weights", {}).keys())
     missing = known_dims - dims_found
     assert not missing, f"Dimensions missing from bundled YAML files: {missing}"
-    assert dims_found >= known_dims, f"Expected 8 dimensions, found: {dims_found}"

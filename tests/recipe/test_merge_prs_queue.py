@@ -647,7 +647,6 @@ def test_remerge_immediate_uses_squash_without_auto(any_recipe) -> None:
 
 def test_all_immediate_merge_steps_have_skip_when_false(any_recipe) -> None:
     immediate_steps = [
-        "check_auto_merge",
         "immediate_merge",
         "wait_for_immediate_merge",
         "immediate_merge_conflict_fix",

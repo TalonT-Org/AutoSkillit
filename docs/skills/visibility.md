@@ -84,7 +84,7 @@ and `/autoskillit:close-kitchen`. Skills in `skills_extended/` are never seen.
 
 Order is similar to cook: AutoSkillit launches Claude Code with access to all tiers.
 The key difference is the orchestrator (`sous-chef` skill) is injected and the kitchen
-is pre-opened so all 42 MCP tools are available from the start.
+is pre-opened so all 43 MCP tools are available from the start.
 
 ### Headless session (launched by `run_skill`)
 

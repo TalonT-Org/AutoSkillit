@@ -123,6 +123,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "release_issue",
         "wait_for_ci",
         "wait_for_merge_queue",
+        "check_repo_merge_state",
         "toggle_auto_merge",
         "create_unique_branch",
         "write_telemetry_files",
@@ -196,6 +197,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     # ci
     "wait_for_ci": frozenset({"ci"}),
     "wait_for_merge_queue": frozenset({"ci"}),
+    "check_repo_merge_state": frozenset({"ci"}),
     "toggle_auto_merge": frozenset({"ci"}),
     "get_ci_status": frozenset({"ci"}),
     # clone

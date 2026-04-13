@@ -253,7 +253,7 @@ class TestClaimReleaseGates:
     RECIPES = ["implementation", "implementation-groups", "remediation"]
     # Recipes where ci_watch routes directly to release_issue_success
     RECIPES_WITH_RELEASE_SUCCESS: list[str] = []
-    # Recipes where ci_watch routes to check_merge_queue (merge-queue path)
+    # Recipes where ci_watch routes to check_repo_merge_state (merge-queue path)
     RECIPES_WITHOUT_RELEASE_SUCCESS = [
         "implementation",
         "implementation-groups",
@@ -336,7 +336,7 @@ class TestClaimReleaseGates:
 
     def test_ci_watch_on_success_routing(self):
         expected = {
-            **{name: "check_merge_queue" for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS},
+            **{name: "check_repo_merge_state" for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS},
             **{name: "release_issue_success" for name in self.RECIPES_WITH_RELEASE_SUCCESS},
         }
         assert set(expected) == set(self.RECIPES), (

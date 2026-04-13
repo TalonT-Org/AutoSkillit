@@ -178,9 +178,9 @@ def _count_semantic_rule_files() -> int:
 # ----- tests ------------------------------------------------------------------
 
 
-def test_kitchen_tagged_tool_count_is_40() -> None:
-    assert _count_kitchen_tools() == 40, (
-        f"Expected 40 kitchen-tagged tools; found {_count_kitchen_tools()}"
+def test_kitchen_tagged_tool_count_is_41() -> None:
+    assert _count_kitchen_tools() == 41, (
+        f"Expected 41 kitchen-tagged tools; found {_count_kitchen_tools()}"
     )
 
 
@@ -239,8 +239,8 @@ def test_retry_reason_value_count_is_11() -> None:
     assert len(values) == 11, f"RetryReason has {len(values)} values: {values}"
 
 
-def test_semantic_rule_family_count_is_17() -> None:
-    assert _count_semantic_rule_files() == 17
+def test_semantic_rule_family_count_is_18() -> None:
+    assert _count_semantic_rule_files() == 18
 
 
 # ----- per-doc count assertions (run once docs exist) -------------------------
@@ -261,8 +261,8 @@ def _assert_doc_states_number(doc: Path, label: str, expected: int) -> None:
         DOCS_DIR / "execution" / "tool-access.md",
     ],
 )
-def test_docs_state_42_mcp_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "MCP tools", 42)
+def test_docs_state_43_mcp_tools(doc_path: Path) -> None:
+    _assert_doc_states_number(doc_path, "MCP tools", 43)
 
 
 @pytest.mark.parametrize(
@@ -272,8 +272,8 @@ def test_docs_state_42_mcp_tools(doc_path: Path) -> None:
         DOCS_DIR / "execution" / "tool-access.md",
     ],
 )
-def test_docs_state_40_kitchen_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "kitchen tools", 40)
+def test_docs_state_41_kitchen_tools(doc_path: Path) -> None:
+    _assert_doc_states_number(doc_path, "kitchen tools", 41)
 
 
 def test_skill_visibility_states_109_skills() -> None:

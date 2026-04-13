@@ -54,7 +54,7 @@ def _assert_ci_steps(recipe) -> None:
     assert ci.tool == "wait_for_ci"
     assert ci.skip_when_false == "inputs.open_pr"
     assert ci.with_args.get("timeout_seconds") == 300
-    assert ci.on_success == "check_merge_queue"
+    assert ci.on_success == "check_repo_merge_state"
     assert ci.on_failure == "detect_ci_conflict"
     assert "release_issue_success" in recipe.steps
     assert "context.merge_target" in ci.with_args["branch"]
@@ -675,19 +675,20 @@ class TestImplementationGroupsStructure:
             "for enable_auto_merge and wait_for_queue"
         )
 
-    def test_ig_ci_watch_routes_to_check_merge_queue(self, recipe) -> None:
-        """REQ-C7-01: ci_watch.on_success must route to check_merge_queue (not release_issue_success)."""  # noqa: E501
+    def test_ig_ci_watch_routes_to_check_repo_merge_state(self, recipe) -> None:
+        """REQ-C7-01: ci_watch.on_success must route to check_repo_merge_state (not release_issue_success)."""  # noqa: E501
         step = recipe.steps["ci_watch"]
-        assert step.on_success == "check_merge_queue", (
-            "ci_watch must route to check_merge_queue so the PR can enter the merge queue. "
+        assert step.on_success == "check_repo_merge_state", (
+            "ci_watch must route to check_repo_merge_state so the PR can enter the merge queue. "
             "Routing directly to release_issue_success skips the queue lifecycle entirely."
         )
 
-    def test_ig_check_merge_queue_step_exists(self, recipe) -> None:
-        """REQ-C7-01: check_merge_queue step must exist."""
-        assert "check_merge_queue" in recipe.steps
-        step = recipe.steps["check_merge_queue"]
-        assert step.tool == "run_cmd"
+    def test_ig_check_repo_merge_state_step_exists(self, recipe) -> None:
+        """REQ-C7-01: check_repo_merge_state step must exist."""
+        assert "check_repo_merge_state" in recipe.steps
+        step = recipe.steps["check_repo_merge_state"]
+        assert step.tool == "check_repo_merge_state"
+        assert step.block == "pre_queue_gate"
         assert "queue_available" in step.capture
 
     def test_ig_wait_for_queue_step_exists(self, recipe) -> None:
@@ -1356,10 +1357,10 @@ class TestImplementationRecipeMergeQueueRule:
     def recipe(self):
         return load_recipe(builtin_recipes_dir() / "implementation.yaml")
 
-    def test_kitchen_rules_mention_check_merge_queue(self, recipe) -> None:
+    def test_kitchen_rules_mention_check_repo_merge_state(self, recipe) -> None:
         all_rules = " ".join(recipe.kitchen_rules)
-        assert "check_merge_queue" in all_rules, (
-            "implementation.yaml kitchen_rules must reference check_merge_queue"
+        assert "check_repo_merge_state" in all_rules, (
+            "implementation.yaml kitchen_rules must reference check_repo_merge_state"
         )
         assert "MERGE ROUTING" in all_rules, (
             "implementation.yaml kitchen_rules must contain a MERGE ROUTING rule"

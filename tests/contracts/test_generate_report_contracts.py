@@ -85,11 +85,11 @@ def test_recommendations_or_discussion_framing() -> None:
 def test_generate_report_step25_no_host_venv() -> None:
     """Step 2.5 must not create a .plot-venv on the host filesystem."""
     text = SKILL_PATH.read_text()
-    step25_section = (
-        text.split("### Step 2.5")[1].split("### Step 3")[0]
-        if "### Step 2.5" in text and "### Step 3" in text
-        else text
+    assert "### Step 2.5" in text, (
+        "generate-report/SKILL.md is missing '### Step 2.5' section header"
     )
+    assert "### Step 3" in text, "generate-report/SKILL.md is missing '### Step 3' section header"
+    step25_section = text.split("### Step 2.5")[1].split("### Step 3")[0]
     assert ".plot-venv" not in step25_section, (
         "generate-report/SKILL.md Step 2.5 must not create a .plot-venv on the host — "
         "all package installation must happen inside the Docker container"
@@ -99,11 +99,11 @@ def test_generate_report_step25_no_host_venv() -> None:
 def test_generate_report_step25_uses_docker_run() -> None:
     """Step 2.5 must use docker run to execute visualization scripts."""
     text = SKILL_PATH.read_text()
-    step25_section = (
-        text.split("### Step 2.5")[1].split("### Step 3")[0]
-        if "### Step 2.5" in text and "### Step 3" in text
-        else text
+    assert "### Step 2.5" in text, (
+        "generate-report/SKILL.md is missing '### Step 2.5' section header"
     )
+    assert "### Step 3" in text, "generate-report/SKILL.md is missing '### Step 3' section header"
+    step25_section = text.split("### Step 2.5")[1].split("### Step 3")[0]
     assert "docker run" in step25_section.lower(), (
         "generate-report/SKILL.md Step 2.5 must reference 'docker run' for executing "
         "visualization scripts inside the experiment container"
@@ -136,11 +136,10 @@ def test_dockerfile_template_uses_micromamba_base() -> None:
         / "research"
         / "Dockerfile.template"
     )
-    if asset_path.exists():
-        content = asset_path.read_text()
-        assert "mambaorg/micromamba" in content, (
-            "assets/research/Dockerfile.template must use mambaorg/micromamba as the base image"
-        )
+    content = asset_path.read_text()
+    assert "mambaorg/micromamba" in content, (
+        "assets/research/Dockerfile.template must use mambaorg/micromamba as the base image"
+    )
 
 
 def test_dockerfile_template_wires_bash_env() -> None:
@@ -153,9 +152,8 @@ def test_dockerfile_template_wires_bash_env() -> None:
         / "research"
         / "Dockerfile.template"
     )
-    if asset_path.exists():
-        content = asset_path.read_text()
-        assert "BASH_ENV" in content, (
-            "assets/research/Dockerfile.template must set BASH_ENV to wire micromamba "
-            "activation into every shell context (including non-interactive)"
-        )
+    content = asset_path.read_text()
+    assert "BASH_ENV" in content, (
+        "assets/research/Dockerfile.template must set BASH_ENV to wire micromamba "
+        "activation into every shell context (including non-interactive)"
+    )

@@ -367,3 +367,68 @@ def test_gh_cli_token_returns_none_when_gh_not_installed(monkeypatch):
 
     monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
     assert _gh_cli_token() is None
+
+
+# ---------------------------------------------------------------------------
+# TokenFactory unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_token_factory_resolves_lazily():
+    """TokenFactory must not resolve until first call, then cache."""
+    call_count = 0
+
+    def _resolver():
+        nonlocal call_count
+        call_count += 1
+        return "ghp_test_token"
+
+    factory = TokenFactory(_resolver)
+    assert call_count == 0, "TokenFactory resolved eagerly at construction"
+    assert not factory.is_resolved
+
+    token = factory()
+    assert token == "ghp_test_token"
+    assert call_count == 1
+    assert factory.is_resolved
+
+    # Second call uses cache
+    token2 = factory()
+    assert token2 == "ghp_test_token"
+    assert call_count == 1, "TokenFactory resolved twice instead of caching"
+
+
+def test_token_factory_caches_none():
+    """TokenFactory caches None results (gh CLI not available)."""
+    call_count = 0
+
+    def _resolver():
+        nonlocal call_count
+        call_count += 1
+        return None
+
+    factory = TokenFactory(_resolver)
+    assert factory() is None
+    assert call_count == 1
+    assert factory() is None
+    assert call_count == 1, "TokenFactory resolved twice for None result"
+
+
+def test_gh_cli_token_not_called_during_make_context(monkeypatch):
+    """make_context() must not call _gh_cli_token() — token resolves lazily."""
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+    calls: list[object] = []
+    original_run = __import__("subprocess").run
+
+    def tracking_run(*args, **kwargs):
+        calls.append(args)
+        return original_run(*args, **kwargs)
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", tracking_run)
+
+    config = AutomationConfig()
+    make_context(config, runner=None, plugin_dir=".")
+
+    gh_calls = [c for c in calls if "gh" in str(c)]
+    assert gh_calls == [], f"_gh_cli_token() called during make_context: {gh_calls}"

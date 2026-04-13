@@ -677,7 +677,7 @@ def test_recover_crashed_sessions_excludes_non_claude_trace_files(tmp_path):
     # One alien trace (e.g., leftover from a test or wrong process)
     _write_old_trace_with_comm(tmpfs, pid=20002, comm="sleep")
 
-    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(log_dir))
+    recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(log_dir))
 
     sessions_dir = log_dir / "sessions"
     recovered = list(sessions_dir.iterdir()) if sessions_dir.exists() else []

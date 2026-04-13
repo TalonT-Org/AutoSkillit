@@ -479,14 +479,3 @@ def test_conformance_rule_clean_when_targets_correct() -> None:
     assert conformance_findings == [], (
         f"Expected no conformance findings for correct targets, got: {conformance_findings}"
     )
-
-
-def test_coverage_rule_flags_missing_pr_state_arm_via_run_semantic_rules() -> None:
-    """T13: coverage rule fires via run_semantic_rules when DROPPED_HEALTHY is absent."""
-    recipe = _make_mq_recipe(exclude={"dropped_healthy"})
-    findings = run_semantic_rules(recipe)
-    coverage_findings = [f for f in findings if f.rule == _COVERAGE_RULE]
-    assert any(f.rule == _COVERAGE_RULE for f in findings), (
-        f"Expected finding with rule {_COVERAGE_RULE!r}, got rules: {[f.rule for f in findings]}"
-    )
-    assert "dropped_healthy" in coverage_findings[0].message

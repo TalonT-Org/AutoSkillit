@@ -76,6 +76,10 @@ from autoskillit.recipe.staleness_cache import (  # noqa: E402
     read_staleness_cache,
     write_staleness_cache,
 )
+from autoskillit.recipe.experiment_type_registry import (  # noqa: E402
+    ExperimentTypeSpec,
+    load_all_experiment_types,
+)
 from autoskillit.recipe.validator import (  # noqa: E402
     RuleFinding,
     analyze_dataflow,
@@ -130,4 +134,6 @@ __all__ = [
     "diagram_stale_to_suggestions",
     "builtin_sub_recipes_dir",
     "find_sub_recipe_by_name",
+    "ExperimentTypeSpec",
+    "load_all_experiment_types",
 ]

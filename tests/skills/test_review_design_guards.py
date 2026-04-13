@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from autoskillit.recipe.experiment_type_registry import load_all_experiment_types
+
 SKILL_PATH = (
     Path(__file__).resolve().parent.parent.parent
     / "src"
@@ -18,16 +20,13 @@ def test_data_acquisition_dimension_exists() -> None:
 
 
 def test_data_acquisition_not_l_weight() -> None:
-    """data_acquisition must be M-weight minimum to influence verdict."""
-    text = SKILL_PATH.read_text()
-    lines = text.split("\n")
-    for line in lines:
-        if "data_acquisition" in line and "|" in line:
-            assert "M" in line or "H" in line, (
-                "data_acquisition must have M or H weight in at least one experiment type"
-            )
+    """data_acquisition must be M-weight minimum to influence verdict in at least one type."""
+    types = load_all_experiment_types()
+    for name, spec in types.items():
+        weight = spec.dimension_weights.get("data_acquisition")
+        if weight in ("M", "H"):
             return
-    raise AssertionError("data_acquisition not found in weight table")
+    raise AssertionError("data_acquisition must have M or H weight in at least one bundled type")
 
 
 def test_agent_implementability_dimension_exists() -> None:
@@ -36,16 +35,19 @@ def test_agent_implementability_dimension_exists() -> None:
 
 
 def test_agent_implementability_weight_row() -> None:
-    """agent_implementability must have H|H|M|M|L weights in the matrix."""
-    text = SKILL_PATH.read_text()
-    for line in text.split("\n"):
-        if "agent_implementability" in line and "|" in line:
-            cells = [c.strip() for c in line.split("|") if c.strip()]
-            if len(cells) == 6:  # dimension name + 5 weights
-                assert cells[1] == "H", f"benchmark weight should be H, got {cells[1]}"
-                assert cells[2] == "H", f"config_study weight should be H, got {cells[2]}"
-                assert cells[3] == "M", f"causal_inf weight should be M, got {cells[3]}"
-                assert cells[4] == "M", f"robust_audit weight should be M, got {cells[4]}"
-                assert cells[5] == "L", f"exploratory weight should be L, got {cells[5]}"
-                return
-    raise AssertionError("agent_implementability not found in weight table")
+    """agent_implementability must have H/H/M/M/L weights for the 5 bundled types."""
+    types = load_all_experiment_types()
+    expected = {
+        "benchmark": "H",
+        "configuration_study": "H",
+        "causal_inference": "M",
+        "robustness_audit": "M",
+        "exploratory": "L",
+    }
+    for type_name, exp_weight in expected.items():
+        spec = types.get(type_name)
+        assert spec is not None, f"Bundled type {type_name!r} not found"
+        actual = spec.dimension_weights.get("agent_implementability")
+        assert actual == exp_weight, (
+            f"{type_name}.agent_implementability = {actual!r}, expected {exp_weight!r}"
+        )

@@ -75,7 +75,19 @@ best available plan.
 3. Read the plan file.
    **Error handling:** If the file does not exist or is unreadable at the resolved path,
    emit `verdict = STOP` with message "Plan file not found: {path}" and exit 0.
-   Parse YAML frontmatter using the **backward-compatible two-level fallback**:
+4. **Load the experiment type registry:**
+   a. Locate bundled types dir: run
+      `python -c "from autoskillit.core import pkg_root; print(pkg_root() / 'recipes' / 'experiment-types')"`
+      to get the absolute bundled directory path.
+   b. Use Glob `*.yaml` in that directory, then Read each file. Parse YAML frontmatter to
+      extract `name`, `classification_triggers`, `dimension_weights`, `applicable_lenses`,
+      `red_team_focus`, and `l1_severity` fields from each.
+   c. Check `.autoskillit/experiment-types/` in the current working directory. If it exists,
+      read all `*.yaml` files there. A user-defined type with the same `name` as a bundled
+      type replaces the bundled entry entirely — do not merge fields.
+   d. The resulting registry is a mapping of type name → spec. The set of valid
+      `experiment_type` values for this run is the set of keys in the registry.
+5. Parse YAML frontmatter using the **backward-compatible two-level fallback**:
    - **Level 1 (frontmatter)**: Read YAML frontmatter between `---` delimiters directly
      (zero LLM tokens). Return present fields and note which are missing.
      Record `source: frontmatter` for each extracted field.
@@ -91,7 +103,7 @@ best available plan.
 
      | Missing Field | Prose Target | Extraction Prompt |
      |---|---|---|
-     | experiment_type | Full plan | "Classify: benchmark, configuration_study, causal_inference, robustness_audit, exploratory" |
+     | experiment_type | Full plan | "Classify using the loaded registry types: {', '.join(registry.keys())}" |
      | hypothesis_h0/h1 | ## Hypothesis | "Extract the null/alternative hypothesis" |
      | estimand | ## Hypothesis + ## Independent Variables | "Extract: treatment, outcome, population, contrast" |
      | metrics | ## Dependent Variables table | "Extract each row as structured object" |
@@ -106,25 +118,22 @@ best available plan.
 ### Step 1: Triage Dispatcher
 
 Launch one subagent. Receives full plan text plus parsed fields. Returns:
-- `experiment_type`: one of `benchmark | configuration_study | causal_inference |
-  robustness_audit | exploratory`
+- `experiment_type`: one of the type names in the loaded registry (from Step 0)
 - `dimension_weights`: the complete weight matrix for this plan (H/M/L/S per dimension)
 - `secondary_modifiers`: list of active modifiers with their effects on weights
 
-**Schema validation:** After the subagent returns, verify that `experiment_type` is one of
-the five enumerated values above. If the returned value is unrecognized, default to
-`exploratory` and log a warning — do not silently pass an invalid type into the weight
+**Schema validation:** After the subagent returns, verify that `experiment_type` is a key
+in the loaded registry (from Step 0). If the returned value is not in the registry, default
+to `exploratory` and log a warning — do not silently pass an invalid type into the weight
 matrix lookup, as this would corrupt all subsequent spawning decisions.
 
 **Triage classification rules (first-match):**
 
-| Rule | Type | Trigger |
-|---|---|---|
-| 1 | benchmark | IVs are system/method names, DVs are performance metrics, multiple comparators |
-| 2 | configuration_study | IVs are numeric parameters of one system, grid/sweep structure |
-| 3 | causal_inference | Causal language ("causes", "effect of"), confounders in threats |
-| 4 | robustness_audit | Tests generalization/stability, deliberately varied conditions |
-| 5 | exploratory | Default — no prior rule fires, or hypothesis absent |
+Use the `classification_triggers` list from each type in the loaded registry to classify
+the experiment. Apply first-match: iterate types in registry insertion order (bundled types
+sorted alphabetically, then user-defined types sorted alphabetically). The first type whose
+trigger description matches the plan is selected. If no trigger matches, default to
+`exploratory`.
 
 **Secondary modifiers** (additive, increase dimension weights):
 - `+causal`: mechanism claim in non-causal type → causal_structure weight +1 tier
@@ -132,20 +141,13 @@ matrix lookup, as this would corrupt all subsequent spawning decisions.
 - `+deployment`: motivation references production/users → ecological_validity floor = M
 - `+multi_metric`: ≥3 DVs → statistical_corrections weight +1 tier
 
-**Full dimension-to-weight matrix** (W = weight per experiment type):
+**Dimension weights:**
 
-| Dimension | benchmark | config_study | causal_inf | robust_audit | exploratory |
-|---|---|---|---|---|---|
-| causal_structure | S | S | H | M | L |
-| variance_protocol | H | H | L | M | L |
-| statistical_corrections | M | H | H | S | S |
-| ecological_validity | M | L | L | H | M |
-| measurement_alignment | M | M | M | H | M |
-| resource_proportionality | L | L | L | L | L |
-| data_acquisition | M | M | M | H | M |
-| agent_implementability | H | H | M | M | L |
-
-Weight tiers: H (High), M (Medium), L (Low), S (SILENT — dimension not spawned, not mentioned).
+Use the `dimension_weights` dict from the matched type's registry entry (loaded in Step 0).
+Each key is a dimension name; each value is one of weight=H (High), weight=M (Medium), weight=L (Low),
+or weight=S (SILENT — dimension not spawned, not mentioned in output). Pass the full
+`dimension_weights` dict to the triage subagent so it can return the complete weight
+matrix for this plan.
 
 ### Subagent Evaluation Scope (applies to ALL dimension subagents)
 
@@ -189,23 +191,17 @@ Each L1 subagent receives as explicit inputs:
 
 **Severity calibration rubric for L1 dimensions:**
 
-| Dimension                 | causal_inference | benchmark | configuration_study | robustness_audit | exploratory |
-|---------------------------|-----------------|-----------|---------------------|------------------|-------------|
-| estimand_clarity          | critical        | warning   | warning             | warning          | info        |
-| hypothesis_falsifiability | critical        | warning   | warning             | warning          | info        |
+Use the `l1_severity` dict from the matched experiment type's registry entry (loaded in
+Step 0). Keys are `estimand_clarity` and `hypothesis_falsifiability`; values are severity
+levels (`critical`, `warning`, `info`). Calibration anchors: `causal_inference` → critical;
+`benchmark`, `configuration_study`, `robustness_audit` → warning; `exploratory` → info.
 
 - `estimand_clarity` agent: "Can the claim be written as a formal contrast (A vs B on Y in Z)?"
   Reference the exp-lens-estimand-clarity philosophical mode as guidance (do NOT invoke
   the skill — reference its lens question only in the subagent prompt).
-  Use the calibration rubric above to assign severity. For `causal_inference`: absent formal
-  estimand = `critical`. For `benchmark`/`configuration_study`/`robustness_audit`: absent
-  formal estimand = `warning` (informal contrast sufficient). For `exploratory`: absent
-  estimand = `info` (intentionally absent).
+  Use the `l1_severity.estimand_clarity` value from the registry to assign severity.
 - `hypothesis_falsifiability` agent: "What result would cause the author to conclude H0?"
-  Use the calibration rubric above. For `causal_inference`: unfalsifiable hypothesis =
-  `critical`. For `benchmark`/`configuration_study`/`robustness_audit`: comparison goal
-  without formal H0 = `warning`. For `exploratory`: absent H0/H1 = `info`
-  (pre-registration not required).
+  Use the `l1_severity.hypothesis_falsifiability` value from the registry to assign severity.
 
 Each subagent returns findings in the standard JSON structure (see Finding Format below).
 
@@ -265,12 +261,8 @@ Receives: full plan text and `experiment_type` (from Step 1 triage output)
   3. **Asymmetric tuning** — proposed method tuned against eval while baselines use defaults
   4. **Survivorship bias** — cherry-picking best run from multiple seeds
   5. **Evaluation collision** — same infrastructure in both treatment and measurement
-- Type-specific focus per experiment type:
-  - benchmark → asymmetric effort
-  - configuration_study → overfitting to held-out set
-  - causal_inference → unblocked backdoor path
-  - robustness_audit → unrealistic threat distribution
-  - exploratory → HARKing vulnerability
+- Type-specific focus: use `red_team_focus.specific` from the matched type's registry
+  entry (loaded in Step 0).
 - ALL red-team findings must set `"requires_decision": true` and `"dimension": "red_team"`
 
 **Red-team severity calibration rubric:**
@@ -413,14 +405,8 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
    the same issue from inflating finding counts and obscuring distinct problems.
 4. **Apply red-team severity cap, then verdict logic**:
    ```python
-   # Red-team severity cap: downgrade findings above the type ceiling
-   RT_MAX_SEVERITY = {
-       "causal_inference": "critical",
-       "benchmark": "warning",
-       "configuration_study": "warning",
-       "robustness_audit": "warning",
-       "exploratory": "info",
-   }
+   # RT_MAX_SEVERITY is built from the registry loaded in Step 0 (dict-of-dicts from YAML parsing):
+   RT_MAX_SEVERITY = {name: spec["red_team_focus"]["severity_cap"] for name, spec in registry.items()}
    SEVERITY_RANK = {"info": 0, "warning": 1, "critical": 2}
    rt_cap = RT_MAX_SEVERITY[experiment_type]
 

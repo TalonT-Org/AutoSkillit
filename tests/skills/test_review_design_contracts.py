@@ -557,32 +557,3 @@ def test_agent_implementability_l4_step5_placement(skill_text: str) -> None:
     assert "agent_implementability" in step5_text, (
         "agent_implementability must be placed in Step 5 (Level 4 dimensions)"
     )
-
-
-def test_weight_matrix_has_eight_dimensions(skill_text: str) -> None:
-    """Weight matrix must have exactly 8 dimension rows after adding agent_implementability."""
-    in_table = False
-    dim_count = 0
-    known_dims = {
-        "causal_structure",
-        "variance_protocol",
-        "statistical_corrections",
-        "ecological_validity",
-        "measurement_alignment",
-        "resource_proportionality",
-        "data_acquisition",
-        "agent_implementability",
-    }
-    for line in skill_text.splitlines():
-        if "| Dimension |" in line:
-            in_table = True
-            continue
-        if in_table and "|---" in line:
-            continue
-        if in_table and "|" in line:
-            cells = [c.strip() for c in line.split("|") if c.strip()]
-            if cells and cells[0] in known_dims:
-                dim_count += 1
-        elif in_table and line.strip() and not line.strip().startswith("|"):
-            break
-    assert dim_count == 8, f"Weight matrix must have exactly 8 dimension rows, found {dim_count}"

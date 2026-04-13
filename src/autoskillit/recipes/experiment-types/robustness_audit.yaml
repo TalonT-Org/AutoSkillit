@@ -1,0 +1,21 @@
+name: robustness_audit
+classification_triggers:
+  - "Tests generalization/stability, deliberately varied conditions"
+dimension_weights:
+  causal_structure: M
+  variance_protocol: M
+  statistical_corrections: S
+  ecological_validity: H
+  measurement_alignment: H
+  resource_proportionality: L
+  data_acquisition: H
+  agent_implementability: M
+applicable_lenses:
+  primary: exp-lens-estimand-clarity
+  secondary: null
+red_team_focus:
+  specific: unrealistic threat distribution
+  severity_cap: warning
+l1_severity:
+  estimand_clarity: warning
+  hypothesis_falsifiability: warning

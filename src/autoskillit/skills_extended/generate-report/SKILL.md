@@ -172,16 +172,19 @@ originates from a non-engineering field:
 - **Default (engineering / computational):** Executive Summary → Background and
   Research Question → Methodology → Results → Observations → Analysis →
   What We Learned → Conclusions → Recommendations
-- **Biology / biomedical:** Follow IMRaD order: Background → Methodology →
-  Results → Analysis → Discussion and Future Directions. Use "Discussion and
-  Future Directions" instead of "Recommendations". For journals that move
+- **Biology / biomedical:** Adapted from IMRaD — Background → Methodology →
+  Results → Discussion and Future Directions → What We Learned. Use "Discussion
+  and Future Directions" instead of "Recommendations". For journals that move
   Methods to supplementary material (e.g., Nature style), omit the Methodology
   section from the main body and note its location.
 - **Economics / social science:** Background → Methodology → Results → Analysis →
-  Discussion and Future Directions.
+  Discussion and Future Directions → What We Learned.
 
 **Rules:**
-- Executive Summary is always first; Appendices are always last.
+- Executive Summary is always first; Appendices are always last. Exception: for
+  academic journal submissions (biology, medical, social science) where Executive
+  Summary is not a standard format, replace it with a structured Abstract at the
+  document start.
 - All mandatory sections (Data Scope Statement, Metrics Provenance Check, Gate
   Enforcement, What We Learned) must appear regardless of reordering.
 - When reordering, only the section position changes — content requirements are

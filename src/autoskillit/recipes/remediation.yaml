@@ -735,8 +735,10 @@ steps:
         route: queue_ejected_fix
       - when: "${{ result.pr_state }} == stalled"
         route: reenroll_stalled_pr
-      - route: register_clone_success
-    on_failure: register_clone_success
+      - when: "${{ result.pr_state }} == timeout"
+        route: release_issue_timeout
+      - route: release_issue_timeout
+    on_failure: release_issue_timeout
     skip_when_false: "inputs.open_pr"
     note: >
       Waits up to 15 minutes for the PR to merge through the queue.
@@ -746,7 +748,7 @@ steps:
       ejected_ci_failure → diagnose_ci (CI failure; conflict resolution cannot fix this).
       ejected → conflict fix cycle then re-enter.
       stalled → lightweight re-enrollment (disable then re-enable auto-merge).
-      timeout → register_clone_success (pipeline done; human monitors queue).
+      timeout → release_issue_timeout (release claim without staged label; merge unconfirmed).
 
   reenroll_stalled_pr:
     tool: toggle_auto_merge

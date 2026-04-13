@@ -134,12 +134,11 @@ If `${RESEARCH_DIR}/visualization-plan.md` exists:
 1. Read `visualization-plan.md`. If it contains zero figure specs (empty plan),
    skip all sub-steps and proceed to Step 3.
 
-2. Create disposable plotting venv (once per run, reuse if already exists):
+2. Identify the experiment's Docker image. The image tag is `research-{slug}` where
+   `{slug}` is the experiment directory name. Verify the image exists:
    ```bash
-   python3 -m venv "${RESEARCH_DIR}/.plot-venv"
-   "${RESEARCH_DIR}/.plot-venv/bin/pip" install --quiet matplotlib seaborn
-   # If any figure-spec declares renderer: plotly:
-   "${RESEARCH_DIR}/.plot-venv/bin/pip" install --quiet plotly kaleido
+   docker image inspect "research-{slug}" > /dev/null 2>&1 || \
+       (cd "${RESEARCH_DIR}" && docker build --build-arg MAMBA_ENV={slug} -t "research-{slug}" .)
    ```
 
 3. For each `yaml:figure-spec` block in `visualization-plan.md`:
@@ -147,10 +146,13 @@ If `${RESEARCH_DIR}/visualization-plan.md` exists:
       `${RESEARCH_DIR}/scripts/fig{N}_{slug}.py`
       that reads from `data_source.path` (or scans `results/` and `data/` if
       the path does not exist — treat `data_source.path` as a hint).
-   b. Run the script:
+   b. Run the script inside the experiment container (volume-mount research dir):
       ```bash
-      "${RESEARCH_DIR}/.plot-venv/bin/python" \
-        "${RESEARCH_DIR}/scripts/fig${N}_${slug}.py"
+      docker run --rm \
+        -v "${RESEARCH_DIR}:/workspace" \
+        "research-{slug}" \
+        bash -c "pip install --quiet matplotlib seaborn plotly kaleido 2>/dev/null; \
+                 python /workspace/scripts/fig${N}_${slug}.py"
       ```
    c. Confirm output exists at `${RESEARCH_DIR}/images/fig-${N}.{png,svg}`.
    d. On failure: emit `MISSING: fig-${N} — {error summary}` to stdout and

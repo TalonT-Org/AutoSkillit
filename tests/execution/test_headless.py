@@ -3560,6 +3560,78 @@ class TestHeadlessExecutorCompletionMarker:
         assert param.default == ""
 
 
+class TestHeadlessExecutorIdleOutputTimeout:
+    """Protocol conformance and resolution logic for idle_output_timeout."""
+
+    def test_headless_executor_accepts_idle_output_timeout(self) -> None:
+        import inspect
+
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+        sig = inspect.signature(DefaultHeadlessExecutor.run)
+        assert "idle_output_timeout" in sig.parameters
+        param = sig.parameters["idle_output_timeout"]
+        assert param.default is None
+
+    def _success_payload(self, marker: str) -> SubprocessResult:
+        payload = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": f"Done. {marker}",
+                "session_id": "sess-iot",
+            }
+        )
+        return SubprocessResult(0, payload, "", TerminationReason.NATURAL_EXIT, pid=1)
+
+    @pytest.mark.anyio
+    async def test_default_headless_executor_uses_per_step_idle_output_timeout(
+        self, tool_ctx
+    ) -> None:
+        """idle_output_timeout=120 is converted to float and passed to the runner."""
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        tool_ctx.runner.push(self._success_payload(marker))
+        await run_headless_core(
+            "/investigate foo", cwd="/tmp", ctx=tool_ctx, idle_output_timeout=120.0
+        )
+        _, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        assert kwargs["idle_output_timeout"] == 120.0
+
+    @pytest.mark.anyio
+    async def test_default_headless_executor_converts_zero_to_none(
+        self, tool_ctx
+    ) -> None:
+        """idle_output_timeout=0 is converted to None (disabled) before passing to runner."""
+        from autoskillit.execution.headless import run_headless_core
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        tool_ctx.runner.push(self._success_payload(marker))
+        await run_headless_core(
+            "/investigate foo", cwd="/tmp", ctx=tool_ctx, idle_output_timeout=0.0
+        )
+        _, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        assert kwargs["idle_output_timeout"] is None
+
+    @pytest.mark.anyio
+    async def test_default_headless_executor_falls_back_to_cfg_idle_output_timeout(
+        self, tool_ctx
+    ) -> None:
+        """idle_output_timeout=None falls back to float(cfg.idle_output_timeout)."""
+        from autoskillit.execution.headless import run_headless_core
+
+        cfg_value = float(tool_ctx.config.run_skill.idle_output_timeout)
+        marker = tool_ctx.config.run_skill.completion_marker
+        tool_ctx.runner.push(self._success_payload(marker))
+        await run_headless_core(
+            "/investigate foo", cwd="/tmp", ctx=tool_ctx, idle_output_timeout=None
+        )
+        _, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        assert kwargs["idle_output_timeout"] == cfg_value
+
+
 def _ndjson_with_write(result_text: str, file_paths: list[str], session_id: str = "test-session"):
     """Build NDJSON stdout with Write tool_use entries and a result record."""
     records = []

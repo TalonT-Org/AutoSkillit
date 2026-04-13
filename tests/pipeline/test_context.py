@@ -158,6 +158,18 @@ def test_headless_executor_protocol_accepts_timeout() -> None:
     assert params["stale_threshold"].default is None
 
 
+def test_headless_executor_protocol_accepts_idle_output_timeout() -> None:
+    """HeadlessExecutor.run() signature must include optional idle_output_timeout."""
+    import inspect
+
+    from autoskillit.core import HeadlessExecutor
+
+    sig = inspect.signature(HeadlessExecutor.run)
+    params = sig.parameters
+    assert "idle_output_timeout" in params, "HeadlessExecutor.run missing idle_output_timeout param"
+    assert params["idle_output_timeout"].default is None
+
+
 def test_recipe_repository_protocol_has_rich_methods() -> None:
     """RecipeRepository protocol must expose load_and_validate, validate_from_path, list_all."""
     from autoskillit.core import RecipeRepository

@@ -34,7 +34,7 @@ from autoskillit.execution.process import decide_termination_action
         (TerminationReason.STALE, False, False, TerminationAction.IMMEDIATE_KILL),
         # timeout_fired beats process_exited
         (TerminationReason.COMPLETED, True, True, TerminationAction.IMMEDIATE_KILL),
-        # IDLE_STALL with process_exited=False, no timeout → IMMEDIATE_KILL
+        # IDLE_STALL with process_exited=True, no timeout → NO_KILL (process exit wins)
         (TerminationReason.IDLE_STALL, False, True, TerminationAction.NO_KILL),
         # STALE with process already exited → NO_KILL (process exit wins)
         (TerminationReason.STALE, False, True, TerminationAction.NO_KILL),

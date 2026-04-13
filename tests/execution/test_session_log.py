@@ -641,12 +641,14 @@ def _write_old_trace_with_comm(tmpfs: Path, pid: int, comm: str, *, n_snaps: int
     old_mtime = time.time() - 60
     os.utime(trace, (old_mtime, old_mtime))
 
-    # Write enrollment sidecar so Gate 1 (sidecar present) passes
+    # Write enrollment sidecar so Gate 1 (sidecar present) passes.
+    # Use schema_version=2 with comm='claude' — autoskillit always enrolls its own
+    # binary as 'claude'. Snapshots whose first comm != enrollment.comm are alien.
     enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
     enrollment.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "pid": pid,
                 "boot_id": read_boot_id() or "",
                 "starttime_ticks": None,
@@ -654,6 +656,7 @@ def _write_old_trace_with_comm(tmpfs: Path, pid: int, comm: str, *, n_snaps: int
                 "enrolled_at": "2026-01-01T00:00:00+00:00",
                 "kitchen_id": "",
                 "order_id": "",
+                "comm": "claude",
             }
         )
     )

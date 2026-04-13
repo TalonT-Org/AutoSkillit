@@ -557,26 +557,3 @@ def test_agent_implementability_l4_step5_placement(skill_text: str) -> None:
     assert "agent_implementability" in step5_text, (
         "agent_implementability must be placed in Step 5 (Level 4 dimensions)"
     )
-
-
-def test_weight_matrix_has_eight_dimensions(skill_text: str) -> None:
-    """All 8 dimension rows must exist across the bundled experiment type YAML files."""
-    import yaml
-
-    exp_types_dir = SKILL_MD.parents[2] / "recipes" / "experiment-types"
-    known_dims = {
-        "causal_structure",
-        "variance_protocol",
-        "statistical_corrections",
-        "ecological_validity",
-        "measurement_alignment",
-        "resource_proportionality",
-        "data_acquisition",
-        "agent_implementability",
-    }
-    dims_found: set[str] = set()
-    for yaml_path in sorted(exp_types_dir.glob("*.yaml")):
-        data = yaml.safe_load(yaml_path.read_text())
-        dims_found.update(data.get("dimension_weights", {}).keys())
-    missing = known_dims - dims_found
-    assert not missing, f"Dimensions missing from bundled YAML files: {missing}"

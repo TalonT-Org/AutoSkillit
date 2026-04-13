@@ -465,6 +465,10 @@ async def fetch_repo_merge_state(
         resp.raise_for_status()
         body = resp.json()
 
+    # GitHub GraphQL always returns a JSON object; guard against unexpected shapes.
+    if not isinstance(body, dict):
+        body = {}
+
     # Gracefully handle GHES 3.0.x where autoMergeAllowed doesn't exist.
     auto_merge_field_missing = any(
         "autoMergeAllowed" in str(e.get("message", "")) for e in body.get("errors", [])

@@ -563,7 +563,7 @@ def test_weight_matrix_has_eight_dimensions(skill_text: str) -> None:
     """All 8 dimension rows must exist across the bundled experiment type YAML files."""
     import yaml
 
-    exp_types_dir = SKILL_MD.parents[4] / "recipes" / "experiment-types"
+    exp_types_dir = SKILL_MD.parents[2] / "recipes" / "experiment-types"
     known_dims = {
         "causal_structure",
         "variance_protocol",

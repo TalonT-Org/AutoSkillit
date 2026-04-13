@@ -1300,6 +1300,7 @@ def test_run_update_checks_emits_status_before_network(
         f"Expected first call to be print() (status_line), got: {call_log}"
     )
     signal_calls = [c for c in call_log if c.endswith("_signal")]
+    assert signal_calls, f"No signal gatherers were called — call_log: {call_log}"
     first_signal_idx = call_log.index(signal_calls[0])
     first_print_idx = call_log.index("print")
     assert first_print_idx < first_signal_idx, (

@@ -99,54 +99,56 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
     Sets ready_event when complete — tools needing audit data await this event.
     """
     try:
-        from autoskillit.execution import recover_crashed_sessions  # noqa: PLC0415
-
-        cfg = ctx.config.linux_tracing
-        n = recover_crashed_sessions(
-            tmpfs_path=cfg.tmpfs_path,
-            log_dir=cfg.log_dir,
-        )
-        if n > 0:
-            logger.info("Recovered %d crashed session trace(s) from tmpfs", n)
-    except Exception:
-        logger.debug("recover_crashed_sessions at startup failed", exc_info=True)
-
-    try:
-        from datetime import datetime, timedelta  # noqa: PLC0415
-
-        from autoskillit.execution import (  # noqa: PLC0415
-            read_telemetry_clear_marker,
-            resolve_log_dir,
-        )
-
-        cfg = ctx.config.linux_tracing
-        log_root = resolve_log_dir(cfg.log_dir)
-        since_dt = datetime.now(tz=UTC) - timedelta(hours=24)
-        clear_marker = read_telemetry_clear_marker(log_root)
-        if clear_marker is not None and clear_marker > since_dt:
-            since_dt = clear_marker
-        since_str = since_dt.isoformat()
-
-        n_aud = ctx.audit.load_from_log_dir(log_root, since=since_str)
-
-        if n_aud:
-            logger.info(
-                "Recovered telemetry from session logs (audit=%d)",
-                n_aud,
-            )
-    except Exception:
-        logger.warning("telemetry_recovery_at_startup_failed", exc_info=True)
-
-    if ctx.session_skill_manager is not None:
         try:
-            removed = ctx.session_skill_manager.cleanup_stale()
-            if removed:
-                logger.info("session_skill_cleanup", extra={"removed": removed})
-        except Exception:
-            logger.warning("session_skill_cleanup_failed", exc_info=True)
+            from autoskillit.execution import recover_crashed_sessions  # noqa: PLC0415
 
-    ready_event.set()
-    logger.info("deferred_initialize_complete")
+            cfg = ctx.config.linux_tracing
+            n = recover_crashed_sessions(
+                tmpfs_path=cfg.tmpfs_path,
+                log_dir=cfg.log_dir,
+            )
+            if n > 0:
+                logger.info("Recovered %d crashed session trace(s) from tmpfs", n)
+        except Exception:
+            logger.debug("recover_crashed_sessions at startup failed", exc_info=True)
+
+        try:
+            from datetime import datetime, timedelta  # noqa: PLC0415
+
+            from autoskillit.execution import (  # noqa: PLC0415
+                read_telemetry_clear_marker,
+                resolve_log_dir,
+            )
+
+            cfg = ctx.config.linux_tracing
+            log_root = resolve_log_dir(cfg.log_dir)
+            since_dt = datetime.now(tz=UTC) - timedelta(hours=24)
+            clear_marker = read_telemetry_clear_marker(log_root)
+            if clear_marker is not None and clear_marker > since_dt:
+                since_dt = clear_marker
+            since_str = since_dt.isoformat()
+
+            n_aud = ctx.audit.load_from_log_dir(log_root, since=since_str)
+
+            if n_aud:
+                logger.info(
+                    "Recovered telemetry from session logs (audit=%d)",
+                    n_aud,
+                )
+        except Exception:
+            logger.warning("telemetry_recovery_at_startup_failed", exc_info=True)
+
+        if ctx.session_skill_manager is not None:
+            try:
+                removed = ctx.session_skill_manager.cleanup_stale()
+                if removed:
+                    logger.info("session_skill_cleanup", extra={"removed": removed})
+            except Exception:
+                logger.warning("session_skill_cleanup_failed", exc_info=True)
+
+        logger.info("deferred_initialize_complete")
+    finally:
+        ready_event.set()
 
 
 def _get_ctx() -> ToolContext:

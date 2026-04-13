@@ -13,6 +13,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import CIRunScope, get_logger
+from autoskillit.execution.merge_queue import fetch_repo_merge_state
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
@@ -438,6 +439,58 @@ async def wait_for_merge_queue(
     except Exception as exc:
         logger.error("autoskillit.wait_for_merge_queue failed", exc_info=exc)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+    finally:
+        if step_name:
+            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
+@track_response_size("check_repo_merge_state")
+async def check_repo_merge_state(
+    owner: str,
+    repo: str,
+    branch: str,
+    cwd: str = ".",
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Single GraphQL round-trip returning queue_available, merge_group_trigger,
+    and auto_merge_available for the given repository branch.
+
+    Consolidates the three former run_cmd shell steps in the pre_queue_gate block
+    into a single MCP tool call, eliminating N+2 REST/GraphQL round-trips and
+    making the call budget auditable by block-level semantic rules.
+
+    Returns a JSON object with keys:
+    - ``queue_available``: branch has an active GitHub merge queue.
+    - ``merge_group_trigger``: a CI workflow declares the merge_group event.
+    - ``auto_merge_available``: repository has auto-merge enabled.
+    On any error, returns an error field alongside the three boolean defaults.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    from autoskillit.server import _get_ctx
+
+    tool_ctx = _get_ctx()
+    _start = time.monotonic()
+    try:
+        state = await fetch_repo_merge_state(
+            owner=owner,
+            repo=repo,
+            branch=branch,
+            token=tool_ctx.github_token,
+        )
+        return json.dumps(state)
+    except Exception as exc:
+        logger.error("autoskillit.check_repo_merge_state failed", exc_info=exc)
+        return json.dumps(
+            {
+                "error": f"{type(exc).__name__}: {exc}",
+                "queue_available": False,
+                "merge_group_trigger": False,
+                "auto_merge_available": False,
+            }
+        )
     finally:
         if step_name:
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

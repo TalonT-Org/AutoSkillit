@@ -76,6 +76,33 @@ mutation EnableAutoMerge($prId: ID!, $mergeMethod: PullRequestMergeMethod!) {
 }
 """
 
+# Repo-level state query: consolidates three former run_cmd steps into one HTTP round-trip.
+# Distinct from _QUERY (PR-level + queue-entries); do not merge these constants.
+# Returns: mergeQueue presence, autoMergeAllowed flag, and workflow file texts for
+# merge_group trigger detection — all in a single GraphQL call.
+_REPO_STATE_QUERY = """
+query GetRepoMergeState($owner: String!, $repo: String!, $branch: String!) {
+  repository(owner: $owner, name: $repo) {
+    mergeQueue(branch: $branch) {
+      id
+    }
+    autoMergeAllowed
+    object(expression: "HEAD:.github/workflows") {
+      ... on Tree {
+        entries {
+          name
+          object {
+            ... on Blob {
+              text
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
 
 class DefaultMergeQueueWatcher:
     """Polls GitHub merge queue state until merged, ejected, stalled, or timed out.
@@ -371,3 +398,74 @@ class DefaultMergeQueueWatcher:
                 raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
             if i < len(mutations) - 1:
                 await asyncio.sleep(2)
+
+
+# ---------------------------------------------------------------------------
+# Repo-level state helper (used by check_repo_merge_state MCP tool)
+# ---------------------------------------------------------------------------
+
+
+async def fetch_repo_merge_state(
+    owner: str,
+    repo: str,
+    branch: str,
+    token: str | None,
+) -> dict[str, bool]:
+    """Fetch repository merge-state in a single GraphQL round-trip.
+
+    Returns a dict with three boolean keys:
+    - ``queue_available``: the branch has an active GitHub merge queue.
+    - ``merge_group_trigger``: at least one CI workflow declares the
+      ``merge_group`` event trigger.
+    - ``auto_merge_available``: the repository has auto-merge enabled.
+
+    Null-handling:
+    - ``mergeQueue is null`` → ``queue_available: False``  (no queue)
+    - ``object is null`` → ``merge_group_trigger: False``  (no workflows dir)
+    - ``entry.object.text is null`` → skip entry (binary/large file)
+    - GraphQL ``autoMergeAllowed`` field error (GHES 3.0.x) → ``auto_merge_available: False``
+
+    Only transport-level failures (network timeout, non-200 HTTP status) are
+    allowed to propagate; callers are expected to handle them.
+    """
+    async with httpx.AsyncClient(
+        headers=github_headers(token),
+        timeout=30.0,
+    ) as client:
+        resp = await client.post(
+            _GRAPHQL_ENDPOINT,
+            json={
+                "query": _REPO_STATE_QUERY,
+                "variables": {"owner": owner, "repo": repo, "branch": branch},
+            },
+        )
+        resp.raise_for_status()
+        body = resp.json()
+
+    # Gracefully handle GHES 3.0.x where autoMergeAllowed doesn't exist.
+    auto_merge_field_missing = any(
+        "autoMergeAllowed" in str(e.get("message", "")) for e in body.get("errors", [])
+    )
+
+    repo_data: dict[str, Any] = (body.get("data") or {}).get("repository") or {}
+    queue_available = repo_data.get("mergeQueue") is not None
+    auto_merge_available = (
+        False if auto_merge_field_missing else bool(repo_data.get("autoMergeAllowed", False))
+    )
+
+    # Detect merge_group trigger: check each workflow file's text content.
+    merge_group_trigger = False
+    workflows_tree = repo_data.get("object")
+    if workflows_tree is not None:
+        for entry in workflows_tree.get("entries", []):
+            blob = entry.get("object") or {}
+            text = blob.get("text")
+            if text is not None and "merge_group" in text:
+                merge_group_trigger = True
+                break
+
+    return {
+        "queue_available": queue_available,
+        "merge_group_trigger": merge_group_trigger,
+        "auto_merge_available": auto_merge_available,
+    }

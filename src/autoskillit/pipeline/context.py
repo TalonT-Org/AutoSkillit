@@ -114,6 +114,9 @@ class ToolContext:
     kitchen_id: str = field(default="")
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
+    # GitHub token for tools that create transient httpx clients (e.g. check_repo_merge_state).
+    # Resolved from config.github.token → GITHUB_TOKEN env → gh CLI token in _factory.py.
+    github_token: str | None = field(default=None)
 
     def __post_init__(self) -> None:
         if self.background is None:

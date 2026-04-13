@@ -61,6 +61,7 @@ if TYPE_CHECKING:
     import structlog
 
     from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import TraceTarget
 
 logger = get_logger(__name__)
 
@@ -240,7 +241,7 @@ async def run_managed_async(
             # script(1) wrapper, not claude. resolve_trace_target walks descendants
             # to find the actual workload by basename. Raising here (on miss) is
             # intentional: a silent fallback to proc.pid recreates issue #806.
-            _target: object = None
+            _target: TraceTarget | None = None
             _observed_pid: int = proc.pid
             _tracked_comm: str | None = None
             if linux_tracing_config is not None:
@@ -261,8 +262,9 @@ async def run_managed_async(
                 else:
                     # Non-PTY mode: proc.pid IS the workload (direct child)
                     _target = trace_target_from_pid(proc.pid)
-                _observed_pid = _target.pid  # type: ignore[union-attr]
-                _tracked_comm = _target.comm  # type: ignore[union-attr]
+                assert _target is not None
+                _observed_pid = _target.pid
+                _tracked_comm = _target.comm
 
             termination = TerminationReason.NATURAL_EXIT
             _channel_confirmation = ChannelConfirmation.UNMONITORED
@@ -333,7 +335,7 @@ async def run_managed_async(
                     from autoskillit.execution.linux_tracing import start_linux_tracing
 
                     tracing_handle = start_linux_tracing(
-                        target=_target,  # type: ignore[arg-type]
+                        target=_target,
                         config=linux_tracing_config,
                         tg=tg,
                     )

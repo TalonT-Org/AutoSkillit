@@ -79,6 +79,9 @@ performing:
 Estimate storage need from the entry's `description` field using LLM reasoning
 (e.g., "10-50GB h5ad files" → project 50GB worst case). Compute headroom:
 
+If `available_bytes == 0` (filesystem completely full), emit **FAIL** immediately —
+do not proceed to the formula below.
+
 ```
 headroom_pct = (available_bytes - projected_bytes) / available_bytes * 100
 ```

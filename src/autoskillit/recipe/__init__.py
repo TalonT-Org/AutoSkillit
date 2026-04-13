@@ -50,6 +50,10 @@ from autoskillit.recipe.diagrams import (  # noqa: E402
     diagram_stale_to_suggestions,
     load_recipe_diagram,
 )
+from autoskillit.recipe.experiment_type_registry import (  # noqa: E402
+    ExperimentTypeSpec,
+    load_all_experiment_types,
+)
 from autoskillit.recipe.io import (  # noqa: E402
     builtin_sub_recipes_dir,
     find_recipe_by_name,
@@ -75,10 +79,6 @@ from autoskillit.recipe.staleness_cache import (  # noqa: E402
     compute_recipe_hash,
     read_staleness_cache,
     write_staleness_cache,
-)
-from autoskillit.recipe.experiment_type_registry import (  # noqa: E402
-    ExperimentTypeSpec,
-    load_all_experiment_types,
 )
 from autoskillit.recipe.validator import (  # noqa: E402
     RuleFinding,

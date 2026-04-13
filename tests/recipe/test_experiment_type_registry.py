@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 
 from autoskillit.recipe.experiment_type_registry import (
@@ -124,9 +123,7 @@ def test_l1_severity_values() -> None:
     types = load_all_experiment_types()
     for name, spec in types.items():
         for dim, sev in spec.l1_severity.items():
-            assert sev in valid_severities, (
-                f"{name}.l1_severity[{dim!r}] = {sev!r}"
-            )
+            assert sev in valid_severities, f"{name}.l1_severity[{dim!r}] = {sev!r}"
 
 
 def test_l1_severity_causal_inference_is_critical() -> None:
@@ -156,14 +153,19 @@ def test_user_override_replaces_bundled_type(tmp_path: Path) -> None:
     user_dir = tmp_path / ".autoskillit" / "experiment-types"
     user_dir.mkdir(parents=True)
     (user_dir / "benchmark.yaml").write_text(
-        yaml.dump({
-            "name": "benchmark",
-            "classification_triggers": ["custom trigger only"],
-            "dimension_weights": {"causal_structure": "H"},
-            "applicable_lenses": {"primary": "custom-lens", "secondary": None},
-            "red_team_focus": {"specific": "custom focus", "severity_cap": "critical"},
-            "l1_severity": {"estimand_clarity": "critical", "hypothesis_falsifiability": "critical"},
-        })
+        yaml.dump(
+            {
+                "name": "benchmark",
+                "classification_triggers": ["custom trigger only"],
+                "dimension_weights": {"causal_structure": "H"},
+                "applicable_lenses": {"primary": "custom-lens", "secondary": None},
+                "red_team_focus": {"specific": "custom focus", "severity_cap": "critical"},
+                "l1_severity": {
+                    "estimand_clarity": "critical",
+                    "hypothesis_falsifiability": "critical",
+                },
+            }
+        )
     )
     types = load_all_experiment_types(project_dir=tmp_path)
     bench = types["benchmark"]
@@ -182,26 +184,28 @@ def test_user_new_type_is_added(tmp_path: Path) -> None:
     user_dir = tmp_path / ".autoskillit" / "experiment-types"
     user_dir.mkdir(parents=True)
     (user_dir / "network_analysis.yaml").write_text(
-        yaml.dump({
-            "name": "network_analysis",
-            "classification_triggers": ["IVs are graph topology parameters"],
-            "dimension_weights": {
-                "causal_structure": "M",
-                "variance_protocol": "M",
-                "statistical_corrections": "M",
-                "ecological_validity": "M",
-                "measurement_alignment": "H",
-                "resource_proportionality": "L",
-                "data_acquisition": "H",
-                "agent_implementability": "M",
-            },
-            "applicable_lenses": {"primary": "exp-lens-estimand-clarity", "secondary": None},
-            "red_team_focus": {"specific": "connectivity bias", "severity_cap": "warning"},
-            "l1_severity": {
-                "estimand_clarity": "warning",
-                "hypothesis_falsifiability": "warning",
-            },
-        })
+        yaml.dump(
+            {
+                "name": "network_analysis",
+                "classification_triggers": ["IVs are graph topology parameters"],
+                "dimension_weights": {
+                    "causal_structure": "M",
+                    "variance_protocol": "M",
+                    "statistical_corrections": "M",
+                    "ecological_validity": "M",
+                    "measurement_alignment": "H",
+                    "resource_proportionality": "L",
+                    "data_acquisition": "H",
+                    "agent_implementability": "M",
+                },
+                "applicable_lenses": {"primary": "exp-lens-estimand-clarity", "secondary": None},
+                "red_team_focus": {"specific": "connectivity bias", "severity_cap": "warning"},
+                "l1_severity": {
+                    "estimand_clarity": "warning",
+                    "hypothesis_falsifiability": "warning",
+                },
+            }
+        )
     )
     types = load_all_experiment_types(project_dir=tmp_path)
     assert "network_analysis" in types

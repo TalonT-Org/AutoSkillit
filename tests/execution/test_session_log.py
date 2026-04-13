@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_log import (
     flush_session_log,
     read_telemetry_clear_marker,
@@ -387,15 +391,36 @@ def test_recover_crashed_sessions_skips_recent_files(tmp_path):
 
 
 def _write_old_trace(tmpfs: Path, filename: str, content: str) -> Path:
-    """Write a trace file and backdate its mtime to 60 seconds ago."""
-    import time
+    """Write a trace file (backdated 60s) and its enrollment sidecar.
 
+    The enrollment sidecar uses the current boot_id so Gate 2 passes.
+    The PID embedded in the filename is expected to be dead (so Gate 3 passes).
+    """
     trace = tmpfs / filename
     trace.write_text(content)
     old_mtime = time.time() - 60
-    import os
-
     os.utime(trace, (old_mtime, old_mtime))
+
+    # Write companion enrollment sidecar so Gate 1 passes
+    try:
+        pid = int(Path(filename).stem.split("_")[-1])
+    except (ValueError, IndexError):
+        pid = 0
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    enrollment.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": pid,
+                "boot_id": read_boot_id() or "",
+                "starttime_ticks": None,
+                "session_id": "",
+                "enrolled_at": "2026-01-01T00:00:00+00:00",
+                "kitchen_id": "",
+                "order_id": "",
+            }
+        )
+    )
     return trace
 
 
@@ -811,3 +836,83 @@ def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
     assert "order_id" in entry
     assert entry["order_id"] == ""
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux-only: uses /proc and boot_id")
+def test_recover_crashed_sessions_skips_live_pid(tmp_path):
+    """A trace file whose enrolled PID is still alive must not be recovered."""
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    pid = os.getpid()
+    trace = tmpfs / f"autoskillit_trace_{pid}.jsonl"
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    trace.write_text("")
+    enrollment.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": pid,
+                "boot_id": read_boot_id() or "",
+                "starttime_ticks": read_starttime_ticks(pid),
+                "session_id": "",
+                "enrolled_at": datetime.now(UTC).isoformat(),
+                "kitchen_id": "",
+                "order_id": "",
+            }
+        )
+    )
+    os.utime(trace, (time.time() - 60,) * 2)
+
+    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path))
+
+    assert count == 0
+    assert trace.exists(), "Trace file for alive PID must not be deleted"
+    assert enrollment.exists(), "Enrollment sidecar for alive PID must not be deleted"
+
+
+def test_recover_crashed_sessions_skips_file_without_enrollment(tmp_path):
+    """A trace file with no enrollment sidecar must be skipped — it is not
+    an autoskillit-owned trace (e.g. a test artifact or alien file)."""
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    trace = tmpfs / "autoskillit_trace_99997.jsonl"
+    trace.write_text("")
+    os.utime(trace, (time.time() - 60,) * 2)
+
+    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path))
+
+    assert count == 0
+    assert trace.exists(), "Alien trace file must not be deleted"
+
+
+def test_recover_crashed_sessions_skips_wrong_boot_id(tmp_path, monkeypatch):
+    """An enrollment sidecar with a different boot_id must be rejected."""
+    monkeypatch.setattr(
+        "autoskillit.execution.session_log.read_boot_id",
+        lambda: "current-boot-id",
+    )
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    pid = 99996
+    trace = tmpfs / f"autoskillit_trace_{pid}.jsonl"
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    trace.write_text("")
+    enrollment.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": pid,
+                "boot_id": "stale-boot-id",
+                "starttime_ticks": 1234,
+                "session_id": "",
+                "enrolled_at": "2026-01-01T00:00:00+00:00",
+                "kitchen_id": "",
+                "order_id": "",
+            }
+        )
+    )
+    os.utime(trace, (time.time() - 60,) * 2)
+
+    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path))
+
+    assert count == 0

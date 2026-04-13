@@ -349,21 +349,10 @@ async def run_managed_async(
                 timeout_fired=timeout_scope.cancelled_caught,
                 process_exited=signals.process_exited,
             )
-            _timeout_fired = timeout_scope.cancelled_caught
-            _kill_reason_hint = (
-                "timeout"
-                if _timeout_fired
-                else "natural_exit"
-                if action == TerminationAction.NO_KILL
-                else "channel_won"
-                if action == TerminationAction.DRAIN_THEN_KILL_IF_ALIVE
-                else "infra_kill"
-            )
             proc_log.debug(
                 "kill_decision",
                 termination=str(termination),
                 action=str(action),
-                reason=_kill_reason_hint,
                 process_exited=signals.process_exited,
                 channel_a=signals.channel_a_confirmed,
                 channel_b=signals.channel_b_status,

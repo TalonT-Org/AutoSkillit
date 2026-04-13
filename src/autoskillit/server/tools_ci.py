@@ -447,10 +447,9 @@ async def wait_for_merge_queue(
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
 @track_response_size("check_repo_merge_state")
 async def check_repo_merge_state(
-    owner: str,
-    repo: str,
     branch: str,
     cwd: str = ".",
+    remote_url: str = "",
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
@@ -460,6 +459,12 @@ async def check_repo_merge_state(
     Consolidates the three former run_cmd shell steps in the pre_queue_gate block
     into a single MCP tool call, eliminating N+2 REST/GraphQL round-trips and
     making the call budget auditable by block-level semantic rules.
+
+    Args:
+        branch: Target branch name to check merge queue state for.
+        cwd: Working directory for git remote resolution.
+        remote_url: Full GitHub remote URL; parsed to owner/repo if provided.
+        step_name: Step name for timing telemetry.
 
     Returns a JSON object with keys:
     - ``queue_available``: branch has an active GitHub merge queue.
@@ -474,6 +479,17 @@ async def check_repo_merge_state(
     tool_ctx = _get_ctx()
     _start = time.monotonic()
     try:
+        resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or None)
+        if not resolved_repo or "/" not in resolved_repo:
+            return json.dumps(
+                {
+                    "error": f"Could not resolve owner/repo from cwd={cwd!r}",
+                    "queue_available": False,
+                    "merge_group_trigger": False,
+                    "auto_merge_available": False,
+                }
+            )
+        owner, repo = resolved_repo.split("/", 1)
         state = await fetch_repo_merge_state(
             owner=owner,
             repo=repo,

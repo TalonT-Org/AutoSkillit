@@ -10,8 +10,9 @@ Budget values are loaded from block_budgets.yaml at import time (lru_cache).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from functools import lru_cache
-from typing import Any, Mapping
+from typing import Any
 
 from autoskillit.core import Severity
 from autoskillit.core.io import load_yaml
@@ -70,9 +71,7 @@ def _check_block_mcp_tool_budget(bctx: BlockContext) -> list[RuleFinding]:
         return []  # No mcp_tools budget declared for this block — skip check
     budget = int(budget_entry["mcp_tools"])
     # MCP tool calls: any tool step that is not run_cmd
-    actual = sum(
-        count for tool, count in bctx.block.tool_counts.items() if tool != "run_cmd"
-    )
+    actual = sum(count for tool, count in bctx.block.tool_counts.items() if tool != "run_cmd")
     if actual <= budget:
         return []
     return [
@@ -127,7 +126,7 @@ def _check_block_single_producer(bctx: BlockContext) -> list[RuleFinding]:
     # Build a map: capture_key → list of step names that produce it
     producers: dict[str, list[str]] = {}
     for step in bctx.block.members:
-        for cap_key in (step.capture or {}):
+        for cap_key in step.capture or {}:
             producers.setdefault(cap_key, []).append(step.name)
     findings = []
     for cap_key, producer_names in producers.items():
@@ -165,12 +164,10 @@ def _check_block_entry_exit_reachable(bctx: BlockContext) -> list[RuleFinding]:
 
     member_names = {s.name for s in bctx.block.members}
     entry_candidates = [
-        s for s in bctx.block.members
-        if not (predecessors.get(s.name, set()) & member_names)
+        s for s in bctx.block.members if not (predecessors.get(s.name, set()) & member_names)
     ]
     exit_candidates = [
-        s for s in bctx.block.members
-        if not (step_graph.get(s.name, set()) & member_names)
+        s for s in bctx.block.members if not (step_graph.get(s.name, set()) & member_names)
     ]
     findings = []
     if len(entry_candidates) != 1:

@@ -73,7 +73,8 @@ def _require_interactive_stdin(command_name: str) -> None:
 
 
 def _prompt_recipe_choice() -> str:
-    _require_interactive_stdin("autoskillit order")
+    from autoskillit.cli._timed_input import timed_prompt
+
     available = list_recipes(Path.cwd()).items
     if not available:
         print("No recipes found. Run 'autoskillit recipes list' to check.")
@@ -81,13 +82,16 @@ def _prompt_recipe_choice() -> str:
     print("Available recipes:")
     for i, r in enumerate(available, 1):
         print(f"  {i}. {r.name}")
-    return input("Recipe name: ").strip()
+    return timed_prompt("Recipe name:", default="", timeout=120, label="autoskillit order")
 
 
 def _prompt_test_command() -> list[str]:
-    _require_interactive_stdin("autoskillit init")
+    from autoskillit.cli._timed_input import timed_prompt
+
     default = "task test-all"
-    answer = input(f"Test command [{default}]: ").strip()
+    answer = timed_prompt(
+        f"Test command [{default}]:", default=default, timeout=120, label="autoskillit init"
+    )
     return (answer if answer else default).split()
 
 
@@ -116,12 +120,19 @@ def _prompt_github_repo() -> str | None:
     _B, _C, _D, _G, _Y, _R = _colors()
     detected = _detect_github_repo()
 
+    from autoskillit.cli._timed_input import timed_prompt
+
     if detected:
         print(f"\n  {_Y}GitHub repo{_R}  {_G}{detected}{_R} {_D}(detected from git remote){_R}")
-        value = input(f"  {_D}Press Enter to confirm, or type a different repo:{_R} ").strip()
+        value = timed_prompt(
+            "Press Enter to confirm, or type a different repo:",
+            default=detected or "",
+            timeout=120,
+            label="init",
+        )
     else:
         print(f"\n  {_Y}GitHub repo{_R}  {_D}owner/repo, URL, or blank to skip{_R}")
-        value = input(f"  {_D}Repository:{_R} ").strip()
+        value = timed_prompt("Repository:", default="", timeout=120, label="init")
 
     if not value:
         return detected
@@ -251,9 +262,11 @@ def _check_secret_scanning(project_dir: Path) -> _ScanResult:
         "  Recommended: add gitleaks to .pre-commit-config.yaml\n"
         "  before proceeding.\n"
     )
+    from autoskillit.cli._timed_input import timed_prompt
+
     print("  To bypass, type exactly:\n")
     print(f"  {_D}{_SECRET_SCAN_BYPASS_PHRASE}{_R}\n")
-    response = input("  > ").strip()
+    response = timed_prompt(">", default="", timeout=120, label="secret-scan-bypass")
     if response != _SECRET_SCAN_BYPASS_PHRASE:
         print(f"\n  {_B}Aborted.{_R} Phrase did not match.")
         return _ScanResult(False)

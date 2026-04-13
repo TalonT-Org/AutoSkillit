@@ -67,7 +67,7 @@ def timed_prompt(
             return default
 
     try:
-        return input("").strip().lower()
+        return input("").strip()
     except EOFError:
         return default
 

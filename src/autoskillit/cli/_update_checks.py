@@ -689,7 +689,7 @@ def run_update_checks(home: Path | None = None) -> None:
     if answer == _TIMEOUT_SENTINEL:
         return
 
-    if answer in ("", "y", "yes"):
+    if answer.lower() in ("", "y", "yes"):
         _run_update_sequence(info, current, _home, state, _skip_env)
         return
 

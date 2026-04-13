@@ -27,7 +27,6 @@ from autoskillit.cli._init_helpers import (
     _log_secret_scan_bypass,
     _prompt_test_command,
     _register_all,
-    _require_interactive_stdin,
 )
 from autoskillit.cli._terminal import terminal_guard
 from autoskillit.core import ClaudeFlags, RecipeSource, atomic_write, pkg_root
@@ -593,8 +592,8 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
             _build_open_kitchen_prompt,
             _resolve_recipe_input,
         )
+        from autoskillit.cli._timed_input import timed_prompt
 
-        _require_interactive_stdin("autoskillit order")
         available = list_recipes(Path.cwd()).items
         if not available:
             print("No recipes found. Run 'autoskillit recipes list' to check.")
@@ -603,7 +602,12 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
         print("  0. Open kitchen (no recipe)")
         for i, r in enumerate(available, 1):
             print(f"  {i}. {r.name}")
-        raw = input(f"Select recipe [0-{len(available)}]: ").strip()
+        raw = timed_prompt(
+            f"Select recipe [0-{len(available)}]:",
+            default="",
+            timeout=120,
+            label="autoskillit order",
+        )
         resolved = _resolve_recipe_input(raw, available)
         if resolved is _OPEN_KITCHEN_CHOICE:
             from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
@@ -663,13 +667,14 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
     if _disabled:
         _needed = _get_subsets_needed(parsed, _disabled)
         if _needed:
+            from autoskillit.cli._timed_input import timed_prompt as _tp
+
             subset_list = ", ".join(sorted(_needed))
             print(f"\nThis recipe requires subset(s): {subset_list}")
-            _require_interactive_stdin("autoskillit order")
             print("  1. Enable temporarily (for this run only)")
             print("  2. Enable permanently (update .autoskillit/config.yaml)")
             print("  3. Cancel")
-            _choice = input("Choose [1/2/3]: ").strip()
+            _choice = _tp("Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order")
             if _choice == "1":
                 _extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
             elif _choice == "2":
@@ -689,13 +694,16 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
     if _default_disabled_packs:
         _packs_needed = _get_packs_needed(parsed, _default_disabled_packs)
         if _packs_needed:
+            from autoskillit.cli._timed_input import timed_prompt as _tp2
+
             pack_list = ", ".join(sorted(_packs_needed))
             print(f"\nThis recipe requires pack(s): {pack_list}")
-            _require_interactive_stdin("autoskillit order")
             print("  1. Enable temporarily (for this run only)")
             print("  2. Enable permanently (update .autoskillit/config.yaml)")
             print("  3. Cancel")
-            _pack_choice = input("Choose [1/2/3]: ").strip()
+            _pack_choice = _tp2(
+                "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
+            )
             if _pack_choice == "1":
                 import json as _json
 
@@ -712,11 +720,11 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
     show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
 
     from autoskillit.cli._ansi import permissions_warning
+    from autoskillit.cli._timed_input import timed_prompt as _tp3
 
     print(permissions_warning())
-    _require_interactive_stdin("autoskillit order")
-    confirm = input("Launch session? [Enter/n]: ").strip().lower()
-    if confirm in ("n", "no"):
+    confirm = _tp3("Launch session? [Enter/n]", default="", timeout=120, label="autoskillit order")
+    if confirm.lower() in ("n", "no"):
         return
 
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)

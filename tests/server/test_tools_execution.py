@@ -361,7 +361,7 @@ class TestRunSkillEnvPrefix:
         assert cmd[0] == "claude"
         env = kwargs["env"]
         assert env["AUTOSKILLIT_HEADLESS"] == "1"
-        assert env["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] == "120000"
+        assert env["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] == "2000"
 
     @pytest.mark.anyio
     async def test_zero_delay_omits_delay_env_var(self, tool_ctx):
@@ -380,7 +380,9 @@ class TestRunSkillEnvPrefix:
     @pytest.mark.anyio
     async def test_custom_delay_value_in_env(self, tool_ctx):
         cfg = AutomationConfig()
-        cfg.run_skill = RunSkillConfig(exit_after_stop_delay_ms=60000)
+        cfg.run_skill = RunSkillConfig(
+            exit_after_stop_delay_ms=60000, natural_exit_grace_seconds=61.0
+        )
         cfg.safety.require_dry_walkthrough = False
         tool_ctx.config = cfg
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))

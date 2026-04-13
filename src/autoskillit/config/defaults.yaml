@@ -43,7 +43,8 @@ run_skill:
   stale_threshold: 1200
   completion_marker: "%%ORDER_UP%%"
   completion_drain_timeout: 5.0
-  exit_after_stop_delay_ms: 120000
+  exit_after_stop_delay_ms: 2000
+  natural_exit_grace_seconds: 3.0
   idle_output_timeout: 600
   max_suppression_seconds: 1800
 

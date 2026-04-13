@@ -15,11 +15,19 @@ import subprocess
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, assert_never
 
 import anyio
+import anyio.abc
 
-from autoskillit.core import ChannelConfirmation, SubprocessResult, TerminationReason, get_logger
+from autoskillit.core import (
+    ChannelConfirmation,
+    KillReason,
+    SubprocessResult,
+    TerminationAction,
+    TerminationReason,
+    get_logger,
+)
 from autoskillit.execution._process_io import create_temp_io, read_temp_output
 from autoskillit.execution._process_jsonl import (
     _jsonl_contains_marker,
@@ -77,6 +85,8 @@ __all__ = [
     "_watch_session_log",
     "async_kill_process_tree",
     "create_temp_io",
+    "decide_termination_action",
+    "execute_termination_action",
     "kill_process_tree",
     "pty_wrap_command",
     "read_temp_output",
@@ -94,6 +104,74 @@ def _resolve_session_id(
     return stdout_session_id or channel_b_session_id or ""
 
 
+def decide_termination_action(
+    termination: TerminationReason,
+    *,
+    timeout_fired: bool,
+    process_exited: bool,
+) -> TerminationAction:
+    """Pure decision function: maps race signals to a TerminationAction.
+
+    Priority:
+    1. timeout_fired → IMMEDIATE_KILL (always overrides)
+    2. process_exited → NO_KILL (process already gone, no signal needed)
+    3. termination-reason dispatch:
+       - COMPLETED: channel won but process alive → DRAIN_THEN_KILL_IF_ALIVE
+       - NATURAL_EXIT: fallback case → NO_KILL
+       - IDLE_STALL / STALE / TIMED_OUT: infra kill → IMMEDIATE_KILL
+
+    The function is deliberately free of anyio and I/O so it can be tested
+    as a pure decision table without any async or process infrastructure.
+    """
+    if timeout_fired:
+        return TerminationAction.IMMEDIATE_KILL
+    if process_exited:
+        return TerminationAction.NO_KILL
+    match termination:
+        case TerminationReason.NATURAL_EXIT:
+            return TerminationAction.NO_KILL
+        case TerminationReason.COMPLETED:
+            return TerminationAction.DRAIN_THEN_KILL_IF_ALIVE
+        case TerminationReason.IDLE_STALL | TerminationReason.STALE | TerminationReason.TIMED_OUT:
+            return TerminationAction.IMMEDIATE_KILL
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+async def execute_termination_action(
+    action: TerminationAction,
+    *,
+    proc: anyio.abc.Process,
+    process_exited_event: anyio.Event,
+    grace_seconds: float,
+    proc_log: Any,
+) -> KillReason:
+    """Single authorized executor for all kill decisions in run_managed_async.
+
+    This is the ONLY function in process.py permitted to call
+    async_kill_process_tree (enforced by test_no_direct_async_kill_process_tree_outside_executor).
+
+    Returns the KillReason that surfaces to SubprocessResult.kill_reason.
+    """
+    match action:
+        case TerminationAction.NO_KILL:
+            return KillReason.NATURAL_EXIT
+        case TerminationAction.DRAIN_THEN_KILL_IF_ALIVE:
+            with anyio.move_on_after(grace_seconds):
+                await process_exited_event.wait()
+            if proc.returncode is not None:
+                proc_log.debug("natural_exit_after_drain", returncode=proc.returncode)
+                return KillReason.NATURAL_EXIT
+            proc_log.debug("grace_expired_killing", grace_seconds=grace_seconds)
+            await async_kill_process_tree(proc.pid)
+            return KillReason.KILL_AFTER_COMPLETION
+        case TerminationAction.IMMEDIATE_KILL:
+            await async_kill_process_tree(proc.pid)
+            return KillReason.INFRA_KILL
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
 async def run_managed_async(
     cmd: list[str],
     *,
@@ -108,6 +186,7 @@ async def run_managed_async(
     stale_threshold: float = 1200,
     session_record_types: frozenset[str] = frozenset({"assistant"}),
     completion_drain_timeout: float = 5.0,
+    natural_exit_grace_seconds: float = 3.0,
     linux_tracing_config: LinuxTracingConfig | None = None,
     idle_output_timeout: float | None = None,
     max_suppression_seconds: float | None = None,
@@ -263,38 +342,37 @@ async def run_managed_async(
 
             if timeout_scope.cancelled_caught:
                 termination = TerminationReason.TIMED_OUT
-                proc_log.debug("kill_decision", reason="timeout", timeout=timeout)
-                logger.warning("Process %d timed out after %ss, killing tree", proc.pid, timeout)
-                await async_kill_process_tree(proc.pid)
-            elif signals.process_exited:
-                proc_log.debug(
-                    "kill_decision",
-                    reason="natural_exit",
-                    returncode=signals.process_returncode,
-                )
-            elif termination == TerminationReason.IDLE_STALL:
-                proc_log.debug(
-                    "kill_decision",
-                    reason="idle_stall",
-                    idle_output_timeout=idle_output_timeout,
-                )
-                logger.warning(
-                    "Stdout idle for %ss, killing tree (IDLE_STALL)", idle_output_timeout
-                )
-                await async_kill_process_tree(proc.pid)
-            elif termination == TerminationReason.STALE:
-                proc_log.debug("kill_decision", reason="stale", stale_threshold=stale_threshold)
-                logger.warning("Session stale for %ss, killing tree", stale_threshold)
-                await async_kill_process_tree(proc.pid)
-            else:
-                proc_log.debug(
-                    "kill_decision",
-                    reason="channel_won",
-                    channel_a=signals.channel_a_confirmed,
-                    channel_b=signals.channel_b_status,
-                )
-                # Channel A or B won; process still alive — kill immediately.
-                await async_kill_process_tree(proc.pid)
+            action = decide_termination_action(
+                termination,
+                timeout_fired=timeout_scope.cancelled_caught,
+                process_exited=signals.process_exited,
+            )
+            _timeout_fired = timeout_scope.cancelled_caught
+            _kill_reason_hint = (
+                "timeout"
+                if _timeout_fired
+                else "natural_exit"
+                if action == TerminationAction.NO_KILL
+                else "channel_won"
+                if action == TerminationAction.DRAIN_THEN_KILL_IF_ALIVE
+                else "infra_kill"
+            )
+            proc_log.debug(
+                "kill_decision",
+                termination=str(termination),
+                action=str(action),
+                reason=_kill_reason_hint,
+                process_exited=signals.process_exited,
+                channel_a=signals.channel_a_confirmed,
+                channel_b=signals.channel_b_status,
+            )
+            kill_reason = await execute_termination_action(
+                action,
+                proc=proc,
+                process_exited_event=signals.process_exited_event,
+                grace_seconds=natural_exit_grace_seconds,
+                proc_log=proc_log,
+            )
 
             # Flush and close before reading
             stdout_file.close()
@@ -314,6 +392,7 @@ async def run_managed_async(
                 session_id=_resolve_session_id(
                     signals.stdout_session_id, signals.channel_b_session_id
                 ),
+                kill_reason=kill_reason,
             )
             proc_log.debug(
                 "run_managed_async_result",

@@ -18,6 +18,8 @@ __all__ = [
     "OutputFormat",
     "Severity",
     "TerminationReason",
+    "TerminationAction",
+    "KillReason",
     "ChannelConfirmation",
     "SessionOutcome",
     "CliSubtype",
@@ -181,6 +183,36 @@ class TerminationReason(StrEnum):
     STALE = "stale"
     IDLE_STALL = "idle_stall"
     TIMED_OUT = "timed_out"
+
+
+class TerminationAction(StrEnum):
+    """What execute_termination_action should do with a subprocess after the race loop.
+
+    Produced by decide_termination_action (pure function) and consumed by
+    execute_termination_action (the single authorized kill caller in process.py).
+
+    - NO_KILL: process already exited naturally; no kill needed.
+    - DRAIN_THEN_KILL_IF_ALIVE: channel confirmed completion but process is still
+      alive; wait up to grace_seconds for natural exit, then kill if still running.
+    - IMMEDIATE_KILL: timeout, stall, or stale — kill without draining.
+    """
+
+    NO_KILL = "no_kill"
+    DRAIN_THEN_KILL_IF_ALIVE = "drain_then_kill_if_alive"
+    IMMEDIATE_KILL = "immediate_kill"
+
+
+class KillReason(StrEnum):
+    """Why the subprocess was (or was not) killed.
+
+    Carried by SubprocessResult and SkillResult so the formatter can annotate
+    the exit_code line and resolve the cognitive contradiction
+    "success=True + exit_code=-9".
+    """
+
+    NATURAL_EXIT = "natural_exit"
+    KILL_AFTER_COMPLETION = "kill_after_completion"  # drain window expired
+    INFRA_KILL = "infra_kill"  # timeout / stall / stale
 
 
 class ChannelConfirmation(StrEnum):

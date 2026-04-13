@@ -302,6 +302,7 @@ class TestGroupDApiContractPreservation:
             "stale_threshold",
             "session_record_types",
             "completion_drain_timeout",
+            "natural_exit_grace_seconds",
             "linux_tracing_config",
             "idle_output_timeout",
             "max_suppression_seconds",
@@ -463,7 +464,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_005_subprocess_result_field_names(self):
-        """SubprocessResult must have exactly the 12 canonical fields."""
+        """SubprocessResult must have exactly the 13 canonical fields."""
         from autoskillit.core.types import SubprocessResult
 
         fields = {f.name for f in dataclasses.fields(SubprocessResult)}
@@ -480,6 +481,7 @@ class TestGroupDApiContractPreservation:
             "start_ts",
             "end_ts",
             "elapsed_seconds",
+            "kill_reason",
         }
         assert fields == expected, (
             f"SubprocessResult fields changed.\n"

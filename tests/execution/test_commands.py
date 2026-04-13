@@ -208,7 +208,7 @@ class TestBuildFullHeadlessCmd:
         output_format_value="stream-json",
         output_format_required_flags=["--verbose"],
         add_dirs=[],
-        exit_after_stop_delay_ms=120000,
+        exit_after_stop_delay_ms=2000,
     )
 
     def test_returns_claude_headless_cmd(self):
@@ -231,7 +231,7 @@ class TestBuildFullHeadlessCmd:
 
     def test_env_has_exit_delay_when_positive(self):
         spec = build_full_headless_cmd("/investigate foo", **self.BASE)
-        assert spec.env["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] == "120000"
+        assert spec.env["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] == "2000"
 
     def test_env_omits_exit_delay_when_zero(self):
         params = {**self.BASE, "exit_after_stop_delay_ms": 0}

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import assert_never
 
@@ -23,6 +23,10 @@ class RaceSignals:
     Captures what happened without making any decisions about what it means.
     All fields are independent: multiple can be True simultaneously when tasks
     complete in the same event loop tick.
+
+    ``process_exited_event`` is the same object as on RaceAccumulator — setting
+    it on the accumulator automatically reflects here (shared reference).
+    execute_termination_action awaits this event inside DRAIN_THEN_KILL_IF_ALIVE.
     """
 
     process_exited: bool
@@ -32,6 +36,7 @@ class RaceSignals:
     channel_b_session_id: str = ""  # Claude Code session ID from JSONL filename stem, or ""
     stdout_session_id: str | None = None  # Session ID extracted from stdout type=system record
     idle_stall: bool = False
+    process_exited_event: anyio.Event = field(default_factory=anyio.Event)
 
 
 @dataclass
@@ -42,6 +47,10 @@ class RaceAccumulator:
     In async cooperative concurrency there are no concurrent writes — only one
     coroutine runs between yield points. to_race_signals() converts to the
     frozen RaceSignals consumed by resolve_termination.
+
+    ``process_exited_event`` is set by _watch_process BEFORE setting trigger,
+    so downstream code can await it as a race primitive. It is passed (by reference)
+    to execute_termination_action to support the DRAIN_THEN_KILL_IF_ALIVE window.
     """
 
     process_exited: bool = False
@@ -51,6 +60,7 @@ class RaceAccumulator:
     channel_b_session_id: str = ""
     stdout_session_id: str | None = None
     idle_stall: bool = False
+    process_exited_event: anyio.Event = field(default_factory=anyio.Event)
 
     def to_race_signals(self) -> RaceSignals:
         return RaceSignals(
@@ -61,6 +71,7 @@ class RaceAccumulator:
             channel_b_session_id=self.channel_b_session_id,
             stdout_session_id=self.stdout_session_id,
             idle_stall=self.idle_stall,
+            process_exited_event=self.process_exited_event,
         )
 
 
@@ -69,11 +80,17 @@ async def _watch_process(
     acc: RaceAccumulator,
     trigger: anyio.Event,
 ) -> None:
-    """Wait for the subprocess to exit and deposit the process-exit signal."""
+    """Wait for the subprocess to exit and deposit the process-exit signal.
+
+    Ordering guarantee: ``acc.process_exited_event`` is set BEFORE ``trigger``
+    so that execute_termination_action's DRAIN_THEN_KILL_IF_ALIVE path can
+    await the event inside the drain window.
+    """
     await proc.wait()
     logger.debug("process_exited", pid=proc.pid, returncode=proc.returncode)
     acc.process_exited = True
     acc.process_returncode = proc.returncode
+    acc.process_exited_event.set()
     trigger.set()
 
 

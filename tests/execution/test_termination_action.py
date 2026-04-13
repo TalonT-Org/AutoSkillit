@@ -59,7 +59,7 @@ def test_decide_termination_action_matrix(
     process_exited: bool,
     expected: TerminationAction,
 ) -> None:
-    """Decision table covers all meaningful (termination, timeout_fired, process_exited) combinations."""
+    """Decision table covers all meaningful (termination, timeout_fired, process_exited) combos."""
     result = decide_termination_action(
         termination, timeout_fired=timeout_fired, process_exited=process_exited
     )

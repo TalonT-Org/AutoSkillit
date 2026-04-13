@@ -305,17 +305,17 @@ class TestRunSkillConfigFields:
 
 
 class TestRunSkillConfigExitAfterStopDelay:
-    def test_default_exit_after_stop_delay_is_120000(self):
+    def test_default_exit_after_stop_delay_is_2000(self):
         cfg = AutomationConfig()
-        assert cfg.run_skill.exit_after_stop_delay_ms == 120000
+        assert cfg.run_skill.exit_after_stop_delay_ms == 2000
 
     def test_yaml_loads_exit_after_stop_delay(self, tmp_path):
         (tmp_path / ".autoskillit").mkdir()
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
-            "run_skill:\n  exit_after_stop_delay_ms: 60000\n"
+            "run_skill:\n  exit_after_stop_delay_ms: 1500\n"
         )
         cfg = load_config(tmp_path)
-        assert cfg.run_skill.exit_after_stop_delay_ms == 60000
+        assert cfg.run_skill.exit_after_stop_delay_ms == 1500
 
     def test_zero_disables_injection(self, tmp_path):
         (tmp_path / ".autoskillit").mkdir()
@@ -329,7 +329,7 @@ class TestRunSkillConfigExitAfterStopDelay:
         (tmp_path / ".autoskillit").mkdir()
         (tmp_path / ".autoskillit" / "config.yaml").write_text("run_skill:\n  timeout: 1800\n")
         cfg = load_config(tmp_path)
-        assert cfg.run_skill.exit_after_stop_delay_ms == 120000
+        assert cfg.run_skill.exit_after_stop_delay_ms == 2000
 
     def test_run_skill_config_fields_include_exit_delay(self):
         names = {f.name for f in dc_fields(RunSkillConfig)}

@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 import textwrap
 import time
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import anyio
 import pytest
@@ -81,16 +81,16 @@ class TestDrainWindowPermitsNaturalExit:
                 tg.cancel_scope.cancel()
 
         assert kill_reason == KillReason.NATURAL_EXIT
-        assert kill_calls == [], f"async_kill_process_tree should not have been called, got calls to pids={kill_calls}"
+        assert kill_calls == [], (
+            f"async_kill_process_tree should not have been called, got calls to pids={kill_calls}"
+        )
 
 
 class TestDrainWindowEscalatesToKill:
     """DRAIN_THEN_KILL_IF_ALIVE: process survives grace window → KILL_AFTER_COMPLETION."""
 
     @pytest.mark.anyio
-    async def test_drain_window_escalates_to_kill_when_process_survives(
-        self, tmp_path
-    ) -> None:
+    async def test_drain_window_escalates_to_kill_when_process_survives(self, tmp_path) -> None:
         """Process sleeps 10s; grace=0.3s → kill_reason=KILL_AFTER_COMPLETION, kill called once."""
         proc = await _spawn_script(_EXIT_AFTER_SLEEP, ["10.0"], tmp_path)
         proc_exited_event = anyio.Event()

@@ -13,6 +13,28 @@ from _fmt_primitives import (  # type: ignore[import-not-found]
 )
 
 
+def _format_exit_code_line(data: dict) -> str:
+    """Return the formatted exit_code line, annotated with kill_reason when present.
+
+    Legacy payloads without kill_reason render as bare exit_code values so that
+    JSON-line replay of old session logs still parses correctly.
+    """
+    exit_code = data.get("exit_code", "")
+    kill_reason = data.get("kill_reason")
+    if kill_reason is None:
+        # Legacy payload — no annotation
+        return f"exit_code: {exit_code}"
+    if kill_reason == "kill_after_completion":
+        return f"exit_code: {exit_code} (infra-terminated after completion — grace exceeded)"
+    if kill_reason == "infra_kill":
+        termination_reason = data.get("termination_reason") or data.get("subtype") or ""
+        if termination_reason:
+            return f"exit_code: {exit_code} (infra-killed: {termination_reason})"
+        return f"exit_code: {exit_code} (infra-killed)"
+    # natural_exit or any unknown value → bare
+    return f"exit_code: {exit_code}"
+
+
 def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     """Format run_skill result as Markdown-KV."""
     success = data.get("success", False)
@@ -27,7 +49,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         session_id = data.get("session_id", "")
         if session_id:
             lines.append(f"session_id: {session_id}")
-        lines.append(f"exit_code: {data.get('exit_code', '')}")
+        lines.append(_format_exit_code_line(data))
         lines.append(f"needs_retry: {data.get('needs_retry', False)}")
         if data.get("retry_reason") and data["retry_reason"] != "none":
             lines.append(f"retry_reason: {data['retry_reason']}")
@@ -49,7 +71,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     if session_id:
         lines.append(f"session_id: {session_id}")
     lines.append(f"subtype: {subtype}")
-    lines.append(f"exit_code: {data.get('exit_code', '')}")
+    lines.append(_format_exit_code_line(data))
     lines.append(f"needs_retry: {data.get('needs_retry', False)}")
     retry_reason = data.get("retry_reason", "none")
     if retry_reason and retry_reason != "none":

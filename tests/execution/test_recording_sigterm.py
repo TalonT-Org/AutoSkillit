@@ -41,9 +41,10 @@ def test_sigterm_writes_scenario_json(tmp_path):
     # Poll stderr line-by-line for the "sigterm_handler_ready" token which
     # serve() emits immediately after installing the SIGTERM handler. This
     # guarantees the handler is active before we send SIGTERM, while still
-    # being responsive (no fixed sleep). Falls back after 5 s on slow CI.
+    # being responsive (no fixed sleep). Falls back after 15 s to tolerate
+    # xdist parallel load where subprocess startup can be slow.
     stderr_lines: list[str] = []
-    deadline = time.monotonic() + 5.0
+    deadline = time.monotonic() + 15.0
     while time.monotonic() < deadline:
         remaining = deadline - time.monotonic()
         readable, _, _ = select.select([proc.stderr], [], [], min(remaining, 0.2))

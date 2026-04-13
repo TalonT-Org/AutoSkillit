@@ -261,10 +261,7 @@ def _probe_origin_url(source: Path) -> CloneSourceResolution:
     classifies the result into one of four typed reasons so callers
     cannot collapse the outcomes into a single empty string.
     """
-    _no_origin_markers = (
-        "no such remote",
-        "does not exist",
-    )
+    _no_origin_markers = ("no such remote",)
     try:
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],

@@ -182,6 +182,7 @@ class HeadlessExecutor(Protocol):
         add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
+        idle_output_timeout: float | None = None,
         expected_output_patterns: Sequence[str] = (),
         write_behavior: WriteBehaviorSpec | None = None,
         completion_marker: str = "",

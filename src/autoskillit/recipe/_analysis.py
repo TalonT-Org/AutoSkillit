@@ -23,6 +23,7 @@ from autoskillit.recipe.schema import (
     DataFlowReport,
     DataFlowWarning,
     Recipe,
+    RecipeBlock,
     RecipeStep,
 )
 
@@ -218,6 +219,7 @@ class ValidationContext:
     disabled_subsets: frozenset[str] = field(default_factory=frozenset)
     skill_category_map: dict[str, frozenset[str]] | None = None
     overridden_skills: frozenset[str] | None = None
+    blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +287,75 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
             graph[pred].add(next_step)
 
     return graph
+
+
+# ---------------------------------------------------------------------------
+# Block extraction helpers
+# ---------------------------------------------------------------------------
+
+
+def _count_by_tool(members: list[RecipeStep]) -> dict[str, int]:
+    """Count tool occurrences across a list of steps."""
+    counts: dict[str, int] = {}
+    for step in members:
+        key = step.tool or ""
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _count_gh_api(step: RecipeStep) -> int:
+    """Count occurrences of 'gh api' in a run_cmd step's cmd argument."""
+    if step.tool != "run_cmd":
+        return 0
+    cmd = (step.with_args or {}).get("cmd", "") or ""
+    return cmd.count("gh api")
+
+
+def extract_blocks(recipe: Recipe, step_graph: dict[str, set[str]]) -> tuple[RecipeBlock, ...]:
+    """Extract named block regions from a recipe's routing graph.
+
+    Groups steps that share the same ``step.block`` value, then computes the
+    entry step (no in-block predecessor) and exit step (no in-block successor)
+    for each group.  The step_graph is the forward adjacency dict produced by
+    ``_build_step_graph``; a local inverse is built here to find predecessors.
+
+    Steps without a ``block`` annotation are ignored.  Recipes with no block
+    annotations return an empty tuple.
+    """
+    # Build predecessor map by inverting the forward step_graph edges.
+    predecessors: dict[str, set[str]] = {}
+    for src, successors in step_graph.items():
+        for dst in successors:
+            predecessors.setdefault(dst, set()).add(src)
+
+    by_name: dict[str, list[RecipeStep]] = {}
+    for step in recipe.steps.values():
+        if step.block is not None:
+            by_name.setdefault(step.block, []).append(step)
+
+    blocks: list[RecipeBlock] = []
+    for name, members in by_name.items():
+        member_names = {s.name for s in members}
+        # Entry: no in-block predecessor (predecessor set ∩ member_names is empty)
+        entry_candidates = [
+            s for s in members if not (predecessors.get(s.name, set()) & member_names)
+        ]
+        # Exit: no in-block successor (successor set ∩ member_names is empty)
+        exit_candidates = [
+            s for s in members if not (step_graph.get(s.name, set()) & member_names)
+        ]
+        blocks.append(
+            RecipeBlock(
+                name=name,
+                entry=entry_candidates[0].name if entry_candidates else members[0].name,
+                exit=exit_candidates[0].name if exit_candidates else members[-1].name,
+                members=tuple(members),
+                tool_counts=_count_by_tool(members),
+                gh_api_occurrences=sum(_count_gh_api(s) for s in members),
+            )
+        )
+    return tuple(blocks)
 
 
 # ---------------------------------------------------------------------------
@@ -654,4 +725,5 @@ def make_validation_context(
         available_sub_recipes=available_sub_recipes,
         project_dir=project_dir,
         disabled_subsets=disabled_subsets,
+        blocks=extract_blocks(recipe, step_graph),
     )

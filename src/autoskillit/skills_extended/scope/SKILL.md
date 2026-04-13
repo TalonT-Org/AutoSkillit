@@ -66,57 +66,61 @@ text is supplementary context.
 ### Step 1 — Parallel Exploration
 
 Launch subagents via the Task tool (model: "sonnet") to explore in parallel.
-The following are **minimum required** subagents — launch as many additional
-subagents as needed to fill information gaps. Use your judgment on what
-additional exploration is necessary for the specific research question.
+You **must launch at least 5 subagents**. Select from the suggested menu below,
+define entirely custom subagents, or use any combination. The menu is a guide,
+not a mandate — you are free to skip entries that are not relevant and substitute
+your own tasks for any or all of them.
 
-**Minimum subagents:**
+**Suggested subagent menu:**
 
-**Subagent A — Prior Art Survey:**
-> Search the codebase for existing implementations, tests, benchmarks, or
-> documentation related to the research question. Look for prior attempts,
-> related utilities, and relevant test fixtures. Report what already exists
-> and what gaps remain.
+**[PRIOR ART — Codebase or Literature]**
+> For software questions: search the codebase for existing implementations, tests,
+> benchmarks, or documentation related to the research question. For domain-specific
+> questions (biology, chemistry, social science, etc.): survey published literature,
+> established protocols, and known methods. Report what already exists and what gaps
+> remain.
 
-**Subagent B — Technical Context:**
-> Understand the architecture surrounding the research area. Identify the
-> key modules, data structures, algorithms, and their relationships.
-> Document the current behavior and any known limitations.
+**[EXTERNAL RESEARCH — Web Search]**
+> Search the web for relevant tools, methods, papers, documentation, and prior work
+> related to the research question. Look for established methodologies, known solutions,
+> documentation for relevant tools, and community discussion of the topic. Report
+> findings with source links.
 
-**Subagent C — External Research (Web Search):**
-> Search the web for relevant tools, methods, papers, documentation, and
-> prior work related to the research question. Look for established
-> methodologies, known solutions, manual pages for relevant tools, and
-> community discussion of the topic. Report findings with source links.
+**[DOMAIN CONTEXT — Architecture or Domain Knowledge]**
+> For software questions: understand the architecture surrounding the research area,
+> key modules, data structures, algorithms, and their relationships; document current
+> behavior and known limitations. For non-software questions: understand the domain-
+> specific structures, relationships, mechanisms, and processes that are central to
+> the research question.
 
-**Subagent D — Metric Context:**
-> Read `src/metrics.rs` to identify which quality dimensions (Accuracy, Parity,
-> Performance) the research question touches. If `src/metrics.rs` is absent or
-> empty, flag it explicitly in the output (do not silently emit an empty section).
-> Report the current threshold values for relevant metrics and any existing test
-> coverage in `tests/integration/test_metrics_assess.rs`. If that test file does
-> not exist, note it as missing rather than omitting coverage information.
-> Output a "Metric Context" section listing which canonical metrics apply to this
-> research question and their current thresholds.
+**[EVALUATION FRAMEWORK — Metrics or Assessment]**
+> Search for whatever evaluation framework the project or domain uses. For software
+> projects look for files named `metrics.*`, `benchmark.*`, `evaluation.*`, or any
+> assessment/scoring module. For non-software domains, look for standard scales,
+> assays, indices, or rubrics that the domain uses to measure outcomes. If no
+> dedicated evaluation infrastructure exists, flag it explicitly in the output (do
+> not silently emit an empty section). Report what measurement mechanisms exist and
+> what gaps remain.
 
-**Subagent E — Computational Complexity:**
-> Identify the most expensive computation the research question involves.
-> Examine the codebase for algorithm implementations, library calls with
-> known high complexity (e.g., distance matrix computation, sorting of
-> large arrays, pairwise comparisons), and any baseline/reference
-> computations that will run alongside the focal algorithm. For each
-> expensive operation found, note its time and space complexity class
-> (O(n²), O(n log n), etc.) and any known pitfalls from library
-> documentation or prior art (implicit matrix materializations, hidden
-> copies, self-inclusion bugs). Report findings as: dominant operation,
-> scaling behavior, known bottlenecks, and gotchas.
+**[COMPUTATIONAL COMPLEXITY — Algorithm Analysis]**
+> Relevant when the research question involves an algorithm, model, or computational
+> approach. Identify the most expensive computation involved. For each expensive
+> operation found, note its time and space complexity class (O(n²), O(n log n), etc.)
+> and any known pitfalls from library documentation or prior art (implicit matrix
+> materializations, hidden copies, self-inclusion bugs, baseline/reference computation
+> costs). Report findings as: dominant operation, scaling behavior, known bottlenecks,
+> and gotchas.
 
-**Additional subagents (launch as many as needed):**
-- Web searches for specific tools, libraries, or methods relevant to the question
-- Deeper exploration of specific code areas identified by early subagents
-- Surveys of existing test or benchmark infrastructure
-- External reference gathering (papers, docs, issue discussions)
-- Any other investigation that fills knowledge gaps
+**[DATA AVAILABILITY — Datasets or Inputs]**
+> Survey what data already exists that is relevant to the research question. Can it be
+> generated synthetically? Are there existing datasets, fixtures, repositories, or
+> domain-standard corpora? Report what is available and what gaps would need to be
+> filled to run a meaningful experiment.
+
+**You may also define entirely custom subagents** for aspects of the research question
+that require unique investigation not covered by the menu above. Always consider
+launching at least one subagent beyond the obvious selections to explore angles you
+might have missed.
 
 ### Step 2 — Synthesize Findings
 
@@ -133,19 +137,22 @@ must contain these sections:
 
 | Category | Known | Unknown |
 |----------|-------|---------|
-| Current behavior | {what the code does today} | {what we don't know about it} |
+| Current state | {what is known about how the subject behaves today} | {what we don't know about it} |
 | Performance | {existing metrics/benchmarks} | {unmeasured aspects} |
 | Edge cases | {known edge cases} | {suspected but unverified} |
 | Prior work | {existing implementations} | {gaps in coverage} |
 
-## Prior Art in Codebase
-{What already exists — implementations, tests, benchmarks, documentation}
+## Prior Art
+{What already exists — implementations, experiments, literature, tests, benchmarks,
+documentation, or prior attempts relevant to this research question}
 
 ## External Research
 {Relevant findings from web searches — tools, methods, papers, documentation}
 
-## Technical Context
-{Architecture, key modules, data flow, algorithms involved}
+## Domain Context
+{For software questions: architecture, key modules, data flow, algorithms involved.
+For non-software questions: domain-specific structures, mechanisms, organisms, pathways,
+models, or processes that are central to the research question.}
 
 ## Computational Complexity
 - **Dominant operation:** {the single most expensive computation the experiment will perform — include the specific library call or algorithm, not just a description}
@@ -162,10 +169,11 @@ must contain these sections:
 ## Success Criteria
 {What would constitute a conclusive answer to the research question}
 
-## Metric Context
-{Which canonical metrics from src/metrics.rs apply to this research question.
-List each metric name, quality dimension (Accuracy/Parity/Performance), and
-current threshold value. Note any gaps where no canonical metric exists.}
+## Metric Context *(include only when an evaluation framework was found)*
+{If the [EVALUATION FRAMEWORK] subagent found a metrics or assessment infrastructure:
+list which evaluation dimensions apply to this research question, what the current
+threshold values or scoring standards are, and where they are defined. If no evaluation
+framework was found, omit this section entirely — do not emit an empty section.}
 ```
 
 ### Step 3 — Write Output

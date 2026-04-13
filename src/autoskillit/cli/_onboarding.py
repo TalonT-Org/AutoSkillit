@@ -176,9 +176,7 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
     print(f"  {_Y}D{_R} — {_C}Write a custom recipe{_R}        (runs /autoskillit:write-recipe)")
     print(f"  {_Y}E{_R} — {_C}Skip{_R}                         (start a normal session)")
 
-    choice = timed_prompt(
-        "\n[A/B/C/D/E]", default="E", timeout=120, label="onboarding"
-    ).upper()
+    choice = timed_prompt("\n[A/B/C/D/E]", default="E", timeout=120, label="onboarding").upper()
 
     # Wait up to 5s for gather_intel to complete, then shut down cleanly
     try:

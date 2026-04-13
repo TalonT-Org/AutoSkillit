@@ -93,6 +93,11 @@ async def get_pipeline_report(clear: bool = False) -> str:
         return gate
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_pipeline_report"):
+        from autoskillit.server._state import _startup_ready
+
+        if _startup_ready is not None and not _startup_ready.is_set():
+            await asyncio.wait_for(_startup_ready.wait(), timeout=30.0)
+
         from autoskillit.server import _get_ctx
 
         failures = _get_ctx().audit.get_report_as_dicts()

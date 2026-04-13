@@ -374,6 +374,8 @@ def _format_diagnostics_section(diag: dict[str, Any], condensed: bool = False) -
     termination = s.get("termination_reason", "—")
     exit_code = s.get("exit_code", "—")
     claude_code_log: str = s.get("claude_code_log") or ""
+    tracked_comm: str | None = s.get("tracked_comm")
+    tracked_comm_drift: bool = bool(s.get("tracked_comm_drift", False))
 
     lines: list[str] = [
         "## Session Diagnostics",
@@ -387,8 +389,13 @@ def _format_diagnostics_section(diag: dict[str, Any], condensed: bool = False) -
         f"| Anomaly Count | {anomaly_count} |",
         f"| Termination | {termination} |",
         f"| Exit Code | {exit_code} |",
-        "",
     ]
+    if tracked_comm is not None:
+        comm_display = f"`{tracked_comm}`"
+        if tracked_comm_drift:
+            comm_display += " ⚠️ drift"
+        lines.append(f"| Tracked Process | {comm_display} |")
+    lines.append("")
 
     if condensed:
         return "\n".join(lines)

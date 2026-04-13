@@ -138,6 +138,5 @@ async def test_pty_wrapped_tracing_produces_no_script_snapshots_in_proc_trace_js
     for row in rows:
         assert "comm" in row, f"Every row must have a 'comm' field. Row: {row}"
         assert row["comm"] != "script", (
-            f"Found comm='script' in proc_trace.jsonl — tracer observed PTY wrapper. "
-            f"Row: {row}"
+            f"Found comm='script' in proc_trace.jsonl — tracer observed PTY wrapper. Row: {row}"
         )

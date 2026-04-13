@@ -20,6 +20,7 @@ class AnomalyKind(StrEnum):
     FD_HIGH = "fd_high"
     D_STATE_SUSTAINED = "d_state_sustained"
     HIGH_CPU_SUSTAINED = "high_cpu_sustained"
+    IDENTITY_DRIFT = "identity_drift"
 
 
 class AnomalySeverity(StrEnum):
@@ -250,5 +251,50 @@ def detect_anomalies(
                     pid,
                 )
             )
+
+    return anomalies
+
+
+def detect_identity_drift(
+    snapshots: list[dict[str, object]],
+    expected_comm: str,
+) -> list[dict[str, object]]:
+    """Detect process identity drift: snapshots whose comm != expected_comm.
+
+    This is the architectural immunity check introduced in #806. If PTY wrapping
+    somehow bypasses the TraceTarget resolver, every snapshot will carry the wrong
+    comm (e.g., 'script' instead of 'claude'). This detector surfaces it immediately
+    rather than letting wrong telemetry accumulate silently for months.
+
+    Args:
+        snapshots: List of snapshot dicts (each may have a 'comm' field).
+        expected_comm: The process name we expect every snapshot to describe.
+
+    Returns:
+        List of IDENTITY_DRIFT anomaly records (one per first-seen mismatch).
+    """
+    anomalies: list[dict[str, object]] = []
+    if not snapshots or not expected_comm:
+        return anomalies
+
+    for seq, snap in enumerate(snapshots):
+        actual_comm = snap.get("comm", "")
+        if actual_comm and actual_comm != expected_comm:
+            anomalies.append(
+                _anomaly(
+                    AnomalyKind.IDENTITY_DRIFT,
+                    AnomalySeverity.CRITICAL,
+                    {
+                        "expected_comm": expected_comm,
+                        "actual_comm": actual_comm,
+                        "seq": seq,
+                    },
+                    snap,
+                    seq,
+                    int(snap.get("pid") or 0),  # type: ignore[call-overload]
+                )
+            )
+            # Report on first occurrence only — one anomaly is enough to diagnose the drift
+            break
 
     return anomalies

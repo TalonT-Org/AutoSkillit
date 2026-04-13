@@ -719,8 +719,10 @@ def test_arch008_accepts_resolve_trace_target_result(tmp_path: Path) -> None:
     """
     f = tmp_path / "good.py"
     f.write_text(
-        "from autoskillit.execution.linux_tracing import start_linux_tracing, resolve_trace_target\n"
-        "target = resolve_trace_target(root_pid=proc.pid, expected_basename='claude', timeout=2.0)\n"
+        "from autoskillit.execution.linux_tracing import (\n"
+        "    start_linux_tracing, resolve_trace_target)\n"
+        "target = resolve_trace_target(\n"
+        "    root_pid=proc.pid, expected_basename='claude')\n"
         "start_linux_tracing(target=target, config=cfg, tg=tg)\n"
     )
     violations = _scan(f)
@@ -735,7 +737,8 @@ def test_arch008_accepts_trace_target_from_pid_result(tmp_path: Path) -> None:
     """ARCH-008 calibration: start_linux_tracing(target=trace_target_from_pid(...)) is allowed."""
     f = tmp_path / "good_direct.py"
     f.write_text(
-        "from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid\n"
+        "from autoskillit.execution.linux_tracing import (\n"
+        "    start_linux_tracing, trace_target_from_pid)\n"
         "target = trace_target_from_pid(proc.pid)\n"
         "start_linux_tracing(target=target, config=cfg, tg=tg)\n"
     )

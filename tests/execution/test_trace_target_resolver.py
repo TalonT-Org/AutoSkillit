@@ -53,7 +53,10 @@ def test_resolve_trace_target_raises_on_miss():
 
     Test 1.4: failure must be loud, not a silent fall-back to wrapper PID.
     """
-    from autoskillit.execution.linux_tracing import TraceTargetResolutionError, resolve_trace_target
+    from autoskillit.execution.linux_tracing import (
+        TraceTargetResolutionError,
+        resolve_trace_target,
+    )
 
     proc = subprocess.Popen(["sleep", "5"])
     try:

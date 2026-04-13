@@ -687,13 +687,6 @@ def test_recover_crashed_sessions_excludes_non_claude_trace_files(tmp_path):
         if summary_file.exists():
             session_summaries.append(json.loads(summary_file.read_text()))
 
-    # The alien (sleep) session must be identified as non-claude.
-    # It should either be skipped entirely OR marked with alien=true / pre_fix_data
-    alien_sessions = [
-        s
-        for s in session_summaries
-        if s.get("alien") or s.get("pre_fix_data") or "20002" in s.get("session_id", "")
-    ]
     claude_sessions = [s for s in session_summaries if "20001" in s.get("session_id", "")]
 
     # The claude trace must be recovered (not excluded)

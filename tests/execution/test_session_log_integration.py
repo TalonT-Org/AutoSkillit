@@ -18,14 +18,14 @@ pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
 async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
     """End-to-end: snapshot accumulation + flush produces unique ts per record."""
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.execution.linux_tracing import start_linux_tracing
+    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
     from autoskillit.execution.session_log import flush_session_log
 
     config = LinuxTracingConfig(proc_interval=0.05, tmpfs_path=str(tmp_path))
     start_ts = datetime.now(UTC).isoformat()
     start_mono = time.monotonic()
     async with anyio.create_task_group() as tg:
-        handle = start_linux_tracing(os.getpid(), config, tg)
+        handle = start_linux_tracing(trace_target_from_pid(os.getpid()), config, tg)
         await anyio.sleep(0.3)
         snaps = handle.stop()
         tg.cancel_scope.cancel()

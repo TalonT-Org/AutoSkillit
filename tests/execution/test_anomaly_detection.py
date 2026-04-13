@@ -318,12 +318,8 @@ def test_identity_drift_anomaly_fires_when_comm_mismatches():
     """
     from autoskillit.execution.anomaly_detection import AnomalyKind, detect_identity_drift
 
-    # Simulate: expected process is 'claude' but every snapshot has comm='script'
-    snaps = [
-        {**_snap().__class__.__dict__, "comm": "script"},  # wrong process
-        {**_snap().__class__.__dict__, "comm": "script"},
-    ]
     # Use plain dicts (as flush_session_log passes to detect_anomalies)
+    # Simulate: expected process is 'claude' but every snapshot has comm='script'
     snap_dicts = [{"comm": "script", "vm_rss_kb": 2048, "oom_score": 10} for _ in range(2)]
     anomalies = detect_identity_drift(snap_dicts, expected_comm="claude")
     assert len(anomalies) >= 1, (

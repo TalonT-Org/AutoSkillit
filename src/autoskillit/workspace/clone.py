@@ -275,6 +275,8 @@ def _probe_origin_url(source: Path) -> CloneSourceResolution:
         )
     except subprocess.TimeoutExpired:
         return CloneSourceResolution(reason="timeout", url="", stderr="")
+    except OSError as exc:
+        return CloneSourceResolution(reason="error", url="", stderr=str(exc))
 
     if result.returncode != 0:
         stderr = result.stderr.strip()

@@ -58,6 +58,7 @@ def test_sigterm_writes_scenario_json(tmp_path):
         decoded = line.decode(errors="replace")
         stderr_lines.append(decoded)
         if _READY_TOKEN in decoded:
+            time.sleep(2.0)  # let lifespan teardown handlers fully register
             break
 
     # SIGTERM is the exact signal Claude Code sends on /exit.

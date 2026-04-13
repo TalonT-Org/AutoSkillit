@@ -20,6 +20,14 @@ WRITE_RESULT_THEN_HANG_SCRIPT = textwrap.dedent("""\
     time.sleep(3600)
 """)
 
+# Shared helper script used by PTY-tracing and session-log integration tests.
+# Allocates 60 MB resident memory then sleeps so the tracer can observe it.
+_ALLOCATE_60MB_SCRIPT = """\
+import time
+data = bytearray(60 * 1024 * 1024)  # 60 MB resident allocation
+time.sleep(3)
+"""
+
 
 @pytest.fixture
 def isolated_tracing_config(tmp_path: pathlib.Path) -> LinuxTracingConfig:

@@ -11,6 +11,8 @@ from datetime import UTC, datetime, timedelta
 import anyio
 import pytest
 
+from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT
+
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
 
 
@@ -140,12 +142,6 @@ def test_flush_session_log_surfaces_high_cpu_sustained(tmp_path):
 # ---------------------------------------------------------------------------
 # Test 1.6 — Sanity lower bound on peak RSS for a real workload
 # ---------------------------------------------------------------------------
-
-_ALLOCATE_60MB_SCRIPT = """\
-import time
-data = bytearray(60 * 1024 * 1024)  # 60 MB resident allocation
-time.sleep(3)
-"""
 
 
 @pytest.mark.anyio

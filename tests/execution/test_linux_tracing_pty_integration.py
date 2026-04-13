@@ -14,9 +14,10 @@ from __future__ import annotations
 import json
 import shutil
 import sys
-import textwrap
 
 import pytest
+
+from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",
@@ -28,13 +29,6 @@ pytestmark_script = pytest.mark.skipif(
     shutil.which("script") is None,
     reason="script(1) not available on this system",
 )
-
-# Helper that allocates ≥60 MB and sleeps briefly so the tracer can observe it.
-_ALLOCATE_60MB_SCRIPT = textwrap.dedent("""\
-    import time
-    data = bytearray(60 * 1024 * 1024)  # 60 MB resident allocation
-    time.sleep(3)
-""")
 
 
 @pytestmark_script

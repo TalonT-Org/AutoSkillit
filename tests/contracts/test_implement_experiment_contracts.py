@@ -15,21 +15,24 @@ SKILL_PATH = (
 def test_implement_experiment_always_includes_test_creation() -> None:
     """implement-experiment ALWAYS list must include a directive to write test files."""
     text = SKILL_PATH.read_text()
-    # The ALWAYS block must reference writing test files
     always_section = text.split("**ALWAYS:**")[1].split("##")[0] if "**ALWAYS:**" in text else text
-    lower = always_section.lower()
-    assert "test" in lower and ("write" in lower or "creat" in lower), (
-        "implement-experiment/SKILL.md ALWAYS list must direct the agent to write test files "
-        "alongside experiment scripts"
+    assert "tests/test_" in always_section, (
+        "implement-experiment/SKILL.md ALWAYS list must direct the agent to write "
+        "tests/test_{name}.py files alongside experiment scripts"
     )
 
 
 def test_implement_experiment_step4_mentions_test_files() -> None:
-    """implement-experiment Step 4 must mention creating test_ files."""
+    """implement-experiment Step 4 must mention creating tests/test_ files."""
     text = SKILL_PATH.read_text()
-    assert "test_" in text, (
-        "implement-experiment/SKILL.md Step 4 must reference creating test_ files "
-        "(e.g., test_analysis.py) alongside each experiment script"
+    step4_section = (
+        text.split("### Step 4")[1].split("### Step 5")[0]
+        if "### Step 4" in text and "### Step 5" in text
+        else text
+    )
+    assert "tests/test_" in step4_section, (
+        "implement-experiment/SKILL.md Step 4 must reference creating tests/test_{name}.py "
+        "files alongside each experiment script"
     )
 
 

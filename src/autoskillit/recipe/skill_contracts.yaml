@@ -1214,6 +1214,23 @@ skills:
     - "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\n%%ORDER_UP%%"
     write_behavior: always
 
+  stage-data:
+    inputs:
+    - name: experiment_plan
+      type: file_path
+      required: true
+    outputs:
+    - name: verdict
+      type: string
+    - name: resource_report
+      type: file_path
+    expected_output_patterns:
+    - "verdict\\s*=\\s*(PASS|WARN|FAIL)"
+    - "resource_report\\s*=\\s*/.+"
+    pattern_examples:
+    - "verdict = PASS\nresource_report = /tmp/stage-data/resource_feasibility_2026-04-13_120000.md\n%%ORDER_UP%%"
+    write_behavior: always
+
   implement-experiment:
     inputs:
     - name: plan_path

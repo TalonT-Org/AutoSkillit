@@ -242,6 +242,7 @@ generic_automation_mcp/
 │   ├── _mcp_names.py        #   MCP prefix detection
 │   ├── _onboarding.py       #   First-run detection + guided menu
 │   ├── _prompts.py          #   Orchestrator prompt builder
+│   ├── _timed_input.py      #   timed_prompt() and status_line() CLI primitives
 │   ├── _update.py           #   run_update_command(): first-class upgrade path for `autoskillit update`
 │   ├── _update_checks.py    #   Unified startup update check: version/hook/source-drift signals, branch-aware dismissal
 │   ├── _workspace.py        #   Workspace clean helpers

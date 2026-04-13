@@ -61,7 +61,12 @@ def timed_prompt(
     print(formatted, end="", flush=True)
 
     if timeout:
-        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+        try:
+            ready, _, _ = select.select([sys.stdin], [], [], timeout)
+        except (OSError, TypeError, ValueError):
+            # stdin lacks fileno() or fileno() returns non-int
+            # (e.g. pytest capture, piped input) — fall back to blocking input().
+            ready = [sys.stdin]
         if not ready:
             print(f"\n{_D}(timed out, continuing...){_R}", flush=True)
             return default

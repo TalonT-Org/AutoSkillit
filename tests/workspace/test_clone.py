@@ -1647,14 +1647,18 @@ class TestCloneDiscriminator:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
 
     @pytest.mark.parametrize(
-        "fixture_name,strategy",
+        "fixture_name,strategy,expected_source_type",
         [
-            ("local_with_remote", "proceed"),
-            ("git_repo", "clone_local"),
+            ("local_with_remote", "proceed", "remote"),
+            ("git_repo", "clone_local", "local"),
         ],
     )
     def test_clone_result_always_has_discriminator_key(
-        self, fixture_name: str, strategy: str, request: pytest.FixtureRequest
+        self,
+        fixture_name: str,
+        strategy: str,
+        expected_source_type: str,
+        request: pytest.FixtureRequest,
     ) -> None:
         """Structural invariant: every success result carries clone_source_type."""
         source = request.getfixturevalue(fixture_name)
@@ -1664,8 +1668,7 @@ class TestCloneDiscriminator:
         result = clone_repo(str(source), "t", **kwargs)  # type: ignore[arg-type]
         clone_path = Path(result["clone_path"])
         try:
-            assert "clone_source_type" in result
-            assert result["clone_source_type"] in ("remote", "local")
+            assert result["clone_source_type"] == expected_source_type
             assert "clone_source_reason" in result
         finally:
             shutil.rmtree(clone_path.parent, ignore_errors=True)

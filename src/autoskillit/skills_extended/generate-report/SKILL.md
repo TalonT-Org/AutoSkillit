@@ -332,7 +332,9 @@ analysis if relevant to the experiment type.}
 
 {Direct answer to the research question.}
 
-## Recommendations *(or "Discussion and Future Directions" for biology/social science)*
+## Recommendations
+
+*For biology and social science domains, use "Discussion and Future Directions" as the section title instead.*
 
 {Actionable next steps based on findings — what to keep, revert, modify,
 or investigate further. Include justification for each recommendation.

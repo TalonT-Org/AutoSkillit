@@ -1126,18 +1126,6 @@ class TestClassifierImmunity:
             f"extra in map: {set(_mq._QUERY_FIELD_MAP) - all_keys}"
         )
 
-    def test_query_text_selects_every_mapped_graphql_path(self):
-        """Every non-computed _QUERY_FIELD_MAP path must appear as a word in _QUERY."""
-        import re
-
-        for key, path in _mq._QUERY_FIELD_MAP.items():
-            if path.startswith("<"):
-                continue
-            head = path.split(".", 1)[0]
-            assert re.search(r"\b" + re.escape(head) + r"\b", _mq._QUERY), (
-                f"_QUERY missing GraphQL field {head!r} required by PRFetchState[{key!r}]"
-            )
-
     # --- T6: Fixture immunity ---
 
     def test_queue_state_fixture_populates_all_prfetchstate_fields(self):

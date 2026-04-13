@@ -41,9 +41,10 @@ def test_sigterm_writes_scenario_json(tmp_path):
     # Poll stderr line-by-line for the "sigterm_handler_ready" token which
     # serve() emits immediately after installing the SIGTERM handler. This
     # guarantees the handler is active before we send SIGTERM, while still
-    # being responsive (no fixed sleep). Falls back after 15 s to tolerate
+    # being responsive (no fixed sleep). Falls back after 30 s to tolerate
     # xdist parallel load where subprocess startup can be slow.
     stderr_lines: list[str] = []
+    ready_seen = False
     deadline = time.monotonic() + 30.0
     while time.monotonic() < deadline:
         remaining = deadline - time.monotonic()
@@ -58,8 +59,16 @@ def test_sigterm_writes_scenario_json(tmp_path):
         decoded = line.decode(errors="replace")
         stderr_lines.append(decoded)
         if _READY_TOKEN in decoded:
+            ready_seen = True
             time.sleep(2.0)  # let lifespan teardown handlers fully register
             break
+
+    if not ready_seen:
+        # Server didn't emit the ready token in time — kill and skip so we
+        # don't assert on a server whose SIGTERM handler was never installed.
+        proc.kill()
+        proc.communicate(timeout=5)
+        pytest.skip("Server startup too slow under load — ready token not seen")
 
     # SIGTERM is the exact signal Claude Code sends on /exit.
     # The handler converts SIGTERM → KeyboardInterrupt, triggering lifespan

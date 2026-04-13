@@ -1,5 +1,5 @@
 ---
-name: write-report
+name: generate-report
 categories: [research]
 description: Synthesize experiment results into a structured research report in the research/ folder. Supports --inconclusive flag.
 hooks:
@@ -7,7 +7,7 @@ hooks:
     - matcher: "*"
       hooks:
         - type: command
-          command: "echo '[SKILL: write-report] Writing research report...'"
+          command: "echo '[SKILL: generate-report] Writing research report...'"
           once: true
 ---
 

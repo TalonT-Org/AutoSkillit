@@ -96,7 +96,7 @@ Two-phase technical research recipe. Phase 1 scopes a research question and open
 | `base_branch` | `main` | Branch to target for the research PR |
 | `setup_phases` | `false` | When `true`, decompose experiment into sequenced setup phases |
 
-**Requires pack:** `research` (pack members: `scope`, `plan-experiment`, `implement-experiment`, `run-experiment`, `write-report`)
+**Requires pack:** `research` (pack members: `scope`, `plan-experiment`, `implement-experiment`, `run-experiment`, `generate-report`)
 
 ## Project Recipes
 

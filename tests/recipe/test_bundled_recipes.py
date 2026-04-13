@@ -1841,7 +1841,7 @@ class TestResearchRecipeStructure:
         assert "--adjust" in step.with_args.get("skill_command", "")
         assert step.on_success == "re_generate_report"
 
-    def test_re_write_report_step(self, recipe) -> None:
+    def test_re_generate_report_step(self, recipe) -> None:
         assert "re_generate_report" in recipe.steps
         step = recipe.steps["re_generate_report"]
         assert step.tool == "run_skill"

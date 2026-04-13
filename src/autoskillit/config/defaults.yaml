@@ -198,7 +198,7 @@ skills:
     - plan-experiment
     - implement-experiment
     - run-experiment
-    - write-report
+    - generate-report
     - validate-audit
     - vis-lens-always-on
     - vis-lens-antipattern

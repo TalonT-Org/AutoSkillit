@@ -1,4 +1,4 @@
-"""Contract tests for write-report SKILL.md — data provenance lifecycle."""
+"""Contract tests for generate-report SKILL.md — data provenance lifecycle."""
 
 from pathlib import Path
 
@@ -7,7 +7,7 @@ SKILL_PATH = (
     / "src"
     / "autoskillit"
     / "skills_extended"
-    / "write-report"
+    / "generate-report"
     / "SKILL.md"
 )
 

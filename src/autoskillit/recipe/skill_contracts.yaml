@@ -1244,7 +1244,7 @@ skills:
     - "results_path = /tmp/run-experiment/results.md\n%%ORDER_UP%%"
     write_behavior: always
 
-  write-report:
+  generate-report:
     inputs:
     - name: worktree_path
       type: directory_path

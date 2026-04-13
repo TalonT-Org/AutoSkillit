@@ -81,6 +81,7 @@ BUNDLED_SKILLS = [
     "open-research-pr",
     "pipeline-summary",
     "plan-experiment",
+    "plan-visualization",
     "prepare-issue",
     "process-issues",
     "rectify",
@@ -119,7 +120,7 @@ BUNDLED_SKILLS = [
     "vis-lens-temporal",
     "vis-lens-uncertainty",
     "write-recipe",
-    "write-report",
+    "generate-report",
 ]
 
 # Internal-only skill documents: injected programmatically, never invocable as slash commands.
@@ -608,7 +609,7 @@ RESEARCH_SKILL_NAMES = {
     "plan-experiment",
     "implement-experiment",
     "run-experiment",
-    "write-report",
+    "generate-report",
     "review-research-pr",
     "prepare-research-pr",
     "compose-research-pr",

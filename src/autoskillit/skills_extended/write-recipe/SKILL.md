@@ -239,7 +239,7 @@ validate-audit, verify-diag,
 vis-lens-always-on, vis-lens-antipattern, vis-lens-caption-annot, vis-lens-chart-select,
 vis-lens-color-access, vis-lens-domain-norms, vis-lens-figure-table, vis-lens-multi-compare,
 vis-lens-reproducibility, vis-lens-story-arc, vis-lens-temporal, vis-lens-uncertainty,
-write-recipe, write-report
+generate-report, write-recipe
 
 ## Skill Reference Disambiguation
 

@@ -33,7 +33,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 
 ### Experiment family
 `scope`, `plan-experiment`, `implement-experiment`, `run-experiment`,
-`write-report`, `troubleshoot-experiment`
+`generate-report`, `troubleshoot-experiment`
 
 ## Tier 3 — pipeline / automation
 

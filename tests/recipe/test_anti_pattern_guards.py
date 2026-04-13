@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import pytest
 import yaml
+from autoskillit.recipe.rules_blocks import _block_budgets  # re-use the cached loader
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+
+def _budget_for(block_name: str) -> dict:  # type: ignore[type-arg]
+    """Return the budget dict for a named block, falling back to the DEFAULT entry."""
+    budgets = _block_budgets()
+    return budgets.get(block_name, budgets.get("DEFAULT", {}))
 
 
 def _all_bundled_recipes():
@@ -107,3 +114,19 @@ def test_merge_prs_has_no_loop_push_kitchen_rule():
     assert not unexpected, (
         f"push_to_remote found in unexpected steps (loop pushes are prohibited): {unexpected}"
     )
+
+
+@pytest.mark.parametrize("recipe_path", _all_bundled_recipes(), ids=lambda p: p.stem)
+def test_no_block_exceeds_run_cmd_budget(recipe_path):
+    """For every RecipeBlock in every bundled recipe, assert run_cmd count ≤ budget.
+
+    Generalises the pre-queue block rule to all future declared blocks.
+    Will FAIL until rules_blocks.py and Recipe.blocks are implemented.
+    """
+    recipe = load_recipe(recipe_path)
+    for block in recipe.blocks:
+        budget = _budget_for(block.name).get("run_cmd", 1)
+        assert block.tool_counts.get("run_cmd", 0) <= budget, (
+            f"{recipe_path.stem}: block {block.name!r} has "
+            f"{block.tool_counts.get('run_cmd', 0)} run_cmd steps (budget {budget})"
+        )

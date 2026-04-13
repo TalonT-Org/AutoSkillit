@@ -144,15 +144,23 @@ def test_implementation_recipe_is_valid(impl_recipe) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_implementation_check_merge_queue_exists(impl_recipe) -> None:
-    """check_merge_queue step must exist in implementation recipe."""
-    assert "check_merge_queue" in impl_recipe.steps
+def test_implementation_has_check_repo_merge_state(impl_recipe) -> None:
+    """check_repo_merge_state step must exist with correct structure."""
+    assert "check_repo_merge_state" in impl_recipe.steps
+    step = impl_recipe.steps["check_repo_merge_state"]
+    assert step.tool == "check_repo_merge_state"
+    assert step.block == "pre_queue_gate"
+    assert set(step.capture or {}) >= {
+        "queue_available",
+        "merge_group_trigger",
+        "auto_merge_available",
+    }
 
 
-def test_implementation_check_merge_queue_has_skip_when_false(impl_recipe) -> None:
-    """check_merge_queue must have skip_when_false: inputs.open_pr."""
-    step = impl_recipe.steps["check_merge_queue"]
-    assert step.skip_when_false == "inputs.open_pr"
+def test_implementation_pre_queue_gate_routes_to_route_queue_mode(impl_recipe) -> None:
+    """check_repo_merge_state.on_success must route to route_queue_mode."""
+    step = impl_recipe.steps["check_repo_merge_state"]
+    assert step.on_success == "route_queue_mode"
 
 
 def test_implementation_route_queue_mode_is_route_action(impl_recipe) -> None:
@@ -182,9 +190,9 @@ def test_implementation_queue_ejected_fix_exists(impl_recipe) -> None:
 
 
 def test_implementation_queue_finale_steps_all_have_skip_when_false(impl_recipe) -> None:
-    """All six new queue finale steps must have skip_when_false: inputs.open_pr."""
+    """All queue finale steps must have skip_when_false: inputs.open_pr."""
     finale_steps = [
-        "check_merge_queue",
+        "check_repo_merge_state",
         "route_queue_mode",
         "enable_auto_merge",
         "wait_for_queue",
@@ -201,10 +209,12 @@ def test_implementation_queue_finale_steps_all_have_skip_when_false(impl_recipe)
         )
 
 
-def test_implementation_ci_watch_routes_to_check_merge_queue_on_success(impl_recipe) -> None:
-    """ci_watch.on_success must route to check_merge_queue."""
+def test_implementation_ci_watch_routes_to_check_repo_merge_state_on_success(
+    impl_recipe,
+) -> None:
+    """ci_watch.on_success must route to check_repo_merge_state."""
     step = impl_recipe.steps["ci_watch"]
-    assert step.on_success == "check_merge_queue"
+    assert step.on_success == "check_repo_merge_state"
 
 
 def test_implementation_extract_pr_number_exists(impl_recipe) -> None:
@@ -218,43 +228,6 @@ def test_implementation_compose_pr_routes_to_extract_pr_number(impl_recipe) -> N
     """compose_pr.on_success must route to extract_pr_number."""
     step = impl_recipe.steps["compose_pr"]
     assert step.on_success == "extract_pr_number"
-
-
-# ---------------------------------------------------------------------------
-# implementation.yaml — check_merge_group_trigger
-# ---------------------------------------------------------------------------
-
-
-def test_implementation_check_merge_group_trigger_exists(impl_recipe) -> None:
-    """check_merge_group_trigger step must exist in implementation recipe."""
-    assert "check_merge_group_trigger" in impl_recipe.steps
-
-
-def test_implementation_check_merge_group_trigger_skip_when_false_is_open_pr(impl_recipe) -> None:
-    """check_merge_group_trigger must use skip_when_false: inputs.open_pr."""
-    step = impl_recipe.steps["check_merge_group_trigger"]
-    assert step.skip_when_false == "inputs.open_pr"
-
-
-def test_implementation_check_merge_group_trigger_captures_merge_group_trigger(
-    impl_recipe,
-) -> None:
-    """check_merge_group_trigger must capture merge_group_trigger."""
-    step = impl_recipe.steps["check_merge_group_trigger"]
-    assert "merge_group_trigger" in step.capture
-
-
-def test_implementation_check_merge_group_trigger_routes_to_check_auto_merge(impl_recipe) -> None:
-    """check_merge_group_trigger.on_success and on_failure must both route to check_auto_merge."""
-    step = impl_recipe.steps["check_merge_group_trigger"]
-    assert step.on_success == "check_auto_merge"
-    assert step.on_failure == "check_auto_merge"
-
-
-def test_implementation_check_merge_queue_routes_to_check_merge_group_trigger(impl_recipe) -> None:
-    """check_merge_queue.on_success must route to check_merge_group_trigger."""
-    step = impl_recipe.steps["check_merge_queue"]
-    assert step.on_success == "check_merge_group_trigger"
 
 
 def test_implementation_route_queue_mode_requires_merge_group_trigger(impl_recipe) -> None:
@@ -292,15 +265,17 @@ def test_remediation_recipe_is_valid(remed_recipe) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_remediation_check_merge_queue_exists(remed_recipe) -> None:
-    """check_merge_queue step must exist in remediation recipe."""
-    assert "check_merge_queue" in remed_recipe.steps
-
-
-def test_remediation_check_merge_queue_has_skip_when_false(remed_recipe) -> None:
-    """check_merge_queue must have skip_when_false: inputs.open_pr."""
-    step = remed_recipe.steps["check_merge_queue"]
-    assert step.skip_when_false == "inputs.open_pr"
+def test_remediation_has_check_repo_merge_state(remed_recipe) -> None:
+    """check_repo_merge_state step must exist with correct structure in remediation."""
+    assert "check_repo_merge_state" in remed_recipe.steps
+    step = remed_recipe.steps["check_repo_merge_state"]
+    assert step.tool == "check_repo_merge_state"
+    assert step.block == "pre_queue_gate"
+    assert set(step.capture or {}) >= {
+        "queue_available",
+        "merge_group_trigger",
+        "auto_merge_available",
+    }
 
 
 def test_remediation_route_queue_mode_is_route_action(remed_recipe) -> None:
@@ -330,9 +305,9 @@ def test_remediation_queue_ejected_fix_exists(remed_recipe) -> None:
 
 
 def test_remediation_queue_finale_steps_all_have_skip_when_false(remed_recipe) -> None:
-    """All new queue finale steps must have skip_when_false: inputs.open_pr."""
+    """All queue finale steps must have skip_when_false: inputs.open_pr."""
     finale_steps = [
-        "check_merge_queue",
+        "check_repo_merge_state",
         "route_queue_mode",
         "enable_auto_merge",
         "wait_for_queue",
@@ -349,10 +324,12 @@ def test_remediation_queue_finale_steps_all_have_skip_when_false(remed_recipe) -
         )
 
 
-def test_remediation_ci_watch_routes_to_check_merge_queue_on_success(remed_recipe) -> None:
-    """ci_watch.on_success must route to check_merge_queue."""
+def test_remediation_ci_watch_routes_to_check_repo_merge_state_on_success(
+    remed_recipe,
+) -> None:
+    """ci_watch.on_success must route to check_repo_merge_state."""
     step = remed_recipe.steps["ci_watch"]
-    assert step.on_success == "check_merge_queue"
+    assert step.on_success == "check_repo_merge_state"
 
 
 def test_remediation_extract_pr_number_exists(remed_recipe) -> None:
@@ -366,41 +343,6 @@ def test_remediation_compose_pr_routes_to_extract_pr_number(remed_recipe) -> Non
     """compose_pr.on_success must route to extract_pr_number."""
     step = remed_recipe.steps["compose_pr"]
     assert step.on_success == "extract_pr_number"
-
-
-# ---------------------------------------------------------------------------
-# remediation.yaml — check_merge_group_trigger
-# ---------------------------------------------------------------------------
-
-
-def test_remediation_check_merge_group_trigger_exists(remed_recipe) -> None:
-    """check_merge_group_trigger step must exist in remediation recipe."""
-    assert "check_merge_group_trigger" in remed_recipe.steps
-
-
-def test_remediation_check_merge_group_trigger_skip_when_false_is_open_pr(remed_recipe) -> None:
-    """check_merge_group_trigger must use skip_when_false: inputs.open_pr."""
-    step = remed_recipe.steps["check_merge_group_trigger"]
-    assert step.skip_when_false == "inputs.open_pr"
-
-
-def test_remediation_check_merge_group_trigger_captures_merge_group_trigger(remed_recipe) -> None:
-    """check_merge_group_trigger must capture merge_group_trigger."""
-    step = remed_recipe.steps["check_merge_group_trigger"]
-    assert "merge_group_trigger" in step.capture
-
-
-def test_remediation_check_merge_group_trigger_routes_to_check_auto_merge(remed_recipe) -> None:
-    """check_merge_group_trigger.on_success and on_failure must both route to check_auto_merge."""
-    step = remed_recipe.steps["check_merge_group_trigger"]
-    assert step.on_success == "check_auto_merge"
-    assert step.on_failure == "check_auto_merge"
-
-
-def test_remediation_check_merge_queue_routes_to_check_merge_group_trigger(remed_recipe) -> None:
-    """check_merge_queue.on_success must route to check_merge_group_trigger."""
-    step = remed_recipe.steps["check_merge_queue"]
-    assert step.on_success == "check_merge_group_trigger"
 
 
 def test_remediation_route_queue_mode_requires_merge_group_trigger(remed_recipe) -> None:
@@ -417,22 +359,11 @@ def test_remediation_route_queue_mode_requires_merge_group_trigger(remed_recipe)
     assert "merge_group_trigger" in cond_when
 
 
-# ---------------------------------------------------------------------------
-# implementation-groups.yaml — check_merge_group_trigger
-# ---------------------------------------------------------------------------
-
-
-def test_impl_groups_check_merge_group_trigger_exists(impl_groups_recipe) -> None:
-    """check_merge_group_trigger step must exist in implementation-groups recipe."""
-    assert "check_merge_group_trigger" in impl_groups_recipe.steps
-
-
-def test_impl_groups_check_merge_queue_routes_to_check_merge_group_trigger(
-    impl_groups_recipe,
-) -> None:
-    """check_merge_queue.on_success must route to check_merge_group_trigger."""
-    step = impl_groups_recipe.steps["check_merge_queue"]
-    assert step.on_success == "check_merge_group_trigger"
+def test_impl_groups_has_check_repo_merge_state(impl_groups_recipe) -> None:
+    """check_repo_merge_state step must exist in implementation-groups recipe."""
+    assert "check_repo_merge_state" in impl_groups_recipe.steps
+    step = impl_groups_recipe.steps["check_repo_merge_state"]
+    assert step.block == "pre_queue_gate"
 
 
 def test_impl_groups_route_queue_mode_requires_merge_group_trigger(impl_groups_recipe) -> None:
@@ -572,45 +503,37 @@ def test_direct_merge_steps_have_skip_when_false(any_recipe) -> None:
 
 
 # ---------------------------------------------------------------------------
-# check_auto_merge detection step
+# check_repo_merge_state — consolidated pre-queue gate step (any_recipe)
 # ---------------------------------------------------------------------------
 
 
-def test_check_auto_merge_step_exists(any_recipe) -> None:
-    """check_auto_merge step must exist in all three recipes."""
-    assert "check_auto_merge" in any_recipe.steps
+def test_check_repo_merge_state_step_exists(any_recipe) -> None:
+    """check_repo_merge_state step must exist in all three queue-capable recipes."""
+    assert "check_repo_merge_state" in any_recipe.steps
 
 
-def test_check_auto_merge_is_run_cmd(any_recipe) -> None:
-    step = any_recipe.steps["check_auto_merge"]
-    assert step.tool == "run_cmd"
+def test_check_repo_merge_state_captures_all_three_fields(any_recipe) -> None:
+    step = any_recipe.steps["check_repo_merge_state"]
+    assert set(step.capture or {}) >= {
+        "queue_available",
+        "merge_group_trigger",
+        "auto_merge_available",
+    }
 
 
-def test_check_auto_merge_captures_auto_merge_available(any_recipe) -> None:
-    step = any_recipe.steps["check_auto_merge"]
-    assert "auto_merge_available" in (step.capture or {})
-
-
-def test_check_auto_merge_routes_to_route_queue_mode_on_success(any_recipe) -> None:
-    step = any_recipe.steps["check_auto_merge"]
+def test_check_repo_merge_state_routes_to_route_queue_mode_on_success(any_recipe) -> None:
+    step = any_recipe.steps["check_repo_merge_state"]
     assert step.on_success == "route_queue_mode"
 
 
-def test_check_auto_merge_routes_to_route_queue_mode_on_failure(any_recipe) -> None:
-    """On failure, auto_merge_available is unset; route_queue_mode defaults to immediate_merge."""
-    step = any_recipe.steps["check_auto_merge"]
-    assert step.on_failure == "route_queue_mode"
-
-
-def test_check_auto_merge_has_skip_when_false(any_recipe) -> None:
-    step = any_recipe.steps["check_auto_merge"]
+def test_check_repo_merge_state_has_skip_when_false(any_recipe) -> None:
+    step = any_recipe.steps["check_repo_merge_state"]
     assert step.skip_when_false == "inputs.open_pr"
 
 
-def test_check_merge_queue_routes_to_check_merge_group_trigger_on_success(any_recipe) -> None:
-    """check_merge_queue.on_success must route to check_merge_group_trigger."""
-    step = any_recipe.steps["check_merge_queue"]
-    assert step.on_success == "check_merge_group_trigger"
+def test_check_repo_merge_state_is_in_pre_queue_gate_block(any_recipe) -> None:
+    step = any_recipe.steps["check_repo_merge_state"]
+    assert step.block == "pre_queue_gate"
 
 
 def test_route_queue_mode_has_auto_merge_available_condition(any_recipe) -> None:

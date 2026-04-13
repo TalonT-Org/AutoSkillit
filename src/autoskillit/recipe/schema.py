@@ -89,6 +89,7 @@ class RecipeStep:
         default_factory=list
     )  # Context variable names that may be referenced before they are captured (cyclic routes)
     stale_threshold: int | None = None  # None means use global RunSkillConfig.stale_threshold
+    idle_output_timeout: int | None = None  # None = use global cfg; 0 = disabled for this step
 
 
 @dataclass

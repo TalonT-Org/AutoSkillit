@@ -9,12 +9,14 @@ import asyncio
 import re
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
 import httpx
 
 from autoskillit.core import get_logger
+from autoskillit.core.types import PRState
 from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
@@ -114,6 +116,96 @@ mutation EnableAutoMerge($prId: ID!, $mergeMethod: PullRequestMergeMethod!) {
   }
 }
 """
+
+
+# ---------------------------------------------------------------------------
+# Classifier primitives (pure functions — no I/O, no async)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ClassificationResult:
+    """Positive-signal classification outcome from _classify_pr_state."""
+
+    terminal: PRState
+    reason: str
+
+
+class ClassifierInconclusive(Exception):
+    """Raised when no positive gate matched — caller must continue polling.
+
+    The .state attribute exposes the full PRFetchState that was inspected,
+    enabling callers to log or surface the ambiguous fields.
+    """
+
+    def __init__(self, state: PRFetchState, reason: str) -> None:
+        super().__init__(reason)
+        self.state = state
+        self.reason = reason
+
+
+def _is_positive_stall(state: PRFetchState) -> bool:
+    """True when auto-merge is enabled and merge_state_status indicates the PR is
+    stuck in a state where it should be in queue but is not."""
+    return state["auto_merge_enabled_at"] is not None and state["merge_state_status"] in {
+        "CLEAN",
+        "HAS_HOOKS",
+    }
+
+
+def _is_positive_dropped_healthy(state: PRFetchState) -> bool:
+    """True when the PR is fully healthy but auto_merge was cleared externally."""
+    return (
+        state["state"] == "OPEN"
+        and state["mergeable"] == "MERGEABLE"
+        and state["merge_state_status"] == "CLEAN"
+        and state["checks_state"] in (None, "SUCCESS")
+        and state["auto_merge_present"] is False
+        and state["in_queue"] is False
+    )
+
+
+def _classify_pr_state(state: PRFetchState) -> ClassificationResult:
+    """Classify PR state using positive signals only — no fall-through to EJECTED.
+
+    Every return originates from a direct positive signal. When no positive gate
+    matches, raises ClassifierInconclusive so the caller can continue polling
+    within a bounded retry budget rather than silently misclassifying.
+
+    Args:
+        state: Current PR fetch state snapshot.
+
+    Returns:
+        ClassificationResult with the matched terminal PRState.
+
+    Raises:
+        ClassifierInconclusive: When no positive signal matched. .state exposes
+            the full snapshot for logging/surfacing.
+    """
+    if state["merged"]:
+        return ClassificationResult(PRState.MERGED, "PR merged")
+
+    if state["state"] == "CLOSED":
+        if state["checks_state"] in {"FAILURE", "ERROR"}:
+            return ClassificationResult(PRState.EJECTED_CI_FAILURE, "PR closed after CI failure")
+        return ClassificationResult(PRState.EJECTED, "PR closed while not merged")
+
+    if state["checks_state"] in {"FAILURE", "ERROR"}:
+        return ClassificationResult(PRState.EJECTED_CI_FAILURE, "checks terminal failure")
+
+    if _is_positive_stall(state):
+        return ClassificationResult(PRState.STALLED, "stall signals present")
+
+    if state["mergeable"] == "CONFLICTING":
+        return ClassificationResult(PRState.EJECTED, "conflicting changes prevent merge")
+
+    if _is_positive_dropped_healthy(state):
+        return ClassificationResult(PRState.DROPPED_HEALTHY, "PR healthy but auto_merge cleared")
+
+    if state["checks_state"] in {"PENDING", "EXPECTED"}:
+        raise ClassifierInconclusive(state, "checks still running")
+
+    raise ClassifierInconclusive(state, "no positive signal matched")
 
 
 class DefaultMergeQueueWatcher:

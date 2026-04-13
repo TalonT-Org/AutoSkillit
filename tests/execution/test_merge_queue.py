@@ -875,7 +875,7 @@ class TestEjectionEnrichment:
 
     @pytest.mark.anyio
     async def test_ejected_when_checks_state_is_none(self):
-        """When checks_state=None at ejection, pr_state='ejected' with no ejection_cause."""
+        """checks_state=None + mergeable=CONFLICTING → pr_state='ejected', no ejection_cause."""
         watcher = _make_watcher()
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=_queue_state(
@@ -883,6 +883,7 @@ class TestEjectionEnrichment:
                 in_queue=False,
                 checks_state=None,
                 merge_state_status="BLOCKED",
+                mergeable="CONFLICTING",
                 auto_merge_enabled_at=None,
             )
         )
@@ -900,7 +901,7 @@ class TestEjectionEnrichment:
 
     @pytest.mark.anyio
     async def test_ejected_when_checks_state_is_success(self):
-        """When checks_state=SUCCESS at ejection, pr_state='ejected' (no enrichment)."""
+        """checks_state=SUCCESS + mergeable=CONFLICTING → pr_state='ejected', no enrichment."""
         watcher = _make_watcher()
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=_queue_state(
@@ -908,6 +909,7 @@ class TestEjectionEnrichment:
                 in_queue=False,
                 checks_state="SUCCESS",
                 merge_state_status="BLOCKED",
+                mergeable="CONFLICTING",
                 auto_merge_enabled_at=None,
             )
         )

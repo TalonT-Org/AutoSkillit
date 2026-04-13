@@ -15,8 +15,7 @@ from typing import Any, TypedDict, assert_never
 
 import httpx
 
-from autoskillit.core import get_logger
-from autoskillit.core.types import PRState
+from autoskillit.core import PRState, get_logger
 from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)

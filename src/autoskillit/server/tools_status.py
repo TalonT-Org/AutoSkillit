@@ -96,7 +96,17 @@ async def get_pipeline_report(clear: bool = False) -> str:
         from autoskillit.server._state import _startup_ready
 
         if _startup_ready is not None and not _startup_ready.is_set():
-            await asyncio.wait_for(_startup_ready.wait(), timeout=30.0)
+            try:
+                await asyncio.wait_for(_startup_ready.wait(), timeout=30.0)
+            except TimeoutError:
+                logger.warning("startup_ready_timeout", timeout=30.0)
+                return json.dumps(
+                    {
+                        "total_failures": 0,
+                        "failures": [],
+                        "warning": "Startup initialization did not complete within 30s",
+                    }
+                )
 
         from autoskillit.server import _get_ctx
 

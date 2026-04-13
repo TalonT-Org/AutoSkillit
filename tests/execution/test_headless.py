@@ -838,6 +838,7 @@ class TestBuildSkillResultCrossValidation:
         "cli_subtype",
         "is_error",
         "exit_code",
+        "kill_reason",
         "needs_retry",
         "retry_reason",
         "stderr",
@@ -1699,6 +1700,8 @@ class TestMarkerCrossValidation:
             (TerminationReason.NATURAL_EXIT, 0, MARKER, False),  # marker-only
             (TerminationReason.COMPLETED, 0, f"Done.\n\n{MARKER}", True),
             (TerminationReason.COMPLETED, -15, f"Done.\n\n{MARKER}", True),
+            (TerminationReason.COMPLETED, -9, f"Done.\n\n{MARKER}", True),
+            (TerminationReason.COMPLETED, -9, "No marker here", False),
             (TerminationReason.COMPLETED, 0, "No marker here", False),
             (TerminationReason.STALE, -15, f"Done.\n\n{MARKER}", False),
             (TerminationReason.TIMED_OUT, -1, f"Done.\n\n{MARKER}", False),
@@ -1709,6 +1712,8 @@ class TestMarkerCrossValidation:
             "natural_exit+marker_only=failure",
             "completed+marker=success",
             "completed_sigterm+marker=success",
+            "completed_sigkill+marker=success",
+            "completed_sigkill+no_marker=failure",
             "completed+no_marker=failure",
             "stale+marker=failure",
             "timed_out+marker=failure",
@@ -1732,6 +1737,37 @@ class TestMarkerCrossValidation:
                 completion_marker=self.MARKER,
             )
             is expected
+        )
+
+    def test_build_skill_result_channel_a_win_preserves_success_with_minus_9(self):
+        """COMPLETED + CHANNEL_A + returncode=-9 + content → success=True (1d).
+
+        Verifies that the adjudicator correctly marks a SIGKILL'd session as
+        successful when Channel A confirmed completion and the result has content
+        with the marker. This is the key assertion that the -9 bug existed at the
+        kill level, not the adjudication level.
+        """
+        ndjson = (
+            '{"type":"result","subtype":"success",'
+            f'"result":"Work done.\\n\\n{self.MARKER}",'
+            '"session_id":"s1","is_error":false}\n'
+        )
+        result = _build_skill_result(
+            SubprocessResult(
+                returncode=-9,
+                stdout=ndjson,
+                stderr="",
+                termination=TerminationReason.COMPLETED,
+                pid=1,
+                channel_confirmation=ChannelConfirmation.CHANNEL_A,
+            ),
+            completion_marker=self.MARKER,
+            skill_command="test-skill",
+            audit=None,
+        )
+        assert result.success is True, (
+            f"Expected success=True for COMPLETED+CHANNEL_A+rc=-9, got success={result.success}, "
+            f"subtype={result.subtype!r}"
         )
 
     def test_build_skill_result_recovers_when_marker_in_separate_assistant_message(self):

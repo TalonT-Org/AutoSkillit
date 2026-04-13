@@ -1779,3 +1779,93 @@ def test_pretty_output_public_surface_unchanged() -> None:
 
     assert callable(p.main)
     assert callable(p._format_response)
+
+
+# PHK-kill-reason: formatter branches on kill_reason (1e)
+
+
+def test_fmt_run_skill_success_with_kill_after_completion_annotates_exit_code() -> None:
+    """kill_reason=kill_after_completion must annotate exit_code line."""
+    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Implementation complete.",
+        "session_id": "abc123",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": -9,
+        "kill_reason": "kill_after_completion",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    assert "exit_code: -9 (infra-terminated after completion" in text, (
+        f"Expected kill_after_completion annotation in exit_code line, got: {text!r}"
+    )
+
+
+def test_fmt_run_skill_success_with_natural_exit_shows_bare_exit_code() -> None:
+    """kill_reason=natural_exit must render bare exit_code without annotation."""
+    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc123",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "kill_reason": "natural_exit",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    assert "exit_code: 0" in text
+    assert "infra-terminated" not in text
+    assert "infra-killed" not in text
+
+
+def test_fmt_run_skill_infra_kill_annotates_reason() -> None:
+    """kill_reason=infra_kill must annotate exit_code with infra-killed."""
+    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": False,
+        "result": "",
+        "session_id": "abc123",
+        "subtype": "timeout",
+        "is_error": True,
+        "exit_code": -9,
+        "kill_reason": "infra_kill",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    assert "infra-killed" in text, (
+        f"Expected 'infra-killed' annotation for infra_kill reason, got: {text!r}"
+    )
+
+
+def test_fmt_run_skill_legacy_payload_without_kill_reason_renders_bare() -> None:
+    """Payload without kill_reason field must render bare exit_code (backward compat)."""
+    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc123",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        # no kill_reason key
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    assert "exit_code: 0" in text
+    assert "infra" not in text

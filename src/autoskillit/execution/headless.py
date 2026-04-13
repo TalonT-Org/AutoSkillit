@@ -884,6 +884,7 @@ def _build_skill_result(
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
             write_call_count=write_call_count,
+            kill_reason=result.kill_reason,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
@@ -1134,6 +1135,7 @@ async def run_headless_core(
                     end_ts=result.end_ts,
                     elapsed_seconds=result.elapsed_seconds,
                     termination_reason=result.termination.value,
+                    kill_reason=skill_result.kill_reason.value,
                     snapshot_interval_seconds=ctx.config.linux_tracing.proc_interval,
                     proc_snapshots=result.proc_snapshots,
                     step_name=step_name,

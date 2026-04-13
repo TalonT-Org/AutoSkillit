@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from ._type_enums import ChannelConfirmation, TerminationReason
+from ._type_enums import ChannelConfirmation, KillReason, TerminationReason
 
 __all__ = [
     "SubprocessResult",
@@ -102,6 +102,12 @@ class SubprocessResult:
     Set by headless.py using time.monotonic() brackets around the subprocess run.
     Consumers (session_log, tokens) must use this float directly — never re-derive
     duration from start_ts/end_ts ISO strings.
+    """
+    kill_reason: KillReason = KillReason.NATURAL_EXIT
+    """Why the subprocess was (or was not) killed after the race loop.
+
+    Set by run_managed_async via execute_termination_action. Surfaces to SkillResult
+    so the formatter can annotate exit_code with the kill cause.
     """
 
 

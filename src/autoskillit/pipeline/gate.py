@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
+from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS, KillReason  # noqa: F401
 
 
 @dataclass(slots=True)
@@ -56,6 +56,7 @@ def gate_error_result(message: str | None = None) -> str:
             "cli_subtype": "",
             "is_error": True,
             "exit_code": -1,
+            "kill_reason": KillReason.NATURAL_EXIT,
             "needs_retry": False,
             "retry_reason": "none",
             "stderr": "",
@@ -89,6 +90,7 @@ def headless_error_result(message: str | None = None) -> str:
             "cli_subtype": "",
             "is_error": True,
             "exit_code": -1,
+            "kill_reason": KillReason.NATURAL_EXIT,
             "needs_retry": False,
             "retry_reason": "none",
             "stderr": "",

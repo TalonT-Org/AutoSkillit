@@ -12,7 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
-from ._type_enums import RetryReason, SessionOutcome
+from ._type_enums import KillReason, RetryReason, SessionOutcome
 
 T = TypeVar("T")
 
@@ -145,6 +145,12 @@ class SkillResult:
     write_path_warnings: list[str] = field(default_factory=list)
     write_call_count: int = 0
     order_id: str = ""
+    kill_reason: KillReason = KillReason.NATURAL_EXIT
+    """Why the subprocess was (or was not) killed after the race loop.
+
+    Surfaces from SubprocessResult so the formatter can annotate exit_code
+    with the kill cause, resolving the "success=True + exit_code=-9" contradiction.
+    """
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -155,6 +161,7 @@ class SkillResult:
             "cli_subtype": self.cli_subtype,
             "is_error": self.is_error,
             "exit_code": self.exit_code,
+            "kill_reason": self.kill_reason.value,
             "needs_retry": self.needs_retry,
             "retry_reason": self.retry_reason,
             "stderr": self.stderr,

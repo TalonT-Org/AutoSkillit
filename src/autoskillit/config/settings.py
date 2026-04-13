@@ -92,9 +92,21 @@ class RunSkillConfig:
     stale_threshold: int = 1200  # 20 minutes
     completion_marker: str = "%%ORDER_UP%%"
     completion_drain_timeout: float = 5.0
-    exit_after_stop_delay_ms: int = 120000
+    exit_after_stop_delay_ms: int = 2000
+    natural_exit_grace_seconds: float = 3.0
     idle_output_timeout: int = 600
     max_suppression_seconds: int = 1800
+
+    def __post_init__(self) -> None:
+        required_ms = self.exit_after_stop_delay_ms + 500
+        if self.natural_exit_grace_seconds * 1000 < required_ms:
+            raise ValueError(
+                f"natural_exit_grace_seconds={self.natural_exit_grace_seconds} is too small: "
+                f"{self.natural_exit_grace_seconds * 1000:.0f}ms < "
+                f"{required_ms}ms (exit_after_stop_delay_ms + 500). "
+                "Increase natural_exit_grace_seconds so the drain window can absorb the "
+                "CLI self-exit delay."
+            )
 
     @property
     def output_format(self) -> OutputFormat:
@@ -398,6 +410,9 @@ class AutomationConfig:
                 ),
                 exit_after_stop_delay_ms=int(
                     val(rs, "exit_after_stop_delay_ms", _rs["exit_after_stop_delay_ms"])
+                ),
+                natural_exit_grace_seconds=float(
+                    val(rs, "natural_exit_grace_seconds", _rs["natural_exit_grace_seconds"])
                 ),
                 idle_output_timeout=int(
                     val(rs, "idle_output_timeout", _rs["idle_output_timeout"])

@@ -244,7 +244,74 @@ class TestRaceSignalsFieldCount:
     """Sentinel test: breaks when RaceSignals fields change."""
 
     def test_race_signals_field_count(self) -> None:
-        assert len(dataclasses.fields(RaceSignals)) == 7, (
-            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 7). "
+        assert len(dataclasses.fields(RaceSignals)) == 8, (
+            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 8). "
             "Update tests to cover the new field."
         )
+
+
+class TestProcessExitedEvent:
+    """process_exited_event on RaceAccumulator / RaceSignals (1h)."""
+
+    @pytest.mark.anyio
+    async def test_watch_process_sets_both_event_and_flag(self, tmp_path) -> None:
+        """_watch_process must set acc.process_exited=True AND process_exited_event."""
+        import sys
+
+        import anyio
+
+        from autoskillit.execution._process_race import _watch_process
+
+        acc = RaceAccumulator()
+        trigger = anyio.Event()
+
+        proc = await anyio.open_process(
+            [sys.executable, "-c", "import time; time.sleep(0.2)"],
+            start_new_session=True,
+        )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_watch_process, proc, acc, trigger)
+            await trigger.wait()
+            tg.cancel_scope.cancel()
+
+        assert acc.process_exited is True
+        assert acc.process_exited_event.is_set() is True
+
+    @pytest.mark.anyio
+    async def test_process_exited_event_fires_before_trigger(self, tmp_path) -> None:
+        """When trigger fires due to process exit, process_exited_event must already be set."""
+        import sys
+
+        import anyio
+
+        from autoskillit.execution._process_race import _watch_process
+
+        acc = RaceAccumulator()
+        trigger = anyio.Event()
+
+        proc = await anyio.open_process(
+            [sys.executable, "-c", "import time; time.sleep(0.1)"],
+            start_new_session=True,
+        )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_watch_process, proc, acc, trigger)
+            await trigger.wait()
+            # trigger just fired — process_exited_event must already be set
+            event_was_set = acc.process_exited_event.is_set()
+            tg.cancel_scope.cancel()
+
+        assert event_was_set, "process_exited_event was not set before trigger fired"
+
+    def test_process_exited_event_propagates_to_signals(self) -> None:
+        """process_exited_event propagates to RaceSignals via to_race_signals()."""
+
+        acc = RaceAccumulator()
+        signals = acc.to_race_signals()
+        # The event object is shared (same reference)
+        assert signals.process_exited_event is acc.process_exited_event
+
+        # After setting the event, it is set on both
+        acc.process_exited_event.set()
+        assert signals.process_exited_event.is_set()

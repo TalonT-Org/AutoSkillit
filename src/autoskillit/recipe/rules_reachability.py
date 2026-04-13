@@ -26,7 +26,6 @@ from autoskillit.recipe._analysis import (
     ValidationContext,
     _bfs_reachable,
     _bfs_with_facts,
-    _build_step_graph,
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
@@ -44,7 +43,9 @@ def _find_context_refs_in_step(step_name: str, ctx: ValidationContext) -> list[s
     if step is None:
         return []
     refs: list[str] = []
-    for val in (step.with_args or {}).values():
+    for key, val in (step.with_args or {}).items():
+        if key == "skill_command":
+            continue  # handled below to avoid double-scan via values()
         if isinstance(val, str):
             refs.extend(_CTX_REF_RE.findall(val))
     skill_cmd = (step.with_args or {}).get("skill_command", "")
@@ -103,6 +104,13 @@ def _check_capture_inversion(ctx: ValidationContext) -> list[RuleFinding]:
 
     facts = _bfs_with_facts(ctx.step_graph, ctx.recipe, start=entry)
 
+    # Pre-compute the full conditional fact domain once — not inside the inner loop.
+    all_facts_in_recipe: set[tuple[str, str]] = set()
+    for node_facts in facts.values():
+        for fs in node_facts:
+            all_facts_in_recipe.update(fs)
+    recipe_fact_vars = {v for v, _ in all_facts_in_recipe}
+
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
         context_refs = _find_context_refs_in_step(step_name, ctx)
@@ -117,11 +125,6 @@ def _check_capture_inversion(ctx: ValidationContext) -> list[RuleFinding]:
             # Only flag vars that appear in the conditional fact domain of the recipe.
             # If no step establishes (var, value) via a conditional edge, the var is
             # captured unconditionally — not an inversion.
-            all_facts_in_recipe: set[tuple[str, str]] = set()
-            for node_facts in facts.values():
-                for fs in node_facts:
-                    all_facts_in_recipe.update(fs)
-            recipe_fact_vars = {v for v, _ in all_facts_in_recipe}
 
             if var not in recipe_fact_vars:
                 continue  # var is not conditionally established anywhere — skip
@@ -189,7 +192,9 @@ def _check_event_scope_requires_upstream_capture(ctx: ValidationContext) -> list
             continue  # producer is upstream — context is known
 
         producer_desc = (
-            f"producer step {mg_producer!r}" if mg_producer else "no producer for merge_group_trigger"
+            f"producer step {mg_producer!r}"
+            if mg_producer
+            else "no producer for merge_group_trigger"
         )
         findings.append(
             RuleFinding(
@@ -200,7 +205,7 @@ def _check_event_scope_requires_upstream_capture(ctx: ValidationContext) -> list
                     f"wait_for_ci step {step_name!r} hardcodes event={event!r} without "
                     f"an upstream merge_group_trigger capture ({producer_desc} "
                     f"is not an ancestor). On a repo that only triggers on merge_group, "
-                    f"this produces a no_runs timeout. Use event: \"${{{{ context.ci_event }}}}\" "
+                    f'this produces a no_runs timeout. Use event: "${{{{ context.ci_event }}}}" '
                     f"and capture ci_event from check_repo_merge_state upstream."
                 ),
             )

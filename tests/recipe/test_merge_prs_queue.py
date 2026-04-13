@@ -993,3 +993,31 @@ def test_queue_enqueue_no_auto_skip_when_false(any_recipe) -> None:
 def test_queue_enqueue_no_auto_step_name(any_recipe) -> None:
     step = any_recipe.steps["queue_enqueue_no_auto"]
     assert step.with_args["step_name"] == "queue_enqueue_no_auto"
+
+
+# ---------------------------------------------------------------------------
+# T9A: Minimal routing — dropped_healthy arm exists on all three recipes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
+def test_wait_for_queue_routes_dropped_healthy_to_cheap_reenter(recipe_fixture, request):
+    """wait_for_queue.on_result must route dropped_healthy to reenter_merge_queue_cheap."""
+    recipe = request.getfixturevalue(recipe_fixture)
+    step = recipe.steps["wait_for_queue"]
+    assert step.on_result is not None, "wait_for_queue must have on_result"
+    conditions = step.on_result.conditions
+    dropped_routes = [
+        c
+        for c in conditions
+        if c.when is not None
+        and "dropped_healthy" in c.when
+        and c.route == "reenter_merge_queue_cheap"
+    ]
+    assert dropped_routes, (
+        f"wait_for_queue.on_result must route dropped_healthy to reenter_merge_queue_cheap"
+        f" in {recipe_fixture}"
+    )
+    assert "reenter_merge_queue_cheap" in recipe.steps, (
+        f"reenter_merge_queue_cheap step must exist in {recipe_fixture}"
+    )

@@ -41,6 +41,9 @@ def test_all_cli_prompts_use_timed_prompt_or_are_exempt() -> None:
             continue
         source = py_file.read_text()
         tree = ast.parse(source, filename=str(py_file))
+        rel_path = py_file.relative_to(Path("src"))
+
+        # Check inside function/method bodies
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -50,11 +53,25 @@ def test_all_cli_prompts_use_timed_prompt_or_are_exempt() -> None:
                 for n in ast.walk(ast.Module(body=node.body, type_ignores=[]))
             )
             if has_input:
-                rel_path = py_file.relative_to(Path("src"))
                 violations.append(
                     f"{rel_path}:{node.lineno}: {func_name}() calls raw input() — "
                     f"use timed_prompt() from _timed_input.py instead"
                 )
+
+        # Check module-level code (outside any function or class)
+        for stmt in tree.body:
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            for n in ast.walk(stmt):
+                if (
+                    isinstance(n, ast.Call)
+                    and isinstance(n.func, ast.Name)
+                    and n.func.id == "input"
+                ):
+                    violations.append(
+                        f"{rel_path}:{n.lineno}: <module-level> calls raw input() — "
+                        f"use timed_prompt() from _timed_input.py instead"
+                    )
 
     assert not violations, (
         "The following CLI functions call input() directly instead of timed_prompt().\n"

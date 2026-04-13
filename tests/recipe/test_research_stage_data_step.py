@@ -71,7 +71,7 @@ def test_stage_data_fail_does_not_route_to_decompose_phases(recipe) -> None:
     """stage_data FAIL verdict must not route to decompose_phases."""
     step = recipe.steps["stage_data"]
     assert step.on_result is not None
-    assert step.on_result.routes.get("FAIL") != "decompose_phases"
+    assert step.on_result.routes["FAIL"] == "escalate_stop"
 
 
 def test_stage_data_on_failure_escalates(recipe) -> None:

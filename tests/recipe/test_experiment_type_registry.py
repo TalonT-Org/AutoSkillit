@@ -82,7 +82,7 @@ def test_dimension_weights_match_skill_matrix() -> None:
     causal = types["causal_inference"]
     assert causal.dimension_weights["causal_structure"] == "H"
     assert causal.dimension_weights["statistical_corrections"] == "H"
-    assert causal.dimension_weights["causal_structure"] == "H"
+    assert causal.dimension_weights["variance_protocol"] == "L"
 
     config = types["configuration_study"]
     assert config.dimension_weights["causal_structure"] == "S"

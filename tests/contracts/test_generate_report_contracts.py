@@ -57,7 +57,10 @@ def test_domain_adaptive_ordering_guidance() -> None:
         "generate-report/SKILL.md has no domain-adaptive ordering guidance. "
         "Add notes on biology/non-engineering section ordering conventions."
     )
-    assert "domain" in lower
+    assert "domain-adaptive" in lower, (
+        "generate-report/SKILL.md must mention 'domain-adaptive' section ordering "
+        "to verify the guidance actually covers non-engineering conventions."
+    )
 
 
 def test_data_availability_section_supported() -> None:

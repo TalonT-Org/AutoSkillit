@@ -3140,6 +3140,7 @@ class TestOutputPathTokensDerivedFromContracts:
             "triage_report",
             "visualization_plan_path",
             "html_path",
+            "resource_report",
         }
     )
 

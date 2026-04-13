@@ -239,6 +239,8 @@ def test_output_path_tokens_synchronized() -> None:
             "report_plan_path",
             # bundle-local-report output (groupG)
             "html_path",
+            # stage-data skill output (resource feasibility report path)
+            "resource_report",
         }
     )
 

@@ -404,18 +404,19 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
             continue
 
         # Gate 4: comm-based alien file rejection (issue #806 immunity)
-        # If the first snapshot has a non-empty comm that is not "claude", this trace
-        # file describes a non-autoskillit process and should be excluded from recovery.
-        # Pre-fix snapshots (comm absent or empty) are recovered as-is to avoid
-        # silently dropping legitimate crash data.
+        # Use enrollment.comm as the expected comm (schema_version=2 records carry the
+        # enrolled binary name). Pre-fix schema_version=1 records have comm="" — skip
+        # the check for those to preserve recovery of legitimate crash data.
         _is_alien = False
-        if snapshots:
+        expected_comm = enrollment.comm
+        if snapshots and expected_comm:
             first_comm = snapshots[0].get("comm", "")
-            if first_comm and isinstance(first_comm, str) and first_comm != "claude":
+            if first_comm and isinstance(first_comm, str) and first_comm != expected_comm:
                 logger.debug(
-                    "Skipping %s: alien comm '%s' (expected 'claude')",
+                    "Skipping %s: alien comm '%s' (expected '%s')",
                     trace_file.name,
                     first_comm,
+                    expected_comm,
                 )
                 _is_alien = True
         if _is_alien:

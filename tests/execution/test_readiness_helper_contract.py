@@ -32,11 +32,7 @@ def _has_subprocess_signal(func_node: ast.FunctionDef | ast.AsyncFunctionDef) ->
         func = node.func
         if isinstance(func, ast.Attribute) and func.attr in ("send_signal", "Popen"):
             return True
-        if (
-            isinstance(func, ast.Name) and func.attr in ("Popen",)
-            if hasattr(func, "attr")
-            else False
-        ):  # noqa: E501
+        if isinstance(func, ast.Name) and func.id == "Popen":
             return True
     return False
 

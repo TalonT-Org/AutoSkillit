@@ -125,7 +125,7 @@ def make_context(
     config: AutomationConfig,
     *,
     runner: SubprocessRunner | None = _UNSET,
-    plugin_dir: str | None = None,
+    plugin_dir: str | None = _UNSET,
 ) -> ToolContext:
     """Create a fully-wired ToolContext with all 22 service fields populated.
 
@@ -141,8 +141,10 @@ def make_context(
         runner: Subprocess runner implementation. Defaults to DefaultSubprocessRunner()
                 for production use. Pass runner=None explicitly to disable the
                 tester (useful in tests that don't need real subprocess execution).
-        plugin_dir: Absolute path to the autoskillit plugin directory. Defaults
-                    to the autoskillit package directory (parent of server/).
+        plugin_dir: Absolute path to the autoskillit plugin directory.
+                    Pass None explicitly to indicate the plugin is installed
+                    (marketplace install; no --plugin-dir needed). When omitted
+                    (sentinel), auto-detects via _is_plugin_installed().
 
     Returns:
         ToolContext with gate starting closed (enabled=False) in all contexts.
@@ -203,7 +205,7 @@ def make_context(
 
     resolved_dir = (
         plugin_dir
-        if plugin_dir is not None
+        if plugin_dir is not _UNSET
         else (_default_plugin_dir() if not _is_plugin_installed() else None)
     )
     gate = DefaultGateState(enabled=False)

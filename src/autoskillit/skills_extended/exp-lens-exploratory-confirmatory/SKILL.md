@@ -56,7 +56,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/exp_diag_exploratory_confirmatory_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

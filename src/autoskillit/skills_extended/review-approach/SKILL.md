@@ -36,11 +36,10 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
 - Tie research back to the specific problem context
 - Include source URLs for all referenced material
 - After writing the review file, emit the **absolute path** as a structured output
-  token immediately before `%%ORDER_UP%%`. Resolve the relative `temp/review-approach/...`
+  token as your final output. Resolve the relative `temp/review-approach/...`
   save path to absolute by prepending the full CWD:
   ```
   review_path = /absolute/cwd/temp/review-approach/{filename}.md
-  %%ORDER_UP%%
   ```
   This token is MANDATORY — the pipeline cannot proceed without it.
 

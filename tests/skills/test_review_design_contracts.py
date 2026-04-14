@@ -227,11 +227,6 @@ def test_revision_guidance_only_on_revise(skill_text):
     )
 
 
-def test_order_up_terminator_present(skill_text):
-    """%%ORDER_UP%% must be the final terminal marker after token emission."""
-    assert "%%ORDER_UP%%" in skill_text
-
-
 # ── Section-scoped helpers ────────────────────────────────────────────────────
 
 

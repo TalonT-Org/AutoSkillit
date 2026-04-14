@@ -452,7 +452,7 @@ This token is mandatory. The recipe captures it to route between re-validation
 
 ## Output
 
-Emit the structured output tokens as the very last lines before `%%ORDER_UP%%`:
+Emit the structured output tokens as the very last lines as your final output:
 
 > **IMPORTANT:** Emit the tokens as **literal plain text with no code fences, no markdown formatting**. The recipe capture system reads raw stdout.
 
@@ -460,7 +460,6 @@ Emit the structured output tokens as the very last lines before `%%ORDER_UP%%`:
 needs_rerun = {true|false}
 verdict = {real_fix|already_green}
 fixes_applied = {N}
-%%ORDER_UP%%
 ```
 
 Summary: `{{AUTOSKILLIT_TEMP}}/resolve-research-review/report_{pr}_{ts}.md` (relative to the current working directory)

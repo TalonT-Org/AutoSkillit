@@ -57,7 +57,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/exp_diag_randomization_blocking_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

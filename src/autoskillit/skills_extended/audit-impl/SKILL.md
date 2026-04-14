@@ -57,12 +57,11 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Resolve all plan files before starting (abort early if any are missing)
 - Write `Dry-walkthrough verified = TRUE` as the absolute first line of any remediation file
 - On a NO GO verdict, after writing the remediation file, emit the **absolute path** as a
-  structured output token immediately before `%%ORDER_UP%%`. Resolve the relative
+  structured output token as your final output. Resolve the relative
   `temp/audit-impl/...` save path to absolute by prepending the full CWD:
   ```
   verdict = NO GO
   remediation_path = /absolute/cwd/temp/audit-impl/{filename}.md
-  %%ORDER_UP%%
   ```
   On a GO verdict, emit only `verdict = GO` (no remediation_path token).
   The remediation_path token is MANDATORY on NO GO — the pipeline cannot proceed without it.

@@ -13,10 +13,10 @@ mermaid diagrams and inserted plot images from `yaml:figure-spec` blocks.
 **NEVER:**
 - Raise a fatal error on missing diagrams or missing visualization-plan — log and continue.
 - Use the ESM mermaid build — ESM triggers CORS under `file://`; always use the UMD bundle (`mermaid.min.js`).
-- Exit without emitting `html_path = ` (even empty) before `%%ORDER_UP%%` — the recipe `capture:` block expects it.
+- Exit without emitting `html_path = ` (even empty) as your final output — the recipe `capture:` block expects it.
 
 **ALWAYS:**
-- Emit `html_path = {path}` (or `html_path = ` if report_path is absent) before `%%ORDER_UP%%`.
+- Emit `html_path = {path}` (or `html_path = ` if report_path is absent) as your final output.
 - Use `{AUTOSKILLIT_TEMP}` as the base for temp files.
 - Using ONLY classDef styles from the mermaid skill (no invented colors).
 
@@ -28,7 +28,7 @@ Positional (space-separated, injected by recipe):
 3. `all_diagram_paths`        — comma-separated list of exp-lens diagram paths (may be empty)
 4. `visualization_plan_path`  — absolute path to visualization-plan.md (may be empty string)
 
-Output: `html_path = {absolute_path_to_report.html}` before `%%ORDER_UP%%`.
+Output: `html_path = {absolute_path_to_report.html}` as your final output.
 
 ## Steps
 
@@ -40,7 +40,7 @@ Capture positional args:
 - `$3` → `all_diagram_paths` (comma-separated, may be empty)
 - `$4` → `visualization_plan_path` (may be empty string)
 
-If `report_path` does not exist, emit `html_path = ` (empty) and `%%ORDER_UP%%` immediately
+If `report_path` does not exist, emit `html_path = ` (empty) immediately
 (graceful non-fatal exit — the pipeline continues to begin_archival).
 
 ### Step 1 — Write and execute the embedded renderer
@@ -53,9 +53,9 @@ python3 {AUTOSKILLIT_TEMP}/bundle-local-report-render.py "$1" "$2" "$3" "$4"
 ```
 
 Capture the stdout line `html_path = ...` and emit it as the structured output token
-before `%%ORDER_UP%%`.
+as your final output.
 
-**ALWAYS** emit `html_path = ` (even empty) before `%%ORDER_UP%%` — the recipe `capture:`
+**ALWAYS** emit `html_path = ` (even empty) as your final output — the recipe `capture:`
 block expects it.
 
 **NEVER** raise a fatal error on missing diagrams or missing visualization-plan — log and

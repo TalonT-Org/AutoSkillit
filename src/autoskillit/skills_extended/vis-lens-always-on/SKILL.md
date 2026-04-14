@@ -57,7 +57,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-always-on/vis_spec_always_on_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

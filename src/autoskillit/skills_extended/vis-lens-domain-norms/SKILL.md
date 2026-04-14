@@ -78,7 +78,6 @@ overlays. The base lens should remain general enough to bootstrap any sub-area.
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-domain-norms/vis_spec_domain_norms_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

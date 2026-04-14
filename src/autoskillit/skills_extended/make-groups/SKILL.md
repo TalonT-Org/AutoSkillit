@@ -66,13 +66,12 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - State dependencies between groups explicitly
 - Write to `{{AUTOSKILLIT_TEMP}}/make-groups/` directory (relative to the current working directory)
 - After writing the groups file and manifest, emit the **absolute paths** as structured output
-  tokens immediately before `%%ORDER_UP%%`. Resolve the relative `{{AUTOSKILLIT_TEMP}}/make-groups/...`
+  tokens as your final output. Resolve the relative `{{AUTOSKILLIT_TEMP}}/make-groups/...`
   save paths to absolute by prepending the full CWD:
   ```
   groups_path = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-groups/{groups_filename}.md
   manifest_path = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-groups/{manifest_filename}.json
   group_files = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-groups/{groups_filename}.md
-  %%ORDER_UP%%
   ```
   These tokens are MANDATORY — the pipeline cannot proceed without them.
 

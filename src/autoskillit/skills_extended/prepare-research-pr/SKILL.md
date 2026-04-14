@@ -35,11 +35,11 @@ Does NOT invoke any exp-lens skills or create a PR.
 **NEVER:**
 - Invoke exp-lens skills — they are run in separate sessions by the recipe orchestrator
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-research-pr/` (relative to the current working directory)
-- Fail silently — always emit all three output tokens before `%%ORDER_UP%%`
+- Fail silently — always emit all three output tokens as your final output
 
 **ALWAYS:**
 - Use Agent subagents (not slash commands) for reading and synthesis
-- Emit `prep_path`, `selected_lenses`, and `lens_context_paths` before `%%ORDER_UP%%`
+- Emit `prep_path`, `selected_lenses`, and `lens_context_paths` as your final output
 - Write all output paths as absolute paths
 
 ## Lens Selection Table
@@ -233,13 +233,12 @@ Store the absolute path as `prep_file_path`.
 ## Output
 
 Emit these tokens as **literal plain text** (no markdown formatting on the token names)
-before `%%ORDER_UP%%`:
+as your final output:
 
 ```
 prep_path = /absolute/path/{{AUTOSKILLIT_TEMP}}/prepare-research-pr/pr_prep_{ts}.md
 selected_lenses = fair-comparison,estimand-clarity
 lens_context_paths = /abs/ctx_fair-comparison_{ts}.md,/abs/ctx_estimand-clarity_{ts}.md
-%%ORDER_UP%%
 ```
 
 Where:

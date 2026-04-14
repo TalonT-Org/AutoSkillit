@@ -58,7 +58,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-error-budget/exp_diag_error_budget_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

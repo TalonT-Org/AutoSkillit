@@ -90,11 +90,6 @@ def test_figure_spec_or_spec_index_in_output(slug: str) -> None:
 
 
 @pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
-def test_order_up_present(slug: str) -> None:
-    assert "%%ORDER_UP%%" in _read(slug), f"vis-lens-{slug} missing %%ORDER_UP%% token"
-
-
-@pytest.mark.parametrize("slug", VIS_LENS_SLUGS)
 def test_vis_spec_prefix_in_output_path(slug: str) -> None:
     assert "vis_spec_" in _read(slug), f"vis-lens-{slug} output path must use vis_spec_ prefix"
 

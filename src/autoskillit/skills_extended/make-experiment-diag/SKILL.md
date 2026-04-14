@@ -34,7 +34,7 @@ Select the right experimental design lens for your analysis. Each lens asks one 
 - Present the selection table to help the user choose
 - Match user description to the most relevant lens
 - Load the selected lens skill using the Skill tool
-- Follow the loaded skill's instructions exclusively; `%%ORDER_UP%%` is emitted by the delegated skill
+- Follow the loaded skill's instructions exclusively; the delegated skill handles completion
 
 ---
 

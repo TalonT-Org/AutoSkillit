@@ -64,7 +64,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-caption-annot/vis_spec_caption_annot_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

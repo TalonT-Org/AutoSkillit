@@ -62,7 +62,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-multi-compare/vis_spec_multi_compare_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

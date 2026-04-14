@@ -56,7 +56,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/exp_diag_governance_risk_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

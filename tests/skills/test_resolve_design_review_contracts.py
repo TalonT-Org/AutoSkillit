@@ -74,9 +74,8 @@ def test_exit_zero_always():
 
 
 def test_structured_output_tokens_present():
-    """SKILL.md must define resolution= structured output token and %%ORDER_UP%%."""
+    """SKILL.md must define resolution= structured output token."""
     assert "resolution = " in SKILL_TEXT
-    assert "%%ORDER_UP%%" in SKILL_TEXT
 
 
 def test_temp_directory_is_resolve_design_review():

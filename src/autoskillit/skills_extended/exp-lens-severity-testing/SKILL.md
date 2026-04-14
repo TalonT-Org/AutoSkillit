@@ -56,7 +56,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/exp_diag_severity_testing_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

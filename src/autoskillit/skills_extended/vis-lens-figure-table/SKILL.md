@@ -61,7 +61,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-figure-table/vis_spec_figure_table_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

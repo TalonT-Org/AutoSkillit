@@ -79,7 +79,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-antipattern/vis_spec_antipattern_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

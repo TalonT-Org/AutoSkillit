@@ -59,7 +59,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-uncertainty/vis_spec_uncertainty_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

@@ -48,13 +48,12 @@ best available plan.
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Write output to `{{AUTOSKILLIT_TEMP}}/review-design/` (relative to the current working directory)
 - After writing output files, emit the **absolute paths** as structured output tokens
-  immediately before `%%ORDER_UP%%`. Resolve relative save paths to absolute by prepending
+  as your final output. Resolve relative save paths to absolute by prepending
   the full CWD:
     verdict = GO|REVISE|STOP
     experiment_type = {type}
     evaluation_dashboard = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/review-design/{filename}.md
     revision_guidance = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/review-design/{filename}.md   (REVISE only)
-    %%ORDER_UP%%
 - `revision_guidance` is written and emitted ONLY when verdict = REVISE
 - `evaluation_dashboard` is ALWAYS written and emitted
 - Red-team agent always sets `requires_decision: true` on all its findings
@@ -498,14 +497,13 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
 
 ### Step 8: Emit Output Tokens
 
-Emit these lines immediately before `%%ORDER_UP%%`:
+Emit these lines as your final output:
 
 ```
 verdict = GO|REVISE|STOP
 experiment_type = {experiment_type}
 evaluation_dashboard = /absolute/path/{{AUTOSKILLIT_TEMP}}/review-design/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md
 revision_guidance = /absolute/path/{{AUTOSKILLIT_TEMP}}/review-design/revision_guidance_{slug}_{YYYY-MM-DD_HHMMSS}.md
-%%ORDER_UP%%
 ```
 
 `revision_guidance` line is emitted ONLY when verdict = REVISE. When verdict is GO or STOP,
@@ -563,7 +561,7 @@ Red-team findings: always `"requires_decision": true`, `"dimension": "red_team"`
 └── revision_guidance_{slug}_{YYYY-MM-DD_HHMMSS}.md      (REVISE only)
 ```
 
-Emit structured output tokens (absolute paths) immediately before `%%ORDER_UP%%`.
+Emit structured output tokens (absolute paths) as your final output.
 
 ## Related Skills
 

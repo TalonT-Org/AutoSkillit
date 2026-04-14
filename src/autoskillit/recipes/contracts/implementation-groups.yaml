@@ -17,9 +17,7 @@ skills:
     expected_output_patterns:
     - groups_path\s*=\s*/.+
     pattern_examples:
-    - 'groups_path = /tmp/groups.json
-
-      %%ORDER_UP%%'
+    - 'groups_path = /tmp/groups.json'
   make-plan:
     inputs:
     - name: task
@@ -33,9 +31,7 @@ skills:
     expected_output_patterns:
     - plan_path\s*=\s*/.+
     pattern_examples:
-    - 'plan_path = /tmp/plan.md
-
-      %%ORDER_UP%%'
+    - 'plan_path = /tmp/plan.md'
     write_behavior: always
   review-approach:
     inputs:
@@ -48,9 +44,7 @@ skills:
     expected_output_patterns:
     - review_path\s*=\s*/.+
     pattern_examples:
-    - 'review_path = /tmp/review.md
-
-      %%ORDER_UP%%'
+    - 'review_path = /tmp/review.md'
   dry-walkthrough:
     inputs:
     - name: plan_path
@@ -73,9 +67,7 @@ skills:
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
-
-      %%ORDER_UP%%'
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
     write_behavior: always
   retry-worktree:
     inputs:
@@ -93,9 +85,7 @@ skills:
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
-
-      %%ORDER_UP%%'
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
     write_behavior: always
   resolve-failures:
     inputs:
@@ -131,14 +121,10 @@ skills:
     expected_output_patterns:
     - verdict\s*=\s*(GO|NO GO)
     pattern_examples:
-    - 'verdict = GO
-
-      %%ORDER_UP%%'
+    - 'verdict = GO'
     - 'verdict = NO GO
 
-      remediation_path = /tmp/remediation.md
-
-      %%ORDER_UP%%'
+      remediation_path = /tmp/remediation.md'
   open-pr:
     inputs:
     - name: plan_paths
@@ -157,9 +143,7 @@ skills:
     expected_output_patterns:
     - https://github\.com/.*/pull/\d+
     pattern_examples:
-    - 'https://github.com/owner/repo/pull/42
-
-      %%ORDER_UP%%'
+    - 'https://github.com/owner/repo/pull/42'
   review-pr:
     inputs:
     - name: feature_branch
@@ -180,15 +164,9 @@ skills:
     expected_output_patterns:
     - verdict\s*=\s*(approved|changes_requested|needs_human)
     pattern_examples:
-    - 'verdict = approved
-
-      %%ORDER_UP%%'
-    - 'verdict = changes_requested
-
-      %%ORDER_UP%%'
-    - 'verdict = needs_human
-
-      %%ORDER_UP%%'
+    - 'verdict = approved'
+    - 'verdict = changes_requested'
+    - 'verdict = needs_human'
   resolve-review:
     inputs:
     - name: feature_branch
@@ -222,9 +200,7 @@ skills:
     expected_output_patterns:
     - diagnosis_path\s*=\s*/.+
     pattern_examples:
-    - 'diagnosis_path = /tmp/diagnosis.md
-
-      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md'
     write_behavior: always
   resolve-merge-conflicts:
     inputs:
@@ -251,9 +227,7 @@ skills:
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
-
-      %%ORDER_UP%%'
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
     write_behavior: conditional
     write_expected_when:
     - conflict_report_path\s*=\s*/.+

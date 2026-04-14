@@ -57,7 +57,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-pipeline-integrity/exp_diag_pipeline_integrity_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

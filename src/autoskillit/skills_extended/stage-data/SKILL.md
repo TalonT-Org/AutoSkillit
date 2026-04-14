@@ -168,7 +168,6 @@ on the exact token name — decorators cause match failure.
 ```
 verdict = PASS
 resource_report = /absolute/path/to/resource_feasibility_{YYYY-MM-DD_HHMMSS}.md
-%%ORDER_UP%%
 ```
 
 ## Output
@@ -176,5 +175,4 @@ resource_report = /absolute/path/to/resource_feasibility_{YYYY-MM-DD_HHMMSS}.md
 ```
 verdict = PASS|WARN|FAIL
 resource_report = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/stage-data/resource_feasibility_{YYYY-MM-DD_HHMMSS}.md
-%%ORDER_UP%%
 ```

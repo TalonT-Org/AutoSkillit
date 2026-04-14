@@ -58,11 +58,10 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Write findings as a markdown report with unique name to `{{AUTOSKILLIT_TEMP}}/investigate/` directory (relative to the current working directory)
 - After writing the investigation report, emit the **absolute path** as a structured output
-  token immediately before `%%ORDER_UP%%`. Resolve the relative `{{AUTOSKILLIT_TEMP}}/investigate/...`
+  token as your final output. Resolve the relative `{{AUTOSKILLIT_TEMP}}/investigate/...`
   save path to absolute by prepending the full CWD:
   ```
   investigation_path = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/investigate/{filename}.md
-  %%ORDER_UP%%
   ```
   This token is MANDATORY — the pipeline cannot proceed without it.
 - Identify how tests missed the issue (if applicable)

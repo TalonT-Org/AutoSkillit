@@ -65,7 +65,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-temporal/vis_spec_temporal_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

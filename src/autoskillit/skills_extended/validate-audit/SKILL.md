@@ -111,7 +111,7 @@ by the top-level package touched (e.g., `pipeline/`, `execution/`, `server/`, `c
 
 ### Step 3 — Launch Parallel Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task calls in a single message.** Do not output any prose between tool calls.
+**Issue ALL Task calls in a single message.**
 
 Spawn the following agents simultaneously using `model: "sonnet"`:
 

@@ -74,10 +74,16 @@ async def run_cmd(
         tool_ctx = _get_ctx()
         _start = time.monotonic()
         try:
+            from autoskillit.execution.recording import SCENARIO_STEP_NAME_ENV
+
+            _env: dict[str, str] | None = (
+                {SCENARIO_STEP_NAME_ENV: step_name} if step_name else None
+            )
             returncode, stdout, stderr = await _run_subprocess(
                 ["bash", "-c", cmd],
                 cwd=cwd,
                 timeout=float(timeout),
+                env=_env,
             )
             result = {
                 "success": returncode == 0,

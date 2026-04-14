@@ -60,6 +60,73 @@ class TestRunCmdTiming:
         assert tool_ctx.timing_log.get_report() == []
 
 
+class TestRunCmdRecording:
+    """run_cmd threads SCENARIO_STEP_NAME into env kwarg for RecordingSubprocessRunner."""
+
+    @pytest.mark.anyio
+    async def test_run_cmd_with_step_name_passes_scenario_step_name_to_runner(self, tool_ctx):
+        """run_cmd with step_name passes SCENARIO_STEP_NAME in env kwarg to ctx.runner."""
+        from autoskillit.execution.recording import SCENARIO_STEP_NAME_ENV
+
+        tool_ctx.runner.push(_make_result(0, "ok", ""))
+        await run_cmd(cmd="echo hi", cwd="/tmp", step_name="setup")
+        call_kwargs = tool_ctx.runner.call_args_list[-1][3]
+        assert call_kwargs.get("env", {}).get(SCENARIO_STEP_NAME_ENV) == "setup"
+
+    @pytest.mark.anyio
+    async def test_run_cmd_without_step_name_passes_no_env(self, tool_ctx):
+        """run_cmd without step_name passes env=None (no SCENARIO_STEP_NAME in env)."""
+        from autoskillit.execution.recording import SCENARIO_STEP_NAME_ENV
+
+        tool_ctx.runner.push(_make_result(0, "", ""))
+        await run_cmd(cmd="echo hi", cwd="/tmp")
+        call_kwargs = tool_ctx.runner.call_args_list[-1][3]
+        env = call_kwargs.get("env")
+        assert env is None or SCENARIO_STEP_NAME_ENV not in env
+
+    @pytest.mark.anyio
+    async def test_run_cmd_with_step_name_records_non_session_step(self, tool_ctx, monkeypatch):
+        """End-to-end: run_cmd step_name → RecordingSubprocessRunner.record_non_session_step()."""
+        from unittest.mock import Mock
+
+        from autoskillit.execution.recording import RecordingSubprocessRunner
+        from tests.conftest import MockSubprocessRunner
+        from tests.conftest import _make_result as _mr
+
+        mock_recorder = Mock()
+        inner = MockSubprocessRunner()
+        inner.push(_mr(0, "task output", ""))
+        recording_runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
+        tool_ctx.runner = recording_runner
+
+        await run_cmd(cmd="task install-worktree", cwd="/tmp", step_name="setup")
+
+        mock_recorder.record_non_session_step.assert_called_once_with(
+            step_name="setup",
+            tool="run_cmd",
+            result_summary={"exit_code": 0, "stdout_head": "task output"},
+        )
+
+    @pytest.mark.anyio
+    async def test_run_cmd_without_step_name_skips_recording(self, tool_ctx, monkeypatch):
+        """run_cmd without step_name does not call record_non_session_step."""
+        from unittest.mock import Mock
+
+        from autoskillit.execution.recording import RecordingSubprocessRunner
+        from tests.conftest import MockSubprocessRunner
+        from tests.conftest import _make_result as _mr
+
+        mock_recorder = Mock()
+        inner = MockSubprocessRunner()
+        inner.push(_mr(0, "", ""))
+        recording_runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
+        tool_ctx.runner = recording_runner
+
+        await run_cmd(cmd="echo hi", cwd="/tmp")
+
+        mock_recorder.record_non_session_step.assert_not_called()
+
+
 class TestRunCmdHeadlessGate:
     """run_cmd returns headless_error when AUTOSKILLIT_HEADLESS=1."""
 

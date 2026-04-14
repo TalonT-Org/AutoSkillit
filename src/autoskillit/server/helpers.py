@@ -7,7 +7,7 @@ import functools
 import json
 import os
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -352,6 +352,7 @@ async def _run_subprocess(
     *,
     cwd: str,
     timeout: float,
+    env: Mapping[str, str] | None = None,
 ) -> tuple[int, str, str]:
     """Run a subprocess asynchronously with timeout. Returns (returncode, stdout, stderr).
 
@@ -360,7 +361,7 @@ async def _run_subprocess(
     """
     runner = _get_ctx().runner
     assert runner is not None, "No subprocess runner configured"
-    result = await runner(cmd, cwd=Path(cwd), timeout=timeout)
+    result = await runner(cmd, cwd=Path(cwd), timeout=timeout, env=env)
     return _process_runner_result(result, timeout)
 
 

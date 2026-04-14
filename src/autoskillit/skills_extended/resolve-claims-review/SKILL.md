@@ -464,37 +464,45 @@ Exit 0.
 
 ## Structured Output
 
-After completing all thread processing (addressed + escalated), emit a single structured
-output token:
+After completing all thread processing (addressed + escalated), emit structured
+output tokens:
+
+**Verdict decision:**
+- If fixes were applied (`Fixes applied: N` where N >= 1): `verdict = real_fix`
+- If no fixes were needed (all findings already addressed): `verdict = already_green`
 
 ```
 needs_rerun = {true|false}
+verdict = {real_fix|already_green}
+fixes_applied = {N}
 ```
 
-- **`true`**: At least one finding was classified as `rerun_required` in the escalation
-  records. This includes: (a) fixes requiring re-running the experiment to generate
-  supporting data, (b) protocol deviations where the experiment execution diverged from
-  the plan in ways that materially undermine the report's claims, or (c) invalid
-  statistical analyses (e.g., CIs from the wrong unit of analysis) that remain cited
-  as evidence for claims.
-- **`false`**: No `rerun_required` escalations exist. May still have `design_flaw`
-  escalations (these are informational and do not require re-running benchmarks).
+- **`needs_rerun = true`**: At least one finding was classified as `rerun_required` in
+  the escalation records. This includes: (a) fixes requiring re-running the experiment
+  to generate supporting data, (b) protocol deviations where the experiment execution
+  diverged from the plan in ways that materially undermine the report's claims, or
+  (c) invalid statistical analyses (e.g., CIs from the wrong unit of analysis) that
+  remain cited as evidence for claims.
+- **`needs_rerun = false`**: No `rerun_required` escalations exist. May still have
+  `design_flaw` escalations (these are informational and do not require re-running).
 
 **Determination logic:** After writing `escalation_records_{pr}.json`, check whether any
 entry has `"strategy": "rerun_required"`. If yes → `true`. If no entries or all entries
 are `design_flaw` → `false`.
 
-This token is mandatory. The recipe captures it as `claims_needs_rerun` to route via
+`needs_rerun` is mandatory. The recipe captures it as `claims_needs_rerun` to route via
 `merge_escalations`.
 
 ## Output
 
-Emit the structured output token as the very last line before `%%ORDER_UP%%`:
+Emit the structured output tokens as the very last lines before `%%ORDER_UP%%`:
 
-> **IMPORTANT:** Emit the token as **literal plain text with no code fences, no markdown formatting**. The recipe capture system reads raw stdout.
+> **IMPORTANT:** Emit the tokens as **literal plain text with no code fences, no markdown formatting**. The recipe capture system reads raw stdout.
 
 ```
 needs_rerun = {true|false}
+verdict = {real_fix|already_green}
+fixes_applied = {N}
 %%ORDER_UP%%
 ```
 

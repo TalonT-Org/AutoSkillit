@@ -315,18 +315,21 @@ class TestImplicitHandoffRule:
         assert ih == []
 
     def test_ih4_does_not_fire_for_skill_with_empty_outputs(self) -> None:
-        """T_IH4: implicit-handoff does NOT fire for a skill with outputs: []."""
+        """T_IH4: implicit-handoff does NOT fire for a skill with outputs: [].
+
+        dry-walkthrough has outputs: [] — no fields to capture, so no finding.
+        """
         steps = {
-            "assess": {
+            "walkthrough": {
                 "tool": "run_skill",
-                "with": {"skill_command": "/autoskillit:resolve-failures worktree plan main"},
+                "with": {"skill_command": "/autoskillit:dry-walkthrough plan"},
                 "on_success": "done",
             },
             "done": {"action": "stop", "message": "Done."},
         }
         recipe = _make_workflow(steps)
         findings = run_semantic_rules(recipe)
-        ih = [f for f in findings if f.rule == "implicit-handoff" and f.step_name == "assess"]
+        ih = [f for f in findings if f.rule == "implicit-handoff" and f.step_name == "walkthrough"]
         assert ih == []
 
     def test_ih5_does_not_fire_for_unknown_skill(self) -> None:

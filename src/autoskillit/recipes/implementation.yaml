@@ -313,8 +313,12 @@ steps:
       step_name: "retry_worktree"
     capture:
       worktree_path: "${{ result.worktree_path }}"
+      phases_implemented: "${{ result.phases_implemented }}"
+    on_result:
+      - when: "${{ result.phases_implemented }} > 0"
+        route: test
+      - route: test
     on_exhausted: release_issue_failure
-    on_success: test
     on_failure: release_issue_failure
 
   test:
@@ -374,7 +378,18 @@ steps:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "fix"
-    on_success: test
+    capture:
+      verdict: "${{ result.verdict }}"
+      fixes_applied: "${{ result.fixes_applied }}"
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: test
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: test
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: test
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: release_issue_failure
     on_failure: release_issue_failure
     on_context_limit: test
     note: "Fixes test failures without merging. Routes back to test for re-validation before merge_worktree. on_context_limit routes needs_retry=True to test (worktree may already be green) instead of re-running fix blindly."
@@ -557,16 +572,27 @@ steps:
       skill_command: "/autoskillit:resolve-review ${{ context.merge_target }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_review"
+    capture:
+      verdict: "${{ result.verdict }}"
     retries: 2
     on_exhausted: release_issue_failure
-    on_success: re_push_review
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: re_push_review
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: re_push_review
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: release_issue_failure
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: release_issue_failure
     on_failure: release_issue_failure
     note: >
       Runs when review_pr reports issues (verdict=changes_requested). The clone
       (context.work_dir) has the feature branch (context.merge_target) checked out.
       resolve-review fetches inline and summary review comments via the GitHub API,
       applies fixes for each actionable finding (critical + warning severity), and
-      commits each fix. Orchestrator re-pushes via re_push_review after success.
+      commits each fix. Routes via on_result: verdict dispatch — real_fix/already_green
+      both route to re_push_review; flake_suspected/ci_only_failure escalate.
       Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.
 
   re_push_review:
@@ -1001,17 +1027,41 @@ steps:
       skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.ci_conclusion }} ${{ context.ci_failed_jobs }} ${{ context.diagnosis_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_ci"
+    capture:
+      verdict: "${{ result.verdict }}"
     retries: 2
     on_exhausted: release_issue_failure
-    on_success: re_push
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: re_push
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: pre_resolve_rebase
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: release_issue_failure
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: release_issue_failure
+      - route: release_issue_failure
     on_failure: release_issue_failure
     note: >
       Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci
-      structured output to avoid redundant CI failure re-investigation. The clone
-      (context.work_dir) has the feature branch (context.merge_target) checked out.
-      The skill commits fixes and exits without merging; the orchestrator re-pushes
-      via re_push. Retries up to 2 times (3 total attempts) before exhausting
-      to release_issue_failure.
+      structured output to avoid redundant CI failure re-investigation. Routes via
+      on_result: verdict dispatch — real_fix pushes, already_green rebases and re-diagnoses
+      (sibling fix may have landed), flake_suspected/ci_only_failure escalate to human.
+      Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.
+
+  pre_resolve_rebase:
+    tool: run_cmd
+    with:
+      cmd: "git -C ${{ context.work_dir }} fetch origin && git -C ${{ context.work_dir }} rebase origin/${{ inputs.base_branch }}"
+      step_name: "pre_resolve_rebase"
+    retries: 1
+    on_success: diagnose_ci
+    on_failure: release_issue_failure
+    note: >
+      Rebases the feature branch against integration head when resolve_ci emits
+      already_green — the worktree was already clean because a sibling pipeline's
+      fix already landed on integration. Pulling it in before re-running diagnose_ci
+      gives the pipeline a real chance at emitting real_fix and reaching re_push.
 
   re_push:
     tool: push_to_remote

@@ -6,17 +6,26 @@ stale cleanup, drift check) as background tasks so they run after the
 transport opens, not on the critical startup path.
 The ``__aexit__`` side calls ``recorder.finalize()`` so scenario data survives
 SIGTERM (issue #745).
+
+The registry-hash drift check (``run_startup_drift_check``) is invoked from
+``serve()`` in ``cli/app.py`` before ``mcp.run()``, not inside this lifespan,
+so that SIGTERM received during the check cannot bypass teardown.
+
+Readiness synchronization: the lifespan writes a filesystem sentinel at
+``core.readiness.write_readiness_sentinel()`` as the first statement inside the
+``try:`` block. Integration tests poll the sentinel path rather than parsing log
+lines — file existence is atomic and has no string-parse race. The sentinel is
+cleaned up in ``finally:`` before ``_finalize_recorder()`` runs.
 """
 
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
-from autoskillit.core import get_logger
+from autoskillit.core import cleanup_readiness_sentinel, get_logger, write_readiness_sentinel
 from autoskillit.execution import RecordingSubprocessRunner
-from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
+from autoskillit.server._state import _get_ctx_or_none
 
 logger = get_logger(__name__)
 
@@ -57,35 +66,40 @@ def run_startup_drift_check() -> None:
         logger.exception("startup_drift_check_failed")
 
 
-async def _async_drift_check() -> None:
-    """Run drift check in background. Wraps the sync function in a thread executor."""
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, run_startup_drift_check)
+def _finalize_recorder() -> None:
+    """Finalize the recording subprocess runner if one is active."""
+    ctx = _get_ctx_or_none()
+    if ctx is not None and isinstance(ctx.runner, RecordingSubprocessRunner):
+        try:
+            ctx.runner.recorder.finalize()
+        except Exception:
+            logger.exception("recorder.finalize() failed during lifespan teardown")
 
 
 @asynccontextmanager
 async def _autoskillit_lifespan(server: Any) -> Any:
-    """Server lifecycle: submit deferred work and teardown recording on shutdown."""
-    logger.info("lifespan_started")
-    ctx = _get_ctx_or_none()
-    if ctx is not None and ctx.background is not None:
-        import autoskillit.server._state as _state_mod
+    """Server lifecycle: write readiness sentinel, yield, then finalize recording.
 
-        _state_mod._startup_ready = asyncio.Event()
-        ctx.background.submit(
-            deferred_initialize(ctx, ready_event=_state_mod._startup_ready),
-            label="deferred_initialize",
-        )
-        ctx.background.submit(
-            _async_drift_check(),
-            label="startup_drift_check",
-        )
+    Readiness model: the sentinel file is written as the first statement inside
+    the ``try:`` block. By the time the lifespan body runs,
+    ``_serve_with_signal_guard()`` in ``cli/app.py`` has already armed the anyio
+    signal receiver via ``tg.start()``. A SIGTERM delivered after the sentinel
+    appears is guaranteed to be caught by the armed receiver — no race window.
+
+    Teardown model: ``CancelledError`` from the anyio cancel scope unwinds past
+    the ``yield``, triggering ``finally:``. The sentinel is cleaned up first,
+    then ``_finalize_recorder()`` writes ``scenario.json``. Any teardown
+    exception is logged and suppressed so the process exits cleanly.
+    """
     try:
+        write_readiness_sentinel()
         yield
     finally:
-        ctx = _get_ctx_or_none()
-        if ctx is not None and isinstance(ctx.runner, RecordingSubprocessRunner):
-            try:
-                ctx.runner.recorder.finalize()
-            except Exception:
-                logger.exception("recorder.finalize() failed during lifespan teardown")
+        try:
+            cleanup_readiness_sentinel()
+        except Exception:
+            logger.exception("lifespan sentinel cleanup error")
+        try:
+            _finalize_recorder()
+        except Exception:
+            logger.exception("lifespan recorder finalization error")

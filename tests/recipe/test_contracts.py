@@ -449,10 +449,17 @@ def test_sc1_audit_impl_has_real_inputs_and_outputs() -> None:
     assert remediation_out["type"] == "file_path"
 
 
-def test_sc2_resolve_failures_has_empty_outputs() -> None:
-    """T_SC2: resolve-failures has outputs: []."""
+def test_sc2_resolve_failures_declares_verdict_output() -> None:
+    """T_SC2: resolve-failures declares a verdict output with allowed_values."""
     manifest = load_bundled_manifest()
-    assert manifest["skills"]["resolve-failures"]["outputs"] == []
+    outputs = manifest["skills"]["resolve-failures"]["outputs"]
+    output_names = {o["name"] for o in outputs}
+    assert "verdict" in output_names, (
+        "resolve-failures must declare a 'verdict' output after Part B implementation"
+    )
+    verdict_out = next(o for o in outputs if o["name"] == "verdict")
+    assert "allowed_values" in verdict_out, "verdict output must have allowed_values"
+    assert "real_fix" in verdict_out["allowed_values"]
 
 
 def test_sc3_dry_walkthrough_has_empty_outputs() -> None:
@@ -647,12 +654,12 @@ def test_every_always_write_skill_has_contract(skill_name: str) -> None:
 # token indicates actual work was performed.
 CONDITIONAL_WRITE_SKILLS: dict[str, str] = {
     # skill_name → substring that must appear in write_expected_when patterns
-    "resolve-failures": "fixes_applied",
+    "resolve-failures": "verdict",
     "resolve-merge-conflicts": "conflict_report_path",
-    "resolve-review": "fixes_applied",
+    "resolve-review": "verdict",
     "retry-worktree": "phases_implemented",
-    "resolve-claims-review": "Fixes applied",
-    "resolve-research-review": "Fixes applied",
+    "resolve-claims-review": "verdict",
+    "resolve-research-review": "verdict",
 }
 
 

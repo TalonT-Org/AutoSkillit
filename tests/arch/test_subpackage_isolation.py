@@ -653,6 +653,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         rules_isolation.py for workspace isolation checks brings the count to 30.
         rules_blocks.py adds the block-level budget rule family, bringing the count to 32.
         rules_reachability.py adds symbolic BFS reachability rules, bringing the count to 33.
+        rules_fixing.py adds conditional-write-skill ungated-push detection,
+        bringing the count to 34.
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
@@ -690,10 +692,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 18,
-        "recipe": 33,
+        "recipe": 34,
         "execution": 26,
-        "core": 17,
-        "cli": 18,
+        "core": 18,
+        "cli": 19,
         "hooks": 20,
     }
     violations: list[str] = []

@@ -23,14 +23,21 @@ class TestCLIInit:
 
     # CL1
     def test_serve_calls_mcp_run(self) -> None:
+        # serve() now delegates to anyio.run(serve_with_signal_guard, mcp)
+        # which calls mcp.run_async() inside the event loop.
+        anyio_run_calls: list = []
         mock_mcp = MagicMock()
         with patch.object(cli, "serve", wraps=cli.serve):
             with (
                 patch("autoskillit.server.mcp", mock_mcp),
                 patch("autoskillit.core.configure_logging"),
+                patch(
+                    "anyio.run",
+                    side_effect=lambda *a, **kw: anyio_run_calls.append(a),
+                ),
             ):
                 cli.serve()
-        mock_mcp.run.assert_called_once()
+        assert anyio_run_calls, "serve() did not call anyio.run() to start the MCP server"
 
     # CL3
     def test_init_creates_config_dir(
@@ -354,7 +361,6 @@ class TestServeStartupLog:
         import structlog.testing
 
         import autoskillit.cli as cli_mod
-        import autoskillit.server as server_mod
 
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".autoskillit").mkdir()
@@ -363,7 +369,7 @@ class TestServeStartupLog:
         )
 
         with (
-            patch.object(server_mod.mcp, "run"),
+            patch("anyio.run"),  # prevent actual event loop
             patch("autoskillit.core.configure_logging"),
             structlog.testing.capture_logs() as logs,
         ):
@@ -380,12 +386,11 @@ class TestServeStartupLog:
         import structlog.testing
 
         import autoskillit.cli as cli_mod
-        import autoskillit.server as server_mod
 
         monkeypatch.chdir(tmp_path)
 
         with (
-            patch.object(server_mod.mcp, "run"),
+            patch("anyio.run"),  # prevent actual event loop
             patch("autoskillit.core.configure_logging"),
             patch("autoskillit.cli.Path.home", return_value=tmp_path),
             structlog.testing.capture_logs() as logs,

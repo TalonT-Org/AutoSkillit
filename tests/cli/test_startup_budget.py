@@ -1,6 +1,6 @@
-"""Integration test: serve() must call mcp.run() within the startup timing budget.
+"""Integration test: serve() must call anyio.run() within the startup timing budget.
 
-REQ-STARTUP-001: The pre-transport startup work (serve() entry to mcp.run() call)
+REQ-STARTUP-001: The pre-transport startup work (serve() entry to anyio.run() call)
 must complete within 2 seconds, leaving 3s of margin before Claude Code's ~5s
 connection timeout.
 """
@@ -12,12 +12,11 @@ from unittest.mock import patch
 
 import structlog.testing
 
-import autoskillit.server as server_mod
 from autoskillit.server import _state
 
 
 def test_serve_calls_mcp_run_within_budget(monkeypatch, tmp_path):
-    """serve() pre-mcp.run() work must complete within 2 seconds."""
+    """serve() pre-anyio.run() synchronous work must complete within 2 seconds."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
@@ -27,11 +26,12 @@ def test_serve_calls_mcp_run_within_budget(monkeypatch, tmp_path):
 
     run_called_at: list[float] = []
 
-    def timed_run(*_a, **_kw):
+    def timed_anyio_run(*_a, **_kw):
         run_called_at.append(time.monotonic())
+        # Do not actually start the event loop — just record the call site
 
     with (
-        patch.object(server_mod.mcp, "run", side_effect=timed_run),
+        patch("anyio.run", side_effect=timed_anyio_run),
         structlog.testing.capture_logs(),
     ):
         import autoskillit.cli as cli_mod
@@ -42,9 +42,9 @@ def test_serve_calls_mcp_run_within_budget(monkeypatch, tmp_path):
     # Restore global state
     monkeypatch.setattr(_state, "_ctx", original_ctx)
 
-    assert run_called_at, "mcp.run() was never called"
+    assert run_called_at, "anyio.run() was never called"
     elapsed = run_called_at[0] - start
     assert elapsed < 2.0, (
-        f"serve() took {elapsed:.2f}s before mcp.run() — exceeds 2s budget. "
+        f"serve() took {elapsed:.2f}s before anyio.run() — exceeds 2s budget. "
         f"Claude Code timeout is ~5s; budget is 2s to leave margin."
     )

@@ -1,24 +1,31 @@
+"""Integration test: autoskillit serve subprocess receives SIGTERM and writes scenario.json.
+
+Regression guard for issue #745. Synchronizes with the subprocess via the
+filesystem sentinel written by the lifespan (``readiness_sentinel_path``).
+File existence is atomic — no string-parse race, no wall-clock settle-sleep.
 """
-Integration test: real autoskillit serve subprocess receives SIGTERM
-and writes scenario.json to disk. Regression guard for issue #745.
-"""
+
+from __future__ import annotations
 
 import json
 import os
-import select
 import signal
 import subprocess
 import sys
-import time
 
 import pytest
 
-_READY_TOKEN = "lifespan_started"
+from autoskillit.core.readiness import readiness_sentinel_path
+from tests._subprocess_ready import wait_for_subprocess_ready
 
 
 @pytest.mark.integration
 def test_sigterm_writes_scenario_json(tmp_path):
-    """Server writes scenario.json when terminated by SIGTERM."""
+    """Server writes scenario.json when terminated by SIGTERM.
+
+    Invariant: must be deterministically passing. A single miss is a
+    structural failure — do not bump deadlines as a fix.
+    """
     output_dir = tmp_path / "scenario"
     output_dir.mkdir()
 
@@ -38,56 +45,32 @@ def test_sigterm_writes_scenario_json(tmp_path):
         env=env,
     )
 
-    # Poll stderr line-by-line for the "sigterm_handler_ready" token which
-    # serve() emits immediately after installing the SIGTERM handler. This
-    # guarantees the handler is active before we send SIGTERM, while still
-    # being responsive (no fixed sleep). Falls back after 30 s to tolerate
-    # xdist parallel load where subprocess startup can be slow.
-    stderr_lines: list[str] = []
-    ready_seen = False
-    deadline = time.monotonic() + 30.0
-    while time.monotonic() < deadline:
-        remaining = deadline - time.monotonic()
-        readable, _, _ = select.select([proc.stderr], [], [], min(remaining, 0.2))
-        if not readable:
-            if proc.poll() is not None:
-                break
-            continue
-        line = proc.stderr.readline()
-        if not line:
-            break  # EOF — process died
-        decoded = line.decode(errors="replace")
-        stderr_lines.append(decoded)
-        if _READY_TOKEN in decoded:
-            ready_seen = True
-            time.sleep(2.0)  # let lifespan teardown handlers fully register
-            break
+    # Wait for the filesystem sentinel — written inside the lifespan's try:
+    # block AFTER the anyio signal receiver is armed. Observing the sentinel
+    # guarantees SIGTERM will be caught by the event-loop-routed handler.
+    sentinel_path = readiness_sentinel_path(proc.pid)
+    wait_for_subprocess_ready(proc, sentinel_path, deadline_s=10.0)
 
-    if not ready_seen:
-        # Server didn't emit the ready token in time — kill and skip so we
-        # don't assert on a server whose SIGTERM handler was never installed.
-        proc.kill()
-        proc.communicate(timeout=5)
-        pytest.skip("Server startup too slow under load — ready token not seen")
-
-    # SIGTERM is the exact signal Claude Code sends on /exit.
-    # The handler converts SIGTERM → KeyboardInterrupt, triggering lifespan
-    # teardown which writes scenario.json.
-    #
-    # Order matters: SIGTERM must arrive before stdin EOF so the asyncio event
-    # loop receives KeyboardInterrupt and runs lifespan __aexit__ (which calls
-    # recorder.finalize()).  If stdin is closed first, the MCP stdio transport
-    # detects EOF and may tear down the event loop before the signal handler
-    # fires, bypassing lifespan cleanup entirely.
+    # SIGTERM is the exact signal Claude Code sends on /exit. Close stdin so
+    # the stdio transport detects EOF and the event loop can fully unwind.
+    proc.stdin.close()
+    proc.stdin = None  # prevent communicate() from flushing the closed pipe
     proc.send_signal(signal.SIGTERM)
     try:
-        stdout_bytes, remaining_stderr_bytes = proc.communicate(timeout=10)
+        stdout_bytes, stderr_bytes = proc.communicate(timeout=10)
     except subprocess.TimeoutExpired:
         proc.kill()
-        stdout_bytes, remaining_stderr_bytes = proc.communicate()
+        stdout_bytes, stderr_bytes = proc.communicate()
 
     stdout = stdout_bytes.decode(errors="replace")
-    stderr = "".join(stderr_lines) + remaining_stderr_bytes.decode(errors="replace")
+    stderr = stderr_bytes.decode(errors="replace")
+
+    # Clean shutdown: event-loop-routed SIGTERM → scope.cancel() → finalize()
+    assert proc.returncode == 0, (
+        f"Expected clean exit (rc=0), got rc={proc.returncode}\n"
+        f"stdout: {stdout!r}\n"
+        f"stderr: {stderr!r}"
+    )
 
     scenario_json = output_dir / "scenario.json"
     assert scenario_json.exists(), (

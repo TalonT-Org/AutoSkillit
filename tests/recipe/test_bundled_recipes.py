@@ -189,17 +189,23 @@ class TestImplementationPipelineStructure:
             "audit_impl must NOT use context.branch_name (deleted by merge_worktree)"
         )
 
-    def test_ip_c1_fix_step_routes_on_success_to_test(self, recipe) -> None:
-        """T_IP_C1: fix step must route on_success back to test (not next_or_done).
+    def test_ip_c1_fix_step_routes_via_on_result_to_test(self, recipe) -> None:
+        """T_IP_C1: fix step must route via verdict-gated on_result back to test.
 
-        assess-and-merge used to merge internally, so fix routed to next_or_done
-        after the internal merge. resolve-failures does not merge, so the orchestrator
-        must route fix → test to re-validate before entering merge_worktree.
+        After Part B, fix uses on_result: verdict dispatch instead of unconditional
+        on_success: test. real_fix and already_green verdicts route to test for
+        re-validation before entering merge_worktree.
         """
         step = recipe.steps["fix"]
-        assert step.on_success == "test", (
-            "fix step must route back to test — resolve-failures only fixes failures, "
-            "it does not merge. The orchestrator must re-validate before merge_worktree."
+        assert step.on_success is None, (
+            "fix step must use on_result: verdict dispatch, not unconditional on_success"
+        )
+        assert step.on_result is not None, "fix step must have on_result: verdict dispatch"
+        test_routes = [
+            c.route for c in step.on_result.conditions if c.when and "real_fix" in c.when
+        ]
+        assert any(r == "test" for r in test_routes), (
+            "fix step on_result must route verdict=real_fix to test for re-validation"
         )
 
     def test_ip_base_sha_captured_before_implement(self, recipe) -> None:
@@ -585,9 +591,17 @@ class TestImplementationGroupsStructure:
         assert "context.base_sha" in skill_cmd
         assert "context.branch_name" not in skill_cmd
 
-    def test_ig_fix_step_routes_on_success_to_test(self, recipe) -> None:
-        """fix step must route on_success to test (resolve-failures does not merge)."""
-        assert recipe.steps["fix"].on_success == "test"
+    def test_ig_fix_step_routes_via_on_result_to_test(self, recipe) -> None:
+        """fix step must route via verdict-gated on_result to test."""
+        step = recipe.steps["fix"]
+        assert step.on_success is None, "fix step must use on_result: verdict dispatch"
+        assert step.on_result is not None, "fix step must have on_result: verdict dispatch"
+        test_routes = [
+            c.route for c in step.on_result.conditions if c.when and "real_fix" in c.when
+        ]
+        assert any(r == "test" for r in test_routes), (
+            "fix step on_result must route verdict=real_fix to test"
+        )
 
     def test_ig_push_after_audit_warning_fires(self, recipe) -> None:
         """push-before-audit semantic rule fires as WARNING (audit has skip_when_false)."""
@@ -1242,8 +1256,20 @@ class TestReviewPrRecipeIntegration:
         assert recipe.steps["resolve_review"].retries == 2  # type: ignore[attr-defined]
 
     def test_resolve_review_routes_to_re_push_review(self, recipe: object) -> None:
-        """T_RP7: resolve_review.on_success routes to re_push_review."""
-        assert recipe.steps["resolve_review"].on_success == "re_push_review"  # type: ignore[attr-defined]
+        """T_RP7: resolve_review uses on_result: verdict dispatch routing to re_push_review."""
+        step = recipe.steps["resolve_review"]  # type: ignore[attr-defined]
+        assert step.on_success is None, (
+            "resolve_review must use on_result: verdict dispatch, not unconditional on_success"
+        )
+        assert step.on_result is not None, (
+            "resolve_review must have on_result: block for verdict-gated routing"
+        )
+        real_fix_routes = [
+            c.route for c in step.on_result.conditions if c.when and "real_fix" in c.when
+        ]
+        assert any("re_push_review" in r for r in real_fix_routes), (
+            "resolve_review on_result must route verdict=real_fix to re_push_review"
+        )
 
     def test_re_push_review_routes_to_ci_watch(self, recipe: object) -> None:
         """T_RP8: re_push_review routes to ci_watch (one-shot review gate)."""

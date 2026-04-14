@@ -7,12 +7,15 @@ import json
 import os
 import random
 import shutil
-import signal
 import subprocess
 import sys
 from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
+
+import anyio
+
+from autoskillit.cli._serve_guard import serve_with_signal_guard
 
 if TYPE_CHECKING:
     from autoskillit.recipe import Recipe, RecipeInfo
@@ -89,7 +92,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
 
     # Import server AFTER logging is configured so module-level loggers
     # resolve to stderr+JSON, not stdout+ConsoleRenderer (structlog default).
-    from autoskillit.server import _initialize, make_context, mcp
+    from autoskillit.server import _initialize, make_context, mcp, run_startup_drift_check
 
     project_path = project_dir / ".autoskillit" / "config.yaml"
     user_path = Path.home() / ".autoskillit" / "config.yaml"
@@ -119,16 +122,12 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
 
-    def _sigterm_handler(*_):
-        """Convert SIGTERM into KeyboardInterrupt so asyncio shuts down cleanly."""
-        raise KeyboardInterrupt
+    run_startup_drift_check()
 
-    signal.signal(signal.SIGTERM, _sigterm_handler)
-    get_logger(__name__).info("sigterm_handler_ready")
     try:
-        mcp.run()
+        anyio.run(serve_with_signal_guard, mcp)
     except KeyboardInterrupt:
-        pass
+        pass  # Ctrl+C before anyio loop starts — rare during heavy import phase
 
 
 @app.command

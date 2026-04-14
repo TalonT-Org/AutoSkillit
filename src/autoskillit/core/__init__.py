@@ -43,6 +43,11 @@ from .paths import (
     is_git_worktree,
     pkg_root,
 )
+from .readiness import (
+    cleanup_readiness_sentinel,
+    readiness_sentinel_path,
+    write_readiness_sentinel,
+)
 from .types import (
     AUTOSKILLIT_INSTALLED_VERSION,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
@@ -55,6 +60,7 @@ from .types import (
     PACK_REGISTRY,
     PIPELINE_FORBIDDEN_TOOLS,
     RESERVED_LOG_RECORD_KEYS,
+    RETIRED_READINESS_TOKENS,
     SKILL_COMMAND_PREFIX,
     SKILL_TOOLS,
     TOOL_SUBSET_TAGS,
@@ -148,6 +154,10 @@ __all__ = [
     # logging
     "configure_logging",
     "get_logger",
+    # readiness
+    "cleanup_readiness_sentinel",
+    "readiness_sentinel_path",
+    "write_readiness_sentinel",
     # paths
     "GENERATED_FILES",
     "claude_code_log_path",
@@ -171,6 +181,7 @@ __all__ = [
     "CATEGORY_TAGS",
     "TOOL_SUBSET_TAGS",
     "CONTEXT_EXHAUSTION_MARKER",
+    "RETIRED_READINESS_TOKENS",
     "FREE_RANGE_TOOLS",
     "GATED_TOOLS",
     "HEADLESS_TOOLS",

@@ -20,6 +20,7 @@ from autoskillit.core import (
 )
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
+    SCENARIO_STEP_NAME_ENV,
     _check_dry_walkthrough,
     _import_and_call,
     _notify,
@@ -74,8 +75,6 @@ async def run_cmd(
         tool_ctx = _get_ctx()
         _start = time.monotonic()
         try:
-            from autoskillit.execution.recording import SCENARIO_STEP_NAME_ENV
-
             _env: dict[str, str] | None = (
                 {SCENARIO_STEP_NAME_ENV: step_name} if step_name else None
             )

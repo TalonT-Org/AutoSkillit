@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core.io import atomic_write
+from autoskillit.core import atomic_write
 
 
 def _default_path() -> Path:

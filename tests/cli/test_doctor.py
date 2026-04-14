@@ -69,7 +69,6 @@ class TestCLIDoctor:
                 {
                     "mcpServers": {
                         "other-server": {"type": "stdio", "command": str(fake_bin)},
-                        "autoskillit": {"type": "stdio", "command": "autoskillit"},
                     }
                 }
             )

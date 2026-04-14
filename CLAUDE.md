@@ -241,6 +241,7 @@ generic_automation_mcp/
 │   ├── _doctor.py           #   16 project setup checks
 │   ├── _hooks.py            #   PreToolUse hook registration helpers
 │   ├── _init_helpers.py
+│   ├── _installed_plugins.py #  InstalledPluginsFile — canonical accessor for installed_plugins.json
 │   ├── _install_info.py     #   InstallInfo, InstallType, detect_install(), comparison_branch(), dismissal_window(), upgrade_command()
 │   ├── _marketplace.py      #   Plugin install/upgrade
 │   ├── _mcp_names.py        #   MCP prefix detection

@@ -585,12 +585,62 @@ def _check_claude_process_state_breakdown() -> DoctorResult:
     )
 
 
+def _check_plugin_cache_exists(
+    cache_dir: Path | None = None,
+) -> DoctorResult:
+    """Check that the plugin cache directory exists."""
+    _cache_dir = cache_dir or (
+        Path.home() / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    )
+    if _cache_dir.is_dir():
+        return DoctorResult(
+            Severity.OK,
+            "plugin_cache_exists",
+            "Plugin cache directory exists",
+        )
+    return DoctorResult(
+        Severity.WARNING,
+        "plugin_cache_exists",
+        f"Plugin cache directory missing: {_cache_dir}. Run `autoskillit install` to recreate it.",
+    )
+
+
+def _check_installed_plugins_entry(
+    plugins_json_path: Path | None = None,
+) -> DoctorResult:
+    """Check that installed_plugins.json contains the autoskillit entry."""
+    _plugins_json = plugins_json_path or (
+        Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+    )
+    if not _plugins_json.exists():
+        return DoctorResult(
+            Severity.WARNING,
+            "installed_plugins_entry",
+            "installed_plugins.json not found. Run `autoskillit install`.",
+        )
+    try:
+        data = json.loads(_plugins_json.read_text())
+    except (json.JSONDecodeError, OSError):
+        return DoctorResult(
+            Severity.WARNING,
+            "installed_plugins_entry",
+            "installed_plugins.json could not be parsed.",
+        )
+    if "autoskillit@autoskillit-local" in data:
+        return DoctorResult(
+            Severity.OK,
+            "installed_plugins_entry",
+            "autoskillit entry present in installed_plugins.json",
+        )
+    return DoctorResult(
+        Severity.WARNING,
+        "installed_plugins_entry",
+        "autoskillit entry missing from installed_plugins.json. Run `autoskillit install` to fix.",
+    )
+
+
 def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
-    from autoskillit.cli._marketplace import _clear_plugin_cache
-
-    _clear_plugin_cache()
-
     results: list[DoctorResult] = []
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
@@ -640,6 +690,12 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 2b: Dual MCP registration — direct entry and marketplace plugin both present
     results.append(_check_dual_mcp_registration())
+
+    # Check 2c: Plugin cache directory exists
+    results.append(_check_plugin_cache_exists())
+
+    # Check 2d: installed_plugins.json has autoskillit entry
+    results.append(_check_installed_plugins_entry())
 
     # Check 3: autoskillit command on PATH
     if shutil.which("autoskillit") is None:

@@ -335,3 +335,15 @@ When `run_skill` output contains `--- QUOTA WARNING ---`:
 - Multiple consecutive denials may occur if the sleep duration was underestimated.
   Keep sleeping and retrying until the call succeeds.
 - NEVER use `AskUserQuestion` for quota events — they are fully automated.
+
+---
+
+## NARRATION SUPPRESSION — MANDATORY
+
+Do NOT output prose status text, phase announcements, or progress summaries between
+tool calls. Every non-final assistant turn MUST invoke at least one tool.
+
+The only permitted text-only turn is a final response containing structured output
+tokens (`plan_path = ...`, `worktree_path = ...`, `%%ORDER_UP%%`, etc.).
+
+This applies to all skills invoked interactively within a cook session.

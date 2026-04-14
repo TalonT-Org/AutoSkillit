@@ -1503,51 +1503,295 @@ class TestCloneRemoteUrlResolution:
         )
 
 
-class TestProbeOriginUrl:
-    """Unit tests for _probe_origin_url (replaces TestResolveCloneSource)."""
+class TestProbeSingleRemote:
+    """Unit tests for _probe_single_remote helper."""
 
-    def test_probe_origin_url_returns_ok_reason_when_remote_configured(
+    def test_probe_single_remote_returns_ok_reason_when_remote_configured(
         self, local_with_remote: Path, bare_remote: Path
     ) -> None:
-        from autoskillit.workspace.clone import _probe_origin_url
+        from autoskillit.workspace.clone import _probe_single_remote
 
-        resolution = _probe_origin_url(local_with_remote)
+        resolution = _probe_single_remote(local_with_remote, "origin")
         assert resolution.reason == "ok"
         assert resolution.url == str(bare_remote)
         assert resolution.stderr == ""
 
-    def test_probe_origin_url_returns_no_origin_reason_when_no_remote(
+    def test_probe_single_remote_returns_no_origin_reason_when_no_remote(
         self, git_repo: Path
     ) -> None:
-        from autoskillit.workspace.clone import _probe_origin_url
+        from autoskillit.workspace.clone import _probe_single_remote
 
-        resolution = _probe_origin_url(git_repo)
+        resolution = _probe_single_remote(git_repo, "origin")
         assert resolution.reason == "no_origin"
         assert resolution.url == ""
 
-    def test_probe_origin_url_returns_timeout_reason_on_timeout(self, tmp_path: Path) -> None:
-        from autoskillit.workspace.clone import _probe_origin_url
+    def test_probe_single_remote_returns_timeout_reason_on_timeout(self, tmp_path: Path) -> None:
+        from autoskillit.workspace.clone import _probe_single_remote
 
         with patch(
             "autoskillit.workspace.clone.subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd=["git"], timeout=30),
         ):
-            resolution = _probe_origin_url(tmp_path)
+            resolution = _probe_single_remote(tmp_path, "origin")
         assert resolution.reason == "timeout"
         assert resolution.url == ""
 
-    def test_probe_origin_url_returns_error_reason_on_non_zero_rc(self, tmp_path: Path) -> None:
-        from autoskillit.workspace.clone import _probe_origin_url
+    def test_probe_single_remote_returns_error_reason_on_non_zero_rc(self, tmp_path: Path) -> None:
+        from autoskillit.workspace.clone import _probe_single_remote
 
         mock_result = MagicMock()
         mock_result.returncode = 1
         mock_result.stdout = ""
         mock_result.stderr = "fatal: not a git repository"
         with patch("autoskillit.workspace.clone.subprocess.run", return_value=mock_result):
-            resolution = _probe_origin_url(tmp_path)
+            resolution = _probe_single_remote(tmp_path, "origin")
         assert resolution.reason == "error"
         assert resolution.url == ""
         assert resolution.stderr == "fatal: not a git repository"
+
+
+class TestProbeCloneSourceUrl:
+    """Unit tests for the updated _probe_clone_source_url URL resolution logic."""
+
+    def test_prefers_upstream_network_url_over_file_origin(self, tmp_path: Path) -> None:
+        """When origin=file:// and upstream=network URL, uses upstream (the key bug fix).
+
+        This is the exact scenario that caused stale clones in multi-batch pipelines:
+        source_dir is a previous autoskillit clone with origin rewritten to file://.
+        """
+        from autoskillit.workspace.clone import _probe_clone_source_url
+
+        bare = tmp_path / "bare.git"
+        subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+        source = tmp_path / "source"
+        subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.name", "T"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        # Simulate a previous _ensure_origin_isolated call: origin=file://, upstream=real remote
+        subprocess.run(
+            ["git", "-C", str(source), "remote", "add", "origin", f"file://{source}"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "remote", "add", "upstream", str(bare)],
+            check=True,
+            capture_output=True,
+        )
+
+        result = _probe_clone_source_url(source)
+
+        assert result.reason == "ok"
+        assert result.url == str(bare), (
+            f"Expected upstream URL {bare!r}, got {result.url!r}. "
+            "When origin=file://, upstream should be preferred."
+        )
+
+    def test_falls_back_to_origin_when_no_upstream(self, tmp_path: Path) -> None:
+        """Without upstream remote, falls back to origin URL (existing behavior preserved)."""
+        from autoskillit.workspace.clone import _probe_clone_source_url
+
+        bare = tmp_path / "bare.git"
+        subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+        source = tmp_path / "source"
+        subprocess.run(["git", "clone", str(bare), str(source)], capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.name", "T"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        # Only origin is configured, no upstream
+
+        result = _probe_clone_source_url(source)
+
+        assert result.reason == "ok"
+        assert result.url == str(bare)
+
+    def test_uses_origin_when_upstream_is_file_url_and_origin_is_network(
+        self, tmp_path: Path
+    ) -> None:
+        """When upstream=file:// and origin=non-file-local-path that is network-equivalent,
+        falls through to origin result (covers edge cases where upstream is also local)."""
+        from autoskillit.workspace.clone import _probe_clone_source_url
+
+        bare = tmp_path / "bare.git"
+        subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+        source = tmp_path / "source"
+        subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.name", "T"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        # upstream is a file:// URL (not a real network URL), origin is the bare path
+        subprocess.run(
+            ["git", "-C", str(source), "remote", "add", "upstream", f"file://{source}"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "remote", "add", "origin", str(bare)],
+            check=True,
+            capture_output=True,
+        )
+
+        result = _probe_clone_source_url(source)
+
+        # upstream is file:// → excluded by _is_not_file_url → falls through to origin
+        assert result.reason == "ok"
+        assert result.url == str(bare)
+
+    def test_returns_no_origin_for_repo_without_remotes(self, tmp_path: Path) -> None:
+        """Repo with no remotes returns reason='no_origin' (unchanged from current behavior)."""
+        from autoskillit.workspace.clone import _probe_clone_source_url
+
+        source = tmp_path / "source"
+        subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.name", "T"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+
+        result = _probe_clone_source_url(source)
+
+        assert result.reason == "no_origin"
+        assert result.url == ""
+
+
+class TestCloneFromPreviousAutoskillitClone:
+    """Regression: cloning from a previous autoskillit clone must use the network remote."""
+
+    def test_clone_from_previous_clone_uses_upstream_not_stale_local(self, tmp_path: Path) -> None:
+        """Batch N+1 clones from batch N's clone must get fresh HEAD from the network remote,
+        not the stale local state of the previous clone.
+
+        Setup:
+          bare_remote (has commit A + commit B)
+          source      (has commit A only — stale)
+          source has: origin=file://source (isolation), upstream=bare_remote
+
+        Expected: clone_from_source gets commit B (fetched from bare_remote via upstream).
+        Bug behavior (pre-fix): gets only commit A (cloned from file://source via origin).
+        """
+        bare_remote = tmp_path / "bare.git"
+        subprocess.run(
+            ["git", "init", "--bare", "--initial-branch=main", str(bare_remote)],
+            check=True,
+            capture_output=True,
+        )
+
+        # source: has commit A, stale (does not have commit B)
+        source = tmp_path / "source"
+        subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "config", "user.name", "T"], check=True, capture_output=True
+        )
+        (source / "a.txt").write_text("commit A")
+        subprocess.run(["git", "-C", str(source), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(source), "commit", "-m", "commit A"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "branch", "-M", "main"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "push", str(bare_remote), "main"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Simulate _ensure_origin_isolated: source.origin = file://, source.upstream = bare_remote
+        subprocess.run(
+            ["git", "-C", str(source), "remote", "add", "origin", f"file://{source}"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(source), "remote", "add", "upstream", str(bare_remote)],
+            check=True,
+            capture_output=True,
+        )
+
+        # Add commit B to bare_remote directly (simulates another batch merging)
+        tmp_push = tmp_path / "push_helper"
+        subprocess.run(
+            ["git", "clone", str(bare_remote), str(tmp_push)], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(tmp_push), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(tmp_push), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        (tmp_push / "b.txt").write_text("commit B")
+        subprocess.run(["git", "-C", str(tmp_push), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(tmp_push), "commit", "-m", "commit B"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(tmp_push), "push", "origin", "main"], check=True, capture_output=True
+        )
+
+        # Now clone from source (which is stale — missing commit B)
+        result = clone_repo(str(source), "batch2", branch="main", strategy="proceed")
+        clone_path = Path(result["clone_path"])
+
+        try:
+            # The clone MUST have b.txt (from bare_remote commit B), not just a.txt
+            assert (clone_path / "b.txt").exists(), (
+                "Clone is missing b.txt — it cloned from the stale local source instead of "
+                "the network remote (bare_remote). This is the #817 regression."
+            )
+        finally:
+            shutil.rmtree(clone_path.parent, ignore_errors=True)
+            shutil.rmtree(tmp_push, ignore_errors=True)
 
 
 class TestCloneOriginProbeFailFast:

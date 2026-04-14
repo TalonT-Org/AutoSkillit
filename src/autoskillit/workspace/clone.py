@@ -33,6 +33,19 @@ RUNS_DIR = "autoskillit-runs"
 _NETWORK_URL_PREFIXES = ("https://", "http://", "git@", "git://", "ssh://", "file://")
 
 
+def _is_not_file_url(url: str) -> bool:
+    """Return True if url is a usable clone source (not a self-referential file:// URL).
+
+    file:// URLs are written by _ensure_origin_isolated to point at the clone directory
+    itself. Using them as a clone source would clone from the stale local working tree
+    instead of fetching fresh state from the real remote (the #817 bug).
+
+    Local bare paths (no scheme) and real network URLs (https://, git@, etc.) are both
+    valid clone sources and are accepted.
+    """
+    return bool(url) and not url.startswith("file://")
+
+
 def classify_remote_url(url: str) -> str:
     """Classify a git remote URL as 'network', 'bare_local', 'nonbare_local', 'none', or 'unknown'.
 
@@ -238,10 +251,13 @@ def _ensure_origin_isolated(clone_path: Path, known_url: str) -> None:
 
 @dataclass(frozen=True)
 class CloneSourceResolution:
-    """Result of probing a source directory for its origin URL.
+    """Result of probing a source directory for its clone-source remote URL.
+
+    Tries 'upstream' first (real remote when source_dir is a previous autoskillit
+    clone), then 'origin'. Returns the first non-file:// URL found.
 
     reason:
-        "ok"        — origin is configured and subprocess returned a URL
+        "ok"        — a usable remote URL was found and returned
         "no_origin" — no origin remote is configured in this repo
         "timeout"   — subprocess.run timed out (30 s)
         "error"     — subprocess returned non-zero exit code
@@ -254,17 +270,15 @@ class CloneSourceResolution:
     stderr: str
 
 
-def _probe_origin_url(source: Path) -> CloneSourceResolution:
-    """Probe source for its origin remote URL.
+def _probe_single_remote(source: Path, remote_name: str) -> CloneSourceResolution:
+    """Run ``git remote get-url <remote_name>`` in source and return a typed result.
 
-    Runs ``git remote get-url origin`` with a 30-second timeout and
-    classifies the result into one of four typed reasons so callers
-    cannot collapse the outcomes into a single empty string.
+    Shared by _probe_clone_source_url for each candidate remote name.
     """
-    _no_origin_markers = ("no such remote",)
+    _no_remote_markers = ("no such remote",)
     try:
         result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
+            ["git", "remote", "get-url", remote_name],
             cwd=str(source),
             capture_output=True,
             text=True,
@@ -277,17 +291,41 @@ def _probe_origin_url(source: Path) -> CloneSourceResolution:
 
     if result.returncode != 0:
         stderr = result.stderr.strip()
-        stderr_lower = stderr.lower()
-        if any(marker in stderr_lower for marker in _no_origin_markers):
+        if any(m in stderr.lower() for m in _no_remote_markers):
             return CloneSourceResolution(reason="no_origin", url="", stderr=stderr)
         return CloneSourceResolution(reason="error", url="", stderr=stderr)
 
     url = result.stdout.strip()
     if not url:
-        # git normally returns non-zero for missing origin, but guard defensively
         return CloneSourceResolution(reason="no_origin", url="", stderr="")
-
     return CloneSourceResolution(reason="ok", url=url, stderr="")
+
+
+def _probe_clone_source_url(source: Path) -> CloneSourceResolution:
+    """Probe source for the best remote URL to use as the git clone source.
+
+    Avoids cloning from stale file:// local state:
+    1. Try 'upstream' — when source_dir is a previous autoskillit clone,
+       _ensure_origin_isolated sets upstream to the real remote and
+       origin to a self-referential file:// URL. Using upstream avoids cloning
+       from the stale local filesystem (fix for #817).
+    2. Try 'origin' — if upstream is absent or is itself a file:// URL, falls
+       back to origin, which is the real remote in a fresh dev checkout.
+    3. If neither yields a non-file:// URL, returns origin's result so callers
+       get the appropriate error (no_origin / error / local path as-is).
+
+    file:// URLs are explicitly excluded because _ensure_origin_isolated writes
+    them to point at the clone directory itself — a stale local reference.
+    Local bare paths (no scheme) and real network URLs are both accepted.
+    """
+    for remote_name in ("upstream", "origin"):
+        result = _probe_single_remote(source, remote_name)
+        if result.reason == "ok" and _is_not_file_url(result.url):
+            return result
+
+    # No non-file:// URL found — return origin's result (may be no_origin, error,
+    # or a local path). The caller raises RuntimeError for non-ok reasons.
+    return _probe_single_remote(source, "origin")
 
 
 def clone_repo(
@@ -390,7 +428,7 @@ def clone_repo(
     clone_path = runs_parent / f"{run_name}-{timestamp}"
     runs_parent.mkdir(parents=True, exist_ok=True)
 
-    resolution = _probe_origin_url(source)
+    resolution = _probe_clone_source_url(source)
 
     if strategy == "clone_local":
         shutil.copytree(str(source), str(clone_path))

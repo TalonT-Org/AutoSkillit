@@ -61,14 +61,11 @@ def test_diagnose_ci_skill_md_consistent_with_contract() -> None:
     outputs = skill.get("outputs", [])
     declared_names = {o.get("name") for o in outputs}
     text = _skill_text()
-    # Every declared output must appear in SKILL.md as an emitted token
-    assert "failure_subtype" in declared_names or "failure_subtype" in text, (
-        "diagnose-ci must declare failure_subtype in skill_contracts.yaml "
-        "AND reference it in SKILL.md"
+    # Both: contract must declare it AND SKILL.md must emit it as a structured token
+    assert "failure_subtype" in declared_names, (
+        "diagnose-ci must declare failure_subtype in skill_contracts.yaml"
     )
-    if "failure_subtype" in declared_names:
-        # Contract declares it — SKILL.md must emit it
-        assert re.search(r"failure_subtype\s*=", text), (
-            "diagnose-ci contract declares 'failure_subtype' output but SKILL.md "
-            "does not emit it as a structured token"
-        )
+    assert re.search(r"failure_subtype\s*=", text), (
+        "diagnose-ci contract declares 'failure_subtype' output but SKILL.md "
+        "does not emit it as a structured token"
+    )

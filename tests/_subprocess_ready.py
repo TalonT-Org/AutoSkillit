@@ -55,8 +55,8 @@ def wait_for_subprocess_ready(
                 remaining_stderr = (
                     proc.stderr.read().decode(errors="replace") if proc.stderr else ""
                 )
-            except Exception:
-                remaining_stderr = "<stderr read failed>"
+            except Exception as exc:
+                remaining_stderr = f"<stderr read failed: {exc!r}>"
             raise RuntimeError(
                 f"Subprocess exited with code {exit_code} before readiness sentinel appeared.\n"
                 f"Sentinel path: {sentinel_path}\n"

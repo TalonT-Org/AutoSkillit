@@ -111,7 +111,7 @@ def test_retry_worktree_cwd_non_skill_step_ignored() -> None:
 
 
 # ---------------------------------------------------------------------------
-# retries-on-worktree-creating-skill tests (new rules replacing old worktree-retry-creates-new)
+# retries-on-worktree-modifying-skill tests (new rules replacing old worktree-retry-creates-new)
 # ---------------------------------------------------------------------------
 
 
@@ -139,9 +139,9 @@ def test_retries_on_worktree_creating_skill_triggers() -> None:
     findings = run_semantic_rules(wf)
     errors = [f for f in findings if f.severity == Severity.ERROR]
     assert any(
-        f.rule == "retries-on-worktree-creating-skill" and "implement" in f.step_name
+        f.rule == "retries-on-worktree-modifying-skill" and "implement" in f.step_name
         for f in errors
-    ), f"Expected retries-on-worktree-creating-skill ERROR on implement step, got: {findings}"
+    ), f"Expected retries-on-worktree-modifying-skill ERROR on implement step, got: {findings}"
 
 
 def test_retries_zero_on_worktree_creating_skill_is_clean() -> None:
@@ -179,8 +179,8 @@ def test_retries_zero_on_worktree_creating_skill_is_clean() -> None:
     )
     findings = run_semantic_rules(wf)
     errors = [f for f in findings if f.severity == Severity.ERROR]
-    assert not any(f.rule == "retries-on-worktree-creating-skill" for f in errors), (
-        f"Unexpected retries-on-worktree-creating-skill ERROR with retries=0: {findings}"
+    assert not any(f.rule == "retries-on-worktree-modifying-skill" for f in errors), (
+        f"Unexpected retries-on-worktree-modifying-skill ERROR with retries=0: {findings}"
     )
 
 
@@ -218,7 +218,7 @@ def test_on_context_limit_on_worktree_skill_is_clean() -> None:
         kitchen_rules=["test"],
     )
     findings = run_semantic_rules(wf)
-    assert not any(f.rule == "retries-on-worktree-creating-skill" for f in findings)
+    assert not any(f.rule == "retries-on-worktree-modifying-skill" for f in findings)
 
 
 # ---------------------------------------------------------------------------
@@ -538,7 +538,7 @@ class TestCloneRootAsWorktreeRule:
 # ---------------------------------------------------------------------------
 
 
-def test_worktree_creating_skills_includes_experiment() -> None:
+def test_worktree_modifying_skills_includes_experiment() -> None:
     """_WORKTREE_MODIFYING_SKILLS must include implement-experiment.
 
     implement-experiment creates a worktree and emits early tokens; excluding it

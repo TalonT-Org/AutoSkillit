@@ -35,7 +35,7 @@ def test_all_rules_registered_across_submodules() -> None:
         "shadowed-required-input",
         "unreachable-step",
         "model-on-non-skill-step",
-        "retries-on-worktree-creating-skill",
+        "retries-on-worktree-modifying-skill",
         "retry-worktree-cwd",
         "weak-constraint-text",
         "undeclared-capture-key",

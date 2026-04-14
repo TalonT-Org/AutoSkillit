@@ -48,11 +48,11 @@ def _check_model_on_non_skill(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
-    name="retries-on-worktree-creating-skill",
+    name="retries-on-worktree-modifying-skill",
     description="Worktree-modifying skills must not have retries > 0.",
     severity=Severity.ERROR,
 )
-def _check_retries_on_worktree_creating_skill(ctx: ValidationContext) -> list[RuleFinding]:
+def _check_retries_on_worktree_modifying_skill(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
@@ -65,7 +65,7 @@ def _check_retries_on_worktree_creating_skill(ctx: ValidationContext) -> list[Ru
         if skill_name and skill_name in _WORKTREE_MODIFYING_SKILLS:
             findings.append(
                 RuleFinding(
-                    rule="retries-on-worktree-creating-skill",
+                    rule="retries-on-worktree-modifying-skill",
                     severity=Severity.ERROR,
                     step_name=step_name,
                     message=(

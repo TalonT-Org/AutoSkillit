@@ -134,8 +134,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.config import load_config
     from autoskillit.core import configure_logging, find_latest_session_id, pkg_root
-    from autoskillit.execution import build_interactive_cmd
-    from autoskillit.execution.commands import _MAX_MCP_OUTPUT_TOKENS_VALUE
+    from autoskillit.execution import _MAX_MCP_OUTPUT_TOKENS_VALUE, build_interactive_cmd
 
     configure_logging()
 

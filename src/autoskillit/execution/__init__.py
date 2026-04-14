@@ -13,6 +13,7 @@ from autoskillit.execution.anomaly_detection import (
 )
 from autoskillit.execution.ci import DefaultCIWatcher
 from autoskillit.execution.commands import (
+    _MAX_MCP_OUTPUT_TOKENS_VALUE,  # noqa: F401 — re-exported so cli/_cook.py avoids submodule import
     ClaudeHeadlessCmd,
     ClaudeInteractiveCmd,
     build_headless_cmd,

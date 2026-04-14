@@ -224,6 +224,67 @@ async def test_run_headless_core_injects_scenario_step_name(tmp_path):
     assert env["SCENARIO_STEP_NAME"] == "investigate"
 
 
+# --- T-DERIVE: _derive_step_name_from_skill_command ---
+
+
+def test_derive_step_name_from_namespaced_skill():
+    """Extract skill name from /autoskillit:skill-name args form."""
+    from autoskillit.execution.headless import _derive_step_name_from_skill_command
+
+    assert (
+        _derive_step_name_from_skill_command("/autoskillit:smoke-task arg1 arg2") == "smoke-task"
+    )
+    assert _derive_step_name_from_skill_command("/autoskillit:investigate foo") == "investigate"
+    assert _derive_step_name_from_skill_command("  /autoskillit:make-plan  ") == "make-plan"
+
+
+def test_derive_step_name_from_plain_skill():
+    """Extract skill name from /skill-name args form (no namespace prefix)."""
+    from autoskillit.execution.headless import _derive_step_name_from_skill_command
+
+    assert _derive_step_name_from_skill_command("/investigate foo") == "investigate"
+    assert _derive_step_name_from_skill_command("/smoke-task") == "smoke-task"
+    assert _derive_step_name_from_skill_command("plain text no slash") == "plain"
+    assert _derive_step_name_from_skill_command("") == ""
+
+
+# --- T-AUTO-DERIVE: run_headless_core auto-derives step name ---
+
+
+@pytest.mark.anyio
+async def test_run_headless_core_auto_derives_step_name_when_recording(tmp_path):
+    """When runner is RecordingSubprocessRunner and step_name is empty,
+    run_headless_core auto-derives step_name from the skill command."""
+    from autoskillit.config import AutomationConfig
+    from autoskillit.execution.headless import run_headless_core
+    from autoskillit.pipeline import DefaultGateState
+    from autoskillit.server._factory import make_context
+
+    mock_recorder = Mock()
+    mock_recorder.record_step.return_value = FakeStepResult(
+        cassette_exit_code=0,
+        cassette_path="",
+        cassette_duration_ms=100,
+    )
+    inner = MockSubprocessRunner()
+    inner.set_default(_make_result())
+    recording_runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
+
+    ctx = make_context(AutomationConfig(), runner=recording_runner, plugin_dir=str(tmp_path))
+    ctx.gate = DefaultGateState(enabled=True)
+    ctx.config.linux_tracing.log_dir = str(tmp_path / "logs")
+
+    # Call WITHOUT step_name — auto-derivation should kick in
+    await run_headless_core("/autoskillit:smoke-task", str(tmp_path), ctx)
+
+    # record_step must be called with the derived step name
+    mock_recorder.record_step.assert_called_once()
+    call_kwargs = mock_recorder.record_step.call_args.kwargs
+    assert call_kwargs["step_name"] == "smoke-task", (
+        f"Expected derived step_name 'smoke-task', got {call_kwargs['step_name']!r}"
+    )
+
+
 # --- T10: make_context wraps runner when RECORD_SCENARIO set ---
 
 

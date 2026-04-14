@@ -54,9 +54,9 @@ async def list_recipes() -> str:
             return json.dumps([])
         result = tool_ctx.recipes.list_all(Path.cwd())
         return json.dumps(result)
-    except Exception as exc:
+    except Exception:
         logger.error("list_recipes unhandled exception", exc_info=True)
-        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps([])
 
 
 @mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
@@ -199,7 +199,7 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
         return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))
     except Exception as exc:
         logger.error("load_recipe unhandled exception", exc_info=True)
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})

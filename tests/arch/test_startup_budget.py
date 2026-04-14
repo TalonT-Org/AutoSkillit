@@ -26,6 +26,36 @@ def _get_call_name(node: ast.Call) -> str:
     return ""
 
 
+def test_lifespan_calls_deferred_initialize() -> None:
+    """Lifespan must wire deferred_initialize as a background task."""
+    source = (SRC / "server" / "_lifespan.py").read_text()
+    tree = ast.parse(source)
+
+    lifespan_func = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_autoskillit_lifespan":
+            lifespan_func = node
+            break
+    assert lifespan_func is not None, "_autoskillit_lifespan not found in _lifespan.py"
+
+    # Walk the entire function body for any call to deferred_initialize
+    found = False
+    for node in ast.walk(lifespan_func):
+        if isinstance(node, ast.Call):
+            name = _get_call_name(node)
+            if "deferred_initialize" in name:
+                found = True
+                break
+            # Also check for Name nodes (direct call without module prefix)
+            if isinstance(node.func, ast.Name) and node.func.id == "_run_deferred_init":
+                found = True
+                break
+    assert found, (
+        "_autoskillit_lifespan must call deferred_initialize (or _run_deferred_init) "
+        "as a background task — deferred startup I/O is not wired into the lifespan"
+    )
+
+
 def test_no_subprocess_in_make_context() -> None:
     """REQ-STARTUP-001: make_context() must not eagerly call subprocess."""
     factory_src = (SRC / "server" / "_factory.py").read_text()
@@ -71,6 +101,51 @@ def _iter_eager_calls(func_node: ast.FunctionDef) -> list[ast.Call]:
         _EagerCallVisitor().visit(stmt)
 
     return eager_calls
+
+
+def test_no_calls_between_initialize_and_anyio_run() -> None:
+    """REQ-STARTUP-001: serve() must not call anything between _initialize() and anyio.run()."""
+    source = (SRC / "cli" / "app.py").read_text()
+    tree = ast.parse(source)
+
+    serve_func = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "serve":
+            serve_func = node
+            break
+    assert serve_func is not None, "serve() not found in app.py"
+
+    # Find the indices of _initialize(...) and anyio.run(...) in the body
+    init_idx = None
+    anyio_idx = None
+    for i, stmt in enumerate(serve_func.body):
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            name = _get_call_name(stmt.value)
+            if name == "_initialize":
+                init_idx = i
+        # anyio.run is wrapped in try/except — look for ast.Try containing anyio.run
+        if isinstance(stmt, ast.Try):
+            for try_stmt in stmt.body:
+                if isinstance(try_stmt, ast.Expr) and isinstance(try_stmt.value, ast.Call):
+                    name = _get_call_name(try_stmt.value)
+                    if name == "anyio.run":
+                        anyio_idx = i
+
+    assert init_idx is not None, "_initialize() call not found in serve() body"
+    assert anyio_idx is not None, "anyio.run() call not found in serve() body"
+    assert init_idx < anyio_idx, "_initialize() must come before anyio.run()"
+
+    # Check for function calls in statements between _initialize and anyio.run
+    violations: list[str] = []
+    for stmt in serve_func.body[init_idx + 1 : anyio_idx]:
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            name = _get_call_name(stmt.value)
+            violations.append(f"{name}() at line {stmt.lineno}")
+
+    assert not violations, (
+        "serve() must not call anything between _initialize() and anyio.run() — "
+        "found:\n" + "\n".join(f"  {v}" for v in violations)
+    )
 
 
 def test_no_gh_cli_token_in_make_context() -> None:

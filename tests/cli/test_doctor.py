@@ -202,6 +202,8 @@ class TestCLIDoctor:
             "editable_install_source_exists",  # ★ new
             "stale_entry_points",  # ★ new
             "dual_mcp_registration",  # ★ new
+            "plugin_cache_exists",
+            "installed_plugins_entry",
         }
         assert expected <= check_names
 
@@ -619,16 +621,53 @@ def test_doctor_fix_parameter_does_not_exist():
     assert "fix" not in sig.parameters, "doctor --fix is a silent no-op and must be removed"
 
 
-def test_doctor_clears_plugin_cache(tmp_path, monkeypatch, capsys):
-    """Doctor must clear the plugin cache on every run."""
+def test_doctor_does_not_modify_plugin_state(tmp_path, monkeypatch, capsys):
+    """Doctor must not delete the plugin cache or modify installed_plugins.json."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
     cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
     cache_dir.mkdir(parents=True)
     (cache_dir / "0.3.0" / "hooks").mkdir(parents=True)
-    (cache_dir / "0.3.0" / "hooks" / "pretty_output_hook.py").write_text("# stale")
+    (cache_dir / "0.3.0" / "hooks" / "pretty_output_hook.py").write_text("# cached")
+
+    plugins_json = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
+    plugins_json.write_text('{"autoskillit@autoskillit-local": {"version": "0.8.25"}}')
+
     cli.doctor()
-    assert not cache_dir.exists()
+
+    assert cache_dir.exists(), "Doctor must not delete the plugin cache directory"
+    data = json.loads(plugins_json.read_text())
+    assert "autoskillit@autoskillit-local" in data, (
+        "Doctor must not remove installed_plugins.json entries"
+    )
+
+
+def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):
+    """Doctor must report when the plugin cache directory is missing."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cli.doctor(output_json=True)
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    checks = [r for r in data["results"] if r["check"] == "plugin_cache_exists"]
+    assert len(checks) == 1, "Expected a plugin_cache_exists check"
+    assert checks[0]["severity"] in ("warning", "error")
+
+
+def test_doctor_checks_installed_plugins_entry(tmp_path, monkeypatch, capsys):
+    """Doctor must report when installed_plugins.json is missing the autoskillit entry."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    # Create installed_plugins.json without the autoskillit entry
+    plugins_dir = tmp_path / ".claude" / "plugins"
+    plugins_dir.mkdir(parents=True)
+    (plugins_dir / "installed_plugins.json").write_text("{}")
+    cli.doctor(output_json=True)
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    checks = [r for r in data["results"] if r["check"] == "installed_plugins_entry"]
+    assert len(checks) == 1, "Expected an installed_plugins_entry check"
+    assert checks[0]["severity"] in ("warning", "error")
 
 
 def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsys):

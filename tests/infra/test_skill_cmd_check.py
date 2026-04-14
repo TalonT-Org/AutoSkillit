@@ -197,3 +197,59 @@ class TestSkillCmdCheckDeny:
         assert hso["hookEventName"] == "PreToolUse"
         assert hso["permissionDecision"] == "deny"
         assert "permissionDecisionReason" in hso
+
+    def test_deny_suggests_all_tokens_single_line(self):
+        """Corrected command includes path tokens first, then non-path tokens."""
+        cmd = "/autoskillit:retry-worktree use this plan .autoskillit/temp/plan.md /path/worktree"
+        result = _run_hook({"skill_command": cmd})
+        assert _decision(result) == "deny"
+        reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+        # Both path tokens appear in corrected suggestion
+        assert ".autoskillit/temp/plan.md" in reason
+        assert "/path/worktree" in reason
+        # Non-path tokens also preserved in the suggestion
+        assert "use this plan" in reason
+
+    def test_deny_suggests_paths_before_non_path_tokens(self):
+        """In corrected command, path tokens appear before non-path tokens."""
+        cmd = (
+            "/autoskillit:implement-worktree-no-merge the verified plan"
+            " .autoskillit/temp/rectify/plan.md"
+        )
+        result = _run_hook({"skill_command": cmd})
+        reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+        path_pos = reason.find(".autoskillit/temp/rectify/plan.md")
+        nonpath_pos = reason.find("the verified plan")
+        # Path must appear before non-path text in the corrected suggestion
+        assert path_pos < nonpath_pos
+
+    def test_deny_multiline_prose_before_path_preserves_prose_after_path(self):
+        """Multiline prose context is preserved and placed after path args in suggestion."""
+        cmd = (
+            "/autoskillit:implement-worktree-no-merge "
+            "implement the feature described below\n\n"
+            ".autoskillit/temp/plan.md"
+        )
+        result = _run_hook({"skill_command": cmd})
+        assert _decision(result) == "deny"
+        reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+        # Path must appear in the corrected suggestion
+        assert ".autoskillit/temp/plan.md" in reason
+        # Prose content must also be present (not dropped)
+        assert "implement the feature described below" in reason
+        # Path precedes prose in the corrected suggestion
+        path_pos = reason.find(".autoskillit/temp/plan.md")
+        prose_pos = reason.find("implement the feature described below")
+        assert path_pos < prose_pos
+
+    def test_deny_message_no_old_parenthetical(self):
+        """Old '(append any remaining positional args...)' phrasing must not appear."""
+        result = _run_hook({"skill_command": _CANONICAL_BUG})
+        reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "append any remaining positional args" not in reason
+
+    def test_deny_message_uses_relocate_wording(self):
+        """Deny message must explicitly say 'relocate' or 'Relocate'."""
+        result = _run_hook({"skill_command": _CANONICAL_BUG})
+        reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "relocate" in reason.lower()

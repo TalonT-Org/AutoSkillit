@@ -111,6 +111,8 @@ def main(*, cache_path_override: str | None = None) -> None:
     tool_response = event.get("tool_response") or ""
 
     settings = resolve_quota_settings(cache_path_override=cache_path_override)
+    if settings.disabled:
+        sys.exit(0)  # quota guard disabled for this session
     cache_path_str = settings.cache_path
     cache_max_age = settings.cache_max_age
     log_dir = _resolve_quota_log_dir()

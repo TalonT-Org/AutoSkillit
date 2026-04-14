@@ -415,6 +415,7 @@ class MergeQueueWatcher(Protocol):
         stall_grace_period: int = 60,
         max_stall_retries: int = 3,
         not_in_queue_confirmation_cycles: int = 2,
+        max_inconclusive_retries: int = 5,
     ) -> dict[str, Any]: ...
 
     async def toggle(

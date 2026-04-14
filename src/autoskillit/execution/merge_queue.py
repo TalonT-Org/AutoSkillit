@@ -301,6 +301,7 @@ class DefaultMergeQueueWatcher:
         stall_grace_period: int = 60,
         max_stall_retries: int = 3,
         not_in_queue_confirmation_cycles: int = 2,
+        max_inconclusive_retries: int = 5,
     ) -> dict[str, Any]:
         """Poll until PR is merged, ejected, stalled, dropped, or timeout expires.
 
@@ -319,6 +320,8 @@ class DefaultMergeQueueWatcher:
             not_in_queue_confirmation_cycles: Consecutive "not in queue" cycles required
                 before acting on absence. Guards against race between queue exit and
                 merged=true propagation (default 2).
+            max_inconclusive_retries: Maximum NoPositiveSignal cycles (beyond the
+                confirmation window) before returning pr_state="timeout" (default 5).
 
         Returns:
             {
@@ -387,12 +390,11 @@ class DefaultMergeQueueWatcher:
                     await asyncio.sleep(poll_interval)
                     continue
                 inconclusive_count += 1
-                if inconclusive_count >= self._max_inconclusive_retries:
+                if inconclusive_count >= max_inconclusive_retries:
                     return _make_result(
                         False,
                         PRState.TIMEOUT,
-                        f"Inconclusive after {self._max_inconclusive_retries} retries:"
-                        f" {exc.reason}",
+                        f"Inconclusive after {max_inconclusive_retries} retries: {exc.reason}",
                     )
                 await asyncio.sleep(poll_interval)
                 continue

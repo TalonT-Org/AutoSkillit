@@ -2316,14 +2316,14 @@ class TestInjectNarrationSuppression:
 
         result = _inject_narration_suppression("cmd")
         # Directive must reference tool calls specifically
-        assert "tool" in result.lower()
+        assert "between tool calls" in result
 
     def test_directive_exempts_final_response(self):
         from autoskillit.execution.commands import _inject_narration_suppression
 
         result = _inject_narration_suppression("cmd")
         # Must not suppress the final response where structured output tokens live
-        assert "final" in result.lower()
+        assert "final response" in result
 
 
 # ---------------------------------------------------------------------------

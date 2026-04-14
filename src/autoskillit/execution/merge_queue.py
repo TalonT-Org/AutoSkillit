@@ -597,6 +597,7 @@ def _is_secondary_rate_limit(resp: httpx.Response) -> bool:
     try:
         text = resp.text.lower()
     except Exception:
+        _log.warning("Failed to read response body for rate-limit check", exc_info=True)
         return False
     return _RATE_LIMIT_SECONDARY_MARKER in text
 

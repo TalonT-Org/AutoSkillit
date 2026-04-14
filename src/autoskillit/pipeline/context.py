@@ -7,7 +7,6 @@ Replaces two mutable module-level singletons in server.py:
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -33,6 +32,7 @@ from autoskillit.core import (
     SubprocessRunner,
     TestRunner,
     TimingLog,
+    TokenFactory,
     TokenLog,
     WorkspaceManager,
     WriteExpectedResolver,
@@ -120,7 +120,7 @@ class ToolContext:
     kitchen_id: str = field(default="")
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
-    token_factory: Callable[[], str | None] | None = field(default=None)
+    token_factory: TokenFactory | None = field(default=None)
 
     def __post_init__(self) -> None:
         if self.background is None:

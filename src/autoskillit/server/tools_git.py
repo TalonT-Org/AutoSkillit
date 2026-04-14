@@ -89,7 +89,7 @@ async def merge_worktree(
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("merge_worktree unhandled exception", exc_info=True)
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})

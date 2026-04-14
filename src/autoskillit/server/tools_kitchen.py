@@ -425,4 +425,4 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
         return "Kitchen is closed."
     except Exception as exc:
         logger.error("close_kitchen unhandled exception", exc_info=True)
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

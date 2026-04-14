@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
-from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
+from autoskillit.cli._init_helpers import (
+    _KNOWN_SCANNERS,
+    _check_dual_mcp_files,
+    _detect_secret_scanner,
+)
 from autoskillit.core import Severity, get_logger
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 from autoskillit.hook_registry import (
@@ -102,26 +106,17 @@ def _check_dual_mcp_registration(
     _plugins_json = plugins_json_path or (
         Path.home() / ".claude" / "plugins" / "installed_plugins.json"
     )
-    try:
-        has_direct = _claude_json.exists() and "autoskillit" in json.loads(
-            _claude_json.read_text()
-        ).get("mcpServers", {})
-        has_marketplace = _plugins_json.exists() and "autoskillit@autoskillit-local" in json.loads(
-            _plugins_json.read_text()
-        ).get("plugins", {})
-        if has_direct and has_marketplace:
-            return DoctorResult(
-                severity=Severity.WARNING,
-                check="dual_mcp_registration",
-                message=(
-                    "autoskillit is registered both as a direct mcpServers entry "
-                    "(~/.claude.json) and as a marketplace plugin. This spawns two "
-                    "independent server processes per session with split gate state. "
-                    "Run `autoskillit install` to remove the stale direct entry."
-                ),
-            )
-    except (OSError, json.JSONDecodeError):
-        pass  # fail-open: unreadable files → cannot confirm dual, treat as OK
+    if _check_dual_mcp_files(_claude_json, _plugins_json):
+        return DoctorResult(
+            severity=Severity.WARNING,
+            check="dual_mcp_registration",
+            message=(
+                "autoskillit is registered both as a direct mcpServers entry "
+                "(~/.claude.json) and as a marketplace plugin. This spawns two "
+                "independent server processes per session with split gate state. "
+                "Run `autoskillit install` to remove the stale direct entry."
+            ),
+        )
     return DoctorResult(
         severity=Severity.OK,
         check="dual_mcp_registration",

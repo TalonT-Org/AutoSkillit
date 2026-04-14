@@ -526,18 +526,12 @@ def _source_drift_signal(info: InstallInfo, home: Path) -> Signal | None:
 
 def _is_dual_mcp_registered(home: Path) -> bool:
     """Return True if both direct mcpServers entry and marketplace plugin are active."""
-    claude_json = home / ".claude.json"
-    plugins_json = home / ".claude" / "plugins" / "installed_plugins.json"
-    try:
-        has_direct = claude_json.exists() and "autoskillit" in json.loads(
-            claude_json.read_text()
-        ).get("mcpServers", {})
-        has_marketplace = plugins_json.exists() and "autoskillit@autoskillit-local" in json.loads(
-            plugins_json.read_text()
-        ).get("plugins", {})
-        return has_direct and has_marketplace
-    except (OSError, json.JSONDecodeError):
-        return False
+    from autoskillit.cli._init_helpers import _check_dual_mcp_files
+
+    return _check_dual_mcp_files(
+        home / ".claude.json",
+        home / ".claude" / "plugins" / "installed_plugins.json",
+    )
 
 
 def _dual_mcp_signal(home: Path | None = None) -> Signal | None:

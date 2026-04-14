@@ -329,6 +329,26 @@ safety:
 """
 
 
+def _check_dual_mcp_files(claude_json: Path, plugins_json: Path) -> bool:
+    """Return True if both direct mcpServers entry and marketplace plugin are active.
+
+    Checks ~/.claude.json for an 'autoskillit' mcpServers key and
+    installed_plugins.json for an 'autoskillit@autoskillit-local' plugin entry.
+
+    Fail-open: any I/O or parse error returns False without raising.
+    """
+    try:
+        has_direct = claude_json.exists() and "autoskillit" in json.loads(
+            claude_json.read_text()
+        ).get("mcpServers", {})
+        has_marketplace = plugins_json.exists() and "autoskillit@autoskillit-local" in json.loads(
+            plugins_json.read_text()
+        ).get("plugins", {})
+        return has_direct and has_marketplace
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
 def _user_claude_json_path() -> Path:
     """Return path to ~/.claude.json (user-scoped MCP server config)."""
     return Path.home() / ".claude.json"

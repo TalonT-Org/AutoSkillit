@@ -17,6 +17,7 @@ from autoskillit.cli._hooks import (
 )
 from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
 from autoskillit.core import atomic_write, is_git_worktree, pkg_root
+from autoskillit.hooks import generate_hooks_json
 
 _VALID_SCOPES = {"user", "project", "local"}
 _MARKETPLACE_NAME = "autoskillit-local"
@@ -35,16 +36,12 @@ def _clear_plugin_cache() -> None:
     if cache_dir.is_dir():
         shutil.rmtree(cache_dir)
 
-    installed_json = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-    if installed_json.exists():
-        try:
-            data = json.loads(installed_json.read_text())
-            plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
-            if plugin_ref in data:
-                del data[plugin_ref]
-                atomic_write(installed_json, json.dumps(data, indent=2))
-        except (OSError, json.JSONDecodeError):
-            pass  # non-fatal — install will proceed regardless
+    from autoskillit.cli._installed_plugins import InstalledPluginsFile
+
+    try:
+        InstalledPluginsFile().remove(f"autoskillit@{_MARKETPLACE_NAME}")
+    except OSError:
+        pass  # non-fatal — install will proceed regardless
 
 
 def _ensure_marketplace() -> Path:
@@ -97,7 +94,28 @@ def _ensure_marketplace() -> Path:
     return marketplace_dir
 
 
-def install(*, scope: str = "user"):
+def _ensure_workspace_ready() -> None:
+    """Repair project workspace state that install() is responsible for.
+
+    Called after the CLAUDECODE guard — only when the actual install proceeds.
+    Idempotent: safe to call on any project state.
+    """
+    from autoskillit.core import ensure_project_temp
+
+    project_dir = Path.cwd()
+    # Repair .autoskillit/.gitignore and ensure temp/ exists
+    if (project_dir / ".autoskillit").is_dir():
+        ensure_project_temp(project_dir)
+
+    # Migrate legacy .autoskillit/scripts/ to .autoskillit/recipes/ if present
+    if (project_dir / ".autoskillit" / "scripts").exists():
+        try:
+            upgrade()
+        except OSError as exc:
+            print(f"Warning: migration upgrade() failed (non-fatal): {exc}")
+
+
+def install(*, scope: str = "user") -> bool:
     """Install the plugin persistently for Claude Code.
 
     Sets up a local marketplace and installs the plugin so it loads
@@ -125,7 +143,7 @@ def install(*, scope: str = "user"):
         print(f"  claude plugin marketplace add {marketplace_dir}")
         print(f"  claude plugin install {plugin_ref} --scope {scope}")
         print("\nThen run: autoskillit init (in your project directory)")
-        return
+        return False  # deferred: user must complete manually in a regular terminal
 
     if shutil.which("claude") is None:
         print("\nERROR: 'claude' command not found on PATH.")
@@ -135,11 +153,10 @@ def install(*, scope: str = "user"):
         print("\nThen run: autoskillit init (in your project directory)")
         sys.exit(1)
 
+    _ensure_workspace_ready()
     _clear_plugin_cache()
 
     # Regenerate hooks.json from the canonical registry with absolute paths
-    from autoskillit.hooks import generate_hooks_json
-
     hooks_json_path = pkg_root() / "hooks" / "hooks.json"
     atomic_write(hooks_json_path, json.dumps(generate_hooks_json(), indent=2) + "\n")
 
@@ -176,6 +193,7 @@ def install(*, scope: str = "user"):
     sweep_all_scopes_for_orphans(Path.cwd())
     settings_path = _hooks_mod._claude_settings_path(scope)
     sync_hooks_to_settings(settings_path)
+    return True
 
 
 def upgrade():

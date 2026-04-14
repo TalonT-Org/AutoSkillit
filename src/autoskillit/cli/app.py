@@ -194,8 +194,9 @@ def install(
     from autoskillit.cli._init_helpers import _print_next_steps
     from autoskillit.cli._marketplace import install as _install
 
-    _install(scope=scope)
-    _print_next_steps(context="install")
+    completed = _install(scope=scope)
+    if completed:
+        _print_next_steps(context="install")
 
 
 @app.command

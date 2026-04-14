@@ -69,7 +69,6 @@ class TestCLIDoctor:
                 {
                     "mcpServers": {
                         "other-server": {"type": "stdio", "command": str(fake_bin)},
-                        "autoskillit": {"type": "stdio", "command": "autoskillit"},
                     }
                 }
             )
@@ -94,7 +93,7 @@ class TestCLIDoctor:
         )
         # Create installed_plugins.json for Check 2d
         (tmp_path / ".claude" / "plugins" / "installed_plugins.json").write_text(
-            json.dumps({"autoskillit@autoskillit-local": {}})
+            json.dumps({"version": 2, "plugins": {"autoskillit@autoskillit-local": {}}})
         )
         # Register hooks so hook_registration check passes
         # Use explicit path (tmp_path already monkeypatched as Path.home())
@@ -639,13 +638,17 @@ def test_doctor_does_not_modify_plugin_state(tmp_path, monkeypatch, capsys):
     (cache_dir / "0.3.0" / "hooks" / "pretty_output_hook.py").write_text("# cached")
 
     plugins_json = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
-    plugins_json.write_text('{"autoskillit@autoskillit-local": {"version": "0.8.25"}}')
+    plugins_json.write_text(
+        json.dumps(
+            {"version": 2, "plugins": {"autoskillit@autoskillit-local": {"version": "0.8.25"}}}
+        )
+    )
 
     cli.doctor()
 
     assert cache_dir.exists(), "Doctor must not delete the plugin cache directory"
     data = json.loads(plugins_json.read_text())
-    assert "autoskillit@autoskillit-local" in data, (
+    assert "autoskillit@autoskillit-local" in data.get("plugins", {}), (
         "Doctor must not remove installed_plugins.json entries"
     )
 
@@ -1776,3 +1779,32 @@ def test_doctor_no_dual_when_only_direct(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     result = _check_dual_mcp_registration()
     assert result.severity == Severity.OK
+
+
+def test_check_installed_plugins_entry_real_structure_is_ok(tmp_path: Path) -> None:
+    """With the real nested format, the check must report OK."""
+    from autoskillit.cli._doctor import _check_installed_plugins_entry
+    from autoskillit.core import Severity
+
+    p = tmp_path / "installed_plugins.json"
+    p.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "plugins": {"autoskillit@autoskillit-local": {"name": "autoskillit"}},
+            }
+        )
+    )
+    result = _check_installed_plugins_entry(plugins_json_path=p)
+    assert result.severity == Severity.OK
+
+
+def test_check_installed_plugins_entry_flat_structure_is_warning(tmp_path: Path) -> None:
+    """A flat structure (wrong format) must not be silently treated as OK."""
+    from autoskillit.cli._doctor import _check_installed_plugins_entry
+    from autoskillit.core import Severity
+
+    p = tmp_path / "installed_plugins.json"
+    p.write_text(json.dumps({"autoskillit@autoskillit-local": {}}))
+    result = _check_installed_plugins_entry(plugins_json_path=p)
+    assert result.severity == Severity.WARNING

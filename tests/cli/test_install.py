@@ -555,6 +555,85 @@ class TestGroupFInstall:
         )
 
 
+def test_clear_plugin_cache_removes_nested_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_clear_plugin_cache must remove the entry from data['plugins'], not top-level data."""
+    from autoskillit.cli._marketplace import _clear_plugin_cache
+
+    plugins_dir = tmp_path / ".claude" / "plugins"
+    plugins_dir.mkdir(parents=True)
+    installed_json = plugins_dir / "installed_plugins.json"
+    installed_json.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "plugins": {"autoskillit@autoskillit-local": {"name": "autoskillit"}},
+            }
+        )
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    _clear_plugin_cache()
+    data = json.loads(installed_json.read_text())
+    assert "autoskillit@autoskillit-local" not in data.get("plugins", {})
+    assert data["version"] == 2  # other keys preserved
+
+
+def test_clear_plugin_cache_noop_when_entry_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_clear_plugin_cache must not raise when the entry is already absent."""
+    from autoskillit.cli._marketplace import _clear_plugin_cache
+
+    plugins_dir = tmp_path / ".claude" / "plugins"
+    plugins_dir.mkdir(parents=True)
+    installed_json = plugins_dir / "installed_plugins.json"
+    installed_json.write_text(json.dumps({"version": 2, "plugins": {}}))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    _clear_plugin_cache()  # must not raise
+    data = json.loads(installed_json.read_text())
+    assert data == {"version": 2, "plugins": {}}
+
+
+def test_install_claudecode_guard_returns_false(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """install() must return False when CLAUDECODE guard fires, not None-as-success."""
+    import importlib as _importlib
+
+    from autoskillit.cli._marketplace import install as _install
+
+    _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+    monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    result = _install(scope="user")
+    assert result is False, f"Expected False, got {result!r}"
+
+
+def test_install_claudecode_guard_does_not_print_next_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """app.install() must not print Next Steps when CLAUDECODE guard fires."""
+
+    import autoskillit.cli._init_helpers as _init_helpers_mod
+    import autoskillit.cli._marketplace as _mkt_mod
+
+    next_steps_called: list[dict] = []
+    monkeypatch.setattr(
+        _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
+    )
+    monkeypatch.setattr(_mkt_mod, "install", lambda **kw: False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    from autoskillit.cli.app import install as app_install
+
+    app_install(scope="user")
+    assert not next_steps_called, (
+        "_print_next_steps must not be called when install() returns False"
+    )
+
+
 def test_install_sweeps_all_scopes_for_orphans(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -599,3 +678,74 @@ def test_install_sweeps_all_scopes_for_orphans(
                 assert "pretty_output.py" not in hook["command"], (
                     "Orphaned hook was not evicted from project scope"
                 )
+
+
+def test_install_creates_autoskillit_gitignore(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After install(), .autoskillit/.gitignore must exist (ensure_project_temp was called)."""
+    import importlib as _importlib
+
+    from autoskillit.cli._marketplace import install as _install
+
+    _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+    monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+    )
+    monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli._marketplace.sweep_all_scopes_for_orphans", lambda _: None
+    )
+    monkeypatch.setattr("autoskillit.cli._marketplace.sync_hooks_to_settings", lambda _: None)
+    monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
+    monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
+
+    (tmp_path / ".autoskillit").mkdir()
+    _install(scope="user")
+
+    assert (tmp_path / ".autoskillit" / ".gitignore").exists(), (
+        ".autoskillit/.gitignore must be created by install(), not just by init()"
+    )
+
+
+def test_install_calls_upgrade_when_scripts_dir_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """install() must migrate .autoskillit/scripts/ → .autoskillit/recipes/ if scripts/ exists."""
+    import importlib as _importlib
+
+    from autoskillit.cli._marketplace import install as _install
+
+    _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+    monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+    )
+    monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli._marketplace.sweep_all_scopes_for_orphans", lambda _: None
+    )
+    monkeypatch.setattr("autoskillit.cli._marketplace.sync_hooks_to_settings", lambda _: None)
+    monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
+    monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
+
+    scripts_dir = tmp_path / ".autoskillit" / "scripts"
+    scripts_dir.mkdir(parents=True)
+
+    _install(scope="user")
+
+    assert (tmp_path / ".autoskillit" / "recipes").exists(), (
+        "install() must migrate scripts/ to recipes/ when scripts/ exists"
+    )
+    assert not scripts_dir.exists(), "scripts/ must be renamed away"

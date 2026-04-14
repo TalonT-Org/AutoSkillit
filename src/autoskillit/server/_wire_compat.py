@@ -18,9 +18,9 @@ from typing import TYPE_CHECKING
 from fastmcp.server.middleware import Middleware
 
 if TYPE_CHECKING:
+    import mcp.types as mt
     from fastmcp.server.middleware import CallNext, MiddlewareContext
     from fastmcp.tools.tool import Tool
-    import mcp.types as mt
 
 
 class ClaudeCodeCompatMiddleware(Middleware):

@@ -45,6 +45,8 @@ __all__ = [
     # Public utilities consumed by CLI and tests
     "version_info",
     "make_context",
+    # Wire-format compatibility middleware
+    "ClaudeCodeCompatMiddleware",
 ]
 
 # Import all tool sub-modules to trigger @mcp.tool() registration.

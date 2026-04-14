@@ -537,9 +537,11 @@ def test_server_file_count_under_limit() -> None:
     the pre-deletion editable install guard for perform_merge().
     Limit updated from 17 to 18 after _lifespan.py was added for
     FastMCP server lifespan teardown (#745).
+    Limit updated from 18 to 19 after _wire_compat.py was added for
+    Claude Code wire-format sanitization middleware.
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 18, f"server/ has {len(py_files)} files, max is 18"
+    assert len(py_files) <= 19, f"server/ has {len(py_files)} files, max is 19"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
@@ -691,7 +693,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         (15 hook scripts + 4 private helpers + 1 __init__).
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 18,
+        "server": 19,
         "recipe": 34,
         "execution": 26,
         "core": 18,

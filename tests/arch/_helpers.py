@@ -228,6 +228,54 @@ def _is_mcp_tool_decorator(node: ast.expr) -> bool:
     return False
 
 
+def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.FunctionDef) -> bool:
+    """Return True if the function has a top-level try/except Exception.
+
+    A leading gate-check guard (if ... return/raise ...) before the try is permitted,
+    matching the canonical gated-tool pattern used across the server layer.
+    """
+    body = func_node.body
+    # Skip docstring
+    stmts = [
+        s for s in body if not isinstance(s, ast.Expr) or not isinstance(s.value, ast.Constant)
+    ]
+    if not stmts:
+        return False
+    # Skip leading guard `if ... return` statements (gate checks, early validation exits)
+    idx = 0
+    while idx < len(stmts):
+        s = stmts[idx]
+        if (
+            isinstance(s, ast.If)
+            and len(s.body) == 1
+            and isinstance(s.body[0], (ast.Return, ast.Raise))
+            and not s.orelse
+        ):
+            idx += 1
+        else:
+            break
+    if idx >= len(stmts):
+        return False
+    first = stmts[idx]
+    if not isinstance(first, ast.Try):
+        return False
+    # Check that at least one handler catches Exception or BaseException
+    for handler in first.handlers:
+        if handler.type is None:  # bare except:
+            return True
+        if isinstance(handler.type, ast.Name) and handler.type.id in (
+            "Exception",
+            "BaseException",
+        ):
+            return True
+        if isinstance(handler.type, ast.Attribute) and handler.type.attr in (
+            "Exception",
+            "BaseException",
+        ):
+            return True
+    return False
+
+
 def _runtime_import_froms(path: Path) -> list[ast.ImportFrom]:
     """Return ImportFrom nodes not inside a TYPE_CHECKING guard."""
     tree = ast.parse(path.read_text())

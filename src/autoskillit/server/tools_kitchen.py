@@ -245,103 +245,148 @@ async def open_kitchen(
         name: Optional recipe name to load immediately after opening.
         overrides: Optional dict of ingredient name → value to override recipe defaults.
             Use to activate hidden features (e.g., ``{"sprint_mode": "true"}``).
+
+    Never raises.
     """
-    # Headless guard — wrap denial in envelope shape
-    if (h := _require_not_headless("open_kitchen")) is not None:
-        parsed_h = json.loads(h)
-        return json.dumps(
-            {
-                "success": False,
-                "kitchen": "failed",
-                "user_visible_message": parsed_h.get(
-                    "result",
-                    "open_kitchen cannot be called from headless sessions.",
-                ),
-                "error": "HeadlessDenied",
-                "stage": "headless_guard",
-            }
+    try:
+        # Headless guard — wrap denial in envelope shape
+        if (h := _require_not_headless("open_kitchen")) is not None:
+            parsed_h = json.loads(h)
+            return json.dumps(
+                {
+                    "success": False,
+                    "kitchen": "failed",
+                    "user_visible_message": parsed_h.get(
+                        "result",
+                        "open_kitchen cannot be called from headless sessions.",
+                    ),
+                    "error": "HeadlessDenied",
+                    "stage": "headless_guard",
+                }
+            )
+
+        from autoskillit.server import _get_ctx  # noqa: PLC0415
+
+        disabled_subsets = _get_ctx().config.subsets.disabled
+
+        handler_err = await _open_kitchen_handler()
+        if handler_err is not None:
+            return handler_err
+
+        try:
+            await ctx.enable_components(tags={"kitchen"})
+        except Exception as exc:
+            logger.warning("open_kitchen_failure", stage="enable_components", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="enable_components")
+
+        try:
+            await _redisable_subsets(ctx, disabled_subsets)
+        except Exception as exc:
+            logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="redisable_subsets")
+
+        _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
+        _categories = _build_tool_category_listing()
+
+        if name is not None:
+            tool_ctx = _get_ctx()
+            if tool_ctx.recipes is None:
+                return _kitchen_failure_envelope(
+                    RuntimeError("Server not initialized"),
+                    stage="recipe_context",
+                    user_hint=(
+                        "open_kitchen cannot load a recipe because the server is not "
+                        "initialized. Run 'autoskillit doctor' to diagnose."
+                    ),
+                )
+            suppressed = tool_ctx.config.migration.suppressed
+            _defaults = resolve_ingredient_defaults(Path.cwd())
+            # Runtime enum check: output_mode must be validated before recipe loading
+            if name == "research":
+                _om_value = (overrides or {}).get("output_mode")
+                if _om_value is not None and _om_value not in {"pr", "local"}:
+                    return json.dumps(
+                        {
+                            "error": (
+                                f"output_mode must be 'pr' or 'local', got {_om_value!r}. "
+                                "Only two modes are supported for the research recipe."
+                            )
+                        }
+                    )
+            try:
+                result = tool_ctx.recipes.load_and_validate(
+                    name,
+                    Path.cwd(),
+                    suppressed=suppressed,
+                    resolved_defaults=_defaults,
+                    ingredient_overrides=overrides,
+                )
+            except Exception as exc:
+                logger.warning("open_kitchen_failure", stage="load_and_validate", exc_info=True)
+                return _kitchen_failure_envelope(exc, stage="load_and_validate")
+
+            tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
+
+            try:
+                recipe_info = tool_ctx.recipes.find(name, Path.cwd())
+            except Exception as exc:
+                logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
+                return _kitchen_failure_envelope(exc, stage="recipe_find")
+
+            try:
+                result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
+            except Exception as exc:
+                logger.warning("open_kitchen_failure", stage="apply_triage_gate", exc_info=True)
+                return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
+
+            result["success"] = True
+            result["kitchen"] = "open"
+            result["version"] = __version__
+
+            if "ingredients_table" not in result or not result["ingredients_table"]:
+                result["ingredients_table"] = None
+
+            try:
+                warning = _build_hook_diagnostic_warning()
+            except Exception as exc:
+                logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
+                return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
+            if warning:
+                result["hook_warning"] = warning.strip()
+            return json.dumps(result)
+
+        text = (
+            f"Kitchen is open. AutoSkillit {__version__}. Tools are ready for service.\n\n"
+            f"Available Tools by Category:\n{_categories}\n\n"
+            "IMPORTANT — Orchestrator Discipline:\n"
+            f"NEVER use native Claude Code tools ({_forbidden_list}) "
+            "in this session. All code reading, searching, editing, and "
+            "investigation MUST be delegated through run_skill, which launches "
+            "headless sessions with full tool access. Do NOT use native tools to "
+            "investigate failures — route to on_failure "
+            "and let the downstream skill handle diagnosis."
         )
 
-    from autoskillit.server import _get_ctx  # noqa: PLC0415
+        # Inject sous-chef global orchestration rules (graceful degradation if absent)
+        _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
+        try:
+            if _sous_chef_path.exists():
+                text += "\n\n" + _sous_chef_path.read_text()
+        except Exception as exc:
+            logger.warning("open_kitchen_failure", stage="read_sous_chef", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="read_sous_chef")
 
-    disabled_subsets = _get_ctx().config.subsets.disabled
-
-    handler_err = await _open_kitchen_handler()
-    if handler_err is not None:
-        return handler_err
-
-    try:
-        await ctx.enable_components(tags={"kitchen"})
-    except Exception as exc:
-        logger.warning("open_kitchen_failure", stage="enable_components", exc_info=True)
-        return _kitchen_failure_envelope(exc, stage="enable_components")
-
-    try:
-        await _redisable_subsets(ctx, disabled_subsets)
-    except Exception as exc:
-        logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
-        return _kitchen_failure_envelope(exc, stage="redisable_subsets")
-
-    _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
-    _categories = _build_tool_category_listing()
-
-    if name is not None:
-        tool_ctx = _get_ctx()
-        if tool_ctx.recipes is None:
-            return _kitchen_failure_envelope(
-                RuntimeError("Server not initialized"),
-                stage="recipe_context",
-                user_hint=(
-                    "open_kitchen cannot load a recipe because the server is not "
-                    "initialized. Run 'autoskillit doctor' to diagnose."
-                ),
+        # Check if the project needs an upgrade
+        scripts_dir = Path.cwd() / ".autoskillit" / "scripts"
+        recipes_dir = Path.cwd() / ".autoskillit" / "recipes"
+        if scripts_dir.exists() and not recipes_dir.exists():
+            text += (
+                "\n\n⚠️ UPGRADE NEEDED: This project has not been migrated"
+                " to the new recipe format.\n"
+                "`.autoskillit/scripts/` still exists."
+                " Run `autoskillit upgrade` in this directory\n"
+                "to migrate automatically, or ask me to do it for you."
             )
-        suppressed = tool_ctx.config.migration.suppressed
-        _defaults = resolve_ingredient_defaults(Path.cwd())
-        # Runtime enum check: output_mode must be validated before recipe loading
-        if name == "research":
-            _om_value = (overrides or {}).get("output_mode")
-            if _om_value is not None and _om_value not in {"pr", "local"}:
-                return json.dumps(
-                    {
-                        "error": (
-                            f"output_mode must be 'pr' or 'local', got {_om_value!r}. "
-                            "Only two modes are supported for the research recipe."
-                        )
-                    }
-                )
-        try:
-            result = tool_ctx.recipes.load_and_validate(
-                name,
-                Path.cwd(),
-                suppressed=suppressed,
-                resolved_defaults=_defaults,
-                ingredient_overrides=overrides,
-            )
-        except Exception as exc:
-            logger.warning("open_kitchen_failure", stage="load_and_validate", exc_info=True)
-            return _kitchen_failure_envelope(exc, stage="load_and_validate")
-
-        tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
-
-        try:
-            recipe_info = tool_ctx.recipes.find(name, Path.cwd())
-        except Exception as exc:
-            logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
-            return _kitchen_failure_envelope(exc, stage="recipe_find")
-
-        try:
-            result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
-        except Exception as exc:
-            logger.warning("open_kitchen_failure", stage="apply_triage_gate", exc_info=True)
-            return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
-
-        result["success"] = True
-        result["kitchen"] = "open"
-        result["version"] = __version__
-
-        if "ingredients_table" not in result or not result["ingredients_table"]:
-            result["ingredients_table"] = None
 
         try:
             warning = _build_hook_diagnostic_warning()
@@ -349,64 +394,35 @@ async def open_kitchen(
             logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
         if warning:
-            result["hook_warning"] = warning.strip()
-        return json.dumps(result)
+            text += warning
 
-    text = (
-        f"Kitchen is open. AutoSkillit {__version__}. Tools are ready for service.\n\n"
-        f"Available Tools by Category:\n{_categories}\n\n"
-        "IMPORTANT — Orchestrator Discipline:\n"
-        f"NEVER use native Claude Code tools ({_forbidden_list}) "
-        "in this session. All code reading, searching, editing, and "
-        "investigation MUST be delegated through run_skill, which launches "
-        "headless sessions with full tool access. Do NOT use native tools to "
-        "investigate failures — route to on_failure and let the downstream skill handle diagnosis."
-    )
-
-    # Inject sous-chef global orchestration rules (graceful degradation if absent)
-    _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
-    try:
-        if _sous_chef_path.exists():
-            text += "\n\n" + _sous_chef_path.read_text()
-    except Exception as exc:
-        logger.warning("open_kitchen_failure", stage="read_sous_chef", exc_info=True)
-        return _kitchen_failure_envelope(exc, stage="read_sous_chef")
-
-    # Check if the project needs an upgrade
-    scripts_dir = Path.cwd() / ".autoskillit" / "scripts"
-    recipes_dir = Path.cwd() / ".autoskillit" / "recipes"
-    if scripts_dir.exists() and not recipes_dir.exists():
-        text += (
-            "\n\n⚠️ UPGRADE NEEDED: This project has not been migrated to the new recipe format.\n"
-            "`.autoskillit/scripts/` still exists. Run `autoskillit upgrade` in this directory\n"
-            "to migrate automatically, or ask me to do it for you."
+        return json.dumps(
+            {
+                "success": True,
+                "kitchen": "open",
+                "content": text,
+                "ingredients_table": None,
+                "version": __version__,
+            }
         )
-
-    try:
-        warning = _build_hook_diagnostic_warning()
     except Exception as exc:
-        logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
-        return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
-    if warning:
-        text += warning
-
-    return json.dumps(
-        {
-            "success": True,
-            "kitchen": "open",
-            "content": text,
-            "ingredients_table": None,
-            "version": __version__,
-        }
-    )
+        logger.error("open_kitchen unhandled exception", exc_info=True)
+        return _kitchen_failure_envelope(exc, stage="unhandled")
 
 
 @mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": True})
 @track_response_size("close_kitchen")
 async def close_kitchen(ctx: Context = CurrentContext()) -> str:
-    """Close the AutoSkillit kitchen."""
-    if (h := _require_not_headless("close_kitchen")) is not None:
-        return h
-    _close_kitchen_handler()
-    await ctx.reset_visibility()
-    return "Kitchen is closed."
+    """Close the AutoSkillit kitchen.
+
+    Never raises.
+    """
+    try:
+        if (h := _require_not_headless("close_kitchen")) is not None:
+            return h
+        _close_kitchen_handler()
+        await ctx.reset_visibility()
+        return "Kitchen is closed."
+    except Exception as exc:
+        logger.error("close_kitchen unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

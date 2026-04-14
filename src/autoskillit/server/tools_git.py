@@ -41,49 +41,55 @@ async def merge_worktree(
         worktree_path: Absolute path to the git worktree.
         base_branch: Branch to merge into (e.g. "integration").
         step_name: Optional YAML step key for wall-clock timing accumulation.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="merge_worktree", cwd=worktree_path)
-    logger.info("merge_worktree", path=worktree_path, base=base_branch)
-    await _notify(
-        ctx,
-        "info",
-        f"merge_worktree: {worktree_path} -> {base_branch}",
-        "autoskillit.merge_worktree",
-        extra={"worktree": worktree_path, "base": base_branch},
-    )
-
-    from autoskillit.server import _get_config, _get_ctx
-    from autoskillit.server.git import perform_merge
-
-    tool_ctx = _get_ctx()
-    runner = tool_ctx.runner
-    assert runner is not None, "No subprocess runner configured"
-    _start = time.monotonic()
     try:
-        result = await perform_merge(
-            worktree_path,
-            base_branch,
-            config=_get_config(),
-            runner=runner,
-            tester=tool_ctx.tester,
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="merge_worktree", cwd=worktree_path)
+        logger.info("merge_worktree", path=worktree_path, base=base_branch)
+        await _notify(
+            ctx,
+            "info",
+            f"merge_worktree: {worktree_path} -> {base_branch}",
+            "autoskillit.merge_worktree",
+            extra={"worktree": worktree_path, "base": base_branch},
         )
 
-        if "error" in result:
-            await _notify(
-                ctx,
-                "error",
-                "merge_worktree failed",
-                "autoskillit.merge_worktree",
-                extra={"reason": result["error"]},
+        from autoskillit.server import _get_config, _get_ctx
+        from autoskillit.server.git import perform_merge
+
+        tool_ctx = _get_ctx()
+        runner = tool_ctx.runner
+        assert runner is not None, "No subprocess runner configured"
+        _start = time.monotonic()
+        try:
+            result = await perform_merge(
+                worktree_path,
+                base_branch,
+                config=_get_config(),
+                runner=runner,
+                tester=tool_ctx.tester,
             )
 
-        return json.dumps(result)
-    finally:
-        if step_name:
-            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+            if "error" in result:
+                await _notify(
+                    ctx,
+                    "error",
+                    "merge_worktree failed",
+                    "autoskillit.merge_worktree",
+                    extra={"reason": result["error"]},
+                )
+
+            return json.dumps(result)
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+    except Exception as exc:
+        logger.error("merge_worktree unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
@@ -111,109 +117,125 @@ async def classify_fix(
         worktree_path: Path to the git worktree with the implemented fix.
         base_branch: The branch the worktree was created from (for merge-base).
         step_name: Optional YAML step key for wall-clock timing accumulation.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="classify_fix", cwd=worktree_path)
-    logger.info("classify_fix", worktree=worktree_path, base=base_branch)
-    await _notify(
-        ctx,
-        "info",
-        f"classify_fix: {worktree_path}",
-        "autoskillit.classify_fix",
-        extra={"worktree": worktree_path, "base": base_branch},
-    )
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="classify_fix", cwd=worktree_path)
+        logger.info("classify_fix", worktree=worktree_path, base=base_branch)
+        await _notify(
+            ctx,
+            "info",
+            f"classify_fix: {worktree_path}",
+            "autoskillit.classify_fix",
+            extra={"worktree": worktree_path, "base": base_branch},
+        )
 
-    if not os.path.isdir(worktree_path):
+        if not os.path.isdir(worktree_path):
+            return json.dumps(
+                {
+                    "restart_scope": RestartScope.FULL_RESTART,
+                    "reason": (
+                        f"worktree_path does not exist or is not a directory: {worktree_path}"
+                    ),
+                    "critical_files": [],
+                    "all_changed_files": [],
+                }
+            )
+
+        from autoskillit.server import _get_config, _get_ctx
+        from autoskillit.server.git import _filter_changed_files
+
+        tool_ctx = _get_ctx()
+        _start = time.monotonic()
+        try:
+            fetch_rc, _, fetch_stderr = await _run_subprocess(
+                ["git", "fetch", "origin", base_branch],
+                cwd=worktree_path,
+                timeout=30,
+            )
+            if fetch_rc != 0:
+                return json.dumps(
+                    {
+                        "restart_scope": RestartScope.FULL_RESTART,
+                        "reason": (
+                            f"git fetch origin {base_branch} failed — "
+                            "remote-tracking ref may be stale. "
+                            f"git error: {(fetch_stderr or '').strip()[:200]}"
+                        ),
+                        "critical_files": [],
+                        "all_changed_files": [],
+                    }
+                )
+
+            returncode, stdout, stderr = await _run_subprocess(
+                ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
+                cwd=worktree_path,
+                timeout=30,
+            )
+
+            if returncode != 0:
+                await _notify(
+                    ctx,
+                    "error",
+                    "classify_fix: git diff failed (falling back to full_restart)",
+                    "autoskillit.classify_fix",
+                    extra={"worktree": worktree_path},
+                )
+                # A missing origin/<base_branch> ref (rc=128, "ambiguous argument" or
+                # "unknown revision") is treated as FULL_RESTART — conservative safe default.
+                # Any other git error also falls back to FULL_RESTART for the same reason:
+                # if we can't determine what changed, assume the worst.
+                return json.dumps(
+                    {
+                        "restart_scope": RestartScope.FULL_RESTART,
+                        "reason": (
+                            f"Cannot diff against origin/{base_branch}"
+                            f" — ref may not exist locally. "
+                            f"git error: {stderr.strip()[:200]}"
+                        ),
+                        "critical_files": [],
+                        "all_changed_files": [],
+                    }
+                )
+
+            prefixes = _get_config().classify_fix.path_prefixes
+            changed_files, critical_files = _filter_changed_files(stdout, prefixes)
+
+            if critical_files:
+                return json.dumps(
+                    {
+                        "restart_scope": RestartScope.FULL_RESTART,
+                        "reason": f"Fix touches critical paths: {', '.join(critical_files[:5])}",
+                        "critical_files": critical_files,
+                        "all_changed_files": changed_files,
+                    }
+                )
+
+            return json.dumps(
+                {
+                    "restart_scope": RestartScope.PARTIAL_RESTART,
+                    "reason": "Fix does not touch critical paths — partial restart is sufficient",
+                    "critical_files": [],
+                    "all_changed_files": changed_files,
+                }
+            )
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+    except Exception as exc:
+        logger.error("classify_fix unhandled exception", exc_info=True)
         return json.dumps(
             {
                 "restart_scope": RestartScope.FULL_RESTART,
-                "reason": f"worktree_path does not exist or is not a directory: {worktree_path}",
+                "reason": f"{type(exc).__name__}: {exc}",
                 "critical_files": [],
                 "all_changed_files": [],
             }
         )
-
-    from autoskillit.server import _get_config, _get_ctx
-    from autoskillit.server.git import _filter_changed_files
-
-    tool_ctx = _get_ctx()
-    _start = time.monotonic()
-    try:
-        fetch_rc, _, fetch_stderr = await _run_subprocess(
-            ["git", "fetch", "origin", base_branch],
-            cwd=worktree_path,
-            timeout=30,
-        )
-        if fetch_rc != 0:
-            return json.dumps(
-                {
-                    "restart_scope": RestartScope.FULL_RESTART,
-                    "reason": (
-                        f"git fetch origin {base_branch} failed — "
-                        "remote-tracking ref may be stale. "
-                        f"git error: {(fetch_stderr or '').strip()[:200]}"
-                    ),
-                    "critical_files": [],
-                    "all_changed_files": [],
-                }
-            )
-
-        returncode, stdout, stderr = await _run_subprocess(
-            ["git", "diff", "--name-only", f"origin/{base_branch}...HEAD"],
-            cwd=worktree_path,
-            timeout=30,
-        )
-
-        if returncode != 0:
-            await _notify(
-                ctx,
-                "error",
-                "classify_fix: git diff failed (falling back to full_restart)",
-                "autoskillit.classify_fix",
-                extra={"worktree": worktree_path},
-            )
-            # A missing origin/<base_branch> ref (rc=128, "ambiguous argument" or
-            # "unknown revision") is treated as FULL_RESTART — conservative safe default.
-            # Any other git error also falls back to FULL_RESTART for the same reason:
-            # if we can't determine what changed, assume the worst.
-            return json.dumps(
-                {
-                    "restart_scope": RestartScope.FULL_RESTART,
-                    "reason": (
-                        f"Cannot diff against origin/{base_branch} — ref may not exist locally. "
-                        f"git error: {stderr.strip()[:200]}"
-                    ),
-                    "critical_files": [],
-                    "all_changed_files": [],
-                }
-            )
-
-        prefixes = _get_config().classify_fix.path_prefixes
-        changed_files, critical_files = _filter_changed_files(stdout, prefixes)
-
-        if critical_files:
-            return json.dumps(
-                {
-                    "restart_scope": RestartScope.FULL_RESTART,
-                    "reason": f"Fix touches critical paths: {', '.join(critical_files[:5])}",
-                    "critical_files": critical_files,
-                    "all_changed_files": changed_files,
-                }
-            )
-
-        return json.dumps(
-            {
-                "restart_scope": RestartScope.PARTIAL_RESTART,
-                "reason": "Fix does not touch critical paths — partial restart is sufficient",
-                "critical_files": [],
-                "all_changed_files": changed_files,
-            }
-        )
-    finally:
-        if step_name:
-            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -257,98 +279,106 @@ async def create_unique_branch(
         base_branch_name: When provided, use this directly as the base name
                           instead of composing from slug+issue_number.
         step_name: Optional YAML step key for wall-clock timing accumulation.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="create_unique_branch", cwd=cwd)
-    _display = base_branch_name if base_branch_name else slug
-    logger.info(
-        "create_unique_branch",
-        slug=slug,
-        issue_number=issue_number,
-        remote=remote,
-        base_branch_name=base_branch_name,
-    )
-    await _notify(
-        ctx,
-        "info",
-        f"create_unique_branch: {_display}",
-        "autoskillit.create_unique_branch",
-        extra={"remote": remote},
-    )
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-    _start = time.monotonic()
-
-    if base_branch_name:
-        base_name = base_branch_name
-    elif not slug:
-        return json.dumps(
-            {
-                "success": False,
-                "error": "create_unique_branch requires either base_branch_name or slug",
-            }
-        )
-    else:
-        base_name = f"{slug}-{issue_number}" if issue_number is not None else slug
-    branch_name = base_name
-    was_unique = True
-
     try:
-        rc, stdout, _ = await _run_subprocess(
-            ["git", "ls-remote", remote, f"refs/heads/{branch_name}"],
-            cwd=cwd,
-            timeout=30,
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="create_unique_branch", cwd=cwd)
+        _display = base_branch_name if base_branch_name else slug
+        logger.info(
+            "create_unique_branch",
+            slug=slug,
+            issue_number=issue_number,
+            remote=remote,
+            base_branch_name=base_branch_name,
+        )
+        await _notify(
+            ctx,
+            "info",
+            f"create_unique_branch: {_display}",
+            "autoskillit.create_unique_branch",
+            extra={"remote": remote},
         )
 
-        if rc == 0 and stdout.strip():
-            was_unique = False
-            suffix = 2
-            _MAX_SUFFIX = 100
-            while suffix <= _MAX_SUFFIX:
-                candidate = f"{base_name}-{suffix}"
-                rc2, stdout2, _ = await _run_subprocess(
-                    ["git", "ls-remote", remote, f"refs/heads/{candidate}"],
-                    cwd=cwd,
-                    timeout=30,
-                )
-                if rc2 != 0:
-                    branch_name = candidate
-                    break
-                if not stdout2.strip():
-                    branch_name = candidate
-                    break
-                suffix += 1
+        from autoskillit.server import _get_ctx
 
-        rc_head, head_out, _ = await _run_subprocess(
-            ["git", "branch", "--show-current"],
-            cwd=cwd,
-            timeout=10,
-        )
-        base_ref = head_out.strip() if rc_head == 0 and head_out.strip() else "DETACHED_HEAD"
+        tool_ctx = _get_ctx()
+        _start = time.monotonic()
 
-        rc_checkout, _, _stderr_checkout = await _run_subprocess(
-            ["git", "checkout", "-b", branch_name],
-            cwd=cwd,
-            timeout=30,
-        )
-        if rc_checkout != 0:
+        if base_branch_name:
+            base_name = base_branch_name
+        elif not slug:
             return json.dumps(
                 {
                     "success": False,
-                    "error": f"git checkout -b {branch_name!r} failed: {_stderr_checkout.strip()}",
+                    "error": "create_unique_branch requires either base_branch_name or slug",
                 }
             )
+        else:
+            base_name = f"{slug}-{issue_number}" if issue_number is not None else slug
+        branch_name = base_name
+        was_unique = True
 
-        return json.dumps(
-            {"branch_name": branch_name, "was_unique": was_unique, "base_ref": base_ref}
-        )
-    finally:
-        if step_name:
-            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+        try:
+            rc, stdout, _ = await _run_subprocess(
+                ["git", "ls-remote", remote, f"refs/heads/{branch_name}"],
+                cwd=cwd,
+                timeout=30,
+            )
+
+            if rc == 0 and stdout.strip():
+                was_unique = False
+                suffix = 2
+                _MAX_SUFFIX = 100
+                while suffix <= _MAX_SUFFIX:
+                    candidate = f"{base_name}-{suffix}"
+                    rc2, stdout2, _ = await _run_subprocess(
+                        ["git", "ls-remote", remote, f"refs/heads/{candidate}"],
+                        cwd=cwd,
+                        timeout=30,
+                    )
+                    if rc2 != 0:
+                        branch_name = candidate
+                        break
+                    if not stdout2.strip():
+                        branch_name = candidate
+                        break
+                    suffix += 1
+
+            rc_head, head_out, _ = await _run_subprocess(
+                ["git", "branch", "--show-current"],
+                cwd=cwd,
+                timeout=10,
+            )
+            base_ref = head_out.strip() if rc_head == 0 and head_out.strip() else "DETACHED_HEAD"
+
+            rc_checkout, _, _stderr_checkout = await _run_subprocess(
+                ["git", "checkout", "-b", branch_name],
+                cwd=cwd,
+                timeout=30,
+            )
+            if rc_checkout != 0:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": (
+                            f"git checkout -b {branch_name!r} failed: {_stderr_checkout.strip()}"
+                        ),
+                    }
+                )
+
+            return json.dumps(
+                {"branch_name": branch_name, "was_unique": was_unique, "base_ref": base_ref}
+            )
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+    except Exception as exc:
+        logger.error("create_unique_branch unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -374,37 +404,43 @@ async def check_pr_mergeable(
         pr_number: GitHub pull request number.
         cwd: Working directory for gh commands.
         repo: Repository as owner/repo. Passed as -R flag when provided.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="check_pr_mergeable", cwd=cwd)
-    logger.info("check_pr_mergeable", pr_number=pr_number, repo=repo)
-    await _notify(
-        ctx,
-        "info",
-        f"check_pr_mergeable: #{pr_number}",
-        "autoskillit.check_pr_mergeable",
-        extra={"repo": repo},
-    )
-
-    cmd = ["gh", "pr", "view", str(pr_number), "--json", "mergeable,mergeStateStatus"]
-    if repo:
-        cmd.extend(["-R", repo])
-
-    rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
-    if rc != 0:
-        return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
-
     try:
-        data = json.loads(stdout)
-    except json.JSONDecodeError:
-        return json.dumps({"success": False, "error": "Failed to parse gh output"})
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="check_pr_mergeable", cwd=cwd)
+        logger.info("check_pr_mergeable", pr_number=pr_number, repo=repo)
+        await _notify(
+            ctx,
+            "info",
+            f"check_pr_mergeable: #{pr_number}",
+            "autoskillit.check_pr_mergeable",
+            extra={"repo": repo},
+        )
 
-    return json.dumps(
-        {
-            "mergeable": data.get("mergeable") == "MERGEABLE",
-            "merge_state_status": data.get("mergeStateStatus", ""),
-            "mergeable_status": data.get("mergeable", ""),
-        }
-    )
+        cmd = ["gh", "pr", "view", str(pr_number), "--json", "mergeable,mergeStateStatus"]
+        if repo:
+            cmd.extend(["-R", repo])
+
+        rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
+        if rc != 0:
+            return json.dumps({"success": False, "error": stderr.strip() or "gh command failed"})
+
+        try:
+            data = json.loads(stdout)
+        except json.JSONDecodeError:
+            return json.dumps({"success": False, "error": "Failed to parse gh output"})
+
+        return json.dumps(
+            {
+                "mergeable": data.get("mergeable") == "MERGEABLE",
+                "merge_state_status": data.get("mergeStateStatus", ""),
+                "mergeable_status": data.get("mergeable", ""),
+            }
+        )
+    except Exception as exc:
+        logger.error("check_pr_mergeable unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

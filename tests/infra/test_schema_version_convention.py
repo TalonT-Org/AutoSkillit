@@ -111,9 +111,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # core/io.py — write_versioned_json itself (the blessed helper) uses atomic_write+json.dumps
     ("src/autoskillit/core/io.py", 118),
     # session_log.py — summary dict, token_usage list, audit_log list
-    ("src/autoskillit/execution/session_log.py", 243),
-    ("src/autoskillit/execution/session_log.py", 256),
-    ("src/autoskillit/execution/session_log.py", 259),
+    ("src/autoskillit/execution/session_log.py", 244),
+    ("src/autoskillit/execution/session_log.py", 260),
+    ("src/autoskillit/execution/session_log.py", 263),
     # migration/store.py — failure store dicts
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),
@@ -128,9 +128,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # tools_kitchen.py — hook config dict
     ("src/autoskillit/server/tools_kitchen.py", 142),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools_status.py", 348),
+    ("src/autoskillit/server/tools_status.py", 385),
     # tools_github.py — bug report dict
-    ("src/autoskillit/server/tools_github.py", 256),
+    ("src/autoskillit/server/tools_github.py", 268),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 23),
     # _init_helpers.py — ~/.claude.json (co-owned)
@@ -211,8 +211,8 @@ class TestSchemaVersionConvention:
         """List-payload sites are included since the AST scanner can't distinguish return types."""
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
-            ("src/autoskillit/execution/session_log.py", 256),
-            ("src/autoskillit/execution/session_log.py", 259),
+            ("src/autoskillit/execution/session_log.py", 260),
+            ("src/autoskillit/execution/session_log.py", 263),
             ("src/autoskillit/smoke_utils.py", 83),
             ("src/autoskillit/smoke_utils.py", 138),
         ]

@@ -14,6 +14,7 @@ import dataclasses
 import os
 import re
 import time
+import traceback
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -1034,32 +1035,43 @@ async def run_headless_core(
                 idle_output_timeout=effective_idle,
                 max_suppression_seconds=cfg.max_suppression_seconds,
             )
-        finally:
-            if _result is None:
-                # Runner raised — write a crash entry so sessions.jsonl stays consistent
-                _log_dir = ctx.config.linux_tracing.log_dir
-                try:
-                    from autoskillit.execution import flush_session_log
+        except Exception as exc:
+            logger.error("run_headless_core runner crashed", exc_info=True)
+            _exc_text = traceback.format_exc()
+            _log_dir = ctx.config.linux_tracing.log_dir
+            try:
+                # Deferred: autoskillit.execution.__init__ imports headless.py (L39-42);
+                # a top-level import of autoskillit.execution would be circular.
+                from autoskillit.execution import flush_session_log
 
-                    flush_session_log(
-                        log_dir=_log_dir,
-                        cwd=str(cwd),
-                        kitchen_id=kitchen_id,
-                        order_id=order_id,
-                        session_id="",
-                        pid=0,
-                        skill_command=skill_command,
-                        success=False,
-                        subtype="crashed",
-                        exit_code=-1,
-                        start_ts=_start_ts,
-                        proc_snapshots=None,
-                        termination_reason="CRASHED",
-                    )
-                except Exception:
-                    logger.debug("flush_session_log during crash failed", exc_info=True)
+                flush_session_log(
+                    log_dir=_log_dir,
+                    cwd=str(cwd),
+                    kitchen_id=kitchen_id,
+                    order_id=order_id,
+                    session_id="",
+                    pid=0,
+                    skill_command=original_skill_command,
+                    success=False,
+                    subtype="crashed",
+                    exit_code=-1,
+                    start_ts=_start_ts,
+                    proc_snapshots=None,
+                    termination_reason="CRASHED",
+                    exception_text=_exc_text,
+                )
+            except Exception:
+                logger.debug("flush_session_log during crash failed", exc_info=True)
+            return SkillResult.crashed(
+                exception=exc,
+                skill_command=original_skill_command,
+                order_id=order_id,
+            )
         if _result is None:
-            raise RuntimeError("runner() did not return a result — cannot build SkillResult")
+            return SkillResult.crashed(
+                exception=RuntimeError("runner() did not return a result"),
+                order_id=order_id,
+            )
         _elapsed = time.monotonic() - _start_mono
         _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
         result = dataclasses.replace(  # type: ignore[arg-type]

@@ -214,6 +214,7 @@ class KillReason(StrEnum):
     NATURAL_EXIT = "natural_exit"
     KILL_AFTER_COMPLETION = "kill_after_completion"  # drain window expired
     INFRA_KILL = "infra_kill"  # timeout / stall / stale
+    EXCEPTION = "exception"  # runner raised an unhandled exception
 
 
 class ChannelConfirmation(StrEnum):

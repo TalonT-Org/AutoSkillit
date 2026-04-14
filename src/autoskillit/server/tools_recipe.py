@@ -41,16 +41,22 @@ async def list_recipes() -> str:
     .autoskillit/skills/ or any other directory).
 
     This tool requires the kitchen to be open (gated by open_kitchen).
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="list_recipes")
-    tool_ctx = _get_ctx_or_none()
-    if tool_ctx is None or tool_ctx.recipes is None:
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="list_recipes")
+        tool_ctx = _get_ctx_or_none()
+        if tool_ctx is None or tool_ctx.recipes is None:
+            return json.dumps([])
+        result = tool_ctx.recipes.list_all(Path.cwd())
+        return json.dumps(result)
+    except Exception:
+        logger.error("list_recipes unhandled exception", exc_info=True)
         return json.dumps([])
-    result = tool_ctx.recipes.list_all(Path.cwd())
-    return json.dumps(result)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
@@ -167,27 +173,33 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     ``diagram`` (pre-generated Markdown string or null), and
     ``suggestions`` (list of semantic findings, possibly empty) keys.
     On error: JSON with ``error`` key.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="load_recipe")
-    tool_ctx = _get_ctx_or_none()
-    if tool_ctx is None or tool_ctx.recipes is None:
-        return json.dumps({"error": "Server not initialized"})
-    suppressed = tool_ctx.config.migration.suppressed
-    _defaults = resolve_ingredient_defaults(Path.cwd())
-    result = tool_ctx.recipes.load_and_validate(
-        name,
-        Path.cwd(),
-        suppressed=suppressed,
-        resolved_defaults=_defaults,
-        ingredient_overrides=overrides,
-        temp_dir=tool_ctx.temp_dir,
-        temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
-    )
-    recipe_info = tool_ctx.recipes.find(name, Path.cwd())
-    return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="load_recipe")
+        tool_ctx = _get_ctx_or_none()
+        if tool_ctx is None or tool_ctx.recipes is None:
+            return json.dumps({"error": "Server not initialized"})
+        suppressed = tool_ctx.config.migration.suppressed
+        _defaults = resolve_ingredient_defaults(Path.cwd())
+        result = tool_ctx.recipes.load_and_validate(
+            name,
+            Path.cwd(),
+            suppressed=suppressed,
+            resolved_defaults=_defaults,
+            ingredient_overrides=overrides,
+            temp_dir=tool_ctx.temp_dir,
+            temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
+        )
+        recipe_info = tool_ctx.recipes.find(name, Path.cwd())
+        return json.dumps(await _apply_triage_gate(result, name, recipe_info=recipe_info))
+    except Exception as exc:
+        logger.error("load_recipe unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
@@ -213,19 +225,25 @@ async def validate_recipe(script_path: str) -> str:
 
     Args:
         script_path: Absolute path to the .yaml recipe file to validate.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="validate_recipe")
-    tool_ctx = _get_ctx_or_none()
-    if tool_ctx is None or tool_ctx.recipes is None:
-        return json.dumps({"valid": False, "errors": ["Server not initialized"]})
-    result = tool_ctx.recipes.validate_from_path(
-        Path(script_path),
-        temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
-    )
-    return json.dumps(result)
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="validate_recipe")
+        tool_ctx = _get_ctx_or_none()
+        if tool_ctx is None or tool_ctx.recipes is None:
+            return json.dumps({"valid": False, "errors": ["Server not initialized"]})
+        result = tool_ctx.recipes.validate_from_path(
+            Path(script_path),
+            temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
+        )
+        return json.dumps(result)
+    except Exception as exc:
+        logger.error("validate_recipe unhandled exception", exc_info=True)
+        return json.dumps({"valid": False, "errors": [f"{type(exc).__name__}: {exc}"]})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
@@ -251,35 +269,41 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
 
     Args:
         name: The recipe name (without .yaml extension) to migrate.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="migrate_recipe", recipe_name=name)
-    logger.info("migrate_recipe", recipe_name=name)
-    await _notify(
-        ctx,
-        "info",
-        f"migrate_recipe: {name}",
-        "autoskillit.migrate_recipe",
-        extra={"recipe_name": name},
-    )
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="migrate_recipe", recipe_name=name)
+        logger.info("migrate_recipe", recipe_name=name)
+        await _notify(
+            ctx,
+            "info",
+            f"migrate_recipe: {name}",
+            "autoskillit.migrate_recipe",
+            extra={"recipe_name": name},
+        )
 
-    from autoskillit.server import _get_config, _get_ctx
+        from autoskillit.server import _get_config, _get_ctx
 
-    tool_ctx = _get_ctx()
+        tool_ctx = _get_ctx()
 
-    # Check suppression list before attempting migration
-    if name in _get_config().migration.suppressed:
-        return json.dumps({"status": "up_to_date", "name": name})
+        # Check suppression list before attempting migration
+        if name in _get_config().migration.suppressed:
+            return json.dumps({"status": "up_to_date", "name": name})
 
-    if tool_ctx.recipes is None:
-        return json.dumps({"error": "Recipe repository not configured"})
-    recipe = tool_ctx.recipes.find(name, Path.cwd())
-    if recipe is None:
-        return json.dumps({"error": f"No recipe named '{name}' found"})
+        if tool_ctx.recipes is None:
+            return json.dumps({"error": "Recipe repository not configured"})
+        recipe = tool_ctx.recipes.find(name, Path.cwd())
+        if recipe is None:
+            return json.dumps({"error": f"No recipe named '{name}' found"})
 
-    if tool_ctx.migrations is None:
-        return json.dumps({"error": "Migration service not configured", "name": name})
-    result = await tool_ctx.migrations.migrate(recipe.path)
-    return json.dumps(result)
+        if tool_ctx.migrations is None:
+            return json.dumps({"error": "Migration service not configured", "name": name})
+        result = await tool_ctx.migrations.migrate(recipe.path)
+        return json.dumps(result)
+    except Exception as exc:
+        logger.error("migrate_recipe unhandled exception", exc_info=True)
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}", "name": name})

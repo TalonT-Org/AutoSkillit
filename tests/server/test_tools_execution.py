@@ -1498,3 +1498,27 @@ async def test_run_skill_idle_output_timeout_defaults_to_none(tool_ctx, monkeypa
 
     await run_skill("/test skill", "/tmp")
     assert captured["idle_output_timeout"] is None
+
+
+@pytest.mark.anyio
+async def test_run_skill_returns_structured_error_when_executor_raises(
+    tool_ctx, monkeypatch, tmp_path
+) -> None:
+    """run_skill returns SkillResult-shaped JSON even if executor.run() raises unexpectedly."""
+    from autoskillit.core import SkillResult
+
+    class ExplodingExecutor:
+        async def run(self, *args, **kwargs) -> SkillResult:
+            raise RuntimeError("unexpected executor failure")
+
+    tool_ctx.executor = ExplodingExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    result_json = await run_skill("/test cmd", str(tmp_path))
+    data = json.loads(result_json)
+    assert data["success"] is False
+    assert data["subtype"] == "crashed"
+    assert data["needs_retry"] is False
+    assert "unexpected executor failure" in data["result"]

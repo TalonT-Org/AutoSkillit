@@ -155,7 +155,9 @@ failure_subtype = {failure_subtype}
 
 ## Log Excerpt
 
+```
 {first 200 lines of failure log}
+```
 
 ## Recommended Fix Approach
 

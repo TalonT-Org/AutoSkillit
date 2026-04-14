@@ -7,10 +7,6 @@ transport opens, not on the critical startup path.
 The ``__aexit__`` side calls ``recorder.finalize()`` so scenario data survives
 SIGTERM (issue #745).
 
-The registry-hash drift check (``run_startup_drift_check``) is invoked from
-``serve()`` in ``cli/app.py`` before ``mcp.run()``, not inside this lifespan,
-so that SIGTERM received during the check cannot bypass teardown.
-
 Readiness synchronization: the lifespan writes a filesystem sentinel at
 ``core.readiness.write_readiness_sentinel()`` as the first statement inside the
 ``try:`` block. Integration tests poll the sentinel path rather than parsing log
@@ -20,12 +16,15 @@ cleaned up in ``finally:`` before ``_finalize_recorder()`` runs.
 
 from __future__ import annotations
 
+import asyncio as _asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
+import anyio
+
 from autoskillit.core import cleanup_readiness_sentinel, get_logger, write_readiness_sentinel
 from autoskillit.execution import RecordingSubprocessRunner
-from autoskillit.server._state import _get_ctx_or_none
+from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 
 logger = get_logger(__name__)
 
@@ -76,6 +75,19 @@ def _finalize_recorder() -> None:
             logger.exception("recorder.finalize() failed during lifespan teardown")
 
 
+async def _run_deferred_init() -> None:
+    """Create the startup-ready event and run deferred_initialize."""
+    from autoskillit.server import _state  # noqa: PLC0415
+
+    event = _asyncio.Event()
+    _state._startup_ready = event
+    ctx = _get_ctx_or_none()
+    if ctx is not None:
+        await deferred_initialize(ctx, ready_event=event)
+    else:
+        event.set()
+
+
 @asynccontextmanager
 async def _autoskillit_lifespan(server: Any) -> Any:
     """Server lifecycle: write readiness sentinel, yield, then finalize recording.
@@ -93,7 +105,10 @@ async def _autoskillit_lifespan(server: Any) -> Any:
     """
     try:
         write_readiness_sentinel()
-        yield
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(anyio.to_thread.run_sync, run_startup_drift_check)
+            tg.start_soon(_run_deferred_init)
+            yield
     finally:
         try:
             cleanup_readiness_sentinel()

@@ -214,17 +214,17 @@ def test_quota_thresholds_defaults() -> None:
     assert long_ == pytest.approx(98.0)
 
 
-def test_doctor_check_count_is_19() -> None:
+def test_doctor_check_count_is_20() -> None:
     # _count_doctor_checks() counts every "# Check N:" and "# Check Nb:" marker
-    # in run_doctor() — 17 numbered base markers + 2 lettered sub-check markers
-    # (4b, 7b) = 19 total.  test_installation_states_17_doctor_checks checks the
+    # in run_doctor() — 17 numbered base markers + 3 lettered sub-check markers
+    # (2b, 4b, 7b) = 20 total.  test_installation_states_17_doctor_checks checks the
     # *user-visible* count from docs/installation.md ("15 numbered + 2 lettered
-    # sub-checks 4b and 7b = 17").  The gap of 2 is intentional: Check 4 and
-    # Check 7 each appear as separate implementation markers but the docs
+    # sub-checks 4b and 7b = 17").  The gap of 3 is intentional: Check 2, Check 4,
+    # and Check 7 each appear as separate implementation markers but the docs
     # present them as single numbered entries that subsume their b variants.
     # Update both tests whenever a new doctor check is added.
-    assert _count_doctor_checks() == 19, (
-        f"Expected 19 doctor checks; found {_count_doctor_checks()}"
+    assert _count_doctor_checks() == 20, (
+        f"Expected 20 doctor checks; found {_count_doctor_checks()}"
     )
 
 

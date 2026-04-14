@@ -13,6 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from autoskillit.execution import _MAX_MCP_OUTPUT_TOKENS_VALUE
+
 
 def test_launch_cook_session_env_excludes_ide_vars(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -100,3 +102,33 @@ def test_cook_command_env_excludes_ide_vars(
     assert "CLAUDE_CODE_SSE_PORT" not in env
     assert "ENABLE_IDE_INTEGRATION" not in env
     assert env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
+
+
+def test_cook_command_env_has_max_mcp_output_tokens(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """cook() must inject MAX_MCP_OUTPUT_TOKENS=50000 into the subprocess env."""
+    monkeypatch.chdir(tmp_path)
+
+    fake_skills_dir = tmp_path / "skills"
+    fake_skills_dir.mkdir()
+    mock_mgr = MagicMock()
+    mock_mgr.init_session.return_value = fake_skills_dir
+
+    with (
+        patch("shutil.which", return_value="/usr/bin/claude"),
+        patch("builtins.input", return_value=""),
+        patch("sys.stdin.isatty", return_value=True),
+        patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+        patch(
+            "autoskillit.cli._cook.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_run,
+        patch("autoskillit.cli._cook.terminal_guard"),
+    ):
+        from autoskillit.cli._cook import cook
+
+        cook()
+
+    env = mock_run.call_args.kwargs["env"]
+    assert env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE

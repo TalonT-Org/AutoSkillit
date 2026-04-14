@@ -190,9 +190,6 @@ def test_implementation_queue_ejected_fix_exists(impl_recipe) -> None:
     assert "queue_ejected_fix" in impl_recipe.steps
 
 
-# --- queue_ejected_fix cheap rebase ---
-
-
 def test_queue_ejected_fix_tool_is_run_cmd(impl_recipe) -> None:
     step = impl_recipe.steps["queue_ejected_fix"]
     assert step.tool == "run_cmd", (
@@ -529,14 +526,6 @@ def test_direct_merge_conflict_fix_exists(any_recipe) -> None:
     assert step.tool == "run_cmd"
 
 
-# --- direct_merge_conflict_fix cheap rebase ---
-
-
-def test_direct_merge_conflict_fix_tool_is_run_cmd(any_recipe) -> None:
-    step = any_recipe.steps["direct_merge_conflict_fix"]
-    assert step.tool == "run_cmd"
-
-
 def test_direct_merge_conflict_fix_clean_routes_to_re_push(any_recipe) -> None:
     step = any_recipe.steps["direct_merge_conflict_fix"]
     clean_route = next(
@@ -699,14 +688,6 @@ def test_wait_for_immediate_merge_closed_routes_to_conflict_fix(any_recipe) -> N
 
 def test_immediate_merge_conflict_fix_exists(any_recipe) -> None:
     assert "immediate_merge_conflict_fix" in any_recipe.steps
-    step = any_recipe.steps["immediate_merge_conflict_fix"]
-    assert step.tool == "run_cmd"
-
-
-# --- immediate_merge_conflict_fix cheap rebase ---
-
-
-def test_immediate_merge_conflict_fix_tool_is_run_cmd(any_recipe) -> None:
     step = any_recipe.steps["immediate_merge_conflict_fix"]
     assert step.tool == "run_cmd"
 

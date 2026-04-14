@@ -20,13 +20,12 @@ cleaned up in ``finally:`` before ``_finalize_recorder()`` runs.
 
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
 from autoskillit.core import cleanup_readiness_sentinel, get_logger, write_readiness_sentinel
 from autoskillit.execution import RecordingSubprocessRunner
-from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
+from autoskillit.server._state import _get_ctx_or_none
 
 logger = get_logger(__name__)
 

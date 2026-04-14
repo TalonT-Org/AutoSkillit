@@ -36,9 +36,7 @@ def _get_skill_outputs(skill_data: dict) -> list[dict]:
 
 def _declared_output_names(skill_data: dict) -> frozenset[str]:
     """Return the set of declared output field names for a skill."""
-    return frozenset(
-        o["name"] for o in _get_skill_outputs(skill_data) if "name" in o
-    )
+    return frozenset(o["name"] for o in _get_skill_outputs(skill_data) if "name" in o)
 
 
 def _step_gated_on_declared_output(step, declared_outputs: frozenset[str]) -> bool:
@@ -131,9 +129,7 @@ def _check_conditional_skill_ungated_push(ctx: ValidationContext) -> list[RuleFi
         # Check that push_to_remote is reachable before firing any finding.
         # Steps that don't lead to push (e.g. worktree-fix → merge_worktree)
         # are not in scope for this rule.
-        push_reachable, push_step = _push_reachable(
-            ctx.step_graph, step_name, ctx.recipe
-        )
+        push_reachable, push_step = _push_reachable(ctx.step_graph, step_name, ctx.recipe)
         if not push_reachable:
             continue
 

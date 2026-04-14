@@ -53,6 +53,11 @@ def main() -> None:
     if tool_name != "AskUserQuestion":
         sys.exit(0)  # defensive; matcher should pre-filter
 
+    # In interactive sessions, AskUserQuestion is always permitted --
+    # the user is present at the terminal and can respond.
+    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
+        sys.exit(0)  # not headless -- pass through
+
     session_id = payload.get("session_id", "")
     if not session_id:
         sys.exit(0)  # fail-open when session_id unavailable
@@ -71,11 +76,10 @@ def main() -> None:
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
                 "permissionDecisionReason": (
-                    "open_kitchen has not been called in this session. "
-                    "Call ToolSearch with query 'select:mcp__autoskillit__open_kitchen' "
-                    "to load the tool schema, then call "
-                    "mcp__autoskillit__open_kitchen(name='<recipe>'). "
-                    "Do not call AskUserQuestion before the kitchen is open."
+                    "AskUserQuestion is not available in headless sessions without "
+                    "an open kitchen. If this is a pipeline worker, proceed without "
+                    "user confirmation or use a default/fallback behavior. "
+                    "If an orchestrator session, call open_kitchen first."
                 ),
             }
         }

@@ -24,6 +24,7 @@ class HookDef:
     event_type: Literal["PreToolUse", "PostToolUse", "SessionStart"] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
     timeout_seconds: int | None = None
+    session_scope: Literal["any", "headless_only", "interactive_only"] = "any"
 
     def __post_init__(self) -> None:
         if self.event_type != "SessionStart" and not self.matcher:
@@ -50,6 +51,7 @@ HOOK_REGISTRY: list[HookDef] = [
         matcher="AskUserQuestion",
         scripts=["ask_user_question_guard.py"],
         timeout_seconds=5,
+        session_scope="headless_only",
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__merge_worktree",
@@ -70,6 +72,7 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*",
         scripts=["headless_orchestration_guard.py"],
+        session_scope="headless_only",
     ),
     HookDef(
         event_type="PostToolUse",
@@ -112,6 +115,7 @@ def _canonical_registry_payload(
                 "event_type": h.event_type,
                 "matcher": h.matcher,
                 "scripts": list(h.scripts),
+                "session_scope": h.session_scope,
                 "timeout_seconds": h.timeout_seconds,
             }
             for h in registry

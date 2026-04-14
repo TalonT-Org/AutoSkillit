@@ -738,11 +738,15 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
 
 def main() -> None:
     """Entry point for autoskillit."""
+    from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
+
+    if evict_direct_mcp_entry(_user_claude_json_path()):
+        from autoskillit.core import get_logger
+
+        get_logger(__name__).debug("evicted stale direct MCP entry from ~/.claude.json")
+
     _first_arg = sys.argv[1] if len(sys.argv) > 1 else "serve"
     if _first_arg != "serve":
-        from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
-
-        evict_direct_mcp_entry(_user_claude_json_path())  # silent heal for stale installs
         from autoskillit.cli._update_checks import run_update_checks
 
         run_update_checks()

@@ -649,6 +649,7 @@ async def fetch_repo_merge_state(
     field is a closely related extension — verify that the push-trigger scan does
     not regress the merge_group-only detection that #498 established.
     """
+    resp: httpx.Response | None = None
     for attempt in range(_RATE_LIMIT_MAX_ATTEMPTS):
         async with httpx.AsyncClient(
             headers=github_headers(token),
@@ -674,9 +675,10 @@ async def fetch_repo_merge_state(
         resp.raise_for_status()
         break
     else:
-        # All attempts exhausted on rate-limited responses — raise on the last one
+        assert resp is not None, "_RATE_LIMIT_MAX_ATTEMPTS must be >= 1"
         resp.raise_for_status()
 
+    assert resp is not None
     body = resp.json()
 
     # GitHub GraphQL always returns a JSON object; guard against unexpected shapes.

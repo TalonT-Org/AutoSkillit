@@ -23,6 +23,7 @@ from autoskillit.core import (
     pkg_root,
 )
 from autoskillit.recipe.io import _parse_recipe
+from autoskillit.recipe.schema import Recipe, RecipeBlock
 from autoskillit.recipe.staleness_cache import (
     StalenessEntry,
     compute_recipe_hash,
@@ -78,6 +79,24 @@ class DataFlowEntry:
     produced: list[str]
 
 
+@dataclasses.dataclass(frozen=True)
+class BlockFingerprint:
+    """Structural fingerprint for a named recipe block.
+
+    Used by ``check_contract_staleness`` to detect silent composition drift:
+    any change to a block's member count, tool usage, gh api call count, or
+    capture names produces a fingerprint mismatch (reason='block_composition_drift').
+    """
+
+    name: str
+    member_count: int
+    tool_counts_sorted: tuple[tuple[str, int], ...]  # sorted by tool name for stable comparison
+    gh_api_occurrences: int
+    capture_names_hash: str  # sha256hex of sorted capture key names across all members
+    entry_step: str
+    exit_step: str
+
+
 @dataclasses.dataclass
 class RecipeCard:
     generated_at: str
@@ -85,6 +104,9 @@ class RecipeCard:
     skill_hashes: dict[str, str]
     skills: dict[str, SkillContract]
     dataflow: list[DataFlowEntry]
+    block_fingerprints: tuple[BlockFingerprint, ...] = dataclasses.field(
+        default_factory=tuple  # type: ignore[arg-type]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -222,16 +244,76 @@ def count_positional_args(skill_command: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Block fingerprint helpers
+# ---------------------------------------------------------------------------
+
+
+def _compute_block_fingerprint(block: RecipeBlock) -> BlockFingerprint:
+    """Compute a structural fingerprint for a RecipeBlock.
+
+    The fingerprint captures:
+    - ``member_count``: total number of member steps
+    - ``tool_counts_sorted``: per-tool counts sorted by tool name (stable comparison)
+    - ``gh_api_occurrences``: total 'gh api' shell substring occurrences
+    - ``capture_names_hash``: sha256 of the sorted set of capture key names across members
+    - ``entry_step`` / ``exit_step``: the block's entry and exit step names
+    """
+    all_capture_names: list[str] = []
+    for step in block.members:
+        all_capture_names.extend(sorted((step.capture or {}).keys()))
+    sorted_capture_names = sorted(all_capture_names)
+    capture_names_hash = (
+        f"sha256:{hashlib.sha256(' '.join(sorted_capture_names).encode()).hexdigest()}"
+    )
+    tool_counts_sorted = tuple(sorted(block.tool_counts.items()))
+    return BlockFingerprint(
+        name=block.name,
+        member_count=len(block.members),
+        tool_counts_sorted=tool_counts_sorted,
+        gh_api_occurrences=block.gh_api_occurrences,
+        capture_names_hash=capture_names_hash,
+        entry_step=block.entry,
+        exit_step=block.exit,
+    )
+
+
+def _generate_recipe_card_for_recipe(recipe: Recipe) -> RecipeCard:
+    """Generate a RecipeCard from a Recipe object (no disk write).
+
+    Used by the block fingerprint drift detection path in ``check_contract_staleness``
+    and by tests that want a ``RecipeCard`` with populated ``block_fingerprints``.
+    Uses a deferred import of ``_build_step_graph`` and ``extract_blocks`` to avoid
+    a circular import (``_analysis.py`` imports from ``contracts.py``).
+    """
+    # Deferred import to avoid circular dependency:
+    # contracts.py → _analysis.py (already safe via _analysis.py → contracts.py)
+    from autoskillit.recipe._analysis import _build_step_graph, extract_blocks  # noqa: PLC0415
+
+    step_graph = _build_step_graph(recipe)
+    blocks = extract_blocks(recipe, step_graph)
+    fingerprints = tuple(_compute_block_fingerprint(b) for b in blocks)
+    manifest = load_bundled_manifest()
+    return RecipeCard(
+        generated_at=datetime.now(UTC).isoformat(),
+        bundled_manifest_version=manifest.get("version", ""),
+        skill_hashes={},
+        skills={},
+        dataflow=[],
+        block_fingerprints=fingerprints,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Pipeline contract generation, loading, and validation
 # ---------------------------------------------------------------------------
 
 
 def generate_recipe_card(
-    pipeline_path: Path | str,
-    recipes_dir: Path | str,
+    pipeline_path: Path | str | Recipe,
+    recipes_dir: Path | str | None = None,
     *,
     skills_dir: Path | None = None,
-) -> dict:
+) -> dict | RecipeCard:
     """Generate a recipe card file for a recipe.
 
     Walks each step, resolves skill names, looks up contracts in the manifest,
@@ -241,8 +323,15 @@ def generate_recipe_card(
     When ``skills_dir`` is None, skill hashes are not computed and ``skill_hashes``
     in the generated card will be empty.
 
-    Returns the contract data dict directly (no disk re-read required by callers).
+    When ``pipeline_path`` is a ``Recipe`` object, returns a ``RecipeCard`` with
+    populated ``block_fingerprints`` (no disk write).  The path-based form returns
+    the contract data dict directly (no disk re-read required by callers).
     """
+    if isinstance(pipeline_path, Recipe):
+        return _generate_recipe_card_for_recipe(pipeline_path)
+
+    if recipes_dir is None:
+        raise ValueError("recipes_dir required when pipeline_path is a file path")
     pipeline_path = Path(pipeline_path)
     recipes_dir = Path(recipes_dir)
 
@@ -387,14 +476,21 @@ def validate_recipe_cards(recipe: Any, contract: dict[str, Any]) -> list[dict[st
 
 
 def check_contract_staleness(
-    contract: dict[str, Any],
+    contract: dict[str, Any] | Recipe,
     *,
     recipe_path: Path | None = None,
     cache_path: Path | None = None,
     skills_dir: Path | None = None,
     resolver: SkillResolver | None = None,
+    stored_card: RecipeCard | None = None,
 ) -> list[StaleItem]:
     """Check a pipeline contract for staleness against the current manifest.
+
+    When ``stored_card`` is provided and ``contract`` is a ``Recipe``, compares
+    block fingerprints from the stored card against the current recipe's blocks.
+    Returns ``StaleItem`` entries with ``reason='block_composition_drift'`` for
+    any block whose fingerprint has changed.  This path does not perform manifest
+    or skill-hash checks — it is a pure structural comparison.
 
     When ``recipe_path`` and ``cache_path`` are both provided, a disk-backed
     cache keyed by recipe content hash + manifest version is consulted first.
@@ -405,8 +501,43 @@ def check_contract_staleness(
     When ``skills_dir`` is None, the bundled skills directory is used for hash
     comparison.
 
+    When ``contract`` is a ``Recipe`` but ``stored_card`` is ``None``, no
+    comparison baseline is available and [] is returned immediately.  This is
+    expected during initial card generation before a stored card exists.
+
     Returns a list of StaleItem entries indicating what changed.
     """
+    if stored_card is not None:
+        recipe_obj = contract if isinstance(contract, Recipe) else None
+        if recipe_obj is not None:
+            current_card = _generate_recipe_card_for_recipe(recipe_obj)
+            current_fps = {fp.name: fp for fp in current_card.block_fingerprints}
+            stale_items: list[StaleItem] = []
+            for stored_fp in stored_card.block_fingerprints:
+                current_fp = current_fps.get(stored_fp.name)
+                if current_fp is None:
+                    stale_items.append(
+                        StaleItem(
+                            skill=stored_fp.name,
+                            reason="block_composition_drift",
+                            stored_value=repr(stored_fp),
+                            current_value="(block removed)",
+                        )
+                    )
+                elif current_fp != stored_fp:
+                    stale_items.append(
+                        StaleItem(
+                            skill=stored_fp.name,
+                            reason="block_composition_drift",
+                            stored_value=repr(stored_fp),
+                            current_value=repr(current_fp),
+                        )
+                    )
+            return stale_items
+
+    if isinstance(contract, Recipe):
+        return []
+
     manifest = load_bundled_manifest()
     current_version = manifest["version"]
     cached: StalenessEntry | None = None

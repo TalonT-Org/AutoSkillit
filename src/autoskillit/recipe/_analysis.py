@@ -10,6 +10,8 @@ Neither contracts.py nor io.py imports _analysis.py, so no cycle exists.
 
 from __future__ import annotations
 
+import re
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -23,6 +25,7 @@ from autoskillit.recipe.schema import (
     DataFlowReport,
     DataFlowWarning,
     Recipe,
+    RecipeBlock,
     RecipeStep,
 )
 
@@ -218,6 +221,8 @@ class ValidationContext:
     disabled_subsets: frozenset[str] = field(default_factory=frozenset)
     skill_category_map: dict[str, frozenset[str]] | None = None
     overridden_skills: frozenset[str] | None = None
+    blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
+    predecessors: dict[str, set[str]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +293,75 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
 
 
 # ---------------------------------------------------------------------------
+# Block extraction helpers
+# ---------------------------------------------------------------------------
+
+
+def _count_by_tool(members: list[RecipeStep]) -> dict[str, int]:
+    """Count tool occurrences across a list of steps."""
+    counts: dict[str, int] = {}
+    for step in members:
+        key = step.tool or ""
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _count_gh_api(step: RecipeStep) -> int:
+    """Count occurrences of 'gh api' in a run_cmd step's cmd argument."""
+    if step.tool != "run_cmd":
+        return 0
+    cmd = (step.with_args or {}).get("cmd", "") or ""
+    return cmd.count("gh api")
+
+
+def extract_blocks(recipe: Recipe, step_graph: dict[str, set[str]]) -> tuple[RecipeBlock, ...]:
+    """Extract named block regions from a recipe's routing graph.
+
+    Groups steps that share the same ``step.block`` value, then computes the
+    entry step (no in-block predecessor) and exit step (no in-block successor)
+    for each group.  The step_graph is the forward adjacency dict produced by
+    ``_build_step_graph``; a local inverse is built here to find predecessors.
+
+    Steps without a ``block`` annotation are ignored.  Recipes with no block
+    annotations return an empty tuple.
+    """
+    # Build predecessor map by inverting the forward step_graph edges.
+    predecessors: dict[str, set[str]] = {}
+    for src, successors in step_graph.items():
+        for dst in successors:
+            predecessors.setdefault(dst, set()).add(src)
+
+    by_name: dict[str, list[RecipeStep]] = {}
+    for step in recipe.steps.values():
+        if step.block is not None:
+            by_name.setdefault(step.block, []).append(step)
+
+    blocks: list[RecipeBlock] = []
+    for name, members in by_name.items():
+        member_names = {s.name for s in members}
+        # Entry: no in-block predecessor (predecessor set ∩ member_names is empty)
+        entry_candidates = [
+            s for s in members if not (predecessors.get(s.name, set()) & member_names)
+        ]
+        # Exit: no in-block successor (successor set ∩ member_names is empty)
+        exit_candidates = [
+            s for s in members if not (step_graph.get(s.name, set()) & member_names)
+        ]
+        blocks.append(
+            RecipeBlock(
+                name=name,
+                entry=entry_candidates[0].name if entry_candidates else members[0].name,
+                exit=exit_candidates[0].name if exit_candidates else members[-1].name,
+                members=tuple(members),
+                tool_counts=_count_by_tool(members),
+                gh_api_occurrences=sum(_count_gh_api(s) for s in members),
+            )
+        )
+    return tuple(blocks)
+
+
+# ---------------------------------------------------------------------------
 # BFS helpers
 # ---------------------------------------------------------------------------
 
@@ -354,6 +428,94 @@ def _bfs_capped(
             continue  # Reached but do not expand — variable is refreshed here
         queue.extend(graph.get(node, set()))
     return visited
+
+
+# ---------------------------------------------------------------------------
+# Symbolic reachability: BFS with fact propagation
+# ---------------------------------------------------------------------------
+
+# A FactSet is a frozen set of (variable, value) pairs established by
+# conditional on_result.when edges.  Each frozenset represents the facts
+# that are known-to-be-true on one particular path through the routing graph.
+_FactSet = frozenset[tuple[str, str]]
+
+# Matches simple equality conditions of the form:
+#   context.X == 'v'    or    ${{ context.X }} == "v"
+# Capture groups: 1 = variable name, 2 = value.
+# Non-equality expressions (inequalities, conjunctions) produce no match —
+# conservative assumption (no fact is established).
+_SIMPLE_WHEN_RE = re.compile(r"(?:\$\{\{\s*)?context\.(\w+)(?:\s*\}\})?\s*==\s*[\"']?(\w+)[\"']?")
+
+
+def _parse_when_expr(expr: str) -> tuple[str, str] | None:
+    """Parse a simple equality when-expression into a (variable, value) fact.
+
+    Returns ``None`` for conjunctions, inequalities, or non-context refs.
+    Conservative: only establishes facts for provably-simple equality conditions.
+    """
+    m = _SIMPLE_WHEN_RE.fullmatch(expr.strip())
+    return (m.group(1), m.group(2)) if m else None
+
+
+def _edge_fact(recipe: Recipe, source: str, target: str) -> tuple[str, str] | None:
+    """Return the (variable, value) fact established by the edge source→target, or None.
+
+    Only ``on_result.conditions`` edges with a parseable simple equality ``when``
+    expression contribute a fact.  ``on_success``/``on_failure`` edges contribute no fact.
+    """
+    step = recipe.steps.get(source)
+    if step is None or step.on_result is None:
+        return None
+    for cond in step.on_result.conditions:
+        if cond.route == target and cond.when is not None:
+            return _parse_when_expr(cond.when)
+    return None
+
+
+def _intersect_facts(fs: set[_FactSet]) -> _FactSet:
+    """Intersect all fact sets — only facts that hold on every incoming path survive."""
+    if not fs:
+        return frozenset()
+    return frozenset.intersection(*fs)
+
+
+def _bfs_with_facts(
+    graph: dict[str, set[str]],
+    recipe: Recipe,
+    start: str,
+) -> dict[str, set[_FactSet]]:
+    """BFS from *start* propagating conditional edge facts.
+
+    Each ``on_result`` edge whose ``when`` expression parses as
+    ``'context.X == "v"'`` extends the current fact set with ``(X, v)`` on
+    the target; other edges carry facts unchanged.  At join points, the
+    returned fact set is the intersection of all incoming fact sets — a fact
+    is only "known" at a node if it holds on every path reaching that node.
+
+    Returns ``{step_name: {intersected_fact_set}}``.  Each value is a
+    single-element set containing one :class:`frozenset` of ``(var, val)``
+    pairs.
+    """
+    # facts maps step_name → set of fact-sets that have been discovered for it.
+    # visited tracks (node, fact_set) pairs to avoid reprocessing.
+    facts: dict[str, set[_FactSet]] = {start: {frozenset()}}
+    work: deque[str] = deque([start])
+    visited: set[tuple[str, _FactSet]] = set()
+
+    while work:
+        node = work.popleft()
+        for succ in graph.get(node, ()):
+            edge_fact = _edge_fact(recipe, node, succ)
+            for f in facts.get(node, {frozenset()}):
+                new_f: _FactSet = f | {edge_fact} if edge_fact else f
+                state = (succ, new_f)
+                if state in visited:
+                    continue
+                visited.add(state)
+                facts.setdefault(succ, set()).add(new_f)
+                work.append(succ)
+
+    return {n: {_intersect_facts(fs)} for n, fs in facts.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -645,6 +807,10 @@ def make_validation_context(
     """
     step_graph = _build_step_graph(recipe)
     dataflow = analyze_dataflow(recipe, step_graph=step_graph)
+    predecessors: dict[str, set[str]] = {}
+    for src, successors in step_graph.items():
+        for dst in successors:
+            predecessors.setdefault(dst, set()).add(src)
     return ValidationContext(
         recipe=recipe,
         step_graph=step_graph,
@@ -654,4 +820,6 @@ def make_validation_context(
         available_sub_recipes=available_sub_recipes,
         project_dir=project_dir,
         disabled_subsets=disabled_subsets,
+        blocks=extract_blocks(recipe, step_graph),
+        predecessors=predecessors,
     )

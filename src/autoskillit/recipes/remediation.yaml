@@ -564,14 +564,13 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.merge_target }}"
-      event: "push"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
-    on_success: check_merge_queue
+    on_success: check_repo_merge_state
     on_failure: detect_ci_conflict
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -580,96 +579,36 @@ steps:
       using the wait_for_ci MCP tool (timeout: 300 s). Captures structured output
       (conclusion + failed job names) for downstream resolve_ci.
       Skipped when open_pr=false — no remote feature branch is opened in that mode.
-      On success, routes to check_merge_queue to determine if the PR should enter
+      On success, routes to check_repo_merge_state to determine if the PR should enter
       the merge queue. On failure, routes to detect_ci_conflict which checks whether
       the failure is caused by a stale base before falling through to diagnose_ci.
 
-  check_merge_queue:
-    tool: run_cmd
+  check_repo_merge_state:
+    tool: check_repo_merge_state
+    block: pre_queue_gate
     with:
-      cmd: >
-        REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||') &&
-        OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
-        BRANCH="${{ inputs.base_branch }}" &&
-        gh api graphql -f query="query {
-          repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
-            mergeQueue(branch:\"$BRANCH\") { id }
-          }
-        }" | jq -r 'if .data.repository.mergeQueue != null then "true" else "false" end'
+      branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "check_merge_queue"
+      remote_url: "${{ context.remote_url }}"
+      step_name: "check_repo_merge_state"
     capture:
-      queue_available: "${{ result.stdout | trim }}"
-    on_success: check_merge_group_trigger
+      queue_available: "${{ result.queue_available }}"
+      merge_group_trigger: "${{ result.merge_group_trigger }}"
+      auto_merge_available: "${{ result.auto_merge_available }}"
+      ci_event: "${{ result.ci_event }}"
+    on_success: route_queue_mode
     on_failure: release_issue_success
     skip_when_false: "inputs.open_pr"
     note: >
-      Detects whether the target branch has an active merge queue via GraphQL.
-      Captures "true" or "false" into context.queue_available.
-      On failure (gh error, parse error), degrades gracefully to release_issue_success
-      (non-queue path). On success, routes to check_merge_group_trigger to validate
-      that a CI workflow includes the merge_group trigger before proceeding.
-      Skipped when open_pr=false — no PR was opened.
-
-  check_merge_group_trigger:
-    tool: run_cmd
-    with:
-      cmd: >
-        REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||') &&
-        OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
-        [ -n "$OWNER" ] && [ -n "$REPO_NAME" ] &&
-        FOUND="" &&
-        while IFS= read -r wf; do
-          content=$(gh api "repos/$OWNER/$REPO_NAME/contents/.github/workflows/$wf" -q '.content')
-          [ -n "$content" ] && echo "$content" | base64 -d 2>/dev/null | grep -q 'merge_group' && FOUND=true && break
-        done < <(gh api "repos/$OWNER/$REPO_NAME/contents/.github/workflows" 2>/dev/null | jq -r '.[] | select(.type == "file") | .name');
-        if [ "$FOUND" = "true" ]; then echo "true"; else
-          echo "WARNING: Merge queue detected on ${{ inputs.base_branch }} but no CI workflow includes merge_group trigger -- degrading to non-queue merge path" >&2
-          echo "false"
-        fi
-      cwd: "${{ context.work_dir }}"
-      step_name: "check_merge_group_trigger"
-    capture:
-      merge_group_trigger: "${{ result.stdout | trim }}"
-    on_success: check_auto_merge
-    on_failure: check_auto_merge
-    skip_when_false: "inputs.open_pr"
-    note: >
-      Validates that at least one CI workflow in .github/workflows/ includes the
-      merge_group event trigger; emits WARNING to stderr when absent.
-      Lists workflow files via GitHub API, decodes base64 content, and greps for
-      'merge_group'; captures merge_group_trigger as "true" (found) or "false"
-      (absent).
-
-  check_auto_merge:
-    tool: run_cmd
-    with:
-      cmd: >
-        REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||') &&
-        OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
-        gh api graphql -f query="query {
-          repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
-            autoMergeAllowed
-          }
-        }" | jq -r '.data.repository.autoMergeAllowed // false'
-      cwd: "${{ context.work_dir }}"
-      step_name: "check_auto_merge"
-    capture:
-      auto_merge_available: "${{ result.stdout | trim }}"
-    on_success: route_queue_mode
-    on_failure: route_queue_mode
-    skip_when_false: "inputs.open_pr"
-    note: >
-      Detects whether the target repository has autoMergeAllowed enabled via GraphQL.
-      Captures "true" or "false" into context.auto_merge_available.
-      On failure (gh error, network error), falls through to route_queue_mode with
-      auto_merge_available unset — route_queue_mode defaults to immediate_merge (safe
-      non-auto path). GraphQL-level errors (rate-limit, missing auth scope) also return
-      exit 0 with an errors array and no .data field; the jq // false fallback outputs
-      false safely, so auto_merge_available defaults to false on any error path.
+      Single GraphQL round-trip that captures queue_available, merge_group_trigger,
+      auto_merge_available, and ci_event for the target branch. Consolidates the former three
+      sequential run_cmd steps (check_merge_queue, check_merge_group_trigger,
+      check_auto_merge) into one MCP tool call. On failure (network error, auth failure),
+      falls through to release_issue_success (non-queue path).
       Skipped when open_pr=false — no PR was opened.
 
   route_queue_mode:
+    block: pre_queue_gate
     action: route
     on_result:
       - when: "${{ inputs.auto_merge }} != 'true'"
@@ -798,7 +737,7 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.merge_target }}"
-      event: "push"
+      event: "${{ context.ci_event }}"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
@@ -1019,7 +958,7 @@ steps:
   diagnose_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - - push"
+      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - - ${{ context.ci_event }}"
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
       ci_failed_jobs: "${{ context.ci_failed_jobs }}"

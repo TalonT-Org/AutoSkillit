@@ -174,6 +174,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "release_issue",  # simple result
         "wait_for_ci",  # ci status dict, generic renders correctly
         "wait_for_merge_queue",  # merge queue result dict, generic renders correctly
+        "check_repo_merge_state",  # simple JSON boolean bundle, generic renders correctly
         "toggle_auto_merge",  # simple success/error result dict, generic renders correctly
         "create_unique_branch",  # simple result
         "write_telemetry_files",  # simple path results

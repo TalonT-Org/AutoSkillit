@@ -651,6 +651,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.
         Adding rules_cmd.py for run_cmd echo-capture alignment validation and
         rules_isolation.py for workspace isolation checks brings the count to 30.
+        rules_blocks.py adds the block-level budget rule family, bringing the count to 32.
+        rules_reachability.py adds symbolic BFS reachability rules, bringing the count to 33.
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
@@ -688,7 +690,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 18,
-        "recipe": 31,
+        "recipe": 33,
         "execution": 26,
         "core": 17,
         "cli": 18,

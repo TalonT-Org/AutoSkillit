@@ -7,6 +7,7 @@ from autoskillit.core import get_logger
 _logger = get_logger(__name__)
 
 # Rule registration — import triggers @semantic_rule registration.
+from autoskillit.recipe import rules_blocks as _rules_blocks  # noqa: E402 F401
 from autoskillit.recipe import rules_bypass as _rules_bypass  # noqa: E402 F401
 from autoskillit.recipe import rules_ci as _rules_ci  # noqa: E402 F401
 from autoskillit.recipe import rules_clone as _rules_clone  # noqa: E402 F401
@@ -18,6 +19,7 @@ from autoskillit.recipe import rules_inputs as _rules_inputs  # noqa: E402 F401
 from autoskillit.recipe import rules_isolation as _rules_isolation  # noqa: E402 F401
 from autoskillit.recipe import rules_merge as _rules_merge  # noqa: E402 F401
 from autoskillit.recipe import rules_packs as _rules_packs  # noqa: E402 F401
+from autoskillit.recipe import rules_reachability as _rules_reachability  # noqa: E402 F401
 from autoskillit.recipe import rules_recipe as _rules_recipe  # noqa: E402 F401
 from autoskillit.recipe import rules_skill_content as _rules_skill_content  # noqa: E402 F401
 from autoskillit.recipe import rules_skills as _rules_skills  # noqa: E402 F401
@@ -68,6 +70,7 @@ from autoskillit.recipe.schema import (  # noqa: E402
     AUTOSKILLIT_VERSION_KEY,
     DataFlowReport,
     Recipe,
+    RecipeBlock,
     RecipeInfo,
     RecipeIngredient,
     RecipeStep,
@@ -94,6 +97,7 @@ __all__ = [
     "RecipeListItem",
     "build_ingredient_rows",
     "Recipe",
+    "RecipeBlock",
     "RecipeInfo",
     "RecipeIngredient",
     "RecipeStep",

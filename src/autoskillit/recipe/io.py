@@ -42,13 +42,23 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
     Substitutes ``{{AUTOSKILLIT_TEMP}}`` in the raw text with
     ``temp_dir_relpath`` *before* YAML parsing so the resulting Recipe
     dataclass observes the resolved value uniformly.
+
+    After parsing, ``recipe.blocks`` is populated via ``extract_blocks`` from
+    ``_analysis.py``.  The import is deferred to break the circular dependency:
+    ``_analysis.py`` imports ``iter_steps_with_context`` from this module, so a
+    top-level import here would create a cycle.
     """
     raw_text = path.read_text(encoding="utf-8")
     substituted = substitute_temp_placeholder(raw_text, temp_dir_relpath)
     data = load_yaml(substituted)
     if not isinstance(data, dict):
         raise ValueError(f"Recipe file must contain a YAML mapping: {path}")
-    return _parse_recipe(data)
+    recipe = _parse_recipe(data)
+    # Deferred import breaks the circular dependency with _analysis.py.
+    from autoskillit.recipe._analysis import _build_step_graph, extract_blocks  # noqa: PLC0415
+
+    recipe.blocks = extract_blocks(recipe, _build_step_graph(recipe))
+    return recipe
 
 
 def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
@@ -125,6 +135,7 @@ def find_recipe_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
 # field name here — the assertion below will fail at import time otherwise.
 _PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
     {
+        "name",  # Set from YAML dict key in _parse_recipe, not from step data
         "tool",
         "action",
         "python",
@@ -149,6 +160,7 @@ _PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
         "optional_context_refs",
         "stale_threshold",
         "idle_output_timeout",
+        "block",  # Named block anchor; maps to step's block: key in YAML
     }
 )
 if _PARSE_STEP_HANDLED_FIELDS != frozenset(RecipeStep.__dataclass_fields__):
@@ -179,7 +191,9 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     steps: dict[str, RecipeStep] = {}
     for step_name, step_data in (data.get("steps") or {}).items():
         if isinstance(step_data, dict):
-            steps[step_name] = _parse_step(step_data)
+            step = _parse_step(step_data)
+            step.name = step_name
+            steps[step_name] = step
 
     kitchen_rules = data.get("kitchen_rules", [])
     if not isinstance(kitchen_rules, list):
@@ -256,6 +270,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         optional_context_refs=data.get("optional_context_refs", []),
         stale_threshold=data.get("stale_threshold"),
         idle_output_timeout=data.get("idle_output_timeout"),
+        block=data.get("block"),
     )
 
 

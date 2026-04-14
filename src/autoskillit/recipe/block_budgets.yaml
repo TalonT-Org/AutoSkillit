@@ -1,0 +1,20 @@
+# Block-level budget configuration for recipe semantic validation.
+#
+# Each top-level key is a block name (matching RecipeStep.block declarations).
+# The special DEFAULT key provides fallback budgets for blocks not listed here.
+#
+# Fields per block:
+#   run_cmd:      maximum number of run_cmd steps allowed in the block
+#   mcp_tools:    maximum number of non-run_cmd MCP tool calls allowed
+#   forbid_gh_api: if true, any "gh api" shell pattern in a run_cmd inside this block is an error
+#
+# version: enables future staleness detection via _llm_triage.py
+version: 1
+
+DEFAULT:
+  run_cmd: 1          # fallback budget for blocks not explicitly listed
+
+pre_queue_gate:
+  run_cmd: 0          # MCP-only block — shell gh api calls are prohibited
+  mcp_tools: 1        # exactly one consolidated tool call for all three captures
+  forbid_gh_api: true

@@ -199,8 +199,21 @@ def test_pmp_no_upstream_branch_ingredient(recipe) -> None:
 
 
 def test_pmp_setup_remote_routes_to_check_integration_exists(recipe) -> None:
-    """setup_remote.on_success must route to check_integration_exists, not analyze_prs."""
-    assert recipe.steps["setup_remote"].on_success == "check_integration_exists"
+    """setup_remote.on_success must route toward check_integration_exists.
+
+    With check_repo_ci_event inserted as a non-blocking pre-step that captures
+    ci_event, the chain is: setup_remote → check_repo_ci_event →
+    check_integration_exists.  Both hops are required.
+    """
+    setup_successor = recipe.steps["setup_remote"].on_success
+    assert setup_successor == "check_repo_ci_event", (
+        f"setup_remote.on_success must be 'check_repo_ci_event', got {setup_successor!r}"
+    )
+    ci_event_successor = recipe.steps["check_repo_ci_event"].on_success
+    assert ci_event_successor == "check_integration_exists", (
+        f"check_repo_ci_event.on_success must be 'check_integration_exists',"
+        f" got {ci_event_successor!r}"
+    )
 
 
 def test_pmp_has_check_integration_exists_step(recipe) -> None:

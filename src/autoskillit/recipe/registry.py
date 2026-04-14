@@ -16,7 +16,7 @@ from autoskillit.core import Severity
 # not import registry.py). The runtime isinstance() check in run_semantic_rules also
 # requires this to be available as a concrete class, not just a TYPE_CHECKING stub.
 from autoskillit.recipe._analysis import ValidationContext  # noqa: E402
-from autoskillit.recipe.schema import DataFlowReport, Recipe
+from autoskillit.recipe.schema import DataFlowReport, Recipe, RecipeBlock
 
 
 @dataclass
@@ -50,6 +50,32 @@ class RuleSpec:
 _RULE_REGISTRY: list[RuleSpec] = []
 
 
+@dataclass(frozen=True)
+class BlockContext:
+    """Per-block dispatch context for block-level semantic rules.
+
+    Block rules receive a ``BlockContext`` rather than a full ``ValidationContext``
+    to enforce the constraint that rules operate on exactly one block at a time.
+    ``parent`` is available read-only for cross-block lookups if ever needed.
+    """
+
+    block: RecipeBlock
+    parent: ValidationContext
+
+
+@dataclass
+class BlockRuleSpec:
+    """Internal: metadata for one registered block-level rule."""
+
+    name: str
+    description: str
+    severity: Severity
+    check: Callable[[BlockContext], list[RuleFinding]]
+
+
+_BLOCK_RULE_REGISTRY: list[BlockRuleSpec] = []
+
+
 def semantic_rule(
     name: str,
     description: str,
@@ -62,6 +88,29 @@ def semantic_rule(
     ) -> Callable[[ValidationContext], list[RuleFinding]]:
         _RULE_REGISTRY.append(
             RuleSpec(name=name, description=description, severity=severity, check=fn)
+        )
+        return fn
+
+    return decorator
+
+
+def block_rule(
+    name: str,
+    description: str,
+    severity: Severity = Severity.WARNING,
+) -> Callable:
+    """Decorator that registers a block-level semantic validation rule.
+
+    The decorated function receives a ``BlockContext`` (one block at a time) and
+    returns a list of ``RuleFinding`` objects.  Registered rules are dispatched
+    by ``run_semantic_rules`` for every block in ``ctx.blocks``.
+    """
+
+    def decorator(
+        fn: Callable[[BlockContext], list[RuleFinding]],
+    ) -> Callable[[BlockContext], list[RuleFinding]]:
+        _BLOCK_RULE_REGISTRY.append(
+            BlockRuleSpec(name=name, description=description, severity=severity, check=fn)
         )
         return fn
 
@@ -81,6 +130,11 @@ def run_semantic_rules(wf: Recipe | ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for spec in _RULE_REGISTRY:
         findings.extend(spec.check(ctx))
+    # Dispatch block-level rules for every declared block in the recipe.
+    for block in ctx.blocks:
+        bctx = BlockContext(block=block, parent=ctx)
+        for bspec in _BLOCK_RULE_REGISTRY:
+            findings.extend(bspec.check(bctx))
     return findings
 
 

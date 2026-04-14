@@ -250,23 +250,26 @@ class TestCIWorkflow:
 
 
 class TestRecipeWorkflowField:
-    def test_ci_watch_steps_carry_event_field(self):
-        """All wait_for_ci steps in bundled top-level recipes must specify an event.
-
-        Without an event field, wait_for_ci can match pull_request runs when a push
-        run is expected, causing the CI watcher to report a passing status for the
-        wrong trigger. The workflow field was removed in favor of config-level
-        ci.workflow defaults; event discrimination must be explicit in each recipe step.
-        """
+    def test_ci_watch_event_value_is_captured_or_absent(self):
+        """Every wait_for_ci step's event value must either be:
+          (a) a template reference to an upstream-captured variable
+              (e.g. ${{ context.ci_event }}), OR
+          (b) absent (matches any event — the ci.py default when scope.event is None).
+        Hardcoded literals ('push', 'pull_request', 'merge_group') are forbidden because
+        they create capture inversions when the repo's actual trigger differs."""
         recipes_dir = REPO_ROOT / "src" / "autoskillit" / "recipes"
         for recipe_path in recipes_dir.glob("*.yaml"):
             recipe = yaml.safe_load(recipe_path.read_text())
             for step_name, step in recipe.get("steps", {}).items():
-                if step.get("tool") == "wait_for_ci":
-                    assert "event" in step.get("with", {}), (
-                        f"{recipe_path.name}:{step_name} missing event in with: — "
-                        "add 'event: \"push\"' to scope CI polling to the correct trigger event"
-                    )
+                if step.get("tool") != "wait_for_ci":
+                    continue
+                event = step.get("with", {}).get("event")
+                if event is None:
+                    continue  # absent is fine — matches any event
+                assert event.startswith("${{") and "context." in event, (
+                    f"{recipe_path.name}:{step_name} — event must be a captured context "
+                    f"reference or absent, not {event!r}"
+                )
 
 
 class TestPtyTestGuard:

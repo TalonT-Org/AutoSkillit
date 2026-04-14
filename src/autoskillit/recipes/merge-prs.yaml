@@ -96,7 +96,7 @@ steps:
       cmd: "git remote set-url origin \"${{ context.remote_url }}\""
       cwd: "${{ context.work_dir }}"
       step_name: "setup_remote"
-    on_success: check_integration_exists
+    on_success: check_repo_ci_event
     on_failure: register_clone_failure
     note: >
       The clone's origin initially points to a file:// URL (set by clone_repo for isolation).
@@ -104,6 +104,25 @@ steps:
       (gh pr merge, gh pr view, etc.) can identify the correct GitHub repository.
       Skills that contact remotes (resolve-merge-conflicts, retry-worktree, implement-worktree)
       now use REMOTE=$(upstream || origin) internally and do not depend on this step.
+
+  check_repo_ci_event:
+    tool: check_repo_merge_state
+    block: pre_merge_prs_ci_gate
+    with:
+      branch: "${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      step_name: "check_repo_ci_event"
+    capture:
+      ci_event: "${{ result.ci_event }}"
+    on_success: check_integration_exists
+    on_failure: check_integration_exists
+    note: >
+      Detects whether the repository's CI triggers on push or merge_group events.
+      Captures ci_event for use by wait_for_ci steps (wait_for_conflict_ci, ci_watch_pr)
+      and diagnose-ci skill invocations downstream. Routes to check_integration_exists
+      regardless of outcome — non-blocking gate: ci_event defaults to null (match-any)
+      on failure, which matches the ci.py scope.event=None behavior.
 
   check_integration_exists:
     tool: run_cmd
@@ -514,7 +533,7 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.worktree_branch_name }}"
-      event: "push"
+      event: "${{ context.ci_event }}"
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
     on_success: merge_conflict_pr
@@ -875,7 +894,7 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.integration_branch }}"
-      event: "push"
+      event: "${{ context.ci_event }}"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       pr_url: "${{ context.pr_url }}"
@@ -891,7 +910,7 @@ steps:
   diagnose_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:diagnose-ci ${{ context.integration_branch }} - - - push"
+      skill_command: "/autoskillit:diagnose-ci ${{ context.integration_branch }} - - - ${{ context.ci_event }}"
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
     capture:

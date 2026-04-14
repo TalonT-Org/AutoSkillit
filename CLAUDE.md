@@ -179,6 +179,7 @@ generic_automation_mcp/
 │   ├── registry.py          #   RuleFinding, RuleSpec, semantic_rule decorator
 │   ├── repository.py
 │   ├── _analysis.py         #   Step graph building + dataflow analysis
+│   ├── rules_blocks.py      #   Block-level budget rules (block-run-cmd-budget, etc.)
 │   ├── rules_bypass.py
 │   ├── rules_ci.py
 │   ├── rules_clone.py
@@ -190,6 +191,7 @@ generic_automation_mcp/
 │   ├── rules_isolation.py
 │   ├── rules_merge.py
 │   ├── rules_packs.py
+│   ├── rules_reachability.py  #   Symbolic reachability rules (capture-inversion-detection, event-scope-requires-upstream-capture)
 │   ├── rules_recipe.py
 │   ├── rules_skill_content.py
 │   ├── rules_skills.py

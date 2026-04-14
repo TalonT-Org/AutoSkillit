@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
-from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
+from autoskillit.cli._init_helpers import (
+    _KNOWN_SCANNERS,
+    _check_dual_mcp_files,
+    _detect_secret_scanner,
+)
 from autoskillit.core import Severity, get_logger
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 from autoskillit.hook_registry import (
@@ -86,6 +90,37 @@ def _check_mcp_server_registered(claude_json_path: Path | None = None) -> Doctor
             "autoskillit not registered. Run 'autoskillit install' to install as a plugin, "
             "or 'autoskillit init' to register in mcpServers." + _plugin_check_detail
         ),
+    )
+
+
+def _check_dual_mcp_registration(
+    claude_json_path: Path | None = None,
+    plugins_json_path: Path | None = None,
+) -> DoctorResult:
+    """Check that autoskillit is not registered both as a direct entry and as a marketplace plugin.
+
+    Returns WARNING if both registrations are simultaneously present (split-brain condition).
+    Fail-open: unreadable files → cannot confirm dual registration, return OK.
+    """
+    _claude_json = claude_json_path or (Path.home() / ".claude.json")
+    _plugins_json = plugins_json_path or (
+        Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+    )
+    if _check_dual_mcp_files(_claude_json, _plugins_json):
+        return DoctorResult(
+            severity=Severity.WARNING,
+            check="dual_mcp_registration",
+            message=(
+                "autoskillit is registered both as a direct mcpServers entry "
+                "(~/.claude.json) and as a marketplace plugin. This spawns two "
+                "independent server processes per session with split gate state. "
+                "Run `autoskillit install` to remove the stale direct entry."
+            ),
+        )
+    return DoctorResult(
+        severity=Severity.OK,
+        check="dual_mcp_registration",
+        message="",
     )
 
 
@@ -602,6 +637,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 2: MCP server registered in ~/.claude.json or via plugin
     results.append(_check_mcp_server_registered(claude_json_path=Path.home() / ".claude.json"))
+
+    # Check 2b: Dual MCP registration — direct entry and marketplace plugin both present
+    results.append(_check_dual_mcp_registration())
 
     # Check 3: autoskillit command on PATH
     if shutil.which("autoskillit") is None:

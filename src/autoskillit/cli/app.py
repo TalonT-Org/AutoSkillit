@@ -27,6 +27,7 @@ from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _check_secret_scanning,
     _generate_config_yaml,
+    _is_plugin_installed,
     _log_secret_scan_bypass,
     _prompt_test_command,
     _register_all,
@@ -118,7 +119,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
             ",".join(cfg.safety.protected_branches),
         )
 
-    plugin_dir = str(pkg_root())
+    plugin_dir: str | None = None if _is_plugin_installed() else str(pkg_root())
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
 
@@ -457,9 +458,10 @@ def _launch_cook_session(
         resume_session_id=resume_session_id,
         env_extras=extra_env,
     )
-    cmd = spec.cmd + [
-        ClaudeFlags.PLUGIN_DIR,
-        str(pkg_root()),
+    plugin_flags = [] if _is_plugin_installed() else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
+    cmd = [
+        *spec.cmd,
+        *plugin_flags,
         ClaudeFlags.TOOLS,
         "AskUserQuestion",
         ClaudeFlags.APPEND_SYSTEM_PROMPT,
@@ -736,6 +738,9 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
 
 def main() -> None:
     """Entry point for autoskillit."""
+    from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
+
+    evict_direct_mcp_entry(_user_claude_json_path())
     _first_arg = sys.argv[1] if len(sys.argv) > 1 else "serve"
     if _first_arg != "serve":
         from autoskillit.cli._update_checks import run_update_checks

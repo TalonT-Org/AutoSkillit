@@ -15,6 +15,7 @@ from autoskillit.cli._hooks import (
     sweep_all_scopes_for_orphans,
     sync_hooks_to_settings,
 )
+from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
 from autoskillit.core import atomic_write, is_git_worktree, pkg_root
 
 _VALID_SCOPES = {"user", "project", "local"}
@@ -168,6 +169,8 @@ def install(*, scope: str = "user"):
         sys.exit(1)
 
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
+    if evict_direct_mcp_entry(_user_claude_json_path()):
+        print("Removed stale direct MCP entry from ~/.claude.json")
     # Cross-scope sweep: evict orphaned autoskillit hooks from ALL scopes before
     # writing canonical entries to the target scope.
     sweep_all_scopes_for_orphans(Path.cwd())

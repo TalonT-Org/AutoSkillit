@@ -72,7 +72,7 @@ _GITHUB_INTEGRATION_PYPROJECT_URL = (
 class Signal:
     """A single firing update condition."""
 
-    kind: Literal["binary", "hooks", "source_drift"]
+    kind: Literal["binary", "hooks", "source_drift", "dual_mcp"]
     message: str
 
 
@@ -521,6 +521,32 @@ def _source_drift_signal(info: InstallInfo, home: Path) -> Signal | None:
     return None
 
 
+def _is_dual_mcp_registered(home: Path) -> bool:
+    """Return True if both direct mcpServers entry and marketplace plugin are active."""
+    from autoskillit.cli._init_helpers import _check_dual_mcp_files
+
+    return _check_dual_mcp_files(
+        home / ".claude.json",
+        home / ".claude" / "plugins" / "installed_plugins.json",
+    )
+
+
+def _dual_mcp_signal(home: Path | None = None) -> Signal | None:
+    """Return a Signal if both direct mcpServers entry and marketplace plugin are registered.
+
+    _is_dual_mcp_registered() delegates to _check_dual_mcp_files() which is
+    fail-open (catches OSError and json.JSONDecodeError internally, never raises).
+    """
+    if _is_dual_mcp_registered(home or Path.home()):
+        return Signal(
+            "dual_mcp",
+            "autoskillit is registered as both a direct MCP server (~/.claude.json) "
+            "and a marketplace plugin — two server processes will spawn per session. "
+            "Run `autoskillit install` to remove the stale direct entry.",
+        )
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Unified dismissal
 # ---------------------------------------------------------------------------
@@ -658,6 +684,7 @@ def run_update_checks(home: Path | None = None) -> None:
         _binary_signal(info, _home, current),
         _hooks_signal(_claude_settings_path("user")),
         _source_drift_signal(info, _home),
+        _dual_mcp_signal(_home),
     ]
 
     # Filter by dismissal

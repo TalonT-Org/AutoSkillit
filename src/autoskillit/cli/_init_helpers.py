@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import NamedTuple
 
 from autoskillit.config import write_config_layer
-from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
+from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, get_logger, load_yaml
 from autoskillit.recipe import list_recipes
+
+logger = get_logger(__name__)
 
 
 class _ScanResult(NamedTuple):
@@ -289,10 +291,9 @@ def _is_plugin_installed() -> bool:
             timeout=10,
         )
         return result.returncode == 0 and "autoskillit" in result.stdout
-    except FileNotFoundError:
-        return False  # claude CLI not on PATH
-    except (subprocess.TimeoutExpired, OSError):
-        return False  # CLI unavailable or timed out
+    except Exception:
+        logger.debug("plugin install check failed", exc_info=True)
+        return False
 
 
 def _generate_config_yaml(test_command: list[str]) -> str:
@@ -328,6 +329,26 @@ safety:
 """
 
 
+def _check_dual_mcp_files(claude_json: Path, plugins_json: Path) -> bool:
+    """Return True if both direct mcpServers entry and marketplace plugin are active.
+
+    Checks ~/.claude.json for an 'autoskillit' mcpServers key and
+    installed_plugins.json for an 'autoskillit@autoskillit-local' plugin entry.
+
+    Fail-open: any I/O or parse error returns False without raising.
+    """
+    try:
+        has_direct = claude_json.exists() and "autoskillit" in json.loads(
+            claude_json.read_text()
+        ).get("mcpServers", {})
+        has_marketplace = plugins_json.exists() and "autoskillit@autoskillit-local" in json.loads(
+            plugins_json.read_text()
+        ).get("plugins", {})
+        return has_direct and has_marketplace
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
 def _user_claude_json_path() -> Path:
     """Return path to ~/.claude.json (user-scoped MCP server config)."""
     return Path.home() / ".claude.json"
@@ -353,6 +374,28 @@ def _register_mcp_server(claude_json_path: Path) -> None:
         "args": [],
     }
     atomic_write(claude_json_path, json.dumps(data, indent=2))
+
+
+def evict_direct_mcp_entry(claude_json_path: Path) -> bool:
+    """Remove mcpServers['autoskillit'] from ~/.claude.json if present.
+
+    Returns True if the entry was removed, False if nothing changed.
+    Fail-open: any I/O or parse error returns False without raising.
+    """
+    if not claude_json_path.exists():
+        return False
+    try:
+        data: dict = json.loads(claude_json_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    if "autoskillit" not in data.get("mcpServers", {}):
+        return False
+    del data["mcpServers"]["autoskillit"]
+    try:
+        atomic_write(claude_json_path, json.dumps(data, indent=2))
+    except OSError:
+        return False
+    return True
 
 
 def _print_next_steps(*, context: str = "install") -> None:
@@ -433,6 +476,8 @@ def _register_all(scope: str, project_dir: Path) -> None:
     plugin_ok = _is_plugin_installed()
     if not plugin_ok:
         _register_mcp_server(_user_claude_json_path())
+    else:
+        evict_direct_mcp_entry(_user_claude_json_path())  # remove stale direct entry
 
     # --- Summary block ---
     print()

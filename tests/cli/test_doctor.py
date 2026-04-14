@@ -201,6 +201,7 @@ class TestCLIDoctor:
             "secret_scanning_hook",
             "editable_install_source_exists",  # ★ new
             "stale_entry_points",  # ★ new
+            "dual_mcp_registration",  # ★ new
         }
         assert expected <= check_names
 
@@ -1696,3 +1697,35 @@ class TestDoctorSourceVersionDriftUsesNetwork:
             f"got {result.severity}: {result.message}"
         )
         assert "unavailable" in result.message.lower() or "network" in result.message.lower()
+
+
+def test_doctor_dual_mcp_registration_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_check_dual_mcp_registration() warns when both direct and marketplace entries exist."""
+    from autoskillit.cli._doctor import _check_dual_mcp_registration
+    from autoskillit.core import Severity
+
+    claude_json = tmp_path / ".claude.json"
+    claude_json.write_text(json.dumps({"mcpServers": {"autoskillit": {"type": "stdio"}}}))
+    plugins_dir = tmp_path / ".claude" / "plugins"
+    plugins_dir.mkdir(parents=True)
+    (plugins_dir / "installed_plugins.json").write_text(
+        json.dumps({"plugins": {"autoskillit@autoskillit-local": {"name": "autoskillit"}}})
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    result = _check_dual_mcp_registration()
+    assert result.severity == Severity.WARNING
+    assert "autoskillit install" in result.message
+
+
+def test_doctor_no_dual_when_only_direct(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """_check_dual_mcp_registration() returns OK when only the direct entry exists."""
+    from autoskillit.cli._doctor import _check_dual_mcp_registration
+    from autoskillit.core import Severity
+
+    claude_json = tmp_path / ".claude.json"
+    claude_json.write_text(json.dumps({"mcpServers": {"autoskillit": {"type": "stdio"}}}))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    result = _check_dual_mcp_registration()
+    assert result.severity == Severity.OK

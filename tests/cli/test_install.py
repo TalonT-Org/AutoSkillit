@@ -171,6 +171,40 @@ class TestCLIInstall:
 
         assert (tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit").is_symlink()
 
+    @patch("autoskillit.cli._marketplace.subprocess.run")
+    def test_install_evicts_stale_direct_mcp_entry(
+        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """install() must remove a stale mcpServers.autoskillit entry left by a prior init."""
+        import importlib as _importlib
+
+        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+
+        # Seed stale direct entry as left by a prior `autoskillit init`
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "autoskillit": {"type": "stdio", "command": "autoskillit", "args": []}
+                    }
+                }
+            )
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        from autoskillit.cli._marketplace import install
+
+        install(scope="user")
+
+        data = json.loads(claude_json.read_text())
+        assert "autoskillit" not in data.get("mcpServers", {})
+
 
 class TestMigrateCommand:
     """Tests for the ``autoskillit migrate`` CLI command."""

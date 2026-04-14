@@ -192,9 +192,12 @@ class SkillResult:
         Produces the same 13+ field envelope as _build_skill_result, ensuring
         pipeline orchestrators can route crash responses without schema inspection.
         """
+        _result = f"{type(exception).__name__}: {exception}"
+        if skill_command:
+            _result += f" | skill_command={skill_command!r}"
         return cls(
             success=False,
-            result=f"{type(exception).__name__}: {exception}",
+            result=_result,
             session_id=session_id,
             subtype="crashed",
             is_error=True,
@@ -202,7 +205,7 @@ class SkillResult:
             needs_retry=False,
             retry_reason=RetryReason.NONE,
             stderr="",
-            kill_reason=KillReason.NATURAL_EXIT,
+            kill_reason=KillReason.EXCEPTION,
             order_id=order_id,
         )
 

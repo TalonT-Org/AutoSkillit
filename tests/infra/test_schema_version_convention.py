@@ -134,9 +134,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 23),
     # _init_helpers.py — ~/.claude.json (co-owned)
-    ("src/autoskillit/cli/_init_helpers.py", 356),
+    ("src/autoskillit/cli/_init_helpers.py", 376),
     # _init_helpers.py — evict_direct_mcp_entry write-back to ~/.claude.json (co-owned)
-    ("src/autoskillit/cli/_init_helpers.py", 375),
+    ("src/autoskillit/cli/_init_helpers.py", 395),
     # _marketplace.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/_marketplace.py", 45),
     # _marketplace.py — marketplace.json (co-owned)
@@ -144,9 +144,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _marketplace.py — hooks.json (co-owned)
     ("src/autoskillit/cli/_marketplace.py", 144),
     # _update_checks.py — dismissal state file
-    ("src/autoskillit/cli/_update_checks.py", 105),
+    ("src/autoskillit/cli/_update_checks.py", 102),
     # _update_checks.py — fetch cache
-    ("src/autoskillit/cli/_update_checks.py", 132),
+    ("src/autoskillit/cli/_update_checks.py", 129),
     # smoke_utils.py — domain partitions dict, hunk ranges list, merge queue list
     ("src/autoskillit/smoke_utils.py", 53),
     ("src/autoskillit/smoke_utils.py", 83),

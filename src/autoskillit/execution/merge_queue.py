@@ -171,6 +171,21 @@ class ClassifierInconclusive(Exception):
         self.reason = reason
 
 
+class CIStillRunning(ClassifierInconclusive):
+    """CI checks are legitimately in-progress (PENDING or EXPECTED).
+
+    Expected transient state — outer timeout_seconds bounds the wait.
+    Must NOT consume the inconclusive budget.
+    """
+
+
+class NoPositiveSignal(ClassifierInconclusive):
+    """No positive classifier gate matched — state is genuinely ambiguous.
+
+    Bounded by max_inconclusive_retries. Counts against the inconclusive budget.
+    """
+
+
 def _is_positive_stall(state: PRFetchState) -> bool:
     """True when auto-merge is enabled and merge_state_status indicates the PR is
     stuck in a state where it should be in queue but is not."""
@@ -230,9 +245,9 @@ def _classify_pr_state(state: PRFetchState) -> ClassificationResult:
         return ClassificationResult(PRState.DROPPED_HEALTHY, "PR healthy but auto_merge cleared")
 
     if state["checks_state"] in {"PENDING", "EXPECTED"}:
-        raise ClassifierInconclusive(state, "checks still running")
+        raise CIStillRunning(state, "checks still running")
 
-    raise ClassifierInconclusive(state, "no positive signal matched")
+    raise NoPositiveSignal(state, "no positive signal matched")
 
 
 class DefaultMergeQueueWatcher:
@@ -353,6 +368,7 @@ class DefaultMergeQueueWatcher:
             # In queue: reset window and continue
             if state["in_queue"]:
                 not_in_queue_cycles = 0
+                inconclusive_count = 0
                 if state["queue_state"] == "UNMERGEABLE":
                     return _make_result(False, PRState.EJECTED, "PR is UNMERGEABLE in merge queue")
                 await asyncio.sleep(poll_interval)
@@ -363,8 +379,10 @@ class DefaultMergeQueueWatcher:
             # Classify state using positive-signal gates
             try:
                 classification = _classify_pr_state(state)
-            except ClassifierInconclusive as exc:
-                # Apply confirmation window before consuming inconclusive budget
+            except CIStillRunning:
+                await asyncio.sleep(poll_interval)
+                continue
+            except NoPositiveSignal as exc:
                 if not_in_queue_cycles < not_in_queue_confirmation_cycles:
                     await asyncio.sleep(poll_interval)
                     continue

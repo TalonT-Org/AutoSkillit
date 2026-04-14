@@ -792,6 +792,192 @@ class TestPendingCIGuard:
         assert isinstance(_make_watcher(), MergeQueueWatcher)
 
 
+class TestInconclusiveBudget:
+    """Tests for the split inconclusive budget: CIStillRunning vs NoPositiveSignal."""
+
+    @pytest.mark.anyio
+    async def test_pending_ci_does_not_exhaust_inconclusive_budget(self):
+        """CIStillRunning must not consume inconclusive_count.
+        Six PENDING cycles with budget=3 must NOT trigger budget ceiling.
+        timeout_seconds=99999 ensures outer deadline is not the cause.
+        """
+        watcher = DefaultMergeQueueWatcher(token=None, max_inconclusive_retries=3)
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count > 6:
+                return _queue_state(merged=True)
+            return _queue_state(
+                merged=False,
+                in_queue=False,
+                checks_state="PENDING",
+                merge_state_status="BLOCKED",
+                auto_merge_enabled_at=None,
+            )
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                timeout_seconds=99999,
+            )
+
+        assert result["success"] is True
+        assert result["pr_state"] == "merged"
+
+    @pytest.mark.anyio
+    async def test_expected_ci_does_not_exhaust_inconclusive_budget(self):
+        """CIStillRunning (EXPECTED) must not consume inconclusive_count.
+        Six EXPECTED cycles with budget=3 must NOT trigger budget ceiling.
+        """
+        watcher = DefaultMergeQueueWatcher(token=None, max_inconclusive_retries=3)
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count > 6:
+                return _queue_state(merged=True)
+            return _queue_state(
+                merged=False,
+                in_queue=False,
+                checks_state="EXPECTED",
+                merge_state_status="BLOCKED",
+                auto_merge_enabled_at=None,
+            )
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                timeout_seconds=99999,
+            )
+
+        assert result["success"] is True
+        assert result["pr_state"] == "merged"
+
+    @pytest.mark.anyio
+    async def test_no_positive_signal_exhausts_budget_returns_timeout(self):
+        """NoPositiveSignal must still exhaust the bounded budget.
+        Unknown state with no positive classifier match × (window + N) cycles
+        → pr_state='timeout'. Reason must contain 'Inconclusive after'.
+        """
+        watcher = DefaultMergeQueueWatcher(token=None, max_inconclusive_retries=3)
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(
+                merged=False,
+                in_queue=False,
+                checks_state="SUCCESS",
+                mergeable="UNKNOWN",
+                merge_state_status="UNKNOWN",
+                auto_merge_enabled_at=None,
+            )
+        )
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                timeout_seconds=99999,
+            )
+
+        assert result["success"] is False
+        assert result["pr_state"] == "timeout"
+        assert "Inconclusive after" in result["reason"]
+
+    @pytest.mark.anyio
+    async def test_inconclusive_count_resets_on_queue_reentry(self):
+        """inconclusive_count must reset when in_queue becomes True.
+        Scenario: out(PENDING×5) → in_queue → out(PENDING×5) → merged.
+        Budget=3. Without reset: second phase exhausts budget immediately.
+        With reset: both phases are tolerated independently.
+        """
+        watcher = DefaultMergeQueueWatcher(token=None, max_inconclusive_retries=3)
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 5:
+                return _queue_state(
+                    merged=False,
+                    in_queue=False,
+                    checks_state="PENDING",
+                    merge_state_status="BLOCKED",
+                    auto_merge_enabled_at=None,
+                )
+            if call_count == 6:
+                return _queue_state(merged=False, in_queue=True)
+            if call_count <= 11:
+                return _queue_state(
+                    merged=False,
+                    in_queue=False,
+                    checks_state="PENDING",
+                    merge_state_status="BLOCKED",
+                    auto_merge_enabled_at=None,
+                )
+            return _queue_state(merged=True)
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                timeout_seconds=99999,
+            )
+
+        assert result["success"] is True
+        assert result["pr_state"] == "merged"
+
+    @pytest.mark.anyio
+    async def test_confirmation_window_does_not_consume_inconclusive_budget(self):
+        """CIStillRunning (PENDING) must never consume the inconclusive budget at any cycle.
+        confirmation_cycles=4, budget=3: all 7 PENDING cycles complete without budget exhaustion
+        because PENDING raises CIStillRunning (exempt from budget). Merged on call 8.
+        """
+        watcher = DefaultMergeQueueWatcher(token=None, max_inconclusive_retries=3)
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count > 7:
+                return _queue_state(merged=True)
+            return _queue_state(
+                merged=False,
+                in_queue=False,
+                checks_state="PENDING",
+                merge_state_status="BLOCKED",
+                auto_merge_enabled_at=None,
+            )
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                poll_interval=1,
+                timeout_seconds=99999,
+                not_in_queue_confirmation_cycles=4,
+            )
+
+        assert result["success"] is True
+        assert result["pr_state"] == "merged"
+        assert call_count == 8
+
+
 class TestRelatedCoverage:
     """Coverage for related untested paths found during investigation."""
 

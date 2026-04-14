@@ -113,14 +113,25 @@ def main() -> None:
         sys.exit(0)
 
     # Anti-pattern: path exists but is not the first token.
-    correct_cmd = f"/autoskillit:{skill_name} {path_token}"
+    # Reconstruct corrected command: all path tokens first, then non-path tokens.
+    # When args_str is multiline, separate prose from paths with a blank line.
+    has_newlines = "\n" in args_str
+    path_tokens = [t for t in tokens if _looks_like_path(t)]
+    non_path_tokens = [t for t in tokens if not _looks_like_path(t)]
+    path_part = " ".join(path_tokens)
+    if has_newlines and non_path_tokens:
+        prose_block = " ".join(non_path_tokens)
+        correct_cmd = f"/autoskillit:{skill_name} {path_part}\n\n{prose_block}"
+    else:
+        tail = (" " + " ".join(non_path_tokens)) if non_path_tokens else ""
+        correct_cmd = f"/autoskillit:{skill_name} {path_part}{tail}"
     _deny(
         f"skill_command format error for '{skill_name}': "
         f"found extra descriptive text '{first}...' before the path argument "
         f"'{path_token}'. Path-argument skills require the path as the first "
-        f"argument after the skill name. "
-        f'Fix: set skill_command to "{correct_cmd}" '
-        f"(append any remaining positional args after the path if needed)."
+        f"argument after the skill name. Relocate any additional context or "
+        f"instructions to after all path arguments. "
+        f'Fix: set skill_command to "{correct_cmd}".'
     )
     sys.exit(0)
 

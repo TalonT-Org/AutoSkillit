@@ -392,16 +392,14 @@ def test_dual_mcp_signal_silent_when_only_one_registered(
     assert sig is None
 
 
-def test_dual_mcp_signal_silent_on_exception(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_dual_mcp_signal_silent_on_corrupted_files(
+    tmp_path: Path,
 ) -> None:
+    # _check_dual_mcp_files is fail-open: corrupted JSON → False → no signal
     from autoskillit.cli._update_checks import _dual_mcp_signal
 
-    monkeypatch.setattr(
-        "autoskillit.cli._update_checks._is_dual_mcp_registered",
-        lambda home: (_ for _ in ()).throw(OSError("disk error")),
-    )
-    # Exceptions must be silently swallowed — signal functions never raise
+    claude_json = tmp_path / ".claude.json"
+    claude_json.write_text("{invalid json")
     sig = _dual_mcp_signal(tmp_path)
     assert sig is None
 

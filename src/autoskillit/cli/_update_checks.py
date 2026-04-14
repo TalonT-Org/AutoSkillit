@@ -532,17 +532,18 @@ def _is_dual_mcp_registered(home: Path) -> bool:
 
 
 def _dual_mcp_signal(home: Path | None = None) -> Signal | None:
-    """Return a Signal if both direct mcpServers entry and marketplace plugin are registered."""
-    try:
-        if _is_dual_mcp_registered(home or Path.home()):
-            return Signal(
-                "dual_mcp",
-                "autoskillit is registered as both a direct MCP server (~/.claude.json) "
-                "and a marketplace plugin — two server processes will spawn per session. "
-                "Run `autoskillit install` to remove the stale direct entry.",
-            )
-    except Exception:
-        logger.debug("dual_mcp signal check failed", exc_info=True)
+    """Return a Signal if both direct mcpServers entry and marketplace plugin are registered.
+
+    _is_dual_mcp_registered() delegates to _check_dual_mcp_files() which is
+    fail-open (catches OSError and json.JSONDecodeError internally, never raises).
+    """
+    if _is_dual_mcp_registered(home or Path.home()):
+        return Signal(
+            "dual_mcp",
+            "autoskillit is registered as both a direct MCP server (~/.claude.json) "
+            "and a marketplace plugin — two server processes will spawn per session. "
+            "Run `autoskillit install` to remove the stale direct entry.",
+        )
     return None
 
 

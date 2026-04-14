@@ -11,6 +11,7 @@ from autoskillit.core import SKILL_TOOLS
 from autoskillit.recipe._analysis import build_recipe_graph
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.rules_merge import _is_commit_guard
 from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -2167,22 +2168,6 @@ def test_bundled_recipes_have_no_ci_hardcoded_workflow() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _is_commit_guard_step(step_name: str, recipe) -> bool:  # type: ignore[no-untyped-def]
-    """Return True if step_name is a commit_guard predecessor.
-
-    A commit_guard step is one whose name starts with 'commit_guard' OR whose
-    tool is 'run_cmd' and whose cmd contains 'git commit'.
-    """
-    if step_name.startswith("commit_guard"):
-        return True
-    step = recipe.steps.get(step_name)
-    if step and step.tool == "run_cmd":
-        cmd = step.with_args.get("cmd", "")
-        if "git commit" in cmd:
-            return True
-    return False
-
-
 def test_merge_worktree_has_commit_guard_predecessor() -> None:
     """Every merge_worktree step in bundled recipes must have a commit_guard predecessor.
 
@@ -2200,7 +2185,7 @@ def test_merge_worktree_has_commit_guard_predecessor() -> None:
         ctx = make_validation_context(recipe)
         for step_name in merge_steps:
             preds = ctx.predecessors.get(step_name, set())
-            has_guard = any(_is_commit_guard_step(p, recipe) for p in preds)
+            has_guard = any(_is_commit_guard(p, ctx) for p in preds)
             assert has_guard, (
                 f"{yaml_path.name}: merge_worktree step '{step_name}' has no commit_guard "
                 f"predecessor. Add a commit_guard run_cmd step immediately before merge. "

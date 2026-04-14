@@ -35,27 +35,40 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 - Delete the worktree if tests still fail after max attempts
 - Modify the plan file
 - Create files outside `{{AUTOSKILLIT_TEMP}}/resolve-failures/` directory
+- Report `fixes_applied=0` when CI has identified a specific failing test
 
 **ALWAYS:**
 - Read the plan first to understand implementation intent
 - Commit each fix iteration separately with descriptive messages
 - Report iteration count and what was fixed
 - Leave worktree intact on failure for manual inspection
+- Treat CI as the source of truth: "passes locally" is not a resolution
 
 ## Workflow
 
 Read the configured test command from `.autoskillit/config.yaml` (key: `test_check.command`). Use this command wherever `{test_command}` appears in these instructions. If no config exists, use the `test_check` MCP tool (which resolves the command from the project's config automatically).
 
 ### Step 0: Validate Arguments
-1. Parse positional args using **path detection**: scan all tokens after the skill name.
-   - First path-like token (starts with `/`, `./`, or `.autoskillit/`) → `worktree_path`
-   - Second path-like token → `plan_path`
-   - First non-path token → `base_branch`
-   - Additional tokens may include `ci_conclusion`, `ci_failed_jobs`, and `diagnosis_path`
-     (optional; use `-` or absence to indicate not provided)
-   - The last path-like token after `plan_path` that ends with `.md` → `diagnosis_path`
-   - If fewer than two path-like tokens are found, abort:
-     `/autoskillit:resolve-failures <worktree_path> <plan_path> <base_branch> [diagnosis_path]`
+1. Parse positional args using **path detection**: scan all tokens after the
+   skill name.
+
+   ```
+   Positional args (in order):
+     1. worktree_path    — path-like token (starts with /, ./, or .autoskillit/)
+     2. plan_path        — path-like token
+     3. base_branch      — non-path token
+     4. ci_conclusion    — optional: "failure", "success", or absent/"-"
+     5. ci_failed_jobs   — optional: JSON array of job names or absent/"-"
+     6. diagnosis_path   — optional: path-like token to the diagnose-ci report or absent/"-"
+   ```
+
+   Scanning rules: use path-detection (find path-like tokens for positions 1, 2,
+   and 6); pick up remaining non-path non-`"-"` tokens for `base_branch`,
+   `ci_conclusion`, and `ci_failed_jobs`. The last path-like token after
+   `plan_path` that ends with `.md` → `diagnosis_path`. Ignore any non-path
+   tokens that appear before the path arguments. If fewer than two path-like
+   tokens are found, abort with a clear error and the correct format:
+   `/autoskillit:resolve-failures <worktree_path> <plan_path> <base_branch>`
 2. Verify worktree exists and is a valid git worktree
 3. Verify plan file exists and is readable
 4. If `diagnosis_path` is provided and exists, note it for Step 2a below
@@ -162,10 +175,38 @@ the worktree was rebased before this skill ran. In that case, the orchestrator's
 resolve-failures will now emit `real_fix` or another verdict. `already_green` is
 not emitted by this skill's primary workflow.
 
-If local tests PASS (no fix needed): skip Step 3 and go directly to Step 4 with
-the verdict determined above (`flake_suspected` or `ci_only_failure`).
+If local tests PASS (no fix needed): go to Step 2.5 (Validate CI Resolution) before
+proceeding to Step 4 — the CI-truth gate may redirect to Step 3 for flakiness
+investigation even when local tests pass.
 
 If local tests FAIL: enter Step 3.
+
+### Step 2.5: Validate CI Resolution
+
+Tests passed locally. Before reporting success, check whether the skill was invoked
+in response to a CI failure.
+
+**CI is the source of truth.** A local pass does not resolve a CI failure — it means
+the failure could not be reproduced locally, which is a flaky-test signal.
+
+1. If `diagnosis_path` is absent (or "-"), or `ci_conclusion` is absent (or is not
+   "failure"): proceed to Step 4 (no active CI failure context to enforce).
+
+2. If `diagnosis_path` is present AND `ci_conclusion == "failure"`:
+   a. Read the diagnosis file at `diagnosis_path`
+   b. Extract the failing test name(s) from the "## Log Excerpt" or the failure_type
+      classification in the diagnosis
+   c. If `failure_type == "test"` (one or more named test failures identified):
+      - Do **NOT** proceed to Step 4
+      - Log: "CI failure on [test name] — local pass is not a resolution (flaky test
+        signal). Entering fix loop to investigate and stabilize."
+      - Proceed to **Step 3 (Fix Loop)** to investigate the non-determinism, timing
+        dependencies, or race conditions that caused the test to pass locally but fail
+        in CI. Apply a stabilizing fix (e.g., increase timeouts, remove timing
+        dependencies, add retry guards, fix resource cleanup).
+   d. If `failure_type` is not "test" (e.g., "lint", "build") and tests pass locally:
+      - Proceed to Step 4 — local pass resolves non-test CI failures (lint/build
+        failures are deterministic; they don't pass locally while failing remotely).
 
 ### Step 3: Fix Loop (max 3 iterations)
 1. Analyze test failures against the plan to understand root cause

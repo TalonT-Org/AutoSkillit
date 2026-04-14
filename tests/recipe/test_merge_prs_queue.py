@@ -190,6 +190,60 @@ def test_implementation_queue_ejected_fix_exists(impl_recipe) -> None:
     assert "queue_ejected_fix" in impl_recipe.steps
 
 
+# --- queue_ejected_fix cheap rebase ---
+
+
+def test_queue_ejected_fix_tool_is_run_cmd(impl_recipe) -> None:
+    step = impl_recipe.steps["queue_ejected_fix"]
+    assert step.tool == "run_cmd", (
+        "queue_ejected_fix must be a run_cmd cheap-rebase step, not a run_skill"
+    )
+
+
+def test_queue_ejected_fix_clean_routes_to_re_push(impl_recipe) -> None:
+    step = impl_recipe.steps["queue_ejected_fix"]
+    clean_route = next(
+        (c.route for c in step.on_result.conditions if c.when and "clean" in c.when),
+        None,
+    )
+    assert clean_route == "re_push_queue_fix"
+
+
+def test_queue_ejected_fix_conflicts_routes_to_resolve_skill(impl_recipe) -> None:
+    step = impl_recipe.steps["queue_ejected_fix"]
+    # The catch-all (no 'when') must route to the renamed skill step
+    fallback_route = next(
+        (c.route for c in step.on_result.conditions if not c.when),
+        None,
+    )
+    assert fallback_route == "resolve_queue_merge_conflicts"
+
+
+def test_queue_ejected_fix_on_failure_routes_to_resolve_skill(impl_recipe) -> None:
+    step = impl_recipe.steps["queue_ejected_fix"]
+    assert step.on_failure == "resolve_queue_merge_conflicts"
+
+
+def test_resolve_queue_merge_conflicts_exists_with_run_skill(impl_recipe) -> None:
+    assert "resolve_queue_merge_conflicts" in impl_recipe.steps
+    step = impl_recipe.steps["resolve_queue_merge_conflicts"]
+    assert step.tool == "run_skill"
+
+
+def test_resolve_queue_merge_conflicts_captures_escalation(impl_recipe) -> None:
+    step = impl_recipe.steps["resolve_queue_merge_conflicts"]
+    assert "conflict_escalation_required" in step.capture
+
+
+def test_resolve_queue_merge_conflicts_routes_to_re_push(impl_recipe) -> None:
+    step = impl_recipe.steps["resolve_queue_merge_conflicts"]
+    fallback_route = next(
+        (c.route for c in step.on_result.conditions if not c.when),
+        None,
+    )
+    assert fallback_route == "re_push_queue_fix"
+
+
 def test_implementation_queue_finale_steps_all_have_skip_when_false(impl_recipe) -> None:
     """All queue finale steps must have skip_when_false: inputs.open_pr."""
     finale_steps = [
@@ -198,6 +252,7 @@ def test_implementation_queue_finale_steps_all_have_skip_when_false(impl_recipe)
         "enable_auto_merge",
         "wait_for_queue",
         "queue_ejected_fix",
+        "resolve_queue_merge_conflicts",
         "re_push_queue_fix",
         "reenter_merge_queue",
     ]
@@ -313,6 +368,7 @@ def test_remediation_queue_finale_steps_all_have_skip_when_false(remed_recipe) -
         "enable_auto_merge",
         "wait_for_queue",
         "queue_ejected_fix",
+        "resolve_queue_merge_conflicts",
         "re_push_queue_fix",
         "reenter_merge_queue",
     ]
@@ -470,7 +526,29 @@ def test_wait_for_direct_merge_closed_routes_to_conflict_fix(any_recipe) -> None
 def test_direct_merge_conflict_fix_exists(any_recipe) -> None:
     assert "direct_merge_conflict_fix" in any_recipe.steps
     step = any_recipe.steps["direct_merge_conflict_fix"]
-    assert step.tool == "run_skill"
+    assert step.tool == "run_cmd"
+
+
+# --- direct_merge_conflict_fix cheap rebase ---
+
+
+def test_direct_merge_conflict_fix_tool_is_run_cmd(any_recipe) -> None:
+    step = any_recipe.steps["direct_merge_conflict_fix"]
+    assert step.tool == "run_cmd"
+
+
+def test_direct_merge_conflict_fix_clean_routes_to_re_push(any_recipe) -> None:
+    step = any_recipe.steps["direct_merge_conflict_fix"]
+    clean_route = next(
+        (c.route for c in step.on_result.conditions if c.when and "clean" in c.when),
+        None,
+    )
+    assert clean_route == "re_push_direct_fix"
+
+
+def test_resolve_direct_merge_conflicts_exists_with_run_skill(any_recipe) -> None:
+    assert "resolve_direct_merge_conflicts" in any_recipe.steps
+    assert any_recipe.steps["resolve_direct_merge_conflicts"].tool == "run_skill"
 
 
 def test_re_push_direct_fix_exists(any_recipe) -> None:
@@ -492,6 +570,7 @@ def test_direct_merge_steps_have_skip_when_false(any_recipe) -> None:
         "direct_merge",
         "wait_for_direct_merge",
         "direct_merge_conflict_fix",
+        "resolve_direct_merge_conflicts",
         "re_push_direct_fix",
         "redirect_merge",
     ]
@@ -621,7 +700,29 @@ def test_wait_for_immediate_merge_closed_routes_to_conflict_fix(any_recipe) -> N
 def test_immediate_merge_conflict_fix_exists(any_recipe) -> None:
     assert "immediate_merge_conflict_fix" in any_recipe.steps
     step = any_recipe.steps["immediate_merge_conflict_fix"]
-    assert step.tool == "run_skill"
+    assert step.tool == "run_cmd"
+
+
+# --- immediate_merge_conflict_fix cheap rebase ---
+
+
+def test_immediate_merge_conflict_fix_tool_is_run_cmd(any_recipe) -> None:
+    step = any_recipe.steps["immediate_merge_conflict_fix"]
+    assert step.tool == "run_cmd"
+
+
+def test_immediate_merge_conflict_fix_clean_routes_to_re_push(any_recipe) -> None:
+    step = any_recipe.steps["immediate_merge_conflict_fix"]
+    clean_route = next(
+        (c.route for c in step.on_result.conditions if c.when and "clean" in c.when),
+        None,
+    )
+    assert clean_route == "re_push_immediate_fix"
+
+
+def test_resolve_immediate_merge_conflicts_exists_with_run_skill(any_recipe) -> None:
+    assert "resolve_immediate_merge_conflicts" in any_recipe.steps
+    assert any_recipe.steps["resolve_immediate_merge_conflicts"].tool == "run_skill"
 
 
 def test_re_push_immediate_fix_exists(any_recipe) -> None:
@@ -651,6 +752,7 @@ def test_all_immediate_merge_steps_have_skip_when_false(any_recipe) -> None:
         "immediate_merge",
         "wait_for_immediate_merge",
         "immediate_merge_conflict_fix",
+        "resolve_immediate_merge_conflicts",
         "re_push_immediate_fix",
         "remerge_immediate",
     ]

@@ -1,4 +1,5 @@
 """Assert that no SKILL.md body references %%ORDER_UP%%."""
+
 from pathlib import Path
 
 import pytest

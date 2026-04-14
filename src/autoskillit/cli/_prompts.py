@@ -78,6 +78,12 @@ includes {mcp_prefix}open_kitchen:
   Do NOT call AskUserQuestion — the tool is not unavailable; it only needs its \
 schema loaded on demand via ToolSearch.
 
+SERVER-STARTUP RECOVERY — If Claude Code reports "No such tool available" for \
+an AutoSkillit tool, the MCP server was still starting when the tool was called. \
+Wait a few seconds and retry the same tool call. Deferred startup I/O (audit \
+recovery, drift checks) runs in the background after the transport opens; tools \
+become available once the server finishes initializing.
+
 FIRST ACTION — before prompting for any inputs:
 0. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to open the kitchen and load the recipe.
    DO NOT call AskUserQuestion or any other tool before open_kitchen.

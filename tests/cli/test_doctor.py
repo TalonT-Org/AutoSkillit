@@ -88,6 +88,14 @@ class TestCLIDoctor:
         (tmp_path / ".pre-commit-config.yaml").write_text(
             "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
         )
+        # Create plugin cache directory for Check 2c
+        (tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit").mkdir(
+            parents=True, exist_ok=True
+        )
+        # Create installed_plugins.json for Check 2d
+        (tmp_path / ".claude" / "plugins" / "installed_plugins.json").write_text(
+            json.dumps({"autoskillit@autoskillit-local": {}})
+        )
         # Register hooks so hook_registration check passes
         # Use explicit path (tmp_path already monkeypatched as Path.home())
         from autoskillit.cli._hooks import (

@@ -94,10 +94,12 @@ async def test_lifespan_sets_startup_ready_event():
     try:
         with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
             async with _autoskillit_lifespan(MagicMock()):
-                # After lifespan yields, _startup_ready should be set
+                # _startup_ready is assigned synchronously before yield
                 assert _state._startup_ready is not None, (
                     "_startup_ready must be assigned an asyncio.Event during lifespan"
                 )
+                # Background task may not have completed yet — await the event
+                await asyncio.wait_for(_state._startup_ready.wait(), timeout=5.0)
                 assert _state._startup_ready.is_set(), (
                     "_startup_ready event must be signalled after deferred_initialize completes"
                 )

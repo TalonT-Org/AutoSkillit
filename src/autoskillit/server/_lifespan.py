@@ -98,6 +98,9 @@ async def _autoskillit_lifespan(server: Any) -> Any:
     finally:
         try:
             cleanup_readiness_sentinel()
+        except Exception:
+            logger.exception("lifespan sentinel cleanup error")
+        try:
             _finalize_recorder()
         except Exception:
-            logger.exception("lifespan teardown error")
+            logger.exception("lifespan recorder finalization error")

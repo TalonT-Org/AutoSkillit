@@ -545,9 +545,16 @@ def test_pmp_resolve_review_integration_has_retries(recipe) -> None:
 
 
 def test_pmp_resolve_review_integration_routes_to_re_push(recipe) -> None:
-    """B19: resolve_review_integration.on_success must route to re_push_review_integration."""
+    """B19: resolve_review_integration routes real_fix to re_push."""
     step = recipe.steps["resolve_review_integration"]
-    assert step.on_success == "re_push_review_integration"
+    assert step.on_success is None, (
+        "resolve_review_integration must use on_result: verdict dispatch"
+    )
+    assert step.on_result is not None, "resolve_review_integration must have on_result: block"
+    push_routes = [c.route for c in step.on_result.conditions if c.when and "real_fix" in c.when]
+    assert any("re_push_review_integration" in r for r in push_routes), (
+        "resolve_review_integration must route verdict=real_fix to re_push_review_integration"
+    )
 
 
 def test_pmp_has_re_push_review_integration_step(recipe) -> None:

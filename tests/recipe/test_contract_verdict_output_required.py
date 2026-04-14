@@ -23,7 +23,15 @@ _AUTO_FIX_SKILLS = [
 ]
 
 _REQUIRED_VERDICT_VALUES = {"real_fix", "already_green", "flake_suspected", "ci_only_failure"}
-_REQUIRED_SUBTYPE_VALUES = {"flaky", "timing_race", "deterministic", "fixture", "import", "env", "unknown"}
+_REQUIRED_SUBTYPE_VALUES = {
+    "flaky",
+    "timing_race",
+    "deterministic",
+    "fixture",
+    "import",
+    "env",
+    "unknown",
+}
 
 
 @pytest.mark.parametrize("skill_name", _AUTO_FIX_SKILLS)
@@ -92,8 +100,7 @@ def test_auto_fix_skill_write_expected_when_uses_verdict(skill_name: str) -> Non
     assert skill is not None, f"Skill '{skill_name}' not found in bundled manifest"
     patterns = skill.get("write_expected_when", [])
     assert any("verdict" in p for p in patterns), (
-        f"Skill '{skill_name}' write_expected_when must reference 'verdict', "
-        f"got {patterns!r}"
+        f"Skill '{skill_name}' write_expected_when must reference 'verdict', got {patterns!r}"
     )
 
 
@@ -127,10 +134,17 @@ def test_diagnose_ci_failure_subtype_has_required_values() -> None:
 
 
 def test_conditional_write_skills_have_verdict_or_fixes_applied_declared() -> None:
-    """Generic future-proofing: every conditional-write skill must declare a verdict output."""
+    """Generic future-proofing: every in-scope conditional-write skill must declare verdict.
+
+    Excludes resolve-merge-conflicts (different oracle: pre-commit + manifest, out of scope)
+    and retry-worktree (phases_implemented oracle, deferred to a separate Part).
+    """
+    _EXCLUDED = {"resolve-merge-conflicts", "retry-worktree"}
     manifest = load_bundled_manifest()
     violations: list[str] = []
     for skill_name, skill in manifest.get("skills", {}).items():
+        if skill_name in _EXCLUDED:
+            continue
         if skill.get("write_behavior") != "conditional":
             continue
         outputs = skill.get("outputs", [])

@@ -15,7 +15,6 @@ Scenarios:
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
@@ -64,9 +63,7 @@ def test_skill_contains_verdict_decision_tree(skill_text: str) -> None:
     assert any(
         phrase in skill_text
         for phrase in ("Verdict Decision Tree", "verdict decision tree", "Verdict decision")
-    ), (
-        "resolve-failures SKILL.md must contain a 'Verdict Decision Tree' section"
-    )
+    ), "resolve-failures SKILL.md must contain a 'Verdict Decision Tree' section"
 
 
 def test_skill_maps_flaky_to_flake_suspected(skill_text: str) -> None:
@@ -76,10 +73,7 @@ def test_skill_maps_flaky_to_flake_suspected(skill_text: str) -> None:
         "for the flaky/timing_race + local-green scenario"
     )
     # The decision tree must map flaky or timing_race subtypes to flake_suspected
-    assert any(
-        subtype in skill_text
-        for subtype in ("flaky", "timing_race")
-    ), (
+    assert any(subtype in skill_text for subtype in ("flaky", "timing_race")), (
         "resolve-failures SKILL.md must reference 'flaky' or 'timing_race' subtypes "
         "in the verdict decision tree"
     )
@@ -138,6 +132,4 @@ def test_skill_verdict_covers_all_required_values(skill_text: str) -> None:
     """All four verdict values must appear in the SKILL.md."""
     required = {"real_fix", "already_green", "flake_suspected", "ci_only_failure"}
     missing = {v for v in required if v not in skill_text}
-    assert not missing, (
-        f"resolve-failures SKILL.md is missing these verdict values: {missing}"
-    )
+    assert not missing, f"resolve-failures SKILL.md is missing these verdict values: {missing}"

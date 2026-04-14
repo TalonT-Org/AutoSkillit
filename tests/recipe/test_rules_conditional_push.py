@@ -7,6 +7,7 @@ dispatches on a declared verdict-like output.
 
 from __future__ import annotations
 
+import autoskillit.recipe.rules_fixing as _rf
 from autoskillit.core.types import Severity
 from autoskillit.recipe.schema import (
     Recipe,
@@ -107,9 +108,7 @@ def _fix_step_gated() -> RecipeStep:
 
 def test_case_a_unconditional_on_success_to_push_fires(monkeypatch) -> None:
     """Case A: unconditional on_success to push_to_remote must fire ERROR."""
-    monkeypatch.setattr(
-        "autoskillit.recipe.contracts.load_bundled_manifest", lambda: _FAKE_MANIFEST
-    )
+    monkeypatch.setattr(_rf, "load_bundled_manifest", lambda: _FAKE_MANIFEST)
     steps = {"fix": _fix_step_unconditional(), "push": _push_step(), **_terminal_steps()}
     recipe = _make_recipe(steps)
     findings = [f for f in run_semantic_rules(recipe) if f.rule == _RULE]
@@ -121,9 +120,7 @@ def test_case_a_unconditional_on_success_to_push_fires(monkeypatch) -> None:
         "conditional-skill-ungated-push findings must have ERROR severity"
     )
     # Finding must reference the offending step
-    assert any("fix" in f.step_name for f in findings), (
-        "finding must reference the 'fix' step"
-    )
+    assert any("fix" in f.step_name for f in findings), "finding must reference the 'fix' step"
 
 
 # ---------------------------------------------------------------------------
@@ -133,9 +130,7 @@ def test_case_a_unconditional_on_success_to_push_fires(monkeypatch) -> None:
 
 def test_case_b_verdict_gated_on_result_passes(monkeypatch) -> None:
     """Case B: on_result with explicit verdict conditions must NOT fire."""
-    monkeypatch.setattr(
-        "autoskillit.recipe.contracts.load_bundled_manifest", lambda: _FAKE_MANIFEST
-    )
+    monkeypatch.setattr(_rf, "load_bundled_manifest", lambda: _FAKE_MANIFEST)
     steps = {"fix": _fix_step_gated(), "push": _push_step(), **_terminal_steps()}
     recipe = _make_recipe(steps)
     findings = [f for f in run_semantic_rules(recipe) if f.rule == _RULE]
@@ -152,9 +147,7 @@ def test_case_b_verdict_gated_on_result_passes(monkeypatch) -> None:
 
 def test_case_c_catchall_only_on_result_fires(monkeypatch) -> None:
     """Case C: on_result with only a catch-all condition must fire."""
-    monkeypatch.setattr(
-        "autoskillit.recipe.contracts.load_bundled_manifest", lambda: _FAKE_MANIFEST
-    )
+    monkeypatch.setattr(_rf, "load_bundled_manifest", lambda: _FAKE_MANIFEST)
     # on_result with only a when-less catch-all → not a real gate
     catchall_step = RecipeStep(
         tool="run_skill",
@@ -182,9 +175,7 @@ def test_case_c_catchall_only_on_result_fires(monkeypatch) -> None:
 
 def test_case_d_indirect_path_fires(monkeypatch) -> None:
     """Case D: rule must fire even when push is 2 hops away via an intermediate step."""
-    monkeypatch.setattr(
-        "autoskillit.recipe.contracts.load_bundled_manifest", lambda: _FAKE_MANIFEST
-    )
+    monkeypatch.setattr(_rf, "load_bundled_manifest", lambda: _FAKE_MANIFEST)
     # fix → verify → push (2 hops; no on_result gate on fix)
     fix_step = RecipeStep(
         tool="run_skill",
@@ -219,9 +210,7 @@ def test_case_d_indirect_path_fires(monkeypatch) -> None:
 
 def test_case_e_on_result_gates_on_undeclared_field_fires(monkeypatch) -> None:
     """Case E: on_result referencing a field not in the contract's outputs must fire."""
-    monkeypatch.setattr(
-        "autoskillit.recipe.contracts.load_bundled_manifest", lambda: _FAKE_MANIFEST
-    )
+    monkeypatch.setattr(_rf, "load_bundled_manifest", lambda: _FAKE_MANIFEST)
     # Gates on ${{ result.fixes_applied }} which is NOT declared in fake_fixer's outputs
     bad_gate_step = RecipeStep(
         tool="run_skill",
@@ -253,24 +242,18 @@ def test_case_e_on_result_gates_on_undeclared_field_fires(monkeypatch) -> None:
 
 def test_finding_severity_is_error(monkeypatch) -> None:
     """All findings from this rule must have ERROR severity."""
-    monkeypatch.setattr(
-        "autoskillit.recipe.contracts.load_bundled_manifest", lambda: _FAKE_MANIFEST
-    )
+    monkeypatch.setattr(_rf, "load_bundled_manifest", lambda: _FAKE_MANIFEST)
     steps = {"fix": _fix_step_unconditional(), "push": _push_step(), **_terminal_steps()}
     recipe = _make_recipe(steps)
     findings = [f for f in run_semantic_rules(recipe) if f.rule == _RULE]
     assert len(findings) >= 1
     for f in findings:
-        assert f.severity == Severity.ERROR, (
-            f"Expected ERROR severity, got {f.severity}"
-        )
+        assert f.severity == Severity.ERROR, f"Expected ERROR severity, got {f.severity}"
 
 
 def test_finding_message_references_fix_and_push(monkeypatch) -> None:
     """Finding message must reference both the fix step and the push step."""
-    monkeypatch.setattr(
-        "autoskillit.recipe.contracts.load_bundled_manifest", lambda: _FAKE_MANIFEST
-    )
+    monkeypatch.setattr(_rf, "load_bundled_manifest", lambda: _FAKE_MANIFEST)
     steps = {"fix": _fix_step_unconditional(), "push": _push_step(), **_terminal_steps()}
     recipe = _make_recipe(steps)
     findings = [f for f in run_semantic_rules(recipe) if f.rule == _RULE]

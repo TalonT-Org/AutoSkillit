@@ -40,7 +40,7 @@ before routing to `resolve-failures`.
 **ALWAYS:**
 - Initialize code-index: call `set_project_path` to current cwd before any search
 - Write the diagnosis file before emitting output tokens
-- Emit the three output tokens (`diagnosis_path`, `failure_type`, `is_fixable`) at the end of the response on their own lines
+- Emit the four output tokens (`diagnosis_path`, `failure_type`, `failure_subtype`, `is_fixable`) at the end of the response on their own lines
 
 ## Workflow
 
@@ -105,6 +105,33 @@ Analyze the log output to classify `failure_type` as one of:
 - `env` — missing environment variables, secrets, or infrastructure issues
 - `unknown` — cannot determine from logs
 
+#### Step 5a: Subtype Classification
+
+After determining `failure_type`, classify `failure_subtype` using the following error-pattern decision tree (first match wins):
+
+| Pattern match in log output | `failure_subtype` |
+|---|---|
+| `TimeoutError`, `deadline exceeded`, `flake`, `intermittent` | `timing_race` |
+| `pytest.*FLAKY`, `rerun`, three-or-more identical test runs | `flaky` |
+| `ImportError`, `ModuleNotFoundError` | `import` |
+| `fixture`, `pytest.fixture`, collection error | `fixture` |
+| `environ`, missing `ENV_VAR`, `KeyError.*environ` | `env` |
+| Assertion error with stable stack trace (same file/line across runs) | `deterministic` |
+| No pattern matched | `unknown` |
+
+**Guidance for `resolve-failures`:** Include a supplementary "Suggested Starting Verdict" field in the
+Recommended Fix Approach section that maps the subtype to an initial verdict for `resolve-failures` to
+consider (not authoritative — `resolve-failures` makes its own verdict decision from the subtype +
+local test result):
+
+| `failure_subtype` | Suggested starting verdict |
+|---|---|
+| `flaky` or `timing_race` | `flake_suspected` |
+| `deterministic` | `ci_only_failure` (if local tests pass) or `real_fix` (if fixable locally) |
+| `fixture` or `import` | `ci_only_failure` (if local tests pass) |
+| `env` | `ci_only_failure` (conservative) |
+| `unknown` | `ci_only_failure` (conservative) |
+
 Determine `is_fixable`:
 - `true` for `test`, `lint`, `build`, `type_check`
 - `false` for `env`, `unknown`
@@ -118,18 +145,23 @@ Create directory `{{AUTOSKILLIT_TEMP}}/diagnose-ci/` if it doesn't exist. Write 
 
 **Run ID:** {run_id}
 **Failure Type:** {failure_type}
+**Failure Subtype:** {failure_subtype}
 **Is Fixable:** {is_fixable}
 **Branch:** {branch}
 
+## Structured Output (machine-readable)
+
+failure_subtype = {failure_subtype}
+
 ## Log Excerpt
 
-```
 {first 200 lines of failure log}
-```
 
 ## Recommended Fix Approach
 
 {1-3 sentences describing how resolve-failures should approach this}
+
+**Suggested Starting Verdict:** {suggested starting verdict from the subtype table above}
 ```
 
 Save to `{{AUTOSKILLIT_TEMP}}/diagnose-ci/diagnosis_{timestamp}.md`. (relative to the current working directory)
@@ -146,14 +178,16 @@ Emit these tokens on their own lines at the end of your response:
 ```
 diagnosis_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/diagnose-ci/diagnosis_{timestamp}.md
 failure_type = test|lint|build|type_check|env|unknown
+failure_subtype = flaky|timing_race|deterministic|fixture|import|env|unknown
 is_fixable = true|false
 ```
 
 ## gh Unavailable Fallback
 
 If `gh` is unavailable at any step, write a minimal diagnosis:
-- `failure_type=unknown`
-- `is_fixable=false`
+- `failure_type = unknown`
+- `failure_subtype = unknown`
+- `is_fixable = false`
 - Diagnosis body: "gh CLI unavailable — logs could not be fetched. Manual inspection required."
 
 Then emit the output tokens and exit.

@@ -566,7 +566,18 @@ steps:
       cwd: "${{ context.worktree_path }}"
       step_name: "fix"
       base_branch: "${{ inputs.base_branch }}"
-    on_success: test
+    capture:
+      verdict: "${{ result.verdict }}"
+      fixes_applied: "${{ result.fixes_applied }}"
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: test
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: test
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: test
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: register_clone_failure
     on_failure: register_clone_failure
     retries: 3
     on_exhausted: register_clone_failure
@@ -868,15 +879,26 @@ steps:
       skill_command: "/autoskillit:resolve-review ${{ context.integration_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_review_integration"
+    capture:
+      verdict: "${{ result.verdict }}"
     retries: 2
     on_exhausted: register_clone_failure
-    on_success: re_push_review_integration
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: re_push_review_integration
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: re_push_review_integration
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: register_clone_failure
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: register_clone_failure
     on_failure: register_clone_failure
     note: >
       Resolves review findings on the integration PR (REQ-REVIEW-002). Fetches inline and
       summary review comments from GitHub and applies fixes. Retries up to 2 times (3 total
-      attempts) before escalating to register_clone_failure (REQ-REVIEW-005). On success, routes to
-      re_push_review_integration to push the fixes to remote.
+      attempts) before escalating to register_clone_failure (REQ-REVIEW-005). Routes via
+      on_result: verdict dispatch — real_fix/already_green push fixes; flake_suspected/
+      ci_only_failure escalate to register_clone_failure.
 
   re_push_review_integration:
     tool: push_to_remote

@@ -379,34 +379,43 @@ Save full report to:
 - Analysis report: `{{AUTOSKILLIT_TEMP}}/resolve-review/analysis_{pr_number}_{ts}.md` (written before code changes)
 - Final report: `{{AUTOSKILLIT_TEMP}}/resolve-review/report_{pr_number}_{ts}.md`
 
-Then emit the structured output token on its own line (required for the
-`write_behavior: conditional` contract gate):
+Then determine and emit the structured output tokens (required for the
+`write_behavior: conditional` contract gate and `on_result:` routing):
 
-> **IMPORTANT:** Emit the token as **literal plain text with no markdown
+**Verdict Decision:**
+- If `{accept_count - skipped_in_fix_phase} >= 1` (fixes were applied): `verdict = real_fix`
+- If all ACCEPT findings were skipped (no code changes): `verdict = already_green`
+
+> **IMPORTANT:** Emit the tokens as **literal plain text with no markdown
 > formatting**. Do not wrap in bold or italic.
 
 ```
+verdict = {verdict}
 fixes_applied = {accept_count - skipped_in_fix_phase}
 ```
 
-Where `{accept_count - skipped_in_fix_phase}` is the number of ACCEPT findings
-where code changes were actually committed (skipped stale/missing-file findings
-are excluded). This is already reported in the text summary as "Fixes applied: N".
+Where:
+- `{verdict}` is `real_fix` if fixes were applied, `already_green` otherwise
+- `{accept_count - skipped_in_fix_phase}` is the number of ACCEPT findings
+  where code changes were actually committed
 
-The Step 1 graceful degradation exit must NOT emit this token — no `fixes_applied =`
-line when skipping due to no PR found.
+The Step 1 graceful degradation exit must NOT emit these tokens — no tokens
+when skipping due to no PR found.
 
 Exit 0.
 
 ## Output
 
-When a PR is processed, the following structured output token is emitted:
+When a PR is processed, the following structured output tokens are emitted:
 
 ```
+verdict = real_fix|already_green
 fixes_applied = {N}
 ```
 
 Where `{N}` is the count of ACCEPT findings where code changes were committed.
+`verdict = real_fix` means fixes were applied; `verdict = already_green` means
+all review findings were already addressed and no code changes were needed.
 
 When no PR is found (graceful degradation), no structured tokens are emitted.
 

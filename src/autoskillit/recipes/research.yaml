@@ -455,7 +455,18 @@ steps:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.experiment_plan }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: fix
-    on_success: retest
+    capture:
+      verdict: "${{ result.verdict }}"
+      fixes_applied: "${{ result.fixes_applied }}"
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: retest
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: retest
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: retest
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: escalate_stop
     on_failure: escalate_stop
 
   retest:

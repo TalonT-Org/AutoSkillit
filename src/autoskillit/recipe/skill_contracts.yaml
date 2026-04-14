@@ -36,12 +36,18 @@ skills:
       type: file_path
     - name: failure_type
       type: string
+      allowed_values: [test, lint, build, type_check, env, unknown]
+    - name: failure_subtype
+      type: string
+      allowed_values: [flaky, timing_race, deterministic, fixture, import, env, unknown]
     - name: is_fixable
       type: string
     expected_output_patterns:
     - "diagnosis_path\\s*=\\s*/.+"
+    - "failure_subtype\\s*=\\s*(flaky|timing_race|deterministic|fixture|import|env|unknown)"
     pattern_examples:
-    - "diagnosis_path = /tmp/diagnosis.md\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = deterministic\nis_fixable = true\n%%ORDER_UP%%"
+    - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = flaky\nis_fixable = false\n%%ORDER_UP%%"
     write_behavior: always
   resolve-design-review:
     inputs:
@@ -75,10 +81,22 @@ skills:
     - name: base_branch
       type: string
       required: true
-    outputs: []
+    - name: diagnosis_path
+      type: file_path
+      required: false
+    outputs:
+    - name: verdict
+      type: string
+      allowed_values:
+        - real_fix
+        - already_green
+        - flake_suspected
+        - ci_only_failure
+    - name: fixes_applied
+      type: integer
     write_behavior: conditional
     write_expected_when:
-    - "fixes_applied\\s*=\\s*[1-9][0-9]*"
+    - "verdict\\s*=\\s*real_fix"
   resolve-merge-conflicts:
     inputs:
     - name: worktree_path
@@ -116,10 +134,19 @@ skills:
     - name: base_branch
       type: string
       required: true
-    outputs: []
+    outputs:
+    - name: verdict
+      type: string
+      allowed_values:
+        - real_fix
+        - already_green
+        - flake_suspected
+        - ci_only_failure
+    - name: fixes_applied
+      type: integer
     write_behavior: conditional
     write_expected_when:
-    - "fixes_applied\\s*=\\s*[1-9][0-9]*"
+    - "verdict\\s*=\\s*real_fix"
   dry-walkthrough:
     inputs:
     - name: plan_path
@@ -258,6 +285,8 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
+    - name: phases_implemented
+      type: integer
     expected_output_patterns:
     - "worktree_path\\s*=\\s*/.+"
     pattern_examples:
@@ -1412,14 +1441,23 @@ skills:
     outputs:
     - name: needs_rerun
       type: string
+    - name: verdict
+      type: string
+      allowed_values:
+        - real_fix
+        - already_green
+        - flake_suspected
+        - ci_only_failure
+    - name: fixes_applied
+      type: integer
     expected_output_patterns:
     - "needs_rerun\\s*=\\s*(true|false)"
     pattern_examples:
-    - "needs_rerun = true\n%%ORDER_UP%%"
-    - "needs_rerun = false\n%%ORDER_UP%%"
+    - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\n%%ORDER_UP%%"
+    - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
-    - "Fixes applied:\\s*[1-9][0-9]*"
+    - "verdict\\s*=\\s*real_fix"
 
   resolve-research-review:
     inputs:
@@ -1432,14 +1470,23 @@ skills:
     outputs:
     - name: needs_rerun
       type: string
+    - name: verdict
+      type: string
+      allowed_values:
+        - real_fix
+        - already_green
+        - flake_suspected
+        - ci_only_failure
+    - name: fixes_applied
+      type: integer
     expected_output_patterns:
     - "needs_rerun\\s*=\\s*(true|false)"
     pattern_examples:
-    - "needs_rerun = true\n%%ORDER_UP%%"
-    - "needs_rerun = false\n%%ORDER_UP%%"
+    - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\n%%ORDER_UP%%"
+    - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
-    - "Fixes applied:\\s*[1-9][0-9]*"
+    - "verdict\\s*=\\s*real_fix"
 
   vis-lens-always-on:
     inputs:

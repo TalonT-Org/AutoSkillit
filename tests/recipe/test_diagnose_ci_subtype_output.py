@@ -30,7 +30,7 @@ def test_diagnose_ci_skill_md_emits_failure_subtype_token() -> None:
     )
 
 
-def test_diagnose_ci_skill_md_contains_subtype_classification(  ) -> None:
+def test_diagnose_ci_skill_md_contains_subtype_classification() -> None:
     """SKILL.md must contain a subtype classification section or decision tree."""
     text = _skill_text()
     assert "failure_subtype" in text, (
@@ -51,9 +51,7 @@ def test_diagnose_ci_skill_md_covers_all_subtype_values() -> None:
     text = _skill_text()
     required = {"flaky", "timing_race", "deterministic", "fixture", "import", "env", "unknown"}
     missing = {v for v in required if v not in text}
-    assert not missing, (
-        f"diagnose-ci SKILL.md is missing these failure_subtype values: {missing}"
-    )
+    assert not missing, f"diagnose-ci SKILL.md is missing these failure_subtype values: {missing}"
 
 
 def test_diagnose_ci_skill_md_consistent_with_contract() -> None:

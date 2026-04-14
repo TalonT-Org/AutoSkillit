@@ -241,7 +241,7 @@ def test_write_expected_resolver_conditional_skill() -> None:
         (
             "/autoskillit:resolve-failures /tmp/wt .autoskillit/temp/plan.md main",
             "conditional",
-            ["fixes_applied"],
+            ["verdict"],
         ),
         (
             "/autoskillit:retry-worktree .autoskillit/temp/plan.md /tmp/wt",
@@ -251,7 +251,7 @@ def test_write_expected_resolver_conditional_skill() -> None:
         (
             "/autoskillit:resolve-review feature-branch main",
             "conditional",
-            ["fixes_applied"],
+            ["verdict"],
         ),
         (
             "/autoskillit:audit-claims /tmp/wt main https://github.com/o/r/pull/1",
@@ -266,12 +266,12 @@ def test_write_expected_resolver_conditional_skill() -> None:
         (
             "/autoskillit:resolve-claims-review /tmp/wt main",
             "conditional",
-            ["Fixes applied", r"[1-9][0-9]*"],
+            ["verdict"],
         ),
         (
             "/autoskillit:resolve-research-review /tmp/wt main",
             "conditional",
-            ["Fixes applied", r"[1-9][0-9]*"],
+            ["verdict"],
         ),
     ],
 )

@@ -51,6 +51,20 @@ branch already checked out.
 - Gracefully degrade (exit 0, report skip) if `gh` is unavailable or no PR is found
 - Report a structured summary: findings fetched, fixes applied, fixes skipped (with reasons)
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, edits may be on disk but not committed.
+The recipe routes to `on_context_limit` (typically a re-push step), bypassing the
+normal commit protocol.
+
+**Before every test run and before emitting structured output tokens:**
+1. Run `git -C {work_dir} status --porcelain`
+2. If any files are dirty: `git -C {work_dir} add -A && git -C {work_dir} commit -m "fix: commit pending review changes"`
+3. Only then proceed with the test or structured output
+
+This ensures that even if context exhaustion interrupts the fix loop, all applied
+review fixes are committed and the downstream push step receives a clean branch.
+
 ## Workflow
 
 Read `test_check.command` from `.autoskillit/config.yaml` (default: `task test-check`).

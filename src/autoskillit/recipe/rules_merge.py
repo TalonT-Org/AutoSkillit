@@ -10,6 +10,23 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
 
+
+def _is_commit_guard(step_name: str, ctx: ValidationContext) -> bool:
+    """Return True if step_name is a commit_guard predecessor for merge_worktree.
+
+    A commit_guard step is one whose name starts with 'commit_guard' OR whose
+    tool is 'run_cmd' and whose cmd contains 'git commit'.
+    """
+    if step_name.startswith("commit_guard"):
+        return True
+    step = ctx.recipe.steps.get(step_name)
+    if step and step.tool == "run_cmd":
+        cmd = step.with_args.get("cmd", "")
+        if "git commit" in cmd:
+            return True
+    return False
+
+
 _RECOVERABLE_FAILED_STEPS: frozenset[str] = frozenset(
     {
         MergeFailedStep.DIRTY_TREE,
@@ -60,6 +77,38 @@ def _check_merge_routing_completeness(ctx: ValidationContext) -> list[RuleFindin
                         f"recoverable failures: {sorted(missing)}. "
                         f"These will fall through to the result.error catch-all, "
                         f"discarding a recoverable worktree."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="merge-without-commit-guard",
+    description=(
+        "A merge_worktree step has no commit_guard predecessor. Any path reaching "
+        "merge with uncommitted changes will fail at the dirty-tree gate, burning "
+        "an expensive recovery cycle. Add a commit_guard run_cmd step before merge."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_merge_without_commit_guard(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "merge_worktree":
+            continue
+        preds = ctx.predecessors.get(step_name, set())
+        if not any(_is_commit_guard(p, ctx) for p in preds):
+            findings.append(
+                RuleFinding(
+                    rule="merge-without-commit-guard",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"merge_worktree step '{step_name}' has no commit_guard predecessor. "
+                        f"Uncommitted changes from context-exhausted skills will trigger "
+                        f"the dirty-tree gate, causing an expensive recovery cycle. "
+                        f"Add a commit_guard run_cmd step immediately before this step."
                     ),
                 )
             )

@@ -44,6 +44,16 @@ MCP-only — not user-invocable directly.
 - Emit revision_guidance ONLY when resolution=revised
 - Use model: "sonnet" for all subagents
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, temp files may be partially written and
+output tokens may not yet be emitted. The recipe routes to `on_context_limit`,
+abandoning the partial triage.
+
+**Before emitting structured output tokens:**
+1. If analysis was not completed, emit `resolution = failed` as a safe fallback
+2. The orchestrator handles the context-limit route based on the emitted verdict
+
 ## Workflow
 
 ### Step 0: Validate Arguments and Parse Dashboard

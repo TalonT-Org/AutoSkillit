@@ -51,6 +51,19 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Run the project's test suite from the worktree directory
 - Rebase onto base branch before completion (ready for squash-and-merge)
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, implementation changes may be on disk but
+not yet committed. The recipe routes to `on_context_limit`, preserving the worktree.
+
+**Before emitting structured output tokens:**
+1. Run `git -C {WORKTREE_PATH} status --porcelain`
+2. If any files are dirty: `git -C {WORKTREE_PATH} add -A && git -C {WORKTREE_PATH} commit -m "chore: commit pending changes before context limit"`
+3. Only then emit the `worktree_path`, `branch_name`, and `phases_implemented` tokens
+
+This ensures that all implementation progress is committed and the downstream
+merge gate receives a clean worktree when the recipe resumes.
+
 ## Workflow
 
 ### Step 0: Receive and Validate Arguments

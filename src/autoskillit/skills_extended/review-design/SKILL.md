@@ -62,6 +62,15 @@ best available plan.
   emit STOP immediately — do NOT proceed to Level 2, 3, or 4. If all L1 criticals are
   ADDRESSABLE, tag them as REQUIRED priority fixes and continue L2-L4 analysis.
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, output files may be partially written or
+absent. The recipe routes to `on_context_limit`, abandoning the partial review.
+
+**Before emitting structured output tokens:**
+1. If `evaluation_dashboard` was not fully written, emit `verdict = STOP` as a safe fallback
+2. Omit `revision_guidance` if not written; the orchestrator handles the context-limit route
+
 ## Workflow
 
 ### Step 0: Read Plan & Setup

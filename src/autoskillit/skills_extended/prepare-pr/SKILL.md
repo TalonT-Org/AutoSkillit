@@ -44,6 +44,16 @@ in the decomposed PR flow (prepare → run_arch_lenses → compose).
 - Emit all three output tokens (`prep_path`, `selected_lenses`, `lens_context_paths`)
 - Classify changed files as new (★) vs modified (●)
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, prep files may be partially written.
+The recipe routes to `on_context_limit` (typically `release_issue_failure`),
+abandoning the PR preparation.
+
+**Before emitting structured output tokens:**
+1. If prep files were not fully written, emit `prep_path = ` (empty) as a fallback
+2. Emit whatever was completed; the orchestrator handles the context-limit route
+
 ## Workflow
 
 ### Step 0: Parse Arguments and Initialize

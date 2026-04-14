@@ -324,6 +324,7 @@ steps:
       step_name: implement_phase
     capture:
       worktree_path: "${{ result.worktree_path }}"
+    retries: 0
     on_success: next_phase_or_experiment
     on_failure: troubleshoot_implement_failure
     on_exhausted: run_experiment
@@ -426,6 +427,7 @@ steps:
       report_path: "${{ result.report_path }}"
     on_success: test
     on_failure: escalate_stop
+    on_context_limit: test
     note: "Writes a conclusive research report to research/ in the worktree."
 
   generate_report_inconclusive:
@@ -438,6 +440,7 @@ steps:
       report_path: "${{ result.report_path }}"
     on_success: test
     on_failure: escalate_stop
+    on_context_limit: test
     note: >
       Writes an inconclusive research report. Experiments could not
       prove or disprove the hypothesis. This is a valid outcome.
@@ -468,6 +471,7 @@ steps:
       - when: "${{ result.verdict }} == 'ci_only_failure'"
         route: escalate_stop
     on_failure: escalate_stop
+    on_context_limit: retest
 
   retest:
     tool: test_check

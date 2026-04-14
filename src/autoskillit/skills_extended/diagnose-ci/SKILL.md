@@ -42,6 +42,17 @@ before routing to `resolve-failures`.
 - Write the diagnosis file before emitting output tokens
 - Emit the four output tokens (`diagnosis_path`, `failure_type`, `failure_subtype`, `is_fixable`) at the end of the response on their own lines
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, the diagnosis file may be partially written
+or absent. The recipe routes to `on_context_limit: resolve_ci`, which proceeds
+best-effort with whatever diagnosis was written (or none).
+
+**Before emitting structured output tokens:**
+1. If the diagnosis file was not fully written, emit `diagnosis_path = ` (empty)
+2. Emit `failure_type = unknown`, `failure_subtype = unknown`, `is_fixable = false`
+   as fallback values when analysis was interrupted
+
 ## Workflow
 
 ### Step 1: Initialize Code Index

@@ -531,3 +531,107 @@ class TestCloneRootAsWorktreeRule:
             findings = run_semantic_rules(recipe)
             crw = [f for f in findings if f.rule == "clone-root-as-worktree"]
             assert crw == [], f"{yaml_path.name} triggered clone-root-as-worktree: {crw}"
+
+
+# ---------------------------------------------------------------------------
+# _WORKTREE_MODIFYING_SKILLS membership guard
+# ---------------------------------------------------------------------------
+
+
+def test_worktree_creating_skills_includes_experiment() -> None:
+    """_WORKTREE_MODIFYING_SKILLS must include implement-experiment.
+
+    implement-experiment creates a worktree and emits early tokens; excluding it
+    means recipes using it without on_context_limit silently bypass the
+    missing-context-limit-on-worktree rule.
+    """
+    from autoskillit.recipe.rules_worktree import _WORKTREE_MODIFYING_SKILLS
+
+    assert "implement-experiment" in _WORKTREE_MODIFYING_SKILLS, (
+        "_WORKTREE_MODIFYING_SKILLS must include implement-experiment so that the "
+        "missing-context-limit-on-worktree rule fires for recipes using it without "
+        "on_context_limit."
+    )
+
+
+# ---------------------------------------------------------------------------
+# file-writing-skill-missing-context-limit rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_file_writing_skill_missing_context_limit_fires() -> None:
+    """run_skill step with write_behavior=always and no on_context_limit → WARNING.
+
+    Uses generate-report which has write_behavior=always in the bundled manifest.
+    """
+    wf = _make_workflow(
+        {
+            "report": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:generate-report /tmp/wt /tmp/results.json"
+                },
+                "on_success": "done",
+                "on_failure": "done",
+                # on_context_limit deliberately absent
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert any(f.rule == "file-writing-skill-missing-context-limit" for f in findings), (
+        f"Expected file-writing-skill-missing-context-limit WARNING for generate-report "
+        f"step (write_behavior=always) without on_context_limit. Got: {findings}"
+    )
+    matched = next(f for f in findings if f.rule == "file-writing-skill-missing-context-limit")
+    assert matched.severity == Severity.WARNING
+
+
+def test_file_writing_skill_with_context_limit_no_warning() -> None:
+    """run_skill step with write_behavior=always and on_context_limit set → no warning."""
+    wf = _make_workflow(
+        {
+            "report": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:generate-report /tmp/wt /tmp/results.json"
+                },
+                "on_context_limit": "done",
+                "on_success": "done",
+                "on_failure": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "file-writing-skill-missing-context-limit" for f in findings), (
+        f"Unexpected file-writing-skill-missing-context-limit finding when "
+        f"on_context_limit is set: {findings}"
+    )
+
+
+def test_file_writing_skill_advisory_step_not_flagged() -> None:
+    """run_skill step with skip_when_false (advisory) is NOT flagged by this rule.
+
+    Advisory steps are already covered by advisory-step-missing-context-limit.
+    """
+    wf = _make_workflow(
+        {
+            "report": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:generate-report /tmp/wt /tmp/results.json"
+                },
+                "skip_when_false": "inputs.run_report",
+                "on_success": "done",
+                "on_failure": "done",
+                # on_context_limit absent but advisory → should not fire this rule
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "file-writing-skill-missing-context-limit" for f in findings), (
+        f"Advisory steps (skip_when_false) should not trigger "
+        f"file-writing-skill-missing-context-limit: {findings}"
+    )

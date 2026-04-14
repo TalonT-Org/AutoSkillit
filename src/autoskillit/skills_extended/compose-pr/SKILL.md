@@ -51,6 +51,16 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
 - Handle `no diagrams` case: when `all_diagram_paths is empty` or every path fails
   marker check, set `validated_diagrams = []` and omit the Architecture Impact section
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, temp files may be written but the PR may
+not yet be created. The recipe routes to `on_context_limit` (typically
+`release_issue_failure`), bypassing the normal completion protocol.
+
+**Before emitting structured output tokens:**
+1. Emit `pr_url = ` (empty) if the PR was not successfully created
+2. Emit whatever was completed; the orchestrator will handle the context-limit route
+
 ## Workflow
 
 ### Step 0: Parse Arguments and Initialize

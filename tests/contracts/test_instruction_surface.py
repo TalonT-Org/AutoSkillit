@@ -508,6 +508,66 @@ class TestResolveFailuresCITruthContract:
         )
 
 
+class TestContextLimitBehaviorContract:
+    """File-writing skills in pipeline recipes must document Context Limit Behavior."""
+
+    _SKILLS_ROOT = (
+        Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit" / "skills_extended"
+    )
+
+    def test_resolve_failures_has_context_limit_section(self):
+        """resolve-failures SKILL.md must contain '## Context Limit Behavior'."""
+        skill_md = self._SKILLS_ROOT / "resolve-failures" / "SKILL.md"
+        content = skill_md.read_text()
+        assert "## Context Limit Behavior" in content, (
+            "resolve-failures/SKILL.md must contain a '## Context Limit Behavior' section. "
+            "This skill commits during execution; context exhaustion can leave edits "
+            "uncommitted on disk. The section must instruct the skill to verify tree "
+            "cleanliness before emitting structured output."
+        )
+
+    def test_pipeline_file_writing_skills_have_context_limit_section(self):
+        """Every write_behavior=always skill used in a step with on_context_limit must
+        document Context Limit Behavior in its SKILL.md.
+
+        Checks all bundled recipe steps: if a step has on_context_limit AND invokes a
+        skill with write_behavior=always, that skill's SKILL.md must contain the section.
+        """
+        from autoskillit.core import SKILL_TOOLS
+        from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+        manifest = load_bundled_manifest()
+        skills = manifest.get("skills", {})
+
+        missing: list[str] = []
+        for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+            recipe = load_recipe(yaml_path)
+            for _step_name, step in recipe.steps.items():
+                if step.tool not in SKILL_TOOLS:
+                    continue
+                if step.on_context_limit is None:
+                    continue
+                skill_cmd = step.with_args.get("skill_command", "")
+                skill = resolve_skill_name(skill_cmd)
+                if not skill:
+                    continue
+                skill_data = skills.get(skill, {})
+                if skill_data.get("write_behavior") != "always":
+                    continue
+                skill_md_path = self._SKILLS_ROOT / skill / "SKILL.md"
+                if not skill_md_path.exists():
+                    continue
+                content = skill_md_path.read_text()
+                if "## Context Limit Behavior" not in content:
+                    missing.append(f"{skill} (used in {yaml_path.name})")
+
+        assert not missing, (
+            "These write_behavior=always skills lack a '## Context Limit Behavior' section "
+            f"in their SKILL.md: {', '.join(sorted(set(missing)))}"
+        )
+
+
 def test_claude_md_documents_all_source_modules() -> None:
     """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
 

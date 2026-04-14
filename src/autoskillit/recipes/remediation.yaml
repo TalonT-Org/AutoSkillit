@@ -349,7 +349,7 @@ steps:
       remediation_path: "${{ result.remediation_path }}"
     on_result:
       - when: "${{ result.verdict }} == GO"
-        route: merge
+        route: commit_guard
       - when: "result.error"
         route: escalate_stop
       - route: remediate
@@ -357,7 +357,7 @@ steps:
     on_context_limit: escalate_stop
     optional: true
     skip_when_false: "inputs.audit"
-    note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
+    note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to commit_guard.
 
   remediate:
     action: route
@@ -378,6 +378,19 @@ steps:
       plan_parts: "${{ result.plan_parts }}"
     on_success: dry_walkthrough
     on_failure: release_issue_failure
+
+  commit_guard:
+    tool: run_cmd
+    with:
+      cmd: "cd ${{ context.implementation_ref }} && if [ -n \"$(git status --porcelain)\" ]; then git add -A && git commit -m 'chore: commit pending session changes'; fi"
+      cwd: "${{ context.implementation_ref }}"
+      step_name: commit_guard
+    on_success: merge
+    on_failure: merge
+    note: >
+      Belt-and-suspenders guard: auto-commits any uncommitted changes before merge.
+      Catches dirty state from context-exhausted skills, cascading pre-commit auto-fixes,
+      or any other source. on_failure routes to merge (dirty-tree gate will catch real issues).
 
   merge:
     tool: merge_worktree
@@ -1075,6 +1088,7 @@ steps:
       verdict: "${{ result.verdict }}"
     retries: 2
     on_exhausted: release_issue_failure
+    on_context_limit: re_push
     on_result:
       - when: "${{ result.verdict }} == 'real_fix'"
         route: re_push

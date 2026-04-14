@@ -56,6 +56,15 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Make sure the plan includes warning against using the codebase as a notepad with useless comments
 - Prefer the long term health of project over quick, easy, and minimal fixes
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, plan file edits may be partially applied.
+The recipe routes to `on_context_limit` (typically `register_clone_failure` or a
+restart step), abandoning the partial walkthrough.
+
+This skill modifies only the plan file (not source code), so partial edits have
+limited blast radius. The downstream step will restart the walkthrough on retry.
+
 ## Dry Walkthrough Workflow
 
 ### Step 1: Load the Plan

@@ -135,6 +135,97 @@ def test_merge_worktree_missing_all_recoverable_steps_is_error() -> None:
         assert step_value in flagged[0].message
 
 
+def test_merge_without_commit_guard_fires() -> None:
+    """test_check → merge_worktree with no commit_guard predecessor → ERROR."""
+    recipe = _make_recipe(
+        {
+            "test": RecipeStep(
+                tool="test_check",
+                with_args={"worktree_path": "/tmp/wt"},
+                on_success="merge",
+                on_failure="abort",
+            ),
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={"worktree_path": "/tmp/wt", "base_branch": "main"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+            "abort": RecipeStep(action="stop", message="abort"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-without-commit-guard"]
+    assert len(flagged) == 1, (
+        f"Expected exactly 1 merge-without-commit-guard ERROR, got: {flagged}"
+    )
+    assert flagged[0].severity == Severity.ERROR
+    assert flagged[0].step_name == "merge"
+
+
+def test_merge_with_commit_guard_step_name_is_clean() -> None:
+    """Step named commit_guard* immediately before merge_worktree → no finding."""
+    recipe = _make_recipe(
+        {
+            "test": RecipeStep(
+                tool="test_check",
+                with_args={"worktree_path": "/tmp/wt"},
+                on_success="commit_guard",
+                on_failure="abort",
+            ),
+            "commit_guard": RecipeStep(
+                tool="run_cmd",
+                with_args={
+                    "cmd": (
+                        "cd /tmp/wt && "
+                        'if [ -n "$(git status --porcelain)" ]; '
+                        "then git add -A && git commit -m 'chore: pending'; fi"
+                    ),
+                    "cwd": "/tmp/wt",
+                },
+                on_success="merge",
+                on_failure="merge",
+            ),
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={"worktree_path": "/tmp/wt", "base_branch": "main"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+            "abort": RecipeStep(action="stop", message="abort"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-without-commit-guard"]
+    assert flagged == [], f"Unexpected merge-without-commit-guard finding: {flagged}"
+
+
+def test_merge_with_git_commit_in_cmd_is_clean() -> None:
+    """run_cmd step with 'git commit' in cmd immediately before merge → no finding."""
+    recipe = _make_recipe(
+        {
+            "pre_merge": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "git add -A && git commit -m 'fix' || true"},
+                on_success="merge",
+                on_failure="merge",
+            ),
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={"worktree_path": "/tmp/wt", "base_branch": "main"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-without-commit-guard"]
+    assert flagged == [], f"Unexpected merge-without-commit-guard finding: {flagged}"
+
+
 def test_multiple_merge_steps_each_checked_independently() -> None:
     """Two merge_worktree steps: one complete, one incomplete → one ERROR."""
     all_values = list(_RECOVERABLE_FAILED_STEPS)

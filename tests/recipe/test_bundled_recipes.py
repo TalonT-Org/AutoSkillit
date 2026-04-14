@@ -2163,6 +2163,76 @@ def test_bundled_recipes_have_no_ci_hardcoded_workflow() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Commit guard and context-limit completeness guards
+# ---------------------------------------------------------------------------
+
+
+def _is_commit_guard_step(step_name: str, recipe) -> bool:  # type: ignore[no-untyped-def]
+    """Return True if step_name is a commit_guard predecessor.
+
+    A commit_guard step is one whose name starts with 'commit_guard' OR whose
+    tool is 'run_cmd' and whose cmd contains 'git commit'.
+    """
+    if step_name.startswith("commit_guard"):
+        return True
+    step = recipe.steps.get(step_name)
+    if step and step.tool == "run_cmd":
+        cmd = step.with_args.get("cmd", "")
+        if "git commit" in cmd:
+            return True
+    return False
+
+
+def test_merge_worktree_has_commit_guard_predecessor() -> None:
+    """Every merge_worktree step in bundled recipes must have a commit_guard predecessor.
+
+    A commit_guard step auto-commits any dirty files before the merge_worktree
+    dirty-tree gate runs, providing structural immunity to context-exhausted skills
+    that leave edits on disk without committing them.
+    """
+    from autoskillit.recipe.validator import make_validation_context
+
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        merge_steps = [n for n, s in recipe.steps.items() if s.tool == "merge_worktree"]
+        if not merge_steps:
+            continue
+        ctx = make_validation_context(recipe)
+        for step_name in merge_steps:
+            preds = ctx.predecessors.get(step_name, set())
+            has_guard = any(_is_commit_guard_step(p, recipe) for p in preds)
+            assert has_guard, (
+                f"{yaml_path.name}: merge_worktree step '{step_name}' has no commit_guard "
+                f"predecessor. Add a commit_guard run_cmd step immediately before merge. "
+                f"Predecessors: {sorted(preds)}"
+            )
+
+
+def test_resolve_failures_steps_have_on_context_limit() -> None:
+    """Every step invoking resolve-failures must declare on_context_limit.
+
+    Without on_context_limit, context exhaustion mid-fix falls through to
+    on_failure, discarding all uncommitted edits and losing partial progress.
+    """
+    from autoskillit.recipe.contracts import resolve_skill_name
+
+    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(yaml_path)
+        for step_name, step in recipe.steps.items():
+            if step.tool not in SKILL_TOOLS:
+                continue
+            skill_cmd = step.with_args.get("skill_command", "")
+            skill = resolve_skill_name(skill_cmd)
+            if skill != "resolve-failures":
+                continue
+            assert step.on_context_limit is not None, (
+                f"{yaml_path.name}: step '{step_name}' invokes resolve-failures "
+                f"but has no on_context_limit. Context exhaustion will strand uncommitted "
+                f"edits on disk and fall through to on_failure, losing progress."
+            )
+
+
+# ---------------------------------------------------------------------------
 # Cross-recipe cwd-after-clone guard
 # ---------------------------------------------------------------------------
 

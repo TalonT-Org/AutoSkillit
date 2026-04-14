@@ -55,6 +55,17 @@ plan, executes what the plan describes, and reports what happened.
 - Write results to `{{AUTOSKILLIT_TEMP}}/run-experiment/` in the worktree (disk only, never committed)
 - Report failures with enough detail for the `--adjust` retry to fix them
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, experiment results may be partially written
+to `{{AUTOSKILLIT_TEMP}}/run-experiment/`. The recipe routes to `on_context_limit`,
+abandoning the partial experiment run.
+
+**Before emitting structured output tokens:**
+1. If results were not fully written, emit `experiment_results = ` (empty) as a fallback
+2. The orchestrator's `on_context_limit` route handles the partial state; the
+   downstream `--adjust` retry can restart the experiment from scratch
+
 ## Workflow
 
 ### Step 1 — Discover Experiment

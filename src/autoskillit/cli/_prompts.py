@@ -87,7 +87,8 @@ become available once the server finishes initializing.
 FIRST ACTION — before prompting for any inputs:
 0. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to open the kitchen and load the recipe.
    DO NOT call AskUserQuestion or any other tool before open_kitchen.
-   The very first tool call in this session MUST be open_kitchen.
+   If the call returns "No such tool available", the MCP server is still
+   initializing. Wait 3 seconds and retry — this is normal on session start.
 1. The response contains a pre-formatted ingredients table
    between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
    Display it verbatim in your response — do not reformat or re-render it.
@@ -218,6 +219,8 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
         f"  2. Only then call {mcp_prefix}open_kitchen.\n"
         "  Do NOT call AskUserQuestion — the tool is not unavailable; it only needs "
         "its schema loaded on demand via ToolSearch.\n\n"
+        'If the call returns "No such tool available", the MCP server is still '
+        "initializing. Wait 3 seconds and retry — this is normal on session start.\n\n"
         f"Call the {mcp_prefix}open_kitchen tool to open the AutoSkillit kitchen "
         "and gain access to all automation tools.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"

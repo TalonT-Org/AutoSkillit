@@ -7,12 +7,13 @@ import functools
 import json
 import os
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
 from autoskillit.execution import (
+    SCENARIO_STEP_NAME_ENV,  # noqa: F401 — re-exported for tools_execution.py
     _refresh_quota_cache,  # noqa: F401 — re-exported for tools_execution.py; patched by tests
     fetch_repo_merge_state,  # noqa: F401 — re-exported for tools_ci.py
     resolve_log_dir,  # noqa: F401 — used by tools_github.py, tools_status.py
@@ -352,6 +353,7 @@ async def _run_subprocess(
     *,
     cwd: str,
     timeout: float,
+    env: Mapping[str, str] | None = None,
 ) -> tuple[int, str, str]:
     """Run a subprocess asynchronously with timeout. Returns (returncode, stdout, stderr).
 
@@ -360,7 +362,7 @@ async def _run_subprocess(
     """
     runner = _get_ctx().runner
     assert runner is not None, "No subprocess runner configured"
-    result = await runner(cmd, cwd=Path(cwd), timeout=timeout)
+    result = await runner(cmd, cwd=Path(cwd), timeout=timeout, env=env)
     return _process_runner_result(result, timeout)
 
 

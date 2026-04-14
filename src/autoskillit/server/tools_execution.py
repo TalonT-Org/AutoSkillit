@@ -20,6 +20,7 @@ from autoskillit.core import (
 )
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
+    SCENARIO_STEP_NAME_ENV,
     _check_dry_walkthrough,
     _import_and_call,
     _notify,
@@ -74,10 +75,14 @@ async def run_cmd(
         tool_ctx = _get_ctx()
         _start = time.monotonic()
         try:
+            _env: dict[str, str] | None = (
+                {SCENARIO_STEP_NAME_ENV: step_name} if step_name else None
+            )
             returncode, stdout, stderr = await _run_subprocess(
                 ["bash", "-c", cmd],
                 cwd=cwd,
                 timeout=float(timeout),
+                env=_env,
             )
             result = {
                 "success": returncode == 0,

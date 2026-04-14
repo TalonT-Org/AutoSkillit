@@ -47,6 +47,7 @@ from autoskillit.execution.clone_guard import (
 )
 from autoskillit.execution.commands import build_full_headless_cmd, build_headless_resume_cmd
 from autoskillit.execution.process import _marker_is_standalone
+from autoskillit.execution.recording import RecordingSubprocessRunner
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     _check_expected_patterns,
@@ -943,6 +944,24 @@ def _build_skill_result(
     return sr
 
 
+def _derive_step_name_from_skill_command(skill_command: str) -> str:
+    """Extract a recording step name from a skill command string.
+
+    Examples:
+        "/autoskillit:smoke-task arg1" -> "smoke-task"
+        "/investigate foo"             -> "investigate"
+        "/autoskillit:make-plan"       -> "make-plan"
+        ""                             -> ""
+    """
+    stripped = skill_command.strip()
+    if not stripped:
+        return ""
+    token = stripped.split()[0].lstrip("/")
+    if ":" in token:
+        token = token.rsplit(":", 1)[-1]
+    return token
+
+
 async def run_headless_core(
     skill_command: str,
     cwd: str,
@@ -968,6 +987,9 @@ async def run_headless_core(
     cfg = ctx.config.run_skill
     effective_marker = completion_marker or cfg.completion_marker
     original_skill_command = skill_command
+
+    if not step_name and isinstance(ctx.runner, RecordingSubprocessRunner):
+        step_name = _derive_step_name_from_skill_command(skill_command)
 
     with structlog.contextvars.bound_contextvars(
         skill_command=original_skill_command[:100],

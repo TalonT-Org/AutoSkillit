@@ -261,11 +261,21 @@ async def test_toolcontext_default_background_wired_with_audit(tmp_path):
 
 
 def test_tool_context_has_token_factory_field():
-    """ToolContext dataclass exposes token_factory as an optional Callable field."""
+    """ToolContext dataclass exposes token_factory as an optional callable Protocol field."""
     import dataclasses
+    import typing
 
+    from autoskillit.core import TokenFactory
     from autoskillit.pipeline.context import ToolContext
 
     fields = {f.name: f for f in dataclasses.fields(ToolContext)}
     assert "token_factory" in fields
     assert fields["token_factory"].default is None
+
+    hints = typing.get_type_hints(ToolContext)
+    assert "token_factory" in hints
+    # Annotation must be a union that includes the TokenFactory Protocol (callable)
+    args = typing.get_args(hints["token_factory"])
+    assert TokenFactory in args, (
+        f"token_factory type hint {hints['token_factory']} does not include TokenFactory Protocol"
+    )

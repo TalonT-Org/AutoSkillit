@@ -7,6 +7,7 @@ Replaces two mutable module-level singletons in server.py:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -80,6 +81,10 @@ class ToolContext:
                           by callers outside make_context(). The default_factory falls back to
                           Path.cwd() / ".autoskillit" / "temp", which is cwd-dependent and
                           ignores the configured workspace.temp_dir.
+    token_factory:        Optional callable that resolves a GitHub token via the
+                          config → GITHUB_TOKEN env → gh CLI fallback chain.
+                          Set by make_context(); None in test ToolContext instances
+                          unless explicitly provided.
     """
 
     config: AutomationConfig
@@ -115,6 +120,7 @@ class ToolContext:
     kitchen_id: str = field(default="")
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
+    token_factory: Callable[[], str | None] | None = field(default=None)
 
     def __post_init__(self) -> None:
         if self.background is None:

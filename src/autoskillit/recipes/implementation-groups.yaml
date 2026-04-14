@@ -723,14 +723,14 @@ steps:
       auto_merge_available: "${{ result.auto_merge_available }}"
       ci_event: "${{ result.ci_event }}"
     on_success: route_queue_mode
-    on_failure: release_issue_success
+    on_failure: immediate_merge
     skip_when_false: "inputs.open_pr"
     note: >
       Single GraphQL round-trip that captures queue_available, merge_group_trigger,
       auto_merge_available, and ci_event for the target branch. Consolidates the former three
       sequential run_cmd steps (check_merge_queue, check_merge_group_trigger,
       check_auto_merge) into one MCP tool call. On failure (network error, auth failure),
-      falls through to release_issue_success (non-queue path).
+      falls through to immediate_merge (non-queue direct merge path).
       Skipped when open_pr=false — no PR was opened.
 
   route_queue_mode:

@@ -182,7 +182,7 @@ class SkillResult:
     @classmethod
     def crashed(
         cls,
-        exception: BaseException,
+        exception: Exception,
         skill_command: str = "",
         session_id: str = "",
         order_id: str = "",

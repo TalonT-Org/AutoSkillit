@@ -57,7 +57,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-reproducibility-artifacts/exp_diag_reproducibility_artifacts_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

@@ -57,7 +57,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-iterative-learning/exp_diag_iterative_learning_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

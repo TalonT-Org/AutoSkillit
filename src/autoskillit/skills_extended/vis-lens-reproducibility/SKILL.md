@@ -64,7 +64,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-reproducibility/vis_spec_reproducibility_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

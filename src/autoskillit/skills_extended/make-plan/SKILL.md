@@ -229,12 +229,11 @@ Before writing the final plan, verify:
 **ALWAYS:**
 - Write to `{{AUTOSKILLIT_TEMP}}/make-plan/` directory (relative to the current working directory)
 - After writing the plan file, emit the **absolute path** as a structured output token
-  immediately before `%%ORDER_UP%%`. The save path is relative (`{{AUTOSKILLIT_TEMP}}/make-plan/...`) but
+  as your final output. The save path is relative (`{{AUTOSKILLIT_TEMP}}/make-plan/...`) but
   the token **must** use the absolute path (prepend the full CWD):
   ```
   plan_path = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-plan/{filename}.md
   plan_parts = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-plan/{filename}.md
-  %%ORDER_UP%%
   ```
   This token is MANDATORY — the pipeline cannot capture the output without it.
 - Use `model: "sonnet"` when spawning all subagents via the Task tool

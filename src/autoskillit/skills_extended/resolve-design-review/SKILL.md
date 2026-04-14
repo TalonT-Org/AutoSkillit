@@ -165,19 +165,17 @@ markdown formatting on the token names**. Do not wrap token names in `**bold**`,
 `*italic*`, or any other markdown. The adjudicator performs a regex match on the
 exact token name — decorators cause match failure.
 
-When resolution = revised, emit immediately before `%%ORDER_UP%%`:
+When resolution = revised, emit as your final output:
 
 ```
 resolution = revised
 revision_guidance = /absolute/path/{{AUTOSKILLIT_TEMP}}/resolve-design-review/revision_guidance_{slug}_{ts}.md
-%%ORDER_UP%%
 ```
 
-When resolution = failed, emit immediately before `%%ORDER_UP%%`:
+When resolution = failed, emit as your final output:
 
 ```
 resolution = failed
-%%ORDER_UP%%
 ```
 
 `revision_guidance` is ONLY emitted when resolution = revised.

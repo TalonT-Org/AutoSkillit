@@ -57,7 +57,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-variance-stability/exp_diag_variance_stability_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

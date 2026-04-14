@@ -112,7 +112,6 @@ metadata:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/vis_spec_chart_select_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

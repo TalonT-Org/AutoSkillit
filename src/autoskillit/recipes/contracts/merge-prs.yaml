@@ -28,9 +28,7 @@ skills:
     expected_output_patterns:
     - pr_order_file\s*=\s*.+
     pattern_examples:
-    - 'pr_order_file = /tmp/pr_order.json
-
-      %%ORDER_UP%%'
+    - 'pr_order_file = /tmp/pr_order.json'
   resolve-merge-conflicts:
     inputs:
     - name: worktree_path
@@ -56,9 +54,7 @@ skills:
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
-
-      %%ORDER_UP%%'
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
     write_behavior: conditional
     write_expected_when:
     - conflict_report_path\s*=\s*/.+
@@ -90,12 +86,8 @@ skills:
     expected_output_patterns:
     - merged\s*=\s*(true|false)
     pattern_examples:
-    - 'merged = true
-
-      %%ORDER_UP%%'
-    - 'merged = false
-
-      %%ORDER_UP%%'
+    - 'merged = true'
+    - 'merged = false'
   make-plan:
     inputs:
     - name: task
@@ -109,9 +101,7 @@ skills:
     expected_output_patterns:
     - plan_path\s*=\s*/.+
     pattern_examples:
-    - 'plan_path = /tmp/plan.md
-
-      %%ORDER_UP%%'
+    - 'plan_path = /tmp/plan.md'
     write_behavior: always
   dry-walkthrough:
     inputs:
@@ -135,9 +125,7 @@ skills:
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
-
-      %%ORDER_UP%%'
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
     write_behavior: always
   retry-worktree:
     inputs:
@@ -155,9 +143,7 @@ skills:
     expected_output_patterns:
     - worktree_path\s*=\s*/.+
     pattern_examples:
-    - 'worktree_path = /tmp/worktrees/impl-foo-20260316
-
-      %%ORDER_UP%%'
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
     write_behavior: always
   resolve-failures:
     inputs:
@@ -193,14 +179,10 @@ skills:
     expected_output_patterns:
     - verdict\s*=\s*(GO|NO GO)
     pattern_examples:
-    - 'verdict = GO
-
-      %%ORDER_UP%%'
+    - 'verdict = GO'
     - 'verdict = NO GO
 
-      remediation_path = /tmp/remediation.md
-
-      %%ORDER_UP%%'
+      remediation_path = /tmp/remediation.md'
   open-integration-pr:
     inputs:
     - name: integration_branch
@@ -224,9 +206,7 @@ skills:
     expected_output_patterns:
     - https://github\.com/.*/pull/\d+
     pattern_examples:
-    - 'https://github.com/owner/repo/pull/42
-
-      %%ORDER_UP%%'
+    - 'https://github.com/owner/repo/pull/42'
   review-pr:
     inputs:
     - name: feature_branch
@@ -247,15 +227,9 @@ skills:
     expected_output_patterns:
     - verdict\s*=\s*(approved|changes_requested|needs_human)
     pattern_examples:
-    - 'verdict = approved
-
-      %%ORDER_UP%%'
-    - 'verdict = changes_requested
-
-      %%ORDER_UP%%'
-    - 'verdict = needs_human
-
-      %%ORDER_UP%%'
+    - 'verdict = approved'
+    - 'verdict = changes_requested'
+    - 'verdict = needs_human'
   resolve-review:
     inputs:
     - name: feature_branch
@@ -289,9 +263,7 @@ skills:
     expected_output_patterns:
     - diagnosis_path\s*=\s*/.+
     pattern_examples:
-    - 'diagnosis_path = /tmp/diagnosis.md
-
-      %%ORDER_UP%%'
+    - 'diagnosis_path = /tmp/diagnosis.md'
     write_behavior: always
 dataflow:
 - step: clone

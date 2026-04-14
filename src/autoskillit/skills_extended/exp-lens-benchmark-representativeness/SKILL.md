@@ -57,7 +57,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-benchmark-representativeness/exp_diag_benchmark_representativeness_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

@@ -234,11 +234,9 @@ Emit these structured output tokens (literal plain text, no markdown decoration)
 On success:
 ```
 pr_url = https://github.com/owner/repo/pull/N
-%%ORDER_UP%%
 ```
 
 On graceful degradation (no `gh` or not authenticated):
 ```
 pr_url = 
-%%ORDER_UP%%
 ```

@@ -42,7 +42,7 @@ Does NOT invoke lens skills or other sub-skills.
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations
-- Emit `pr_url` token before `%%ORDER_UP%%` (even if empty)
+- Emit `pr_url` token as your final output (even if empty)
 - Use Agent subagents to read the prep file
 
 ## Diagram Validation Keywords
@@ -162,7 +162,7 @@ Store the body file path as `pr_body_path`.
 gh auth status 2>/dev/null
 ```
 
-If **not available or not authenticated**: emit `pr_url = ` (empty) and `%%ORDER_UP%%` then stop.
+If **not available or not authenticated**: emit `pr_url = ` (empty) then stop.
 
 ### Step 5: Create PR
 
@@ -181,16 +181,14 @@ Capture the PR URL from the output.
 ## Output
 
 Emit these tokens as **literal plain text** (no markdown formatting on the token names)
-before `%%ORDER_UP%%`:
+as your final output:
 
 ```
 pr_url = https://github.com/owner/repo/pull/N
-%%ORDER_UP%%
 ```
 
 Where `pr_url` is the absolute GitHub PR URL, or an empty string if GitHub is unavailable:
 
 ```
 pr_url = 
-%%ORDER_UP%%
 ```

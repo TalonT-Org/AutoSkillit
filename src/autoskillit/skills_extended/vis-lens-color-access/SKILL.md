@@ -62,7 +62,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/vis-lens-color-access/vis_spec_color_access_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

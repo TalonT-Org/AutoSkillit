@@ -41,7 +41,7 @@ outputs, and synthesizes a complete visualization plan.
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Write a vis-lens context file for each selected lens before invoking it
 - Log every conflict resolution decision in the Conflict Resolution Log table
-- Emit `visualization_plan_path` and `report_plan_path` tokens before `%%ORDER_UP%%`
+- Emit `visualization_plan_path` and `report_plan_path` tokens as your final output
 
 ## Workflow
 
@@ -220,5 +220,4 @@ Content structure:
 ```
 visualization_plan_path = {absolute_path_to_visualization-plan.md}
 report_plan_path = {absolute_path_to_report-plan.md}
-%%ORDER_UP%%
 ```

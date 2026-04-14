@@ -58,7 +58,6 @@ hooks:
 
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/exp_diag_comparator_construction_{...}.md
-  %%ORDER_UP%%
   ```
 
 ---

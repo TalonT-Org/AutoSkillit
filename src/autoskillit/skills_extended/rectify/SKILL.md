@@ -47,12 +47,11 @@ Do not change any code.
 - Map the components and their connections thoroughly
 - Write the plan as markdown to `{{AUTOSKILLIT_TEMP}}/rectify/` directory (relative to the current working directory)
 - After writing the plan file, emit the **absolute path** as a structured output token
-  immediately before `%%ORDER_UP%%`. The save path is relative (`{{AUTOSKILLIT_TEMP}}/rectify/...`) but
+  as your final output. The save path is relative (`{{AUTOSKILLIT_TEMP}}/rectify/...`) but
   the token **must** use the absolute path (prepend the full CWD):
   ```
   plan_path = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/rectify/{filename}.md
   plan_parts = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/rectify/{filename}.md
-  %%ORDER_UP%%
   ```
   This token is MANDATORY — the pipeline cannot capture the output without it.
 - The solution must solve more than just the immediate issue

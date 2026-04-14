@@ -16,7 +16,7 @@ from autoskillit.cli._doctor import (
     _count_hook_registry_drift,
 )
 from autoskillit.cli._hooks import _claude_settings_path
-from autoskillit.cli._init_helpers import _prompt_recipe_choice
+from autoskillit.cli._init_helpers import _is_plugin_installed, _prompt_recipe_choice
 from autoskillit.cli._prompts import (
     _OPEN_KITCHEN_CHOICE,
     _build_open_kitchen_prompt,
@@ -53,6 +53,7 @@ from autoskillit.hook_registry import HookDriftResult
 
 __all__ = [
     "_OPEN_KITCHEN_CHOICE",
+    "_is_plugin_installed",
     "_build_open_kitchen_prompt",
     "_build_orchestrator_prompt",
     "DoctorResult",

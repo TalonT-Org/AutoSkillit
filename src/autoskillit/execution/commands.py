@@ -234,7 +234,7 @@ def build_full_headless_cmd(
 
     filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
     spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)
-    cmd: list[str] = list(spec.cmd)
+    cmd: list[str] = [*spec.cmd]
     if plugin_dir is not None:
         cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_dir)]
     cmd += [ClaudeFlags.OUTPUT_FORMAT, output_format_value]

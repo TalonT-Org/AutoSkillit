@@ -289,10 +289,8 @@ def _is_plugin_installed() -> bool:
             timeout=10,
         )
         return result.returncode == 0 and "autoskillit" in result.stdout
-    except FileNotFoundError:
-        return False  # claude CLI not on PATH
-    except (subprocess.TimeoutExpired, OSError):
-        return False  # CLI unavailable or timed out
+    except Exception:
+        return False  # CLI unavailable, timed out, or returned unexpected mock type
 
 
 def _generate_config_yaml(test_command: list[str]) -> str:

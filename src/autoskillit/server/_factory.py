@@ -15,7 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from autoskillit.cli._init_helpers import _is_plugin_installed
+from autoskillit.cli import _is_plugin_installed
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     SubprocessRunner,

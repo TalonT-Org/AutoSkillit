@@ -458,19 +458,15 @@ def _launch_cook_session(
         resume_session_id=resume_session_id,
         env_extras=extra_env,
     )
-    plugin_dir_flags: list[str] = (
-        [] if _is_plugin_installed() else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
-    )
-    cmd = (
-        spec.cmd
-        + plugin_dir_flags
-        + [
-            ClaudeFlags.TOOLS,
-            "AskUserQuestion",
-            ClaudeFlags.APPEND_SYSTEM_PROMPT,
-            system_prompt,
-        ]
-    )
+    plugin_flags = [] if _is_plugin_installed() else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
+    cmd = [
+        *spec.cmd,
+        *plugin_flags,
+        ClaudeFlags.TOOLS,
+        "AskUserQuestion",
+        ClaudeFlags.APPEND_SYSTEM_PROMPT,
+        system_prompt,
+    ]
     with terminal_guard():
         result = subprocess.run(cmd, env=spec.env)
     if result.returncode != 0:

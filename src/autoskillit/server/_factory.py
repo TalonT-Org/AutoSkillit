@@ -15,6 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from autoskillit.cli._init_helpers import _is_plugin_installed
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     SubprocessRunner,
@@ -200,7 +201,11 @@ def make_context(
         lambda: config.github.token or os.environ.get("GITHUB_TOKEN") or _gh_cli_token()
     )
 
-    resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
+    resolved_dir = (
+        plugin_dir
+        if plugin_dir is not None
+        else (_default_plugin_dir() if not _is_plugin_installed() else None)
+    )
     gate = DefaultGateState(enabled=False)
 
     project_dir = Path.cwd()

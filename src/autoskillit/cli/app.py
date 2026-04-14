@@ -27,6 +27,7 @@ from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _check_secret_scanning,
     _generate_config_yaml,
+    _is_plugin_installed,
     _log_secret_scan_bypass,
     _prompt_test_command,
     _register_all,
@@ -118,7 +119,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
             ",".join(cfg.safety.protected_branches),
         )
 
-    plugin_dir = str(pkg_root())
+    plugin_dir: str | None = None if _is_plugin_installed() else str(pkg_root())
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
 
@@ -457,14 +458,19 @@ def _launch_cook_session(
         resume_session_id=resume_session_id,
         env_extras=extra_env,
     )
-    cmd = spec.cmd + [
-        ClaudeFlags.PLUGIN_DIR,
-        str(pkg_root()),
-        ClaudeFlags.TOOLS,
-        "AskUserQuestion",
-        ClaudeFlags.APPEND_SYSTEM_PROMPT,
-        system_prompt,
-    ]
+    plugin_dir_flags: list[str] = (
+        [] if _is_plugin_installed() else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
+    )
+    cmd = (
+        spec.cmd
+        + plugin_dir_flags
+        + [
+            ClaudeFlags.TOOLS,
+            "AskUserQuestion",
+            ClaudeFlags.APPEND_SYSTEM_PROMPT,
+            system_prompt,
+        ]
+    )
     with terminal_guard():
         result = subprocess.run(cmd, env=spec.env)
     if result.returncode != 0:

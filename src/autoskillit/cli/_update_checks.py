@@ -72,7 +72,7 @@ _GITHUB_INTEGRATION_PYPROJECT_URL = (
 class Signal:
     """A single firing update condition."""
 
-    kind: Literal["binary", "hooks", "source_drift"]
+    kind: Literal["binary", "hooks", "source_drift", "dual_mcp"]
     message: str
 
 
@@ -521,6 +521,37 @@ def _source_drift_signal(info: InstallInfo, home: Path) -> Signal | None:
     return None
 
 
+def _is_dual_mcp_registered(home: Path) -> bool:
+    """Return True if both direct mcpServers entry and marketplace plugin are active."""
+    claude_json = home / ".claude.json"
+    plugins_json = home / ".claude" / "plugins" / "installed_plugins.json"
+    try:
+        has_direct = claude_json.exists() and "autoskillit" in json.loads(
+            claude_json.read_text()
+        ).get("mcpServers", {})
+        has_marketplace = plugins_json.exists() and "autoskillit@autoskillit-local" in json.loads(
+            plugins_json.read_text()
+        ).get("plugins", {})
+        return has_direct and has_marketplace
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+def _dual_mcp_signal(home: Path | None = None) -> Signal | None:
+    """Return a Signal if both direct mcpServers entry and marketplace plugin are registered."""
+    try:
+        if _is_dual_mcp_registered(home or Path.home()):
+            return Signal(
+                "dual_mcp",
+                "autoskillit is registered as both a direct MCP server (~/.claude.json) "
+                "and a marketplace plugin — two server processes will spawn per session. "
+                "Run `autoskillit install` to remove the stale direct entry.",
+            )
+    except Exception:
+        logger.debug("dual_mcp signal check failed", exc_info=True)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Unified dismissal
 # ---------------------------------------------------------------------------
@@ -658,6 +689,7 @@ def run_update_checks(home: Path | None = None) -> None:
         _binary_signal(info, _home, current),
         _hooks_signal(_claude_settings_path("user")),
         _source_drift_signal(info, _home),
+        _dual_mcp_signal(_home),
     ]
 
     # Filter by dismissal

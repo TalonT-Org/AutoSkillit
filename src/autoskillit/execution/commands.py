@@ -183,7 +183,7 @@ def build_full_headless_cmd(
     cwd: str,
     completion_marker: str,
     model: str | None,
-    plugin_dir: str | Path,
+    plugin_dir: str | Path | None,
     output_format_value: str,
     output_format_required_flags: Sequence[str] = (),
     add_dirs: Sequence[ValidatedAddDir] = (),
@@ -234,12 +234,10 @@ def build_full_headless_cmd(
 
     filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
     spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)
-    cmd: list[str] = spec.cmd + [
-        ClaudeFlags.PLUGIN_DIR,
-        str(plugin_dir),
-        ClaudeFlags.OUTPUT_FORMAT,
-        output_format_value,
-    ]
+    cmd: list[str] = list(spec.cmd)
+    if plugin_dir is not None:
+        cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_dir)]
+    cmd += [ClaudeFlags.OUTPUT_FORMAT, output_format_value]
     for flag in output_format_required_flags:
         if flag not in cmd:
             cmd.append(flag)

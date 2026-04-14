@@ -130,6 +130,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     if confirm.lower() in ("n", "no"):
         return
 
+    from autoskillit.cli._init_helpers import _is_plugin_installed
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.config import load_config
     from autoskillit.core import configure_logging, find_latest_session_id, pkg_root
@@ -158,8 +159,9 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         session_id_local, cook_session=True, config=config, project_dir=project_dir
     )
 
+    plugin_dir = None if _is_plugin_installed() else pkg_root()
     spec = build_interactive_cmd(
-        plugin_dir=pkg_root(),
+        plugin_dir=plugin_dir,
         add_dirs=[skills_dir],
         initial_prompt=initial_prompt,
         resume_session_id=resume_session_id,

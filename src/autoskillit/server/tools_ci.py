@@ -150,7 +150,7 @@ async def wait_for_ci(
 
             return json.dumps(result)
         except Exception as exc:
-            logger.error("autoskillit.wait_for_ci failed", exc_info=exc)
+            logger.error("wait_for_ci failed", exc_info=True)
             return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
         finally:
             if step_name:

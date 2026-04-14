@@ -74,6 +74,22 @@ class TestRunCmdRecording:
         assert call_kwargs.get("env", {}).get(SCENARIO_STEP_NAME_ENV) == "setup"
 
     @pytest.mark.anyio
+    async def test_run_cmd_with_step_name_preserves_parent_env(self, tool_ctx, monkeypatch):
+        """run_cmd with step_name must not strip PATH/HOME from the child env."""
+        from autoskillit.execution.recording import SCENARIO_STEP_NAME_ENV
+
+        monkeypatch.setenv("PATH", "/usr/bin:/usr/local/bin")
+        monkeypatch.setenv("HOME", "/home/testuser")
+        tool_ctx.runner.push(_make_result(0, "ok", ""))
+        await run_cmd(cmd="echo hi", cwd="/tmp", step_name="setup")
+        call_kwargs = tool_ctx.runner.call_args_list[-1][3]
+        env = call_kwargs["env"]
+        assert env is not None
+        assert "PATH" in env, "run_cmd stripped PATH from child environment"
+        assert "HOME" in env, "run_cmd stripped HOME from child environment"
+        assert env[SCENARIO_STEP_NAME_ENV] == "setup"
+
+    @pytest.mark.anyio
     async def test_run_cmd_without_step_name_passes_no_env(self, tool_ctx):
         """run_cmd without step_name passes env=None (no SCENARIO_STEP_NAME in env)."""
         from autoskillit.execution.recording import SCENARIO_STEP_NAME_ENV

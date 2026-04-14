@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -76,7 +77,7 @@ async def run_cmd(
         _start = time.monotonic()
         try:
             _env: dict[str, str] | None = (
-                {SCENARIO_STEP_NAME_ENV: step_name} if step_name else None
+                {**os.environ, SCENARIO_STEP_NAME_ENV: step_name} if step_name else None
             )
             returncode, stdout, stderr = await _run_subprocess(
                 ["bash", "-c", cmd],

@@ -206,6 +206,107 @@ def test_update_command_all_subprocess_calls_have_env_kwarg() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Sibling rule: _run_subprocess(env=...) calls in server/ must start from
+# os.environ — enforced via per-function AST walk with single-assignment
+# tracking.
+# ─────────────────────────────────────────────────────────────────────────────
+
+SERVER_ROOT = Path(__file__).parents[2] / "src" / "autoskillit" / "server"
+
+
+def _dict_has_os_environ_unpack(dict_node: ast.Dict) -> bool:
+    """True if the dict literal contains **os.environ."""
+    for key, val in zip(dict_node.keys, dict_node.values):
+        if key is None and isinstance(val, ast.Attribute):
+            if isinstance(val.value, ast.Name) and val.value.id == "os" and val.attr == "environ":
+                return True
+    return False
+
+
+def _check_env_value(
+    env_val: ast.expr,
+    bindings: dict[str, ast.expr],
+    lineno: int,
+    path: Path,
+) -> str | None:
+    """Return a violation string if env_val is unsafe, None if safe.
+
+    Safe patterns:
+    - env=None literal
+    - env=<Dict> containing **os.environ
+    - env=<Call> (builder function)
+    - env=<Name> bound to a safe value (resolved one level via bindings)
+    - env=<Name> unresolvable (parameter/outer scope — trusted)
+    """
+    if isinstance(env_val, ast.Constant) and env_val.value is None:
+        return None
+    if isinstance(env_val, ast.Dict):
+        if _dict_has_os_environ_unpack(env_val):
+            return None
+        rel = path.relative_to(SERVER_ROOT.parents[2])
+        return f"{rel}:{lineno}: _run_subprocess(env=<dict>) without **os.environ"
+    if isinstance(env_val, ast.Call):
+        return None
+    if isinstance(env_val, ast.Name):
+        bound = bindings.get(env_val.id)
+        if bound is None:
+            return None
+        return _check_env_value(bound, {}, lineno, path)
+    return None
+
+
+def _find_run_subprocess_env_violations(source: str, path: Path) -> list[str]:
+    """Find _run_subprocess() calls with unsafe env= kwargs, per-function."""
+    tree = ast.parse(source)
+    violations: list[str] = []
+    for func_node in ast.walk(tree):
+        if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        bindings: dict[str, ast.expr] = {}
+        for stmt in ast.walk(func_node):
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                target = stmt.targets[0]
+                if isinstance(target, ast.Name):
+                    bindings[target.id] = stmt.value
+            elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+                if isinstance(stmt.target, ast.Name):
+                    bindings[stmt.target.id] = stmt.value
+        for node in ast.walk(func_node):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not (isinstance(func, ast.Name) and func.id == "_run_subprocess"):
+                continue
+            env_kw = None
+            for kw in node.keywords:
+                if kw.arg == "env":
+                    env_kw = kw.value
+                    break
+            if env_kw is None:
+                continue
+            violation = _check_env_value(env_kw, bindings, node.lineno, path)
+            if violation:
+                violations.append(violation)
+    return violations
+
+
+def test_run_subprocess_callers_use_safe_env_pattern() -> None:
+    """Every _run_subprocess(env=...) call in server/ must start from os.environ."""
+    if not SERVER_ROOT.is_dir():
+        pytest.skip("Source tree unavailable")
+    violations: list[str] = []
+    for py_file in sorted(SERVER_ROOT.rglob("*.py")):
+        source = py_file.read_text(encoding="utf-8")
+        if "_run_subprocess" not in source:
+            continue
+        violations.extend(_find_run_subprocess_env_violations(source, py_file))
+    assert not violations, (
+        "Found _run_subprocess() calls with unsafe env= patterns:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Sibling rule: claude-launching subprocess calls must route env through
 # build_claude_env() — enforced via intra-function AST walk.
 # ─────────────────────────────────────────────────────────────────────────────

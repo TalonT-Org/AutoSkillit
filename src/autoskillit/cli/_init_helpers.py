@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import NamedTuple
 
 from autoskillit.config import write_config_layer
-from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
+from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, get_logger, load_yaml
 from autoskillit.recipe import list_recipes
+
+logger = get_logger(__name__)
 
 
 class _ScanResult(NamedTuple):
@@ -290,7 +292,8 @@ def _is_plugin_installed() -> bool:
         )
         return result.returncode == 0 and "autoskillit" in result.stdout
     except Exception:
-        return False  # CLI unavailable, timed out, or returned unexpected mock type
+        logger.debug("plugin install check failed", exc_info=True)
+        return False
 
 
 def _generate_config_yaml(test_command: list[str]) -> str:

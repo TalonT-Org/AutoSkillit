@@ -430,7 +430,7 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
 
 @mcp.tool(tags={"autoskillit"})
 @track_response_size("disable_quota_guard")
-def disable_quota_guard() -> str:
+async def disable_quota_guard() -> str:
     """Disable the quota guard for the remainder of this kitchen session.
 
     The quota guard blocks run_skill calls when API utilization exceeds a
@@ -450,14 +450,17 @@ def disable_quota_guard() -> str:
             return json.dumps(
                 {
                     "success": False,
-                    "error": "Kitchen is not open — hook config file absent. Open the kitchen first.",
+                    "error": "Kitchen is not open — hook config file absent.",
                 }
             )
         try:
             payload = json.loads(hook_cfg_path.read_text())
         except (OSError, json.JSONDecodeError) as exc:
             return json.dumps(
-                {"success": False, "error": f"Failed to read hook config: {type(exc).__name__}: {exc}"}
+                {
+                    "success": False,
+                    "error": f"Failed to read hook config: {type(exc).__name__}: {exc}",
+                }
             )
         quota_section = payload.get("quota_guard", {})
         quota_section["disabled"] = True
@@ -466,7 +469,10 @@ def disable_quota_guard() -> str:
         return json.dumps(
             {
                 "success": True,
-                "content": "Quota guard disabled for this session. run_skill calls will no longer be blocked by quota checks.",
+                "content": (
+                    "Quota guard disabled for this session. "
+                    "run_skill calls will no longer be blocked by quota checks."
+                ),
             }
         )
     except Exception as exc:

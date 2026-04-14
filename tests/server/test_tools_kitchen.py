@@ -1111,7 +1111,8 @@ def test_every_return_path_parses_as_json_and_has_boolean_success(stage):
     assert isinstance(envelope["success"], bool)
 
 
-def test_disable_quota_guard_writes_disabled_flag(tmp_path, monkeypatch):
+@pytest.mark.anyio
+async def test_disable_quota_guard_writes_disabled_flag(tmp_path, monkeypatch):
     """disable_quota_guard() sets quota_guard.disabled=True in the hook config file."""
     monkeypatch.chdir(tmp_path)
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
@@ -1122,7 +1123,7 @@ def test_disable_quota_guard_writes_disabled_flag(tmp_path, monkeypatch):
 
     from autoskillit.server.tools_kitchen import disable_quota_guard
 
-    result_str = disable_quota_guard()
+    result_str = await disable_quota_guard()
     parsed = json.loads(result_str)
     assert parsed["success"] is True
 
@@ -1130,24 +1131,26 @@ def test_disable_quota_guard_writes_disabled_flag(tmp_path, monkeypatch):
     assert payload["quota_guard"]["disabled"] is True
 
 
-def test_disable_quota_guard_denies_headless(tmp_path, monkeypatch):
+@pytest.mark.anyio
+async def test_disable_quota_guard_denies_headless(tmp_path, monkeypatch):
     """disable_quota_guard() returns an error when called from a headless session."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
 
     from autoskillit.server.tools_kitchen import disable_quota_guard
 
-    result_str = disable_quota_guard()
+    result_str = await disable_quota_guard()
     parsed = json.loads(result_str)
     assert parsed["success"] is False
 
 
-def test_disable_quota_guard_returns_error_when_kitchen_not_open(tmp_path, monkeypatch):
+@pytest.mark.anyio
+async def test_disable_quota_guard_returns_error_when_kitchen_not_open(tmp_path, monkeypatch):
     """disable_quota_guard() returns an error when the kitchen is not open."""
     monkeypatch.chdir(tmp_path)
 
     from autoskillit.server.tools_kitchen import disable_quota_guard
 
-    result_str = disable_quota_guard()
+    result_str = await disable_quota_guard()
     parsed = json.loads(result_str)
     assert parsed["success"] is False

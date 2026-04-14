@@ -438,7 +438,7 @@ class TestCookTerminalGuard:
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")
-        monkeypatch.setattr("autoskillit.cli._cook._is_plugin_installed", lambda: False)
+        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
         # is_first_run is imported inside cook() body — patch the source module
         monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
         # cook() calls input() for launch confirmation before subprocess.run
@@ -484,7 +484,7 @@ class TestCookTerminalGuard:
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")
-        monkeypatch.setattr("autoskillit.cli.app._is_plugin_installed", lambda: False)
+        monkeypatch.setattr(app_mod, "_is_plugin_installed", lambda: False)
 
         with pytest.raises(KeyboardInterrupt):
             app_mod._launch_cook_session("system prompt")

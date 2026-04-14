@@ -134,9 +134,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 23),
     # _init_helpers.py — ~/.claude.json (co-owned)
-    ("src/autoskillit/cli/_init_helpers.py", 355),
+    ("src/autoskillit/cli/_init_helpers.py", 356),
     # _init_helpers.py — evict_direct_mcp_entry write-back to ~/.claude.json (co-owned)
-    ("src/autoskillit/cli/_init_helpers.py", 374),
+    ("src/autoskillit/cli/_init_helpers.py", 375),
     # _marketplace.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/_marketplace.py", 45),
     # _marketplace.py — marketplace.json (co-owned)

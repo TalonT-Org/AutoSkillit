@@ -28,9 +28,6 @@ from typing import Any, Literal
 import httpx
 
 from autoskillit.cli._hooks import _claude_settings_path
-from autoskillit.cli._init_helpers import (
-    _is_plugin_installed,  # noqa: F401 — relay for autoskillit.cli re-export
-)
 from autoskillit.cli._install_info import (
     InstallInfo,
     InstallType,

@@ -1502,7 +1502,7 @@ async def test_run_skill_idle_output_timeout_defaults_to_none(tool_ctx, monkeypa
 
 @pytest.mark.anyio
 async def test_run_skill_returns_structured_error_when_executor_raises(
-    tool_ctx, monkeypatch
+    tool_ctx, monkeypatch, tmp_path
 ) -> None:
     """run_skill returns SkillResult-shaped JSON even if executor.run() raises unexpectedly."""
     from autoskillit.core import SkillResult
@@ -1516,7 +1516,7 @@ async def test_run_skill_returns_structured_error_when_executor_raises(
 
     from autoskillit.server.tools_execution import run_skill
 
-    result_json = await run_skill("/test cmd", "/tmp")
+    result_json = await run_skill("/test cmd", str(tmp_path))
     data = json.loads(result_json)
     assert data["success"] is False
     assert data["subtype"] == "crashed"

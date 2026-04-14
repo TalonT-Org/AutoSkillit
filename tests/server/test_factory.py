@@ -451,3 +451,10 @@ def test_make_context_sets_plugin_dir_when_plugin_not_installed(
     ctx = make_context(AutomationConfig(), runner=None)
     assert ctx.plugin_dir is not None
     assert ctx.plugin_dir != ""
+
+
+def test_make_context_sets_token_factory(tmp_path):
+    """make_context() sets token_factory on the returned ToolContext."""
+    cfg = AutomationConfig()
+    ctx = make_context(cfg, runner=None, plugin_dir=str(tmp_path))
+    assert callable(ctx.token_factory)

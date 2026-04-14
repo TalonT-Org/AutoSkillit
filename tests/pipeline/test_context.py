@@ -253,3 +253,19 @@ async def test_toolcontext_default_background_wired_with_audit(tmp_path):
 
     records = audit.get_report()
     assert any(r.subtype == "background_exception" for r in records)
+
+
+# ---------------------------------------------------------------------------
+# token_factory field
+# ---------------------------------------------------------------------------
+
+
+def test_tool_context_has_token_factory_field():
+    """ToolContext dataclass exposes token_factory as an optional Callable field."""
+    import dataclasses
+
+    from autoskillit.pipeline.context import ToolContext
+
+    fields = {f.name: f for f in dataclasses.fields(ToolContext)}
+    assert "token_factory" in fields
+    assert fields["token_factory"].default is None

@@ -538,6 +538,7 @@ class TestContextLimitBehaviorContract:
         from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
         manifest = load_bundled_manifest()
+        assert manifest is not None, "load_bundled_manifest() returned None"
         skills = manifest.get("skills", {})
 
         missing: list[str] = []

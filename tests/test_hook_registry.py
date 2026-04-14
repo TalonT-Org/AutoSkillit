@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
+    HOOKS_DIR,
     _extract_script_basenames,
     _is_own_hook,
     canonical_script_basenames,
+    find_broken_hook_scripts,
     generate_hooks_json,
 )
 
@@ -130,3 +133,55 @@ def test_hook_registry_uses_new_filenames() -> None:
     }
     for old in old_names:
         assert old not in all_scripts, f"HOOK_REGISTRY still references old name: {old}"
+
+
+def test_find_broken_hook_scripts_ignores_user_inline_hooks(tmp_path: Path) -> None:
+    """User inline hooks like 'wsl-notify-send.exe Done' must not be flagged as broken."""
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PostToolUse": [{"hooks": [{"command": 'wsl-notify-send.exe "Build done"'}]}]
+                }
+            }
+        )
+    )
+    broken = find_broken_hook_scripts(settings)
+    assert broken == []
+
+
+def test_find_broken_hook_scripts_flags_missing_autoskillit_script(tmp_path: Path) -> None:
+    """A python3 /abs/path/autoskillit/hooks/script.py that doesn't exist must be flagged."""
+    missing = str(HOOKS_DIR / "nonexistent_guard.py")
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [{"matcher": ".*", "hooks": [{"command": f"python3 {missing}"}]}]
+                }
+            }
+        )
+    )
+    broken = find_broken_hook_scripts(settings)
+    assert any("nonexistent_guard.py" in b for b in broken)
+
+
+def test_find_broken_hook_scripts_does_not_flag_user_python_scripts(tmp_path: Path) -> None:
+    """A user's python3 script outside the autoskillit hooks dir must not be flagged."""
+    user_script = "/home/user/my_custom_guard.py"
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {"matcher": ".*", "hooks": [{"command": f"python3 {user_script}"}]}
+                    ]
+                }
+            }
+        )
+    )
+    broken = find_broken_hook_scripts(settings)
+    assert broken == []

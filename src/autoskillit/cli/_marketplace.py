@@ -35,16 +35,12 @@ def _clear_plugin_cache() -> None:
     if cache_dir.is_dir():
         shutil.rmtree(cache_dir)
 
-    installed_json = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-    if installed_json.exists():
-        try:
-            data = json.loads(installed_json.read_text())
-            plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
-            if plugin_ref in data:
-                del data[plugin_ref]
-                atomic_write(installed_json, json.dumps(data, indent=2))
-        except (OSError, json.JSONDecodeError):
-            pass  # non-fatal — install will proceed regardless
+    from autoskillit.cli._installed_plugins import InstalledPluginsFile
+
+    try:
+        InstalledPluginsFile().remove(f"autoskillit@{_MARKETPLACE_NAME}")
+    except OSError:
+        pass  # non-fatal — install will proceed regardless
 
 
 def _ensure_marketplace() -> Path:
@@ -97,7 +93,7 @@ def _ensure_marketplace() -> Path:
     return marketplace_dir
 
 
-def install(*, scope: str = "user"):
+def install(*, scope: str = "user") -> bool:
     """Install the plugin persistently for Claude Code.
 
     Sets up a local marketplace and installs the plugin so it loads
@@ -125,7 +121,7 @@ def install(*, scope: str = "user"):
         print(f"  claude plugin marketplace add {marketplace_dir}")
         print(f"  claude plugin install {plugin_ref} --scope {scope}")
         print("\nThen run: autoskillit init (in your project directory)")
-        return
+        return False  # deferred: user must complete manually in a regular terminal
 
     if shutil.which("claude") is None:
         print("\nERROR: 'claude' command not found on PATH.")
@@ -176,6 +172,7 @@ def install(*, scope: str = "user"):
     sweep_all_scopes_for_orphans(Path.cwd())
     settings_path = _hooks_mod._claude_settings_path(scope)
     sync_hooks_to_settings(settings_path)
+    return True
 
 
 def upgrade():

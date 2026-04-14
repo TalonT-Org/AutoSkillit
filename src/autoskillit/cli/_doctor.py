@@ -609,24 +609,16 @@ def _check_installed_plugins_entry(
     plugins_json_path: Path | None = None,
 ) -> DoctorResult:
     """Check that installed_plugins.json contains the autoskillit entry."""
-    _plugins_json = plugins_json_path or (
-        Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-    )
-    if not _plugins_json.exists():
+    from autoskillit.cli._installed_plugins import InstalledPluginsFile
+
+    store = InstalledPluginsFile(plugins_json_path)
+    if not store.path.exists():
         return DoctorResult(
             Severity.WARNING,
             "installed_plugins_entry",
             "installed_plugins.json not found. Run `autoskillit install`.",
         )
-    try:
-        data = json.loads(_plugins_json.read_text())
-    except (json.JSONDecodeError, OSError):
-        return DoctorResult(
-            Severity.WARNING,
-            "installed_plugins_entry",
-            "installed_plugins.json could not be parsed.",
-        )
-    if "autoskillit@autoskillit-local" in data:
+    if store.contains("autoskillit@autoskillit-local"):
         return DoctorResult(
             Severity.OK,
             "installed_plugins_entry",

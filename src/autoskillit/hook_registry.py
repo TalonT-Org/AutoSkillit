@@ -281,6 +281,8 @@ def find_broken_hook_scripts(settings_path: Path) -> list[str]:
         for entry in data.get("hooks", {}).get(event_type, []):
             for hook in entry.get("hooks", []):
                 cmd = hook.get("command", "")
+                if not _is_own_hook(cmd):  # skip non-autoskillit hooks
+                    continue
                 parts = cmd.split()
                 if len(parts) >= 2:
                     if not Path(parts[-1]).is_file():

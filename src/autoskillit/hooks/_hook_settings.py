@@ -38,6 +38,7 @@ class QuotaHookSettings:
     cache_path: str
     cache_max_age: int
     buffer_seconds: int
+    disabled: bool = False
 
 
 def _read_hook_config() -> dict:
@@ -98,8 +99,11 @@ def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHo
         DEFAULT_BUFFER_SECONDS,
     )
 
+    disabled = bool(hook_config.get("disabled", False))
+
     return QuotaHookSettings(
         cache_path=cache_path,
         cache_max_age=cache_max_age,
         buffer_seconds=buffer_seconds,
+        disabled=disabled,
     )

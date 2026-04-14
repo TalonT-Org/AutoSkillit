@@ -62,7 +62,7 @@ def test_check_quota_not_in_ungated_tools():
 def test_ungated_tools_contains_expected_names():
     from autoskillit.pipeline.gate import UNGATED_TOOLS
 
-    expected = {"open_kitchen", "close_kitchen"}
+    expected = {"open_kitchen", "close_kitchen", "disable_quota_guard"}
     assert UNGATED_TOOLS == expected
 
 
@@ -178,7 +178,7 @@ def test_headless_tools_contains_expected_names():
 def test_free_range_tools_contains_expected_names():
     from autoskillit.core.types import FREE_RANGE_TOOLS
 
-    assert FREE_RANGE_TOOLS == {"open_kitchen", "close_kitchen"}
+    assert FREE_RANGE_TOOLS == {"open_kitchen", "close_kitchen", "disable_quota_guard"}
 
 
 def test_ungated_tools_equals_free_range_tools():

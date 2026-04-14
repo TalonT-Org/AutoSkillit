@@ -605,3 +605,37 @@ def test_resolve_quota_log_dir_and_resolve_log_dir_in_sync(monkeypatch):
         f"  quota_check: {quota_path_xdg}\n"
         f"  session_log: {session_path_xdg}"
     )
+
+
+def test_hook_approves_when_disabled_flag_set_in_hook_config(tmp_path, monkeypatch):
+    """Hook bypasses all checks and approves when disabled=True in hook config.
+
+    Even with a high-utilization blocking cache, the hook must exit 0 with
+    no output when the quota_guard.disabled flag is set.
+    """
+    monkeypatch.chdir(tmp_path)
+    cache = tmp_path / "blocking_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    _write_hook_config(
+        tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS),
+        cache_max_age=300,
+        cache_path=str(cache),
+        extra={"disabled": True},
+    )
+    out, _ = _run_hook(event={"tool_name": "run_skill"})
+    assert out.strip() == ""
+
+
+def test_hook_still_blocks_without_disabled_flag(tmp_path, monkeypatch):
+    """Regression guard: hook still blocks when disabled key is absent from hook config."""
+    monkeypatch.chdir(tmp_path)
+    cache = tmp_path / "blocking_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    _write_hook_config(
+        tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS),
+        cache_max_age=300,
+        cache_path=str(cache),
+    )
+    out, _ = _run_hook(event={"tool_name": "run_skill"})
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"

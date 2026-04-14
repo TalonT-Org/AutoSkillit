@@ -151,7 +151,9 @@ GATED_TOOLS: frozenset[str] = frozenset(
 
 HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check"})
 
-FREE_RANGE_TOOLS: frozenset[str] = frozenset({"open_kitchen", "close_kitchen"})
+FREE_RANGE_TOOLS: frozenset[str] = frozenset(
+    {"open_kitchen", "close_kitchen", "disable_quota_guard"}
+)
 
 UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS
 

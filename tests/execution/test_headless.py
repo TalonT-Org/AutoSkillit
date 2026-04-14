@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -9,6 +10,7 @@ from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     ChannelConfirmation,
     RetryReason,
+    SkillResult,
     SubprocessResult,
     TerminationReason,
 )
@@ -2148,12 +2150,62 @@ class TestCrashSessionLog:
 
         tool_ctx.runner = raising_runner  # type: ignore[assignment]
 
-        with pytest.raises(RuntimeError, match="simulated crash"):
-            await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
+        skill_result = await run_headless_core(
+            "/investigate test", cwd=str(tmp_path), ctx=tool_ctx
+        )
+        assert isinstance(skill_result, SkillResult)
+        assert skill_result.success is False
+        assert skill_result.subtype == "crashed"
+        assert skill_result.is_error is True
+        assert skill_result.exit_code == -1
+        assert skill_result.needs_retry is False
+        assert "simulated crash" in skill_result.result
 
         crash_calls = [f for f in flushed if f.get("termination_reason") == "CRASHED"]
         assert len(crash_calls) >= 1
         assert crash_calls[0]["success"] is False
+
+    @pytest.mark.anyio
+    async def test_crash_exception_text_passed_to_flush(self, monkeypatch, tool_ctx, tmp_path):
+        """flush_session_log receives exception_text with the traceback on crash."""
+        from autoskillit.execution.headless import run_headless_core
+
+        flushed: list[dict] = []
+
+        def fake_flush(**kwargs: object) -> None:
+            flushed.append(dict(kwargs))
+
+        monkeypatch.setattr("autoskillit.execution.flush_session_log", fake_flush)
+
+        async def raising_runner(*args: object, **kwargs: object) -> None:
+            raise OSError("disk full")
+
+        tool_ctx.runner = raising_runner  # type: ignore[assignment]
+
+        await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
+
+        crash_calls = [f for f in flushed if f.get("termination_reason") == "CRASHED"]
+        assert len(crash_calls) >= 1
+        assert "exception_text" in crash_calls[0]
+        assert "OSError: disk full" in crash_calls[0]["exception_text"]
+
+    @pytest.mark.anyio
+    async def test_crash_logs_exception_with_logger_error(self, monkeypatch, tool_ctx, tmp_path):
+        """Runner crash is logged at ERROR level with exc_info."""
+        from autoskillit.execution.headless import run_headless_core
+
+        monkeypatch.setattr("autoskillit.execution.flush_session_log", lambda **kw: None)
+
+        async def raising_runner(*args: object, **kwargs: object) -> None:
+            raise ValueError("bad input")
+
+        tool_ctx.runner = raising_runner  # type: ignore[assignment]
+
+        with patch("autoskillit.execution.headless.logger") as mock_logger:
+            await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
+            mock_logger.error.assert_called_once()
+            call_kwargs = mock_logger.error.call_args
+            assert call_kwargs[1].get("exc_info") is not None
 
 
 class TestRetryBudgetEnforcement:

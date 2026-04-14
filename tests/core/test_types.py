@@ -375,3 +375,31 @@ def test_pr_state_enum_members_are_locked():
         PRState.ERROR,
     }
     assert PRState.DROPPED_HEALTHY.value == "dropped_healthy"
+
+
+class TestSkillResultCrashedFactory:
+    def test_crashed_returns_skill_result_with_correct_fields(self):
+        result = SkillResult.crashed(
+            exception=RuntimeError("boom"),
+            skill_command="/investigate test",
+        )
+        assert result.success is False
+        assert result.subtype == "crashed"
+        assert result.is_error is True
+        assert result.exit_code == -1
+        assert result.needs_retry is False
+        assert result.retry_reason == RetryReason.NONE
+        assert "RuntimeError: boom" in result.result
+        assert result.session_id == ""
+        assert result.stderr == ""
+
+    def test_crashed_to_json_produces_valid_envelope(self):
+        result = SkillResult.crashed(
+            exception=RuntimeError("boom"),
+            skill_command="/investigate test",
+        )
+        data = json.loads(result.to_json())
+        assert "needs_retry" in data
+        assert "session_id" in data
+        assert "subtype" in data
+        assert data["subtype"] == "crashed"

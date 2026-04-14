@@ -1032,3 +1032,25 @@ def test_recover_crashed_sessions_skips_wrong_boot_id(tmp_path, monkeypatch):
     count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path))
 
     assert count == 0
+
+
+def test_flush_writes_crash_exception_file(tmp_path):
+    """When exception_text is provided, flush_session_log writes crash_exception.txt."""
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="test-session",
+        pid=1234,
+        skill_command="/test",
+        success=False,
+        subtype="crashed",
+        exit_code=-1,
+        start_ts=datetime.now(UTC).isoformat(),
+        proc_snapshots=None,
+        termination_reason="CRASHED",
+        exception_text="RuntimeError: boom\n  at headless.py:1023",
+    )
+    session_dir = tmp_path / "sessions" / "test-session"
+    crash_file = session_dir / "crash_exception.txt"
+    assert crash_file.exists()
+    assert "RuntimeError: boom" in crash_file.read_text()

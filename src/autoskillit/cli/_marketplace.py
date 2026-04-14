@@ -17,6 +17,7 @@ from autoskillit.cli._hooks import (
 )
 from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
 from autoskillit.core import atomic_write, is_git_worktree, pkg_root
+from autoskillit.hooks import generate_hooks_json
 
 _VALID_SCOPES = {"user", "project", "local"}
 _MARKETPLACE_NAME = "autoskillit-local"
@@ -153,8 +154,6 @@ def install(*, scope: str = "user") -> bool:
     _clear_plugin_cache()
 
     # Regenerate hooks.json from the canonical registry with absolute paths
-    from autoskillit.hooks import generate_hooks_json
-
     hooks_json_path = pkg_root() / "hooks" / "hooks.json"
     atomic_write(hooks_json_path, json.dumps(generate_hooks_json(), indent=2) + "\n")
 

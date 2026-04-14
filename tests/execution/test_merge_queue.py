@@ -1182,6 +1182,7 @@ class TestFetchRepoMergeStateRetry:
         result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
         assert result["queue_available"] is False
         assert len(sleep_calls) == 1
+        assert sleep_calls[0] == 1.0  # Retry-After header value is '1'
 
     @pytest.mark.anyio
     async def test_retries_on_secondary_rate_limit_403(self, httpx_mock, monkeypatch):
@@ -1192,6 +1193,7 @@ class TestFetchRepoMergeStateRetry:
             sleep_calls.append(secs)
 
         monkeypatch.setattr(_mq.asyncio, "sleep", fake_sleep)
+        monkeypatch.setattr(_mq.random, "uniform", lambda a, b: 0.42)
 
         httpx_mock.add_response(
             url="https://api.github.com/graphql",
@@ -1208,6 +1210,7 @@ class TestFetchRepoMergeStateRetry:
         result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
         assert result["queue_available"] is False
         assert len(sleep_calls) == 1
+        assert sleep_calls[0] == 0.42  # jitter backoff via patched random.uniform
 
     @pytest.mark.anyio
     async def test_raises_on_non_rate_limit_403(self, httpx_mock):

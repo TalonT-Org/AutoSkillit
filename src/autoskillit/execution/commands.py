@@ -6,6 +6,7 @@ import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 
 from autoskillit.core import (
     ClaudeFlags,
@@ -81,7 +82,10 @@ def build_interactive_cmd(
         cmd += [ClaudeFlags.ADD_DIR, str(d)]
     if initial_prompt is not None:
         cmd.append(initial_prompt)
-    return ClaudeInteractiveCmd(cmd=cmd, env=build_claude_env(extras=env_extras))
+    merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
+    if env_extras:
+        merged.update(env_extras)
+    return ClaudeInteractiveCmd(cmd=cmd, env=build_claude_env(extras=merged))
 
 
 def build_headless_cmd(
@@ -103,6 +107,16 @@ def build_headless_cmd(
 # default 25,000 tokens to 50,000, preventing open_kitchen() responses
 # from being persisted to a file instead of returned inline.
 _MAX_MCP_OUTPUT_TOKENS_VALUE: str = "50000"
+
+# Baseline env vars injected into EVERY AutoSkillit-launched Claude session
+# (both interactive and headless). Callers can override via env_extras.
+# Analogous to IDE_ENV_ALWAYS_EXTRAS in _claude_env.py but scoped to
+# session-level concerns rather than IDE scrubbing.
+_SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
+    {
+        "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
+    }
+)
 
 # Variables that build_full_headless_cmd controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
@@ -142,7 +156,10 @@ def build_headless_resume_cmd(
     ]
     if plugin_dir is not None:
         cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_dir)]
-    return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(extras=env_extras))
+    merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
+    if env_extras:
+        merged.update(env_extras)
+    return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(extras=merged))
 
 
 def _ensure_skill_prefix(skill_command: str) -> str:

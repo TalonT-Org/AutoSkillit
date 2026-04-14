@@ -70,6 +70,26 @@ def test_launch_cook_session_extra_env_still_applied(
     assert "CLAUDE_CODE_SSE_PORT" not in env
 
 
+def test_launch_cook_session_env_has_max_mcp_output_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_launch_cook_session (order path) must produce env with MAX_MCP_OUTPUT_TOKENS."""
+    from autoskillit.cli.app import _launch_cook_session
+
+    with (
+        patch("shutil.which", return_value="/usr/bin/claude"),
+        patch(
+            "autoskillit.cli.app.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_run,
+        patch("autoskillit.cli.app.terminal_guard"),
+    ):
+        _launch_cook_session("system prompt", initial_message="hello")
+
+    env = mock_run.call_args.kwargs["env"]
+    assert env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
+
+
 def test_cook_command_env_excludes_ide_vars(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

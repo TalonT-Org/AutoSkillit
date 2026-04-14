@@ -1,5 +1,5 @@
 {
   "name": "autoskillit",
-  "version": "0.8.23",
+  "version": "0.8.24",
   "description": "Orchestrated skill-driven workflows using Claude Code headless sessions"
 }

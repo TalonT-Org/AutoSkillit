@@ -1784,6 +1784,7 @@ def test_doctor_no_dual_when_only_direct(tmp_path: Path, monkeypatch: pytest.Mon
 def test_check_installed_plugins_entry_real_structure_is_ok(tmp_path: Path) -> None:
     """With the real nested format, the check must report OK."""
     from autoskillit.cli._doctor import _check_installed_plugins_entry
+    from autoskillit.core import Severity
 
     p = tmp_path / "installed_plugins.json"
     p.write_text(
@@ -1795,14 +1796,15 @@ def test_check_installed_plugins_entry_real_structure_is_ok(tmp_path: Path) -> N
         )
     )
     result = _check_installed_plugins_entry(plugins_json_path=p)
-    assert result.severity.name == "OK"
+    assert result.severity == Severity.OK
 
 
 def test_check_installed_plugins_entry_flat_structure_is_warning(tmp_path: Path) -> None:
     """A flat structure (wrong format) must not be silently treated as OK."""
     from autoskillit.cli._doctor import _check_installed_plugins_entry
+    from autoskillit.core import Severity
 
     p = tmp_path / "installed_plugins.json"
     p.write_text(json.dumps({"autoskillit@autoskillit-local": {}}))
     result = _check_installed_plugins_entry(plugins_json_path=p)
-    assert result.severity.name == "WARNING"
+    assert result.severity == Severity.WARNING

@@ -73,6 +73,8 @@ async def wait_for_ci(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
+        _start = time.monotonic()
+        _timing_ctx = None
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(tool="wait_for_ci")
         logger.info("wait_for_ci", branch=branch, repo=repo or "(infer)")
@@ -80,6 +82,7 @@ async def wait_for_ci(
         from autoskillit.server import _get_ctx
 
         tool_ctx = _get_ctx()
+        _timing_ctx = tool_ctx
         if tool_ctx.ci_watcher is None:
             return json.dumps(
                 {
@@ -121,7 +124,6 @@ async def wait_for_ci(
             },
         )
 
-        _start = time.monotonic()
         try:
             result = await tool_ctx.ci_watcher.wait(
                 branch,
@@ -155,6 +157,8 @@ async def wait_for_ci(
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("wait_for_ci unhandled exception", exc_info=True)
+        if step_name and _timing_ctx is not None:
+            _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
@@ -472,7 +476,7 @@ async def wait_for_merge_queue(
             )
             return json.dumps(result)
         except Exception as exc:
-            logger.error("autoskillit.wait_for_merge_queue failed", exc_info=exc)
+            logger.error("wait_for_merge_queue ci_watcher error", exc_info=True)
             return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
         finally:
             if step_name:
@@ -542,7 +546,7 @@ async def check_repo_merge_state(
             )
             return json.dumps(state)
         except Exception as exc:
-            logger.error("autoskillit.check_repo_merge_state failed", exc_info=exc)
+            logger.error("check_repo_merge_state ci_watcher error", exc_info=True)
             return json.dumps(
                 {
                     "error": f"{type(exc).__name__}: {exc}",

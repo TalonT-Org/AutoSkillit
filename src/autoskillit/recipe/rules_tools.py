@@ -99,6 +99,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "stall_grace_period",
             "max_stall_retries",
             "not_in_queue_confirmation_cycles",
+            "max_inconclusive_retries",
             "step_name",
         }
     ),

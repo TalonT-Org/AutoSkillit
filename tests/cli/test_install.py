@@ -678,3 +678,74 @@ def test_install_sweeps_all_scopes_for_orphans(
                 assert "pretty_output.py" not in hook["command"], (
                     "Orphaned hook was not evicted from project scope"
                 )
+
+
+def test_install_creates_autoskillit_gitignore(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After install(), .autoskillit/.gitignore must exist (ensure_project_temp was called)."""
+    import importlib as _importlib
+
+    from autoskillit.cli._marketplace import install as _install
+
+    _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+    monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+    )
+    monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli._marketplace.sweep_all_scopes_for_orphans", lambda _: None
+    )
+    monkeypatch.setattr("autoskillit.cli._marketplace.sync_hooks_to_settings", lambda _: None)
+    monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
+    monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
+
+    (tmp_path / ".autoskillit").mkdir()
+    _install(scope="user")
+
+    assert (tmp_path / ".autoskillit" / ".gitignore").exists(), (
+        ".autoskillit/.gitignore must be created by install(), not just by init()"
+    )
+
+
+def test_install_calls_upgrade_when_scripts_dir_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """install() must migrate .autoskillit/scripts/ → .autoskillit/recipes/ if scripts/ exists."""
+    import importlib as _importlib
+
+    from autoskillit.cli._marketplace import install as _install
+
+    _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
+    monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+    )
+    monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli._marketplace.sweep_all_scopes_for_orphans", lambda _: None
+    )
+    monkeypatch.setattr("autoskillit.cli._marketplace.sync_hooks_to_settings", lambda _: None)
+    monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
+    monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
+
+    scripts_dir = tmp_path / ".autoskillit" / "scripts"
+    scripts_dir.mkdir(parents=True)
+
+    _install(scope="user")
+
+    assert (tmp_path / ".autoskillit" / "recipes").exists(), (
+        "install() must migrate scripts/ to recipes/ when scripts/ exists"
+    )
+    assert not scripts_dir.exists(), "scripts/ must be renamed away"

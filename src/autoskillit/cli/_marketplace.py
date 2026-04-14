@@ -93,6 +93,24 @@ def _ensure_marketplace() -> Path:
     return marketplace_dir
 
 
+def _ensure_workspace_ready() -> None:
+    """Repair project workspace state that install() is responsible for.
+
+    Called after the CLAUDECODE guard — only when the actual install proceeds.
+    Idempotent: safe to call on any project state.
+    """
+    from autoskillit.core import ensure_project_temp
+
+    project_dir = Path.cwd()
+    # Repair .autoskillit/.gitignore and ensure temp/ exists
+    if (project_dir / ".autoskillit").is_dir():
+        ensure_project_temp(project_dir)
+
+    # Migrate legacy .autoskillit/scripts/ to .autoskillit/recipes/ if present
+    if (project_dir / ".autoskillit" / "scripts").exists():
+        upgrade()
+
+
 def install(*, scope: str = "user") -> bool:
     """Install the plugin persistently for Claude Code.
 
@@ -131,6 +149,7 @@ def install(*, scope: str = "user") -> bool:
         print("\nThen run: autoskillit init (in your project directory)")
         sys.exit(1)
 
+    _ensure_workspace_ready()
     _clear_plugin_cache()
 
     # Regenerate hooks.json from the canonical registry with absolute paths

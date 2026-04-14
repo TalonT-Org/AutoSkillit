@@ -40,7 +40,7 @@ Capture positional args:
 - `$3` → `all_diagram_paths` (comma-separated, may be empty)
 - `$4` → `visualization_plan_path` (may be empty string)
 
-If `report_path` does not exist, emit `html_path = ` (empty) immediately
+If `report_path` does not exist, emit `html_path = ` (empty) as your final output immediately
 (graceful non-fatal exit — the pipeline continues to begin_archival).
 
 ### Step 1 — Write and execute the embedded renderer

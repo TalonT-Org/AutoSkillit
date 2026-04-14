@@ -332,3 +332,10 @@ class TestBuildFullHeadlessCmd:
     def test_model_omitted_when_none(self):
         spec = build_full_headless_cmd("/investigate foo", **self.BASE)
         assert "--model" not in spec.cmd
+
+    def test_narration_suppression_directive_in_prompt(self):
+        """EFFICIENCY DIRECTIVE must appear in the assembled prompt."""
+        spec = build_full_headless_cmd("/investigate foo", **self.BASE)
+        cmd = spec.cmd
+        prompt_idx = cmd.index("-p") + 1 if "-p" in cmd else cmd.index("--print") + 1
+        assert "EFFICIENCY DIRECTIVE" in cmd[prompt_idx]

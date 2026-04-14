@@ -2293,6 +2293,40 @@ class TestInjectCwdAnchor:
 
 
 # ---------------------------------------------------------------------------
+# Test: _inject_narration_suppression
+# ---------------------------------------------------------------------------
+
+
+class TestInjectNarrationSuppression:
+    def test_appends_efficiency_directive(self):
+        from autoskillit.execution.commands import _inject_narration_suppression
+
+        result = _inject_narration_suppression("Use /make-plan foo")
+        assert "EFFICIENCY DIRECTIVE" in result
+
+    def test_preserves_original_command(self):
+        from autoskillit.execution.commands import _inject_narration_suppression
+
+        original = "Use /autoskillit:investigate problem"
+        result = _inject_narration_suppression(original)
+        assert result.startswith(original)
+
+    def test_directive_targets_inter_tool_prose(self):
+        from autoskillit.execution.commands import _inject_narration_suppression
+
+        result = _inject_narration_suppression("cmd")
+        # Directive must reference tool calls specifically
+        assert "tool" in result.lower()
+
+    def test_directive_exempts_final_response(self):
+        from autoskillit.execution.commands import _inject_narration_suppression
+
+        result = _inject_narration_suppression("cmd")
+        # Must not suppress the final response where structured output tokens live
+        assert "final" in result.lower()
+
+
+# ---------------------------------------------------------------------------
 # Test: _extract_output_paths (Step 1b)
 # ---------------------------------------------------------------------------
 

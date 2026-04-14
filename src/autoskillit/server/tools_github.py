@@ -119,29 +119,35 @@ async def get_issue_title(issue_url: str) -> str:
     Args:
         issue_url: Full GitHub issue URL (https://github.com/owner/repo/issues/42)
                    or shorthand (owner/repo#42).
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    from autoskillit.server import _get_config, _get_ctx
+    try:
+        from autoskillit.server import _get_config, _get_ctx
 
-    tool_ctx = _get_ctx()
-    if tool_ctx.github_client is None:
-        return json.dumps({"success": False, "error": "GitHub client not available."})
+        tool_ctx = _get_ctx()
+        if tool_ctx.github_client is None:
+            return json.dumps({"success": False, "error": "GitHub client not available."})
 
-    config = _get_config()
-    url = issue_url.strip()
-    if url.isdigit():
-        if not config.github.default_repo:
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": "Bare issue number requires github.default_repo in config.",
-                }
-            )
-        url = f"{config.github.default_repo}#{url}"
+        config = _get_config()
+        url = issue_url.strip()
+        if url.isdigit():
+            if not config.github.default_repo:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "Bare issue number requires github.default_repo in config.",
+                    }
+                )
+            url = f"{config.github.default_repo}#{url}"
 
-    result = await tool_ctx.github_client.fetch_title(url)
-    return json.dumps(result)
+        result = await tool_ctx.github_client.fetch_title(url)
+        return json.dumps(result)
+    except Exception as exc:
+        logger.error("get_issue_title unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -177,117 +183,126 @@ async def report_bug(
         severity: "non_blocking" (fire-and-forget) or "blocking" (await completion).
         model: Model override. Empty string = config default.
         step_name: Optional label for token tracking.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    with structlog.contextvars.bound_contextvars(tool="report_bug", cwd=cwd, severity=severity):
-        logger.info("report_bug", error_context=error_context[:80], severity=severity)
-        await _notify(
-            ctx,
-            "info",
-            f"report_bug: {error_context[:60]}",
-            "autoskillit.report_bug",
-            extra={"severity": severity, "cwd": cwd},
-        )
-
-        from autoskillit.server import _get_config, _get_ctx
-
-        tool_ctx = _get_ctx()
-        if tool_ctx.executor is None:
-            return json.dumps({"success": False, "error": "Executor not configured"})
-
-        config = _get_config()
-        cfg = config.report_bug
-
-        # Resolve and create the report directory up front so the path is stable
-        # before the (potentially background) session writes the file.
-        report_dir = Path(cfg.report_dir) if cfg.report_dir else tool_ctx.temp_dir / "bug-reports"
-        report_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-        report_path = report_dir / f"{timestamp}_report.md"
-
-        effective_model = model or cfg.model or ""
-        skill_command = (
-            f"/autoskillit:report-bug\n\n"
-            f"Error context:\n{error_context}\n\n"
-            f"Report output path: {report_path}"
-        )
-
-        log_dir = config.linux_tracing.log_dir if config.linux_tracing is not None else ""
-
-        expected_output_patterns: list[str] = []
-        if tool_ctx.output_pattern_resolver:
-            expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
-
-        from autoskillit.core import WriteBehaviorSpec
-
-        write_spec: WriteBehaviorSpec | None = None
-        if tool_ctx.write_expected_resolver:
-            write_spec = tool_ctx.write_expected_resolver(skill_command)
-
-        if severity == "blocking":
-            result = await _run_report_session(
-                skill_command,
-                cwd,
-                report_path,
-                error_context,
-                tool_ctx.executor,
-                tool_ctx.github_client,
-                config,
-                effective_model,
-                step_name,
-                log_dir=log_dir,
-                expected_output_patterns=expected_output_patterns,
-                write_behavior=write_spec,
+    try:
+        with structlog.contextvars.bound_contextvars(
+            tool="report_bug", cwd=cwd, severity=severity
+        ):
+            logger.info("report_bug", error_context=error_context[:80], severity=severity)
+            await _notify(
+                ctx,
+                "info",
+                f"report_bug: {error_context[:60]}",
+                "autoskillit.report_bug",
+                extra={"severity": severity, "cwd": cwd},
             )
-            if not result["success"]:
-                await _notify(
-                    ctx,
-                    "error",
-                    "report_bug session failed",
-                    "autoskillit.report_bug",
-                    extra={"report_path": str(report_path)},
-                )
-            return json.dumps(result)
 
-        # Non-blocking: supervised background dispatch, return immediately.
-        status_path = report_path.with_suffix(".status.json")
-        atomic_write(
-            status_path,
-            json.dumps(
-                {"status": "pending", "dispatched_at": datetime.now(UTC).isoformat()},
-                indent=2,
-            ),
-        )
-        if tool_ctx.background is None:  # always set by ToolContext.__post_init__
-            raise RuntimeError("ToolContext.background not initialized")
-        tool_ctx.background.submit(
-            _run_report_session(
-                skill_command,
-                cwd,
-                report_path,
-                error_context,
-                tool_ctx.executor,
-                tool_ctx.github_client,
-                config,
-                effective_model,
-                step_name,
-                log_dir=log_dir,
-                expected_output_patterns=expected_output_patterns,
-                write_behavior=write_spec,
-                status_path=status_path,
-            ),
-            label=step_name or "report_bug",
-        )
-        return json.dumps(
-            {
-                "success": True,
-                "status": "dispatched",
-                "report_path": str(report_path),
-                "status_path": str(status_path),
-            }
-        )
+            from autoskillit.server import _get_config, _get_ctx
+
+            tool_ctx = _get_ctx()
+            if tool_ctx.executor is None:
+                return json.dumps({"success": False, "error": "Executor not configured"})
+
+            config = _get_config()
+            cfg = config.report_bug
+
+            # Resolve and create the report directory up front so the path is stable
+            # before the (potentially background) session writes the file.
+            report_dir = (
+                Path(cfg.report_dir) if cfg.report_dir else tool_ctx.temp_dir / "bug-reports"
+            )
+            report_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+            report_path = report_dir / f"{timestamp}_report.md"
+
+            effective_model = model or cfg.model or ""
+            skill_command = (
+                f"/autoskillit:report-bug\n\n"
+                f"Error context:\n{error_context}\n\n"
+                f"Report output path: {report_path}"
+            )
+
+            log_dir = config.linux_tracing.log_dir if config.linux_tracing is not None else ""
+
+            expected_output_patterns: list[str] = []
+            if tool_ctx.output_pattern_resolver:
+                expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
+            from autoskillit.core import WriteBehaviorSpec
+
+            write_spec: WriteBehaviorSpec | None = None
+            if tool_ctx.write_expected_resolver:
+                write_spec = tool_ctx.write_expected_resolver(skill_command)
+
+            if severity == "blocking":
+                result = await _run_report_session(
+                    skill_command,
+                    cwd,
+                    report_path,
+                    error_context,
+                    tool_ctx.executor,
+                    tool_ctx.github_client,
+                    config,
+                    effective_model,
+                    step_name,
+                    log_dir=log_dir,
+                    expected_output_patterns=expected_output_patterns,
+                    write_behavior=write_spec,
+                )
+                if not result["success"]:
+                    await _notify(
+                        ctx,
+                        "error",
+                        "report_bug session failed",
+                        "autoskillit.report_bug",
+                        extra={"report_path": str(report_path)},
+                    )
+                return json.dumps(result)
+
+            # Non-blocking: supervised background dispatch, return immediately.
+            status_path = report_path.with_suffix(".status.json")
+            atomic_write(
+                status_path,
+                json.dumps(
+                    {"status": "pending", "dispatched_at": datetime.now(UTC).isoformat()},
+                    indent=2,
+                ),
+            )
+            if tool_ctx.background is None:  # always set by ToolContext.__post_init__
+                raise RuntimeError("ToolContext.background not initialized")
+            tool_ctx.background.submit(
+                _run_report_session(
+                    skill_command,
+                    cwd,
+                    report_path,
+                    error_context,
+                    tool_ctx.executor,
+                    tool_ctx.github_client,
+                    config,
+                    effective_model,
+                    step_name,
+                    log_dir=log_dir,
+                    expected_output_patterns=expected_output_patterns,
+                    write_behavior=write_spec,
+                    status_path=status_path,
+                ),
+                label=step_name or "report_bug",
+            )
+            return json.dumps(
+                {
+                    "success": True,
+                    "status": "dispatched",
+                    "report_path": str(report_path),
+                    "status_path": str(status_path),
+                }
+            )
+    except Exception as exc:
+        logger.error("report_bug unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 # ---------------------------------------------------------------------------

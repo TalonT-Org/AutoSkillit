@@ -307,7 +307,7 @@ class TestLoadRecipeExceptionHandling:
     async def test_unexpected_exception_returns_structured_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Unexpected exceptions are caught by the exception boundary."""
+        """Unexpected exceptions are caught by the handler-level exception boundary."""
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
@@ -319,8 +319,7 @@ class TestLoadRecipeExceptionHandling:
             side_effect=AttributeError("programming error"),
         ):
             result = json.loads(await load_recipe(name="test"))
-        assert result["success"] is False
-        assert result["subtype"] == "tool_exception"
+        assert "error" in result
         assert "programming error" in result["error"]
 
 

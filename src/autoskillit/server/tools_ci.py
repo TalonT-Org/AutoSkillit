@@ -67,89 +67,95 @@ async def wait_for_ci(
         "action_required", "timed_out", "no_runs", "error", "unknown"),
         and failed_jobs list. Billing limit errors surface as
         conclusion="action_required" with failed_jobs=[].
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="wait_for_ci")
-    logger.info("wait_for_ci", branch=branch, repo=repo or "(infer)")
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.ci_watcher is None:
-        return json.dumps(
-            {
-                "run_id": None,
-                "conclusion": "error",
-                "failed_jobs": [],
-                "error": "CI watcher not configured",
-            }
-        )
-
-    # Infer head_sha from cwd if not provided
-    if head_sha is None and cwd:
-        try:
-            rc, stdout, _ = await _run_subprocess(
-                ["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0
-            )
-            if rc == 0:
-                head_sha = stdout.strip()
-        except Exception:
-            logger.warning("git rev-parse HEAD failed", exc_info=True)
-
-    scope = CIRunScope(
-        workflow=workflow or tool_ctx.default_ci_scope.workflow,
-        head_sha=head_sha,
-        event=event or tool_ctx.default_ci_scope.event,
-    )
-
-    resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
-
-    await _notify(
-        ctx,
-        "info",
-        f"Watching CI for branch {branch}",
-        "autoskillit.wait_for_ci",
-        extra={
-            "repo": resolved_repo or "(infer)",
-            "head_sha": scope.head_sha or "(any)",
-            "workflow": scope.workflow or "(any)",
-        },
-    )
-
-    _start = time.monotonic()
     try:
-        result = await tool_ctx.ci_watcher.wait(
-            branch,
-            repo=resolved_repo or None,
-            scope=scope,
-            timeout_seconds=timeout_seconds,
-            cwd=cwd,
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="wait_for_ci")
+        logger.info("wait_for_ci", branch=branch, repo=repo or "(infer)")
+
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.ci_watcher is None:
+            return json.dumps(
+                {
+                    "run_id": None,
+                    "conclusion": "error",
+                    "failed_jobs": [],
+                    "error": "CI watcher not configured",
+                }
+            )
+
+        # Infer head_sha from cwd if not provided
+        if head_sha is None and cwd:
+            try:
+                rc, stdout, _ = await _run_subprocess(
+                    ["git", "rev-parse", "HEAD"], cwd=cwd, timeout=5.0
+                )
+                if rc == 0:
+                    head_sha = stdout.strip()
+            except Exception:
+                logger.warning("git rev-parse HEAD failed", exc_info=True)
+
+        scope = CIRunScope(
+            workflow=workflow or tool_ctx.default_ci_scope.workflow,
+            head_sha=head_sha,
+            event=event or tool_ctx.default_ci_scope.event,
         )
 
-        # Include head_sha used for this CI check so orchestrators can verify
-        # CI results correspond to the current HEAD after a force-push.
-        if scope.head_sha:
-            result = {**result, "head_sha": scope.head_sha}
+        resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
 
-        conclusion = result.get("conclusion", "unknown")
-        level = "info" if conclusion == "success" else "error"
         await _notify(
             ctx,
-            level,
-            f"CI result: {conclusion}",
+            "info",
+            f"Watching CI for branch {branch}",
             "autoskillit.wait_for_ci",
-            extra={"run_id": result.get("run_id")},
+            extra={
+                "repo": resolved_repo or "(infer)",
+                "head_sha": scope.head_sha or "(any)",
+                "workflow": scope.workflow or "(any)",
+            },
         )
 
-        return json.dumps(result)
+        _start = time.monotonic()
+        try:
+            result = await tool_ctx.ci_watcher.wait(
+                branch,
+                repo=resolved_repo or None,
+                scope=scope,
+                timeout_seconds=timeout_seconds,
+                cwd=cwd,
+            )
+
+            # Include head_sha used for this CI check so orchestrators can verify
+            # CI results correspond to the current HEAD after a force-push.
+            if scope.head_sha:
+                result = {**result, "head_sha": scope.head_sha}
+
+            conclusion = result.get("conclusion", "unknown")
+            level = "info" if conclusion == "success" else "error"
+            await _notify(
+                ctx,
+                level,
+                f"CI result: {conclusion}",
+                "autoskillit.wait_for_ci",
+                extra={"run_id": result.get("run_id")},
+            )
+
+            return json.dumps(result)
+        except Exception as exc:
+            logger.error("autoskillit.wait_for_ci failed", exc_info=exc)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
-        logger.error("autoskillit.wait_for_ci failed", exc_info=exc)
+        logger.error("wait_for_ci unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
-    finally:
-        if step_name:
-            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -177,6 +183,8 @@ async def set_commit_status(
         target_url: Optional URL linking to review details.
         repo: owner/repo format. Inferred from `cwd` git remote if absent.
         cwd: Working directory for repo inference. Defaults to plugin_dir.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
@@ -193,41 +201,45 @@ async def set_commit_status(
             }
         )
 
-    from autoskillit.server import _get_ctx
+    try:
+        from autoskillit.server import _get_ctx
 
-    tool_ctx = _get_ctx()
-    effective_cwd = cwd or tool_ctx.plugin_dir or "."
+        tool_ctx = _get_ctx()
+        effective_cwd = cwd or tool_ctx.plugin_dir or "."
 
-    # Resolve owner/repo if not provided
-    owner_repo = repo
-    if not owner_repo:
-        owner_repo = await infer_repo_from_remote(effective_cwd)
+        # Resolve owner/repo if not provided
+        owner_repo = repo
         if not owner_repo:
-            return json.dumps(
-                {"success": False, "error": "Could not infer owner/repo from git remote"}
-            )
+            owner_repo = await infer_repo_from_remote(effective_cwd)
+            if not owner_repo:
+                return json.dumps(
+                    {"success": False, "error": "Could not infer owner/repo from git remote"}
+                )
 
-    cmd = [
-        "gh",
-        "api",
-        "--method",
-        "POST",
-        f"/repos/{owner_repo}/statuses/{sha}",
-        "-f",
-        f"state={state}",
-        "-f",
-        f"context={context}",
-        "-f",
-        f"description={description}",
-    ]
-    if target_url:
-        cmd += ["-f", f"target_url={target_url}"]
+        cmd = [
+            "gh",
+            "api",
+            "--method",
+            "POST",
+            f"/repos/{owner_repo}/statuses/{sha}",
+            "-f",
+            f"state={state}",
+            "-f",
+            f"context={context}",
+            "-f",
+            f"description={description}",
+        ]
+        if target_url:
+            cmd += ["-f", f"target_url={target_url}"]
 
-    rc, _stdout, stderr = await _run_subprocess(cmd, cwd=effective_cwd, timeout=30.0)
-    if rc != 0:
-        return json.dumps({"success": False, "error": stderr})
+        rc, _stdout, stderr = await _run_subprocess(cmd, cwd=effective_cwd, timeout=30.0)
+        if rc != 0:
+            return json.dumps({"success": False, "error": stderr})
 
-    return json.dumps({"success": True, "sha": sha, "state": state, "context": context})
+        return json.dumps({"success": True, "sha": sha, "state": state, "context": context})
+    except Exception as exc:
+        logger.error("set_commit_status unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
@@ -254,31 +266,37 @@ async def get_ci_status(
 
     Returns:
         JSON with runs list, each containing id, status, conclusion, failed_jobs.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    from autoskillit.server import _get_ctx
+    try:
+        from autoskillit.server import _get_ctx
 
-    tool_ctx = _get_ctx()
-    if tool_ctx.ci_watcher is None:
-        return json.dumps({"runs": [], "error": "CI watcher not configured"})
+        tool_ctx = _get_ctx()
+        if tool_ctx.ci_watcher is None:
+            return json.dumps({"runs": [], "error": "CI watcher not configured"})
 
-    if branch is None and run_id is None:
-        return json.dumps({"runs": [], "error": "Provide branch or run_id"})
+        if branch is None and run_id is None:
+            return json.dumps({"runs": [], "error": "Provide branch or run_id"})
 
-    scope = CIRunScope(
-        workflow=workflow or tool_ctx.default_ci_scope.workflow,
-        event=event or tool_ctx.default_ci_scope.event,
-    )
+        scope = CIRunScope(
+            workflow=workflow or tool_ctx.default_ci_scope.workflow,
+            event=event or tool_ctx.default_ci_scope.event,
+        )
 
-    result = await tool_ctx.ci_watcher.status(
-        branch or "",
-        repo=repo,
-        run_id=run_id,
-        scope=scope,
-        cwd=cwd,
-    )
-    return json.dumps(result)
+        result = await tool_ctx.ci_watcher.status(
+            branch or "",
+            repo=repo,
+            run_id=run_id,
+            scope=scope,
+            cwd=cwd,
+        )
+        return json.dumps(result)
+    except Exception as exc:
+        logger.error("get_ci_status unhandled exception", exc_info=True)
+        return json.dumps({"runs": [], "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": False})
@@ -307,43 +325,48 @@ async def toggle_auto_merge(
     Returns:
         JSON: {"success": bool, "pr_number": int} on success,
               {"success": false, "error": str} on failure.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(
-        tool="toggle_auto_merge", pr_number=pr_number, target_branch=target_branch
-    )
-    await _notify(
-        ctx,
-        "info",
-        f"Toggling auto-merge for PR #{pr_number} on {target_branch!r}",
-        "autoskillit.toggle_auto_merge",
-        extra={"pr_number": pr_number, "target_branch": target_branch},
-    )
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-
-    if tool_ctx.merge_queue_watcher is None:
-        return json.dumps(
-            {
-                "success": False,
-                "error": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
-            }
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            tool="toggle_auto_merge", pr_number=pr_number, target_branch=target_branch
+        )
+        await _notify(
+            ctx,
+            "info",
+            f"Toggling auto-merge for PR #{pr_number} on {target_branch!r}",
+            "autoskillit.toggle_auto_merge",
+            extra={"pr_number": pr_number, "target_branch": target_branch},
         )
 
-    resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
+        from autoskillit.server import _get_ctx
 
-    result = await tool_ctx.merge_queue_watcher.toggle(
-        pr_number=pr_number,
-        target_branch=target_branch,
-        repo=resolved_repo or None,
-        cwd=cwd,
-    )
-    return json.dumps(result)
+        tool_ctx = _get_ctx()
+
+        if tool_ctx.merge_queue_watcher is None:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
+                }
+            )
+
+        resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
+
+        result = await tool_ctx.merge_queue_watcher.toggle(
+            pr_number=pr_number,
+            target_branch=target_branch,
+            repo=resolved_repo or None,
+            cwd=cwd,
+        )
+        return json.dumps(result)
+    except Exception as exc:
+        logger.error("toggle_auto_merge unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": False})
@@ -401,57 +424,62 @@ async def wait_for_merge_queue(
           dropped_healthy  — auto-merge disabled on a PR with no CI/conflict issues.
           timeout          — polling budget exhausted before a terminal state was reached.
           error            — watcher raised an unexpected exception.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(
-        tool="wait_for_merge_queue", pr_number=pr_number, target_branch=target_branch
-    )
-    await _notify(
-        ctx,
-        "info",
-        f"Waiting for PR #{pr_number} in merge queue on {target_branch!r}",
-        "autoskillit.wait_for_merge_queue",
-        extra={"pr_number": pr_number, "target_branch": target_branch},
-    )
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-
-    if tool_ctx.merge_queue_watcher is None:
-        return json.dumps(
-            {
-                "success": False,
-                "pr_state": "error",
-                "reason": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
-            }
-        )
-
-    resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
-
-    _start = time.monotonic()
     try:
-        result = await tool_ctx.merge_queue_watcher.wait(
-            pr_number=pr_number,
-            target_branch=target_branch,
-            repo=resolved_repo or None,
-            cwd=cwd,
-            timeout_seconds=timeout_seconds,
-            poll_interval=poll_interval,
-            stall_grace_period=stall_grace_period,
-            max_stall_retries=max_stall_retries,
-            not_in_queue_confirmation_cycles=not_in_queue_confirmation_cycles,
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            tool="wait_for_merge_queue", pr_number=pr_number, target_branch=target_branch
         )
-        return json.dumps(result)
+        await _notify(
+            ctx,
+            "info",
+            f"Waiting for PR #{pr_number} in merge queue on {target_branch!r}",
+            "autoskillit.wait_for_merge_queue",
+            extra={"pr_number": pr_number, "target_branch": target_branch},
+        )
+
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+
+        if tool_ctx.merge_queue_watcher is None:
+            return json.dumps(
+                {
+                    "success": False,
+                    "pr_state": "error",
+                    "reason": "merge_queue_watcher not configured (missing GITHUB_TOKEN?)",
+                }
+            )
+
+        resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or repo or None)
+
+        _start = time.monotonic()
+        try:
+            result = await tool_ctx.merge_queue_watcher.wait(
+                pr_number=pr_number,
+                target_branch=target_branch,
+                repo=resolved_repo or None,
+                cwd=cwd,
+                timeout_seconds=timeout_seconds,
+                poll_interval=poll_interval,
+                stall_grace_period=stall_grace_period,
+                max_stall_retries=max_stall_retries,
+                not_in_queue_confirmation_cycles=not_in_queue_confirmation_cycles,
+            )
+            return json.dumps(result)
+        except Exception as exc:
+            logger.error("autoskillit.wait_for_merge_queue failed", exc_info=exc)
+            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
-        logger.error("autoskillit.wait_for_merge_queue failed", exc_info=exc)
+        logger.error("wait_for_merge_queue unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
-    finally:
-        if step_name:
-            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
@@ -483,35 +511,52 @@ async def check_repo_merge_state(
     - ``ci_event``: ``"push"`` | ``"merge_group"`` | ``null`` — recommended
       event to use when polling CI via wait_for_ci.
     On any error, returns an error field alongside the four boolean/null defaults.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-    _start = time.monotonic()
     try:
-        resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or None)
-        if not resolved_repo or "/" not in resolved_repo:
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        _start = time.monotonic()
+        try:
+            resolved_repo = await infer_repo_from_remote(cwd, hint=remote_url or None)
+            if not resolved_repo or "/" not in resolved_repo:
+                return json.dumps(
+                    {
+                        "error": f"Could not resolve owner/repo from cwd={cwd!r}",
+                        "queue_available": False,
+                        "merge_group_trigger": False,
+                        "auto_merge_available": False,
+                        "ci_event": None,
+                    }
+                )
+            owner, repo = resolved_repo.split("/", 1)
+            state = await fetch_repo_merge_state(
+                owner=owner,
+                repo=repo,
+                branch=branch,
+                token=tool_ctx.config.github.token,
+            )
+            return json.dumps(state)
+        except Exception as exc:
+            logger.error("autoskillit.check_repo_merge_state failed", exc_info=exc)
             return json.dumps(
                 {
-                    "error": f"Could not resolve owner/repo from cwd={cwd!r}",
+                    "error": f"{type(exc).__name__}: {exc}",
                     "queue_available": False,
                     "merge_group_trigger": False,
                     "auto_merge_available": False,
                     "ci_event": None,
                 }
             )
-        owner, repo = resolved_repo.split("/", 1)
-        state = await fetch_repo_merge_state(
-            owner=owner,
-            repo=repo,
-            branch=branch,
-            token=tool_ctx.config.github.token,
-        )
-        return json.dumps(state)
+        finally:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
-        logger.error("autoskillit.check_repo_merge_state failed", exc_info=exc)
+        logger.error("check_repo_merge_state unhandled exception", exc_info=True)
         return json.dumps(
             {
                 "error": f"{type(exc).__name__}: {exc}",
@@ -521,6 +566,3 @@ async def check_repo_merge_state(
                 "ci_event": None,
             }
         )
-    finally:
-        if step_name:
-            tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

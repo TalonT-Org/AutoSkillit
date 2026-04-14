@@ -190,77 +190,82 @@ async def prepare_issue(
         labels: Additional labels to apply beyond triage labels (optional).
         dry_run: When True, classifies and previews without creating or labeling.
         split: When True, splits mixed-concern issues into sub-issues automatically.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="prepare_issue", title=title[:60])
-    logger.info("prepare_issue", title=title[:60], dry_run=dry_run, split=split)
-    await _notify(
-        ctx,
-        "info",
-        f"prepare_issue: {title[:60]}",
-        "autoskillit.prepare_issue",
-        extra={"dry_run": dry_run, "split": split},
-    )
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.executor is None:
-        return json.dumps({"success": False, "error": "Executor not configured"})
-
-    if labels:
-        if err := tool_ctx.config.github.check_labels_allowed(labels):
-            return json.dumps({"success": False, "error": err})
-
-    skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
-
-    expected_output_patterns: list[str] = []
-    if tool_ctx.output_pattern_resolver:
-        expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
-
-    write_spec: WriteBehaviorSpec | None = None
-    if tool_ctx.write_expected_resolver:
-        write_spec = tool_ctx.write_expected_resolver(skill_command)
-
-    result = await tool_ctx.executor.run(
-        skill_command,
-        str(Path.cwd()),
-        expected_output_patterns=expected_output_patterns,
-        write_behavior=write_spec,
-    )
-
-    if not result.success:
-        return json.dumps(
-            _build_headless_error_response(result, error=_retry_reason_to_error(result))
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="prepare_issue", title=title[:60])
+        logger.info("prepare_issue", title=title[:60], dry_run=dry_run, split=split)
+        await _notify(
+            ctx,
+            "info",
+            f"prepare_issue: {title[:60]}",
+            "autoskillit.prepare_issue",
+            extra={"dry_run": dry_run, "split": split},
         )
 
-    if result.result is None or not result.result.strip():
-        return json.dumps(
-            _build_headless_error_response(
-                result,
-                error="session completed but output was empty (drain race)",
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.executor is None:
+            return json.dumps({"success": False, "error": "Executor not configured"})
+
+        if labels:
+            if err := tool_ctx.config.github.check_labels_allowed(labels):
+                return json.dumps({"success": False, "error": err})
+
+        skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
+
+        expected_output_patterns: list[str] = []
+        if tool_ctx.output_pattern_resolver:
+            expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
+        write_spec: WriteBehaviorSpec | None = None
+        if tool_ctx.write_expected_resolver:
+            write_spec = tool_ctx.write_expected_resolver(skill_command)
+
+        result = await tool_ctx.executor.run(
+            skill_command,
+            str(Path.cwd()),
+            expected_output_patterns=expected_output_patterns,
+            write_behavior=write_spec,
+        )
+
+        if not result.success:
+            return json.dumps(
+                _build_headless_error_response(result, error=_retry_reason_to_error(result))
             )
+
+        if result.result is None or not result.result.strip():
+            return json.dumps(
+                _build_headless_error_response(
+                    result,
+                    error="session completed but output was empty (drain race)",
+                )
+            )
+
+        parsed = _parse_prepare_result(result.result)
+        # Distinguish block-parse failures (block absent or malformed JSON) from skill-level data.
+        # The sentinel errors from _parse_prepare_result signal a block-extraction failure —
+        # these are not the same as skill-internal errors embedded in a valid block.
+        if parsed.get("error") in _BLOCK_PARSE_ERRORS:
+            return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
+
+        # Block parsed successfully. result.success=True is the authoritative signal —
+        # the parsed block's "success" field (if any) must not overwrite it.
+        return json.dumps(
+            {
+                "success": True,
+                "status": "complete",
+                **_without_success_key(parsed),
+            }
         )
-
-    parsed = _parse_prepare_result(result.result)
-    # Distinguish block-parse failures (block absent or malformed JSON) from skill-level data.
-    # The sentinel errors from _parse_prepare_result signal a block-extraction failure —
-    # these are not the same as skill-internal errors embedded in a valid block.
-    if parsed.get("error") in _BLOCK_PARSE_ERRORS:
-        return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
-
-    # Block parsed successfully. result.success=True is the authoritative signal —
-    # the parsed block's "success" field (if any) must not overwrite it.
-    return json.dumps(
-        {
-            "success": True,
-            "status": "complete",
-            **_without_success_key(parsed),
-        }
-    )
+    except Exception as exc:
+        logger.error("prepare_issue unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -291,73 +296,78 @@ async def enrich_issues(
         batch: Filter candidates by batch:N label in addition to recipe:implementation.
         dry_run: When True, previews generated requirements without editing issues.
         repo: Target repository as owner/repo. Falls back to gh default repo if None.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(
-        tool="enrich_issues",
-        issue_number=issue_number,
-        batch=batch,
-        dry_run=dry_run,
-    )
-    logger.info("enrich_issues", issue_number=issue_number, batch=batch, dry_run=dry_run)
-    await _notify(
-        ctx,
-        "info",
-        "enrich_issues: backfilling requirements on recipe:implementation issues",
-        "autoskillit.enrich_issues",
-        extra={"dry_run": dry_run},
-    )
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.executor is None:
-        return json.dumps({"success": False, "error": "Executor not configured"})
-
-    skill_command = _build_enrich_skill_command(issue_number, batch, dry_run, repo)
-
-    expected_output_patterns: list[str] = []
-    if tool_ctx.output_pattern_resolver:
-        expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
-
-    write_spec: WriteBehaviorSpec | None = None
-    if tool_ctx.write_expected_resolver:
-        write_spec = tool_ctx.write_expected_resolver(skill_command)
-
-    result = await tool_ctx.executor.run(
-        skill_command,
-        str(Path.cwd()),
-        expected_output_patterns=expected_output_patterns,
-        write_behavior=write_spec,
-    )
-
-    if not result.success:
-        return json.dumps(
-            _build_headless_error_response(result, error=_retry_reason_to_error(result))
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            tool="enrich_issues",
+            issue_number=issue_number,
+            batch=batch,
+            dry_run=dry_run,
+        )
+        logger.info("enrich_issues", issue_number=issue_number, batch=batch, dry_run=dry_run)
+        await _notify(
+            ctx,
+            "info",
+            "enrich_issues: backfilling requirements on recipe:implementation issues",
+            "autoskillit.enrich_issues",
+            extra={"dry_run": dry_run},
         )
 
-    if result.result is None or not result.result.strip():
-        return json.dumps(
-            _build_headless_error_response(
-                result,
-                error="session completed but output was empty (drain race)",
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.executor is None:
+            return json.dumps({"success": False, "error": "Executor not configured"})
+
+        skill_command = _build_enrich_skill_command(issue_number, batch, dry_run, repo)
+
+        expected_output_patterns: list[str] = []
+        if tool_ctx.output_pattern_resolver:
+            expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
+        write_spec: WriteBehaviorSpec | None = None
+        if tool_ctx.write_expected_resolver:
+            write_spec = tool_ctx.write_expected_resolver(skill_command)
+
+        result = await tool_ctx.executor.run(
+            skill_command,
+            str(Path.cwd()),
+            expected_output_patterns=expected_output_patterns,
+            write_behavior=write_spec,
+        )
+
+        if not result.success:
+            return json.dumps(
+                _build_headless_error_response(result, error=_retry_reason_to_error(result))
             )
+
+        if result.result is None or not result.result.strip():
+            return json.dumps(
+                _build_headless_error_response(
+                    result,
+                    error="session completed but output was empty (drain race)",
+                )
+            )
+
+        parsed = _parse_enrich_result(result.result)
+        if parsed.get("error") in _BLOCK_PARSE_ERRORS:
+            return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
+
+        return json.dumps(
+            {
+                "success": True,
+                "status": "complete",
+                **_without_success_key(parsed),
+            }
         )
-
-    parsed = _parse_enrich_result(result.result)
-    if parsed.get("error") in _BLOCK_PARSE_ERRORS:
-        return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
-
-    return json.dumps(
-        {
-            "success": True,
-            "status": "complete",
-            **_without_success_key(parsed),
-        }
-    )
+    except Exception as exc:
+        logger.error("enrich_issues unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -384,83 +394,88 @@ async def claim_issue(
         allow_reentry: When True and the in-progress label is already present, returns
                        claimed=True with reentry=True instead of claimed=False. Used by
                        process-issues to re-enter recipes for upfront-claimed issues.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="claim_issue", issue_url=issue_url)
-    logger.info("claim_issue", issue_url=issue_url)
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.github_client is None:
-        return json.dumps(
-            {"success": False, "error": "GitHub token required for label management"}
-        )
-
-    effective_label = label or tool_ctx.config.github.in_progress_label
-
     try:
-        owner, repo, issue_number = _parse_issue_ref(issue_url)
-    except ValueError as exc:
-        return json.dumps({"success": False, "error": str(exc)})
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="claim_issue", issue_url=issue_url)
+        logger.info("claim_issue", issue_url=issue_url)
 
-    if err := tool_ctx.config.github.check_label_allowed(effective_label):
-        return json.dumps({"success": False, "error": err})
+        from autoskillit.server import _get_ctx
 
-    result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
-    if not result.get("success"):
-        return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
+        tool_ctx = _get_ctx()
+        if tool_ctx.github_client is None:
+            return json.dumps(
+                {"success": False, "error": "GitHub token required for label management"}
+            )
 
-    current_labels = _extract_label_names(result.get("labels", []))
-    if effective_label in current_labels:
-        if allow_reentry:
+        effective_label = label or tool_ctx.config.github.in_progress_label
+
+        try:
+            owner, repo, issue_number = _parse_issue_ref(issue_url)
+        except ValueError as exc:
+            return json.dumps({"success": False, "error": str(exc)})
+
+        if err := tool_ctx.config.github.check_label_allowed(effective_label):
+            return json.dumps({"success": False, "error": err})
+
+        result = await tool_ctx.github_client.fetch_issue(issue_url, include_comments=False)
+        if not result.get("success"):
+            return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
+
+        current_labels = _extract_label_names(result.get("labels", []))
+        if effective_label in current_labels:
+            if allow_reentry:
+                return json.dumps(
+                    {
+                        "success": True,
+                        "claimed": True,
+                        "reentry": True,
+                        "issue_number": issue_number,
+                        "label": effective_label,
+                    }
+                )
             return json.dumps(
                 {
                     "success": True,
-                    "claimed": True,
-                    "reentry": True,
-                    "issue_number": issue_number,
-                    "label": effective_label,
+                    "claimed": False,
+                    "reason": (
+                        f"Issue #{issue_number} already has '{effective_label}' label"
+                        " — another session may be processing it"
+                    ),
                 }
             )
+
+        await tool_ctx.github_client.ensure_label(
+            owner,
+            repo,
+            effective_label,
+            color="fbca04",
+            description="Issue is actively being processed by a pipeline session",
+        )
+
+        add_result = await tool_ctx.github_client.add_labels(
+            owner, repo, issue_number, [effective_label]
+        )
+        if not add_result.get("success"):
+            return json.dumps(
+                {"success": False, "error": add_result.get("error", "add_labels failed")}
+            )
+
         return json.dumps(
             {
                 "success": True,
-                "claimed": False,
-                "reason": (
-                    f"Issue #{issue_number} already has '{effective_label}' label"
-                    " — another session may be processing it"
-                ),
+                "claimed": True,
+                "issue_number": issue_number,
+                "label": effective_label,
             }
         )
-
-    await tool_ctx.github_client.ensure_label(
-        owner,
-        repo,
-        effective_label,
-        color="fbca04",
-        description="Issue is actively being processed by a pipeline session",
-    )
-
-    add_result = await tool_ctx.github_client.add_labels(
-        owner, repo, issue_number, [effective_label]
-    )
-    if not add_result.get("success"):
-        return json.dumps(
-            {"success": False, "error": add_result.get("error", "add_labels failed")}
-        )
-
-    return json.dumps(
-        {
-            "success": True,
-            "claimed": True,
-            "issue_number": issue_number,
-            "label": effective_label,
-        }
-    )
+    except Exception as exc:
+        logger.error("claim_issue unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -487,96 +502,107 @@ async def release_issue(
         label: Label name to remove. Defaults to github.in_progress_label from config.
         target_branch: Branch the PR was merged into. When non-default, applies staged label.
         staged_label: Label name for staged state. Defaults to github.staged_label from config.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="release_issue", issue_url=issue_url)
-    logger.info("release_issue", issue_url=issue_url)
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.github_client is None:
-        return json.dumps(
-            {"success": False, "error": "GitHub token required for label management"}
-        )
-
-    effective_label = label or tool_ctx.config.github.in_progress_label
-
     try:
-        owner, repo, issue_number = _parse_issue_ref(issue_url)
-    except ValueError as exc:
-        return json.dumps({"success": False, "error": str(exc)})
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="release_issue", issue_url=issue_url)
+        logger.info("release_issue", issue_url=issue_url)
 
-    result = await tool_ctx.github_client.remove_label(owner, repo, issue_number, effective_label)
-    if not result.get("success", False):
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.github_client is None:
+            return json.dumps(
+                {"success": False, "error": "GitHub token required for label management"}
+            )
+
+        effective_label = label or tool_ctx.config.github.in_progress_label
+
+        try:
+            owner, repo, issue_number = _parse_issue_ref(issue_url)
+        except ValueError as exc:
+            return json.dumps({"success": False, "error": str(exc)})
+
+        result = await tool_ctx.github_client.remove_label(
+            owner, repo, issue_number, effective_label
+        )
+        if not result.get("success", False):
+            return json.dumps(
+                {
+                    "success": False,
+                    "issue_number": issue_number,
+                    "label": effective_label,
+                    "staged": False,
+                    "staged_label": None,
+                }
+            )
+
+        # Determine if staging is needed
+        promotion_target = tool_ctx.config.branching.promotion_target
+        should_stage = target_branch is not None and target_branch != promotion_target
+
+        staged = False
+        effective_staged_label = staged_label or tool_ctx.config.github.staged_label
+
+        if should_stage:
+            if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "issue_number": issue_number,
+                        "label": effective_staged_label,
+                        "error": err,
+                    }
+                )
+
+            ensure_result = await tool_ctx.github_client.ensure_label(
+                owner,
+                repo,
+                effective_staged_label,
+                color="0075ca",
+                description=(
+                    f"Implementation staged and waiting for promotion to {promotion_target}"
+                ),
+            )
+            if not ensure_result.get("success"):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "issue_number": issue_number,
+                        "label": effective_label,
+                        "error": (
+                            f"Failed to ensure staged label: {ensure_result.get('error', '?')}"
+                        ),
+                    }
+                )
+
+            apply_result = await tool_ctx.github_client.add_labels(
+                owner, repo, issue_number, [effective_staged_label]
+            )
+            if not apply_result.get("success"):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "issue_number": issue_number,
+                        "label": effective_label,
+                        "error": f"Failed to apply staged label: {apply_result.get('error', '?')}",
+                    }
+                )
+            staged = True
+
         return json.dumps(
             {
-                "success": False,
+                "success": True,
                 "issue_number": issue_number,
                 "label": effective_label,
-                "staged": False,
-                "staged_label": None,
+                "staged": staged,
+                "staged_label": effective_staged_label if staged else None,
             }
         )
-
-    # Determine if staging is needed
-    promotion_target = tool_ctx.config.branching.promotion_target
-    should_stage = target_branch is not None and target_branch != promotion_target
-
-    staged = False
-    effective_staged_label = staged_label or tool_ctx.config.github.staged_label
-
-    if should_stage:
-        if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
-            return json.dumps(
-                {
-                    "success": False,
-                    "issue_number": issue_number,
-                    "label": effective_staged_label,
-                    "error": err,
-                }
-            )
-
-        ensure_result = await tool_ctx.github_client.ensure_label(
-            owner,
-            repo,
-            effective_staged_label,
-            color="0075ca",
-            description=(f"Implementation staged and waiting for promotion to {promotion_target}"),
-        )
-        if not ensure_result.get("success"):
-            return json.dumps(
-                {
-                    "success": False,
-                    "issue_number": issue_number,
-                    "label": effective_label,
-                    "error": (f"Failed to ensure staged label: {ensure_result.get('error', '?')}"),
-                }
-            )
-
-        apply_result = await tool_ctx.github_client.add_labels(
-            owner, repo, issue_number, [effective_staged_label]
-        )
-        if not apply_result.get("success"):
-            return json.dumps(
-                {
-                    "success": False,
-                    "issue_number": issue_number,
-                    "label": effective_label,
-                    "error": f"Failed to apply staged label: {apply_result.get('error', '?')}",
-                }
-            )
-        staged = True
-
-    return json.dumps(
-        {
-            "success": True,
-            "issue_number": issue_number,
-            "label": effective_label,
-            "staged": staged,
-            "staged_label": effective_staged_label if staged else None,
-        }
-    )
+    except Exception as exc:
+        logger.error("release_issue unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

@@ -2,7 +2,8 @@
 
 Kitchen tools (40 gated + 1 headless-tagged) are hidden at startup via FastMCP v3
 mcp.disable(tags={'kitchen'}) applied once after all tool modules are imported.
-Each new session sees only the 2 free-range tools (open_kitchen and close_kitchen).
+Each new session sees only the 3 free-range tools (open_kitchen, close_kitchen,
+and disable_quota_guard).
 Headless sessions (AUTOSKILLIT_HEADLESS=1) pre-reveal only headless-tagged tools
 (test_check) via mcp.enable(tags={'headless'}) — not all kitchen tools.
 Calling the open_kitchen tool reveals all 41 kitchen-tagged tools for that session

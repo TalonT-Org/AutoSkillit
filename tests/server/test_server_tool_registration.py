@@ -78,6 +78,7 @@ class TestToolRegistration:
             "get_ci_status",
             "open_kitchen",
             "close_kitchen",
+            "disable_quota_guard",
             "create_unique_branch",
             "check_pr_mergeable",
             "write_telemetry_files",

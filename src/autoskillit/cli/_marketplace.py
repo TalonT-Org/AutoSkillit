@@ -109,7 +109,10 @@ def _ensure_workspace_ready() -> None:
 
     # Migrate legacy .autoskillit/scripts/ to .autoskillit/recipes/ if present
     if (project_dir / ".autoskillit" / "scripts").exists():
-        upgrade()
+        try:
+            upgrade()
+        except OSError as exc:
+            print(f"Warning: migration upgrade() failed (non-fatal): {exc}")
 
 
 def install(*, scope: str = "user") -> bool:

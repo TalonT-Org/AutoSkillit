@@ -738,6 +738,9 @@ def main() -> None:
     """Entry point for autoskillit."""
     _first_arg = sys.argv[1] if len(sys.argv) > 1 else "serve"
     if _first_arg != "serve":
+        from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
+
+        evict_direct_mcp_entry(_user_claude_json_path())  # silent heal for stale installs
         from autoskillit.cli._update_checks import run_update_checks
 
         run_update_checks()

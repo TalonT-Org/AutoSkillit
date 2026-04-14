@@ -355,6 +355,28 @@ def _register_mcp_server(claude_json_path: Path) -> None:
     atomic_write(claude_json_path, json.dumps(data, indent=2))
 
 
+def evict_direct_mcp_entry(claude_json_path: Path) -> bool:
+    """Remove mcpServers['autoskillit'] from ~/.claude.json if present.
+
+    Returns True if the entry was removed, False if nothing changed.
+    Fail-open: any I/O or parse error returns False without raising.
+    """
+    if not claude_json_path.exists():
+        return False
+    try:
+        data: dict = json.loads(claude_json_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    if "autoskillit" not in data.get("mcpServers", {}):
+        return False
+    del data["mcpServers"]["autoskillit"]
+    try:
+        atomic_write(claude_json_path, json.dumps(data, indent=2))
+    except OSError:
+        return False
+    return True
+
+
 def _print_next_steps(*, context: str = "install") -> None:
     _B, _C, _D, _G, _Y, _R = _colors()
     if context == "install":
@@ -433,6 +455,8 @@ def _register_all(scope: str, project_dir: Path) -> None:
     plugin_ok = _is_plugin_installed()
     if not plugin_ok:
         _register_mcp_server(_user_claude_json_path())
+    else:
+        evict_direct_mcp_entry(_user_claude_json_path())  # remove stale direct entry
 
     # --- Summary block ---
     print()

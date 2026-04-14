@@ -476,6 +476,39 @@ class TestResolveFailuresDirtyTreeContract:
         )
 
 
+class TestResolveFailuresCITruthContract:
+    """resolve-failures SKILL.md must document the CI-truth rule."""
+
+    def test_resolve_failures_rejects_local_pass_when_ci_failing(self):
+        skill_md = _project_root() / "src/autoskillit/skills_extended/resolve-failures/SKILL.md"
+        content = skill_md.read_text().lower()
+        # Must mention that CI is the source of truth and local pass != resolution
+        assert "ci is the source of truth" in content or (
+            "source of truth" in content and "ci" in content
+        ), "resolve-failures SKILL.md must state CI is the source of truth"
+
+    def test_resolve_failures_documents_flaky_test_investigation(self):
+        skill_md = _project_root() / "src/autoskillit/skills_extended/resolve-failures/SKILL.md"
+        content = skill_md.read_text().lower()
+        # Must describe what to do when tests pass locally but CI failed
+        assert (
+            "passes locally" in content
+            or "flak" in content
+            or ("locally" in content and "ci" in content and "not" in content)
+        ), "resolve-failures SKILL.md must document the flaky test / local-pass != resolution case"
+
+    def test_resolve_failures_parses_ci_context_args(self):
+        skill_md = _project_root() / "src/autoskillit/skills_extended/resolve-failures/SKILL.md"
+        content = skill_md.read_text()
+        # Must document parsing of ci_conclusion and diagnosis_path
+        assert (
+            "ci_conclusion" in content or "ci_failed" in content or "diagnosis_path" in content
+        ), (
+            "resolve-failures SKILL.md must document parsing of CI context arguments "
+            "passed by the resolve_ci recipe step"
+        )
+
+
 def test_claude_md_documents_all_source_modules() -> None:
     """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
 

@@ -64,7 +64,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "get_quota_events",
         ),
     ),
-    ("Kitchen", ("open_kitchen", "close_kitchen")),
+    ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard")),
 )
 
 

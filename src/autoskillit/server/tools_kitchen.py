@@ -114,7 +114,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "get_quota_events",
         ),
     ),
-    ("Kitchen", ("open_kitchen", "close_kitchen")),
+    ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard")),
 )
 
 
@@ -425,4 +425,50 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
         return "Kitchen is closed."
     except Exception as exc:
         logger.error("close_kitchen unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+@mcp.tool(tags={"autoskillit"})
+@track_response_size("disable_quota_guard")
+def disable_quota_guard() -> str:
+    """Disable the quota guard for the remainder of this kitchen session.
+
+    The quota guard blocks run_skill calls when API utilization exceeds a
+    threshold. Invoke this tool when you decide the work is worth the quota
+    spend and want to override the guard for the current session.
+
+    Session-scoped only: the guard re-activates when the kitchen is closed
+    and reopened. Does not modify persistent configuration.
+
+    Never raises.
+    """
+    try:
+        if (h := _require_not_headless("disable_quota_guard")) is not None:
+            return h
+        hook_cfg_path = _hook_config_path(Path.cwd())
+        if not hook_cfg_path.exists():
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "Kitchen is not open — hook config file absent. Open the kitchen first.",
+                }
+            )
+        try:
+            payload = json.loads(hook_cfg_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            return json.dumps(
+                {"success": False, "error": f"Failed to read hook config: {type(exc).__name__}: {exc}"}
+            )
+        quota_section = payload.get("quota_guard", {})
+        quota_section["disabled"] = True
+        payload["quota_guard"] = quota_section
+        atomic_write(hook_cfg_path, json.dumps(payload))
+        return json.dumps(
+            {
+                "success": True,
+                "content": "Quota guard disabled for this session. run_skill calls will no longer be blocked by quota checks.",
+            }
+        )
+    except Exception as exc:
+        logger.error("disable_quota_guard unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

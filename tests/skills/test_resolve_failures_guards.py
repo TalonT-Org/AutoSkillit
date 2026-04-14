@@ -1,8 +1,8 @@
 """Guards for resolve-failures SKILL.md: polling-cascade and output-bloat fixes."""
+
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from autoskillit.core.paths import pkg_root
 
@@ -26,6 +26,7 @@ def _extract_step(text: str, step_id: str) -> str:
 
 
 # --- Polling-cascade fix ---
+
 
 def test_resolve_failures_step2_prohibits_bash_test_run() -> None:
     """Step 2 must not instruct running tests via Bash (cd … && {test_command}).
@@ -76,6 +77,7 @@ def test_resolve_failures_fix_loop_prescribes_test_check_mcp() -> None:
 
 # --- Output-bloat fix ---
 
+
 def test_resolve_failures_fix_loop_instructs_output_summarization() -> None:
     """Step 3 must instruct the LLM to retain only failure signal, discarding full stdout.
 
@@ -100,7 +102,7 @@ def test_resolve_failures_fix_loop_instructs_stdout_discard() -> None:
     text = _skill_text()
     step3 = _extract_step(text, "Step 3")
     has_discard = bool(
-        re.search(r"discard|do not retain|not retain.{0,40}full|full.{0,40}output", step3, re.IGNORECASE)
+        re.search(r"discard.{0,60}(pytest|stdout|full output)", step3, re.IGNORECASE)
     )
     assert has_discard, (
         "resolve-failures Step 3 must explicitly instruct discarding full pytest stdout "

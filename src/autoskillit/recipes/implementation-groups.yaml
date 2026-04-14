@@ -824,11 +824,33 @@ steps:
     skip_when_false: "inputs.open_pr"
 
   queue_ejected_fix:
+    tool: run_cmd
+    with:
+      cmd: >
+        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+        then echo 'clean';
+        else git rebase --abort 2>/dev/null || true; echo 'conflicts';
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "queue_ejected_fix"
+    on_result:
+      - when: "${{ result.stdout | trim }} == clean"
+        route: re_push_queue_fix
+      - route: resolve_queue_merge_conflicts
+    on_failure: resolve_queue_merge_conflicts
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Attempts a cheap rebase before invoking the full conflict-resolution skill.
+      On a clean rebase (stdout "clean"), skips the skill and proceeds directly to
+      re_push_queue_fix. On conflict, aborts the rebase and routes to
+      resolve_queue_merge_conflicts for goal-aware resolution.
+
+  resolve_queue_merge_conflicts:
     tool: run_skill
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "queue_ejected_fix"
+      step_name: "resolve_queue_merge_conflicts"
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
@@ -842,8 +864,7 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Resolves rebase conflicts on the feature branch after queue ejection.
-      Uses the clone working directory (context.work_dir) with the feature branch
-      (context.merge_target) checked out. context.plan_path provides resolution guidance.
+      Only reached when the cheap rebase in queue_ejected_fix encountered conflicts.
       escalation_required=true → release_issue_failure for human review.
 
   re_push_queue_fix:
@@ -944,11 +965,32 @@ steps:
       timeout / unexpected → release_issue_timeout.
 
   direct_merge_conflict_fix:
+    tool: run_cmd
+    with:
+      cmd: >
+        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+        then echo 'clean';
+        else git rebase --abort 2>/dev/null || true; echo 'conflicts';
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "direct_merge_conflict_fix"
+    on_result:
+      - when: "${{ result.stdout | trim }} == clean"
+        route: re_push_direct_fix
+      - route: resolve_direct_merge_conflicts
+    on_failure: resolve_direct_merge_conflicts
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Attempts a cheap rebase before invoking the full conflict-resolution skill.
+      On clean rebase, proceeds to re_push_direct_fix. On conflict, routes to
+      resolve_direct_merge_conflicts for goal-aware resolution.
+
+  resolve_direct_merge_conflicts:
     tool: run_skill
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "direct_merge_conflict_fix"
+      step_name: "resolve_direct_merge_conflicts"
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
@@ -961,7 +1003,8 @@ steps:
     on_exhausted: release_issue_failure
     skip_when_false: "inputs.open_pr"
     note: >
-      Resolves rebase conflicts on the feature branch after direct-merge rejection.
+      Resolves rebase conflicts after direct-merge rejection.
+      Only reached when the cheap rebase in direct_merge_conflict_fix encountered conflicts.
       escalation_required=true → release_issue_failure for human review.
 
   re_push_direct_fix:
@@ -1033,11 +1076,32 @@ steps:
       timeout → release_issue_timeout.
 
   immediate_merge_conflict_fix:
+    tool: run_cmd
+    with:
+      cmd: >
+        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+        then echo 'clean';
+        else git rebase --abort 2>/dev/null || true; echo 'conflicts';
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "immediate_merge_conflict_fix"
+    on_result:
+      - when: "${{ result.stdout | trim }} == clean"
+        route: re_push_immediate_fix
+      - route: resolve_immediate_merge_conflicts
+    on_failure: resolve_immediate_merge_conflicts
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Attempts a cheap rebase before invoking the full conflict-resolution skill.
+      On clean rebase, proceeds to re_push_immediate_fix. On conflict, routes to
+      resolve_immediate_merge_conflicts for goal-aware resolution.
+
+  resolve_immediate_merge_conflicts:
     tool: run_skill
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "immediate_merge_conflict_fix"
+      step_name: "resolve_immediate_merge_conflicts"
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
@@ -1050,8 +1114,8 @@ steps:
     on_exhausted: release_issue_failure
     skip_when_false: "inputs.open_pr"
     note: >
-      Resolves rebase conflicts on the feature branch after immediate-merge rejection.
-      Analogous to direct_merge_conflict_fix.
+      Resolves rebase conflicts after immediate-merge rejection.
+      Only reached when the cheap rebase in immediate_merge_conflict_fix encountered conflicts.
       escalation_required=true → release_issue_failure for human review.
 
   re_push_immediate_fix:

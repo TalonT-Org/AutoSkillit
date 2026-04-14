@@ -883,6 +883,7 @@ steps:
       verdict: "${{ result.verdict }}"
     retries: 2
     on_exhausted: register_clone_failure
+    on_context_limit: re_push_review_integration
     on_result:
       - when: "${{ result.verdict }} == 'real_fix'"
         route: re_push_review_integration

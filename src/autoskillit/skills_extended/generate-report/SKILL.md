@@ -70,6 +70,20 @@ In addition to the arguments above, this skill reads from the worktree:
 - Include a "What We Learned" section regardless of outcome
 - Link back to the originating GitHub issue if an issue number is available
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, the report may be partially written
+but not yet committed to the worktree. The recipe routes to `on_context_limit: test`,
+preserving whatever was written.
+
+**Before emitting structured output tokens:**
+1. Run `git -C {worktree_path} status --porcelain`
+2. If any files are dirty: `git -C {worktree_path} add -A && git -C {worktree_path} commit -m "chore: commit partial report before context limit"`
+3. Only then emit the structured output tokens
+
+This ensures the partial report is committed and the downstream test step can
+evaluate whatever research output was produced.
+
 ## Workflow
 
 ### Step 1 — Gather All Artifacts

@@ -44,6 +44,20 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 - Leave worktree intact on failure for manual inspection
 - Treat CI as the source of truth: "passes locally" is not a resolution
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, edits may be on disk but not committed.
+The recipe routes to `on_context_limit` (typically `test`), bypassing the normal
+commit protocol in Step 3.
+
+**Before every test run and before emitting structured output tokens:**
+1. Run `git -C {worktree_path} status --porcelain`
+2. If any files are dirty: `git -C {worktree_path} add -A && git -C {worktree_path} commit -m "fix: commit pending changes before context limit"`
+3. Only then proceed with the test or structured output
+
+This ensures that even if context exhaustion interrupts the fix loop, all applied
+edits are committed and the downstream merge gate receives a clean worktree.
+
 ## Workflow
 
 Read the configured test command from `.autoskillit/config.yaml` (key: `test_check.command`). Use this command wherever `{test_command}` appears in these instructions. If no config exists, use the `test_check` MCP tool (which resolves the command from the project's config automatically).
@@ -216,8 +230,11 @@ the failure could not be reproduced locally, which is a flaky-test signal.
 ### Step 3: Fix Loop (max 3 iterations)
 1. Analyze test failures against the plan to understand root cause
 2. Apply targeted fixes
-3. If the project has pre-commit hooks, run `pre-commit run --all-files` and
-   stage any auto-fixed files before committing. Commit each fix: `fix: {what was wrong and why}`
+3. Commit ALL modified files (not just intentionally changed ones):
+   a. If the project has pre-commit hooks, run `pre-commit run --all-files` first
+   b. Run `git -C {worktree_path} status --porcelain` to capture the full set of modified files, including any auto-fixed by hooks
+   c. Stage and commit: `git -C {worktree_path} add -A && git -C {worktree_path} commit -m "fix: {what was wrong and why}"`
+   d. Run `git -C {worktree_path} status --porcelain` again to verify the tree is clean; if any files remain dirty, stage and commit them too
 4. Write a fix log entry to `{{AUTOSKILLIT_TEMP}}/resolve-failures/` (relative to
    the current working directory) to satisfy the write_behavior contract
    (generates an Edit/Write call that proves work was done):

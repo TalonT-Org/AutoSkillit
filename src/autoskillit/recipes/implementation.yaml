@@ -325,8 +325,21 @@ steps:
     tool: test_check
     with:
       worktree_path: "${{ context.worktree_path }}"
-    on_success: merge
+    on_success: commit_guard
     on_failure: fix
+
+  commit_guard:
+    tool: run_cmd
+    with:
+      cmd: "cd ${{ context.worktree_path }} && if [ -n \"$(git status --porcelain)\" ]; then git add -A && git commit -m 'chore: commit pending session changes'; fi"
+      cwd: "${{ context.worktree_path }}"
+      step_name: commit_guard
+    on_success: merge
+    on_failure: merge
+    note: >
+      Belt-and-suspenders guard: auto-commits any uncommitted changes before merge.
+      Catches dirty state from context-exhausted skills, cascading pre-commit auto-fixes,
+      or any other source. on_failure routes to merge (dirty-tree gate will catch real issues).
 
   merge:
     tool: merge_worktree
@@ -1095,6 +1108,7 @@ steps:
       verdict: "${{ result.verdict }}"
     retries: 2
     on_exhausted: release_issue_failure
+    on_context_limit: re_push
     on_result:
       - when: "${{ result.verdict }} == 'real_fix'"
         route: re_push

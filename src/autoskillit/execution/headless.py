@@ -1040,6 +1040,8 @@ async def run_headless_core(
             _exc_text = traceback.format_exc()
             _log_dir = ctx.config.linux_tracing.log_dir
             try:
+                # Deferred: autoskillit.execution.__init__ imports headless.py (L39-42);
+                # a top-level import of autoskillit.execution would be circular.
                 from autoskillit.execution import flush_session_log
 
                 flush_session_log(
@@ -1063,6 +1065,11 @@ async def run_headless_core(
             return SkillResult.crashed(
                 exception=exc,
                 skill_command=original_skill_command,
+                order_id=order_id,
+            )
+        if _result is None:
+            return SkillResult.crashed(
+                exception=RuntimeError("runner() did not return a result"),
                 order_id=order_id,
             )
         _elapsed = time.monotonic() - _start_mono

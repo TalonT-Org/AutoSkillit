@@ -98,6 +98,7 @@ def flush_session_log(
     write_call_count: int = 0,
     clone_contamination_reverted: bool = False,
     tracked_comm: str | None = None,
+    exception_text: str = "",
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -241,6 +242,9 @@ def flush_session_log(
     }
     summary_path = session_dir / "summary.json"
     atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
+
+    if exception_text:
+        (session_dir / "crash_exception.txt").write_text(exception_text, encoding="utf-8")
 
     # Write per-session telemetry files when step_name is provided
     if step_name and token_usage is not None:

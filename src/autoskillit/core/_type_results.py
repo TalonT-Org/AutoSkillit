@@ -179,6 +179,33 @@ class SkillResult:
             data["order_id"] = self.order_id
         return json.dumps(data, default=lambda o: o.value if isinstance(o, Enum) else str(o))
 
+    @classmethod
+    def crashed(
+        cls,
+        exception: BaseException,
+        skill_command: str = "",
+        session_id: str = "",
+        order_id: str = "",
+    ) -> SkillResult:
+        """Construct a SkillResult for a runner crash (pre-launch or mid-flight exception).
+
+        Produces the same 13+ field envelope as _build_skill_result, ensuring
+        pipeline orchestrators can route crash responses without schema inspection.
+        """
+        return cls(
+            success=False,
+            result=f"{type(exception).__name__}: {exception}",
+            session_id=session_id,
+            subtype="crashed",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+            kill_reason=KillReason.NATURAL_EXIT,
+            order_id=order_id,
+        )
+
     @property
     def outcome(self) -> SessionOutcome:
         """Classify this result as SUCCEEDED, RETRIABLE, or FAILED.

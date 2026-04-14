@@ -12,6 +12,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     LayoutError,
+    SkillResult,
     ValidatedAddDir,
     get_logger,
     truncate_text,
@@ -325,6 +326,13 @@ async def run_skill(
                 label="quota_post_run_refresh",
             )
         return skill_result.to_json()
+    except Exception as exc:
+        logger.error("run_skill executor raised unexpectedly", exc_info=True)
+        return SkillResult.crashed(
+            exception=exc,
+            skill_command=resolved_command,
+            order_id=order_id,
+        ).to_json()
     finally:
         if step_name:
             tool_ctx.timing_log.record(step_name, time.monotonic() - _start, order_id=order_id)

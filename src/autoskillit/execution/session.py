@@ -663,9 +663,29 @@ def _compute_success(
             return content_ok
 
         case TerminationReason.NATURAL_EXIT:
-            # The process exited on its own. A non-zero returncode is treated
-            # as authoritative evidence of failure — no asymmetric bypass.
+            # The process exited on its own. A non-zero returncode is normally
+            # authoritative evidence of failure — no asymmetric bypass.
+            #
+            # Post-completion kill bypass: when an external watchdog kills the
+            # process AFTER it finished its work (e.g. trailing async task cleanup),
+            # the signal is a teardown artifact. The completion marker in the result
+            # provides strong evidence of completion — trust it over the returncode.
             if returncode != 0:
+                if (
+                    session.subtype == CliSubtype.SUCCESS
+                    and session.result.strip()
+                    and completion_marker
+                    and completion_marker in session.result
+                ):
+                    content_ok = _check_session_content(
+                        session, completion_marker, expected_output_patterns
+                    )
+                    logger.debug(
+                        "compute_success_natural_exit_post_completion_kill",
+                        returncode=returncode,
+                        content_check=content_ok,
+                    )
+                    return content_ok
                 return False
             content_ok = _check_session_content(
                 session, completion_marker, expected_output_patterns

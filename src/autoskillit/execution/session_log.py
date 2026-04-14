@@ -244,7 +244,7 @@ def flush_session_log(
     atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
 
     if exception_text:
-        (session_dir / "crash_exception.txt").write_text(exception_text, encoding="utf-8")
+        atomic_write(session_dir / "crash_exception.txt", exception_text)
 
     # Write per-session telemetry files when step_name is provided
     if step_name and token_usage is not None:

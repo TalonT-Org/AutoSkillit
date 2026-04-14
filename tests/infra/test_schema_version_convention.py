@@ -111,9 +111,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # core/io.py — write_versioned_json itself (the blessed helper) uses atomic_write+json.dumps
     ("src/autoskillit/core/io.py", 118),
     # session_log.py — summary dict, token_usage list, audit_log list
-    ("src/autoskillit/execution/session_log.py", 243),
-    ("src/autoskillit/execution/session_log.py", 256),
-    ("src/autoskillit/execution/session_log.py", 259),
+    ("src/autoskillit/execution/session_log.py", 244),
+    ("src/autoskillit/execution/session_log.py", 260),
+    ("src/autoskillit/execution/session_log.py", 263),
     # migration/store.py — failure store dicts
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),

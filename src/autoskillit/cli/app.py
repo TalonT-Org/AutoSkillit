@@ -93,7 +93,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
 
     # Import server AFTER logging is configured so module-level loggers
     # resolve to stderr+JSON, not stdout+ConsoleRenderer (structlog default).
-    from autoskillit.server import _initialize, make_context, mcp, run_startup_drift_check
+    from autoskillit.server import _initialize, make_context, mcp
 
     project_path = project_dir / ".autoskillit" / "config.yaml"
     user_path = Path.home() / ".autoskillit" / "config.yaml"
@@ -122,8 +122,6 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     plugin_dir: str | None = None if _is_plugin_installed() else str(pkg_root())
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
-
-    run_startup_drift_check()
 
     try:
         anyio.run(serve_with_signal_guard, mcp)

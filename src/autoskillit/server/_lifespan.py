@@ -7,10 +7,6 @@ transport opens, not on the critical startup path.
 The ``__aexit__`` side calls ``recorder.finalize()`` so scenario data survives
 SIGTERM (issue #745).
 
-The registry-hash drift check (``run_startup_drift_check``) is invoked from
-``serve()`` in ``cli/app.py`` before ``mcp.run()``, not inside this lifespan,
-so that SIGTERM received during the check cannot bypass teardown.
-
 Readiness synchronization: the lifespan writes a filesystem sentinel at
 ``core.readiness.write_readiness_sentinel()`` as the first statement inside the
 ``try:`` block. Integration tests poll the sentinel path rather than parsing log
@@ -20,12 +16,13 @@ cleaned up in ``finally:`` before ``_finalize_recorder()`` runs.
 
 from __future__ import annotations
 
+import asyncio as _asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
 from autoskillit.core import cleanup_readiness_sentinel, get_logger, write_readiness_sentinel
 from autoskillit.execution import RecordingSubprocessRunner
-from autoskillit.server._state import _get_ctx_or_none
+from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 
 logger = get_logger(__name__)
 
@@ -76,6 +73,21 @@ def _finalize_recorder() -> None:
             logger.exception("recorder.finalize() failed during lifespan teardown")
 
 
+async def _run_drift_check_async() -> None:
+    """Run run_startup_drift_check in a thread executor."""
+    loop = _asyncio.get_running_loop()
+    await loop.run_in_executor(None, run_startup_drift_check)
+
+
+async def _run_deferred_init(ready_event: _asyncio.Event) -> None:
+    """Run deferred_initialize, signalling *ready_event* when done."""
+    ctx = _get_ctx_or_none()
+    if ctx is not None:
+        await deferred_initialize(ctx, ready_event=ready_event)
+    else:
+        ready_event.set()
+
+
 @asynccontextmanager
 async def _autoskillit_lifespan(server: Any) -> Any:
     """Server lifecycle: write readiness sentinel, yield, then finalize recording.
@@ -86,15 +98,35 @@ async def _autoskillit_lifespan(server: Any) -> Any:
     signal receiver via ``tg.start()``. A SIGTERM delivered after the sentinel
     appears is guaranteed to be caught by the armed receiver — no race window.
 
+    Background tasks (drift check, deferred init) are launched via
+    ``create_background_task`` (from ``pipeline.background``) so they run
+    concurrently without wrapping the ``yield`` in a task group.  A task-group
+    ``yield`` causes a cancel-scope mismatch when FastMCP resumes the generator
+    on a different task at exit.
+
     Teardown model: ``CancelledError`` from the anyio cancel scope unwinds past
-    the ``yield``, triggering ``finally:``. The sentinel is cleaned up first,
-    then ``_finalize_recorder()`` writes ``scenario.json``. Any teardown
-    exception is logged and suppressed so the process exits cleanly.
+    the ``yield``, triggering ``finally:``. Background tasks are cancelled,
+    the sentinel is cleaned up, then ``_finalize_recorder()`` writes
+    ``scenario.json``. Any teardown exception is logged and suppressed so the
+    process exits cleanly.
     """
     try:
+        from autoskillit.pipeline import create_background_task  # noqa: PLC0415
+        from autoskillit.server import _state  # noqa: PLC0415
+
+        bg_tasks: list[_asyncio.Task[None]] = []
+        event = _asyncio.Event()
+        _state._startup_ready = event
         write_readiness_sentinel()
+        bg_tasks.append(create_background_task(_run_drift_check_async(), label="drift_check"))
+        bg_tasks.append(create_background_task(_run_deferred_init(event), label="deferred_init"))
         yield
     finally:
+        for task in bg_tasks:
+            if not task.done():
+                task.cancel()
+        if bg_tasks:
+            await _asyncio.gather(*bg_tasks, return_exceptions=True)
         try:
             cleanup_readiness_sentinel()
         except Exception:

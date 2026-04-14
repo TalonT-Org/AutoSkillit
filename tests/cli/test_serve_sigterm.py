@@ -31,7 +31,6 @@ def test_serve_uses_anyio_run_not_mcp_run(monkeypatch, tmp_path):
     monkeypatch.setattr("autoskillit.core.configure_logging", lambda **kw: None)
     monkeypatch.setattr("autoskillit.server.make_context", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("autoskillit.server._initialize", lambda ctx: None)
-    monkeypatch.setattr("autoskillit.server.run_startup_drift_check", lambda: None)
 
     def capture_anyio_run(coro_fn, *args, **kwargs):
         anyio_calls.append(coro_fn)

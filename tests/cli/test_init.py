@@ -801,3 +801,73 @@ def test_init_from_pkg_root_like_cwd_refuses(
 
     with pytest.raises(Exception, match="inside the autoskillit source tree"):
         _register_all(scope="user", project_dir=fake_pkg_root)
+
+
+# --- evict_direct_mcp_entry unit tests ---
+
+
+def test_evict_direct_mcp_entry_removes_key(tmp_path: Path) -> None:
+    """evict_direct_mcp_entry() removes the autoskillit key and preserves all other keys."""
+    from autoskillit.cli._init_helpers import evict_direct_mcp_entry
+
+    claude_json = tmp_path / ".claude.json"
+    claude_json.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "autoskillit": {"type": "stdio", "command": "autoskillit", "args": []}
+                },
+                "other": "preserved",
+            }
+        )
+    )
+    result = evict_direct_mcp_entry(claude_json)
+    assert result is True
+    data = json.loads(claude_json.read_text())
+    assert "autoskillit" not in data.get("mcpServers", {})
+    assert data["other"] == "preserved"
+
+
+def test_evict_direct_mcp_entry_idempotent_when_absent(tmp_path: Path) -> None:
+    """evict_direct_mcp_entry() returns False and leaves the file unchanged when key is absent."""
+    from autoskillit.cli._init_helpers import evict_direct_mcp_entry
+
+    claude_json = tmp_path / ".claude.json"
+    original = {"mcpServers": {}}
+    claude_json.write_text(json.dumps(original))
+    result = evict_direct_mcp_entry(claude_json)
+    assert result is False
+    assert json.loads(claude_json.read_text()) == original
+
+
+def test_evict_direct_mcp_entry_returns_false_when_file_absent(tmp_path: Path) -> None:
+    """evict_direct_mcp_entry() returns False without raising when the file does not exist."""
+    from autoskillit.cli._init_helpers import evict_direct_mcp_entry
+
+    result = evict_direct_mcp_entry(tmp_path / "nonexistent.json")
+    assert result is False
+
+
+def test_register_all_evicts_direct_entry_when_plugin_installed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_register_all() evicts the direct MCP entry when the plugin is already installed."""
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+    )
+    claude_json = tmp_path / ".claude.json"
+    claude_json.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "autoskillit": {"type": "stdio", "command": "autoskillit", "args": []}
+                }
+            }
+        )
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: True)
+    cli.init(scope="user", test_command="task test-all")
+    data = json.loads(claude_json.read_text())
+    assert "autoskillit" not in data.get("mcpServers", {})

@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.core import ClaudeFlags
 from autoskillit.execution.commands import (
+    _MAX_MCP_OUTPUT_TOKENS_VALUE,
     ClaudeHeadlessCmd,
     ClaudeInteractiveCmd,
     build_full_headless_cmd,
@@ -343,7 +344,7 @@ class TestBuildFullHeadlessCmd:
     def test_env_has_max_mcp_output_tokens(self):
         """MAX_MCP_OUTPUT_TOKENS=50000 must be present in headless session env."""
         spec = build_full_headless_cmd("/investigate foo", **self.BASE)
-        assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == "50000"
+        assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
 
     def test_max_mcp_output_tokens_not_in_argv(self):
         """MAX_MCP_OUTPUT_TOKENS must live in spec.env, not in argv."""
@@ -356,7 +357,7 @@ class TestBuildFullHeadlessCmd:
         """Host-env MAX_MCP_OUTPUT_TOKENS must be stripped and replaced by the hardcoded value."""
         monkeypatch.setenv("MAX_MCP_OUTPUT_TOKENS", "99999")
         spec = build_full_headless_cmd("/investigate foo", **self.BASE)
-        assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == "50000"
+        assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
 
 
 def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:

@@ -319,6 +319,7 @@ class TestLoadRecipeExceptionHandling:
             side_effect=AttributeError("programming error"),
         ):
             result = json.loads(await load_recipe(name="test"))
+        assert result["success"] is False
         assert "error" in result
         assert "programming error" in result["error"]
 

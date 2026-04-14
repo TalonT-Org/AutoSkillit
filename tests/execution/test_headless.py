@@ -2205,7 +2205,7 @@ class TestCrashSessionLog:
             await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
             mock_logger.error.assert_called_once()
             call_kwargs = mock_logger.error.call_args
-            assert call_kwargs[1].get("exc_info") is not None
+            assert call_kwargs[1].get("exc_info")
 
 
 class TestRetryBudgetEnforcement:

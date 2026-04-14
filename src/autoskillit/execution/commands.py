@@ -177,6 +177,24 @@ def _inject_cwd_anchor(skill_command: str, cwd: str, temp_dir_relpath: str | Non
     return skill_command + directive
 
 
+def _inject_narration_suppression(skill_command: str) -> str:
+    """Append an efficiency directive to suppress inter-tool narration.
+
+    Targets prose status text and phase announcements emitted between tool
+    calls — the primary driver of unnecessary context-length overhead in
+    long-running sessions. Does NOT suppress the final response, which is
+    where structured output tokens (worktree_path, plan_path, etc.) live.
+    """
+    directive = (
+        "\n\nEFFICIENCY DIRECTIVE: Do NOT output prose status text, phase "
+        "announcements, or progress summaries between tool calls. Every "
+        "non-final assistant turn MUST invoke at least one tool. The only "
+        "permitted text-only turn is the final response required by the "
+        "ORCHESTRATION DIRECTIVE above."
+    )
+    return skill_command + directive
+
+
 def build_full_headless_cmd(
     skill_command: str,
     *,
@@ -193,10 +211,11 @@ def build_full_headless_cmd(
 ) -> ClaudeHeadlessCmd:
     """Build the complete headless command spec ready for subprocess invocation.
 
-    Applies prompt transformations (skill prefix, completion directive, cwd anchor),
-    then constructs the full CLI command including plugin-dir, output-format,
-    and add-dir entries. The environment carries ``AUTOSKILLIT_HEADLESS=1`` and any
-    scenario / exit-delay extras on ``.env`` — it is NOT serialized as an argv prefix.
+    Applies prompt transformations (skill prefix, completion directive, cwd anchor,
+    narration suppression), then constructs the full CLI command including plugin-dir,
+    output-format, and add-dir entries. The environment carries ``AUTOSKILLIT_HEADLESS=1``
+    and any scenario / exit-delay extras on ``.env`` — it is NOT serialized as an argv
+    prefix.
 
     Parameters
     ----------
@@ -221,10 +240,12 @@ def build_full_headless_cmd(
     scenario_step_name
         When non-empty, carried as ``SCENARIO_STEP_NAME=<name>`` in ``.env`` for recording.
     """
-    prompt = _inject_cwd_anchor(
-        _inject_completion_directive(_ensure_skill_prefix(skill_command), completion_marker),
-        cwd,
-        temp_dir_relpath=temp_dir_relpath,
+    prompt = _inject_narration_suppression(
+        _inject_cwd_anchor(
+            _inject_completion_directive(_ensure_skill_prefix(skill_command), completion_marker),
+            cwd,
+            temp_dir_relpath=temp_dir_relpath,
+        )
     )
     extras: dict[str, str] = {"AUTOSKILLIT_HEADLESS": "1"}
     if exit_after_stop_delay_ms > 0:

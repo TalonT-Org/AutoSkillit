@@ -89,8 +89,11 @@ def test_scoped_guard_has_both_session_type_test_cases(guard_script: str) -> Non
         f"Expected: tests/infra/test_{Path(guard_script).stem}.py"
     )
     source = test_file.read_text(encoding="utf-8")
-    has_headless_true = "headless=True" in source or "AUTOSKILLIT_HEADLESS" in source
-    has_headless_false = "headless=False" in source
+    code_lines = "\n".join(
+        line for line in source.splitlines() if not line.lstrip().startswith("#")
+    )
+    has_headless_true = "headless=True" in code_lines or "AUTOSKILLIT_HEADLESS" in code_lines
+    has_headless_false = "headless=False" in code_lines
     assert has_headless_true, (
         f"{test_file.name} must test the headless=True path for scoped guard '{guard_script}'."
     )

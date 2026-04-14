@@ -38,6 +38,9 @@ IDE_ENV_DENYLIST: frozenset[str] = frozenset(
         # into child sessions even when exit_after_stop_delay_ms=0 or no step name.
         "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
         "SCENARIO_STEP_NAME",
+        # MCP response size gate: injected explicitly by AutoSkillit session launchers
+        # so the child always gets the correct value regardless of the parent env.
+        "MAX_MCP_OUTPUT_TOKENS",
     }
 )
 

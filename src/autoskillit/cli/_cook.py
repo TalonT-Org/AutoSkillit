@@ -135,6 +135,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     from autoskillit.config import load_config
     from autoskillit.core import configure_logging, find_latest_session_id, pkg_root
     from autoskillit.execution import build_interactive_cmd
+    from autoskillit.execution.commands import _MAX_MCP_OUTPUT_TOKENS_VALUE
 
     configure_logging()
 
@@ -165,6 +166,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         add_dirs=[skills_dir],
         initial_prompt=initial_prompt,
         resume_session_id=resume_session_id,
+        env_extras={"MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE},
     )
     _run_cook_session(
         cmd=spec.cmd,

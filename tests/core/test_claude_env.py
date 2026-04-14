@@ -118,3 +118,15 @@ def test_ide_env_prefix_denylist_covers_ide_and_sse() -> None:
 
 def test_ide_env_always_extras_includes_auto_connect_off() -> None:
     assert IDE_ENV_ALWAYS_EXTRAS["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
+
+
+def test_ide_env_denylist_contains_max_mcp_output_tokens() -> None:
+    """MAX_MCP_OUTPUT_TOKENS must be in IDE_ENV_DENYLIST."""
+    assert "MAX_MCP_OUTPUT_TOKENS" in IDE_ENV_DENYLIST
+
+
+def test_build_claude_env_strips_max_mcp_output_tokens() -> None:
+    """MAX_MCP_OUTPUT_TOKENS must be stripped from base env by build_claude_env."""
+    result = build_claude_env(base={"MAX_MCP_OUTPUT_TOKENS": "99999", "HOME": "/tmp"})
+    assert "MAX_MCP_OUTPUT_TOKENS" not in result
+    assert result["HOME"] == "/tmp"

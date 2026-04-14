@@ -98,6 +98,12 @@ def build_headless_cmd(
     return ClaudeHeadlessCmd(cmd=cmd, env=build_claude_env(base=base, extras=env_extras))
 
 
+# Injected into every AutoSkillit-launched headless and cook session.
+# Raises the Claude Code client-side MCP tool result size gate from the
+# default 25,000 tokens to 50,000, preventing open_kitchen() responses
+# from being persisted to a file instead of returned inline.
+_MAX_MCP_OUTPUT_TOKENS_VALUE: str = "50000"
+
 # Variables that build_full_headless_cmd controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
 # parameters (exit_after_stop_delay_ms, scenario_step_name).
@@ -105,6 +111,7 @@ _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
     {
         "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
         "SCENARIO_STEP_NAME",
+        "MAX_MCP_OUTPUT_TOKENS",
     }
 )
 
@@ -247,7 +254,10 @@ def build_full_headless_cmd(
             temp_dir_relpath=temp_dir_relpath,
         )
     )
-    extras: dict[str, str] = {"AUTOSKILLIT_HEADLESS": "1"}
+    extras: dict[str, str] = {
+        "AUTOSKILLIT_HEADLESS": "1",
+        "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
+    }
     if exit_after_stop_delay_ms > 0:
         extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
     if scenario_step_name:

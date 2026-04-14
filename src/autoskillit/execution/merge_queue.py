@@ -6,6 +6,7 @@ Never raises. All errors are returned as structured results.
 from __future__ import annotations
 
 import asyncio
+import random
 import re
 import time
 from collections.abc import Callable
@@ -580,6 +581,42 @@ def _text_has_push_trigger(text: str) -> bool:
     return any(pat in text for pat in ("on: [push", "on: push", "push:"))
 
 
+_RATE_LIMIT_MAX_ATTEMPTS = 3
+_RATE_LIMIT_SECONDARY_MARKER = "secondary rate limit"
+
+
+def _is_secondary_rate_limit(resp: httpx.Response) -> bool:
+    """Return True when a 403 response is a GitHub secondary rate limit.
+
+    GitHub returns HTTP 403 (not 429) for secondary rate limits.
+    The response body contains the phrase "secondary rate limit".
+    Primary rate limits use HTTP 429 or include x-ratelimit-remaining: 0.
+    """
+    if resp.status_code != 403:
+        return False
+    try:
+        text = resp.text.lower()
+    except Exception:
+        _log.warning("Failed to read response body for rate-limit check", exc_info=True)
+        return False
+    return _RATE_LIMIT_SECONDARY_MARKER in text
+
+
+def _retry_after_seconds(attempt: int, resp: httpx.Response) -> float:
+    """Return seconds to sleep before the next retry attempt.
+
+    Prefers the Retry-After header (integer seconds) when present and valid.
+    Falls back to full-jitter exponential backoff: random(0, min(60, 1 * 2^attempt)).
+    """
+    try:
+        header_val = resp.headers.get("Retry-After", "")
+        if header_val:
+            return float(header_val)
+    except (ValueError, AttributeError):
+        pass
+    return random.uniform(0, min(60.0, 1.0 * (2**attempt)))
+
+
 async def fetch_repo_merge_state(
     owner: str,
     repo: str,
@@ -612,19 +649,37 @@ async def fetch_repo_merge_state(
     field is a closely related extension — verify that the push-trigger scan does
     not regress the merge_group-only detection that #498 established.
     """
-    async with httpx.AsyncClient(
-        headers=github_headers(token),
-        timeout=30.0,
-    ) as client:
-        resp = await client.post(
-            _GRAPHQL_ENDPOINT,
-            json={
-                "query": _REPO_STATE_QUERY,
-                "variables": {"owner": owner, "repo": repo, "branch": branch},
-            },
-        )
+    resp: httpx.Response | None = None
+    for attempt in range(_RATE_LIMIT_MAX_ATTEMPTS):
+        async with httpx.AsyncClient(
+            headers=github_headers(token),
+            timeout=30.0,
+        ) as client:
+            resp = await client.post(
+                _GRAPHQL_ENDPOINT,
+                json={
+                    "query": _REPO_STATE_QUERY,
+                    "variables": {"owner": owner, "repo": repo, "branch": branch},
+                },
+            )
+        if resp.status_code == 429 or _is_secondary_rate_limit(resp):
+            sleep_secs = _retry_after_seconds(attempt, resp)
+            _log.warning(
+                "fetch_repo_merge_state rate limited",
+                status=resp.status_code,
+                attempt=attempt,
+                sleep_secs=sleep_secs,
+            )
+            await asyncio.sleep(sleep_secs)
+            continue
         resp.raise_for_status()
-        body = resp.json()
+        break
+    else:
+        assert resp is not None, "_RATE_LIMIT_MAX_ATTEMPTS must be >= 1"
+        resp.raise_for_status()
+
+    assert resp is not None
+    body = resp.json()
 
     # GitHub GraphQL always returns a JSON object; guard against unexpected shapes.
     if not isinstance(body, dict):

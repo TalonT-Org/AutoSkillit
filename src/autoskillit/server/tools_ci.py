@@ -8,6 +8,7 @@ import json
 import time
 from typing import Literal
 
+import httpx
 import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -538,24 +539,30 @@ async def check_repo_merge_state(
                     }
                 )
             owner, repo = resolved_repo.split("/", 1)
+            resolved_token = (
+                tool_ctx.token_factory()
+                if tool_ctx.token_factory is not None
+                else tool_ctx.config.github.token
+            )
             state = await fetch_repo_merge_state(
                 owner=owner,
                 repo=repo,
                 branch=branch,
-                token=tool_ctx.config.github.token,
+                token=resolved_token,
             )
             return json.dumps(state)
         except Exception as exc:
-            logger.error("check_repo_merge_state ci_watcher error", exc_info=True)
-            return json.dumps(
-                {
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "queue_available": False,
-                    "merge_group_trigger": False,
-                    "auto_merge_available": False,
-                    "ci_event": None,
-                }
-            )
+            logger.error("autoskillit.check_repo_merge_state failed", exc_info=exc)
+            envelope: dict[str, object] = {
+                "error": f"{type(exc).__name__}: {exc}",
+                "queue_available": False,
+                "merge_group_trigger": False,
+                "auto_merge_available": False,
+                "ci_event": None,
+            }
+            if isinstance(exc, httpx.HTTPStatusError):
+                envelope["http_status"] = exc.response.status_code
+            return json.dumps(envelope)
         finally:
             if step_name:
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

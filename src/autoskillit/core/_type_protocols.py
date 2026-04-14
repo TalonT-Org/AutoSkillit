@@ -44,6 +44,7 @@ __all__ = [
     "SkillResolver",
     "BackgroundSupervisor",
     "QuotaRefreshTask",
+    "TokenFactory",
 ]
 
 
@@ -497,3 +498,15 @@ class QuotaRefreshTask(Protocol):
     """
 
     def cancel(self, msg: Any = None) -> bool: ...
+
+
+@runtime_checkable
+class TokenFactory(Protocol):
+    """Protocol for resolving a GitHub token via the config → env → CLI fallback chain.
+
+    Satisfied by any zero-argument callable that returns a token string or None.
+    Set by make_context() on ToolContext; None in test ToolContext instances unless
+    explicitly provided.
+    """
+
+    def __call__(self) -> str | None: ...

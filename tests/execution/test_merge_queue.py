@@ -1136,3 +1136,119 @@ class TestClassifierImmunity:
             f"_queue_state() missing keys: {all_keys - fixture_keys}, "
             f"extra keys: {fixture_keys - all_keys}"
         )
+
+
+# ---------------------------------------------------------------------------
+# fetch_repo_merge_state rate-limit retry
+# ---------------------------------------------------------------------------
+
+
+_SUCCESS_BODY = {
+    "data": {
+        "repository": {
+            "mergeQueue": None,
+            "autoMergeAllowed": False,
+            "object": None,
+        }
+    }
+}
+
+
+class TestFetchRepoMergeStateRetry:
+    """Tests for HTTP 429 / secondary-rate-limit 403 retry behaviour."""
+
+    @pytest.mark.anyio
+    async def test_retries_on_429(self, httpx_mock, monkeypatch):
+        """Retries on HTTP 429, succeeds on second attempt."""
+        sleep_calls: list[float] = []
+
+        async def fake_sleep(secs: float) -> None:
+            sleep_calls.append(secs)
+
+        monkeypatch.setattr(_mq.asyncio, "sleep", fake_sleep)
+
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            status_code=429,
+            headers={"Retry-After": "1"},
+        )
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            json=_SUCCESS_BODY,
+        )
+
+        from autoskillit.execution.merge_queue import fetch_repo_merge_state
+
+        result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
+        assert result["queue_available"] is False
+        assert len(sleep_calls) == 1
+        assert sleep_calls[0] == 1.0  # Retry-After header value is '1'
+
+    @pytest.mark.anyio
+    async def test_retries_on_secondary_rate_limit_403(self, httpx_mock, monkeypatch):
+        """Retries on 403 whose body contains 'secondary rate limit'."""
+        sleep_calls: list[float] = []
+
+        async def fake_sleep(secs: float) -> None:
+            sleep_calls.append(secs)
+
+        monkeypatch.setattr(_mq.asyncio, "sleep", fake_sleep)
+        monkeypatch.setattr(_mq.random, "uniform", lambda a, b: 0.42)
+
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            status_code=403,
+            text="You have exceeded a secondary rate limit",
+        )
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            json=_SUCCESS_BODY,
+        )
+
+        from autoskillit.execution.merge_queue import fetch_repo_merge_state
+
+        result = await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
+        assert result["queue_available"] is False
+        assert len(sleep_calls) == 1
+        assert sleep_calls[0] == 0.42  # jitter backoff via patched random.uniform
+
+    @pytest.mark.anyio
+    async def test_raises_on_non_rate_limit_403(self, httpx_mock):
+        """Non-secondary-rate-limit 403 propagates immediately without retry."""
+        httpx_mock.add_response(
+            url="https://api.github.com/graphql",
+            status_code=403,
+            text="Bad credentials",
+        )
+
+        from autoskillit.execution.merge_queue import fetch_repo_merge_state
+
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
+        assert exc_info.value.response.status_code == 403
+        # Only one request was made (no retry)
+        assert len(httpx_mock.get_requests()) == 1
+
+    @pytest.mark.anyio
+    async def test_exhausts_retries_and_raises(self, httpx_mock, monkeypatch):
+        """After max_attempts of 429, raises HTTPStatusError."""
+        sleep_calls: list[float] = []
+
+        async def fake_sleep(secs: float) -> None:
+            sleep_calls.append(secs)
+
+        monkeypatch.setattr(_mq.asyncio, "sleep", fake_sleep)
+
+        for _ in range(_mq._RATE_LIMIT_MAX_ATTEMPTS):
+            httpx_mock.add_response(
+                url="https://api.github.com/graphql",
+                status_code=429,
+                headers={"Retry-After": "1"},
+            )
+
+        from autoskillit.execution.merge_queue import fetch_repo_merge_state
+
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
+        assert exc_info.value.response.status_code == 429
+        assert len(httpx_mock.get_requests()) == _mq._RATE_LIMIT_MAX_ATTEMPTS

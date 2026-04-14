@@ -150,14 +150,19 @@ Check if the project has artifact generation steps that CI runs before tests:
 
 This ensures local test results match CI behavior. Skip if no pre-test generation steps exist.
 
-### Step 2c: Reproduce Failure Locally
-
-1. Run `cd {worktree_path} && {test_command}`
-2. Record exit code and output as `{local_result}`: PASS or FAIL
+### Step 2: Run Tests
+1. Run tests using the `test_check` MCP tool — not via Bash or `run_cmd`:
+   ```
+   test_check(worktree_path="{worktree_path}")
+   ```
+   When test suites take 5–7 minutes, the Bash tool auto-backgrounds the command
+   and the LLM enters a polling cascade of 20+ API calls to detect completion.
+   `test_check` blocks synchronously and returns `passed: true/false` in a single call.
+2. Record the result as `{local_result}`: PASS (`passed: true`) or FAIL (`passed: false`)
 
 ### Step 2d: Verdict Decision Tree
 
-Using `{local_result}` from Step 2c and `{failure_subtype}` from Step 2a, determine `{verdict}`:
+Using `{local_result}` from Step 2 and `{failure_subtype}` from Step 2a, determine `{verdict}`:
 
 | Local result | `failure_subtype` | Verdict |
 |---|---|---|
@@ -218,7 +223,17 @@ the failure could not be reproduced locally, which is a flaky-test signal.
    (generates an Edit/Write call that proves work was done):
    - Path: `{{AUTOSKILLIT_TEMP}}/resolve-failures/fix_log_{iteration}_{ts}.md`
    - Content: iteration number, files changed, commit SHA, brief description
-5. Re-run: `cd {worktree_path} && {test_command}`
+5. Re-run tests using the `test_check` MCP tool:
+   ```
+   test_check(worktree_path="{worktree_path}")
+   ```
+   Do NOT re-run via Bash — see Step 2 rationale.
+   After receiving the result, extract and retain ONLY:
+   - Total pass/fail counts (e.g., "12 failed, 240 passed")
+   - The names of all failing tests
+   - The specific error message for each failure (first 10–15 lines)
+   Discard the full pytest stdout — do not retain progress dots, install-worktree
+   output, or timing lines. These accumulate across iterations and inflate context.
 6. Green → Step 4 (with `verdict = real_fix`); Red and < 3 iterations → repeat; Red and >= 3 → Step 5
 
 ### Step 4: Report

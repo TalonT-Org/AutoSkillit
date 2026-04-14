@@ -162,10 +162,6 @@ After this phase:
 
 For each batch in **ascending order** (batch 1, then batch 2, etc.):
 
-**CRITICAL:** Do NOT output any prose status text between batches. After
-completing one batch (all issues processed, optional merge cycle done),
-immediately begin the batch header (3a) for the next batch.
-
 - If `--batch N` was given, skip all batches with a different number.
 
 **3a. Log batch header:**
@@ -177,11 +173,6 @@ Processing X issues:
 ```
 
 **3b. For each issue in the batch (process sequentially):**
-
-**CRITICAL:** Do NOT output any prose status text between issues. After
-completing one issue's processing (step 6), immediately begin step 1
-(check pre_claimed_urls) for the next issue. Inter-issue announcements
-create end_turn windows that cause stochastic session termination.
 
 1. **Check pre_claimed_urls:** If `issue_url` is NOT in `pre_claimed_urls` → skip
    (excluded by upfront claim phase — another session holds it).
@@ -259,9 +250,6 @@ run_skill("/autoskillit:analyze-prs {base_branch}")
 
 Parse the `pr_order_file` from the skill output. For each PR in the recommended
 merge order:
-
-**CRITICAL:** Do NOT output any prose status text between PRs. After one
-merge-pr completes, immediately call run_skill for the next PR.
 
 ```
 run_skill("/autoskillit:merge-pr {pr_number} {complexity}")

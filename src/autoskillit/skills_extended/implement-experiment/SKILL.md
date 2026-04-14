@@ -254,11 +254,10 @@ what to create in each phase. Typical phases include:
 4. **Dry run** — execute the experiment with minimal inputs to verify the
    pipeline works end-to-end.
 
-For each phase:
-1. Announce the phase objective
-2. Implement the changes
-3. Run any verification the plan specifies
-4. Commit with a descriptive message. If the project has pre-commit hooks,
+For each phase, begin implementation immediately (no announcement):
+1. Implement the changes
+2. Run any verification the plan specifies
+3. Commit with a descriptive message. If the project has pre-commit hooks,
    run `pre-commit run --all-files` and stage any auto-fixed files before
    each commit.
 

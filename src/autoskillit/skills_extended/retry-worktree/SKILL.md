@@ -148,13 +148,11 @@ Only explore systems related to the **remaining** phases. Do NOT re-explore alre
 
 Initialize a counter before iterating: `PHASES_IMPLEMENTED=0`
 
-For each remaining/incomplete phase:
-1. Announce phase objective and files to modify
-2. Implement changes
-3. Run per-phase verification if plan specifies it
-4. Commit per phase if possible
-5. Increment the counter: `PHASES_IMPLEMENTED=$((PHASES_IMPLEMENTED + 1))`
-6. Report phase completion
+For each remaining/incomplete phase, begin implementation immediately (no announcement):
+1. Implement changes
+2. Run per-phase verification if plan specifies it
+3. Commit per phase if possible
+4. Increment the counter: `PHASES_IMPLEMENTED=$((PHASES_IMPLEMENTED + 1))`
 
 Where practical, delegate test updates to subagents to keep main conversation context lean.
 

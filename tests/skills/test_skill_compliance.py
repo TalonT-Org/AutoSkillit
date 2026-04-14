@@ -65,6 +65,19 @@ _ANTI_PROSE_GUARD_PATTERNS = [
     re.compile(r"(?i)do\s+not\s+emit\s+(?:any\s+)?(?:prose|text|status)"),
 ]
 
+# Skills whose narration suppression is handled globally by _inject_narration_suppression()
+# in build_full_headless_cmd() (headless path) and sous-chef/SKILL.md (cook path).
+# Per-loop inline anti-prose guards are intentionally absent — they are redundant.
+_GLOBALLY_GUARDED_SKILLS: frozenset[str] = frozenset(
+    {
+        "process-issues",
+        "open-integration-pr",
+        "setup-project",
+        "collapse-issues",
+        "validate-audit",
+    }
+)
+
 
 def _all_skill_dirs() -> list[Path]:
     """Discover all skill directories that contain a SKILL.md from both skill directories."""
@@ -222,12 +235,17 @@ def test_no_text_then_tool_in_any_step(skill_dir: Path) -> None:
     same step or consecutive sub-steps, or an unguarded loop with
     tool invocations.
 
+    Skills in _GLOBALLY_GUARDED_SKILLS are exempt from the loop-boundary
+    check — their narration suppression is injected at the prompt level
+    by build_full_headless_cmd() and sous-chef/SKILL.md.
+
     This is a project-wide structural invariant, not specific to
     open-pr or arch-lens.
     """
     text = (skill_dir / "SKILL.md").read_text()
     violations = _check_text_then_tool(text)
-    violations.extend(_check_loop_boundary(text))
+    if skill_dir.name not in _GLOBALLY_GUARDED_SKILLS:
+        violations.extend(_check_loop_boundary(text))
     assert not violations, (
         f"{skill_dir.name}/SKILL.md contains text-then-tool anti-pattern:\n"
         + "\n".join(f"  - {v}" for v in violations)

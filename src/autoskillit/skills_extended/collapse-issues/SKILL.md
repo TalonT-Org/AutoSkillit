@@ -160,8 +160,6 @@ For each issue in each qualifying group (not standalone issues), call:
 where `issue_url` is constructed as:
     https://github.com/{repo}/issues/{number}
 
-Do not output any prose between fetch calls — immediately proceed to the next issue.
-
 Store the returned `content` field from the response. If `fetch_github_issue` returns
 `success: false` for an issue, log the failure and proceed using the issue title
 and a note that full body content was unavailable (do not fabricate body content).
@@ -193,8 +191,6 @@ Emit result block with `"dry_run": true` and exit without any GitHub mutations:
 ### Step 7: Create Combined Issues
 
 For each qualifying group (in-context LLM reasoning for title synthesis):
-
-Do not emit any prose or status text between groups — immediately proceed to create each combined issue.
 
 **7a. Synthesize title:**
 

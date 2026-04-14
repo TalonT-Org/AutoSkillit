@@ -152,15 +152,9 @@ Tell the user: "Full analysis saved to {path} for your review."
 
 Interactive flow. For each candidate workflow discovered:
 
-**CRITICAL:** Do NOT output any prose status text between workflow iterations.
-After completing one workflow's presentation and user response, immediately
-begin presenting the next workflow.
-
 1. **Always offer the standard implementation pipeline first** (plan → dry-walkthrough → implement → test → merge), even if not discovered in history. This is the core AutoSkillit workflow.
 
 2. For each candidate workflow (including the standard one):
-   Do NOT output any prose status text between workflows — immediately begin the
-   next workflow's presentation after the user responds.
    - Present the workflow chain and explain what it automates
    - Ask the user: "Would you like me to generate a recipe for this workflow?"
    - Before generating, resolve skill references in the workflow:

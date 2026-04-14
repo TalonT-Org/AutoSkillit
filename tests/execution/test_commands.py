@@ -84,6 +84,16 @@ class TestBuildInteractiveCmd:
         prompt_idx = result.cmd.index("hello")
         assert resume_idx < prompt_idx
 
+    def test_env_has_max_mcp_output_tokens(self) -> None:
+        """build_interactive_cmd must inject MAX_MCP_OUTPUT_TOKENS even with no env_extras."""
+        spec = build_interactive_cmd()
+        assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
+
+    def test_caller_extras_override_baseline(self) -> None:
+        """Caller-supplied env_extras must override the baseline default."""
+        spec = build_interactive_cmd(env_extras={"MAX_MCP_OUTPUT_TOKENS": "99999"})
+        assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == "99999"
+
 
 class TestBuildInteractiveCmdExtended:
     def test_accepts_plugin_dir(self, tmp_path: Path) -> None:
@@ -186,6 +196,11 @@ class TestBuildHeadlessResumeCmd:
         assert isinstance(result.env, Mapping)
         assert len(result.env) > 0
         assert result.env.get("CLAUDE_CODE_AUTO_CONNECT_IDE") == "0"
+
+    def test_env_has_max_mcp_output_tokens(self) -> None:
+        """build_headless_resume_cmd must inject MAX_MCP_OUTPUT_TOKENS even with no env_extras."""
+        spec = build_headless_resume_cmd(resume_session_id="abc", prompt="Emit token")
+        assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
 
     def test_no_plugin_dir_by_default(self) -> None:
         result = build_headless_resume_cmd(resume_session_id="abc-123", prompt="Emit token")
@@ -365,3 +380,29 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
     assert "MAX_MCP_OUTPUT_TOKENS" in _HEADLESS_EXCLUSIVE_VARS
+
+
+# MAINTENANCE: When adding a new session builder to commands.py,
+# add it to this parametrize list. test_no_raw_claude_env ensures
+# env routing; this test ensures env CONTENT.
+@pytest.mark.parametrize(
+    "builder_call",
+    [
+        lambda: build_interactive_cmd(),
+        lambda: build_full_headless_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_dir=None,
+            output_format_value="stream-json",
+        ),
+        lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
+    ],
+    ids=["interactive", "full_headless", "headless_resume"],
+)
+def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None:
+    """Every session command builder must produce env with MAX_MCP_OUTPUT_TOKENS."""
+    spec = builder_call()
+    assert "MAX_MCP_OUTPUT_TOKENS" in spec.env
+    assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE

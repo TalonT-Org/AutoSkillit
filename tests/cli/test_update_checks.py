@@ -364,6 +364,48 @@ def test_source_drift_signal_silent_when_ref_sha_none(
     assert _source_drift_signal(info, tmp_path) is None
 
 
+def test_dual_mcp_signal_fires_when_both_registered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.cli._update_checks import _dual_mcp_signal
+
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._is_dual_mcp_registered",
+        lambda home: True,
+    )
+    sig = _dual_mcp_signal(tmp_path)
+    assert sig is not None
+    assert sig.kind == "dual_mcp"
+    assert "autoskillit install" in sig.message
+
+
+def test_dual_mcp_signal_silent_when_only_one_registered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.cli._update_checks import _dual_mcp_signal
+
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._is_dual_mcp_registered",
+        lambda home: False,
+    )
+    sig = _dual_mcp_signal(tmp_path)
+    assert sig is None
+
+
+def test_dual_mcp_signal_silent_on_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.cli._update_checks import _dual_mcp_signal
+
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks._is_dual_mcp_registered",
+        lambda home: (_ for _ in ()).throw(OSError("disk error")),
+    )
+    # Exceptions must be silently swallowed — signal functions never raise
+    sig = _dual_mcp_signal(tmp_path)
+    assert sig is None
+
+
 # ---------------------------------------------------------------------------
 # find_source_repo behavioral tests
 # ---------------------------------------------------------------------------

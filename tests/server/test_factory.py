@@ -432,3 +432,22 @@ def test_gh_cli_token_not_called_during_make_context(monkeypatch):
 
     gh_calls = [c for c in calls if "gh" in str(c)]
     assert gh_calls == [], f"_gh_cli_token() called during make_context: {gh_calls}"
+
+
+def test_make_context_sets_plugin_dir_none_when_plugin_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """make_context() sets plugin_dir=None when marketplace plugin is installed."""
+    monkeypatch.setattr("autoskillit.server._factory._is_plugin_installed", lambda: True)
+    ctx = make_context(AutomationConfig(), runner=None)
+    assert ctx.plugin_dir is None
+
+
+def test_make_context_sets_plugin_dir_when_plugin_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """make_context() sets plugin_dir to package root when plugin is not installed."""
+    monkeypatch.setattr("autoskillit.server._factory._is_plugin_installed", lambda: False)
+    ctx = make_context(AutomationConfig(), runner=None)
+    assert ctx.plugin_dir is not None
+    assert ctx.plugin_dir != ""

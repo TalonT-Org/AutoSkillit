@@ -440,6 +440,58 @@ class TestCLIOrder:
         assert "stdin" not in kwargs
 
     @patch("autoskillit.cli.subprocess.run")
+    def test_order_suppresses_plugin_dir_when_plugin_installed(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order omits --plugin-dir when marketplace plugin is installed."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        monkeypatch.setattr("autoskillit.cli.app._is_plugin_installed", lambda: True)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.order("test-script")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert ClaudeFlags.PLUGIN_DIR not in cmd
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_includes_plugin_dir_when_no_plugin_installed(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order includes --plugin-dir when marketplace plugin is not installed."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        monkeypatch.setattr("autoskillit.cli.app._is_plugin_installed", lambda: False)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.order("test-script")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert ClaudeFlags.PLUGIN_DIR in cmd
+
+    @patch("autoskillit.cli.subprocess.run")
     def test_order_system_prompt_contains_behavioral_instructions(
         self,
         mock_run: MagicMock,

@@ -86,3 +86,18 @@ class TestFirstActionAskUserQuestionProhibition:
         first_action_end = prompt.index("During pipeline execution", first_action_start)
         first_action_section = prompt[first_action_start:first_action_end]
         assert "DO NOT call AskUserQuestion" in first_action_section
+
+
+class TestFirstActionTimingResilience:
+    """FIRST ACTION must acknowledge MCP initialization timing."""
+
+    def test_first_action_is_timing_resilient(self):
+        """FIRST ACTION must not unconditionally command 'MUST be first'
+        without acknowledging MCP initialization timing."""
+        prompt = _get_prompt()
+        first_action_start = prompt.index("FIRST ACTION")
+        first_action_end = prompt.index("During pipeline execution", first_action_start)
+        first_action_section = prompt[first_action_start:first_action_end]
+        assert (
+            "retry" in first_action_section.lower() or "available" in first_action_section.lower()
+        ), "FIRST ACTION must acknowledge MCP init timing with retry/availability guidance"

@@ -434,3 +434,102 @@ def test_server_init_no_shebang() -> None:
     src_path = Path(server_pkg.__file__)  # type: ignore[arg-type]
     src = src_path.read_text(encoding="utf-8")
     assert not src.startswith("#!"), "server/__init__.py must not have a shebang"
+
+
+# ---------------------------------------------------------------------------
+# Wire-format compliance (Claude Code #25081)
+# ---------------------------------------------------------------------------
+
+# Fields that Claude Code #25081 silently rejects on tools/list responses.
+# If any tool carries a non-None value for these fields, Claude Code drops
+# the ENTIRE tool list from that server.
+_REJECTED_FIELDS = {"outputSchema", "annotations"}
+
+
+class TestWireFormatCompliance:
+    """tools/list wire response must be compatible with Claude Code's MCP parser."""
+
+    @pytest.mark.anyio
+    async def test_tools_list_contains_no_rejected_fields(self):
+        """tools/list wire response must not contain fields that trigger
+        Claude Code #25081 (silent full-tool-list rejection)."""
+        from fastmcp.client import Client
+
+        from autoskillit.server import mcp
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        for tool in tools:
+            for field in _REJECTED_FIELDS:
+                # FastMCP Tool objects use snake_case attrs for camelCase wire fields
+                attr = "output_schema" if field == "outputSchema" else field
+                value = getattr(tool, attr, None)
+                assert value is None, (
+                    f"Tool '{tool.name}' has non-None {field}={value!r}. "
+                    f"Claude Code #25081 silently drops ALL tools when this field is present."
+                )
+
+
+class TestClaudeCodeCompatMiddleware:
+    """Unit tests for the wire-format sanitization middleware."""
+
+    @pytest.mark.anyio
+    async def test_middleware_strips_output_schema(self):
+        """Middleware must strip outputSchema from every tool."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
+
+        mw = ClaudeCodeCompatMiddleware()
+        tool = MagicMock()
+        tool.name = "test_tool"
+        tool.output_schema = {"type": "string"}
+        tool.annotations = None
+
+        ctx = MagicMock()
+        call_next = AsyncMock(return_value=[tool])
+
+        result = await mw.on_list_tools(ctx, call_next)
+        assert result[0].output_schema is None
+
+    @pytest.mark.anyio
+    async def test_middleware_strips_annotations(self):
+        """Middleware must strip annotations from every tool."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
+
+        mw = ClaudeCodeCompatMiddleware()
+        tool = MagicMock()
+        tool.name = "test_tool"
+        tool.output_schema = None
+        tool.annotations = MagicMock(readOnlyHint=True)
+
+        ctx = MagicMock()
+        call_next = AsyncMock(return_value=[tool])
+
+        result = await mw.on_list_tools(ctx, call_next)
+        assert result[0].annotations is None
+
+    @pytest.mark.anyio
+    async def test_middleware_preserves_tool_identity(self):
+        """Middleware must not alter tool name, description, or inputSchema."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
+
+        mw = ClaudeCodeCompatMiddleware()
+        tool = MagicMock()
+        tool.name = "my_tool"
+        tool.description = "Does things"
+        tool.parameters = {"type": "object", "properties": {}}
+        tool.output_schema = {"type": "string"}
+        tool.annotations = MagicMock()
+
+        ctx = MagicMock()
+        call_next = AsyncMock(return_value=[tool])
+
+        result = await mw.on_list_tools(ctx, call_next)
+        assert result[0].name == "my_tool"
+        assert result[0].description == "Does things"
+        assert result[0].parameters == {"type": "object", "properties": {}}

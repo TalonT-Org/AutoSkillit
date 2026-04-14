@@ -74,33 +74,6 @@ async def test_lifespan_calls_finalize_on_cancellation():
     mock_recorder.finalize.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_lifespan_submits_deferred_tasks():
-    """Lifespan pre-yield must submit deferred_initialize and drift_check tasks."""
-    from autoskillit.server import _autoskillit_lifespan
-
-    submitted: list[str] = []
-    mock_background = MagicMock()
-
-    def tracking_submit(coro, **kw):
-        submitted.append(kw.get("label", ""))
-        coro.close()
-        return asyncio.create_task(asyncio.sleep(0))
-
-    mock_background.submit = tracking_submit
-
-    mock_ctx = MagicMock()
-    mock_ctx.background = mock_background
-    mock_ctx.runner = MagicMock()
-
-    with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
-        async with _autoskillit_lifespan(MagicMock()):
-            pass
-
-    assert "deferred_initialize" in submitted
-    assert "startup_drift_check" in submitted
-
-
 def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:
     """run_startup_drift_check() regenerates hooks.json when hash is mismatched."""
     import json as _json

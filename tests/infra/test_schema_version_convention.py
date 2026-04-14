@@ -124,7 +124,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # background.py — payload dict
     ("src/autoskillit/pipeline/background.py", 132),
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
-    ("src/autoskillit/server/_lifespan.py", 55),
+    ("src/autoskillit/server/_lifespan.py", 58),
     # tools_kitchen.py — hook config dict
     ("src/autoskillit/server/tools_kitchen.py", 142),
     # tools_status.py — mcp_data dict

@@ -187,13 +187,18 @@ class TestComputeSuccess:
 
 
 class TestComputeSuccessNaturalExitNonZero:
-    """NATURAL_EXIT with non-zero returncode is always a failure."""
+    """NATURAL_EXIT with non-zero returncode.
 
-    def test_natural_exit_nonzero_returncode_with_success_session_returns_false(self):
-        """NATURAL_EXIT + non-zero returncode is unrecoverable regardless of session envelope.
+    Default: failure (no bypass). Exception: post-completion kill bypass fires when
+    the session envelope is SUCCESS, result is non-empty, and the completion marker
+    is present — the signal is a teardown artifact, not a genuine CLI error.
+    """
 
-        Documents that PTY-masking quirks on natural exit cannot be distinguished from
-        genuine CLI errors, so we fail conservatively.
+    def test_natural_exit_nonzero_returncode_without_marker_returns_false(self):
+        """NATURAL_EXIT + non-zero returncode + no completion marker → failure.
+
+        Without a completion marker, we cannot distinguish a post-completion kill
+        from a genuine crash. Fail conservatively (PTY masking cannot be ruled out).
         """
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="done", session_id="s1"
@@ -219,6 +224,90 @@ class TestComputeSuccessNaturalExitNonZero:
         )
         assert result_completed is True
         assert result_natural is True
+
+
+class TestComputeSuccessNaturalExitPostCompletionKill:
+    """NATURAL_EXIT with non-zero returncode is success when completion marker is present."""
+
+    def test_natural_exit_sigkill_with_marker_is_success(self):
+        """NATURAL_EXIT + returncode -9 + SUCCESS subtype + completion marker → success.
+
+        Documents the post-completion kill bypass: a process killed by an external
+        watchdog AFTER completing its work produces -9 on NATURAL_EXIT. The completion
+        marker in the result confirms the session finished before the kill.
+        """
+        marker = "%%ORDER_UP%%"
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result=f"fixes_applied = 2\n{marker}",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=-9,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker=marker,
+            )
+            is True
+        )
+
+    def test_natural_exit_sigkill_without_marker_remains_failure(self):
+        """No bypass when no completion_marker is configured — conservative path unchanged."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="fixes_applied = 2",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=-9,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker="",  # no marker configured
+            )
+            is False
+        )
+
+    def test_natural_exit_sigkill_marker_absent_from_result_remains_failure(self):
+        """Bypass does not fire when marker is configured but missing from result."""
+        marker = "%%ORDER_UP%%"
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="partial output without marker",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=-9,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker=marker,
+            )
+            is False
+        )
+
+    def test_natural_exit_nonzero_non_success_subtype_remains_failure(self):
+        """Bypass does not fire for non-success subtypes even with marker present."""
+        marker = "%%ORDER_UP%%"
+        session = ClaudeSessionResult(
+            subtype="unparseable",
+            is_error=False,
+            result=f"some output {marker}",
+            session_id="s1",
+        )
+        assert (
+            _compute_success(
+                session,
+                returncode=-9,
+                termination=TerminationReason.NATURAL_EXIT,
+                completion_marker=marker,
+            )
+            is False
+        )
 
 
 class TestComputeRetry:

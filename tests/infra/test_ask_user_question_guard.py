@@ -42,13 +42,10 @@ def run_guard(
     return RunResult(exit_code=result.returncode, stdout=result.stdout, stderr=result.stderr)
 
 
-# ---------------------------------------------------------------------------
 # Existing tests (updated to use headless=True where the headless path matters)
-# ---------------------------------------------------------------------------
 
 
-def test_guard_denies_when_no_marker(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+def test_guard_denies_when_no_marker(tmp_path: Path) -> None:
     hook_input = {
         "tool_name": "AskUserQuestion",
         "tool_input": {},
@@ -66,8 +63,8 @@ def test_guard_denies_when_no_marker(tmp_path: Path, monkeypatch) -> None:
     assert hook_out["hookEventName"] == "PreToolUse"
     assert hook_out["permissionDecision"] == "deny"
     reason = hook_out["permissionDecisionReason"]
-    assert "open_kitchen" in reason
-    assert "headless" in reason.lower()
+    assert "headless sessions" in reason
+    assert "open_kitchen first" in reason
 
 
 def test_guard_permits_when_marker_present(tmp_path: Path, monkeypatch) -> None:
@@ -106,9 +103,7 @@ def test_guard_permits_unrelated_tool(tmp_path: Path) -> None:
     assert result.stdout.strip() == ""  # non-AskUserQuestion exits silently
 
 
-# ---------------------------------------------------------------------------
 # New tests: session-type axis
-# ---------------------------------------------------------------------------
 
 
 def test_guard_permits_interactive_session(tmp_path: Path) -> None:

@@ -386,6 +386,7 @@ steps:
         route: test
       - when: "${{ result.verdict }} == 'ci_only_failure'"
         route: release_issue_failure
+      - route: release_issue_failure
     on_failure: release_issue_failure
     on_context_limit: test
     note: "Fixes test failures without merging. Routes back to test for re-validation before merge_worktree. on_context_limit routes needs_retry=True to test (worktree may already be green) instead of re-running fix blindly."

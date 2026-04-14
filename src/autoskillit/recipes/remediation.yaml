@@ -1020,6 +1020,7 @@ steps:
         route: release_issue_failure
       - when: "${{ result.verdict }} == 'ci_only_failure'"
         route: release_issue_failure
+      - route: release_issue_failure
     on_failure: release_issue_failure
     note: >
       Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci

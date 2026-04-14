@@ -387,6 +387,7 @@ async def wait_for_merge_queue(
     stall_grace_period: int = 60,
     max_stall_retries: int = 3,
     not_in_queue_confirmation_cycles: int = 2,
+    max_inconclusive_retries: int = 5,
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
@@ -410,6 +411,8 @@ async def wait_for_merge_queue(
         not_in_queue_confirmation_cycles: Consecutive "not in queue" cycles required
                     before treating absence as definitive. Guards against race between
                     queue exit and merged=true propagation (default 2).
+        max_inconclusive_retries: Maximum NoPositiveSignal cycles (beyond the
+                    confirmation window) before returning pr_state="timeout" (default 5).
         step_name: Optional YAML step key for wall-clock timing accumulation.
 
     Returns:
@@ -474,6 +477,7 @@ async def wait_for_merge_queue(
                 stall_grace_period=stall_grace_period,
                 max_stall_retries=max_stall_retries,
                 not_in_queue_confirmation_cycles=not_in_queue_confirmation_cycles,
+                max_inconclusive_retries=max_inconclusive_retries,
             )
             return json.dumps(result)
         except Exception as exc:

@@ -86,6 +86,20 @@ def main() -> None:
             _write_kitchen_marker(session_id, recipe_name)
     except Exception as e:
         print(f"[open_kitchen_guard] marker write failed: {e}", file=sys.stderr)
+        # Surface the failure so the user knows AskUserQuestion will be blocked
+        # in headless sub-sessions (ask_user_question_guard relies on the marker).
+        payload = json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "message": (
+                        f"Warning: kitchen marker write failed ({e}). "
+                        "AskUserQuestion may be blocked in headless sub-sessions."
+                    ),
+                }
+            }
+        )
+        sys.stdout.write(payload + "\n")
 
     sys.exit(0)
 

@@ -17,8 +17,8 @@ from autoskillit.recipe._analysis import (  # noqa: F401
 )
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,
-    _INPUT_REF_RE,
     _TEMPLATE_REF_RE,
+    INPUT_REF_RE,
 )
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import (
@@ -231,7 +231,7 @@ def validate_recipe(recipe: Recipe) -> list[str]:
         for arg_key, arg_val in step.with_args.items():
             if not isinstance(arg_val, str):
                 continue
-            for ref in _INPUT_REF_RE.findall(arg_val):
+            for ref in INPUT_REF_RE.findall(arg_val):
                 if ref not in ingredient_names:
                     errors.append(
                         f"Step '{step_name}'.with.{arg_key} references undeclared input '{ref}'."

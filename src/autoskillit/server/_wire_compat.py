@@ -35,4 +35,5 @@ class ClaudeCodeCompatMiddleware(Middleware):
         for tool in tools:
             tool.output_schema = None
             tool.annotations = None
+            tool.title = None
         return tools

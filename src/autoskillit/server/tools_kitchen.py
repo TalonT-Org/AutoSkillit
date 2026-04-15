@@ -160,12 +160,14 @@ async def _open_kitchen_handler() -> str | None:
     try:
         _write_hook_config()
     except Exception as exc:
+        ctx.gate.disable()
         logger.warning("open_kitchen_failure", stage="write_hook_config", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="write_hook_config")
 
     try:
         await _prime_quota_cache()
     except Exception as exc:
+        ctx.gate.disable()
         logger.warning("open_kitchen_failure", stage="prime_quota_cache", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="prime_quota_cache")
 

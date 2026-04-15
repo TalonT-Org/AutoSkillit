@@ -10,7 +10,7 @@ from autoskillit.core import (
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
-    _RESULT_CAPTURE_RE,
+    RESULT_CAPTURE_RE,
     get_skill_contract,
     load_bundled_manifest,
     resolve_skill_name,
@@ -90,7 +90,7 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
         declared_keys = {out.name for out in contract.outputs}
 
         for _capture_var, capture_expr in step.capture.items():
-            for ref_key in _RESULT_CAPTURE_RE.findall(capture_expr):
+            for ref_key in RESULT_CAPTURE_RE.findall(capture_expr):
                 if ref_key not in declared_keys:
                     findings.append(
                         RuleFinding(
@@ -106,7 +106,7 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
                     )
 
         for _capture_var, capture_expr in step.capture_list.items():
-            for ref_key in _RESULT_CAPTURE_RE.findall(capture_expr):
+            for ref_key in RESULT_CAPTURE_RE.findall(capture_expr):
                 if ref_key not in declared_keys:
                     findings.append(
                         RuleFinding(

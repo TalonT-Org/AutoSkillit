@@ -215,6 +215,7 @@ class KillReason(StrEnum):
     KILL_AFTER_COMPLETION = "kill_after_completion"  # drain window expired
     INFRA_KILL = "infra_kill"  # timeout / stall / stale
     EXCEPTION = "exception"  # runner raised an unhandled exception
+    NOT_APPLICABLE = "not_applicable"  # no subprocess ran (gate/headless error)
 
 
 class ChannelConfirmation(StrEnum):

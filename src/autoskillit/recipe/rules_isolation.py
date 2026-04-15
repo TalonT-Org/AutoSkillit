@@ -6,7 +6,7 @@ import re
 
 from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.contracts import _INPUT_REF_RE
+from autoskillit.recipe.contracts import INPUT_REF_RE
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
@@ -38,7 +38,7 @@ def _check_source_isolation(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
         cwd = step.with_args.get("cwd", "")
-        if not _INPUT_REF_RE.search(cwd):
+        if not INPUT_REF_RE.search(cwd):
             continue
 
         # Rule 1: git-mutating tools with inputs.* cwd — always ERROR
@@ -87,7 +87,7 @@ def _check_git_mutation_on_source(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         cmd = step.with_args.get("cmd", "")
         cwd = step.with_args.get("cwd", "")
-        if not _INPUT_REF_RE.search(cwd):
+        if not INPUT_REF_RE.search(cwd):
             continue
         if not _GIT_MUTATION_RE.search(cmd):
             continue

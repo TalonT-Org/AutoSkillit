@@ -6,7 +6,7 @@ import re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.contracts import _RESULT_CAPTURE_RE
+from autoskillit.recipe.contracts import RESULT_CAPTURE_RE
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 # Raw tool output fields — these are populated directly from the tool JSON response,
@@ -35,7 +35,7 @@ def _check_run_cmd_emit_alignment(ctx: ValidationContext) -> list[RuleFinding]:
         if not isinstance(cmd, str):
             continue
         for cap_key, cap_val in step.capture.items():
-            m = _RESULT_CAPTURE_RE.search(cap_val)
+            m = RESULT_CAPTURE_RE.search(cap_val)
             if m is None:
                 # Cannot determine the result field — skip (e.g. pipe-filtered values).
                 continue

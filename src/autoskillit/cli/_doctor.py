@@ -589,6 +589,16 @@ def _check_plugin_cache_exists(
     cache_dir: Path | None = None,
 ) -> DoctorResult:
     """Check that the plugin cache directory exists."""
+    from autoskillit.cli._install_info import InstallType, detect_install
+
+    info = detect_install()
+    if info.install_type == InstallType.LOCAL_EDITABLE:
+        return DoctorResult(
+            Severity.OK,
+            "plugin_cache_exists",
+            "Plugin cache check skipped (editable dev install)",
+        )
+
     _cache_dir = cache_dir or (
         Path.home() / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
     )

@@ -18,7 +18,7 @@ from pathlib import Path
 import igraph
 
 from autoskillit.core import SKILL_TOOLS, get_logger
-from autoskillit.recipe.contracts import _CONTEXT_REF_RE, _RESULT_CAPTURE_RE
+from autoskillit.recipe.contracts import _CONTEXT_REF_RE, RESULT_CAPTURE_RE
 from autoskillit.recipe.io import iter_steps_with_context  # noqa: F401 — re-exported for rules
 from autoskillit.recipe.schema import (
     _TERMINAL_TARGETS,
@@ -391,7 +391,7 @@ def _build_capture_origin_map(recipe: Recipe) -> dict[str, str]:
     for step in recipe.steps.values():
         for cap_var, cap_expr in (step.capture or {}).items():
             if isinstance(cap_expr, str):
-                keys = _RESULT_CAPTURE_RE.findall(cap_expr)
+                keys = RESULT_CAPTURE_RE.findall(cap_expr)
                 if len(keys) == 1:
                     origin[cap_var] = keys[0]
     return origin
@@ -444,7 +444,10 @@ _FactSet = frozenset[tuple[str, str]]
 # Capture groups: 1 = variable name, 2 = value.
 # Non-equality expressions (inequalities, conjunctions) produce no match —
 # conservative assumption (no fact is established).
-_SIMPLE_WHEN_RE = re.compile(r"(?:\$\{\{\s*)?context\.(\w+)(?:\s*\}\})?\s*==\s*[\"']?(\w+)[\"']?")
+_SIMPLE_WHEN_RE = re.compile(
+    r"(?:\$\{\{\s*)?context\.(\w+)(?:\s*\}\})?\s*==\s*"
+    r"(?:\"(\w+)\"|'(\w+)'|(\w+))"
+)
 
 
 def _parse_when_expr(expr: str) -> tuple[str, str] | None:
@@ -454,7 +457,11 @@ def _parse_when_expr(expr: str) -> tuple[str, str] | None:
     Conservative: only establishes facts for provably-simple equality conditions.
     """
     m = _SIMPLE_WHEN_RE.fullmatch(expr.strip())
-    return (m.group(1), m.group(2)) if m else None
+    if not m:
+        return None
+    # Groups 2/3/4 are mutually exclusive (double-quoted, single-quoted, unquoted)
+    value = m.group(2) or m.group(3) or m.group(4)
+    return (m.group(1), value)
 
 
 def _edge_fact(recipe: Recipe, source: str, target: str) -> tuple[str, str] | None:

@@ -83,6 +83,26 @@ def _check_merge_routing_completeness(ctx: ValidationContext) -> list[RuleFindin
     return findings
 
 
+def _has_commit_guard_ancestor(
+    step_name: str, ctx: ValidationContext, *, max_depth: int = 5
+) -> bool:
+    """BFS over predecessors to find a commit_guard within *max_depth* hops."""
+    visited: set[str] = set()
+    frontier = ctx.predecessors.get(step_name, set())
+    for _ in range(max_depth):
+        if not frontier:
+            break
+        for p in frontier:
+            if _is_commit_guard(p, ctx):
+                return True
+        visited |= frontier
+        next_frontier: set[str] = set()
+        for p in frontier:
+            next_frontier |= ctx.predecessors.get(p, set()) - visited
+        frontier = next_frontier
+    return False
+
+
 @semantic_rule(
     name="merge-without-commit-guard",
     description=(
@@ -97,8 +117,7 @@ def _check_merge_without_commit_guard(ctx: ValidationContext) -> list[RuleFindin
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "merge_worktree":
             continue
-        preds = ctx.predecessors.get(step_name, set())
-        if not any(_is_commit_guard(p, ctx) for p in preds):
+        if not _has_commit_guard_ancestor(step_name, ctx):
             findings.append(
                 RuleFinding(
                     rule="merge-without-commit-guard",

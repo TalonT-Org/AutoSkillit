@@ -379,7 +379,7 @@ async def run_managed_async(
                 termination = TerminationReason.TIMED_OUT
             action = decide_termination_action(
                 termination,
-                timeout_fired=timeout_scope.cancelled_caught,
+                timeout_fired=timeout_scope is not None and timeout_scope.cancelled_caught,
                 process_exited=signals.process_exited,
             )
             proc_log.debug(

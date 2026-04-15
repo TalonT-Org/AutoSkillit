@@ -560,7 +560,7 @@ async def check_repo_merge_state(
             )
             return json.dumps(state)
         except Exception as exc:
-            logger.error("autoskillit.check_repo_merge_state failed", exc_info=exc)
+            logger.error("autoskillit.check_repo_merge_state failed", exc_info=True)
             envelope: dict[str, object] = {
                 "error": f"{type(exc).__name__}: {exc}",
                 "queue_available": False,

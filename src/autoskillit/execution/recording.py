@@ -286,6 +286,7 @@ def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
         }
         raw_map = player.build_session_map()
     except Exception:
+        _tmp_replay_dir.cleanup()
         logger.exception("Failed to parse scenario manifest in %r", replay_dir)
         raise
 

@@ -76,9 +76,30 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                         if recipe.steps[s].on_success is not None
                     )
                     if not success_stays_in_cycle:
-                        # Success path exits the cycle — cycle is truly bounded
-                        rec_stack.discard(node)
-                        return
+                        # Success path exits the cycle — but does it loop back?
+                        # BFS from exit targets to check if they can reach any
+                        # cycle member through the step graph.
+                        exit_targets: set[str] = set()
+                        for _rs in retrying_steps:
+                            _os = recipe.steps[_rs].on_success
+                            if _os is not None and _os not in cycle_set:
+                                exit_targets.add(_os)
+                        loops_back = False
+                        visited_exit: set[str] = set()
+                        frontier = exit_targets
+                        while frontier:
+                            if frontier & cycle_set:
+                                loops_back = True
+                                break
+                            visited_exit |= frontier
+                            nxt: set[str] = set()
+                            for f in frontier:
+                                nxt |= set(graph.get(f, set())) - visited_exit
+                            frontier = nxt
+                        if not loops_back:
+                            # Truly exits — cycle is bounded
+                            rec_stack.discard(node)
+                            return
 
                     # Success path re-enters the cycle — retry exit only bounds
                     # individual step visits, not the outer loop. Emit WARNING.

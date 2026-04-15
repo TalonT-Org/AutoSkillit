@@ -402,7 +402,7 @@ def test_recipe_validator_has_regex_patterns() -> None:
     ast_module = _get_module_ast("recipe/contracts.py")
     assigns = _top_level_assign_targets(ast_module)
     assert "_CONTEXT_REF_RE" in assigns, "recipe/contracts.py must define _CONTEXT_REF_RE"
-    assert "_INPUT_REF_RE" in assigns, "recipe/contracts.py must define _INPUT_REF_RE"
+    assert "INPUT_REF_RE" in assigns, "recipe/contracts.py must define INPUT_REF_RE"
 
 
 def test_recipe_validator_no_process_lifecycle_import() -> None:

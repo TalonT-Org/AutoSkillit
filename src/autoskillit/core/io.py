@@ -120,13 +120,6 @@ def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: in
 
 _AUTOSKILLIT_GITIGNORE_ENTRIES = ["temp/", ".secrets.yaml", ".onboarded", "sync_manifest.json"]
 
-_ROOT_GITIGNORE_ENTRIES = [
-    ".autoskillit/.secrets.yaml",
-    ".autoskillit/temp/",
-    ".autoskillit/.onboarded",
-    ".autoskillit/sync_manifest.json",
-]
-
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(
     {
         "config.yaml",

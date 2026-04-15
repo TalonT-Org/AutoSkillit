@@ -43,9 +43,6 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # without any autoskillit imports. Falls back to .autoskillit/temp/kitchen_state relative to
     # CWD when AUTOSKILLIT_STATE_DIR is not set.
     "core/kitchen_state.py": "stdlib-only kitchen state module; cannot use resolve_temp_dir()",
-    # Justification: L0 readiness sentinel module; cannot import resolve_temp_dir() from io.py.
-    # Uses same .autoskillit/temp/kitchen_state fallback as kitchen_state.py.
-    "core/readiness.py": "L0 sentinel module; cannot use resolve_temp_dir()",
 }
 
 _LITERAL = ".autoskillit/temp"

@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 
 from .io import atomic_write
+from .kitchen_state import get_state_dir
 
 __all__ = [
     "readiness_sentinel_path",
@@ -29,14 +30,10 @@ __all__ = [
 def _sentinel_dir() -> Path:
     """Return the directory where sentinel files are written.
 
-    Reads ``AUTOSKILLIT_STATE_DIR`` env (for test isolation); falls back to
-    ``<cwd>/.autoskillit/temp/kitchen_state`` — the same base used by
-    ``core.kitchen_state.get_state_dir()``.
+    Delegates to ``kitchen_state.get_state_dir()`` to avoid path-resolution
+    drift between the two modules.
     """
-    override = os.environ.get("AUTOSKILLIT_STATE_DIR")
-    if override:
-        return Path(override) / "kitchen_state"
-    return Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+    return get_state_dir()
 
 
 def readiness_sentinel_path(pid: int) -> Path:

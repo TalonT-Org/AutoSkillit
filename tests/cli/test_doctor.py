@@ -655,8 +655,21 @@ def test_doctor_does_not_modify_plugin_state(tmp_path, monkeypatch, capsys):
 
 def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):
     """Doctor must report when the plugin cache directory is missing."""
+    from autoskillit.cli._install_info import InstallInfo, InstallType
+
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
+    # Force non-editable install so the cache check actually runs
+    monkeypatch.setattr(
+        "autoskillit.cli._install_info.detect_install",
+        lambda: InstallInfo(
+            install_type=InstallType.GIT_VCS,
+            commit_id=None,
+            requested_revision=None,
+            url=None,
+            editable_source=None,
+        ),
+    )
     cli.doctor(output_json=True)
     captured = capsys.readouterr()
     data = json.loads(captured.out)

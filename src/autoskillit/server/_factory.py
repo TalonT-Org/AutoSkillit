@@ -242,7 +242,7 @@ def make_context(
         clone_mgr=DefaultCloneManager(),
         github_client=DefaultGitHubFetcher(token=token_factory),
         ci_watcher=DefaultCIWatcher(token=token_factory),
-        merge_queue_watcher=DefaultMergeQueueWatcher(token_factory),
+        merge_queue_watcher=DefaultMergeQueueWatcher(token=token_factory),
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
         quota_refresh_task=None,

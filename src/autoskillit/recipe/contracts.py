@@ -115,9 +115,9 @@ class RecipeCard:
 
 _SKILL_NAME_RE = re.compile(r"/autoskillit:([\w-]+)")
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
-_INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
+INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
-_RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
+RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +206,7 @@ def extract_input_refs(step: Any) -> set[str]:
     """Extract ${{ inputs.X }} references from a step's with_args."""
     refs: set[str] = set()
     for val in step.with_args.values():
-        refs.update(_INPUT_REF_RE.findall(str(val)))
+        refs.update(INPUT_REF_RE.findall(str(val)))
     return refs
 
 
@@ -218,7 +218,7 @@ def extract_skill_cmd_refs(skill_command: str) -> set[str]:
     invocations where template ref names don't match named contract inputs.
     """
     ctx = set(_CONTEXT_REF_RE.findall(skill_command))
-    inp = set(_INPUT_REF_RE.findall(skill_command))
+    inp = set(INPUT_REF_RE.findall(skill_command))
     return ctx | inp
 
 

@@ -330,7 +330,7 @@ def resolve_reference_sha(
         info: Install classification from ``detect_install()``.
         home: User home directory (used by the disk-backed fetch cache).
         network: When ``False``, only the local git or disk cache is consulted.
-            The doctor check uses ``network=False`` to guarantee no outbound calls.
+            The doctor check passes ``network=True`` so it can resolve remote refs.
     """
     try:
         if info.requested_revision is None:

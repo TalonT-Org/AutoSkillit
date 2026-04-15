@@ -1055,3 +1055,129 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         "Default* classes may only be constructed in server/_factory.py "
         "or in the allowlisted CLI/recording/context fallback sites:\n" + "\n".join(violations)
     )
+
+
+# ── Test file layer boundary enforcement ─────────────────────────────────────
+
+_TESTS_ROOT = Path(__file__).parent.parent  # = tests/
+
+# Allowed autoskillit top-level packages per test layer directory.
+# L3 dirs (server, cli) use wildcard "autoskillit" meaning any sub-package is allowed.
+_TEST_LAYER_ALLOWED: dict[str, frozenset[str]] = {
+    "tests/core": frozenset({"autoskillit.core"}),
+    "tests/config": frozenset({"autoskillit.core", "autoskillit.config"}),
+    "tests/pipeline": frozenset({"autoskillit.core", "autoskillit.pipeline"}),
+    "tests/execution": frozenset({"autoskillit.core", "autoskillit.execution"}),
+    "tests/workspace": frozenset({"autoskillit.core", "autoskillit.workspace"}),
+    "tests/recipe": frozenset({"autoskillit.core", "autoskillit.recipe"}),
+    "tests/migration": frozenset({"autoskillit.core", "autoskillit.migration"}),
+    "tests/server": frozenset({"autoskillit"}),  # wildcard: any autoskillit.* import allowed
+    "tests/cli": frozenset({"autoskillit"}),  # wildcard: any autoskillit.* import allowed
+}
+
+# Known intentional cross-refs: file path → extra allowed top-level packages.
+# Group D (plan-specified allowlisted benign cross-refs):
+#   test_context.py needs config to construct ToolContext (DI container under test).
+#   test_skills.py needs load_config() (file-reading fn — not wrappable as a helper).
+# Additional benign cross-refs discovered during enforcement rollout:
+#   Each entry carries the rationale for why the cross-ref is intentional.
+_TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
+    # pipeline tests
+    "tests/pipeline/test_context.py": frozenset({"autoskillit.config"}),
+    "tests/pipeline/test_gate.py": frozenset({"autoskillit.server"}),
+    # core tests — protocol conformance checks require concrete implementations
+    "tests/core/test_core_terminal_table.py": frozenset({"autoskillit.cli"}),
+    "tests/core/test_types.py": frozenset({"autoskillit.execution"}),
+    # execution tests — clone_guard/headless/commands use sibling layers
+    "tests/execution/test_clone_guard.py": frozenset({"autoskillit.pipeline"}),
+    "tests/execution/test_commands.py": frozenset({"autoskillit.cli"}),
+    "tests/execution/test_headless.py": frozenset({"autoskillit.pipeline", "autoskillit.recipe"}),
+    "tests/execution/test_quota.py": frozenset({"autoskillit.hooks"}),
+    # workspace tests
+    "tests/workspace/test_clone_ci_contract.py": frozenset({"autoskillit.execution"}),
+    "tests/workspace/test_skills.py": frozenset({"autoskillit.config"}),
+    # recipe tests — recipe layer is L2 and may use workspace (L1 sibling)
+    "tests/recipe/test_contracts.py": frozenset({"autoskillit.workspace"}),
+    "tests/recipe/test_rules_skill_content.py": frozenset({"autoskillit.workspace"}),
+    # migration tests — migration engine integrates with execution.session
+    "tests/migration/test_engine.py": frozenset({"autoskillit.execution"}),
+}
+
+
+def _autoskillit_top_package(module: str) -> str | None:
+    """Return the top-level autoskillit package for a dotted module string.
+
+    Examples:
+      'autoskillit.config.settings' → 'autoskillit.config'
+      'autoskillit.config'          → 'autoskillit.config'
+      'autoskillit'                 → None  (bare package import, always allowed)
+      'structlog'                   → None
+    """
+    if not module.startswith("autoskillit"):
+        return None
+    parts = module.split(".")
+    if len(parts) >= 2:
+        return f"{parts[0]}.{parts[1]}"
+    return None  # bare 'import autoskillit' — root package, always allowed
+
+
+def _collect_layer_test_params() -> list[tuple[str, str, frozenset[str]]]:
+    """Return (rel_path, layer_dir, allowed) for every test_*.py in layered dirs."""
+    params: list[tuple[str, str, frozenset[str]]] = []
+    for layer_dir, allowed in _TEST_LAYER_ALLOWED.items():
+        subdir = layer_dir.split("/", 1)[1]  # strip leading "tests/"
+        layer_path = _TESTS_ROOT / subdir
+        if not layer_path.exists():
+            continue
+        for py_file in sorted(layer_path.glob("test_*.py")):
+            rel = f"{layer_dir}/{py_file.name}"
+            params.append((rel, layer_dir, allowed))
+    return params
+
+
+_LAYER_TEST_PARAMS = _collect_layer_test_params()
+
+
+@pytest.mark.parametrize(
+    "rel_path,layer_dir,allowed",
+    _LAYER_TEST_PARAMS,
+    ids=[p[0] for p in _LAYER_TEST_PARAMS],
+)
+def test_test_files_respect_layer_boundaries(
+    rel_path: str, layer_dir: str, allowed: frozenset[str]
+) -> None:
+    """Each test_*.py in a layered directory may only import from its allowed autoskillit packages.
+
+    L3 test dirs (server/, cli/) use a wildcard and may import from any autoskillit sub-package.
+    Known intentional cross-refs are listed in _TEST_LAYER_ALLOWLIST with rationale.
+    conftest.py files are exempt (only test_*.py is scanned).
+    """
+    file_path = _TESTS_ROOT / rel_path.split("/", 1)[1]
+    source = file_path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(file_path))
+
+    wildcard = frozenset({"autoskillit"}) == allowed
+    allowlist_extras = _TEST_LAYER_ALLOWLIST.get(rel_path, frozenset())
+
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if not node.module:
+                continue
+            pkg = _autoskillit_top_package(node.module)
+            if pkg is None or wildcard or pkg in allowed or pkg in allowlist_extras:
+                continue
+            violations.append(
+                f"  line {node.lineno}: from {node.module} import ... "
+                f"({pkg} not allowed in {layer_dir})"
+            )
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                pkg = _autoskillit_top_package(alias.name)
+                if pkg is None or wildcard or pkg in allowed or pkg in allowlist_extras:
+                    continue
+                violations.append(
+                    f"  line {node.lineno}: import {alias.name} ({pkg} not allowed in {layer_dir})"
+                )
+
+    assert not violations, f"{rel_path}: cross-layer import violations:\n" + "\n".join(violations)

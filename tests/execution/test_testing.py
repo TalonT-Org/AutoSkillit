@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.config import AutomationConfig
 from autoskillit.core.types import (
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     SubprocessResult,
@@ -19,6 +18,7 @@ from autoskillit.execution.testing import (
 from autoskillit.execution.testing import (
     parse_pytest_summary as _parse_pytest_summary,
 )
+from tests._helpers import make_test_config
 
 
 def test_build_sanitized_env_strips_private_env_vars(monkeypatch):
@@ -66,7 +66,7 @@ async def test_default_test_runner_strips_private_env_vars_from_subprocess(monke
             pid=12345,
         )
 
-    runner = DefaultTestRunner(config=AutomationConfig(), runner=capturing_runner)
+    runner = DefaultTestRunner(config=make_test_config(), runner=capturing_runner)
     await runner.run(cwd=tmp_path)
 
     assert "env" in captured_kwargs, "DefaultTestRunner must pass env= to its runner"
@@ -305,14 +305,13 @@ def test_check_test_passed_parses_pytest_summary_in_stderr() -> None:
 
 @pytest.mark.anyio
 async def test_default_test_runner_returns_test_result_with_stderr(tmp_path: Path) -> None:
-    from autoskillit.config import AutomationConfig
     from autoskillit.core import TestResult
     from autoskillit.execution.testing import DefaultTestRunner
     from tests.conftest import MockSubprocessRunner, _make_result
 
     runner = MockSubprocessRunner()
     runner.push(_make_result(0, "", stderr="PASSED [0.5s] all tests"))
-    config = AutomationConfig()
+    config = make_test_config()
     tester = DefaultTestRunner(config=config, runner=runner)
     result = await tester.run(tmp_path)
     assert isinstance(result, TestResult)

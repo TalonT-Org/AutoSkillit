@@ -28,6 +28,7 @@ _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
         "error",
         "content",
         "ingredients_table",
+        "orchestration_rules",
     }
 )
 _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
@@ -106,6 +107,9 @@ def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
     ]
     if errors:
         lines.append(f"\n{len(errors)} finding(s)")
+    orch_rules = data.get("orchestration_rules")
+    if orch_rules:
+        lines.append(f"\n{orch_rules}")
     return lines
 
 

@@ -189,8 +189,21 @@ TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
 OPTIONAL STEP SEMANTICS:
 - optional: true means the step is SKIPPED (treated as bypassed) when its
   skip_when_false ingredient is false. It does NOT mean failures are tolerated.
+- When skip_when_false evaluates to true (or is absent), the step is MANDATORY
+  and MUST execute. The ONLY reason to skip an optional step is skip_when_false
+  being false — no other reason is valid.
 - A running optional step that returns success: false MUST follow on_failure.
   Never route a running optional step's failure to done.
+
+STEP EXECUTION IS NOT DISCRETIONARY:
+- You MUST execute every step the pipeline routes you to.
+- NEVER skip a step because the PR is small, the diff is trivial, the change
+  looks simple, or you judge the step unnecessary.
+- The ONLY mechanism for skipping a step is skip_when_false evaluating to false.
+  When skip_when_false evaluates to true (or is absent), the step is MANDATORY.
+- Consequence: skipping PR review steps results in unreviewed code, missing diff
+  annotations, and no architectural lens analysis — code reaches main without
+  quality gates.
 
 ACTION: CONFIRM STEP SEMANTICS:
 - When you reach a step with action: "confirm", call AskUserQuestion with the
@@ -228,8 +241,21 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
         "in this session. All code reading, searching, editing, and "
         "investigation MUST be delegated through run_skill, which launches "
         "headless sessions with full tool access. Do NOT use native tools to "
-        "investigate failures — route to on_failure and let the downstream skill handle diagnosis."
-        + sous_chef_content
+        "investigate failures — route to on_failure and let the downstream skill "
+        "handle diagnosis.\n\n"
+        "OPTIONAL STEP SEMANTICS:\n"
+        "- optional: true means the step is SKIPPED when its skip_when_false ingredient\n"
+        "  is false. When skip_when_false evaluates to true (or is absent), the step is\n"
+        "  MANDATORY. The ONLY reason to skip an optional step is skip_when_false being false.\n"
+        "- A running optional step that returns success: false MUST follow on_failure.\n\n"
+        "STEP EXECUTION IS NOT DISCRETIONARY:\n"
+        "- You MUST execute every step the pipeline routes you to.\n"
+        "- NEVER skip a step because the PR is small, the diff is trivial, the change\n"
+        "  looks simple, or you judge the step unnecessary.\n"
+        "- The ONLY mechanism for skipping a step is skip_when_false evaluating to false.\n"
+        "- Consequence: skipping PR review steps results in unreviewed code, missing diff\n"
+        "  annotations, and no architectural lens analysis — code reaches main without\n"
+        "  quality gates." + sous_chef_content
     )
 
     scripts_dir = Path.cwd() / ".autoskillit" / "scripts"

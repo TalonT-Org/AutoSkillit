@@ -158,6 +158,12 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
     - classify_fix: "error" key present in response
     - push_to_remote: {"success": false} (also has "error" and "stderr" keys)
 
+    OPTIONAL STEP SEMANTICS:
+    - optional: true means the step is SKIPPED when its skip_when_false ingredient
+      is false. When the ingredient is true (or absent), the step is MANDATORY.
+    - NEVER skip a step for any other reason (PR size, diff triviality, etc.).
+    - A running optional step that returns success: false MUST follow on_failure.
+
     To CREATE a new recipe, use the /autoskillit:write-recipe skill.
     This tool is for loading and executing existing recipes.
 

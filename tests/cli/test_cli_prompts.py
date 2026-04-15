@@ -434,3 +434,29 @@ def test_prompt_builder_includes_startup_retry():
     prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
     assert "SERVER-STARTUP RECOVERY" in prompt
     assert "No such tool available" in prompt
+
+
+def test_orchestrator_prompt_contains_anti_skip_rule():
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
+    assert "STEP EXECUTION IS NOT DISCRETIONARY" in prompt
+    assert "NEVER skip a step because" in prompt
+
+
+def test_open_kitchen_prompt_contains_anti_skip_rule():
+    from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
+    prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
+    assert "STEP EXECUTION IS NOT DISCRETIONARY" in prompt
+    assert "NEVER skip a step because" in prompt
+
+
+def test_orchestrator_prompt_closes_optional_semantics():
+    """OPTIONAL STEP SEMANTICS must state that skip_when_false=false is the ONLY skip reason."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
+    idx = prompt.index("OPTIONAL STEP SEMANTICS")
+    section = prompt[idx : idx + 500]
+    assert "ONLY" in section

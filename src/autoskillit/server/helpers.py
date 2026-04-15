@@ -6,7 +6,6 @@ import asyncio
 import functools
 import json
 import os
-import time
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -21,15 +20,6 @@ from autoskillit.execution import (
 )
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.pipeline import gate_error_result
-from autoskillit.recipe import (
-    StaleItem,
-    StalenessEntry,
-    compute_recipe_hash,
-    find_recipe_by_name,
-    load_bundled_manifest,
-    read_staleness_cache,
-    write_staleness_cache,
-)
 from autoskillit.workspace import clone_registry  # noqa: F401 — re-exported for tools_clone.py
 
 if TYPE_CHECKING:
@@ -248,90 +238,14 @@ async def _apply_triage_gate(
 ) -> dict[str, Any]:
     """Apply LLM triage to stale-contract suggestions, suppressing cosmetic ones.
 
-    Checks the staleness cache for a cached triage result. If not cached,
-    runs triage_staleness() (a 30s Haiku call) for hash_mismatch items only.
-    version_mismatch items are always treated as meaningful and never suppressed.
-
-    When ``recipe_info`` is provided by the caller, the internal find() call is
-    skipped, eliminating the duplicate YAML directory scan.
-
-    Modifies ``result`` in-place and returns it.
+    Delegates to the RecipeRepository implementation via the Composition Root.
     """
     from autoskillit.server._state import _ctx
 
     if _ctx is None or _ctx.recipes is None:
         return result
 
-    stale_suggs = [s for s in result.get("suggestions", []) if s.get("rule") == "stale-contract"]
-    if not stale_suggs:
-        return result
-
-    if recipe_info is None:
-        recipe_info = _ctx.recipes.find(name, Path.cwd())
-    if recipe_info is None:
-        return result
-
-    cache_path = _ctx.temp_dir / "recipe_staleness_cache.json"
-    t0 = time.perf_counter()
-    cached = read_staleness_cache(cache_path, name)
-    logger.debug(
-        "triage_gate_cache_read",
-        recipe=name,
-        elapsed_ms=round((time.perf_counter() - t0) * 1000, 1),
-    )
-
-    if cached is not None and cached.triage_result == "cosmetic":
-        result["suggestions"] = [
-            s for s in result["suggestions"] if s.get("rule") != "stale-contract"
-        ]
-        return result
-
-    if cached is None or cached.triage_result is None:
-        hash_items = [
-            StaleItem(
-                skill=s["skill"],
-                reason=s["reason"],
-                stored_value=s.get("stored_value", ""),
-                current_value=s.get("current_value", ""),
-            )
-            for s in stale_suggs
-            if s.get("reason") == "hash_mismatch"
-        ]
-        if hash_items:
-            from datetime import UTC, datetime
-
-            from autoskillit._llm_triage import triage_staleness
-
-            t_llm = time.perf_counter()
-            triage = await triage_staleness(hash_items)
-            logger.debug(
-                "triage_gate_llm_triage",
-                recipe=name,
-                elapsed_ms=round((time.perf_counter() - t_llm) * 1000, 1),
-            )
-            all_cosmetic = all(not r.get("meaningful", True) for r in triage)
-            triage_str = "cosmetic" if all_cosmetic else "meaningful"
-            current_hash = compute_recipe_hash(recipe_info.path)
-            current_ver = load_bundled_manifest().get("version", "")
-            write_staleness_cache(
-                cache_path,
-                name,
-                StalenessEntry(
-                    recipe_hash=current_hash,
-                    manifest_version=current_ver,
-                    is_stale=True,
-                    triage_result=triage_str,
-                    checked_at=datetime.now(UTC).isoformat(),
-                ),
-            )
-            if all_cosmetic and not any(
-                s.get("reason") == "version_mismatch" for s in stale_suggs
-            ):
-                result["suggestions"] = [
-                    s for s in result["suggestions"] if s.get("rule") != "stale-contract"
-                ]
-
-    return result
+    return await _ctx.recipes.apply_triage_gate(result, name, recipe_info, _ctx.temp_dir, logger)
 
 
 def _process_runner_result(
@@ -466,16 +380,6 @@ async def _import_and_call(
         return {"success": True, "result": result}
     except (TypeError, ValueError):
         return {"success": True, "result": str(result)}
-
-
-def _find_recipe(name: str, cwd: Path) -> Any:
-    """Look up a recipe by name. Delegates to recipe layer; exposed for tools_kitchen.py.
-
-    tools_kitchen.py (a tools_*.py file) is restricted by REQ-IMP-003 to importing
-    only from autoskillit.core, autoskillit.pipeline, and autoskillit.server.
-    This function provides the architecture-compliant bridge to autoskillit.recipe.
-    """
-    return find_recipe_by_name(name, cwd)
 
 
 async def infer_repo_from_remote(cwd: str, hint: str | None = None) -> str:

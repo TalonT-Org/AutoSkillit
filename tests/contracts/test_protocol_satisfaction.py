@@ -175,6 +175,31 @@ def test_default_recipe_repository_satisfies_recipe_repository():
     assert isinstance(DefaultRecipeRepository(), RecipeRepository)
 
 
+def test_recipe_repository_has_apply_triage_gate():
+    """RecipeRepository protocol defines apply_triage_gate as an async method."""
+    import inspect
+
+    from autoskillit.core import RecipeRepository
+
+    method = getattr(RecipeRepository, "apply_triage_gate", None)
+    assert method is not None, "RecipeRepository must define apply_triage_gate"
+    assert inspect.iscoroutinefunction(method), "apply_triage_gate must be async"
+    sig = inspect.signature(method)
+    expected_params = ["self", "result", "recipe_name", "recipe_info", "temp_dir", "logger"]
+    assert list(sig.parameters.keys()) == expected_params
+
+
+def test_default_recipe_repository_has_apply_triage_gate():
+    """DefaultRecipeRepository implements apply_triage_gate from the protocol."""
+    import inspect
+
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    method = getattr(DefaultRecipeRepository, "apply_triage_gate", None)
+    assert method is not None
+    assert inspect.iscoroutinefunction(method)
+
+
 def test_default_migration_service_satisfies_migration_service():
     from autoskillit.core import MigrationService
     from autoskillit.migration.engine import DefaultMigrationService, MigrationEngine

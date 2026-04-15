@@ -580,7 +580,10 @@ def _is_dismissed(
         entry = state.get("update_prompt")
         if not isinstance(entry, dict):
             return False
-        dismissed_at = datetime.fromisoformat(entry["dismissed_at"])
+        raw_dismissed = entry.get("dismissed_at")
+        if raw_dismissed is None:
+            return False
+        dismissed_at = datetime.fromisoformat(raw_dismissed)
         if datetime.now(UTC) - dismissed_at >= window:
             return False
         from packaging.version import Version

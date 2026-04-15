@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tests._helpers import make_quota_guard_config
+from autoskillit.config.settings import QuotaGuardConfig
 
 
 class TestReadCredentials:
@@ -200,10 +200,10 @@ class TestWriteCache:
 class TestCheckAndSleepIfNeeded:
     @pytest.mark.anyio
     async def test_disabled_returns_immediately_no_io(self, monkeypatch):
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import check_and_sleep_if_needed
-        from tests._helpers import make_quota_guard_config
 
-        config = make_quota_guard_config(enabled=False)
+        config = QuotaGuardConfig(enabled=False)
         fetch_called = []
 
         async def mock_fetch(*a, **kw):
@@ -217,16 +217,16 @@ class TestCheckAndSleepIfNeeded:
 
     @pytest.mark.anyio
     async def test_below_threshold_returns_should_sleep_false(self, monkeypatch, tmp_path):
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=True,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
@@ -249,16 +249,16 @@ class TestCheckAndSleepIfNeeded:
     async def test_above_threshold_returns_should_sleep_true(self, monkeypatch, tmp_path):
         from unittest.mock import AsyncMock
 
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=True,
             buffer_seconds=0,
             credentials_path=str(tmp_path / ".credentials.json"),
@@ -286,6 +286,7 @@ class TestCheckAndSleepIfNeeded:
 
     @pytest.mark.anyio
     async def test_uses_fresh_cache_skips_fetch(self, monkeypatch, tmp_path):
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
@@ -293,7 +294,6 @@ class TestCheckAndSleepIfNeeded:
             _write_cache,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=1)
         cache_path = tmp_path / "cache.json"
@@ -306,7 +306,7 @@ class TestCheckAndSleepIfNeeded:
                 ),
             ),
         )
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=True,
             cache_max_age=120,
             credentials_path=str(tmp_path / ".credentials.json"),
@@ -326,10 +326,10 @@ class TestCheckAndSleepIfNeeded:
 
     @pytest.mark.anyio
     async def test_credentials_failure_returns_error_dict(self, tmp_path):
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import check_and_sleep_if_needed
-        from tests._helpers import make_quota_guard_config
 
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=True,
             credentials_path=str(tmp_path / "nonexistent.json"),
             cache_path=str(tmp_path / "cache.json"),
@@ -340,10 +340,10 @@ class TestCheckAndSleepIfNeeded:
 
     @pytest.mark.anyio
     async def test_network_error_returns_error_dict(self, monkeypatch, tmp_path):
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import check_and_sleep_if_needed
-        from tests._helpers import make_quota_guard_config
 
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=True,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
@@ -371,15 +371,15 @@ class TestCheckAndSleepIfNeeded:
 
         import structlog.testing
 
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=True,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
@@ -428,15 +428,15 @@ class TestCheckAndSleepIfNeeded:
 class TestCheckAndSleepResetAtNoneBlocks:
     @pytest.mark.anyio
     async def test_above_threshold_resets_at_none_first_fetch_blocks(self, monkeypatch, tmp_path):
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=True,
             buffer_seconds=60,
             credentials_path=str(tmp_path / ".credentials.json"),
@@ -464,16 +464,16 @@ class TestCheckAndSleepResetAtNoneBlocks:
     async def test_above_threshold_resets_at_none_second_fetch_blocks(self, monkeypatch, tmp_path):
         from unittest.mock import AsyncMock
 
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=True,
             buffer_seconds=60,
             credentials_path=str(tmp_path / ".credentials.json"),
@@ -508,6 +508,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
 
     @pytest.mark.anyio
     async def test_cache_hit_resets_at_none_above_threshold_blocks(self, monkeypatch, tmp_path):
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
@@ -515,7 +516,6 @@ class TestCheckAndSleepResetAtNoneBlocks:
             _write_cache,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         cache_path = tmp_path / "cache.json"
         # Write a cache entry with resets_at=None and above-threshold utilization
@@ -532,7 +532,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
                 ),
             ),
         )
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=True,
             buffer_seconds=60,
             cache_max_age=120,
@@ -552,15 +552,15 @@ class TestCheckAndSleepResetAtNoneBlocks:
 
     @pytest.mark.anyio
     async def test_fallback_sleep_uses_at_least_buffer_seconds(self, monkeypatch, tmp_path):
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=True,
             buffer_seconds=120,
             credentials_path=str(tmp_path / ".credentials.json"),
@@ -588,17 +588,17 @@ class TestCheckAndSleepResetAtNoneBlocks:
     async def test_above_threshold_with_buffer_seconds_default(self, monkeypatch, tmp_path):
         from unittest.mock import AsyncMock
 
+        from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
-        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         # Do NOT override buffer_seconds — exercises the real default (60)
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=True,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
@@ -1054,7 +1054,7 @@ class TestPerWindowThresholds:
             return QuotaFetchResult(windows=windows, binding=binding)
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             cache_path=str(tmp_path / "cache.json"),
             credentials_path=str(tmp_path / "creds.json"),
         )
@@ -1090,7 +1090,7 @@ class TestPerWindowThresholds:
             return QuotaFetchResult(windows=windows, binding=binding)
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             cache_path=str(tmp_path / "cache.json"),
             credentials_path=str(tmp_path / "creds.json"),
         )
@@ -1135,7 +1135,7 @@ class TestRefreshQuotaCache:
             )
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
-        config = make_quota_guard_config(cache_path=str(fresh_cache))
+        config = QuotaGuardConfig(cache_path=str(fresh_cache))
         await _refresh_quota_cache(config)
         assert len(fetch_called) == 1  # must have fetched even though cache was fresh
 
@@ -1158,7 +1158,7 @@ class TestRefreshQuotaCache:
             )
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
-        config = make_quota_guard_config(cache_path=str(cache_path))
+        config = QuotaGuardConfig(cache_path=str(cache_path))
         await _refresh_quota_cache(config)
         assert cache_path.exists()
         data = json.loads(cache_path.read_text())
@@ -1384,7 +1384,7 @@ class TestCacheSchemaVersion:
             )
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             cache_path=str(cache_path),
             credentials_path=str(tmp_path / "fake_creds.json"),
         )
@@ -1560,7 +1560,7 @@ class TestPerWindowToggles:
         )
 
         resets_at = datetime.now(UTC) + timedelta(hours=3)
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             short_window_enabled=False,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
@@ -1602,7 +1602,7 @@ class TestPerWindowToggles:
             check_and_sleep_if_needed,
         )
 
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             long_window_enabled=False,
             credentials_path=str(tmp_path / ".credentials.json"),
             cache_path=str(tmp_path / "cache.json"),
@@ -1648,7 +1648,7 @@ class TestPerWindowToggles:
             check_and_sleep_if_needed,
         )
 
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             short_window_enabled=False,
             long_window_enabled=False,
             credentials_path=str(tmp_path / ".credentials.json"),
@@ -1689,7 +1689,7 @@ class TestPerWindowToggles:
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", sentinel_fetch)
         from autoskillit.execution.quota import check_and_sleep_if_needed
 
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             enabled=False,
             short_window_enabled=True,
             long_window_enabled=True,
@@ -1718,7 +1718,7 @@ class TestPerWindowToggles:
             )
 
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
-        config = make_quota_guard_config(
+        config = QuotaGuardConfig(
             short_window_enabled=False,
             cache_path=str(tmp_path / "cache.json"),
         )

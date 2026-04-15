@@ -13,21 +13,14 @@ All tests run under `-n 4 --dist worksteal`. Every test must be safe for paralle
 
 ## Fixture Discipline
 
-- The `tool_ctx` fixture (conftest.py) provides a fully isolated `ToolContext` via
-  `make_context()` — a full-stack L3 fixture that imports all production layers. Use for
-  server integration tests that need executor, tester, recipes, or other service fields.
-  It monkeypatches `server._ctx` so all server tool handler calls use the test context
-  without global state leakage.
-- The `minimal_ctx` fixture (conftest.py) provides a lightweight `ToolContext` using only
-  L0+L1 imports (core, pipeline, config). Use for tests that only need gate, audit,
-  token_log, timing_log, or config — no server factory, no L2/L3 service wiring. Does NOT
-  monkeypatch `server._state._ctx`. Guard tests in `test_conftest.py` enforce the import
-  boundary via AST analysis.
-- To test with the kitchen closed, set `ctx.gate = DefaultGateState(enabled=False)` at
+- The `tool_ctx` fixture (conftest.py) provides a fully isolated `ToolContext` with gate open
+  by default (`DefaultGateState(enabled=True)`). It monkeypatches `server._ctx` so all server
+  tool handler calls use the test context without global state leakage.
+- To test with the kitchen closed, set `tool_ctx.gate = DefaultGateState(enabled=False)` at
   the start of the test or in a class-level autouse fixture (see `_close_kitchen` in
   `test_instruction_surface.py` for an example).
 - Never use bare assignment or `try/finally` to restore server state — use `monkeypatch` or
-  rely on the fixture's teardown.
+  rely on `tool_ctx`'s fixture teardown.
 
 ## Placement Convention: tests/skills/ vs tests/contracts/
 
@@ -53,7 +46,7 @@ tests/
 ├── CLAUDE.md                            # xdist compatibility guidelines
 ├── __init__.py
 ├── _helpers.py
-├── conftest.py                          # Shared fixtures: minimal_ctx, tool_ctx, MockSubprocessRunner, _make_result, _make_timeout_result
+├── conftest.py                          # Shared fixtures: MockSubprocessRunner, _make_result, _make_timeout_result
 ├── test_conftest.py                     # Tests for conftest fixtures
 ├── test_phase2_skills.py
 ├── test_skill_preambles.py

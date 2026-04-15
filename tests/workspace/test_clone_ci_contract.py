@@ -64,3 +64,38 @@ async def test_resolve_remote_repo_after_clone_uses_upstream(tmp_path: Path) -> 
         assert resolved == "testowner/testrepo"
     finally:
         shutil.rmtree(Path(clone_path).parent, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Regression guard: infer_repo_from_remote with file:// origin
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_infer_repo_from_remote_returns_empty_for_file_url(
+    clone_isolation_repo: Path,
+    tmp_path: Path,
+) -> None:
+    """Regression guard: file:// origin, no upstream → infer_repo_from_remote returns ''.
+
+    Uses a temporary copy of clone_isolation_repo so the session-scoped
+    fixture is not mutated by removing the upstream remote.
+    """
+    import shutil
+
+    from autoskillit.server.helpers import infer_repo_from_remote
+
+    work_copy = tmp_path / "work_copy"
+    shutil.copytree(clone_isolation_repo, work_copy)
+    try:
+        # Remove the upstream remote so only file:// origin remains
+        subprocess.run(
+            ["git", "remote", "remove", "upstream"],
+            cwd=str(work_copy),
+            check=True,
+        )
+
+        result = await infer_repo_from_remote(str(work_copy))
+        assert result == ""
+    finally:
+        shutil.rmtree(work_copy, ignore_errors=True)

@@ -217,16 +217,6 @@ class RecipeRepository(Protocol):
 
     def list_all(self, project_dir: Any | None = None) -> dict[str, Any]: ...
 
-    async def apply_triage_gate(
-        self,
-        result: dict[str, Any],
-        recipe_name: str,
-        recipe_info: Any,
-        temp_dir: Path,
-        logger: Any,
-        triage_fn: Any = None,
-    ) -> dict[str, Any]: ...
-
 
 @runtime_checkable
 class MigrationService(Protocol):

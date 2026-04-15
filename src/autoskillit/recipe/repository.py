@@ -149,6 +149,8 @@ class DefaultRecipeRepository:
                     recipe=recipe_name,
                     elapsed_ms=round((time.perf_counter() - t_llm) * 1000, 1),
                 )
+                if not triage:
+                    return result
                 all_cosmetic = all(not r.get("meaningful", True) for r in triage)
                 triage_str = "cosmetic" if all_cosmetic else "meaningful"
                 current_hash = compute_recipe_hash(recipe_info.path)

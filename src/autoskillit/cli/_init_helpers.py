@@ -11,6 +11,7 @@ from typing import NamedTuple
 
 from autoskillit.config import write_config_layer
 from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, get_logger, load_yaml
+from autoskillit.recipe import list_recipes
 
 logger = get_logger(__name__)
 
@@ -75,7 +76,6 @@ def _require_interactive_stdin(command_name: str) -> None:
 
 def _prompt_recipe_choice() -> str:
     from autoskillit.cli._timed_input import timed_prompt
-    from autoskillit.recipe import list_recipes
 
     available = list_recipes(Path.cwd()).items
     if not available:

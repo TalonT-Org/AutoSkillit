@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from tests._helpers import make_tracing_config
+from autoskillit.config.settings import LinuxTracingConfig
 
 # Simulates Claude CLI process that writes a result line then hangs.
 # Used by test_process_channel_b.py and test_process_monitor.py.
@@ -31,13 +31,13 @@ time.sleep(3)
 
 
 @pytest.fixture
-def isolated_tracing_config(tmp_path: pathlib.Path):
+def isolated_tracing_config(tmp_path: pathlib.Path) -> LinuxTracingConfig:
     """Pre-isolated LinuxTracingConfig for tracing tests.
     Always writes to a tmp_path subdir, never to the real /dev/shm.
     Use this fixture for all new tests that need a LinuxTracingConfig."""
     shm = tmp_path / "shm"
     shm.mkdir(parents=True, exist_ok=True)
-    return make_tracing_config(enabled=True, proc_interval=0.05, tmpfs_path=str(shm))
+    return LinuxTracingConfig(enabled=True, proc_interval=0.05, tmpfs_path=str(shm))
 
 
 @pytest.fixture

@@ -1,5 +1,6 @@
 """Shared test fixtures for autoskillit."""
 
+import sys
 from pathlib import Path as _Path
 
 import pytest
@@ -212,9 +213,15 @@ def _clear_headless_env(monkeypatch):
     """Ensure AUTOSKILLIT_HEADLESS is unset at the start of every test.
 
     Tools check this env var to block calls from headless sessions.
-    MCP tag resets are handled by tests/server/conftest.py for server tests.
+    Also resets mcp kitchen visibility transforms when the server module is
+    already imported.
     """
+
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    if "autoskillit.server" in sys.modules:
+        from autoskillit.server import mcp
+
+        mcp.disable(tags={"kitchen"})
 
 
 @pytest.fixture(autouse=True)
@@ -229,44 +236,8 @@ def anyio_backend():
 
 
 @pytest.fixture
-def minimal_ctx(tmp_path):
-    """Lightweight ToolContext using only L0+L1 imports (core, pipeline, config).
-
-    Use for tests that only need gate, audit, token_log, timing_log, or config —
-    no server factory, no L2/L3 service wiring. Importing this fixture does NOT
-    pull in autoskillit.server, autoskillit.execution, autoskillit.recipe,
-    autoskillit.migration, or autoskillit.workspace.
-
-    Tests that need full service wiring (executor, tester, recipes, etc.) should
-    use tool_ctx instead.
-    """
-    from autoskillit.config import AutomationConfig
-    from autoskillit.pipeline.audit import DefaultAuditLog
-    from autoskillit.pipeline.context import ToolContext
-    from autoskillit.pipeline.gate import DefaultGateState
-    from autoskillit.pipeline.timings import DefaultTimingLog
-    from autoskillit.pipeline.tokens import DefaultTokenLog
-
-    ctx = ToolContext(
-        config=AutomationConfig(),
-        audit=DefaultAuditLog(),
-        token_log=DefaultTokenLog(),
-        timing_log=DefaultTimingLog(),
-        gate=DefaultGateState(enabled=True),
-        plugin_dir=None,
-        runner=None,
-        temp_dir=tmp_path / ".autoskillit" / "temp",
-    )
-    return ctx
-
-
-@pytest.fixture
 def tool_ctx(monkeypatch, tmp_path):
-    """Provide a fully isolated ToolContext for server integration tests.
-
-    Full-stack fixture: calls make_context() from server/_factory.py, which
-    imports ALL production layers (L0–L3). Use minimal_ctx instead when the
-    test only needs gate, audit, token_log, timing_log, or config fields.
+    """Provide a fully isolated ToolContext for server tests.
 
     Monkeypatches server._ctx so all server tool calls use this context.
     Gate is enabled (open kitchen) by default — tests that need a closed

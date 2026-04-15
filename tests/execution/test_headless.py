@@ -921,6 +921,15 @@ class TestBuildSkillResultCrossValidation:
         response = json.loads(_build_skill_result(result_obj).to_json())
         assert response["success"] is False
 
+    def test_gate_disabled_schema(self, tool_ctx):
+        """Gate-disabled response has standard keys."""
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server.helpers import _require_enabled
+
+        tool_ctx.gate = DefaultGateState(enabled=False)
+        response = json.loads(_require_enabled())
+        assert set(response.keys()) == self.EXPECTED_SKILL_KEYS
+
     def test_stale_schema(self):
         """Stale response has standard keys."""
         result_obj = SubprocessResult(

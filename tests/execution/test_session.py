@@ -20,6 +20,7 @@ from autoskillit.execution.session import (
     extract_token_usage,
     parse_session_result,
 )
+from autoskillit.server.tools_execution import run_skill
 from tests._helpers import _flush_structlog_proxy_caches as _flush_logger_proxy_caches
 
 
@@ -260,6 +261,42 @@ class TestAgentResult:
             session_id="s1",
         )
         assert session.agent_result == "Tool execution failed: permission denied"
+
+
+class TestResponseFieldsAreTypeSafe:
+    """Every discriminator field in MCP tool responses uses enum values."""
+
+    @pytest.mark.anyio
+    async def test_retry_reason_is_enum_value(self, tool_ctx):
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_max_turns",
+                "is_error": False,
+                "session_id": "s1",
+                "num_turns": 200,
+                "errors": [],
+            }
+        )
+        tool_ctx.runner.push(_make_session_result(1, stdout, ""))
+        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        assert result["retry_reason"] in {e.value for e in RetryReason}
+
+    @pytest.mark.anyio
+    async def test_retry_reason_none_is_enum_value(self, tool_ctx):
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "Done.",
+                "session_id": "s1",
+                "num_turns": 50,
+            }
+        )
+        tool_ctx.runner.push(_make_session_result(0, stdout, ""))
+        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        assert result["retry_reason"] in {e.value for e in RetryReason}
 
 
 class TestClaudeSessionResultTypeEnforcement:

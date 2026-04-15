@@ -194,6 +194,29 @@ def test_minimal_ctx_has_no_server_factory_dependency():
             )
 
 
+def test_clear_headless_env_no_server_import():
+    """_clear_headless_env must not import from autoskillit.server."""
+    import ast
+    from pathlib import Path
+
+    conftest_path = Path(__file__).parent / "conftest.py"
+    tree = ast.parse(conftest_path.read_text(), filename=str(conftest_path))
+
+    func = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_clear_headless_env":
+            func = node
+            break
+    assert func is not None, "_clear_headless_env fixture not found in conftest.py"
+
+    for node in ast.walk(func):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            assert not node.module.startswith("autoskillit.server"), (
+                f"_clear_headless_env imports from server module: {node.module}. "
+                f"MCP tag resets belong in tests/server/conftest.py."
+            )
+
+
 def test_minimal_ctx_provides_isolated_gate(minimal_ctx):
     """minimal_ctx fixture provides a ToolContext with gate enabled."""
     from autoskillit.pipeline.gate import DefaultGateState

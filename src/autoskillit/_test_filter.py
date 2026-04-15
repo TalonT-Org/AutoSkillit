@@ -54,10 +54,7 @@ def apply_manifest(
     if not changed_files:
         return set()
 
-    compiled = {
-        pat: pathspec.PathSpec.from_lines("gitwildmatch", [pat])
-        for pat in manifest
-    }
+    compiled = {pat: pathspec.PathSpec.from_lines("gitwildmatch", [pat]) for pat in manifest}
 
     matched_dirs: set[str] = set()
     unmatched: list[str] = []

@@ -180,16 +180,16 @@ class TestOutputFormatDerivation:
 
     def test_run_skill_config_derives_format(self):
         """RunSkillConfig.output_format derives STREAM_JSON for default config."""
-        from autoskillit.config.settings import RunSkillConfig
+        from tests._helpers import make_run_skill_config
 
-        cfg = RunSkillConfig()  # default completion_marker is set
+        cfg = make_run_skill_config()  # default completion_marker is set
         assert cfg.output_format == OutputFormat.STREAM_JSON
 
     def test_run_skill_config_derives_json_when_no_marker(self):
         """RunSkillConfig.output_format derives JSON when completion_marker is empty."""
-        from autoskillit.config.settings import RunSkillConfig
+        from tests._helpers import make_run_skill_config
 
-        cfg = RunSkillConfig(completion_marker="")
+        cfg = make_run_skill_config(completion_marker="")
         assert cfg.output_format == OutputFormat.JSON
 
 

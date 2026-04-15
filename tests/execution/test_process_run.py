@@ -294,8 +294,8 @@ class TestTracingStopOnException:
         """tracing_handle.stop() is called in except BaseException even when task group raises."""
         import subprocess
 
-        from autoskillit.config import LinuxTracingConfig
         from autoskillit.execution.linux_tracing import LinuxTracingHandle
+        from tests._helpers import make_tracing_config
 
         stop_called: list[bool] = []
         original_stop = LinuxTracingHandle.stop
@@ -308,7 +308,7 @@ class TestTracingStopOnException:
 
         # Use a real process with tracing enabled; cancel mid-run to trigger BaseException path
         proc = subprocess.Popen(["sleep", "2"])
-        cfg = LinuxTracingConfig(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
+        cfg = make_tracing_config(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
 
         import anyio
 

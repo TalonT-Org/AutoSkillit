@@ -16,10 +16,9 @@ def _reset_server_state(monkeypatch):
     monkeypatch records the current value before yield and restores it after,
     giving each test a clean slate regardless of what _initialize() sets.
     """
-    if "autoskillit.server._state" in __import__("sys").modules:
-        from autoskillit.server import _state
+    from autoskillit.server import _state
 
-        monkeypatch.setattr(_state, "_ctx", _state._ctx)
+    monkeypatch.setattr(_state, "_ctx", _state._ctx)
 
 
 @pytest.fixture(autouse=True)

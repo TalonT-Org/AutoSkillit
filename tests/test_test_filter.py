@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit._test_filter import apply_manifest as manifest_apply_manifest
+from autoskillit._test_filter import load_manifest as manifest_load_manifest
 from tests._test_filter import (
     ALWAYS_RUN_AGGRESSIVE,
     ALWAYS_RUN_CONSERVATIVE,
@@ -23,6 +25,9 @@ from tests._test_filter import (
     git_changed_files,
     load_manifest,
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MANIFEST_PATH = PROJECT_ROOT / ".autoskillit" / "test-filter-manifest.yaml"
 
 # ---------------------------------------------------------------------------
 # Walker Tests (W1–W8)
@@ -468,7 +473,7 @@ class TestReexportClosure:
 
 
 # ---------------------------------------------------------------------------
-# Manifest Tests (MA1–MA4)
+# Manifest Tests — tests/_test_filter (MA1–MA4)
 # ---------------------------------------------------------------------------
 
 
@@ -520,3 +525,62 @@ class TestApplyManifest:
         manifest = {"patterns": {"*.yaml": ["config", "infra"]}}
         result = apply_manifest({"defaults.yaml"}, manifest)
         assert result == {"config", "infra"}
+
+
+# ---------------------------------------------------------------------------
+# Manifest Tests — autoskillit._test_filter (pathspec-based)
+# ---------------------------------------------------------------------------
+
+
+class TestManifestLoadManifest:
+    def test_load_manifest_parses_yaml(self) -> None:
+        manifest = manifest_load_manifest(MANIFEST_PATH)
+        assert isinstance(manifest, dict)
+        assert len(manifest) >= 22
+        for pattern, dirs in manifest.items():
+            assert isinstance(dirs, list)
+            assert len(dirs) > 0
+            assert all(isinstance(d, str) for d in dirs)
+
+    def test_load_manifest_missing_file_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(FileNotFoundError):
+            manifest_load_manifest(tmp_path / "nonexistent.yaml")
+
+
+class TestManifestApplyManifest:
+    def test_apply_manifest_single_star_glob(self) -> None:
+        manifest = {"src/autoskillit/recipes/*.yaml": ["recipe/"]}
+        result = manifest_apply_manifest(
+            ["src/autoskillit/recipes/implementation.yaml"], manifest
+        )
+        assert result == {"recipe/"}
+
+    def test_apply_manifest_doublestar_glob(self) -> None:
+        manifest = {"docs/**/*.md": ["docs/"]}
+        # Deep nested path
+        result = manifest_apply_manifest(["docs/developer/README.md"], manifest)
+        assert result == {"docs/"}
+        # Zero intermediate segments
+        result = manifest_apply_manifest(["docs/README.md"], manifest)
+        assert result == {"docs/"}
+
+    def test_apply_manifest_no_match_returns_none(self) -> None:
+        manifest = {"src/autoskillit/recipes/*.yaml": ["recipe/"]}
+        result = manifest_apply_manifest(["some/unknown/file.txt"], manifest)
+        assert result is None
+
+    def test_apply_manifest_multiple_files_union(self) -> None:
+        manifest = {
+            "src/autoskillit/recipes/*.yaml": ["recipe/"],
+            "docs/**/*.md": ["docs/"],
+        }
+        result = manifest_apply_manifest(
+            ["src/autoskillit/recipes/cook.yaml", "docs/guide.md"], manifest
+        )
+        assert result == {"recipe/", "docs/"}
+
+
+class TestManifestGuard:
+    def test_manifest_entry_count_guard(self) -> None:
+        manifest = manifest_load_manifest(MANIFEST_PATH)
+        assert len(manifest) >= 22

@@ -330,7 +330,7 @@ class TestMultiChannelSkillUniqueness:
             SkillsDirectoryProvider,
         )
         from autoskillit.workspace.skills import (
-            SkillResolver,
+            DefaultSkillResolver,
             detect_project_local_overrides,
         )
 
@@ -345,7 +345,7 @@ class TestMultiChannelSkillUniqueness:
         )
 
         # Channel 1: BUNDLED skill names (served by --plugin-dir)
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         channel_1 = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED}
 
         # Channel 2: skills written to ephemeral dir

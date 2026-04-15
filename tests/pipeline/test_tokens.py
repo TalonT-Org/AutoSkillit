@@ -247,7 +247,7 @@ class TestDefaultTokenLog:
             end_ts="2026-01-01T12:00:00+00:00",  # earlier
         )
         entries = log.get_report()
-        assert entries[0]["elapsed_seconds"] >= 0
+        assert entries[0]["elapsed_seconds"] == pytest.approx(0.0)
 
     def test_record_uses_elapsed_seconds_param_over_iso_subtraction(self):
         """When elapsed_seconds kwarg is provided, it is used directly, not ISO subtraction."""
@@ -394,6 +394,26 @@ class TestDefaultTokenLogLoadFromLogDir:
         log = DefaultTokenLog()
         n = log.load_from_log_dir(tmp_path)
         assert n == 0
+
+    def test_load_null_timing_seconds(self, tmp_path):
+        """TokenLog must handle timing_seconds: null without TypeError."""
+        _write_session(
+            tmp_path,
+            "s001",
+            {
+                "step_name": "implement",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": None,
+            },
+        )
+        log = DefaultTokenLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 1
+        report = log.get_report()
+        assert report[0]["elapsed_seconds"] == 0.0
 
 
 class TestLoadFromLogDirDesignDocumentation:

@@ -7,6 +7,7 @@ import pytest
 
 from autoskillit.core.types import (
     ChannelConfirmation,
+    CIRunScope,
     MergeFailedStep,
     MergeState,
     RestartScope,
@@ -29,6 +30,7 @@ def test_retry_reason_values():
         RetryReason.PATH_CONTAMINATION,
         RetryReason.CONTRACT_RECOVERY,
         RetryReason.STALE,
+        RetryReason.CLONE_CONTAMINATION,
     }
     assert RetryReason.NONE.value == "none"
 
@@ -82,10 +84,12 @@ def test_channel_confirmation_values():
         ChannelConfirmation.CHANNEL_A,
         ChannelConfirmation.CHANNEL_B,
         ChannelConfirmation.UNMONITORED,
+        ChannelConfirmation.DIR_MISSING,
     }
     assert ChannelConfirmation.CHANNEL_A.value == "channel_a"
     assert ChannelConfirmation.CHANNEL_B.value == "channel_b"
     assert ChannelConfirmation.UNMONITORED.value == "unmonitored"
+    assert ChannelConfirmation.DIR_MISSING.value == "dir_missing"
 
 
 def test_skill_command_prefix_constant_exists():
@@ -336,3 +340,66 @@ def test_run_managed_async_pty_mode_default_false():
 
     sig = inspect.signature(run_managed_async)
     assert sig.parameters["pty_mode"].default is False
+
+
+# ---------------------------------------------------------------------------
+# CIRunScope event field
+# ---------------------------------------------------------------------------
+
+
+def test_ci_run_scope_event_field():
+    """CIRunScope must accept and store an event field."""
+    scope = CIRunScope(event="push")
+    assert scope.event == "push"
+    assert scope.workflow is None
+    assert scope.head_sha is None
+
+
+def test_ci_run_scope_event_defaults_to_none():
+    """CIRunScope.event defaults to None when not specified."""
+    scope = CIRunScope()
+    assert scope.event is None
+
+
+def test_pr_state_enum_members_are_locked():
+    """PRState enum has exactly the expected members — prevents silent addition/removal."""
+    from autoskillit.core.types import PRState
+
+    assert set(PRState) == {
+        PRState.MERGED,
+        PRState.EJECTED,
+        PRState.EJECTED_CI_FAILURE,
+        PRState.STALLED,
+        PRState.DROPPED_HEALTHY,
+        PRState.TIMEOUT,
+        PRState.ERROR,
+    }
+    assert PRState.DROPPED_HEALTHY.value == "dropped_healthy"
+
+
+class TestSkillResultCrashedFactory:
+    def test_crashed_returns_skill_result_with_correct_fields(self):
+        result = SkillResult.crashed(
+            exception=RuntimeError("boom"),
+            skill_command="/investigate test",
+        )
+        assert result.success is False
+        assert result.subtype == "crashed"
+        assert result.is_error is True
+        assert result.exit_code == -1
+        assert result.needs_retry is False
+        assert result.retry_reason == RetryReason.NONE
+        assert "RuntimeError: boom" in result.result
+        assert result.session_id == ""
+        assert result.stderr == ""
+
+    def test_crashed_to_json_produces_valid_envelope(self):
+        result = SkillResult.crashed(
+            exception=RuntimeError("boom"),
+            skill_command="/investigate test",
+        )
+        data = json.loads(result.to_json())
+        assert "needs_retry" in data
+        assert "session_id" in data
+        assert "subtype" in data
+        assert data["subtype"] == "crashed"

@@ -13,13 +13,13 @@ hooks:
 # diagnose-ci Skill
 
 Fetch CI logs for a failing branch, classify the failure type, and write a structured
-diagnosis report to `.autoskillit/temp/diagnose-ci/`. Called by the orchestrator on `ci_watch` failure
+diagnosis report to `{{AUTOSKILLIT_TEMP}}/diagnose-ci/`. Called by the orchestrator on `ci_watch` failure
 before routing to `resolve-failures`.
 
 ## Invocation
 
 ```
-/autoskillit:diagnose-ci {branch} [run_id] [ci_failed_jobs] [workflow]
+/autoskillit:diagnose-ci {branch} [run_id] [ci_failed_jobs] [workflow] [event]
 ```
 
 **Positional args:**
@@ -27,19 +27,31 @@ before routing to `resolve-failures`.
 - `run_id` (optional) — specific workflow run ID; if absent, discover from `gh run list`
 - `ci_failed_jobs` (optional) — JSON array of failed job names from `wait_for_ci`, used to scope log fetching
 - `workflow` (optional) — workflow filename (e.g. `tests.yml`); if provided, scopes `gh run list` to that workflow only; use `-` to skip
+- `event` (optional) — GitHub Actions trigger event (e.g. `push`, `pull_request`); if provided, scopes `gh run list` to that event only; use `-` to skip
 
 ## Critical Constraints
 
 **NEVER:**
 - Modify any source code files
 - Run the test suite
-- Write files outside `.autoskillit/temp/diagnose-ci/`
+- Write files outside `{{AUTOSKILLIT_TEMP}}/diagnose-ci/`
 - Block on missing `gh` CLI — write a minimal `failure_type=unknown` diagnosis instead
 
 **ALWAYS:**
 - Initialize code-index: call `set_project_path` to current cwd before any search
 - Write the diagnosis file before emitting output tokens
-- Emit the three output tokens (`diagnosis_path`, `failure_type`, `is_fixable`) at the end of the response on their own lines
+- Emit the four output tokens (`diagnosis_path`, `failure_type`, `failure_subtype`, `is_fixable`) at the end of the response on their own lines
+
+## Context Limit Behavior
+
+When context is exhausted mid-execution, the diagnosis file may be partially written
+or absent. The recipe routes to `on_context_limit: resolve_ci`, which proceeds
+best-effort with whatever diagnosis was written (or none).
+
+**Before emitting structured output tokens:**
+1. If the diagnosis file was not fully written, emit `diagnosis_path = ` (empty)
+2. Emit `failure_type = unknown`, `failure_subtype = unknown`, `is_fixable = false`
+   as fallback values when analysis was interrupted
 
 ## Workflow
 
@@ -51,14 +63,25 @@ mcp__code-index__set_project_path(path=<cwd>)
 
 ### Step 2: Discover Run ID (if not provided)
 
-If `run_id` is not provided as an argument (or is `-`):
+If `run_id` is not provided as an argument (or is `-`), construct the `gh run list` command
+with any provided filters:
+
 ```bash
+# Base command (always used):
 gh run list --branch {branch} --limit 1 --json databaseId,status,conclusion
+
+# If workflow is provided and is not `-`, add:
+  --workflow {workflow}
+
+# If event is provided and is not `-`, add:
+  --event {event}
 ```
-If `workflow` is provided and is not `-`:
+
+Example with both filters:
 ```bash
-gh run list --branch {branch} --workflow {workflow} --limit 1 --json databaseId,status,conclusion
+gh run list --branch {branch} --workflow {workflow} --event {event} --limit 1 --json databaseId,status,conclusion
 ```
+
 Parse the JSON to extract `databaseId` as `run_id`.
 
 If `gh` is unavailable or the command fails, skip to Step 5 (write minimal diagnosis).
@@ -93,21 +116,53 @@ Analyze the log output to classify `failure_type` as one of:
 - `env` — missing environment variables, secrets, or infrastructure issues
 - `unknown` — cannot determine from logs
 
+#### Step 5a: Subtype Classification
+
+After determining `failure_type`, classify `failure_subtype` using the following error-pattern decision tree (first match wins):
+
+| Pattern match in log output | `failure_subtype` |
+|---|---|
+| `TimeoutError`, `deadline exceeded`, `flake`, `intermittent` | `timing_race` |
+| `pytest.*FLAKY`, `rerun`, three-or-more identical test runs | `flaky` |
+| `ImportError`, `ModuleNotFoundError` | `import` |
+| `fixture`, `pytest.fixture`, collection error | `fixture` |
+| `environ`, missing `ENV_VAR`, `KeyError.*environ` | `env` |
+| Assertion error with stable stack trace (same file/line across runs) | `deterministic` |
+| No pattern matched | `unknown` |
+
+**Guidance for `resolve-failures`:** Include a supplementary "Suggested Starting Verdict" field in the
+Recommended Fix Approach section that maps the subtype to an initial verdict for `resolve-failures` to
+consider (not authoritative — `resolve-failures` makes its own verdict decision from the subtype +
+local test result):
+
+| `failure_subtype` | Suggested starting verdict |
+|---|---|
+| `flaky` or `timing_race` | `flake_suspected` |
+| `deterministic` | `ci_only_failure` (if local tests pass) or `real_fix` (if fixable locally) |
+| `fixture` or `import` | `ci_only_failure` (if local tests pass) |
+| `env` | `ci_only_failure` (conservative) |
+| `unknown` | `ci_only_failure` (conservative) |
+
 Determine `is_fixable`:
 - `true` for `test`, `lint`, `build`, `type_check`
 - `false` for `env`, `unknown`
 
 ### Step 6: Write Diagnosis Report
 
-Create directory `.autoskillit/temp/diagnose-ci/` if it doesn't exist. Write the diagnosis file:
+Create directory `{{AUTOSKILLIT_TEMP}}/diagnose-ci/` if it doesn't exist. Write the diagnosis file:
 
 ```markdown
 # CI Diagnosis: {branch}
 
 **Run ID:** {run_id}
 **Failure Type:** {failure_type}
+**Failure Subtype:** {failure_subtype}
 **Is Fixable:** {is_fixable}
 **Branch:** {branch}
+
+## Structured Output (machine-readable)
+
+failure_subtype = {failure_subtype}
 
 ## Log Excerpt
 
@@ -118,9 +173,11 @@ Create directory `.autoskillit/temp/diagnose-ci/` if it doesn't exist. Write the
 ## Recommended Fix Approach
 
 {1-3 sentences describing how resolve-failures should approach this}
+
+**Suggested Starting Verdict:** {suggested starting verdict from the subtype table above}
 ```
 
-Save to `.autoskillit/temp/diagnose-ci/diagnosis_{timestamp}.md`. (relative to the current working directory)
+Save to `{{AUTOSKILLIT_TEMP}}/diagnose-ci/diagnosis_{timestamp}.md`. (relative to the current working directory)
 
 ### Step 7: Emit Output Tokens
 
@@ -132,16 +189,18 @@ Emit these tokens on their own lines at the end of your response:
 > exact token name — decorators cause match failure.
 
 ```
-diagnosis_path = /absolute/path/to/.autoskillit/temp/diagnose-ci/diagnosis_{timestamp}.md
+diagnosis_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/diagnose-ci/diagnosis_{timestamp}.md
 failure_type = test|lint|build|type_check|env|unknown
+failure_subtype = flaky|timing_race|deterministic|fixture|import|env|unknown
 is_fixable = true|false
 ```
 
 ## gh Unavailable Fallback
 
 If `gh` is unavailable at any step, write a minimal diagnosis:
-- `failure_type=unknown`
-- `is_fixable=false`
+- `failure_type = unknown`
+- `failure_subtype = unknown`
+- `is_fixable = false`
 - Diagnosis body: "gh CLI unavailable — logs could not be fetched. Manual inspection required."
 
 Then emit the output tokens and exit.

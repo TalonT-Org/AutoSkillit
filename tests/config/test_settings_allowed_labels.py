@@ -5,11 +5,6 @@ from autoskillit.config.settings import GitHubConfig, _make_dynaconf
 
 
 class TestGitHubConfigAllowedLabelsField:
-    def test_github_config_allowed_labels_default_is_empty(self):
-        """GitHubConfig has allowed_labels field defaulting to empty list."""
-        cfg = GitHubConfig()
-        assert cfg.allowed_labels == []
-
     def test_automation_config_allowed_labels_default_is_empty(self):
         """AutomationConfig().github.allowed_labels defaults to empty list."""
         cfg = AutomationConfig()

@@ -210,6 +210,17 @@ class TestDefaultTimingLogLoadFromLogDir:
         n = log.load_from_log_dir(tmp_path)
         assert n == 2
 
+    def test_load_null_total_seconds(self, tmp_path):
+        """TimingLog must handle total_seconds: null without TypeError."""
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        _write_timing_session(tmp_path, "s001", {"step_name": "implement", "total_seconds": None})
+        log = DefaultTimingLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 1
+        report = log.get_report()
+        assert report[0]["total_seconds"] == 0.0
+
 
 class TestLoadFromLogDirCwdFilterTiming:
     """

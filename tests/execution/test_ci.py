@@ -25,6 +25,7 @@ def _run(
     status: str = "completed",
     conclusion: str = "success",
     head_sha: str = "abc123",
+    event: str = "push",
     updated_at: str | None = None,
 ) -> dict:
     """Build a mock workflow run dict."""
@@ -33,6 +34,7 @@ def _run(
         "status": status,
         "conclusion": conclusion,
         "head_sha": head_sha,
+        "event": event,
         "updated_at": updated_at or _NOW.isoformat(),
     }
 
@@ -51,16 +53,18 @@ def _jobs_response(*jobs: tuple[str, str]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_jittered_sleep_bounded():
-    for attempt in range(10):
-        val = _jittered_sleep(attempt)
-        assert 0 <= val <= 30  # cap is 30
+@pytest.mark.parametrize("attempt", range(10))
+def test_jittered_sleep_bounded(attempt: int) -> None:
+    val = _jittered_sleep(attempt)
+    assert 0 <= val <= 30  # cap is 30
 
 
 def test_jittered_sleep_variance():
     """Two calls should not produce identical results (statistical check)."""
-    values = {_jittered_sleep(2) for _ in range(20)}
-    assert len(values) > 1
+    values = [_jittered_sleep(2) for _ in range(20)]
+    assert max(values) - min(values) > 1.0, (
+        "Jitter variance is too low — values are nearly constant"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -151,8 +155,14 @@ async def test_lookback_without_head_sha_matches_any():
 
 
 @pytest.mark.anyio
-async def test_lookback_window_filters_old_runs():
-    """Runs older than lookback_seconds should be filtered by the service."""
+async def test_wait_returns_no_runs_when_fetch_returns_empty():
+    """wait() returns no_runs or timed_out when _fetch_completed_runs returns [].
+
+    _fetch_completed_runs is mocked to return [] (no completed runs found).
+    asyncio.sleep is mocked to return immediately. With timeout_seconds=1 the
+    test may exit via either "no_runs" (poll exhausted) or "timed_out"
+    (wall-clock exceeded); both are valid outcomes for this empty-fetch scenario.
+    """
     watcher = DefaultCIWatcher(token="tok")
     # Look-back returns old run — will be filtered by cutoff time
     watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
@@ -339,6 +349,36 @@ async def test_status_by_run_id(httpx_mock):
     assert len(result["runs"]) == 1
     assert result["runs"][0]["conclusion"] == "failure"
     assert result["runs"][0]["failed_jobs"] == ["deploy"]
+
+
+# ---------------------------------------------------------------------------
+# Event discrimination — regression test for issue #662
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_event_filtering_selects_correct_event():
+    """With scope.event='push', a passing pull_request run must not mask a failing push run.
+
+    This is the core regression test for GitHub issue #662.
+    """
+    watcher = DefaultCIWatcher(token="tok")
+    watcher._fetch_completed_runs = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            _run(run_id=1, conclusion="success", event="pull_request"),
+            _run(run_id=2, conclusion="failure", event="push"),
+        ]
+    )
+    watcher._fetch_failed_jobs = AsyncMock(return_value=["test"])  # type: ignore[method-assign]
+
+    result = await watcher.wait(
+        "main",
+        repo="owner/repo",
+        scope=CIRunScope(event="push"),
+        timeout_seconds=60,
+    )
+    assert result["conclusion"] == "failure"  # push run, not pull_request
+    assert result["run_id"] == 2
 
 
 # ---------------------------------------------------------------------------

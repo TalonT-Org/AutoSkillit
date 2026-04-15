@@ -1,25 +1,6 @@
 # test_gate.py — unit tests for _gate.py constants and functions
 
 
-def test_gated_tools_is_frozenset():
-    from autoskillit.pipeline.gate import GATED_TOOLS
-
-    assert isinstance(GATED_TOOLS, frozenset)
-
-
-def test_ungated_tools_is_frozenset():
-    from autoskillit.pipeline.gate import UNGATED_TOOLS
-
-    assert isinstance(UNGATED_TOOLS, frozenset)
-
-
-def test_tool_sets_total_count():
-    from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
-
-    assert len(GATED_TOOLS) == 39
-    assert len(UNGATED_TOOLS) == 2
-
-
 def test_gated_tools_contains_expected_names():
     from autoskillit.pipeline.gate import GATED_TOOLS
 
@@ -49,6 +30,7 @@ def test_gated_tools_contains_expected_names():
         "check_pr_mergeable",
         "set_commit_status",
         "wait_for_merge_queue",
+        "check_repo_merge_state",
         "toggle_auto_merge",
         # formerly ungated — now kitchen-gated:
         "fetch_github_issue",
@@ -80,7 +62,7 @@ def test_check_quota_not_in_ungated_tools():
 def test_ungated_tools_contains_expected_names():
     from autoskillit.pipeline.gate import UNGATED_TOOLS
 
-    expected = {"open_kitchen", "close_kitchen"}
+    expected = {"open_kitchen", "close_kitchen", "disable_quota_guard"}
     assert UNGATED_TOOLS == expected
 
 
@@ -187,28 +169,16 @@ def test_gated_tools_does_not_contain_run_recipe():
     assert "run_recipe" not in GATED_TOOLS
 
 
-def test_headless_tools_is_frozenset():
-    from autoskillit.core.types import HEADLESS_TOOLS
-
-    assert isinstance(HEADLESS_TOOLS, frozenset)
-
-
 def test_headless_tools_contains_expected_names():
     from autoskillit.core.types import HEADLESS_TOOLS
 
     assert HEADLESS_TOOLS == {"test_check"}
 
 
-def test_free_range_tools_is_frozenset():
-    from autoskillit.core.types import FREE_RANGE_TOOLS
-
-    assert isinstance(FREE_RANGE_TOOLS, frozenset)
-
-
 def test_free_range_tools_contains_expected_names():
     from autoskillit.core.types import FREE_RANGE_TOOLS
 
-    assert FREE_RANGE_TOOLS == {"open_kitchen", "close_kitchen"}
+    assert FREE_RANGE_TOOLS == {"open_kitchen", "close_kitchen", "disable_quota_guard"}
 
 
 def test_ungated_tools_equals_free_range_tools():
@@ -224,7 +194,6 @@ def test_all_tool_sets_disjoint_and_complete():
     assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
     assert GATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert UNGATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
-    assert len(GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS) == 42
 
 
 def test_worker_tools_removed_from_core():

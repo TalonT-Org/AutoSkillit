@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
@@ -64,6 +65,7 @@ _TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
 
 @dataclass
 class RecipeStep:
+    name: str = ""  # Set from the YAML dict key after parsing; enables block member lookup
     tool: str | None = None
     action: str | None = None  # Built-in action: "route", "stop", "confirm"
     python: str | None = None
@@ -85,6 +87,30 @@ class RecipeStep:
     description: str = ""
     sub_recipe: str | None = None  # Name of sub-recipe file (no extension)
     gate: str | None = None  # Ingredient name whose value controls lazy loading
+    optional_context_refs: list[str] = field(
+        default_factory=list
+    )  # Context variable names that may be referenced before they are captured (cyclic routes)
+    stale_threshold: int | None = None  # None means use global RunSkillConfig.stale_threshold
+    idle_output_timeout: int | None = None  # None = use global cfg; 0 = disabled for this step
+    block: str | None = None  # Named block anchor this step belongs to (e.g. "pre_queue_gate")
+
+
+@dataclass(frozen=True)
+class RecipeBlock:
+    """A named contiguous region of the step routing graph with budget constraints.
+
+    Populated by ``extract_blocks`` in ``recipe/_analysis.py`` during validation.
+    Steps declare membership via ``step.block = <name>``.  The block primitive
+    enables per-block semantic rules (budget guards, single-producer checks, etc.)
+    that individual-step rules cannot express.
+    """
+
+    name: str  # e.g. "pre_queue_gate"
+    entry: str  # name of the step at the block entry point (no in-block predecessor)
+    exit: str  # name of the step at the block exit point (no in-block successor)
+    members: tuple[RecipeStep, ...]  # ordered member steps (by YAML declaration order)
+    tool_counts: Mapping[str, int]  # {"run_cmd": 1, "check_repo_merge_state": 1, …}
+    gh_api_occurrences: int  # total count of "gh api" substrings across all run_cmd cmds
 
 
 @dataclass
@@ -97,6 +123,9 @@ class Recipe:
     kitchen_rules: list[str] = field(default_factory=list)
     version: str | None = None
     experimental: bool = False
+    requires_packs: list[str] = field(default_factory=list)
+    # Populated by extract_blocks() during load; empty tuple for recipes with no block: anchors.
+    blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         self.name = self.name.strip()

@@ -6,12 +6,12 @@ SubprocessRunner, and the termination contract sentinel.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from ._type_enums import ChannelConfirmation, TerminationReason
+from ._type_enums import ChannelConfirmation, KillReason, TerminationReason
 
 __all__ = [
     "SubprocessResult",
@@ -103,6 +103,20 @@ class SubprocessResult:
     Consumers (session_log, tokens) must use this float directly — never re-derive
     duration from start_ts/end_ts ISO strings.
     """
+    kill_reason: KillReason = KillReason.NATURAL_EXIT
+    """Why the subprocess was (or was not) killed after the race loop.
+
+    Set by run_managed_async via execute_termination_action. Surfaces to SkillResult
+    so the formatter can annotate exit_code with the kill cause.
+    """
+    tracked_comm: str | None = None
+    """Process identity comm of the observed workload, or None when tracing disabled.
+
+    Populated from TraceTarget.comm after resolve_trace_target() resolves the workload
+    PID from the spawn PID. Propagated to flush_session_log and anomaly detection so
+    that downstream telemetry (sessions.jsonl, summary.json, GitHub issue bodies) can
+    self-identify which process was actually observed. (Issue #806)
+    """
 
 
 @runtime_checkable
@@ -115,7 +129,7 @@ class SubprocessRunner(Protocol):
         *,
         cwd: Path,
         timeout: float,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] | None = None,
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,
@@ -123,4 +137,6 @@ class SubprocessRunner(Protocol):
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
         linux_tracing_config: Any | None = None,
+        idle_output_timeout: float | None = None,
+        max_suppression_seconds: float | None = None,
     ) -> Awaitable[SubprocessResult]: ...

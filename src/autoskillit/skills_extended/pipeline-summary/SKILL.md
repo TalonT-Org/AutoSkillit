@@ -138,7 +138,7 @@ If push fails (no remote, network issue), log the error and exit successfully.
 ### Step 6: Create GitHub Issue
 Write the issue body to a temp file, then:
 ```bash
-TEMP_ISSUE_BODY=".autoskillit/temp/pipeline-summary/issue_body_$(date +%Y%m%d-%H%M%S).md"
+TEMP_ISSUE_BODY="{{AUTOSKILLIT_TEMP}}/pipeline-summary/issue_body_$(date +%Y%m%d-%H%M%S).md"
 mkdir -p "$(dirname "${TEMP_ISSUE_BODY}")"
 # [write the issue body content to ${TEMP_ISSUE_BODY} here]
 gh issue create \
@@ -153,7 +153,7 @@ Output: `issue_url={url}`
 ### Step 7: Create Pull Request
 Write the PR body to a temp file (reference the issue), then:
 ```bash
-TEMP_PR_BODY=".autoskillit/temp/pipeline-summary/pr_body_$(date +%Y%m%d-%H%M%S).md"
+TEMP_PR_BODY="{{AUTOSKILLIT_TEMP}}/pipeline-summary/pr_body_$(date +%Y%m%d-%H%M%S).md"
 mkdir -p "$(dirname "${TEMP_PR_BODY}")"
 # [write the PR body content to ${TEMP_PR_BODY} here]
 gh pr create \
@@ -182,7 +182,7 @@ Output: `pr_url={url}`
 For recipe authors who want to include token/timing data in the PR body:
 
 1. Call the `get_token_summary` MCP tool to retrieve current pipeline token data.
-2. Write the JSON result to `.autoskillit/temp/token_summary_{timestamp}.json` using a `run_python` step. (relative to the current working directory)
+2. Write the JSON result to `{{AUTOSKILLIT_TEMP}}/token_summary_{timestamp}.json` using a `run_python` step. (relative to the current working directory)
    The `run_python` step executes in the MCP server process and has access to the live
    `ToolContext` via the server context; call `ctx.token_log.get_report()` and
    `ctx.token_log.compute_total()`, then write `{"steps": ..., "total": ...}` as JSON.

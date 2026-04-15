@@ -87,6 +87,57 @@ def _has_active_api_connection(pid: int) -> bool:
     return False
 
 
+_CPU_ACTIVE_THRESHOLD: float = 10.0  # percent; evidence of actual computational work
+
+# Cached Process objects keyed by PID so cpu_percent(interval=0) returns
+# delta since the previous call on the *same* object rather than always 0.0
+# on a freshly constructed psutil.Process.
+_child_process_cache: dict[int, psutil.Process] = {}
+
+
+def _has_active_child_processes(pid: int) -> bool:
+    """Return True if any child process in the tree exceeds the CPU activity threshold.
+
+    Used by _session_log_monitor to suppress stale-kill when background Bash tasks
+    (launched via run_in_background: true) are actively running despite LLM/API being idle.
+
+    cpu_percent(interval=0) returns usage since the last call per-process.  We
+    cache psutil.Process objects across invocations so the second and subsequent
+    calls on a given child produce meaningful CPU deltas (the first call on any
+    new Process object always returns 0.0).
+    """
+    try:
+        parent = psutil.Process(pid)
+        current_children = parent.children(recursive=True)
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return False
+
+    live_pids: set[int] = set()
+    active = False
+    for child in current_children:
+        live_pids.add(child.pid)
+        cached = _child_process_cache.get(child.pid)
+        if cached is None:
+            # First sighting: prime cpu_percent baseline (returns 0.0).
+            _child_process_cache[child.pid] = child
+            try:
+                child.cpu_percent(interval=0)
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+                pass
+            continue
+        try:
+            if cached.cpu_percent(interval=0) > _CPU_ACTIVE_THRESHOLD:
+                active = True
+        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+            continue
+
+    # Evict stale entries for children that no longer exist.
+    for stale_pid in list(_child_process_cache.keys() - live_pids):
+        _child_process_cache.pop(stale_pid, None)
+
+    return active
+
+
 async def _session_log_monitor(
     session_log_dir: Path,
     completion_marker: str,
@@ -99,6 +150,7 @@ async def _session_log_monitor(
     _phase1_timeout: float = 30.0,
     _on_poll: Callable[[], None] | None = None,
     expected_session_id: str | None = None,
+    max_suppression_seconds: float = 1800.0,
 ) -> SessionMonitorResult:
     """Watch Claude Code session log for completion or staleness.
 
@@ -169,6 +221,12 @@ async def _session_log_monitor(
                     else "recency",
                 )
             os_error_count = 0
+        except FileNotFoundError:
+            # Directory missing is structural — it won't self-heal during a
+            # poll loop.  Return immediately so downstream gates can
+            # distinguish "could not monitor" from "monitored but timed out".
+            logger.warning("session_log_dir_absent", path=str(session_log_dir))
+            return SessionMonitorResult(ChannelBStatus.DIR_MISSING, "")
         except OSError:
             os_error_count += 1
             if os_error_count == 10:
@@ -185,6 +243,8 @@ async def _session_log_monitor(
     last_change = _time.monotonic()
     scan_pos = 0
     os_error_count = 0
+    suppression_start_api: float | None = None
+    suppression_start_child: float | None = None
 
     while True:
         await anyio.sleep(_phase2_poll)
@@ -202,6 +262,8 @@ async def _session_log_monitor(
         if current_size > last_size:
             last_size = current_size
             last_change = _time.monotonic()
+            suppression_start_api = None
+            suppression_start_child = None
 
             # Check new content for completion marker (structured)
             try:
@@ -223,9 +285,41 @@ async def _session_log_monitor(
             elapsed = _time.monotonic() - last_change
             if elapsed >= stale_threshold:
                 if pid is not None and _has_active_api_connection(pid):
+                    suppression_start_child = None
+                    if suppression_start_api is None:
+                        suppression_start_api = _time.monotonic()
+                    if _time.monotonic() - suppression_start_api >= max_suppression_seconds:
+                        logger.warning(
+                            "Suppression bounded: stale kill after %.0fs consecutive "
+                            "suppression (max_suppression_seconds=%.0f, pid=%d)",
+                            _time.monotonic() - suppression_start_api,
+                            max_suppression_seconds,
+                            pid,
+                        )
+                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
                     last_change = _time.monotonic()
                     logger.warning(
                         "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
+                        "suppressing stale kill (pid=%d)",
+                        elapsed,
+                        pid,
+                    )
+                elif pid is not None and _has_active_child_processes(pid):
+                    suppression_start_api = None
+                    if suppression_start_child is None:
+                        suppression_start_child = _time.monotonic()
+                    if _time.monotonic() - suppression_start_child >= max_suppression_seconds:
+                        logger.warning(
+                            "Suppression bounded: stale kill after %.0fs consecutive "
+                            "suppression (max_suppression_seconds=%.0f, pid=%d)",
+                            _time.monotonic() - suppression_start_child,
+                            max_suppression_seconds,
+                            pid,
+                        )
+                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
+                    last_change = _time.monotonic()
+                    logger.warning(
+                        "JSONL silent for %.0fs but child processes are CPU-active — "
                         "suppressing stale kill (pid=%d)",
                         elapsed,
                         pid,

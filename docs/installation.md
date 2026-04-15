@@ -11,13 +11,12 @@
 - **[gh CLI](https://cli.github.com/)** — Required for GitHub features (PR creation, issue management, CI status). Install: `brew install gh` or see [gh docs](https://cli.github.com/). Authenticate: `gh auth login`
 - **Task** (go-task) — If your project uses Taskfile.yml for test commands
 
-## Quick Install
+## Quick install
 
-The install script handles everything:
+The install script runs five steps:
 
     curl -fsSL https://raw.githubusercontent.com/TalonT-Org/AutoSkillit/stable/install.sh | sh
 
-What it does:
 1. Checks for Python 3.11+ (installs via brew/apt if missing)
 2. Checks for uv (installs if missing)
 3. Checks for Claude Code (fails with install link if missing)
@@ -68,17 +67,43 @@ projects need.
 
     autoskillit doctor
 
-Doctor runs 8 checks:
-| Check | What it verifies |
-|-------|-----------------|
-| stale_mcp_servers | No dead MCP entries in ~/.claude.json |
-| mcp_server_registered | AutoSkillit MCP server is registered |
-| autoskillit_on_path | `autoskillit` command is available |
-| project_config | `.autoskillit/config.yaml` exists |
-| version_consistency | Installed package matches plugin.json |
-| hook_health | All hook scripts exist on disk |
-| hook_registration | Hooks are registered in settings.json |
-| script_version_health | Project recipes are up to date |
+Doctor runs 17 checks (15 numbered + 2 lettered sub-checks `4b` and `7b`),
+enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
+
+| # | Check | What it verifies |
+|---|-------|------------------|
+| 1 | Stale MCP servers | No dead binaries or nonexistent paths in `~/.claude.json` |
+| 2 | MCP server registered | AutoSkillit MCP server is registered (direct entry or via plugin) |
+| 3 | `autoskillit` on PATH | The CLI command is reachable |
+| 4 | Config exists | `.autoskillit/config.yaml` is present |
+| 4b | Config secrets placement | Secrets live in `.autoskillit/.secrets.yaml`, never in `config.yaml` |
+| 5 | Version consistency | Installed package version matches `plugin.json` |
+| 6 | Hook executability | Deployed hook scripts exist and are executable for every event type |
+| 7 | Hook registration | Hooks are registered in `settings.json` |
+| 7b | Hook registry drift | Structural diff against `generate_hooks_json()` from `hook_registry.py` |
+| 8 | Script version health | Project recipes carry the current `autoskillit_version` |
+| 9 | gitignore completeness | `.gitignore` covers `.autoskillit/temp/` and other generated paths |
+| 10 | Secret scanning hook | `gitleaks` (or equivalent) is installed as a pre-commit hook |
+| 11 | Editable install source exists | An editable install still points at a real source directory |
+| 12 | No stale entry points | No leftover `autoskillit` scripts outside `~/.local/bin` |
+| 13 | Source version drift | Installed commit SHA vs. branch HEAD (network, with cache fallback) |
+| 14 | Quota cache schema | `~/.claude/autoskillit_quota_cache.json` schema version is current |
+| 15 | Claude process state | Reports D-state and CPU breakdown of running `claude` processes via `ps` |
+| 16 | Install classification | `direct_url.json` classifies the install type and requested revision |
+| 17 | Update dismissal state | Active update-prompt dismissal window and conditions, if any |
+
+See **[Hooks](safety/hooks.md)** for what each PreToolUse / PostToolUse /
+SessionStart hook actually enforces.
+
+## Updating
+
+AutoSkillit checks for updates on every interactive invocation and shows a single
+consolidated `[Y/n]` prompt when updates are available.  For details on how update
+checks work, dismissal windows, and escape hatches, see **[Update Checks](update-checks.md)**.
+
+To update immediately without waiting for the prompt:
+
+    autoskillit update
 
 ## Troubleshooting
 

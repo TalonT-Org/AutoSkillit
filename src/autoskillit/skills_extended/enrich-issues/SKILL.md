@@ -177,11 +177,19 @@ The API layer exposes skill execution to MCP clients through the headless execut
   **not** call `gh issue edit`. Set `dry_run: true` in the result.
 - Otherwise: append the section to the original issue body:
   ```bash
-  gh issue edit N --body "$(gh issue view N --json body -q .body)
+  ts=$(date +%Y-%m-%d_%H%M%S)
+  EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/enrich-issues/edit_body_${ts}.md"
+  REQUIREMENTS_FILE="${EDIT_BODY_FILE%.md}_req.md"
+  mkdir -p "{{AUTOSKILLIT_TEMP}}/enrich-issues"
 
-## Requirements
+  # Fetch current body immediately before editing (avoids shell interpolation):
+  gh issue view N --json body -q .body > "${EDIT_BODY_FILE}"
 
-$(generated_requirements_section)"
+  # Populate ${REQUIREMENTS_FILE} with generated requirements, then:
+  printf '\n\n## Requirements\n\n' >> "${EDIT_BODY_FILE}"
+  cat "${REQUIREMENTS_FILE}" >> "${EDIT_BODY_FILE}"
+
+  gh issue edit N --body-file "${EDIT_BODY_FILE}"
   ```
 
   Always fetch the current body immediately before editing to avoid overwriting
@@ -212,6 +220,8 @@ After processing all candidates, emit to stdout:
 - Apply `## Requirements` to an issue that already has one (idempotency)
 - Skip the result block — always emit it, even on dry-run or when all issues were
   skipped
+- Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
+  `{{AUTOSKILLIT_TEMP}}/enrich-issues/edit_body_{timestamp}.md` and use `--body-file`
 
 **ALWAYS:**
 - Respect `--dry-run`: never call `gh issue edit` when this flag is set

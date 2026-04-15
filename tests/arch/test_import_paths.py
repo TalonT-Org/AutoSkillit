@@ -239,16 +239,16 @@ def test_req_imp_006_prompts_no_gate_state_import() -> None:
 
 
 def test_req_imp_007_pretty_output_no_private_recipe_api_import() -> None:
-    """hooks/pretty_output.py TYPE_CHECKING must not use recipe._api.
+    """hooks/pretty_output_hook.py TYPE_CHECKING must not use recipe._api.
 
     ListRecipesResult and LoadRecipeResult are re-exported via autoskillit.recipe.__all__.
     Importing from the private recipe._api sub-module bypasses the canonical surface (P14-1).
     """
-    path = SRC / "hooks" / "pretty_output.py"
+    path = SRC / "hooks" / "pretty_output_hook.py"
     for mod, in_tc in _parse_imports(path):
         if in_tc and mod == "autoskillit.recipe._api":
             pytest.fail(
-                "hooks/pretty_output.py TYPE_CHECKING must use "
+                "hooks/pretty_output_hook.py TYPE_CHECKING must use "
                 "'from autoskillit.recipe import ...' "
                 "instead of 'from autoskillit.recipe._api import ...' (P14-1). "
                 "Both ListRecipesResult and LoadRecipeResult are in recipe.__all__."
@@ -289,3 +289,52 @@ def test_req_imp_009_session_skills_no_config_settings_import() -> None:
                 "instead of 'from autoskillit.config.settings import AutomationConfig' "
                 "(P14-4). AutomationConfig is available via autoskillit.config.__all__."
             )
+
+
+# ---------------------------------------------------------------------------
+# REQ-IMP-007: server/ and cli/ files must not import cross-package sub-modules
+# (Finding 13.3) — extends REQ-IMP-001 coverage to L3 layers
+# ---------------------------------------------------------------------------
+
+
+def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> None:
+    """REQ-IMP-007: every file in server/ and cli/ must obey the same
+    cross-package submodule rule that REQ-IMP-001 enforces for the L0–L2
+    layers, with a small explicit allowlist:
+
+      server/_factory.py     — Composition Root, may import any layer
+      server/git.py          — REQ-IMP-005 exemption
+      server/tools_kitchen.py — REQ-IMP-006 ban (covered separately)
+      cli/app.py             — REQ-IMP-004 exemption (Typer composition)
+      cli/_cook.py           — allowlisted composition boundary
+      cli/_workspace.py      — allowlisted composition boundary
+
+    Every other file in server/ and cli/ must import only:
+      autoskillit.core, autoskillit.config, autoskillit.pipeline,
+      autoskillit.{own_pkg}, and gateway-level (`autoskillit.X`, not
+      `autoskillit.X.Y`) imports of other packages.
+    """
+    allowlist = {
+        Path("server/_factory.py"),
+        Path("server/git.py"),
+        Path("server/tools_kitchen.py"),
+        Path("cli/app.py"),
+        Path("cli/_cook.py"),
+        Path("cli/_workspace.py"),
+    }
+    forbidden_pkgs = {"execution", "workspace", "recipe", "migration"}
+    violations: list[str] = []
+    for pkg in ("server", "cli"):
+        for f in (SRC / pkg).rglob("*.py"):
+            rel = f.relative_to(SRC)
+            if rel in allowlist or "__pycache__" in rel.parts:
+                continue
+            for mod, in_tc in _parse_imports(f):
+                if in_tc:
+                    continue
+                if mod.startswith("autoskillit.") and mod.count(".") >= 2:
+                    parts = mod.split(".")
+                    other_pkg = parts[1]
+                    if other_pkg in forbidden_pkgs and other_pkg != pkg:
+                        violations.append(f"{rel} → {mod}")
+    assert not violations, "REQ-IMP-007 violations:\n" + "\n".join(violations)

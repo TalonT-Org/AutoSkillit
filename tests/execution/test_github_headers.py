@@ -6,7 +6,7 @@ and the missing User-Agent in DefaultMergeQueueWatcher.
 
 from __future__ import annotations
 
-import asyncio
+import pytest
 
 from autoskillit.execution.github import github_headers
 from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
@@ -48,26 +48,27 @@ def test_github_headers_returns_new_dict_each_call():
 # ---------------------------------------------------------------------------
 
 
-def test_merge_queue_watcher_includes_user_agent_in_client_headers():
+@pytest.mark.anyio
+async def test_merge_queue_watcher_includes_user_agent_in_client_headers():
     """DefaultMergeQueueWatcher must include User-Agent: autoskillit in its client.
 
-    This is the regression guard for the P6-5 bug: merge_queue.py built headers
-    inline in __init__ and omitted User-Agent.
+    Regression guard for P6-5 bug: merge_queue.py built headers inline in __init__
+    and omitted User-Agent.
     """
     watcher = DefaultMergeQueueWatcher(token=None)
     try:
-        # httpx.AsyncClient merges headers case-insensitively; check both cases
         client_headers = dict(watcher._client.headers)
         assert client_headers.get("user-agent") == "autoskillit"
     finally:
-        asyncio.run(watcher.aclose())
+        await watcher.aclose()
 
 
-def test_merge_queue_watcher_includes_user_agent_with_token():
+@pytest.mark.anyio
+async def test_merge_queue_watcher_includes_user_agent_with_token():
     """User-Agent must be present even when a token is provided."""
     watcher = DefaultMergeQueueWatcher(token="tok")
     try:
         client_headers = dict(watcher._client.headers)
         assert client_headers.get("user-agent") == "autoskillit"
     finally:
-        asyncio.run(watcher.aclose())
+        await watcher.aclose()

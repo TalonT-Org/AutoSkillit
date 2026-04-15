@@ -7,8 +7,6 @@ from unittest.mock import patch
 
 import structlog.testing
 
-import autoskillit.server as server_mod
-
 
 class TestServeLoggingPhases:
     """Verify serve() calls configure_logging twice: early init then config-driven."""
@@ -24,7 +22,7 @@ class TestServeLoggingPhases:
         (config_dir / "config.yaml").write_text("logging:\n  level: DEBUG\n")
 
         with (
-            patch.object(server_mod.mcp, "run"),
+            patch("anyio.run"),  # prevent actual event loop; serve() routes through anyio.run
             patch("autoskillit.core.configure_logging") as mock_configure,
             structlog.testing.capture_logs(),
         ):
@@ -51,7 +49,7 @@ class TestServeLoggingPhases:
         # No config file — defaults only
 
         with (
-            patch.object(server_mod.mcp, "run"),
+            patch("anyio.run"),  # prevent actual event loop; serve() routes through anyio.run
             patch("autoskillit.core.configure_logging") as mock_configure,
             structlog.testing.capture_logs(),
         ):
@@ -67,7 +65,7 @@ class TestServeLoggingPhases:
         monkeypatch.chdir(tmp_path)
 
         with (
-            patch.object(server_mod.mcp, "run"),
+            patch("anyio.run"),  # prevent actual event loop; serve() routes through anyio.run
             patch("autoskillit.core.configure_logging") as mock_configure,
             structlog.testing.capture_logs(),
         ):
@@ -88,7 +86,7 @@ class TestServeLoggingPhases:
         (config_dir / "config.yaml").write_text("logging:\n  json_output: true\n")
 
         with (
-            patch.object(server_mod.mcp, "run"),
+            patch("anyio.run"),  # prevent actual event loop; serve() routes through anyio.run
             patch("autoskillit.core.configure_logging") as mock_configure,
             structlog.testing.capture_logs(),
         ):

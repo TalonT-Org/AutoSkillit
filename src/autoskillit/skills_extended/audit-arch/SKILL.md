@@ -27,7 +27,7 @@ Audit the codebase for adherence to architectural standards and rules.
 
 **ALWAYS:**
 - Use subagents for parallel exploration
-- Write report to `.autoskillit/temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+- Write report to `{{AUTOSKILLIT_TEMP}}/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - Provide file paths and line numbers
 - Categorize by severity (CRITICAL, HIGH, MEDIUM, LOW)
 
@@ -263,7 +263,7 @@ These apply across all principles when evaluating architectural decisions:
       `REVISED – <corrected claim or reason for removal>`. These notes are for
       internal quality control and do not appear in the final report.
 
-7. **Write report** to `.autoskillit/temp/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+7. **Write report** to `{{AUTOSKILLIT_TEMP}}/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 8. **Output summary** to terminal
 
 ---

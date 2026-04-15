@@ -5,11 +5,17 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
-from autoskillit.core import SubprocessResult, TerminationReason
+from autoskillit.core import PRState, SubprocessResult, TerminationReason
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
-from autoskillit.server.tools_ci import get_ci_status, wait_for_ci, wait_for_merge_queue
+from autoskillit.server.tools_ci import (
+    check_repo_merge_state,
+    get_ci_status,
+    wait_for_ci,
+    wait_for_merge_queue,
+)
 
 # ---------------------------------------------------------------------------
 # Gate membership
@@ -199,6 +205,29 @@ async def test_get_ci_status_no_watcher(tool_ctx):
     result = json.loads(await get_ci_status(branch="main"))
     assert result["runs"] == []
     assert "not configured" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# wait_for_ci event param propagation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_passes_event_to_scope(tool_ctx):
+    """wait_for_ci must propagate event param into CIRunScope."""
+    captured_scope = None
+
+    async def _side_effect(branch, *, repo, scope, **kw):
+        nonlocal captured_scope
+        captured_scope = scope
+        return {"run_id": 1, "conclusion": "success", "failed_jobs": []}
+
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(side_effect=_side_effect)
+    tool_ctx.ci_watcher = mock_watcher
+    await wait_for_ci(branch="main", event="push", cwd="/tmp")
+    assert captured_scope is not None
+    assert captured_scope.event == "push"
 
 
 # ---------------------------------------------------------------------------
@@ -578,4 +607,203 @@ async def test_wait_for_merge_queue_watcher_exception_returns_structured_json(to
     assert result["success"] is False
     assert "connection refused" in result["error"]
     assert "subtype" not in result
+
+
+# ---------------------------------------------------------------------------
+# wait_for_ci head_sha enrichment (Gap 5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_includes_head_sha_in_result(tool_ctx):
+    """wait_for_ci result includes head_sha when git rev-parse HEAD succeeds."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+    )
+    tool_ctx.ci_watcher = mock_watcher
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=0,
+            stdout="deadbeef1234\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
+
+    result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+
+    assert result["head_sha"] == "deadbeef1234"
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_omits_head_sha_when_git_fails(tool_ctx):
+    """wait_for_ci result omits head_sha when git rev-parse fails."""
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={"run_id": 1, "conclusion": "success", "failed_jobs": []}
+    )
+    tool_ctx.ci_watcher = mock_watcher
+    tool_ctx.runner.push(
+        SubprocessResult(
+            returncode=128,
+            stdout="",
+            stderr="fatal: not a git repository",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+    )
+
+    result = json.loads(await wait_for_ci("main", cwd="/some/repo"))
+
+    assert "head_sha" not in result
     assert "exit_code" not in result
+
+
+# ---------------------------------------------------------------------------
+# T10: MCP round-trip exhaustiveness — parametrized over list(PRState)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("pr_state", list(PRState))
+async def test_wait_for_merge_queue_serializes_every_pr_state(pr_state, tool_ctx):
+    """Every PRState value round-trips faithfully through the MCP handler.
+
+    Adding a new PRState member without a handler test fails this parametrized suite.
+    """
+    mock_watcher = AsyncMock()
+    mock_watcher.wait = AsyncMock(
+        return_value={
+            "success": pr_state == PRState.MERGED,
+            "pr_state": pr_state.value,
+            "reason": f"test reason for {pr_state.value}",
+        }
+    )
+    tool_ctx.merge_queue_watcher = mock_watcher
+
+    with patch(
+        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_proc:
+        proc_inst = AsyncMock()
+        proc_inst.communicate = AsyncMock(
+            return_value=(b"https://github.com/owner/repo.git\n", b"")
+        )
+        proc_inst.returncode = 0
+        mock_proc.return_value = proc_inst
+
+        result = json.loads(await wait_for_merge_queue(pr_number=1, target_branch="main", cwd="."))
+
+    assert result["pr_state"] == pr_state.value, (
+        f"Expected pr_state={pr_state.value!r} in response, got: {result.get('pr_state')!r}"
+    )
+    expected_success = pr_state == PRState.MERGED
+    assert result["success"] == expected_success, (
+        f"Expected success={expected_success!r} for pr_state={pr_state.value!r}, "
+        f"got: {result.get('success')!r}"
+    )
+
+
+def test_pr_state_docstring_documents_all_members():
+    """T10: wait_for_merge_queue docstring must name every PRState member value.
+
+    Prevents silent docstring drift when new PRState members are added.
+    """
+    doc = wait_for_merge_queue.__doc__ or ""
+    for state in PRState:
+        assert state.value in doc, (
+            f"PRState.{state.name} ({state.value!r}) is not documented in the "
+            f"wait_for_merge_queue docstring. Update the Returns section to include it."
+        )
+
+
+# ---------------------------------------------------------------------------
+# check_repo_merge_state: token_factory and http_status
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_check_repo_merge_state_uses_token_factory(tool_ctx, monkeypatch):
+    """check_repo_merge_state calls token_factory() when set, not config.github.token."""
+    resolved_calls = []
+
+    def factory():
+        resolved_calls.append(1)
+        return "factory-token"
+
+    tool_ctx.token_factory = factory
+    tool_ctx.config.github.token = "config-token"
+
+    captured_tokens = []
+
+    async def fake_fetch(owner, repo, branch, token):
+        captured_tokens.append(token)
+        return {
+            "queue_available": False,
+            "merge_group_trigger": False,
+            "auto_merge_available": False,
+            "ci_event": None,
+        }
+
+    monkeypatch.setattr("autoskillit.server.tools_ci.fetch_repo_merge_state", fake_fetch)
+    monkeypatch.setattr(
+        "autoskillit.server.tools_ci.infer_repo_from_remote",
+        AsyncMock(return_value="owner/repo"),
+    )
+
+    await check_repo_merge_state(branch="main")
+    assert captured_tokens == ["factory-token"]
+    assert resolved_calls == [1]
+
+
+@pytest.mark.anyio
+async def test_check_repo_merge_state_falls_back_to_config_token_when_no_factory(
+    tool_ctx, monkeypatch
+):
+    """When token_factory is None, config.github.token is used."""
+    tool_ctx.token_factory = None
+    tool_ctx.config.github.token = "config-token"
+
+    captured_tokens = []
+
+    async def fake_fetch(owner, repo, branch, token):
+        captured_tokens.append(token)
+        return {
+            "queue_available": False,
+            "merge_group_trigger": False,
+            "auto_merge_available": False,
+            "ci_event": None,
+        }
+
+    monkeypatch.setattr("autoskillit.server.tools_ci.fetch_repo_merge_state", fake_fetch)
+    monkeypatch.setattr(
+        "autoskillit.server.tools_ci.infer_repo_from_remote",
+        AsyncMock(return_value="owner/repo"),
+    )
+
+    await check_repo_merge_state(branch="main")
+    assert captured_tokens == ["config-token"]
+
+
+@pytest.mark.anyio
+async def test_check_repo_merge_state_error_includes_http_status(tool_ctx, monkeypatch):
+    """HTTP error response envelope contains http_status field."""
+
+    async def fake_fetch(owner, repo, branch, token):
+        response = httpx.Response(
+            403,
+            request=httpx.Request("POST", "https://api.github.com/graphql"),
+        )
+        raise httpx.HTTPStatusError("403 Forbidden", request=response.request, response=response)
+
+    monkeypatch.setattr("autoskillit.server.tools_ci.fetch_repo_merge_state", fake_fetch)
+    monkeypatch.setattr(
+        "autoskillit.server.tools_ci.infer_repo_from_remote",
+        AsyncMock(return_value="owner/repo"),
+    )
+
+    result = json.loads(await check_repo_merge_state(branch="main"))
+    assert "http_status" in result
+    assert result["http_status"] == 403

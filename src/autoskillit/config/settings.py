@@ -11,11 +11,13 @@ Resolution order (low → high priority):
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import logging
+import os
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from autoskillit.core import (
     CATEGORY_TAGS,
@@ -90,7 +92,27 @@ class RunSkillConfig:
     stale_threshold: int = 1200  # 20 minutes
     completion_marker: str = "%%ORDER_UP%%"
     completion_drain_timeout: float = 5.0
-    exit_after_stop_delay_ms: int = 120000
+    exit_after_stop_delay_ms: int = 2000
+    natural_exit_grace_seconds: float = 3.0
+    idle_output_timeout: int = 600
+    max_suppression_seconds: int = 1800
+
+    # Safety margin (ms) above exit_after_stop_delay_ms that
+    # natural_exit_grace_seconds must cover so the drain window can absorb
+    # the CLI self-exit delay without a race.
+    _EXIT_GRACE_BUFFER_MS: ClassVar[int] = 500
+
+    def __post_init__(self) -> None:
+        required_ms = self.exit_after_stop_delay_ms + self._EXIT_GRACE_BUFFER_MS
+        # Convert seconds → ms for the comparison
+        if self.natural_exit_grace_seconds * 1000 < required_ms:
+            raise ValueError(
+                f"natural_exit_grace_seconds={self.natural_exit_grace_seconds} is too small: "
+                f"{self.natural_exit_grace_seconds * 1000:.0f}ms < "
+                f"{required_ms}ms (exit_after_stop_delay_ms + {self._EXIT_GRACE_BUFFER_MS}). "
+                "Increase natural_exit_grace_seconds so the drain window can absorb the "
+                "CLI self-exit delay."
+            )
 
     @property
     def output_format(self) -> OutputFormat:
@@ -122,9 +144,14 @@ class TokenUsageConfig:
 @dataclass
 class QuotaGuardConfig:
     enabled: bool = True
-    threshold: float = 90.0
+    short_window_enabled: bool = True
+    long_window_enabled: bool = True
+    short_window_threshold: float = 85.0
+    long_window_threshold: float = 98.0
+    long_window_patterns: list[str] = field(default_factory=lambda: ["weekly", "sonnet", "opus"])
     buffer_seconds: int = 60
     cache_max_age: int = 300
+    cache_refresh_interval: int = 240
     credentials_path: str = "~/.claude/.credentials.json"
     cache_path: str = "~/.claude/autoskillit_quota_cache.json"
 
@@ -168,7 +195,7 @@ class GitHubConfig:
 class ReportBugConfig:
     timeout: int = 600
     model: str | None = None
-    report_dir: str | None = None  # None = {cwd}/.autoskillit/temp/bug-reports/
+    report_dir: str | None = None  # None = resolved temp dir + /bug-reports/
     github_filing: bool = True
     github_labels: list[str] = field(default_factory=lambda: ["autoreported", "bug"])
 
@@ -186,6 +213,25 @@ class LinuxTracingConfig:
     log_dir: str = ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
     tmpfs_path: str = "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
 
+    def __post_init__(self) -> None:
+        if self.tmpfs_path != "/dev/shm" or not os.environ.get("PYTEST_CURRENT_TEST"):
+            return
+        # Only raise when called directly from test code — not from library machinery
+        # (e.g. AutomationConfig default_factory, from_dynaconf). We inspect the call
+        # frame two levels up: __post_init__ → __init__ (generated) → actual caller.
+        frame = inspect.currentframe()
+        init_frame = frame.f_back if frame is not None else None
+        caller = init_frame.f_back if init_frame is not None else None
+        if caller is not None and "/tests/" in (caller.f_code.co_filename or ""):
+            raise RuntimeError(
+                "LinuxTracingConfig.tmpfs_path is '/dev/shm' but PYTEST_CURRENT_TEST "
+                "is set — this test would write to the real shared tmpfs and pollute "
+                "production state. Override tmpfs_path with a test-local path, e.g.: "
+                "LinuxTracingConfig(tmpfs_path=str(tmp_path)). "
+                "Use the isolated_tracing_config fixture for new tests."
+            )
+        del frame, init_frame, caller
+
 
 @dataclass
 class McpResponseConfig:
@@ -201,6 +247,7 @@ class BranchingConfig:
 @dataclass
 class CIConfig:
     workflow: str | None = None
+    event: str | None = None
 
 
 @dataclass
@@ -231,6 +278,7 @@ class PacksConfig:
 class WorkspaceConfig:
     worktree_root: str | None = None  # null = auto-resolve to ../worktrees/
     runs_root: str | None = None  # null = auto-resolve to ../autoskillit-runs/
+    temp_dir: str | None = None  # null = canonical default (see resolve_temp_dir)
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:
@@ -369,6 +417,15 @@ class AutomationConfig:
                 exit_after_stop_delay_ms=int(
                     val(rs, "exit_after_stop_delay_ms", _rs["exit_after_stop_delay_ms"])
                 ),
+                natural_exit_grace_seconds=float(
+                    val(rs, "natural_exit_grace_seconds", _rs["natural_exit_grace_seconds"])
+                ),
+                idle_output_timeout=int(
+                    val(rs, "idle_output_timeout", _rs["idle_output_timeout"])
+                ),
+                max_suppression_seconds=int(
+                    val(rs, "max_suppression_seconds", _rs["max_suppression_seconds"])
+                ),
             ),
             model=ModelConfig(
                 default=_d if (_d := val(mc, "default", None)) is not None else _mc["default"],
@@ -385,9 +442,26 @@ class AutomationConfig:
             ),
             quota_guard=QuotaGuardConfig(
                 enabled=bool(val(qg, "enabled", _qg["enabled"])),
-                threshold=float(val(qg, "threshold", _qg["threshold"])),
+                short_window_enabled=bool(
+                    val(qg, "short_window_enabled", _qg["short_window_enabled"])
+                ),
+                long_window_enabled=bool(
+                    val(qg, "long_window_enabled", _qg["long_window_enabled"])
+                ),
+                short_window_threshold=float(
+                    val(qg, "short_window_threshold", _qg["short_window_threshold"])
+                ),
+                long_window_threshold=float(
+                    val(qg, "long_window_threshold", _qg["long_window_threshold"])
+                ),
+                long_window_patterns=list(
+                    val(qg, "long_window_patterns", _qg["long_window_patterns"])
+                ),
                 buffer_seconds=int(val(qg, "buffer_seconds", _qg["buffer_seconds"])),
                 cache_max_age=int(val(qg, "cache_max_age", _qg["cache_max_age"])),
+                cache_refresh_interval=int(
+                    val(qg, "cache_refresh_interval", _qg["cache_refresh_interval"])
+                ),
                 credentials_path=str(val(qg, "credentials_path", _qg["credentials_path"])),
                 cache_path=str(val(qg, "cache_path", _qg["cache_path"])),
             ),
@@ -432,6 +506,7 @@ class AutomationConfig:
             ),
             ci=CIConfig(
                 workflow=val(ci, "workflow", _ci["workflow"]) or None,
+                event=val(ci, "event", _ci["event"]) or None,
             ),
             skills=SkillsConfig(
                 tier1=list(val(sk, "tier1", _sk["tier1"])),
@@ -443,6 +518,7 @@ class AutomationConfig:
             workspace=WorkspaceConfig(
                 worktree_root=val(ws_raw, "worktree_root", _wsc["worktree_root"]) or None,
                 runs_root=val(ws_raw, "runs_root", _wsc["runs_root"]) or None,
+                temp_dir=val(ws_raw, "temp_dir", _wsc["temp_dir"]) or None,
             ),
         )
 

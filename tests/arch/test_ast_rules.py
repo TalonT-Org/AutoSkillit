@@ -414,6 +414,7 @@ def test_no_raw_claude_list_construction() -> None:
         ("_llm_triage.py", "_triage_batch"),
         ("commands.py", "build_interactive_cmd"),
         ("commands.py", "build_headless_cmd"),
+        ("commands.py", "build_headless_resume_cmd"),
         ("_init_helpers.py", "_is_plugin_installed"),
         ("_doctor.py", "_check_mcp_server_registered"),
     }
@@ -571,3 +572,199 @@ def test_get_logger_no_bind() -> None:
             )
             return
     pytest.fail("get_logger() function not found in core/logging.py")
+
+
+# ── Kill-path structural guards (1f) ─────────────────────────────────────────
+
+
+def test_no_direct_async_kill_process_tree_outside_executor() -> None:
+    """No src file may call async_kill_process_tree or kill_process_tree
+    outside the designated kill helper functions.
+
+    Allowed call sites:
+    - src/autoskillit/execution/_process_kill.py (defines the helpers)
+    - execute_termination_action in src/autoskillit/execution/process.py
+    - BaseException handler in run_managed_async in process.py (cleanup path)
+    - run_managed_sync in process.py (sync cleanup path)
+    """
+    allowed_files = {
+        SRC_ROOT / "execution" / "_process_kill.py",
+        SRC_ROOT / "execution" / "process.py",
+    }
+    violations: list[str] = []
+
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        if py_file in allowed_files:
+            continue
+        try:
+            tree = ast.parse(py_file.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in {"async_kill_process_tree", "kill_process_tree"}
+            ):
+                violations.append(
+                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                    f"direct call to {node.func.id}() outside allowed files"
+                )
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"async_kill_process_tree", "kill_process_tree"}
+            ):
+                violations.append(
+                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                    f"direct call to .{node.func.attr}() outside allowed files"
+                )
+
+    assert not violations, (
+        "Direct async_kill_process_tree/kill_process_tree calls found outside allowed files.\n"
+        "All kill calls must go through execute_termination_action in process.py:\n"
+        + "\n".join(violations)
+    )
+
+
+def test_no_direct_termination_dispatch_ifelse_in_run_managed() -> None:
+    """run_managed_async must not contain an if/elif chain that inspects
+    TerminationReason.* or signals.process_exited directly.
+
+    The dispatch must be delegated to decide_termination_action.
+    """
+    process_py = SRC_ROOT / "execution" / "process.py"
+    tree = ast.parse(process_py.read_text())
+
+    # Find run_managed_async function body
+    run_managed_node: ast.AsyncFunctionDef | None = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "run_managed_async":
+            run_managed_node = node
+            break
+
+    assert run_managed_node is not None, "run_managed_async not found in process.py"
+
+    # Walk the function body and detect any If node whose test references
+    # TerminationReason.* attribute or signals.process_exited
+    violations: list[str] = []
+    for node in ast.walk(run_managed_node):
+        if not isinstance(node, ast.If):
+            continue
+        test = node.test
+        # Detect: timeout_scope.cancelled_caught (allowed), but TerminationReason.* is banned
+        # Walk the test expression for TerminationReason attribute access
+        for subnode in ast.walk(test):
+            if (
+                isinstance(subnode, ast.Attribute)
+                and isinstance(subnode.value, ast.Name)
+                and subnode.value.id == "TerminationReason"
+            ):
+                violations.append(
+                    f"process.py:{getattr(node, 'lineno', '?')}: "
+                    f"run_managed_async uses if/elif on TerminationReason.{subnode.attr} "
+                    "— dispatch must go through decide_termination_action"
+                )
+            # Detect: signals.process_exited in if test
+            if (
+                isinstance(subnode, ast.Attribute)
+                and isinstance(subnode.value, ast.Name)
+                and subnode.value.id == "signals"
+                and subnode.attr == "process_exited"
+            ):
+                violations.append(
+                    f"process.py:{getattr(node, 'lineno', '?')}: "
+                    "run_managed_async branches on signals.process_exited directly "
+                    "— dispatch must go through decide_termination_action"
+                )
+
+    assert not violations, (
+        "run_managed_async must not inspect TerminationReason or signals.process_exited directly."
+        "\nUse decide_termination_action to make the kill decision:\n" + "\n".join(violations)
+    )
+
+
+# ---------------------------------------------------------------------------
+# ARCH-008: no-raw-pid-to-start-linux-tracing — Test 1.9 calibration tests
+# ---------------------------------------------------------------------------
+
+
+def test_arch008_detects_raw_pid_attribute_passed_as_target(tmp_path: Path) -> None:
+    """ARCH-008 calibration: start_linux_tracing(target=proc.pid) is a violation.
+
+    The .pid attribute on an anyio/subprocess Process object is the wrapper PID when
+    PTY mode is active. Passing it directly to start_linux_tracing caused issue #806.
+    """
+    f = tmp_path / "bad.py"
+    f.write_text(
+        "from autoskillit.execution.linux_tracing import start_linux_tracing\n"
+        "start_linux_tracing(target=proc.pid, config=cfg, tg=tg)\n"
+    )
+    violations = _scan(f)
+    arch008 = [v for v in violations if v.rule_id == "ARCH-008"]
+    assert arch008, (
+        "ARCH-008 must fire when start_linux_tracing is called with target=<expr>.pid. "
+        f"All violations found: {violations}"
+    )
+    assert "pid" in arch008[0].message.lower() or "raw" in arch008[0].message.lower(), (
+        f"ARCH-008 violation message must mention the raw pid issue. Got: {arch008[0].message!r}"
+    )
+
+
+def test_arch008_accepts_resolve_trace_target_result(tmp_path: Path) -> None:
+    """ARCH-008 calibration: start_linux_tracing(target=resolve_trace_target(...)) is allowed.
+
+    Calling resolve_trace_target() returns a TraceTarget (not a raw int), so it
+    satisfies the type contract.
+    """
+    f = tmp_path / "good.py"
+    f.write_text(
+        "from autoskillit.execution.linux_tracing import (\n"
+        "    start_linux_tracing, resolve_trace_target)\n"
+        "target = resolve_trace_target(\n"
+        "    root_pid=proc.pid, expected_basename='claude')\n"
+        "start_linux_tracing(target=target, config=cfg, tg=tg)\n"
+    )
+    violations = _scan(f)
+    arch008 = [v for v in violations if v.rule_id == "ARCH-008"]
+    assert not arch008, (
+        f"ARCH-008 must NOT fire when target is a Name (variable), not an Attribute. "
+        f"Violations found: {arch008}"
+    )
+
+
+def test_arch008_accepts_trace_target_from_pid_result(tmp_path: Path) -> None:
+    """ARCH-008 calibration: start_linux_tracing(target=trace_target_from_pid(...)) is allowed."""
+    f = tmp_path / "good_direct.py"
+    f.write_text(
+        "from autoskillit.execution.linux_tracing import (\n"
+        "    start_linux_tracing, trace_target_from_pid)\n"
+        "target = trace_target_from_pid(proc.pid)\n"
+        "start_linux_tracing(target=target, config=cfg, tg=tg)\n"
+    )
+    violations = _scan(f)
+    arch008 = [v for v in violations if v.rule_id == "ARCH-008"]
+    assert not arch008, (
+        f"ARCH-008 must NOT fire when target is a Name variable, not an Attribute. "
+        f"Violations found: {arch008}"
+    )
+
+
+def test_no_raw_pid_attr_to_start_linux_tracing() -> None:
+    """ARCH-008 (Test 1.9): no production file passes <expr>.pid as target to start_linux_tracing.
+
+    Enforces the PTY wrapper tracer PID immunity contract from issue #806:
+    any call site that tries to pass proc.pid (or any .pid Attribute) directly
+    to start_linux_tracing is caught in CI before it ships.
+    """
+    violations = []
+    for src_file in _SOURCE_FILES:
+        file_violations = _scan(src_file)
+        arch008 = [v for v in file_violations if v.rule_id == "ARCH-008"]
+        violations.extend(arch008)
+
+    assert not violations, (
+        "ARCH-008: start_linux_tracing called with a raw .pid attribute as target. "
+        "Use resolve_trace_target() (PTY mode) or trace_target_from_pid() (direct mode) "
+        "to get a TraceTarget first (issue #806):\n" + "\n".join(f"  {v}" for v in violations)
+    )

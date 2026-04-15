@@ -596,18 +596,6 @@ async def test_ensure_label_returns_error_on_network_failure(httpx_mock):
 # ---------------------------------------------------------------------------
 
 
-def test_github_fetcher_protocol_has_add_labels():
-    assert hasattr(GitHubFetcher, "add_labels")
-
-
-def test_github_fetcher_protocol_has_remove_label():
-    assert hasattr(GitHubFetcher, "remove_label")
-
-
-def test_github_fetcher_protocol_has_ensure_label():
-    assert hasattr(GitHubFetcher, "ensure_label")
-
-
 def test_default_github_fetcher_implements_full_protocol():
     fetcher = DefaultGitHubFetcher(token=None)
     assert isinstance(fetcher, GitHubFetcher)

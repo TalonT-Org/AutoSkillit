@@ -305,17 +305,17 @@ class TestRunSkillConfigFields:
 
 
 class TestRunSkillConfigExitAfterStopDelay:
-    def test_default_exit_after_stop_delay_is_120000(self):
+    def test_default_exit_after_stop_delay_is_2000(self):
         cfg = AutomationConfig()
-        assert cfg.run_skill.exit_after_stop_delay_ms == 120000
+        assert cfg.run_skill.exit_after_stop_delay_ms == 2000
 
     def test_yaml_loads_exit_after_stop_delay(self, tmp_path):
         (tmp_path / ".autoskillit").mkdir()
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
-            "run_skill:\n  exit_after_stop_delay_ms: 60000\n"
+            "run_skill:\n  exit_after_stop_delay_ms: 1500\n"
         )
         cfg = load_config(tmp_path)
-        assert cfg.run_skill.exit_after_stop_delay_ms == 60000
+        assert cfg.run_skill.exit_after_stop_delay_ms == 1500
 
     def test_zero_disables_injection(self, tmp_path):
         (tmp_path / ".autoskillit").mkdir()
@@ -329,7 +329,7 @@ class TestRunSkillConfigExitAfterStopDelay:
         (tmp_path / ".autoskillit").mkdir()
         (tmp_path / ".autoskillit" / "config.yaml").write_text("run_skill:\n  timeout: 1800\n")
         cfg = load_config(tmp_path)
-        assert cfg.run_skill.exit_after_stop_delay_ms == 120000
+        assert cfg.run_skill.exit_after_stop_delay_ms == 2000
 
     def test_run_skill_config_fields_include_exit_delay(self):
         names = {f.name for f in dc_fields(RunSkillConfig)}
@@ -342,7 +342,8 @@ class TestQuotaGuardConfig:
 
         config = AutomationConfig()
         assert config.quota_guard.enabled is True
-        assert config.quota_guard.threshold == pytest.approx(90.0)
+        assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
+        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
         assert config.quota_guard.buffer_seconds == 60
         assert config.quota_guard.cache_max_age == 300
 
@@ -352,13 +353,119 @@ class TestQuotaGuardConfig:
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text(
-            yaml.dump({"quota_guard": {"enabled": True, "threshold": 90.0}})
+            yaml.dump(
+                {
+                    "quota_guard": {
+                        "enabled": True,
+                        "short_window_threshold": 85.0,
+                        "long_window_threshold": 98.0,
+                    }
+                }
+            )
         )
         config = load_config(tmp_path)
         assert config.quota_guard.enabled is True
-        assert config.quota_guard.threshold == pytest.approx(90.0)
+        assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
+        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
         # Unspecified fields keep defaults
         assert config.quota_guard.buffer_seconds == 60
+
+    def test_short_window_threshold_defaults_to_85(self):
+        from autoskillit.config.settings import QuotaGuardConfig
+
+        assert QuotaGuardConfig().short_window_threshold == 85.0
+
+    def test_long_window_threshold_defaults_to_98(self):
+        from autoskillit.config.settings import QuotaGuardConfig
+
+        assert QuotaGuardConfig().long_window_threshold == 98.0
+
+    def test_long_window_patterns_default(self):
+        from autoskillit.config.settings import QuotaGuardConfig
+
+        assert QuotaGuardConfig().long_window_patterns == ["weekly", "sonnet", "opus"]
+
+    def test_threshold_field_removed(self):
+        import dataclasses
+
+        from autoskillit.config.settings import QuotaGuardConfig
+
+        names = {f.name for f in dataclasses.fields(QuotaGuardConfig)}
+        assert "threshold" not in names
+
+    def test_quota_guard_yaml_round_trip_per_window(self, tmp_path):
+        import pytest
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump(
+                {
+                    "quota_guard": {
+                        "short_window_threshold": 85.0,
+                        "long_window_threshold": 98.0,
+                        "long_window_patterns": ["weekly", "sonnet", "opus"],
+                    }
+                }
+            )
+        )
+        config = load_config(tmp_path)
+        assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
+        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
+        assert config.quota_guard.long_window_patterns == ["weekly", "sonnet", "opus"]
+
+    def test_quota_guard_config_has_cache_refresh_interval(self):
+        """QG_C3: QuotaGuardConfig has cache_refresh_interval defaulting to 240."""
+        from autoskillit.config.settings import QuotaGuardConfig
+
+        config = QuotaGuardConfig()
+        assert config.cache_refresh_interval == 240
+
+    def test_defaults_yaml_has_cache_refresh_interval(self):
+        """QG_C4: defaults.yaml defines quota_guard.cache_refresh_interval < cache_max_age."""
+        from autoskillit.core.paths import pkg_root
+
+        defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
+        assert "cache_refresh_interval" in defaults["quota_guard"]
+        interval = defaults["quota_guard"]["cache_refresh_interval"]
+        max_age = defaults["quota_guard"]["cache_max_age"]
+        assert interval < max_age, (
+            f"cache_refresh_interval ({interval}) must be < cache_max_age ({max_age}); "
+            "otherwise the loop arrives after the cache has already expired"
+        )
+
+    def test_quota_guard_per_window_enabled_defaults_true(self):
+        """Test 14: QuotaGuardConfig() defaults both per-window flags to True."""
+        from autoskillit.config.settings import QuotaGuardConfig
+
+        config = QuotaGuardConfig()
+        assert config.short_window_enabled is True
+        assert config.long_window_enabled is True
+
+    def test_quota_guard_per_window_enabled_yaml_round_trip(self, tmp_path):
+        """Test 15: per-window enabled flags survive a YAML round-trip."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump({"quota_guard": {"short_window_enabled": False}})
+        )
+        config = load_config(tmp_path)
+        assert config.quota_guard.short_window_enabled is False
+        assert config.quota_guard.long_window_enabled is True
+
+    def test_defaults_yaml_has_per_window_enabled_keys(self):
+        """Test 16: defaults.yaml has both per-window enabled keys set to True."""
+        from autoskillit.core.paths import pkg_root
+
+        defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
+        assert defaults["quota_guard"]["short_window_enabled"] is True
+        assert defaults["quota_guard"]["long_window_enabled"] is True
+
+    def test_quota_guard_env_var_override_short_window_enabled(self, monkeypatch, tmp_path):
+        """Test 17: AUTOSKILLIT_QUOTA_GUARD__SHORT_WINDOW_ENABLED=false is cast to bool False."""
+        monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__SHORT_WINDOW_ENABLED", "false")
+        config = load_config(tmp_path)
+        assert config.quota_guard.short_window_enabled is False
 
 
 class TestLoggingConfig:
@@ -708,10 +815,13 @@ class TestBranchingConfig:
     def test_branching_config_promotion_target_defaults_match_yaml(self, tmp_path) -> None:
         """Python default for promotion_target matches defaults.yaml."""
         from autoskillit.config import load_config
-        from autoskillit.config.settings import BranchingConfig
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
 
         loaded = load_config(tmp_path / "settings.toml")
-        assert loaded.branching.promotion_target == BranchingConfig().promotion_target
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        expected = defaults["branching"]["promotion_target"]
+        assert loaded.branching.promotion_target == expected
 
     def test_branching_config_promotion_target_env_var_override(
         self, monkeypatch, tmp_path
@@ -727,32 +837,13 @@ class TestBranchingConfig:
 class TestBuildSubsetsConfigCustomTagsValidation:
     """CC-F2: _build_subsets_config must raise ValueError for non-dict custom_tags."""
 
-    def test_build_subsets_config_raises_for_non_dict_custom_tags(self):
+    @pytest.mark.parametrize("bad_value", [["list", "not", "dict"], "oops", 42])
+    def test_build_subsets_config_raises_for_non_dict_custom_tags(self, bad_value: object) -> None:
         """Non-dict custom_tags must raise ValueError, not silently coerce to {}."""
-        import pytest
-
         from autoskillit.config.settings import _build_subsets_config
 
         with pytest.raises(ValueError, match="custom_tags"):
-            _build_subsets_config({"custom_tags": ["list", "not", "dict"]})
-
-    def test_build_subsets_config_raises_for_string_custom_tags(self):
-        """String custom_tags must raise ValueError."""
-        import pytest
-
-        from autoskillit.config.settings import _build_subsets_config
-
-        with pytest.raises(ValueError, match="custom_tags"):
-            _build_subsets_config({"custom_tags": "oops"})
-
-    def test_build_subsets_config_raises_for_int_custom_tags(self):
-        """Integer custom_tags must raise ValueError."""
-        import pytest
-
-        from autoskillit.config.settings import _build_subsets_config
-
-        with pytest.raises(ValueError, match="custom_tags"):
-            _build_subsets_config({"custom_tags": 42})
+            _build_subsets_config({"custom_tags": bad_value})
 
     def test_build_subsets_config_dict_custom_tags_accepted(self):
         """Valid dict custom_tags must not raise."""
@@ -813,7 +904,7 @@ class TestSkillsConfig:
         cfg = load_config(tmp_path / "settings.toml")
         assert "open-kitchen" in cfg.skills.tier1
         assert "make-plan" in cfg.skills.tier2
-        assert "open-pr" in cfg.skills.tier3
+        assert "compose-pr" in cfg.skills.tier3
 
     def test_skills_config_exported_from_config_package(self) -> None:
         """SkillsConfig is importable from autoskillit.config and has expected fields."""
@@ -1043,20 +1134,20 @@ class TestWriteConfigLayer:
 class TestWorkspaceConfig:
     """WorkspaceConfig section is present in AutomationConfig with correct defaults."""
 
-    def test_workspace_config_exists_on_automation_config(self):
+    def test_workspace_config_exists_on_automation_config(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert hasattr(cfg, "workspace")
 
-    def test_workspace_worktree_root_defaults_to_none(self):
+    def test_workspace_worktree_root_defaults_to_none(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.workspace.worktree_root is None
 
-    def test_workspace_runs_root_defaults_to_none(self):
+    def test_workspace_runs_root_defaults_to_none(self, tmp_path):
         from autoskillit.config import load_config
 
-        cfg = load_config()
+        cfg = load_config(tmp_path / "settings.toml")
         assert cfg.workspace.runs_root is None

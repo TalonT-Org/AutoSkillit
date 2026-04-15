@@ -110,7 +110,7 @@ async def test_watch_process_logs_exit(tmp_path):
 
 @pytest.mark.anyio
 async def test_kill_decision_logs_natural_exit(tmp_path):
-    """Kill decision logs 'natural_exit' when process exits on its own."""
+    """Kill decision logs 'no_kill' reason when process exits on its own."""
     from autoskillit.execution.process import run_managed_async
 
     cmd = ["python3", "-c", "pass"]
@@ -119,12 +119,12 @@ async def test_kill_decision_logs_natural_exit(tmp_path):
 
     kill_logs = [r for r in logs if r.get("event") == "kill_decision"]
     assert kill_logs, f"Expected kill_decision log, got events: {[r.get('event') for r in logs]}"
-    assert kill_logs[0]["reason"] == "natural_exit"
+    assert kill_logs[0]["reason"] == "no_kill"
 
 
 @pytest.mark.anyio
 async def test_kill_decision_logs_timeout(tmp_path):
-    """Kill decision logs 'timeout' when process exceeds timeout."""
+    """Kill decision logs 'immediate_kill' reason when process exceeds timeout."""
     from autoskillit.execution.process import run_managed_async
 
     cmd = [
@@ -141,4 +141,4 @@ async def test_kill_decision_logs_timeout(tmp_path):
     assert result.termination == TerminationReason.TIMED_OUT
     kill_logs = [r for r in logs if r.get("event") == "kill_decision"]
     assert kill_logs, f"Expected kill_decision log, got events: {[r.get('event') for r in logs]}"
-    assert kill_logs[0]["reason"] == "timeout"
+    assert kill_logs[0]["reason"] == "immediate_kill"

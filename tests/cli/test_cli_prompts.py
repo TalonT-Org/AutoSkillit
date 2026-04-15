@@ -209,6 +209,33 @@ def test_show_cook_preview_no_diagram(monkeypatch, tmp_path, capsys):
     assert "RECIPE" not in captured.out
 
 
+def test_show_cook_preview_uses_resolved_base_branch_for_smoke_test(monkeypatch, capsys):
+    """T8: show_cook_preview renders the config-resolved base_branch for smoke-test."""
+    import autoskillit.recipe._api as api_mod
+    from autoskillit.cli._prompts import show_cook_preview
+    from autoskillit.core import pkg_root
+    from autoskillit.recipe.io import find_recipe_by_name, load_recipe
+
+    project_dir = pkg_root().parent.parent
+    monkeypatch.setattr(api_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(
+        "autoskillit.config.resolve_ingredient_defaults",
+        lambda _: {"base_branch": "integration"},
+    )
+
+    recipe_info = find_recipe_by_name("smoke-test", project_dir)
+    assert recipe_info is not None, "smoke-test recipe must exist in project-local recipes"
+    recipe = load_recipe(recipe_info.path)
+
+    show_cook_preview("smoke-test", recipe, project_dir, project_dir)
+    captured = capsys.readouterr()
+    assert "integration" in captured.out
+    # base_branch row must NOT show the YAML literal "main"
+    base_branch_lines = [line for line in captured.out.splitlines() if "base_branch" in line]
+    assert base_branch_lines, "base_branch must appear in the rendered table"
+    assert all("main" not in line for line in base_branch_lines)
+
+
 def test_orchestrator_prompt_contains_multi_issue_guidance():
     """System prompt must document the sequential vs parallel decision for multiple issues."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt
@@ -367,3 +394,43 @@ def test_open_kitchen_prompt_uses_fully_qualified_tool_name(mcp_prefix: str) -> 
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=mcp_prefix)
     assert f"{mcp_prefix}open_kitchen" in prompt
+
+
+def test_orchestrator_prompt_contains_quota_routing():
+    """_build_orchestrator_prompt output includes QUOTA DENIAL ROUTING section."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("test-recipe", mcp_prefix=DIRECT_PREFIX)
+    assert "QUOTA DENIAL ROUTING" in prompt
+
+
+def test_orchestrator_prompt_instructs_toolsearch_when_deferred():
+    """PR #750 added DO-NOT-ask; this test pins the recovery path instead."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
+    assert "ToolSearch" in prompt
+    assert "deferred" in prompt.lower()
+    assert "select:" in prompt
+    assert "open_kitchen" in prompt
+
+
+def test_open_kitchen_prompt_instructs_toolsearch_when_deferred():
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
+    prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
+    assert "ToolSearch" in prompt
+    assert "deferred" in prompt.lower()
+    assert "open_kitchen" in prompt
+
+
+def test_prompt_builder_includes_startup_retry():
+    """Prompt must include retry instruction for 'No such tool available'."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
+    assert "SERVER-STARTUP RECOVERY" in prompt
+    assert "No such tool available" in prompt

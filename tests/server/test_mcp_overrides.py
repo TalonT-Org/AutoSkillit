@@ -80,6 +80,7 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
         patch(
             "autoskillit.server.tools_kitchen._open_kitchen_handler",
             new_callable=AsyncMock,
+            return_value=None,
         ),
         patch("autoskillit.server._get_ctx", return_value=mock_tool_ctx),
         patch(

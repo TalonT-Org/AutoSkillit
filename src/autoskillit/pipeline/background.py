@@ -105,6 +105,19 @@ class DefaultBackgroundSupervisor:
             await asyncio.gather(*self._tasks, return_exceptions=True)
 
 
+def create_background_task(
+    coro: Coroutine[Any, Any, Any], *, label: str = ""
+) -> asyncio.Task[Any]:
+    """Create an asyncio.Task for a long-running background coroutine.
+
+    Unlike DefaultBackgroundSupervisor.submit(), this does NOT wrap the coroutine
+    in _supervise_task — the caller owns the task handle and is responsible for
+    cancellation. Used for kitchen-scoped lifecycle tasks (quota_refresh_loop) that
+    must be cancelled explicitly when the kitchen closes.
+    """
+    return asyncio.create_task(coro, name=label)
+
+
 def write_status(path: Path | None, status: str, *, error: str | None = None) -> None:
     """Write a status.json file atomically. Never raises."""
     try:

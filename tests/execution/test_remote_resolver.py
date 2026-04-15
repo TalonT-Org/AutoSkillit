@@ -124,3 +124,19 @@ async def test_resolve_returns_none_when_no_remotes(tmp_path: Path) -> None:
     repo = _make_repo_with_remotes(tmp_path)
     result = await resolve_remote_repo(str(repo))
     assert result is None
+
+
+def test_resolve_remote_has_timeout_in_source() -> None:
+    """Static check: resolve_remote_repo uses wait_for with a timeout on subprocess calls."""
+    import ast
+    import inspect
+
+    source = inspect.getsource(resolve_remote_repo)
+    tree = ast.parse(source)
+    has_wait_for = any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "wait_for"
+        for node in ast.walk(tree)
+    )
+    assert has_wait_for, "resolve_remote_repo should use asyncio.wait_for for timeout protection"

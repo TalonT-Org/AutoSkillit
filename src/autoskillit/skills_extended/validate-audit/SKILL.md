@@ -31,8 +31,8 @@ signal downstream processing.
 
 - `audit_report_path` — absolute path to an audit report produced by `audit-arch`,
   `audit-tests`, or `audit-cohesion`. If omitted, use the most recent file under
-  `.autoskillit/temp/audit-arch/`, `.autoskillit/temp/audit-tests/`, or
-  `.autoskillit/temp/audit-cohesion/` (most recent mtime wins across all three).
+  `{{AUTOSKILLIT_TEMP}}/audit-arch/`, `{{AUTOSKILLIT_TEMP}}/audit-tests/`, or
+  `{{AUTOSKILLIT_TEMP}}/audit-cohesion/` (most recent mtime wins across all three).
   If no files exist under any of these directories, print an error message and exit
   with a non-zero status.
 
@@ -40,7 +40,7 @@ signal downstream processing.
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `.autoskillit/temp/validate-audit/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/validate-audit/`
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
@@ -111,7 +111,7 @@ by the top-level package touched (e.g., `pipeline/`, `execution/`, `server/`, `c
 
 ### Step 3 — Launch Parallel Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task calls in a single message.** Do not output any prose between tool calls.
+**Issue ALL Task calls in a single message.**
 
 Spawn the following agents simultaneously using `model: "sonnet"`:
 
@@ -177,10 +177,10 @@ After all agents return:
 
 ### Step 5 — Generate Output Files
 
-Ensure `.autoskillit/temp/validate-audit/` exists (`mkdir -p`).
+Ensure `{{AUTOSKILLIT_TEMP}}/validate-audit/` exists (`mkdir -p`).
 
 **File 1 — Validated report**
-Path: `.autoskillit/temp/validate-audit/validated_report_{source}_{YYYY-MM-DD_HHMMSS}.md`
+Path: `{{AUTOSKILLIT_TEMP}}/validate-audit/validated_report_{source}_{YYYY-MM-DD_HHMMSS}.md`
 
 Structure:
 
@@ -216,7 +216,7 @@ validated: true
 ```
 
 **File 2 — Contested findings** (write only when `N_contested > 0`)
-Path: `.autoskillit/temp/validate-audit/contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md`
+Path: `{{AUTOSKILLIT_TEMP}}/validate-audit/contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md`
 
 Structure:
 
@@ -243,8 +243,8 @@ headless.
 ```
 [validate-audit] Done.
   Valid: {N_valid} | Exceptions: {N_exception} | Contested: {N_contested}
-  Report:    .autoskillit/temp/validate-audit/validated_report_{source}_{ts}.md
-  Contested: .autoskillit/temp/validate-audit/contested_findings_{source}_{ts}.md
+  Report:    {{AUTOSKILLIT_TEMP}}/validate-audit/validated_report_{source}_{ts}.md
+  Contested: {{AUTOSKILLIT_TEMP}}/validate-audit/contested_findings_{source}_{ts}.md
 ```
 
 (Omit the "Contested:" line if `N_contested == 0`.)
@@ -264,7 +264,7 @@ If the user confirms, pass the contested findings file path to `prepare-issue`.
 ## Output Location
 
 ```
-.autoskillit/temp/validate-audit/
+{{AUTOSKILLIT_TEMP}}/validate-audit/
 ├── validated_report_{source}_{YYYY-MM-DD_HHMMSS}.md    (always written)
 └── contested_findings_{source}_{YYYY-MM-DD_HHMMSS}.md  (when N_contested > 0)
 ```

@@ -199,8 +199,21 @@ def test_pmp_no_upstream_branch_ingredient(recipe) -> None:
 
 
 def test_pmp_setup_remote_routes_to_check_integration_exists(recipe) -> None:
-    """setup_remote.on_success must route to check_integration_exists, not analyze_prs."""
-    assert recipe.steps["setup_remote"].on_success == "check_integration_exists"
+    """setup_remote.on_success must route toward check_integration_exists.
+
+    With check_repo_ci_event inserted as a non-blocking pre-step that captures
+    ci_event, the chain is: setup_remote → check_repo_ci_event →
+    check_integration_exists.  Both hops are required.
+    """
+    setup_successor = recipe.steps["setup_remote"].on_success
+    assert setup_successor == "check_repo_ci_event", (
+        f"setup_remote.on_success must be 'check_repo_ci_event', got {setup_successor!r}"
+    )
+    ci_event_successor = recipe.steps["check_repo_ci_event"].on_success
+    assert ci_event_successor == "check_integration_exists", (
+        f"check_repo_ci_event.on_success must be 'check_integration_exists',"
+        f" got {ci_event_successor!r}"
+    )
 
 
 def test_pmp_has_check_integration_exists_step(recipe) -> None:
@@ -346,9 +359,9 @@ def test_ci_watch_pr_uses_integration_branch(recipe) -> None:
 
 
 def test_ci_watch_pr_routing(recipe) -> None:
-    """ci_watch_pr on_success -> check_defer_cleanup; on_failure -> diagnose_ci."""
+    """ci_watch_pr on_success -> register_clone_success; on_failure -> diagnose_ci."""
     step = recipe.steps["ci_watch_pr"]
-    assert step.on_success == "check_defer_cleanup"
+    assert step.on_success == "register_clone_success"
     assert step.on_failure == "diagnose_ci"
 
 
@@ -532,9 +545,16 @@ def test_pmp_resolve_review_integration_has_retries(recipe) -> None:
 
 
 def test_pmp_resolve_review_integration_routes_to_re_push(recipe) -> None:
-    """B19: resolve_review_integration.on_success must route to re_push_review_integration."""
+    """B19: resolve_review_integration routes real_fix to re_push."""
     step = recipe.steps["resolve_review_integration"]
-    assert step.on_success == "re_push_review_integration"
+    assert step.on_success is None, (
+        "resolve_review_integration must use on_result: verdict dispatch"
+    )
+    assert step.on_result is not None, "resolve_review_integration must have on_result: block"
+    push_routes = [c.route for c in step.on_result.conditions if c.when and "real_fix" in c.when]
+    assert any("re_push_review_integration" in r for r in push_routes), (
+        "resolve_review_integration must route verdict=real_fix to re_push_review_integration"
+    )
 
 
 def test_pmp_has_re_push_review_integration_step(recipe) -> None:

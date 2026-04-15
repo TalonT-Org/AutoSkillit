@@ -69,7 +69,6 @@ class TestCLIDoctor:
                 {
                     "mcpServers": {
                         "other-server": {"type": "stdio", "command": str(fake_bin)},
-                        "autoskillit": {"type": "stdio", "command": "autoskillit"},
                     }
                 }
             )
@@ -80,14 +79,21 @@ class TestCLIDoctor:
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
             "test_check:\n  command: ['pytest']\n"
         )
-        from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES, _ROOT_GITIGNORE_ENTRIES
+        from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES
 
         (tmp_path / ".autoskillit" / ".gitignore").write_text(
             "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n"
         )
-        (tmp_path / ".gitignore").write_text("\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
         (tmp_path / ".pre-commit-config.yaml").write_text(
             "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
+        )
+        # Create plugin cache directory for Check 2c
+        (tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit").mkdir(
+            parents=True, exist_ok=True
+        )
+        # Create installed_plugins.json for Check 2d
+        (tmp_path / ".claude" / "plugins" / "installed_plugins.json").write_text(
+            json.dumps({"version": 2, "plugins": {"autoskillit@autoskillit-local": {}}})
         )
         # Register hooks so hook_registration check passes
         # Use explicit path (tmp_path already monkeypatched as Path.home())
@@ -202,6 +208,9 @@ class TestCLIDoctor:
             "secret_scanning_hook",
             "editable_install_source_exists",  # ★ new
             "stale_entry_points",  # ★ new
+            "dual_mcp_registration",  # ★ new
+            "plugin_cache_exists",
+            "installed_plugins_entry",
         }
         assert expected <= check_names
 
@@ -574,10 +583,6 @@ class TestDoctorScriptHealth:
 
 
 class TestSyncRemovalCLI:
-    def test_update_command_does_not_exist(self):
-        """REQ-APP-002: 'autoskillit update' is not a registered command."""
-        assert not hasattr(cli, "update")
-
     def test_doctor_has_no_recipe_sync_check(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ):
@@ -623,16 +628,70 @@ def test_doctor_fix_parameter_does_not_exist():
     assert "fix" not in sig.parameters, "doctor --fix is a silent no-op and must be removed"
 
 
-def test_doctor_clears_plugin_cache(tmp_path, monkeypatch, capsys):
-    """Doctor must clear the plugin cache on every run."""
+def test_doctor_does_not_modify_plugin_state(tmp_path, monkeypatch, capsys):
+    """Doctor must not delete the plugin cache or modify installed_plugins.json."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
     cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
     cache_dir.mkdir(parents=True)
     (cache_dir / "0.3.0" / "hooks").mkdir(parents=True)
-    (cache_dir / "0.3.0" / "hooks" / "pretty_output.py").write_text("# stale")
+    (cache_dir / "0.3.0" / "hooks" / "pretty_output_hook.py").write_text("# cached")
+
+    plugins_json = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
+    plugins_json.write_text(
+        json.dumps(
+            {"version": 2, "plugins": {"autoskillit@autoskillit-local": {"version": "0.8.25"}}}
+        )
+    )
+
     cli.doctor()
-    assert not cache_dir.exists()
+
+    assert cache_dir.exists(), "Doctor must not delete the plugin cache directory"
+    data = json.loads(plugins_json.read_text())
+    assert "autoskillit@autoskillit-local" in data.get("plugins", {}), (
+        "Doctor must not remove installed_plugins.json entries"
+    )
+
+
+def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):
+    """Doctor must report when the plugin cache directory is missing."""
+    from autoskillit.cli._install_info import InstallInfo, InstallType
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    # Force non-editable install so the cache check actually runs
+    monkeypatch.setattr(
+        "autoskillit.cli._install_info.detect_install",
+        lambda: InstallInfo(
+            install_type=InstallType.GIT_VCS,
+            commit_id=None,
+            requested_revision=None,
+            url=None,
+            editable_source=None,
+        ),
+    )
+    cli.doctor(output_json=True)
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    checks = [r for r in data["results"] if r["check"] == "plugin_cache_exists"]
+    assert len(checks) == 1, "Expected a plugin_cache_exists check"
+    assert checks[0]["severity"] in ("warning", "error")
+
+
+def test_doctor_checks_installed_plugins_entry(tmp_path, monkeypatch, capsys):
+    """Doctor must report when installed_plugins.json is missing the autoskillit entry."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    # Create installed_plugins.json without the autoskillit entry
+    plugins_dir = tmp_path / ".claude" / "plugins"
+    plugins_dir.mkdir(parents=True)
+    (plugins_dir / "installed_plugins.json").write_text("{}")
+    cli.doctor(output_json=True)
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    checks = [r for r in data["results"] if r["check"] == "installed_plugins_entry"]
+    assert len(checks) == 1, "Expected an installed_plugins_entry check"
+    assert checks[0]["severity"] in ("warning", "error")
 
 
 def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsys):
@@ -703,61 +762,17 @@ def test_doctor_warns_on_missing_gitignore_entry(
 def test_doctor_gitignore_ok_when_all_covered(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Doctor must report OK when all .autoskillit/ files are covered."""
-    from autoskillit.core.io import _ROOT_GITIGNORE_ENTRIES
+    """Doctor must report OK when all .autoskillit/ files are covered.
 
-    autoskillit_dir = tmp_path / ".autoskillit"
-    autoskillit_dir.mkdir()
-    (autoskillit_dir / ".gitignore").write_text(
-        "temp/\n.secrets.yaml\nsync_manifest.json\n.onboarded\n"
-    )
-    (autoskillit_dir / "temp").mkdir()
-    (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
-    (tmp_path / ".gitignore").write_text("\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
-
-    monkeypatch.chdir(tmp_path)
-    from autoskillit.cli._doctor import _check_gitignore_completeness
-    from autoskillit.core import Severity
-
-    result = _check_gitignore_completeness(tmp_path)
-    assert result.severity == Severity.OK
-
-
-# RG-DROOT-1
-def test_doctor_warns_when_root_gitignore_missing_secrets_entry(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Doctor must WARN when root .gitignore lacks .autoskillit/.secrets.yaml."""
+    Root ``.gitignore`` is no longer mutated by autoskillit (self-gitignoring
+    temp dir pattern), so the doctor only checks ``.autoskillit/.gitignore``.
+    """
     from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES
 
     autoskillit_dir = tmp_path / ".autoskillit"
     autoskillit_dir.mkdir()
-    # .autoskillit/.gitignore is complete — only root is missing
     (autoskillit_dir / ".gitignore").write_text("\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n")
     (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
-    # No root .gitignore
-
-    monkeypatch.chdir(tmp_path)
-    from autoskillit.cli._doctor import _check_gitignore_completeness
-    from autoskillit.core import Severity
-
-    result = _check_gitignore_completeness(tmp_path)
-    assert result.severity == Severity.WARNING
-    assert ".autoskillit/.secrets.yaml" in result.message
-
-
-# RG-DROOT-2
-def test_doctor_ok_when_root_gitignore_has_all_entries(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Doctor must report OK when both .autoskillit/.gitignore and root .gitignore are complete."""
-    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES, _ROOT_GITIGNORE_ENTRIES
-
-    autoskillit_dir = tmp_path / ".autoskillit"
-    autoskillit_dir.mkdir()
-    (autoskillit_dir / ".gitignore").write_text("\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n")
-    (autoskillit_dir / ".secrets.yaml").write_text("github:\n  token: ''\n")
-    (tmp_path / ".gitignore").write_text("\n".join(_ROOT_GITIGNORE_ENTRIES) + "\n")
 
     monkeypatch.chdir(tmp_path)
     from autoskillit.cli._doctor import _check_gitignore_completeness
@@ -1079,7 +1094,7 @@ def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
     from autoskillit.cli._doctor import _check_hook_health
     from autoskillit.core import Severity
 
-    # Write a settings.json that includes token_summary_appender (PostToolUse)
+    # Write a settings.json that includes token_summary_hook (PostToolUse)
     # but point it at a non-existent path.
     settings = {
         "hooks": {
@@ -1089,7 +1104,7 @@ def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "python3 /nonexistent/token_summary_appender.py",
+                            "command": "python3 /nonexistent/token_summary_hook.py",
                         }
                     ],
                 }
@@ -1103,4 +1118,706 @@ def test_doctor_hook_health_checks_all_event_types(tmp_path: Path) -> None:
     assert result.severity != Severity.OK, (
         "hook_health must report non-OK when a PostToolUse hook script is missing"
     )
-    assert "token_summary_appender" in result.message or "PostToolUse" in result.message
+    assert "token_summary_hook" in result.message or "PostToolUse" in result.message
+
+
+# T-DRIFT-1: _count_hook_registry_drift() detects orphaned hooks
+def test_count_hook_registry_drift_detects_orphaned_hooks(tmp_path: Path) -> None:
+    """deployed − canonical must be counted and returned.
+    Orphaned hooks are the fatal failure mode (ENOENT on every tool call).
+    """
+    from autoskillit.cli._doctor import _count_hook_registry_drift
+
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    ghost_cmd = "python3 /path/to/autoskillit/hooks/status_health_guard.py"
+    data = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "mcp__.*autoskillit.*__run_skill.*",
+                    "hooks": [{"type": "command", "command": ghost_cmd}],
+                }
+            ]
+        }
+    }
+    settings.write_text(json.dumps(data))
+    result = _count_hook_registry_drift(settings)
+    assert hasattr(result, "orphaned"), (
+        "_count_hook_registry_drift must return a result with 'orphaned' field"
+    )
+    assert result.orphaned >= 1, f"Expected orphaned >= 1 for ghost entry, got {result.orphaned}"
+
+
+# T-DRIFT-2: _check_hook_registry_drift() returns ERROR for orphaned hooks
+def test_check_hook_registry_drift_error_on_orphaned_hooks(tmp_path: Path) -> None:
+    from autoskillit.cli._doctor import _check_hook_registry_drift
+    from autoskillit.core import Severity
+
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    ghost_cmd = "python3 /path/to/autoskillit/hooks/status_health_guard.py"
+    data = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "mcp__.*autoskillit.*__run_skill.*",
+                    "hooks": [{"type": "command", "command": ghost_cmd}],
+                }
+            ]
+        }
+    }
+    settings.write_text(json.dumps(data))
+    result = _check_hook_registry_drift(settings)
+    assert result.severity == Severity.ERROR, (
+        f"Orphaned hooks must produce ERROR severity, got {result.severity}"
+    )
+    assert "status_health_guard.py" in result.message, (
+        "Error message must name the orphaned script(s)"
+    )
+
+
+# T-DRIFT-3: User hooks must not appear as orphans
+def test_count_hook_registry_drift_ignores_user_hooks(tmp_path: Path) -> None:
+    """Non-autoskillit user hooks in settings.json must not be counted as orphaned.
+
+    Regression: _extract_script_basenames() includes ALL commands without filtering,
+    making user hooks appear as orphans in the deployed - canonical set diff.
+    """
+    from autoskillit.hook_registry import _count_hook_registry_drift, generate_hooks_json
+
+    # Start with all canonical hooks so missing=0
+    canonical_data = generate_hooks_json()
+    # Add non-autoskillit user hooks alongside canonical ones
+    user_hooks = [
+        {"type": "command", "command": "python3 /home/user/my_guard.py"},
+        {"type": "command", "command": 'wsl-notify-send.exe "Done!"'},
+    ]
+    canonical_data["hooks"].setdefault("PreToolUse", []).append(
+        {"matcher": ".*", "hooks": user_hooks}
+    )
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text(json.dumps(canonical_data))
+
+    result = _count_hook_registry_drift(settings)
+    assert result.orphaned == 0, (
+        f"User hooks must not be counted as orphaned, got orphaned={result.orphaned}, "
+        f"orphaned_cmds={result.orphaned_cmds}"
+    )
+    assert result.missing == 0, (
+        f"All canonical hooks are deployed, expected missing=0, got {result.missing}"
+    )
+
+
+# T-DRIFT-4: Cross-environment path mismatch must not cause false drift
+def test_count_hook_registry_drift_cross_env_path_mismatch(tmp_path: Path) -> None:
+    """settings.json written by a different install (different pkg_root prefix)
+    must not show drift when all script basenames match.
+
+    Regression: full-path string comparison treats path-prefix differences
+    as drift, even though the same scripts are deployed.
+    """
+    from autoskillit.hook_registry import HOOK_REGISTRY, _count_hook_registry_drift
+
+    # Build settings.json with a DIFFERENT path prefix than current pkg_root()
+    foreign_hooks_dir = (
+        "/home/user/.local/share/uv/tools/autoskillit/lib/python3.13"
+        "/site-packages/autoskillit/hooks"
+    )
+    by_event: dict[str, list[dict]] = {}
+    for hdef in HOOK_REGISTRY:
+        hook_commands = [
+            {"type": "command", "command": f"python3 {foreign_hooks_dir}/{script}"}
+            for script in hdef.scripts
+        ]
+        entry: dict = {"hooks": hook_commands}
+        if hdef.event_type != "SessionStart":
+            entry["matcher"] = hdef.matcher
+        by_event.setdefault(hdef.event_type, []).append(entry)
+    data = {"hooks": by_event}
+
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text(json.dumps(data))
+
+    result = _count_hook_registry_drift(settings)
+    assert result.orphaned == 0, (
+        f"Path prefix difference must not cause orphaned hooks, got orphaned={result.orphaned}"
+    )
+    assert result.missing == 0, (
+        f"Path prefix difference must not cause missing hooks, got missing={result.missing}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# _check_source_version_drift — doctor check (cache-only, no network)
+# ---------------------------------------------------------------------------
+
+
+def test_check_source_version_drift_ok_outside_source_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GIT_VCS install with empty cache reports OK (no drift observable)."""
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="abc1234",
+        requested_revision="integration",
+        url=None,
+        editable_source=None,
+    )
+    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+    # Simulate empty cache and no source repo: resolve returns None
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks.resolve_reference_sha", lambda info, home, **kw: None
+    )
+
+    result = _check_source_version_drift(home=tmp_path)
+    assert result.severity == Severity.OK
+
+
+def test_check_source_version_drift_ok_for_editable_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LOCAL_EDITABLE installs are under active development — drift check is skipped."""
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    info = InstallInfo(
+        install_type=InstallType.LOCAL_EDITABLE,
+        commit_id=None,
+        requested_revision=None,
+        url="file:///home/user/autoskillit",
+        editable_source=Path("/home/user/autoskillit"),
+    )
+    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+
+    result = _check_source_version_drift(home=tmp_path)
+    assert result.severity == Severity.OK
+    assert "editable" in result.message.lower() or "not applicable" in result.message.lower()
+
+
+def test_check_source_version_drift_ok_for_pinned_sha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When requested_revision == commit_id, resolve_reference_sha short-circuits → no drift."""
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    sha = "abcdef1234567890abcdef1234567890"
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id=sha,
+        requested_revision=sha,  # pinned SHA = no drift possible
+        url=None,
+        editable_source=None,
+    )
+    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+    # When requested_revision == commit_id, resolve_reference_sha returns commit_id
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks.resolve_reference_sha", lambda info, home, **kw: sha
+    )
+
+    result = _check_source_version_drift(home=tmp_path)
+    assert result.severity == Severity.OK
+
+
+def test_check_source_version_drift_ok_when_cache_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When SHA cannot be resolved (network/cache miss), doctor reports OK."""
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id="installed123",
+        requested_revision="integration",
+        url=None,
+        editable_source=None,
+    )
+    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks.resolve_reference_sha", lambda info, home, **kw: None
+    )
+
+    result = _check_source_version_drift(home=tmp_path)
+    assert result.severity == Severity.OK
+    # Message should note that the reference SHA is unavailable
+    assert "unavailable" in result.message.lower(), (
+        f"Expected 'unavailable' in message when resolve returns None, got: {result.message!r}"
+    )
+
+
+def test_check_source_version_drift_warning_on_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When cache has a different reference SHA than installed, reports WARNING with short SHAs."""
+    from autoskillit.cli._doctor import _check_source_version_drift
+    from autoskillit.cli._install_info import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    installed_sha = "installed123abc"
+    ref_sha = "reference456def"
+
+    info = InstallInfo(
+        install_type=InstallType.GIT_VCS,
+        commit_id=installed_sha,
+        requested_revision="integration",
+        url=None,
+        editable_source=None,
+    )
+    monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(
+        "autoskillit.cli._update_checks.resolve_reference_sha", lambda info, home, **kw: ref_sha
+    )
+
+    result = _check_source_version_drift(home=tmp_path)
+    assert result.severity == Severity.WARNING
+    assert installed_sha[:8] in result.message
+    assert ref_sha[:8] in result.message
+
+
+# ---------------------------------------------------------------------------
+# Check 14: Quota cache schema version (#711 Part B, Phase 4)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckQuotaCacheSchema:
+    """Tests for _check_quota_cache_schema doctor check."""
+
+    def test_check_quota_cache_schema_ok_when_current(self, tmp_path):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+        from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(
+            json.dumps(
+                {"schema_version": QUOTA_CACHE_SCHEMA_VERSION, "fetched_at": "2026-01-01T00:00:00"}
+            )
+        )
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.OK
+        assert f"v{QUOTA_CACHE_SCHEMA_VERSION}" in result.message
+
+    def test_check_quota_cache_schema_ok_when_missing(self, tmp_path):
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "nonexistent.json"
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.OK
+        assert "No quota cache" in result.message
+
+    def test_check_quota_cache_schema_warning_when_no_schema_version_key(self, tmp_path):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"fetched_at": "2026-01-01T00:00:00"}))
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.WARNING
+        assert "schema drift" in result.message.lower()
+
+    def test_check_quota_cache_schema_warning_when_older_schema_version(self, tmp_path):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"schema_version": 1, "fetched_at": "2026-01-01T00:00:00"}))
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.WARNING
+
+    def test_check_quota_cache_schema_warning_includes_cache_path_and_observed_value(
+        self, tmp_path
+    ):
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_quota_cache_schema
+
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"schema_version": 1}))
+        result = _check_quota_cache_schema(cache_path=cache)
+        assert result.severity == Severity.WARNING
+        assert str(cache) in result.message
+        assert "observed=1" in result.message
+
+
+def test_doctor_reports_drift_in_project_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_check_hook_registry_drift must report drift found in project scope."""
+    import json as _json
+
+    from autoskillit.cli._doctor import _check_hook_registry_drift
+    from autoskillit.core import Severity
+
+    # Seed a stale pretty_output.py in project scope
+    project_settings = tmp_path / ".claude" / "settings.json"
+    project_settings.parent.mkdir(parents=True)
+    project_settings.write_text(
+        _json.dumps(
+            {
+                "hooks": {
+                    "PostToolUse": [
+                        {
+                            "matcher": "mcp__.*autoskillit.*",
+                            "hooks": [
+                                {"type": "command", "command": "python3 /stale/pretty_output.py"}
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
+    )
+
+    result = _check_hook_registry_drift(project_settings, scope_label="project")
+    assert result.severity == Severity.ERROR
+    assert "[project]" in result.message
+    assert "pretty_output.py" in result.message
+
+
+# ---------------------------------------------------------------------------
+# REQ-DOCTOR-001 — _check_claude_process_state_breakdown
+# ---------------------------------------------------------------------------
+
+
+class TestCheckClaudeProcessStateBreakdown:
+    """Tests for the claude_process_state doctor check (Check 15)."""
+
+    def _ps_result(self, stdout: str, returncode: int = 0):
+        return type(
+            "CompletedProcess",
+            (),
+            {"returncode": returncode, "stdout": stdout},
+        )()
+
+    def test_ok_when_only_sleeping(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Single sleeping claude process → Severity.OK with state breakdown."""
+        import subprocess
+
+        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._ps_result(header + "1234 S 0.5 claude"),
+        )
+        result = _check_claude_process_state_breakdown()
+        assert result.severity == Severity.OK
+        assert "S=1" in result.message
+
+    def test_warns_on_d_state(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """claude process in D state → Severity.WARNING with pid and pcpu in message."""
+        import subprocess
+
+        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._ps_result(header + "1234 D 99.0 claude"),
+        )
+        result = _check_claude_process_state_breakdown()
+        assert result.severity == Severity.WARNING
+        assert "D=1" in result.message
+        assert "99.0" in result.message
+
+    def test_ok_when_no_claude_processes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Empty ps output (no claude rows) → Severity.OK, 'No claude processes running'."""
+        import subprocess
+
+        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._ps_result(header + "5678 S 0.1 python"),
+        )
+        result = _check_claude_process_state_breakdown()
+        assert result.severity == Severity.OK
+        assert result.message == "No claude processes running"
+
+    def test_ok_when_ps_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """FileNotFoundError from ps → Severity.OK explaining ps unavailability."""
+        import subprocess
+
+        from autoskillit.cli._doctor import Severity, _check_claude_process_state_breakdown
+
+        def _raise(*a, **kw):
+            raise FileNotFoundError("ps")
+
+        monkeypatch.setattr(subprocess, "run", _raise)
+        result = _check_claude_process_state_breakdown()
+        assert result.severity == Severity.OK
+        assert "ps unavailable" in result.message
+        assert "FileNotFoundError" in result.message
+
+
+class TestDoctorInstallClassification:
+    """Tests for _check_install_classification doctor check."""
+
+    @pytest.mark.parametrize(
+        "revision,expected_fragment",
+        [
+            ("stable", "stable"),
+            ("integration", "integration"),
+        ],
+    )
+    def test_doctor_reports_install_classification_git_vcs(
+        self, monkeypatch: pytest.MonkeyPatch, revision: str, expected_fragment: str
+    ) -> None:
+        import json
+
+        from autoskillit.cli._doctor import Severity, _check_install_classification
+
+        fake_direct_url = json.dumps(
+            {
+                "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+                "vcs_info": {
+                    "vcs": "git",
+                    "requested_revision": revision,
+                    "commit_id": "abc123",
+                },
+            }
+        )
+        from unittest.mock import MagicMock
+
+        fake_dist = MagicMock()
+        fake_dist.read_text.return_value = fake_direct_url
+        monkeypatch.setattr(
+            "importlib.metadata.Distribution.from_name",
+            lambda _name: fake_dist,
+        )
+        result = _check_install_classification()
+        assert result.severity == Severity.OK
+        assert expected_fragment in result.message
+
+    def test_doctor_reports_install_classification_unknown(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from autoskillit.cli._doctor import Severity, _check_install_classification
+
+        fake_dist = MagicMock()
+        fake_dist.read_text.return_value = None
+        monkeypatch.setattr(
+            "importlib.metadata.Distribution.from_name",
+            lambda _name: fake_dist,
+        )
+        result = _check_install_classification()
+        assert result.severity == Severity.WARNING
+        assert "could not be detected" in result.message
+
+
+class TestDoctorUpdateDismissalState:
+    """Tests for _check_update_dismissal_state doctor check."""
+
+    def test_doctor_reports_dismissal_state_empty(self, tmp_path: Path) -> None:
+        from autoskillit.cli._doctor import Severity, _check_update_dismissal_state
+
+        result = _check_update_dismissal_state(home=tmp_path)
+        assert result.severity == Severity.OK
+        assert "No active dismissal" in result.message
+
+    def test_doctor_reports_dismissal_state_populated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import json
+        from datetime import UTC, datetime
+        from unittest.mock import MagicMock
+
+        from autoskillit.cli._doctor import Severity, _check_update_dismissal_state
+        from autoskillit.cli._update_checks import _write_dismiss_state
+
+        # Seed state
+        dismissed_at = datetime.now(UTC).isoformat()
+        _write_dismiss_state(
+            tmp_path,
+            {
+                "update_prompt": {
+                    "dismissed_at": dismissed_at,
+                    "dismissed_version": "0.7.77",
+                    "conditions": ["binary"],
+                }
+            },
+        )
+
+        # Patch detect_install to return stable GIT_VCS
+        fake_direct_url = json.dumps(
+            {
+                "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+                "vcs_info": {
+                    "vcs": "git",
+                    "requested_revision": "stable",
+                    "commit_id": "abc123",
+                },
+            }
+        )
+        fake_dist = MagicMock()
+        fake_dist.read_text.return_value = fake_direct_url
+        monkeypatch.setattr(
+            "importlib.metadata.Distribution.from_name",
+            lambda _name: fake_dist,
+        )
+
+        result = _check_update_dismissal_state(home=tmp_path)
+        assert result.severity == Severity.OK
+        assert "dismissed until" in result.message
+        assert "binary" in result.message
+
+
+class TestDoctorSourceVersionDriftUsesNetwork:
+    """Test that source_version_drift now uses network=True."""
+
+    def test_doctor_source_version_drift_uses_network_true(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """_check_source_version_drift must call resolve_reference_sha with network=True."""
+        import json
+        from unittest.mock import MagicMock
+
+        from autoskillit.cli._doctor import _check_source_version_drift
+
+        fake_direct_url = json.dumps(
+            {
+                "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+                "vcs_info": {
+                    "vcs": "git",
+                    "requested_revision": "stable",
+                    "commit_id": "abc123",
+                },
+            }
+        )
+        fake_dist = MagicMock()
+        fake_dist.read_text.return_value = fake_direct_url
+        monkeypatch.setattr(
+            "importlib.metadata.Distribution.from_name",
+            lambda _name: fake_dist,
+        )
+
+        network_args: list[bool] = []
+        monkeypatch.setattr(
+            "autoskillit.cli._update_checks.resolve_reference_sha",
+            lambda info, home, **kw: network_args.append(kw.get("network", True)) or None,
+        )
+
+        _check_source_version_drift(home=tmp_path)
+        assert any(n is True for n in network_args), (
+            "_check_source_version_drift must call resolve_reference_sha with network=True"
+        )
+
+    def test_check_source_version_drift_returns_ok_when_network_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Network error (resolve_reference_sha returns None) → OK, not hard failure."""
+        import json
+        from unittest.mock import MagicMock
+
+        from autoskillit.cli._doctor import _check_source_version_drift
+
+        fake_direct_url = json.dumps(
+            {
+                "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+                "vcs_info": {
+                    "vcs": "git",
+                    "requested_revision": "stable",
+                    "commit_id": "abc123",
+                },
+            }
+        )
+        fake_dist = MagicMock()
+        fake_dist.read_text.return_value = fake_direct_url
+        monkeypatch.setattr(
+            "importlib.metadata.Distribution.from_name",
+            lambda _name: fake_dist,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli._update_checks.resolve_reference_sha",
+            lambda info, home, **kw: None,
+        )
+
+        from autoskillit.cli._doctor import Severity
+
+        result = _check_source_version_drift(home=tmp_path)
+        assert result.severity == Severity.OK, (
+            f"Expected OK (fail-open) when network unavailable, "
+            f"got {result.severity}: {result.message}"
+        )
+        assert "unavailable" in result.message.lower() or "network" in result.message.lower()
+
+
+def test_doctor_dual_mcp_registration_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_check_dual_mcp_registration() warns when both direct and marketplace entries exist."""
+    from autoskillit.cli._doctor import _check_dual_mcp_registration
+    from autoskillit.core import Severity
+
+    claude_json = tmp_path / ".claude.json"
+    claude_json.write_text(json.dumps({"mcpServers": {"autoskillit": {"type": "stdio"}}}))
+    plugins_dir = tmp_path / ".claude" / "plugins"
+    plugins_dir.mkdir(parents=True)
+    (plugins_dir / "installed_plugins.json").write_text(
+        json.dumps({"plugins": {"autoskillit@autoskillit-local": {"name": "autoskillit"}}})
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    result = _check_dual_mcp_registration()
+    assert result.severity == Severity.WARNING
+    assert "autoskillit install" in result.message
+
+
+def test_doctor_no_dual_when_only_direct(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """_check_dual_mcp_registration() returns OK when only the direct entry exists."""
+    from autoskillit.cli._doctor import _check_dual_mcp_registration
+    from autoskillit.core import Severity
+
+    claude_json = tmp_path / ".claude.json"
+    claude_json.write_text(json.dumps({"mcpServers": {"autoskillit": {"type": "stdio"}}}))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    result = _check_dual_mcp_registration()
+    assert result.severity == Severity.OK
+
+
+def test_check_installed_plugins_entry_real_structure_is_ok(tmp_path: Path) -> None:
+    """With the real nested format, the check must report OK."""
+    from autoskillit.cli._doctor import _check_installed_plugins_entry
+    from autoskillit.core import Severity
+
+    p = tmp_path / "installed_plugins.json"
+    p.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "plugins": {"autoskillit@autoskillit-local": {"name": "autoskillit"}},
+            }
+        )
+    )
+    result = _check_installed_plugins_entry(plugins_json_path=p)
+    assert result.severity == Severity.OK
+
+
+def test_check_installed_plugins_entry_flat_structure_is_warning(tmp_path: Path) -> None:
+    """A flat structure (wrong format) must not be silently treated as OK."""
+    from autoskillit.cli._doctor import _check_installed_plugins_entry
+    from autoskillit.core import Severity
+
+    p = tmp_path / "installed_plugins.json"
+    p.write_text(json.dumps({"autoskillit@autoskillit-local": {}}))
+    result = _check_installed_plugins_entry(plugins_json_path=p)
+    assert result.severity == Severity.WARNING

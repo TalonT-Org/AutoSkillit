@@ -1,0 +1,23 @@
+FROM mambaorg/micromamba:1.0-bullseye-slim
+SHELL ["/bin/bash", "-c"]
+ARG MAMBA_ENV="research_env"
+
+USER root
+RUN apt-get --allow-releaseinfo-change update \
+    && apt-get install -y --no-install-recommends procps git curl build-essential \
+    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+
+RUN curl -sL https://taskfile.dev/install.sh | sh -s -- -b /usr/local/bin
+
+RUN rm -f /root/.bashrc \
+    && echo "source /etc/container.bashrc" >> /etc/bash.bashrc \
+    && echo "set +u" > /etc/container.bashrc \
+    && echo 'eval "$(micromamba shell hook --shell=bash)"' >> /etc/container.bashrc
+
+ENV BASH_ENV=/etc/container.bashrc
+ENV ENV=/etc/container.bashrc
+
+# The environment YAML is the source of truth — lives in the research dir
+COPY ${MAMBA_ENV}.yaml /opt/research/env/
+RUN micromamba create -f /opt/research/env/${MAMBA_ENV}.yaml && micromamba clean -afy
+RUN echo "micromamba activate ${MAMBA_ENV}" >> /etc/container.bashrc

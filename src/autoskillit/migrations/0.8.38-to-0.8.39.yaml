@@ -1,0 +1,32 @@
+from_version: "0.8.38"
+to_version: "0.8.39"
+description: >
+  Quota guard configuration migrated from single threshold to dual-window
+  thresholds (short and long window).
+changes:
+  - id: quota-guard-dual-window-thresholds
+    description: >
+      QuotaGuardConfig.threshold (single float) replaced by two separate
+      fields: short_window_threshold and long_window_threshold, enabling
+      independent control of short-burst and sustained-usage quota limits.
+    instruction: |
+      In your project's .autoskillit/config.yaml, replace:
+        quota_guard:
+          threshold: 90.0
+      with:
+        quota_guard:
+          short_window_threshold: 85.0
+          long_window_threshold: 98.0
+      Adjust values to taste. The old 'threshold' key is no longer recognized
+      and will raise a ConfigSchemaError at startup.
+    detect:
+      key: quota_guard.threshold
+    example_before: |
+      quota_guard:
+        threshold: 90.0
+        enabled: true
+    example_after: |
+      quota_guard:
+        short_window_threshold: 85.0
+        long_window_threshold: 98.0
+        enabled: true

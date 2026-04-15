@@ -10,19 +10,22 @@ Neither contracts.py nor io.py imports _analysis.py, so no cycle exists.
 
 from __future__ import annotations
 
+import re
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import igraph
 
 from autoskillit.core import SKILL_TOOLS, get_logger
-from autoskillit.recipe.contracts import _CONTEXT_REF_RE, _RESULT_CAPTURE_RE
+from autoskillit.recipe.contracts import _CONTEXT_REF_RE, RESULT_CAPTURE_RE
 from autoskillit.recipe.io import iter_steps_with_context  # noqa: F401 — re-exported for rules
 from autoskillit.recipe.schema import (
     _TERMINAL_TARGETS,
     DataFlowReport,
     DataFlowWarning,
     Recipe,
+    RecipeBlock,
     RecipeStep,
 )
 
@@ -218,6 +221,8 @@ class ValidationContext:
     disabled_subsets: frozenset[str] = field(default_factory=frozenset)
     skill_category_map: dict[str, frozenset[str]] | None = None
     overridden_skills: frozenset[str] | None = None
+    blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
+    predecessors: dict[str, set[str]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +293,101 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
 
 
 # ---------------------------------------------------------------------------
+# Block extraction helpers
+# ---------------------------------------------------------------------------
+
+
+def _count_by_tool(members: list[RecipeStep]) -> dict[str, int]:
+    """Count tool occurrences across a list of steps."""
+    counts: dict[str, int] = {}
+    for step in members:
+        key = step.tool or ""
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _count_gh_api(step: RecipeStep) -> int:
+    """Count occurrences of 'gh api' in a run_cmd step's cmd argument."""
+    if step.tool != "run_cmd":
+        return 0
+    cmd = (step.with_args or {}).get("cmd", "") or ""
+    return cmd.count("gh api")
+
+
+def extract_blocks(
+    recipe: Recipe,
+    step_graph: dict[str, set[str]],
+    *,
+    predecessors: dict[str, set[str]] | None = None,
+) -> tuple[RecipeBlock, ...]:
+    """Extract named block regions from a recipe's routing graph.
+
+    Groups steps that share the same ``step.block`` value, then computes the
+    entry step (no in-block predecessor) and exit step (no in-block successor)
+    for each group.  The step_graph is the forward adjacency dict produced by
+    ``_build_step_graph``; a local inverse is built here to find predecessors.
+
+    Steps without a ``block`` annotation are ignored.  Recipes with no block
+    annotations return an empty tuple.
+    """
+    if predecessors is None:
+        # Build predecessor map by inverting the forward step_graph edges.
+        predecessors = {}
+        for src, successors in step_graph.items():
+            for dst in successors:
+                predecessors.setdefault(dst, set()).add(src)
+
+    by_name: dict[str, list[RecipeStep]] = {}
+    for step in recipe.steps.values():
+        if step.block is not None:
+            by_name.setdefault(step.block, []).append(step)
+
+    blocks: list[RecipeBlock] = []
+    for name, members in by_name.items():
+        member_names = {s.name for s in members}
+        # Entry: no in-block predecessor (predecessor set ∩ member_names is empty)
+        entry_candidates = [
+            s for s in members if not (predecessors.get(s.name, set()) & member_names)
+        ]
+        # Exit: no in-block successor (successor set ∩ member_names is empty)
+        exit_candidates = [
+            s for s in members if not (step_graph.get(s.name, set()) & member_names)
+        ]
+        entry_name: str
+        if entry_candidates:
+            entry_name = entry_candidates[0].name
+        else:
+            logger.warning(
+                "block %r has no graph-reachable entry step; falling back to first member",
+                name,
+            )
+            entry_name = members[0].name
+
+        exit_name: str
+        if exit_candidates:
+            exit_name = exit_candidates[0].name
+        else:
+            logger.warning(
+                "block %r has no graph-reachable exit step; falling back to last member",
+                name,
+            )
+            exit_name = members[-1].name
+
+        blocks.append(
+            RecipeBlock(
+                name=name,
+                entry=entry_name,
+                exit=exit_name,
+                members=tuple(members),
+                tool_counts=_count_by_tool(members),
+                gh_api_occurrences=sum(_count_gh_api(s) for s in members),
+            )
+        )
+    return tuple(blocks)
+
+
+# ---------------------------------------------------------------------------
 # BFS helpers
 # ---------------------------------------------------------------------------
 
@@ -317,7 +417,7 @@ def _build_capture_origin_map(recipe: Recipe) -> dict[str, str]:
     for step in recipe.steps.values():
         for cap_var, cap_expr in (step.capture or {}).items():
             if isinstance(cap_expr, str):
-                keys = _RESULT_CAPTURE_RE.findall(cap_expr)
+                keys = RESULT_CAPTURE_RE.findall(cap_expr)
                 if len(keys) == 1:
                     origin[cap_var] = keys[0]
     return origin
@@ -354,6 +454,101 @@ def _bfs_capped(
             continue  # Reached but do not expand — variable is refreshed here
         queue.extend(graph.get(node, set()))
     return visited
+
+
+# ---------------------------------------------------------------------------
+# Symbolic reachability: BFS with fact propagation
+# ---------------------------------------------------------------------------
+
+# A FactSet is a frozen set of (variable, value) pairs established by
+# conditional on_result.when edges.  Each frozenset represents the facts
+# that are known-to-be-true on one particular path through the routing graph.
+_FactSet = frozenset[tuple[str, str]]
+
+# Matches simple equality conditions of the form:
+#   context.X == 'v'    or    ${{ context.X }} == "v"
+# Capture groups: 1 = variable name, 2 = value.
+# Non-equality expressions (inequalities, conjunctions) produce no match —
+# conservative assumption (no fact is established).
+_SIMPLE_WHEN_RE = re.compile(
+    r"(?:\$\{\{\s*)?context\.(\w+)(?:\s*\}\})?\s*==\s*"
+    r"(?:\"(\w+)\"|'(\w+)'|(\w+))"
+)
+
+
+def _parse_when_expr(expr: str) -> tuple[str, str] | None:
+    """Parse a simple equality when-expression into a (variable, value) fact.
+
+    Returns ``None`` for conjunctions, inequalities, or non-context refs.
+    Conservative: only establishes facts for provably-simple equality conditions.
+    """
+    m = _SIMPLE_WHEN_RE.fullmatch(expr.strip())
+    if not m:
+        return None
+    # Groups 2/3/4 are mutually exclusive (double-quoted, single-quoted, unquoted)
+    value = m.group(2) or m.group(3) or m.group(4)
+    return (m.group(1), value)
+
+
+def _edge_fact(recipe: Recipe, source: str, target: str) -> tuple[str, str] | None:
+    """Return the (variable, value) fact established by the edge source→target, or None.
+
+    Only ``on_result.conditions`` edges with a parseable simple equality ``when``
+    expression contribute a fact.  ``on_success``/``on_failure`` edges contribute no fact.
+    """
+    step = recipe.steps.get(source)
+    if step is None or step.on_result is None:
+        return None
+    for cond in step.on_result.conditions:
+        if cond.route == target and cond.when is not None:
+            return _parse_when_expr(cond.when)
+    return None
+
+
+def _intersect_facts(fs: set[_FactSet]) -> _FactSet:
+    """Intersect all fact sets — only facts that hold on every incoming path survive."""
+    if not fs:
+        return frozenset()
+    return frozenset.intersection(*fs)
+
+
+def _bfs_with_facts(
+    graph: dict[str, set[str]],
+    recipe: Recipe,
+    start: str,
+) -> dict[str, set[_FactSet]]:
+    """BFS from *start* propagating conditional edge facts.
+
+    Each ``on_result`` edge whose ``when`` expression parses as
+    ``'context.X == "v"'`` extends the current fact set with ``(X, v)`` on
+    the target; other edges carry facts unchanged.  At join points, the
+    returned fact set is the intersection of all incoming fact sets — a fact
+    is only "known" at a node if it holds on every path reaching that node.
+
+    Returns ``{step_name: {intersected_fact_set}}``.  Each value is a
+    single-element set containing one :class:`frozenset` of ``(var, val)``
+    pairs.
+    """
+    # facts maps step_name → set of fact-sets that have been discovered for it.
+    # visited tracks (node, fact_set) pairs to avoid reprocessing.
+    facts: dict[str, set[_FactSet]] = {start: {frozenset()}}
+    work: deque[str] = deque([start])
+    visited: set[tuple[str, _FactSet]] = set()
+
+    while work:
+        node = work.popleft()
+        for succ in graph.get(node, ()):
+            edge_fact = _edge_fact(recipe, node, succ)
+            for f in facts.get(node, {frozenset()}):
+                new_f: _FactSet = f | {edge_fact} if edge_fact else f
+                state = (succ, new_f)
+                if state in visited:
+                    continue
+                visited.add(state)
+                facts.setdefault(succ, set()).add(new_f)
+                work.append(succ)
+
+    return {n: {_intersect_facts(fs)} for n, fs in facts.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -444,6 +639,51 @@ def _detect_ref_invalidations(recipe: Recipe, graph: dict[str, set[str]]) -> lis
     return warnings
 
 
+# Observability captures: variables captured for human-readable logs, hook
+# consumption, or note-driven orchestration rather than downstream recipe
+# threading.  Each entry is (cap_key, skill_command_fragment).  A capture is
+# exempt when cap_key matches AND skill_command_fragment appears in the
+# step's skill_command (or tool/step_name for non-skill steps).
+_OBSERVABILITY_CAPTURES: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("diagnosis_path", "diagnose-ci"),
+        ("summary_path", "pipeline-summary"),
+        ("report_path", "generate-report"),
+        ("selected_lenses", "prepare-research-pr"),
+        ("selected_lenses", "prepare-pr"),
+        ("lens_context_paths", "prepare-research-pr"),
+        ("lens_context_paths", "prepare-pr"),
+        ("pr_url", "compose-pr"),
+        ("html_path", "bundle-local-report"),
+        ("resource_report", "stage-data"),
+    }
+)
+
+
+def _is_observability_capture(cap_key: str, step_name: str, step: RecipeStep) -> bool:
+    """Return True if *cap_key* is a known observability-only capture."""
+    skill_cmd = step.with_args.get("skill_command", "") if step.with_args else ""
+
+    # Skill-command-based exemptions (the common case).
+    for obs_key, fragment in _OBSERVABILITY_CAPTURES:
+        if cap_key == obs_key and fragment in skill_cmd:
+            return True
+
+    # merge_worktree cleanup_succeeded: matched by tool name + capture value,
+    # not skill_command (merge_worktree is a direct tool, not a skill).
+    if step.tool == "merge_worktree" and "result.cleanup_succeeded" in str(
+        step.capture.get(cap_key, "")
+    ):
+        return True
+
+    # export_local_bundle local_bundle_path: matched by step name (terminal
+    # step in the local-mode path that ends at a stop action).
+    if cap_key == "local_bundle_path" and step_name == "export_local_bundle":
+        return True
+
+    return False
+
+
 def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[DataFlowWarning]:
     """Detect captured variables that are never consumed downstream."""
     warnings: list[DataFlowWarning] = []
@@ -483,26 +723,7 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         # Flag captured vars not consumed on any path
         for cap_key in step.capture:
             if cap_key not in consumed:
-                # Exempt merge_worktree diagnostic captures: cleanup_succeeded is captured
-                # for observability (to surface orphaned worktrees), not for data-passing.
-                # The merge-cleanup-uncaptured rule requires this capture; exempting it
-                # from dead-output prevents the two rules from conflicting.
-                cap_val = step.capture.get(cap_key, "")
-                if step.tool == "merge_worktree" and "result.cleanup_succeeded" in str(cap_val):
-                    continue
-                # Exempt diagnose-ci diagnosis_path captures: in recipes without a resolve_ci
-                # step (e.g. merge-prs), diagnosis_path is captured for observability
-                # only — no downstream automated remediation consumes it.
-                if cap_key == "diagnosis_path" and "diagnose-ci" in step.with_args.get(
-                    "skill_command", ""
-                ):
-                    continue
-                # Exempt pipeline-summary summary_path captures: pipeline-summary is a
-                # terminal reporting skill that writes to disk for human use; summary_path
-                # is captured for observability only — no downstream step consumes it.
-                if cap_key == "summary_path" and "pipeline-summary" in step.with_args.get(
-                    "skill_command", ""
-                ):
+                if _is_observability_capture(cap_key, step_name, step):
                     continue
                 warnings.append(
                     DataFlowWarning(
@@ -594,6 +815,12 @@ def make_validation_context(
     """
     step_graph = _build_step_graph(recipe)
     dataflow = analyze_dataflow(recipe, step_graph=step_graph)
+    # Build predecessor map once; also passed to extract_blocks to avoid
+    # recomputing the same inversion inside that function.
+    predecessors: dict[str, set[str]] = {}
+    for src, successors in step_graph.items():
+        for dst in successors:
+            predecessors.setdefault(dst, set()).add(src)
     return ValidationContext(
         recipe=recipe,
         step_graph=step_graph,
@@ -603,4 +830,6 @@ def make_validation_context(
         available_sub_recipes=available_sub_recipes,
         project_dir=project_dir,
         disabled_subsets=disabled_subsets,
+        blocks=extract_blocks(recipe, step_graph, predecessors=predecessors),
+        predecessors=predecessors,
     )

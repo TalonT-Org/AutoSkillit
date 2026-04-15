@@ -12,7 +12,17 @@ _ALL_TOOLS: frozenset[str] = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
 # Intentionally hardcoded — recipe validation runs without a live MCP server.
 _TOOL_PARAMS: dict[str, frozenset[str]] = {
     # --- Execution tools ---
-    "run_skill": frozenset({"skill_command", "cwd", "model", "step_name", "order_id"}),
+    "run_skill": frozenset(
+        {
+            "skill_command",
+            "cwd",
+            "model",
+            "step_name",
+            "order_id",
+            "stale_threshold",
+            "idle_output_timeout",
+        }
+    ),
     "run_cmd": frozenset({"cmd", "cwd", "timeout", "step_name"}),
     "run_python": frozenset({"callable", "args", "timeout"}),
     # --- Workspace tools ---
@@ -59,6 +69,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
     "batch_cleanup_clones": frozenset(
         {
             "registry_path",
+            "all_owners",
             "step_name",
         }
     ),
@@ -70,6 +81,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "remote_url",
             "head_sha",
             "workflow",
+            "event",
             "timeout_seconds",
             "cwd",
             "step_name",
@@ -87,10 +99,11 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "stall_grace_period",
             "max_stall_retries",
             "not_in_queue_confirmation_cycles",
+            "max_inconclusive_retries",
             "step_name",
         }
     ),
-    "get_ci_status": frozenset({"branch", "run_id", "repo", "workflow", "cwd"}),
+    "get_ci_status": frozenset({"branch", "run_id", "repo", "workflow", "event", "cwd"}),
     "set_commit_status": frozenset(
         {
             "sha",

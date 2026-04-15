@@ -167,19 +167,28 @@ class TestMergeWorktree:
         tool_ctx.runner.push(
             _make_result(
                 0,
-                "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n"
+                "worktree /repo\nHEAD abc123\nbranch refs/heads/dev\n\n"
                 "worktree /wt\nHEAD def456\nbranch refs/heads/impl-branch\n\n",
                 "",
             )
         )  # worktree list --porcelain
+        tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
         result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
+        assert result["into_branch"] == "dev"
         assert result["cleanup_succeeded"] is True
         assert result["worktree_removed"] is True
         assert result["branch_deleted"] is True
+        # Verify merge command cwd is the main_repo (/repo)
+        merge_call = next(
+            args
+            for args in tool_ctx.runner.call_args_list
+            if len(args[0]) > 1 and args[0][1] == "merge"
+        )
+        assert merge_call[1] == Path("/repo")
 
     @pytest.mark.anyio
     async def test_merge_worktree_aborts_on_rebase_failure(self, tool_ctx, tmp_path):
@@ -293,10 +302,11 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx.runner.push(
             _make_result(
                 0,
-                "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n",
+                "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n",
                 "",
             )
         )  # worktree list
+        tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
         with patch(
@@ -332,10 +342,11 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx.runner.push(
             _make_result(
                 0,
-                "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n",
+                "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n",
                 "",
             )
         )  # worktree list
+        tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
         tool_ctx.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS
@@ -387,8 +398,9 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
-            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
+            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n", "")
         )
+        tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
         tool_ctx.runner.push(_make_result(0, "", ""))  # merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D
 
@@ -428,8 +440,9 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
-            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
+            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n", "")
         )
+        tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
         tool_ctx.runner.push(_make_result(0, "", ""))  # merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx.runner.push(_make_result(1, "", "error: branch not found"))  # branch -D FAILS
@@ -462,8 +475,9 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx.runner.push(_make_result(0, "", ""))  # rebase
         tool_ctx.runner.push(_make_result(0, "PASS\n= 100 passed =", ""))  # post-rebase test-check
         tool_ctx.runner.push(
-            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n", "")
+            _make_result(0, "worktree /repo\nHEAD abc\nbranch refs/heads/dev\n\n", "")
         )
+        tool_ctx.runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
         tool_ctx.runner.push(_make_result(0, "", ""))  # merge
         tool_ctx.runner.push(_make_result(0, "", ""))  # worktree remove — success
         tool_ctx.runner.push(_make_result(0, "", ""))  # branch -D — success
@@ -705,6 +719,7 @@ class TestCreateUniqueBranch:
     @pytest.mark.anyio
     async def test_creates_branch_when_unique(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, "", ""))  # ls-remote: empty = absent
+        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # branch --show-current (HEAD state)
         tool_ctx.runner.push(_make_result(0, "", ""))  # git checkout -b
         result = json.loads(await create_unique_branch("feat-foo", 42, "origin", "."))
         assert result["branch_name"] == "feat-foo-42"
@@ -714,6 +729,7 @@ class TestCreateUniqueBranch:
     async def test_appends_suffix_when_branch_exists_on_remote(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, "abc123\trefs/heads/feat-foo-42\n", ""))  # exists
         tool_ctx.runner.push(_make_result(0, "", ""))  # -2 not found
+        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # branch --show-current (HEAD state)
         tool_ctx.runner.push(_make_result(0, "", ""))  # checkout -b feat-foo-42-2
         result = json.loads(await create_unique_branch("feat-foo", 42, "origin", "."))
         assert result["branch_name"] == "feat-foo-42-2"
@@ -722,6 +738,7 @@ class TestCreateUniqueBranch:
     @pytest.mark.anyio
     async def test_ls_remote_auth_failure_falls_back_gracefully(self, tool_ctx):
         tool_ctx.runner.push(_make_result(128, "", "fatal: Authentication failed"))
+        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # branch --show-current (HEAD state)
         tool_ctx.runner.push(_make_result(0, "", ""))  # checkout proceeds with base name
         result = json.loads(await create_unique_branch("feat-foo", 42, "origin", "."))
         assert result["branch_name"] == "feat-foo-42"
@@ -729,8 +746,9 @@ class TestCreateUniqueBranch:
 
     @pytest.mark.anyio
     async def test_no_issue_uses_slug_only(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "", ""))
-        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ls-remote
+        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # checkout -b
         result = json.loads(await create_unique_branch("feat-bar", None, "origin", "."))
         assert result["branch_name"] == "feat-bar"
 
@@ -743,8 +761,9 @@ class TestCreateUniqueBranch:
 
     @pytest.mark.anyio
     async def test_timing_recorded_when_step_name_provided(self, tool_ctx):
-        tool_ctx.runner.push(_make_result(0, "", ""))
-        tool_ctx.runner.push(_make_result(0, "", ""))
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ls-remote
+        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # checkout -b
         await create_unique_branch("feat-x", 1, "origin", ".", step_name="branch_step")
         assert any(e["step_name"] == "branch_step" for e in tool_ctx.timing_log.get_report())
 
@@ -752,6 +771,7 @@ class TestCreateUniqueBranch:
     async def test_create_unique_branch_uses_base_branch_name_when_provided(self, tool_ctx):
         """AP3: when base_branch_name is provided, use it directly as the base."""
         tool_ctx.runner.push(_make_result(0, "", ""))  # ls-remote: empty = absent
+        tool_ctx.runner.push(_make_result(0, "main\n", ""))  # branch --show-current
         tool_ctx.runner.push(_make_result(0, "", ""))  # git checkout -b
         result = json.loads(await create_unique_branch(base_branch_name="impl/238", cwd="."))
         assert result["branch_name"] == "impl/238"
@@ -762,6 +782,27 @@ class TestCreateUniqueBranch:
         )
         assert ls_remote_cmd is not None, "No ls-remote subprocess call found"
         assert any("impl/238" in arg for arg in ls_remote_cmd)
+
+    @pytest.mark.anyio
+    async def test_reports_base_ref_in_return_value(self, tool_ctx):
+        """Test 1.6: create_unique_branch reports base_ref (the branch HEAD was on)."""
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ls-remote: empty = absent
+        tool_ctx.runner.push(_make_result(0, "feature-branch\n", ""))  # branch --show-current
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git checkout -b
+        result = json.loads(await create_unique_branch("feat-foo", 42, "origin", "."))
+        assert result["branch_name"] == "feat-foo-42"
+        assert result["was_unique"] is True
+        assert result["base_ref"] == "feature-branch"
+
+    @pytest.mark.anyio
+    async def test_reports_detached_head_as_base_ref(self, tool_ctx):
+        """create_unique_branch reports DETACHED_HEAD when HEAD is detached."""
+        tool_ctx.runner.push(_make_result(0, "", ""))  # ls-remote: empty = absent
+        tool_ctx.runner.push(_make_result(0, "", ""))  # branch --show-current returns empty
+        tool_ctx.runner.push(_make_result(0, "", ""))  # git checkout -b
+        result = json.loads(await create_unique_branch("feat-foo", 42, "origin", "."))
+        assert result["branch_name"] == "feat-foo-42"
+        assert result["base_ref"] == "DETACHED_HEAD"
 
 
 class TestCheckPrMergeable:

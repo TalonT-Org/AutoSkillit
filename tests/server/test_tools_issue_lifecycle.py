@@ -389,4 +389,4 @@ async def test_release_issue_stages_when_different_branch(
     )
     assert result["success"] is True
     assert result["staged"] is True
-    assert result["staged_label"] is not None
+    assert result["staged_label"] == "staged"

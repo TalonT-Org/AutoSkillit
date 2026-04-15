@@ -1,0 +1,21 @@
+name: benchmark
+classification_triggers:
+  - "IVs are system/method names, DVs are performance metrics, multiple comparators"
+dimension_weights:
+  causal_structure: S
+  variance_protocol: H
+  statistical_corrections: M
+  ecological_validity: M
+  measurement_alignment: M
+  resource_proportionality: L
+  data_acquisition: M
+  agent_implementability: H
+applicable_lenses:
+  primary: exp-lens-estimand-clarity
+  secondary: null
+red_team_focus:
+  specific: asymmetric effort
+  severity_cap: warning
+l1_severity:
+  estimand_clarity: warning
+  hypothesis_falsifiability: warning

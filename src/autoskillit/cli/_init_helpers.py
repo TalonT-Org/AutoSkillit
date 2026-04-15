@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import NamedTuple
 
 from autoskillit.config import write_config_layer
-from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
+from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, get_logger, load_yaml
 from autoskillit.recipe import list_recipes
+
+logger = get_logger(__name__)
 
 
 class _ScanResult(NamedTuple):
@@ -73,7 +75,8 @@ def _require_interactive_stdin(command_name: str) -> None:
 
 
 def _prompt_recipe_choice() -> str:
-    _require_interactive_stdin("autoskillit order")
+    from autoskillit.cli._timed_input import timed_prompt
+
     available = list_recipes(Path.cwd()).items
     if not available:
         print("No recipes found. Run 'autoskillit recipes list' to check.")
@@ -81,13 +84,16 @@ def _prompt_recipe_choice() -> str:
     print("Available recipes:")
     for i, r in enumerate(available, 1):
         print(f"  {i}. {r.name}")
-    return input("Recipe name: ").strip()
+    return timed_prompt("Recipe name:", default="", timeout=120, label="autoskillit order")
 
 
 def _prompt_test_command() -> list[str]:
-    _require_interactive_stdin("autoskillit init")
+    from autoskillit.cli._timed_input import timed_prompt
+
     default = "task test-all"
-    answer = input(f"Test command [{default}]: ").strip()
+    answer = timed_prompt(
+        f"Test command [{default}]:", default=default, timeout=120, label="autoskillit init"
+    )
     return (answer if answer else default).split()
 
 
@@ -116,12 +122,19 @@ def _prompt_github_repo() -> str | None:
     _B, _C, _D, _G, _Y, _R = _colors()
     detected = _detect_github_repo()
 
+    from autoskillit.cli._timed_input import timed_prompt
+
     if detected:
         print(f"\n  {_Y}GitHub repo{_R}  {_G}{detected}{_R} {_D}(detected from git remote){_R}")
-        value = input(f"  {_D}Press Enter to confirm, or type a different repo:{_R} ").strip()
+        value = timed_prompt(
+            "Press Enter to confirm, or type a different repo:",
+            default=detected or "",
+            timeout=120,
+            label="init",
+        )
     else:
         print(f"\n  {_Y}GitHub repo{_R}  {_D}owner/repo, URL, or blank to skip{_R}")
-        value = input(f"  {_D}Repository:{_R} ").strip()
+        value = timed_prompt("Repository:", default="", timeout=120, label="init")
 
     if not value:
         return detected
@@ -251,9 +264,11 @@ def _check_secret_scanning(project_dir: Path) -> _ScanResult:
         "  Recommended: add gitleaks to .pre-commit-config.yaml\n"
         "  before proceeding.\n"
     )
+    from autoskillit.cli._timed_input import timed_prompt
+
     print("  To bypass, type exactly:\n")
     print(f"  {_D}{_SECRET_SCAN_BYPASS_PHRASE}{_R}\n")
-    response = input("  > ").strip()
+    response = timed_prompt(">", default="", timeout=120, label="secret-scan-bypass")
     if response != _SECRET_SCAN_BYPASS_PHRASE:
         print(f"\n  {_B}Aborted.{_R} Phrase did not match.")
         return _ScanResult(False)
@@ -276,10 +291,9 @@ def _is_plugin_installed() -> bool:
             timeout=10,
         )
         return result.returncode == 0 and "autoskillit" in result.stdout
-    except FileNotFoundError:
-        return False  # claude CLI not on PATH
-    except (subprocess.TimeoutExpired, OSError):
-        return False  # CLI unavailable or timed out
+    except Exception:
+        logger.debug("plugin install check failed", exc_info=True)
+        return False
 
 
 def _generate_config_yaml(test_command: list[str]) -> str:
@@ -315,6 +329,26 @@ safety:
 """
 
 
+def _check_dual_mcp_files(claude_json: Path, plugins_json: Path) -> bool:
+    """Return True if both direct mcpServers entry and marketplace plugin are active.
+
+    Checks ~/.claude.json for an 'autoskillit' mcpServers key and
+    installed_plugins.json for an 'autoskillit@autoskillit-local' plugin entry.
+
+    Fail-open: any I/O or parse error returns False without raising.
+    """
+    try:
+        has_direct = claude_json.exists() and "autoskillit" in json.loads(
+            claude_json.read_text()
+        ).get("mcpServers", {})
+        has_marketplace = plugins_json.exists() and "autoskillit@autoskillit-local" in json.loads(
+            plugins_json.read_text()
+        ).get("plugins", {})
+        return has_direct and has_marketplace
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
 def _user_claude_json_path() -> Path:
     """Return path to ~/.claude.json (user-scoped MCP server config)."""
     return Path.home() / ".claude.json"
@@ -342,6 +376,28 @@ def _register_mcp_server(claude_json_path: Path) -> None:
     atomic_write(claude_json_path, json.dumps(data, indent=2))
 
 
+def evict_direct_mcp_entry(claude_json_path: Path) -> bool:
+    """Remove mcpServers['autoskillit'] from ~/.claude.json if present.
+
+    Returns True if the entry was removed, False if nothing changed.
+    Fail-open: any I/O or parse error returns False without raising.
+    """
+    if not claude_json_path.exists():
+        return False
+    try:
+        data: dict = json.loads(claude_json_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    if "autoskillit" not in data.get("mcpServers", {}):
+        return False
+    del data["mcpServers"]["autoskillit"]
+    try:
+        atomic_write(claude_json_path, json.dumps(data, indent=2))
+    except OSError:
+        return False
+    return True
+
+
 def _print_next_steps(*, context: str = "install") -> None:
     _B, _C, _D, _G, _Y, _R = _colors()
     if context == "install":
@@ -363,12 +419,28 @@ def _print_next_steps(*, context: str = "install") -> None:
 
 def _register_all(scope: str, project_dir: Path) -> None:
     """Ensure project temp dir, register hooks and MCP server, print summary."""
+    import autoskillit.core.paths as _core_paths
     from autoskillit.cli._hooks import (
         _claude_settings_path,
         _evict_stale_autoskillit_hooks,
+        sweep_all_scopes_for_orphans,
         sync_hooks_to_settings,
     )
     from autoskillit.core import ensure_project_temp
+
+    # Refuse to register from inside the autoskillit source tree — this would
+    # plant source-tree absolute paths in the project scope.
+    if project_dir.resolve().is_relative_to(_core_paths.pkg_root().resolve()):
+        from autoskillit.cli.app import CliError
+
+        raise CliError(
+            "Refusing to run `autoskillit init` from inside the autoskillit source tree — "
+            "this would plant source-tree absolute paths in your project scope. "
+            "`cd` to a different directory first."
+        )
+
+    # Cross-scope sweep: evict stale hooks from all scopes before writing canonical entries.
+    sweep_all_scopes_for_orphans(project_dir)
 
     _B, _C, _D, _G, _Y, _R = _colors()
 
@@ -404,6 +476,8 @@ def _register_all(scope: str, project_dir: Path) -> None:
     plugin_ok = _is_plugin_installed()
     if not plugin_ok:
         _register_mcp_server(_user_claude_json_path())
+    else:
+        evict_direct_mcp_entry(_user_claude_json_path())  # remove stale direct entry
 
     # --- Summary block ---
     print()

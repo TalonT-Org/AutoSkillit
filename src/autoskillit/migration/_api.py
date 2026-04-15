@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import RetryReason, SkillResult
+from autoskillit.core import RetryReason, SkillResult, resolve_temp_dir
 from autoskillit.migration.engine import MigrationFile, default_migration_engine
 from autoskillit.migration.loader import applicable_migrations
 
@@ -22,6 +22,7 @@ async def check_and_migrate(
     name: str,
     project_dir: Path,
     installed_version: str,
+    temp_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Check and apply pending migrations for a named recipe.
 
@@ -50,7 +51,8 @@ async def check_and_migrate(
     if not migrations:
         return {"status": "up_to_date", "name": name}
 
-    temp_dir = _pdir / ".autoskillit" / "temp"
+    if temp_dir is None:
+        temp_dir = resolve_temp_dir(_pdir, None)
     engine = default_migration_engine()
     file = MigrationFile(
         name=name,

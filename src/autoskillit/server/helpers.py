@@ -7,15 +7,19 @@ import functools
 import json
 import os
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
 from autoskillit.execution import (
+    SCENARIO_STEP_NAME_ENV,  # noqa: F401 — re-exported for tools_execution.py
+    _refresh_quota_cache,  # noqa: F401 — re-exported for tools_execution.py; patched by tests
+    fetch_repo_merge_state,  # noqa: F401 — re-exported for tools_ci.py
     resolve_log_dir,  # noqa: F401 — used by tools_github.py, tools_status.py
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
+from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.pipeline import gate_error_result
 from autoskillit.recipe import (
     StaleItem,
@@ -31,12 +35,13 @@ from autoskillit.workspace import clone_registry  # noqa: F401 — re-exported f
 if TYPE_CHECKING:
     from fastmcp import Context
 
+    from autoskillit.config import QuotaGuardConfig
     from autoskillit.core import SubprocessResult
 
 logger = get_logger(__name__)
 
-_HOOK_CONFIG_FILENAME: str = ".autoskillit_hook_config.json"
-_HOOK_DIR_COMPONENTS: tuple[str, ...] = (".autoskillit", "temp")
+_HOOK_CONFIG_FILENAME: str = _HOOK_CONFIG_PATH_COMPONENTS[-1]
+_HOOK_DIR_COMPONENTS: tuple[str, ...] = _HOOK_CONFIG_PATH_COMPONENTS[:-1]
 
 
 def _hook_config_path(project_root: Path) -> Path:
@@ -105,6 +110,10 @@ def track_response_size(
 ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
     """Decorator: measure the JSON string size of a tool response and record to response_log.
 
+    Last-resort safety net. Tool implementations SHOULD catch exceptions locally
+    and emit domain-specific envelopes with more helpful ``user_visible_message``
+    values; this decorator only catches what slips through.
+
     Apply BELOW @mcp.tool() so the wrapped function is what FastMCP registers:
 
         @mcp.tool(tags={"automation"})
@@ -125,6 +134,10 @@ def track_response_size(
                         "error": f"{type(exc).__name__}: {exc}",
                         "exit_code": -1,
                         "subtype": "tool_exception",
+                        "user_visible_message": (
+                            f"An internal error occurred in {tool_name}: "
+                            f"{type(exc).__name__}. Run 'autoskillit doctor' or reinstall."
+                        ),
                     }
                 )
                 logger.exception("Unhandled exception in tool %s", tool_name)
@@ -258,7 +271,7 @@ async def _apply_triage_gate(
     if recipe_info is None:
         return result
 
-    cache_path = Path.cwd() / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
+    cache_path = _ctx.temp_dir / "recipe_staleness_cache.json"
     t0 = time.perf_counter()
     cached = read_staleness_cache(cache_path, name)
     logger.debug(
@@ -340,6 +353,7 @@ async def _run_subprocess(
     *,
     cwd: str,
     timeout: float,
+    env: Mapping[str, str] | None = None,
 ) -> tuple[int, str, str]:
     """Run a subprocess asynchronously with timeout. Returns (returncode, stdout, stderr).
 
@@ -348,7 +362,7 @@ async def _run_subprocess(
     """
     runner = _get_ctx().runner
     assert runner is not None, "No subprocess runner configured"
-    result = await runner(cmd, cwd=Path(cwd), timeout=timeout)
+    result = await runner(cmd, cwd=Path(cwd), timeout=timeout, env=env)
     return _process_runner_result(result, timeout)
 
 
@@ -486,5 +500,66 @@ async def _prime_quota_cache() -> None:
 
     try:
         await check_and_sleep_if_needed(_get_ctx().config.quota_guard)
-    except (OSError, ValueError, RuntimeError):
+    except Exception:
         logger.warning("quota_prime_failed", exc_info=True)
+
+
+async def _quota_refresh_loop(config: QuotaGuardConfig) -> None:
+    """Long-running coroutine: refreshes the quota cache every cache_refresh_interval seconds.
+
+    Designed to run as a background asyncio.Task for the duration of a kitchen session.
+    The loop sleeps first, then refreshes — ensuring _prime_quota_cache's initial write
+    is not immediately overwritten. CancelledError from asyncio.sleep propagates
+    uncaught, terminating the loop cleanly when the task is cancelled.
+
+    Guarantee: with cache_refresh_interval < cache_max_age, the cache written by any
+    loop tick will still be fresh when the next tick fires. The hook never sees a stale
+    cache as long as this loop is running.
+    """
+    while True:
+        await asyncio.sleep(config.cache_refresh_interval)
+        try:
+            await _refresh_quota_cache(config)
+        except Exception as exc:
+            logger.warning("quota_refresh_loop_error", exc_info=True, error=str(exc))
+
+
+def _build_hook_diagnostic_warning() -> str | None:
+    """Run hook health and drift checks. Return a warning string if issues are found.
+
+    Only reads; never writes or modifies state. Returns None when all hooks are healthy
+    or when settings.json does not yet exist (nothing to validate).
+    """
+    from autoskillit.hook_registry import (
+        _claude_settings_path,
+        _count_hook_registry_drift,
+        find_broken_hook_scripts,
+    )
+
+    settings_path = _claude_settings_path("user")
+    if not settings_path.exists():
+        return None
+
+    broken = find_broken_hook_scripts(settings_path)
+    drift = _count_hook_registry_drift(settings_path)
+
+    issues: list[str] = []
+    if broken:
+        issues.append(f"Hook scripts not found: {', '.join(broken)}")
+    if drift.orphaned > 0:
+        issues.append(
+            f"{drift.orphaned} orphaned hook entry(ies) in settings.json are not in "
+            f"HOOK_REGISTRY — every matching tool call will be denied with ENOENT."
+        )
+    if drift.missing > 0:
+        issues.append(
+            f"{drift.missing} hook(s) from HOOK_REGISTRY are not deployed in settings.json."
+        )
+    if not issues:
+        return None
+
+    lines = ["\n⚠️  Hook configuration issues detected:"]
+    for issue in issues:
+        lines.append(f"   • {issue}")
+    lines.append("   → Run 'autoskillit install' to regenerate hook configuration.\n")
+    return "\n".join(lines)

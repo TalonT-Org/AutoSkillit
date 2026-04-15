@@ -1,5 +1,6 @@
 ---
 name: migrate-recipes
+activate_deps: [write-recipe]
 description: Apply versioned migration notes to an AutoSkillit recipe. Use when user confirms migration, called by agent or autoskillit migrate CLI, or invoked directly.
 hooks:
   PreToolUse:
@@ -37,7 +38,7 @@ The orchestrator provides all context in the prompt:
 - Declare success if validation fails after all retry attempts
 
 **ALWAYS:**
-- Save migrated scripts to .autoskillit/temp/migrations/{script_name}.yaml for review
+- Save migrated scripts to {{AUTOSKILLIT_TEMP}}/migrations/{script_name}.yaml for review
 - Validate via validate_recipe before declaring success
 - Preserve all existing script fields not targeted by migration changes
 - Output a human-readable diff summary of changes applied
@@ -51,12 +52,13 @@ The orchestrator provides all context in the prompt:
    - `missing_field`: The field that should be added if absent
 3. If changes are needed, use `/autoskillit:write-recipe` in edit mode:
    - Load the skill: invoke `/autoskillit:write-recipe` via the Skill tool
+   - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, skip the recipe update and log a warning; proceed with remaining validation steps.
    - Provide the current YAML content
    - Describe all needed changes with the `instruction` text and before/after examples
 4. Validate the result with `validate_recipe`
 5. On validation failure, retry up to 3 times with error feedback
 6. Ensure `autoskillit_version` is set to the `target_version`
-7. Save the migrated script to `.autoskillit/temp/migrations/{script_name}.yaml`
+7. Save the migrated script to `{{AUTOSKILLIT_TEMP}}/migrations/{script_name}.yaml`
 8. Output a summary of changes applied
 
 ## Error Handling

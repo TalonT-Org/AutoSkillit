@@ -1,6 +1,7 @@
 ---
 name: arch-lens-operational
 categories: [arch-lens]
+activate_deps: [mermaid]
 description: Create Operational architecture diagram showing CLI workflows, configuration, and observability. Administration lens answering "How is it run and monitored?"
 hooks:
   PreToolUse:
@@ -37,18 +38,38 @@ hooks:
 - Document configuration hierarchy
 - Include monitoring and logging outputs
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
+- If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - After writing the diagram file, emit the **absolute path** as a structured output
-  token immediately before `%%ORDER_UP%%`. Resolve the relative `temp/arch-lens-operational/...`
+  token as your final output. Resolve the relative `temp/arch-lens-operational/...`
   save path to absolute by prepending the full CWD:
   ```
   diagram_path = /absolute/cwd/temp/arch-lens-operational/{filename}.md
-  %%ORDER_UP%%
   ```
   This token is MANDATORY — the pipeline cannot proceed without it.
+
+## Arguments
+
+`/autoskillit:arch-lens-operational [context_path]`
+
+- **context_path** (optional) — Absolute path to a PR context file containing new files
+  (★-prefixed) and modified files (●-prefixed) from the PR diff. When provided, read
+  this file before beginning analysis and focus the diagram on the architectural areas
+  affected by these specific files. When absent, explore the full CWD.
 
 ---
 
 ## Analysis Workflow
+
+### Step 0: Read PR context (when provided)
+
+If a `context_path` positional argument is present:
+1. Read the file at `context_path`
+2. Extract: new files list (★-prefixed), modified files list (●-prefixed)
+3. Focus Step 1 exploration on the modules/components these files belong to
+4. Apply ★ prefix on diagram nodes representing new files/components
+5. Apply ● prefix on diagram nodes representing modified files/components
+
+If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
 ### Step 1: Launch Parallel Exploration Subagents
 
@@ -72,7 +93,7 @@ Spawn Explore subagents to investigate:
 **Logging & Monitoring**
 - Find logging configuration
 - Identify observability outputs
-- Look for: logging configuration, log files, metrics, activity logs, .autoskillit/temp/ output directories
+- Look for: logging configuration, log files, metrics, activity logs, {{AUTOSKILLIT_TEMP}}/ output directories
 
 **Status & Health**
 - Find status/health commands
@@ -142,7 +163,7 @@ Use flowchart with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/arch-lens-operational/arch_diag_operational_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `{{AUTOSKILLIT_TEMP}}/arch-lens-operational/arch_diag_operational_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After writing the diagram file, emit a structured output line:
 
@@ -204,7 +225,7 @@ flowchart TB
     subgraph Monitoring ["OBSERVABILITY"]
         direction TB
         LOGS["Activity Logs<br/>━━━━━━━━━━<br/>Step-by-step"]
-        DEBUG["Debug Artifacts<br/>━━━━━━━━━━<br/>.autoskillit/temp/ directory"]
+        DEBUG["Debug Artifacts<br/>━━━━━━━━━━<br/>{{AUTOSKILLIT_TEMP}}/ directory"]
     end
 
     subgraph Tasks ["TASK COMMANDS"]

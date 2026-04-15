@@ -10,6 +10,7 @@ import subprocess  # noqa: F401 — tests patch autoskillit.cli.subprocess.run
 from pathlib import Path  # noqa: F401 — tests patch autoskillit.cli.Path.home
 
 from autoskillit.cli._cook import cook
+from autoskillit.cli._doctor import DoctorResult
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli._init_helpers import _prompt_recipe_choice
 from autoskillit.cli._prompts import (
@@ -20,6 +21,7 @@ from autoskillit.cli._prompts import (
 )
 from autoskillit.cli.app import (
     _generate_config_yaml,
+    _is_plugin_installed,
     _prompt_test_command,
     app,
     config_app,
@@ -38,16 +40,21 @@ from autoskillit.cli.app import (
     serve,
     skills_app,
     skills_list,
+    update,
     upgrade,
     workspace_app,
     workspace_clean,
     workspace_init,
 )
+from autoskillit.hook_registry import HookDriftResult
 
 __all__ = [
     "_OPEN_KITCHEN_CHOICE",
+    "_is_plugin_installed",
     "_build_open_kitchen_prompt",
     "_build_orchestrator_prompt",
+    "DoctorResult",
+    "HookDriftResult",
     "_claude_settings_path",
     "_generate_config_yaml",
     "_prompt_recipe_choice",
@@ -71,6 +78,7 @@ __all__ = [
     "serve",
     "skills_app",
     "skills_list",
+    "update",
     "upgrade",
     "workspace_app",
     "workspace_clean",

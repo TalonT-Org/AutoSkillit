@@ -19,12 +19,17 @@ from autoskillit.core import (
     PACK_REGISTRY,
     ClaudeDirectoryConventions,
     PackDef,
+    SkillResolver,
     SkillSource,
     ValidatedAddDir,
     atomic_write,
     get_logger,
 )
-from autoskillit.workspace.skills import SkillInfo, SkillResolver, detect_project_local_overrides
+from autoskillit.workspace.skills import (
+    DefaultSkillResolver,
+    SkillInfo,
+    detect_project_local_overrides,
+)
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -101,6 +106,45 @@ def _remove_disable_model_invocation(content: str) -> str:
     return f"---\n{fm_text}\n---\n{body}"
 
 
+_ORDER_UP_LINE = re.compile(r"^.*%%ORDER_UP%%.*\n?", re.MULTILINE)
+
+
+def _strip_marker_from_body(content: str, marker: str = "%%ORDER_UP%%") -> str:
+    """Remove completion marker lines from SKILL.md body content."""
+    m = _FM_PATTERN.match(content)
+    if not m:
+        return _ORDER_UP_LINE.sub("", content) if marker in content else content
+    fm_text = m.group(1)
+    body = m.group(2)
+    if marker not in body:
+        return content
+    body = _ORDER_UP_LINE.sub("", body)
+    return f"---\n{fm_text}\n---\n{body}"
+
+
+_ACTIVATE_DEPS_PATTERN = re.compile(r"^activate_deps:\s*\[([^\]]*)\]", re.MULTILINE)
+
+
+def _parse_activate_deps(content: str) -> list[str]:
+    """Extract activate_deps list from SKILL.md frontmatter.
+
+    Parses ``activate_deps: [item1, item2]`` from YAML frontmatter.
+    Each item is either a PACK_REGISTRY key (pack dependency) or a
+    bare skill name (individual dependency).
+    """
+    m = _FM_PATTERN.match(content)
+    if not m:
+        return []
+    fm_text = m.group(1)
+    match = _ACTIVATE_DEPS_PATTERN.search(fm_text)
+    if not match:
+        return []
+    items = match.group(1).strip()
+    if not items:
+        return []
+    return [item.strip() for item in items.split(",") if item.strip()]
+
+
 def _is_skill_disabled(
     skill_info: SkillInfo,
     disabled: list[str],
@@ -171,11 +215,63 @@ def _should_inject_skill(
     return True
 
 
+def _build_pack_index(provider: SkillsDirectoryProvider) -> dict[str, set[str]]:
+    """Build a pack-name → set of member skill names index from the provider."""
+    index: dict[str, set[str]] = {}
+    for skill in provider.list_skills():
+        for cat in skill.categories:
+            index.setdefault(cat, set()).add(skill.name)
+    return index
+
+
+def compute_skill_closure(
+    skill_name: str,
+    provider: SkillsDirectoryProvider,
+) -> frozenset[str]:
+    """Return the transitive activate_deps closure for a skill, including the skill itself.
+
+    Returns ``frozenset()`` if ``skill_name`` does not resolve to a real skill.
+    Pack-name dependencies are expanded to all pack members. Unknown deps are silently dropped.
+    """
+    if provider.resolver.resolve(skill_name) is None:
+        return frozenset()
+    pack_index: dict[str, set[str]] | None = None
+    visited: set[str] = set()
+    resolved: set[str] = set()
+    queue: list[str] = [skill_name]
+    while queue:
+        name = queue.pop()
+        if name in visited:
+            continue
+        visited.add(name)
+        info = provider.resolver.resolve(name)
+        if info is None:
+            continue
+        try:
+            content = info.path.read_text()
+        except OSError:
+            continue
+        resolved.add(name)
+        for dep in _parse_activate_deps(content):
+            if dep in PACK_REGISTRY:
+                if pack_index is None:
+                    pack_index = _build_pack_index(provider)
+                for member in pack_index.get(dep, ()):
+                    if member not in visited:
+                        queue.append(member)
+            elif dep not in visited:
+                queue.append(dep)
+    return frozenset(resolved)
+
+
 class SkillsDirectoryProvider:
     """Provides bundled skill content with tier-aware frontmatter injection."""
 
-    def __init__(self) -> None:
-        self._resolver = SkillResolver()
+    def __init__(self, temp_dir_relpath: str = ".autoskillit/temp") -> None:
+        if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
+            raise ValueError(f"temp_dir_relpath is YAML-unsafe: {temp_dir_relpath!r}")
+        self._resolver = DefaultSkillResolver()
+        self._temp_dir_relpath = temp_dir_relpath
 
     @property
     def resolver(self) -> SkillResolver:
@@ -191,6 +287,9 @@ class SkillsDirectoryProvider:
 
         - gated=True  → ensure disable-model-invocation: true is present
         - gated=False → return unmodified content (cook session or Tier 1)
+
+        Substitutes ``{{AUTOSKILLIT_TEMP}}`` with the configured temp dir relpath.
+        Tier 1 skills (which contain no placeholder) are unaffected.
         """
         skill_info = self._resolver.resolve(name)
         if skill_info is None:
@@ -198,7 +297,7 @@ class SkillsDirectoryProvider:
         content = skill_info.path.read_text()
         if gated:
             content = _inject_disable_model_invocation(content)
-        return content
+        return content.replace("{{AUTOSKILLIT_TEMP}}", self._temp_dir_relpath)
 
 
 class DefaultSessionSkillManager:
@@ -212,6 +311,13 @@ class DefaultSessionSkillManager:
         self._provider = provider
         self._root = ephemeral_root
 
+    def compute_skill_closure(self, skill_name: str) -> frozenset[str]:
+        """Return the transitive activate_deps closure for ``skill_name``.
+
+        See :func:`compute_skill_closure` for semantics.
+        """
+        return compute_skill_closure(skill_name, self._provider)
+
     def init_session(
         self,
         session_id: str,
@@ -220,6 +326,7 @@ class DefaultSessionSkillManager:
         config: AutomationConfig | None = None,
         project_dir: Path | None = None,
         recipe_packs: frozenset[str] | None = None,
+        allow_only: frozenset[str] | None = None,
     ) -> ValidatedAddDir:
         """Create ephemeral skill dir for session_id.
 
@@ -279,6 +386,9 @@ class DefaultSessionSkillManager:
         skills_base = session_skills_dir / _SKILLS_SUBDIR
         skills_base.mkdir(parents=True, exist_ok=True)
         for skill_info in self._provider.list_skills():
+            if allow_only is not None and skill_info.name not in allow_only:
+                _log.debug("init_session_allow_only_skip", skill=skill_info.name)
+                continue
             if not _should_inject_skill(
                 skill_info,
                 overrides=overrides,
@@ -299,28 +409,67 @@ class DefaultSessionSkillManager:
             atomic_write(skill_dir / "SKILL.md", content)
         return ValidatedAddDir(path=str(session_skills_dir))
 
-    def activate_tier2(self, session_id: str, skill_name: str) -> bool:
-        """Remove disable-model-invocation from the ephemeral copy of skill_name.
+    def activate_skill_deps(self, session_id: str, skill_name: str) -> bool:
+        """Remove disable-model-invocation from a skill and its declared dependencies.
 
-        Returns True if the file was found and updated, False otherwise.
+        Reads ``activate_deps`` from the target skill's frontmatter and transitively
+        activates all dependencies:
+        - Pack names (keys in PACK_REGISTRY) -> activate all session skills with that category
+        - Skill names -> activate the specific named skill
+
+        Cycle-safe: tracks already-activated skills to prevent infinite recursion.
         """
-        if (
-            not session_id
-            or "\x00" in session_id
-            or "/" in session_id
-            or "\\" in session_id
-            or session_id in (".", "..")
-        ):
-            raise ValueError(f"Invalid session_id: {session_id!r}")
-        if not skill_name or "/" in skill_name or "\\" in skill_name or skill_name in (".", ".."):
-            raise ValueError(f"Invalid skill_name: {skill_name!r}")
+        for value, label in ((session_id, "session_id"), (skill_name, "skill_name")):
+            if not value or any(c in value for c in ("/", "\\", "\x00")):
+                raise ValueError(f"Invalid {label}: {value!r}")
+            if value in (".", ".."):
+                raise ValueError(f"Invalid {label}: {value!r}")
+
+        activated: set[str] = set()
+        return self._activate_with_deps(session_id, skill_name, activated)
+
+    def _activate_with_deps(
+        self, session_id: str, skill_name: str, activated: set[str], *, _is_root: bool = True
+    ) -> bool:
+        """Activate a single skill and recursively activate its dependencies."""
+        if skill_name in activated:
+            return False
+        activated.add(skill_name)
+
         skill_md = self._root / session_id / _SKILLS_SUBDIR / skill_name / "SKILL.md"
         if not skill_md.exists():
             return False
+
         content = skill_md.read_text()
-        updated = _remove_disable_model_invocation(content)
-        atomic_write(skill_md, updated)
+        new_content = _remove_disable_model_invocation(content)
+        if not _is_root:
+            new_content = _strip_marker_from_body(new_content)
+        if new_content != content:
+            atomic_write(skill_md, new_content)
+
+        deps = _parse_activate_deps(content)
+        for dep in deps:
+            if dep in PACK_REGISTRY:
+                self._activate_pack_deps(session_id, dep, activated)
+            else:
+                self._activate_with_deps(session_id, dep, activated, _is_root=False)
+
         return True
+
+    def _activate_pack_deps(self, session_id: str, pack_name: str, activated: set[str]) -> None:
+        """Activate all session skills whose category matches *pack_name*."""
+        skills_base = self._root / session_id / _SKILLS_SUBDIR
+        if not skills_base.is_dir():
+            return
+        for skill_dir in sorted(skills_base.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            name = skill_dir.name
+            if name in activated:
+                continue
+            info = self._provider.resolver.resolve(name)
+            if info and pack_name in info.categories:
+                self._activate_with_deps(session_id, name, activated, _is_root=False)
 
     def cleanup_stale(self, max_age_seconds: int = 259200) -> int:
         """Remove session dirs not accessed within max_age_seconds.

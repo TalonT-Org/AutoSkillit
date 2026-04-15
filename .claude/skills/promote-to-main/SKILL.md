@@ -114,7 +114,7 @@ from autoskillit.pipeline.tokens import DefaultTokenLog
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 from autoskillit.execution.session_log import resolve_log_dir
 
-cfg_path = pathlib.Path(".autoskillit") / "temp" / ".autoskillit_hook_config.json"
+cfg_path = pathlib.Path(".autoskillit") / "temp" / ".hook_config.json"
 kitchen_id = ""
 if cfg_path.exists():
     _cfg = json.loads(cfg_path.read_text())

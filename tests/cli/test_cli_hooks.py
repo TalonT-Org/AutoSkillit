@@ -101,7 +101,7 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
                 {
                     "matcher": "mcp__.*autoskillit.*__run_skill.*",
                     "hooks": [
-                        {"type": "command", "command": "python3 -m autoskillit.hooks.quota_check"},
+                        {"type": "command", "command": "python3 -m autoskillit.hooks.quota_guard"},
                     ],
                 },
                 {
@@ -109,7 +109,7 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "python3 /old/path/hooks/quota_check.py",
+                            "command": "python3 /old/path/hooks/quota_guard.py",
                         },
                     ],
                 },
@@ -147,13 +147,13 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
     all_commands = [
         h["command"] for entry in data["hooks"]["PreToolUse"] for h in entry.get("hooks", [])
     ]
-    quota_commands = [c for c in all_commands if "quota_check" in c]
+    quota_commands = [c for c in all_commands if "quota_guard" in c]
     assert len(quota_commands) == 1
 
 
 # T-REG-1
 def test_install_production_order_includes_quota_check(tmp_path, monkeypatch):
-    """install() must register quota_check.py regardless of function call order."""
+    """install() must register quota_guard.py regardless of function call order."""
     import importlib
 
     from autoskillit.cli._marketplace import install
@@ -176,8 +176,8 @@ def test_install_production_order_includes_quota_check(tmp_path, monkeypatch):
     data = json.loads(settings_path.read_text())
     pretooluse = data.get("hooks", {}).get("PreToolUse", [])
     all_commands = [h["command"] for e in pretooluse for h in e.get("hooks", [])]
-    assert any("quota_check.py" in c for c in all_commands), (
-        "quota_check.py missing from settings.json after install() — silent drop bug present"
+    assert any("quota_guard.py" in c for c in all_commands), (
+        "quota_guard.py missing from settings.json after install() — silent drop bug present"
     )
 
 
@@ -207,7 +207,10 @@ def test_settings_json_matches_hook_registry_after_install(tmp_path, monkeypatch
     data = json.loads(settings_path.read_text())
     for hook_def in HOOK_REGISTRY:
         event_entries = data.get("hooks", {}).get(hook_def.event_type, [])
-        matching = [e for e in event_entries if e.get("matcher") == hook_def.matcher]
+        if hook_def.event_type == "SessionStart":
+            matching = [e for e in event_entries if "matcher" not in e]
+        else:
+            matching = [e for e in event_entries if e.get("matcher") == hook_def.matcher]
         assert len(matching) == 1, (
             f"Expected exactly 1 {hook_def.event_type} entry for matcher "
             f"{hook_def.matcher!r}, got {len(matching)}"
@@ -285,3 +288,22 @@ def test_sync_hooks_to_settings_is_idempotent(tmp_path):
     assert len(posttooluse) == posttooluse_count, (
         f"Duplicate entries after evict+sync twice: {len(posttooluse)} PostToolUse entries"
     )
+
+
+# T-CROSS-1
+def test_sync_hooks_to_settings_session_start_no_matcher(tmp_path):
+    """sync_hooks_to_settings() must not emit 'matcher' key for SessionStart entries."""
+    from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
+
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text('{"hooks": {}}')
+    _evict_stale_autoskillit_hooks(settings)
+    sync_hooks_to_settings(settings)
+    data = json.loads(settings.read_text())
+    session_start_entries = data.get("hooks", {}).get("SessionStart", [])
+    assert session_start_entries, "Expected at least one SessionStart entry"
+    for entry in session_start_entries:
+        assert "matcher" not in entry, (
+            f"SessionStart entry must not have 'matcher' key, got: {entry}"
+        )

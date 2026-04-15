@@ -25,15 +25,6 @@ def check_bug_report_non_empty(workspace: str) -> dict[str, str]:
         return {"non_empty": "false"}
 
 
-def check_cleanup_mode(defer_cleanup: str) -> dict[str, str]:
-    """Route helper: return deferred='true' when defer_cleanup is truthy, else 'false'.
-
-    Used by check_defer_cleanup and check_defer_on_failure recipe steps to choose
-    between immediate per-pipeline cleanup and deferred batch cleanup.
-    """
-    return {"deferred": "true" if defer_cleanup.lower() == "true" else "false"}
-
-
 def compute_domain_partitions(
     integration_branch: str, base_branch: str, cwd: str, output_dir: str
 ) -> dict[str, str]:
@@ -54,6 +45,7 @@ def compute_domain_partitions(
         text=True,
         check=True,
         cwd=cwd,
+        timeout=60,
     )
     files = [f for f in result.stdout.strip().split("\n") if f]
     partitions = partition_files_by_domain(files)
@@ -80,6 +72,7 @@ def annotate_pr_diff(pr_number: str, cwd: str, output_dir: str) -> dict[str, str
         text=True,
         check=True,
         cwd=cwd,
+        timeout=60,
     )
     diff = result.stdout
     out = Path(output_dir)
@@ -112,6 +105,7 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
         text=True,
         check=True,
         cwd=cwd,
+        timeout=60,
     )
     info = json.loads(repo_info.stdout)
     owner = info["owner"]["login"]
@@ -128,6 +122,7 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
         capture_output=True,
         text=True,
         cwd=cwd,
+        timeout=60,
     )
     if graphql_result.returncode != 0:
         entries: list = []

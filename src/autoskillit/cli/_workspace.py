@@ -74,12 +74,16 @@ async def run_workspace_clean(
             print()
 
             if not force:
-                from autoskillit.cli._init_helpers import _require_interactive_stdin
+                from autoskillit.cli._timed_input import timed_prompt
 
-                _require_interactive_stdin("autoskillit workspace clean")
                 suffix = "ies" if len(stale) != 1 else "y"
-                answer = input(f"Remove {len(stale)} director{suffix}? [y/N]: ")
-                if answer.strip().lower() != "y":
+                answer = timed_prompt(
+                    f"Remove {len(stale)} director{suffix}? [y/N]",
+                    default="n",
+                    timeout=120,
+                    label="autoskillit workspace clean",
+                )
+                if answer.lower() != "y":
                     print("Aborted.")
                     return
 
@@ -148,12 +152,16 @@ async def run_workspace_clean(
     print()
 
     if not force:
-        from autoskillit.cli._init_helpers import _require_interactive_stdin
+        from autoskillit.cli._timed_input import timed_prompt
 
-        _require_interactive_stdin("autoskillit workspace clean")
         suffix = "ies" if len(stale_wts) != 1 else "y"
-        answer = input(f"Remove {len(stale_wts)} worktree director{suffix}? [y/N]: ")
-        if answer.strip().lower() != "y":
+        answer = timed_prompt(
+            f"Remove {len(stale_wts)} worktree director{suffix}? [y/N]",
+            default="n",
+            timeout=120,
+            label="autoskillit workspace clean",
+        )
+        if answer.lower() != "y":
             print("Aborted.")
             return
 

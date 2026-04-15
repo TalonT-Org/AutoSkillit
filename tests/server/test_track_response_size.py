@@ -92,3 +92,40 @@ class TestTrackResponseSize:
         assert data["success"] is False
         assert "ValueError: something went wrong" in data["error"]
         assert data["subtype"] == "tool_exception"
+
+    @pytest.mark.anyio
+    async def test_track_response_size_exception_envelope_includes_user_visible_message(self):
+        """Exception envelope includes non-empty user_visible_message with tool name."""
+        from autoskillit.server.helpers import track_response_size
+
+        @track_response_size("open_kitchen")
+        async def bad_handler():
+            raise RuntimeError("boom")
+
+        with patch("autoskillit.server.helpers._get_ctx_or_none", return_value=None):
+            result = await bad_handler()
+
+        data = json.loads(result)
+        assert "user_visible_message" in data
+        assert isinstance(data["user_visible_message"], str)
+        assert len(data["user_visible_message"]) > 0
+        assert "An internal error occurred in open_kitchen" in data["user_visible_message"]
+
+    @pytest.mark.anyio
+    async def test_track_response_size_exception_envelope_preserves_existing_fields(self):
+        """Regression guard: success, error, exit_code, subtype keys still present."""
+        from autoskillit.server.helpers import track_response_size
+
+        @track_response_size("test_tool")
+        async def bad_handler():
+            raise ValueError("fail")
+
+        with patch("autoskillit.server.helpers._get_ctx_or_none", return_value=None):
+            result = await bad_handler()
+
+        data = json.loads(result)
+        assert data["success"] is False
+        assert "ValueError: fail" in data["error"]
+        assert data["exit_code"] == -1
+        assert data["subtype"] == "tool_exception"
+        assert "user_visible_message" in data

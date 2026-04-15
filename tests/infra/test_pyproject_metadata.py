@@ -36,3 +36,11 @@ def test_pyproject_has_sdist_target():
         data.get("tool", {}).get("hatch", {}).get("build", {}).get("targets", {}).get("sdist", {})
     )
     assert "include" in sdist, "[tool.hatch.build.targets.sdist] must list included paths"
+
+
+def test_markdown_it_py_in_dependencies() -> None:
+    """REQ-R741-A05 — markdown-it-py must be a declared runtime dependency."""
+    deps: list[str] = _project()["project"]["dependencies"]
+    assert any("markdown-it-py" in d for d in deps), (
+        "markdown-it-py not found in [project].dependencies in pyproject.toml"
+    )

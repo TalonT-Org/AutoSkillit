@@ -67,6 +67,9 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("review-pr", "owner"),
         ("review-pr", "repo"),
         ("review-pr", "pr_number"),
+        ("review-research-pr", "owner"),
+        ("review-research-pr", "repo"),
+        ("review-research-pr", "pr_number"),
         # ── GRAPHQL FIELD NAMES (false positives) ─────────────────────────────────────
         # These appear inside single-quoted GraphQL query strings as JSON field names, not
         # as bash template placeholders. The {identifier} regex matches them spuriously.
@@ -78,9 +81,47 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("review-pr", "verdict"),  # computed verdict string
         ("review-pr", "summary_markdown"),  # computed review summary
         ("review-pr", "escalation_user_mention"),  # prose: "set escalation_user_mention=..."
+        ("review-research-pr", "verdict"),  # computed verdict string
+        ("review-research-pr", "summary_markdown"),  # computed review summary
+        (
+            "review-research-pr",
+            "escalation_user_mention",
+        ),  # prose: "set escalation_user_mention=..."
         ("resolve-review", "comment_id"),  # per-comment REST database ID in the inline-reply loop
         ("resolve-review", "file"),  # per-finding file path from review comments
         ("resolve-merge-conflicts", "file"),  # per-iteration conflicted file path
+        # ── resolve-research-review: same pattern as resolve-review ──────────────────
+        ("resolve-research-review", "owner"),  # GitHub API URL template (gh repo view)
+        ("resolve-research-review", "repo"),  # GitHub API URL template (gh repo view)
+        ("resolve-research-review", "number"),  # PR number from gh pr list output
+        (
+            "resolve-research-review",
+            "comment_id",
+        ),  # per-comment REST database ID in inline-reply loop
+        ("resolve-research-review", "file"),  # per-finding file path from review comments
+        ("resolve-research-review", "databaseId"),  # GraphQL field name (false positive)
+        ("resolve-research-review", "isResolved"),  # GraphQL field name (false positive)
+        ("resolve-research-review", "description"),  # per-commit description derived from finding
+        (
+            "resolve-research-review",
+            "dimension",
+        ),  # per-commit dimension label derived from finding
+        # ── audit-claims: mirrors review-research-pr pattern ─────────────────────────
+        ("audit-claims", "owner"),  # GitHub API URL template (gh repo view)
+        ("audit-claims", "repo"),  # GitHub API URL template (gh repo view)
+        ("audit-claims", "pr_number"),  # PR number from argument
+        ("audit-claims", "verdict"),  # computed verdict string
+        ("audit-claims", "summary_markdown"),  # computed review summary
+        # ── resolve-claims-review: mirrors resolve-research-review pattern ────────────
+        ("resolve-claims-review", "owner"),  # GitHub API URL template (gh repo view)
+        ("resolve-claims-review", "repo"),  # GitHub API URL template (gh repo view)
+        ("resolve-claims-review", "number"),  # PR number from gh pr list output
+        ("resolve-claims-review", "comment_id"),  # per-comment REST database ID
+        ("resolve-claims-review", "file"),  # per-finding file path from review comments
+        ("resolve-claims-review", "databaseId"),  # GraphQL field name (false positive)
+        ("resolve-claims-review", "isResolved"),  # GraphQL field name (false positive)
+        ("resolve-claims-review", "description"),  # per-commit description derived from finding
+        ("resolve-claims-review", "dimension"),  # per-commit dimension label derived from finding
         # ── PER-ITERATION / LOOP VALUES ──────────────────────────────────────────────
         # Used inside per-issue/per-PR/per-file loops. The prose establishes the loop
         # structure and makes the substitution unambiguous.
@@ -98,10 +139,12 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("open-integration-pr", "timestamp"),  # generated timestamp
         ("open-integration-pr", "new_pr_number"),  # newly created integration PR number
         ("open-integration-pr", "new_pr_url"),  # newly created integration PR URL
-        ("open-pr", "plan_path"),  # iterating over plan_paths (singular loop var)
-        ("open-pr", "closing_issue"),  # optional arg declared as [closing_issue]
-        ("open-pr", "task_title"),  # derived from first heading of plan file
-        ("open-pr", "timestamp"),  # generated timestamp for temp file
+        # ── prepare-pr: runtime-computed values ──────────────────────────────────────
+        # task_title: synthesized from plan headings (single or multi-plan subagent)
+        ("prepare-pr", "task_title"),
+        # ── compose-pr: runtime-computed values ──────────────────────────────────────
+        # task_title: extracted from prep file in Step 1
+        ("compose-pr", "task_title"),
         ("pipeline-summary", "bug_count"),  # runtime computed count from audit log
         ("pipeline-summary", "date"),  # runtime computed date string
         ("prepare-issue", "body"),
@@ -115,6 +158,11 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("process-issues", "recipe"),  # recipe name from manifest
         ("triage-issues", "number"),  # per-issue iteration value
         ("triage-issues", "recipe"),  # recipe name from manifest
+        # ── compose-research-pr: runtime-computed values ──────────────────────────────
+        # title: extracted from prep file by Agent subagent in Step 1
+        # pr_body_path: path to PR body file written in Step 3, used in Step 5
+        ("compose-research-pr", "title"),
+        ("compose-research-pr", "pr_body_path"),
     }
 )
 

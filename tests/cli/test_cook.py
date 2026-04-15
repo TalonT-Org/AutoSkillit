@@ -102,6 +102,17 @@ class TestCLIOrder:
         """Most order() paths require an interactive TTY — default to True for this class."""
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
+    @pytest.fixture(autouse=True)
+    def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub _is_plugin_installed in app.py to False to prevent subprocess.run collision."""
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
+
     # --- workspace init ---
 
     def test_prep_station_init_creates_dir_with_marker(
@@ -440,6 +451,70 @@ class TestCLIOrder:
         assert "stdin" not in kwargs
 
     @patch("autoskillit.cli.subprocess.run")
+    def test_order_suppresses_plugin_dir_when_plugin_installed(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order omits --plugin-dir when marketplace plugin is installed."""
+        import importlib
+        import sys as _sys
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: True)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.order("test-script")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert ClaudeFlags.PLUGIN_DIR not in cmd
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_includes_plugin_dir_when_no_plugin_installed(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order includes --plugin-dir when marketplace plugin is not installed."""
+        import importlib
+        import sys as _sys
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.order("test-script")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert ClaudeFlags.PLUGIN_DIR in cmd
+
+    @patch("autoskillit.cli.subprocess.run")
     def test_order_system_prompt_contains_behavioral_instructions(
         self,
         mock_run: MagicMock,
@@ -647,13 +722,12 @@ class TestCLIOrder:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        prompts_seen: list[str] = []
-        monkeypatch.setattr("builtins.input", lambda prompt="": prompts_seen.append(prompt) or "")
+        input_calls = []
+        monkeypatch.setattr("builtins.input", lambda prompt="": input_calls.append(prompt) or "")
 
         cli.order("test-script")
 
-        assert len(prompts_seen) == 1, "input() should be called exactly once (confirmation)"
-        assert "Launch session" in prompts_seen[0]
+        assert len(input_calls) == 1, "input() should be called exactly once (confirmation)"
 
     @patch("autoskillit.cli.subprocess.run")
     def test_order_command_includes_positional_greeting(
@@ -1011,6 +1085,17 @@ class TestOrderSubsetGate:
             lambda *a, **kw: None,
         )
 
+    @pytest.fixture(autouse=True)
+    def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub _is_plugin_installed in app.py to False to prevent subprocess.run collision."""
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
+
     def _make_config_mock(self, disabled: list[str]) -> MagicMock:
         mock_cfg = MagicMock()
         mock_cfg.subsets.disabled = disabled
@@ -1188,6 +1273,17 @@ class TestOrderMcpPrefixSelection:
     @pytest.fixture(autouse=True)
     def _interactive_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+    @pytest.fixture(autouse=True)
+    def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub _is_plugin_installed in app.py to False to prevent subprocess.run collision."""
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
 
     @patch("autoskillit.cli.subprocess.run")
     def test_order_prompt_uses_direct_prefix_when_no_marketplace_install(

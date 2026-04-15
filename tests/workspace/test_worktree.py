@@ -112,3 +112,6 @@ class TestRemoveWorktreeSidecar:
         result = remove_worktree_sidecar(tmp_path, "impl-absent")
         assert result.failed == []
         assert len(result.skipped) == 1
+        assert any("impl-absent" in s for s in result.skipped), (
+            f"Expected impl-absent path in skipped list; got: {result.skipped}"
+        )

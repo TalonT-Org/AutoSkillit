@@ -190,77 +190,82 @@ async def prepare_issue(
         labels: Additional labels to apply beyond triage labels (optional).
         dry_run: When True, classifies and previews without creating or labeling.
         split: When True, splits mixed-concern issues into sub-issues automatically.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="prepare_issue", title=title[:60])
-    logger.info("prepare_issue", title=title[:60], dry_run=dry_run, split=split)
-    await _notify(
-        ctx,
-        "info",
-        f"prepare_issue: {title[:60]}",
-        "autoskillit.prepare_issue",
-        extra={"dry_run": dry_run, "split": split},
-    )
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.executor is None:
-        return json.dumps({"success": False, "error": "Executor not configured"})
-
-    if labels:
-        if err := tool_ctx.config.github.check_labels_allowed(labels):
-            return json.dumps({"success": False, "error": err})
-
-    skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
-
-    expected_output_patterns: list[str] = []
-    if tool_ctx.output_pattern_resolver:
-        expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
-
-    write_spec: WriteBehaviorSpec | None = None
-    if tool_ctx.write_expected_resolver:
-        write_spec = tool_ctx.write_expected_resolver(skill_command)
-
-    result = await tool_ctx.executor.run(
-        skill_command,
-        str(Path.cwd()),
-        expected_output_patterns=expected_output_patterns,
-        write_behavior=write_spec,
-    )
-
-    if not result.success:
-        return json.dumps(
-            _build_headless_error_response(result, error=_retry_reason_to_error(result))
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="prepare_issue", title=title[:60])
+        logger.info("prepare_issue", title=title[:60], dry_run=dry_run, split=split)
+        await _notify(
+            ctx,
+            "info",
+            f"prepare_issue: {title[:60]}",
+            "autoskillit.prepare_issue",
+            extra={"dry_run": dry_run, "split": split},
         )
 
-    if result.result is None or not result.result.strip():
-        return json.dumps(
-            _build_headless_error_response(
-                result,
-                error="session completed but output was empty (drain race)",
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.executor is None:
+            return json.dumps({"success": False, "error": "Executor not configured"})
+
+        if labels:
+            if err := tool_ctx.config.github.check_labels_allowed(labels):
+                return json.dumps({"success": False, "error": err})
+
+        skill_command = _build_prepare_skill_command(title, body, repo, labels, dry_run, split)
+
+        expected_output_patterns: list[str] = []
+        if tool_ctx.output_pattern_resolver:
+            expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
+        write_spec: WriteBehaviorSpec | None = None
+        if tool_ctx.write_expected_resolver:
+            write_spec = tool_ctx.write_expected_resolver(skill_command)
+
+        result = await tool_ctx.executor.run(
+            skill_command,
+            str(Path.cwd()),
+            expected_output_patterns=expected_output_patterns,
+            write_behavior=write_spec,
+        )
+
+        if not result.success:
+            return json.dumps(
+                _build_headless_error_response(result, error=_retry_reason_to_error(result))
             )
+
+        if result.result is None or not result.result.strip():
+            return json.dumps(
+                _build_headless_error_response(
+                    result,
+                    error="session completed but output was empty (drain race)",
+                )
+            )
+
+        parsed = _parse_prepare_result(result.result)
+        # Distinguish block-parse failures (block absent or malformed JSON) from skill-level data.
+        # The sentinel errors from _parse_prepare_result signal a block-extraction failure —
+        # these are not the same as skill-internal errors embedded in a valid block.
+        if parsed.get("error") in _BLOCK_PARSE_ERRORS:
+            return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
+
+        # Block parsed successfully. result.success=True is the authoritative signal —
+        # the parsed block's "success" field (if any) must not overwrite it.
+        return json.dumps(
+            {
+                "success": True,
+                "status": "complete",
+                **_without_success_key(parsed),
+            }
         )
-
-    parsed = _parse_prepare_result(result.result)
-    # Distinguish block-parse failures (block absent or malformed JSON) from skill-level data.
-    # The sentinel errors from _parse_prepare_result signal a block-extraction failure —
-    # these are not the same as skill-internal errors embedded in a valid block.
-    if parsed.get("error") in _BLOCK_PARSE_ERRORS:
-        return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
-
-    # Block parsed successfully. result.success=True is the authoritative signal —
-    # the parsed block's "success" field (if any) must not overwrite it.
-    return json.dumps(
-        {
-            "success": True,
-            "status": "complete",
-            **_without_success_key(parsed),
-        }
-    )
+    except Exception as exc:
+        logger.error("prepare_issue unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -291,73 +296,78 @@ async def enrich_issues(
         batch: Filter candidates by batch:N label in addition to recipe:implementation.
         dry_run: When True, previews generated requirements without editing issues.
         repo: Target repository as owner/repo. Falls back to gh default repo if None.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(
-        tool="enrich_issues",
-        issue_number=issue_number,
-        batch=batch,
-        dry_run=dry_run,
-    )
-    logger.info("enrich_issues", issue_number=issue_number, batch=batch, dry_run=dry_run)
-    await _notify(
-        ctx,
-        "info",
-        "enrich_issues: backfilling requirements on recipe:implementation issues",
-        "autoskillit.enrich_issues",
-        extra={"dry_run": dry_run},
-    )
-
-    from autoskillit.server import _get_ctx
-
-    tool_ctx = _get_ctx()
-    if tool_ctx.executor is None:
-        return json.dumps({"success": False, "error": "Executor not configured"})
-
-    skill_command = _build_enrich_skill_command(issue_number, batch, dry_run, repo)
-
-    expected_output_patterns: list[str] = []
-    if tool_ctx.output_pattern_resolver:
-        expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
-
-    write_spec: WriteBehaviorSpec | None = None
-    if tool_ctx.write_expected_resolver:
-        write_spec = tool_ctx.write_expected_resolver(skill_command)
-
-    result = await tool_ctx.executor.run(
-        skill_command,
-        str(Path.cwd()),
-        expected_output_patterns=expected_output_patterns,
-        write_behavior=write_spec,
-    )
-
-    if not result.success:
-        return json.dumps(
-            _build_headless_error_response(result, error=_retry_reason_to_error(result))
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            tool="enrich_issues",
+            issue_number=issue_number,
+            batch=batch,
+            dry_run=dry_run,
+        )
+        logger.info("enrich_issues", issue_number=issue_number, batch=batch, dry_run=dry_run)
+        await _notify(
+            ctx,
+            "info",
+            "enrich_issues: backfilling requirements on recipe:implementation issues",
+            "autoskillit.enrich_issues",
+            extra={"dry_run": dry_run},
         )
 
-    if result.result is None or not result.result.strip():
-        return json.dumps(
-            _build_headless_error_response(
-                result,
-                error="session completed but output was empty (drain race)",
+        from autoskillit.server import _get_ctx
+
+        tool_ctx = _get_ctx()
+        if tool_ctx.executor is None:
+            return json.dumps({"success": False, "error": "Executor not configured"})
+
+        skill_command = _build_enrich_skill_command(issue_number, batch, dry_run, repo)
+
+        expected_output_patterns: list[str] = []
+        if tool_ctx.output_pattern_resolver:
+            expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
+
+        write_spec: WriteBehaviorSpec | None = None
+        if tool_ctx.write_expected_resolver:
+            write_spec = tool_ctx.write_expected_resolver(skill_command)
+
+        result = await tool_ctx.executor.run(
+            skill_command,
+            str(Path.cwd()),
+            expected_output_patterns=expected_output_patterns,
+            write_behavior=write_spec,
+        )
+
+        if not result.success:
+            return json.dumps(
+                _build_headless_error_response(result, error=_retry_reason_to_error(result))
             )
+
+        if result.result is None or not result.result.strip():
+            return json.dumps(
+                _build_headless_error_response(
+                    result,
+                    error="session completed but output was empty (drain race)",
+                )
+            )
+
+        parsed = _parse_enrich_result(result.result)
+        if parsed.get("error") in _BLOCK_PARSE_ERRORS:
+            return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
+
+        return json.dumps(
+            {
+                "success": True,
+                "status": "complete",
+                **_without_success_key(parsed),
+            }
         )
-
-    parsed = _parse_enrich_result(result.result)
-    if parsed.get("error") in _BLOCK_PARSE_ERRORS:
-        return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
-
-    return json.dumps(
-        {
-            "success": True,
-            "status": "complete",
-            **_without_success_key(parsed),
-        }
-    )
+    except Exception as exc:
+        logger.error("enrich_issues unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -384,11 +394,14 @@ async def claim_issue(
         allow_reentry: When True and the in-progress label is already present, returns
                        claimed=True with reentry=True instead of claimed=False. Used by
                        process-issues to re-enter recipes for upfront-claimed issues.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    with structlog.contextvars.bound_contextvars(tool="claim_issue", issue_url=issue_url):
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="claim_issue", issue_url=issue_url)
         logger.info("claim_issue", issue_url=issue_url)
 
         from autoskillit.server import _get_ctx
@@ -460,6 +473,9 @@ async def claim_issue(
                 "label": effective_label,
             }
         )
+    except Exception as exc:
+        logger.error("claim_issue unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
@@ -486,11 +502,14 @@ async def release_issue(
         label: Label name to remove. Defaults to github.in_progress_label from config.
         target_branch: Branch the PR was merged into. When non-default, applies staged label.
         staged_label: Label name for staged state. Defaults to github.staged_label from config.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-
-    with structlog.contextvars.bound_contextvars(tool="release_issue", issue_url=issue_url):
+    try:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(tool="release_issue", issue_url=issue_url)
         logger.info("release_issue", issue_url=issue_url)
 
         from autoskillit.server import _get_ctx
@@ -515,6 +534,7 @@ async def release_issue(
             return json.dumps(
                 {
                     "success": False,
+                    "error": result.get("error", "remove_label failed"),
                     "issue_number": issue_number,
                     "label": effective_label,
                     "staged": False,
@@ -584,3 +604,6 @@ async def release_issue(
                 "staged_label": effective_staged_label if staged else None,
             }
         )
+    except Exception as exc:
+        logger.error("release_issue unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

@@ -46,8 +46,11 @@ async def test_headless_command_includes_headless_env_var(tmp_path: Path) -> Non
     await run_headless_core("/investigate foo", str(tmp_path), ctx)
 
     assert mock_runner.call_args_list, "runner was never called"
-    cmd, *_ = mock_runner.call_args_list[0]
-    assert "AUTOSKILLIT_HEADLESS=1" in cmd, (
-        "run_headless_core must inject AUTOSKILLIT_HEADLESS=1 into the subprocess command "
+    cmd, _cwd, _timeout, kwargs = mock_runner.call_args_list[0]
+    env = kwargs.get("env")
+    assert env is not None
+    assert env["AUTOSKILLIT_HEADLESS"] == "1", (
+        "run_headless_core must inject AUTOSKILLIT_HEADLESS=1 via the env kwarg "
         "so PreToolUse hooks can identify headless sessions."
     )
+    assert cmd[0] != "env", "argv must no longer carry a leading ['env', ...] prefix"

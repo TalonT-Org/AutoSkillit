@@ -11,6 +11,19 @@ from autoskillit.core.types import RetryReason, TerminationReason
 from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
 
+# Deterministic UUID for tests that need to predict the per-invocation marker.
+_DETERMINISTIC_HEX = "a1b2c3d4e5f6a7b890123456"
+_DETERMINISTIC_MARKER = f"%%ORDER_UP::{_DETERMINISTIC_HEX[:8]}%%"
+
+
+class _FixedUUID:
+    hex = _DETERMINISTIC_HEX
+
+
+def _patch_uuid4(monkeypatch):
+    """Monkeypatch uuid4 to return a deterministic value for marker prediction."""
+    monkeypatch.setattr("uuid.uuid4", lambda: _FixedUUID())
+
 
 class TestRunSkillRetryRemoved:
     """run_skill_retry must not exist as a separate MCP tool."""
@@ -27,8 +40,10 @@ class TestRunSkillRetryRemoved:
         """run_skill_retry is not in tools_execution.__all__ (if defined)."""
         import autoskillit.server.tools_execution as module
 
-        all_exports = getattr(module, "__all__", [])
-        assert "run_skill_retry" not in all_exports
+        # tools_execution does not define __all__; verify via direct attribute check
+        assert not hasattr(module, "run_skill_retry"), (
+            "run_skill_retry should not be a public attribute of tools_execution"
+        )
 
 
 class TestRunSkillSessionOutcome:
@@ -47,7 +62,7 @@ class TestRunSkillSessionOutcome:
             }
         )
         tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is True
         assert result["retry_reason"] == RetryReason.RESUME
 
@@ -64,13 +79,15 @@ class TestRunSkillSessionOutcome:
             }
         )
         tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is True
         assert result["retry_reason"] == RetryReason.RESUME
 
     @pytest.mark.anyio
-    async def test_success_not_retriable(self, tool_ctx):
+    async def test_success_not_retriable(self, tool_ctx, monkeypatch):
         """Normal success -> needs_retry=False."""
+        _patch_uuid4(monkeypatch)
+        marker = _DETERMINISTIC_MARKER
         assistant = json.dumps(
             {
                 "type": "assistant",
@@ -82,13 +99,13 @@ class TestRunSkillSessionOutcome:
                 "type": "result",
                 "subtype": "success",
                 "is_error": False,
-                "result": "Done. %%ORDER_UP%%",
+                "result": f"Done. {marker}",
                 "session_id": "s1",
             }
         )
         stdout = assistant + "\n" + result_record
         tool_ctx.runner.push(_make_result(0, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is False
         assert result["retry_reason"] == RetryReason.NONE
 
@@ -105,14 +122,14 @@ class TestRunSkillSessionOutcome:
             }
         )
         tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is False
 
     @pytest.mark.anyio
     async def test_unparseable_stdout_not_retriable(self, tool_ctx):
         """Non-JSON stdout -> needs_retry=False."""
         tool_ctx.runner.push(_make_result(1, "crash dump", "segfault"))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["needs_retry"] is False
 
 
@@ -149,7 +166,7 @@ class TestRunSkillAgentResult:
             }
         )
         tool_ctx.runner.push(_make_result(0, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
         assert result["result"] == "Done."
 
 
@@ -187,14 +204,16 @@ class TestRunSkillFields:
     """run_skill includes needs_retry and retry_reason."""
 
     @pytest.mark.anyio
-    async def test_includes_needs_retry_false(self, tool_ctx):
+    async def test_includes_needs_retry_false(self, tool_ctx, monkeypatch):
         """run_skill response includes needs_retry=False on normal success."""
+        _patch_uuid4(monkeypatch)
+        marker = _DETERMINISTIC_MARKER
         stdout = json.dumps(
             {
                 "type": "result",
                 "subtype": "success",
                 "is_error": False,
-                "result": "Done. %%ORDER_UP%%",
+                "result": f"Done. {marker}",
                 "session_id": "s1",
             }
         )

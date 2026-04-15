@@ -72,3 +72,34 @@ class TestSousChefStaleRouting:
             "sous-chef/SKILL.md must contain 'subtype: stale' or 'subtype=stale' as a "
             "compound routing discriminant, not just the words 'stale' and 'subtype' separately"
         )
+
+
+def _extract_merge_phase_section(skill_md: str) -> str:
+    """Extract text from '## MERGE PHASE' up to the next top-level '## ' heading."""
+    lines = skill_md.splitlines()
+    in_section = False
+    extracted: list[str] = []
+    for line in lines:
+        if line.startswith("## MERGE PHASE"):
+            in_section = True
+            extracted.append(line)
+            continue
+        if in_section and line.startswith("## ") and "MERGE PHASE" not in line:
+            break
+        if in_section:
+            extracted.append(line)
+    return "\n".join(extracted)
+
+
+def test_sous_chef_merge_phase_documents_queue_no_auto_path() -> None:
+    """MERGE PHASE section must document the queue_enqueue_no_auto routing cell."""
+    skill_md = _sous_chef_text()
+    merge_phase = _extract_merge_phase_section(skill_md)
+    assert merge_phase, "MERGE PHASE section not found in sous-chef/SKILL.md"
+    assert "queue_enqueue_no_auto" in merge_phase, (
+        "MERGE PHASE section must document the queue_enqueue_no_auto step"
+    )
+    assert "queue_available == true and auto_merge_available == false" in merge_phase, (
+        "MERGE PHASE section must document the condition "
+        "'queue_available == true and auto_merge_available == false'"
+    )

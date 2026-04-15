@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
-from autoskillit.smoke_utils import check_bug_report_non_empty, check_cleanup_mode
+from autoskillit.smoke_utils import check_bug_report_non_empty
 
 
 # T_SU1
@@ -39,22 +40,17 @@ def test_returns_false_when_bug_report_malformed(tmp_path: Path) -> None:
     assert result == {"non_empty": "false"}
 
 
-# T_SU5
-def test_check_cleanup_mode_returns_deferred_true() -> None:
-    """check_cleanup_mode('true') returns {'deferred': 'true'}."""
-    assert check_cleanup_mode("true") == {"deferred": "true"}
-
-
-# T_SU6
-def test_check_cleanup_mode_returns_deferred_false() -> None:
-    """check_cleanup_mode('false') returns {'deferred': 'false'}."""
-    assert check_cleanup_mode("false") == {"deferred": "false"}
-
-
-# T_SU7
-def test_check_cleanup_mode_case_insensitive() -> None:
-    """check_cleanup_mode accepts 'True', 'TRUE', 'False' etc."""
-    assert check_cleanup_mode("True") == {"deferred": "true"}
-    assert check_cleanup_mode("TRUE") == {"deferred": "true"}
-    assert check_cleanup_mode("False") == {"deferred": "false"}
-    assert check_cleanup_mode("FALSE") == {"deferred": "false"}
+def test_subprocess_calls_have_timeout() -> None:
+    """All subprocess.run() calls in smoke_utils.py must have a timeout= argument."""
+    src = Path("src/autoskillit/smoke_utils.py").read_text()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "run"
+        ):
+            kw_names = {kw.arg for kw in node.keywords}
+            assert "timeout" in kw_names, (
+                f"subprocess.run() at line {node.lineno} in smoke_utils.py missing timeout="
+            )

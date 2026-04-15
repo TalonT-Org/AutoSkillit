@@ -59,17 +59,21 @@ _PRINT_EXEMPT = frozenset(
         "_cook.py",
         "_init_helpers.py",
         "_onboarding.py",
-        "_stale_check.py",
+        "_timed_input.py",
+        "_update.py",
+        "_update_checks.py",
         "app.py",
         "_doctor.py",
         "_marketplace.py",
         "_prompts.py",
         "_workspace.py",
         "branch_protection_guard.py",
-        "pretty_output.py",
-        "quota_check.py",
+        "open_kitchen_guard.py",
+        "pretty_output_hook.py",
+        "quota_guard.py",
+        "quota_post_hook.py",
         "remove_clone_guard.py",
-        "skill_cmd_check.py",
+        "skill_cmd_guard.py",
         "skill_command_guard.py",
     }
 )
@@ -79,12 +83,15 @@ _PRINT_EXEMPT = frozenset(
 _BROAD_EXCEPT_EXEMPT = frozenset(
     {
         "_onboarding.py",
-        "pretty_output.py",
-        "quota_check.py",
+        "open_kitchen_guard.py",
+        "pretty_output_hook.py",
+        "quota_guard.py",
+        "quota_post_hook.py",
         "remove_clone_guard.py",
-        "skill_cmd_check.py",
+        "session_start_hook.py",
+        "skill_cmd_guard.py",
         "skill_command_guard.py",
-        "token_summary_appender.py",
+        "token_summary_hook.py",
     }
 )
 
@@ -98,7 +105,7 @@ _DISPATCH_TABLE_EXEMPT_FUNCTIONS = frozenset(
     }
 )
 
-# ── RULES tuple — 7 entries ───────────────────────────────────────────────────
+# ── RULES tuple — 8 entries ───────────────────────────────────────────────────
 
 RULES: tuple[RuleDescriptor, ...] = (
     RuleDescriptor(
@@ -220,6 +227,27 @@ RULES: tuple[RuleDescriptor, ...] = (
         exemptions=_DISPATCH_TABLE_EXEMPT_FUNCTIONS,
         severity="high",
         defense_standard="DS-007",
+    ),
+    RuleDescriptor(
+        rule_id="ARCH-008",
+        name="no-raw-pid-to-start-linux-tracing",
+        lens="process-flow",
+        description=(
+            "start_linux_tracing() must receive a TraceTarget, not a raw .pid attribute. "
+            "Call resolve_trace_target() (or trace_target_from_pid()) first."
+        ),
+        rationale=(
+            "anyio.open_process() returns the PID of any PTY wrapper (script(1)), not the "
+            "workload binary. Passing proc.pid directly to start_linux_tracing causes the "
+            "tracer to observe the wrapper (~2 MB RSS, 1 thread) instead of claude, producing "
+            "silently wrong telemetry in proc_trace.jsonl, sessions.jsonl, and GitHub issue "
+            "bodies. TraceTarget encapsulates provenance (comm, starttime_ticks) and can only "
+            "be produced by a resolver that walks descendants to the workload. This rule "
+            "prevents the bug class from returning via copy-paste. (Issue #806)"
+        ),
+        exemptions=frozenset(),
+        severity="error",
+        defense_standard="DS-008",
     ),
 )
 

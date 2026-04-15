@@ -1,0 +1,149 @@
+name: full-audit
+description: >-
+  Run audit-tests, audit-cohesion, and audit-arch in parallel, validate each
+  report individually, and create a GitHub issue from each validated report.
+summary: "branch → audit×3 ∥ → validate×3 ∥ → issue×3 ∥ → done"
+
+ingredients:
+  workspace:
+    description: "Path to the git repository workspace"
+    required: true
+  branch:
+    description: "The branch to audit against"
+    required: true
+
+kitchen_rules:
+  - >-
+    Each audit chain (tests, cohesion, arch) is independent. A failure in one
+    chain MUST NOT block or affect the other two chains. Continue with
+    successful chains and note failures for escalation.
+  - >-
+    Within each wave, fire all run_skill calls in a single message to achieve
+    parallelism. Do not serialize audit/validate/issue calls.
+  - >-
+    Report paths are discovered from session output — look for file paths
+    in .autoskillit/temp/ directories. Pass discovered paths as positional
+    arguments to downstream skills.
+
+steps:
+  checkout:
+    tool: run_cmd
+    description: "Check out the target branch"
+    with:
+      cmd: "git checkout ${{ inputs.branch }}"
+      cwd: "${{ inputs.workspace }}"
+      step_name: "checkout"
+    note: >
+      Ensure the working directory is on the target branch before audits run.
+      If the checkout fails (e.g., dirty working tree, unknown branch), route
+      to escalate — audits cannot proceed on the wrong branch.
+    on_success: run_audits
+    on_failure: escalate_stop
+    retries: 0
+    on_exhausted: escalate_stop
+
+  run_audits:
+    tool: run_skill
+    description: "Run three audit skills in parallel"
+    with:
+      skill_command: "/autoskillit:audit-tests"
+      cwd: "${{ inputs.workspace }}"
+      step_name: "run_audits"
+    note: >
+      PARALLEL AUDIT WAVE — Fire three run_skill calls in a single message:
+
+      1. run_skill(skill_command="/autoskillit:audit-tests", cwd="${{ inputs.workspace }}", step_name="audit_tests")
+      2. run_skill(skill_command="/autoskillit:audit-cohesion", cwd="${{ inputs.workspace }}", step_name="audit_cohesion")
+      3. run_skill(skill_command="/autoskillit:audit-arch", cwd="${{ inputs.workspace }}", step_name="audit_arch")
+
+      Each audit writes its report to a well-known temp directory:
+      - .autoskillit/temp/audit-tests/{name}_{timestamp}.md
+      - .autoskillit/temp/audit-cohesion/cohesion_audit_{timestamp}.md
+      - .autoskillit/temp/audit-arch/arch_audit_{timestamp}.md
+
+      After all three complete, discover the most-recently-modified .md file in
+      each temp directory from the session output. Record which audits succeeded
+      and their report paths for the validation wave.
+
+      If any audit fails, note the failure but continue with the other two.
+      Proceed to validate_audits even if only one or two audits succeeded.
+      Route to escalate_stop ONLY if all three audits fail.
+    on_success: validate_audits
+    on_failure: escalate_stop
+    retries: 1
+    on_exhausted: escalate_stop
+
+  validate_audits:
+    tool: run_skill
+    description: "Validate each audit report in parallel"
+    with:
+      skill_command: "/autoskillit:validate-audit"
+      cwd: "${{ inputs.workspace }}"
+      step_name: "validate_audits"
+    note: >
+      PARALLEL VALIDATION WAVE — For each audit that succeeded in the previous
+      wave, fire a run_skill call in a single message. Pass the audit report
+      path as a positional argument:
+
+      1. run_skill(skill_command="/autoskillit:validate-audit {tests_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_tests")
+      2. run_skill(skill_command="/autoskillit:validate-audit {cohesion_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_cohesion")
+      3. run_skill(skill_command="/autoskillit:validate-audit {arch_report_path}", cwd="${{ inputs.workspace }}", step_name="validate_arch")
+
+      Skip validation for any audit that failed in wave 1.
+      Each validation writes to .autoskillit/temp/validate-audit/:
+      - validated_report_{source}_{timestamp}.md (first line: "validated: true")
+      - contested_findings_{source}_{timestamp}.md (only if contested > 0)
+
+      After all complete, discover the validated_report_*.md files from session
+      output. Record paths for the issue creation wave.
+
+      If any validation fails, note it but continue with the others.
+      Route to escalate_stop ONLY if all validations fail.
+    on_success: create_issues
+    on_failure: escalate_stop
+    retries: 1
+    on_exhausted: escalate_stop
+
+  create_issues:
+    tool: run_skill
+    description: "Create GitHub issues from validated reports"
+    with:
+      skill_command: "/autoskillit:prepare-issue"
+      cwd: "${{ inputs.workspace }}"
+      step_name: "create_issues"
+    note: >
+      PARALLEL ISSUE CREATION WAVE — For each validated audit report, fire a
+      run_skill call in a single message. Pass the validated report path as
+      the description argument:
+
+      1. run_skill(skill_command="/autoskillit:prepare-issue {validated_tests_path}", cwd="${{ inputs.workspace }}", step_name="issue_tests")
+      2. run_skill(skill_command="/autoskillit:prepare-issue {validated_cohesion_path}", cwd="${{ inputs.workspace }}", step_name="issue_cohesion")
+      3. run_skill(skill_command="/autoskillit:prepare-issue {validated_arch_path}", cwd="${{ inputs.workspace }}", step_name="issue_arch")
+
+      Skip issue creation for any validation that failed in wave 2.
+      The prepare-issue skill auto-detects the "validated: true" sentinel in
+      the report's first line and uses the audit-report input path (derives
+      title from H1 heading, strips artifact paths from body).
+
+      Collect the issue URLs from each successful result.
+      If any issue creation fails, note it but continue with the others.
+    capture_list:
+      issue_urls: "${{ result.issue_url }}"
+    on_success: done
+    on_failure: escalate_stop
+    retries: 1
+    on_exhausted: escalate_stop
+
+  done:
+    action: stop
+    message: >-
+      Full audit complete. GitHub issues created from validated audit reports.
+      Check context.issue_urls for the created issue links and
+      .autoskillit/temp/ for all audit artifacts.
+
+  escalate_stop:
+    action: stop
+    message: >-
+      Full audit pipeline failed — one or more audit chains could not complete.
+      Check session logs and .autoskillit/temp/ directories for partial results.
+      Individual chain failures are noted in the session output above.

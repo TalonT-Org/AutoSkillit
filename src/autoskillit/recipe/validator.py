@@ -17,8 +17,8 @@ from autoskillit.recipe._analysis import (  # noqa: F401
 )
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,
-    _INPUT_REF_RE,
     _TEMPLATE_REF_RE,
+    INPUT_REF_RE,
 )
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import (
@@ -153,6 +153,22 @@ def validate_recipe(recipe: Recipe) -> list[str]:
                 f"Step '{step_name}'.retries must be a non-negative integer, got {step.retries!r}."
             )
 
+        if step.stale_threshold is not None and (
+            not isinstance(step.stale_threshold, int) or step.stale_threshold <= 0
+        ):
+            errors.append(
+                f"Step {step_name!r}: 'stale_threshold' must be a positive integer "
+                f"when set, got {step.stale_threshold!r}"
+            )
+
+        if step.idle_output_timeout is not None and (
+            not isinstance(step.idle_output_timeout, int) or step.idle_output_timeout < 0
+        ):
+            errors.append(
+                f"Step {step_name!r}: 'idle_output_timeout' must be a non-negative integer "
+                f"when set (0 = disabled), got {step.idle_output_timeout!r}"
+            )
+
         if step.on_result is not None:
             if step.on_success is not None:
                 errors.append(
@@ -215,13 +231,13 @@ def validate_recipe(recipe: Recipe) -> list[str]:
         for arg_key, arg_val in step.with_args.items():
             if not isinstance(arg_val, str):
                 continue
-            for ref in _INPUT_REF_RE.findall(arg_val):
+            for ref in INPUT_REF_RE.findall(arg_val):
                 if ref not in ingredient_names:
                     errors.append(
                         f"Step '{step_name}'.with.{arg_key} references undeclared input '{ref}'."
                     )
             for ref in _CONTEXT_REF_RE.findall(arg_val):
-                if ref not in available_context:
+                if ref not in available_context and ref not in step.optional_context_refs:
                     errors.append(
                         f"Step '{step_name}'.with.{arg_key} references "
                         f"context variable '{ref}' which has not been "
@@ -239,4 +255,4 @@ def validate_recipe(recipe: Recipe) -> list[str]:
 
 # Re-export test-access symbols from their new locations.
 from autoskillit.recipe.rules_inputs import _check_outdated_version  # noqa: E402 F401
-from autoskillit.recipe.rules_worktree import _WORKTREE_CREATING_SKILLS  # noqa: E402 F401
+from autoskillit.recipe.rules_worktree import _WORKTREE_MODIFYING_SKILLS  # noqa: E402 F401

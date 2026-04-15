@@ -9,20 +9,7 @@ import pytest
 
 from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
 from autoskillit.execution.process import run_managed_async
-
-# ---------------------------------------------------------------------------
-# Helper scripts — small Python programs that reproduce specific scenarios
-# ---------------------------------------------------------------------------
-
-# Script that writes a JSON result line then hangs (simulates Claude CLI completed-but-hung)
-WRITE_RESULT_THEN_HANG_SCRIPT = textwrap.dedent("""\
-    import sys, time, json
-    result = {"type": "result", "subtype": "success", "is_error": False,
-              "result": "done", "session_id": "s1"}
-    sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")
-    sys.stdout.flush()
-    time.sleep(3600)
-""")
+from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
 # Script that:
 #   (1) writes %%ORDER_UP%% to a JSONL session file (Channel B fires)
@@ -162,6 +149,11 @@ class TestChannelBDrainWait:
           t=0.16s  Channel B fires → drain wait starts with 0.5s timeout
           t=0.66s  drain times out (script never wrote to stdout)
           t=0.66s  process killed with empty stdout
+
+        timeout=60s: guards against the outer wall-clock expiring under xdist -n 4 load.
+        _watch_session_log waits up to 1s for stdout_session_id_ready before Phase 1 starts;
+        under CI load both the preamble and Phase 1 polls can overrun, so the outer
+        timeout must exceed 1s + _phase1_timeout (30s default) + drain (0.5s) = 31.5s.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -171,7 +163,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=30,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
@@ -485,3 +477,63 @@ class TestPostExitDrainWindow:
         )
 
         assert result.channel_confirmation == ChannelConfirmation.UNMONITORED
+
+
+# Script that:
+#   (1) writes static %%ORDER_UP%% to JSONL (simulating sub-skill emission)
+#   (2) later writes %%ORDER_UP::{unique}%% to JSONL (the parent's real marker)
+#   (3) writes type=result to stdout within the drain window
+#   (4) hangs until killed
+# Pass session_dir as sys.argv[1], unique marker as sys.argv[2].
+CHANNEL_B_SUB_SKILL_COLLISION_SCRIPT = textwrap.dedent("""\
+    import sys, time, json, os
+    session_dir = sys.argv[1]
+    unique_marker = sys.argv[2]
+    os.makedirs(session_dir, exist_ok=True)
+    time.sleep(0.1)
+    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+        # Sub-skill emits static marker — should NOT trigger completion
+        sub_skill_record = {"type": "assistant", "message": {"role": "assistant",
+                  "content": "%%ORDER_UP%%"}}
+        f.write(json.dumps(sub_skill_record) + "\\n")
+        f.flush()
+        time.sleep(0.3)
+        # Parent emits its unique marker — SHOULD trigger completion
+        parent_record = {"type": "assistant", "message": {"role": "assistant",
+                  "content": unique_marker}}
+        f.write(json.dumps(parent_record) + "\\n")
+        f.flush()
+    time.sleep(0.15)
+    result = {"type": "result", "subtype": "success", "is_error": False,
+              "result": "done", "session_id": "s1"}
+    sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")
+    sys.stdout.flush()
+    time.sleep(3600)
+""")
+
+
+class TestChannelBSubSkillCollision:
+    """Channel B ignores static markers when monitoring for a unique marker."""
+
+    @pytest.mark.anyio
+    async def test_channel_b_ignores_sub_skill_marker(self, tmp_path):
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        unique_marker = "%%ORDER_UP::test1234%%"
+        script = tmp_path / "sub_skill_collision.py"
+        script.write_text(CHANNEL_B_SUB_SKILL_COLLISION_SCRIPT)
+
+        result = await run_managed_async(
+            [sys.executable, str(script), str(session_dir), unique_marker],
+            cwd=tmp_path,
+            timeout=15,
+            session_log_dir=session_dir,
+            completion_marker=unique_marker,
+            completion_drain_timeout=2.0,
+            _phase1_poll=0.05,
+            _phase2_poll=0.05,
+            _heartbeat_poll=0.05,
+        )
+
+        assert result.termination == TerminationReason.COMPLETED
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B

@@ -42,33 +42,41 @@ async def kitchen_status() -> str:
     enabling tools or anytime you need to verify the server is healthy.
 
     This tool requires the kitchen to be open (gated by open_kitchen).
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    from autoskillit.server import _get_config, _get_ctx, version_info
+    try:
+        structlog.contextvars.clear_contextvars()
+        with structlog.contextvars.bound_contextvars(tool="kitchen_status"):
+            from autoskillit.server import _get_config, _get_ctx, version_info
 
-    info = version_info()
-    status = {
-        "package_version": info["package_version"],
-        "plugin_json_version": info["plugin_json_version"],
-        "versions_match": info["match"],
-        "tools_enabled": _get_ctx().gate.enabled,
-    }
-    if not info["match"]:
-        status["warning"] = (
-            f"Version mismatch: package is {info['package_version']} but "
-            f"plugin.json reports {info['plugin_json_version']}. "
-            f"Run `autoskillit doctor` for details or "
-            f"`autoskillit install` to refresh the plugin cache."
-        )
-    status["token_usage_verbosity"] = _get_config().token_usage.verbosity
-    status["quota_guard_enabled"] = _get_config().quota_guard.enabled
-    github_client = _get_ctx().github_client
-    status["github_token_configured"] = (
-        github_client.has_token if github_client is not None else False
-    )
-    status["github_default_repo"] = _get_config().github.default_repo
-    return json.dumps(status)
+            info = version_info()
+            status = {
+                "package_version": info["package_version"],
+                "plugin_json_version": info["plugin_json_version"],
+                "versions_match": info["match"],
+                "tools_enabled": _get_ctx().gate.enabled,
+            }
+            if not info["match"]:
+                status["warning"] = (
+                    f"Version mismatch: package is {info['package_version']} but "
+                    f"plugin.json reports {info['plugin_json_version']}. "
+                    f"Run `autoskillit doctor` for details or "
+                    f"`autoskillit install` to refresh the plugin cache."
+                )
+            status["token_usage_verbosity"] = _get_config().token_usage.verbosity
+            status["quota_guard_enabled"] = _get_config().quota_guard.enabled
+            github_client = _get_ctx().github_client
+            status["github_token_configured"] = (
+                github_client.has_token if github_client is not None else False
+            )
+            status["github_default_repo"] = _get_config().github.default_repo
+            return json.dumps(status)
+    except Exception as exc:
+        logger.error("kitchen_status unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
@@ -86,24 +94,49 @@ async def get_pipeline_report(clear: bool = False) -> str:
                             needs_retry, retry_reason, stderr}
 
     This tool requires the kitchen to be open (gated by open_kitchen).
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    from autoskillit.server import _get_ctx
+    try:
+        structlog.contextvars.clear_contextvars()
+        with structlog.contextvars.bound_contextvars(tool="get_pipeline_report"):
+            from autoskillit.server._state import _startup_ready
 
-    failures = _get_ctx().audit.get_report_as_dicts()
-    if clear:
-        _get_ctx().audit.clear()
-        try:
-            write_telemetry_clear_marker(_get_log_root())
-        except Exception:
-            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
-    return json.dumps(
-        {
-            "total_failures": len(failures),
-            "failures": failures,
-        }
-    )
+            if _startup_ready is not None and not _startup_ready.is_set():
+                try:
+                    await asyncio.wait_for(_startup_ready.wait(), timeout=30.0)
+                except TimeoutError:
+                    logger.warning("startup_ready_timeout", timeout=30.0)
+                    return json.dumps(
+                        {
+                            "total_failures": 0,
+                            "failures": [],
+                            "warning": "Startup initialization did not complete within 30s",
+                        }
+                    )
+
+            from autoskillit.server import _get_ctx
+
+            failures = _get_ctx().audit.get_report_as_dicts()
+            if clear:
+                _get_ctx().audit.clear()
+                try:
+                    write_telemetry_clear_marker(_get_log_root())
+                except Exception:
+                    logger.debug("write_telemetry_clear_marker failed", exc_info=True)
+            return json.dumps(
+                {
+                    "total_failures": len(failures),
+                    "failures": failures,
+                }
+            )
+    except Exception as exc:
+        logger.error("get_pipeline_report unhandled exception", exc_info=True)
+        return json.dumps(
+            {"total_failures": 0, "failures": [], "error": f"{type(exc).__name__}: {exc}"}
+        )
 
 
 def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> list[dict]:
@@ -135,38 +168,46 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
                 "table" returns a pre-formatted markdown table string.
         order_id: If non-empty, return only token entries for this specific order/issue.
                   Empty string (default) returns aggregated data for all orders.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    from autoskillit.server import _get_ctx
+    try:
+        structlog.contextvars.clear_contextvars()
+        with structlog.contextvars.bound_contextvars(tool="get_token_summary"):
+            from autoskillit.server import _get_ctx
 
-    ctx = _get_ctx()
-    steps = _merge_wall_clock_seconds(
-        ctx.token_log.get_report(order_id=order_id),
-        ctx.timing_log.get_report(order_id=order_id),
-    )
-    total = ctx.token_log.compute_total(order_id=order_id)
-    mcp_report = ctx.response_log.get_report()
-    mcp_total = ctx.response_log.compute_total()
-    if clear:
-        ctx.token_log.clear()
-        ctx.response_log.clear()
-        try:
-            write_telemetry_clear_marker(_get_log_root())
-        except Exception:
-            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
-    if format == "table":
-        return TelemetryFormatter.format_token_table(steps, total)
-    return json.dumps(
-        {
-            "steps": steps,
-            "total": total,
-            "mcp_responses": {
-                "steps": mcp_report,
-                "total": mcp_total,
-            },
-        }
-    )
+            ctx = _get_ctx()
+            steps = _merge_wall_clock_seconds(
+                ctx.token_log.get_report(order_id=order_id),
+                ctx.timing_log.get_report(order_id=order_id),
+            )
+            total = ctx.token_log.compute_total(order_id=order_id)
+            mcp_report = ctx.response_log.get_report()
+            mcp_total = ctx.response_log.compute_total()
+            if clear:
+                ctx.token_log.clear()
+                ctx.response_log.clear()
+                try:
+                    write_telemetry_clear_marker(_get_log_root())
+                except Exception:
+                    logger.debug("write_telemetry_clear_marker failed", exc_info=True)
+            if format == "table":
+                return TelemetryFormatter.format_token_table(steps, total)
+            return json.dumps(
+                {
+                    "steps": steps,
+                    "total": total,
+                    "mcp_responses": {
+                        "steps": mcp_report,
+                        "total": mcp_total,
+                    },
+                }
+            )
+    except Exception as exc:
+        logger.error("get_token_summary unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
@@ -184,22 +225,30 @@ async def get_timing_summary(clear: bool = False, format: str = "json", order_id
                 "table" returns a pre-formatted markdown table string.
         order_id: If non-empty, return only timing entries for this specific order/issue.
                   Empty string (default) returns aggregated data for all orders.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    from autoskillit.server import _get_ctx
+    try:
+        structlog.contextvars.clear_contextvars()
+        with structlog.contextvars.bound_contextvars(tool="get_timing_summary"):
+            from autoskillit.server import _get_ctx
 
-    steps = _get_ctx().timing_log.get_report(order_id=order_id)
-    total = _get_ctx().timing_log.compute_total(order_id=order_id)
-    if clear:
-        _get_ctx().timing_log.clear()
-        try:
-            write_telemetry_clear_marker(_get_log_root())
-        except Exception:
-            logger.debug("write_telemetry_clear_marker failed", exc_info=True)
-    if format == "table":
-        return TelemetryFormatter.format_timing_table(steps, total)
-    return json.dumps({"steps": steps, "total": total})
+            steps = _get_ctx().timing_log.get_report(order_id=order_id)
+            total = _get_ctx().timing_log.compute_total(order_id=order_id)
+            if clear:
+                _get_ctx().timing_log.clear()
+                try:
+                    write_telemetry_clear_marker(_get_log_root())
+                except Exception:
+                    logger.debug("write_telemetry_clear_marker failed", exc_info=True)
+            if format == "table":
+                return TelemetryFormatter.format_timing_table(steps, total)
+            return json.dumps({"steps": steps, "total": total})
+    except Exception as exc:
+        logger.error("get_timing_summary unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
@@ -231,13 +280,14 @@ def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
 async def get_quota_events(n: int = 50) -> str:
     """Return the most recent quota guard events from the diagnostic log.
 
-    Events are written by the quota_check.py PreToolUse hook each time it
+    Events are written by the quota_guard.py PreToolUse hook each time it
     approves or blocks a run_skill call. Use this to diagnose quota throttling
     during long pipeline runs.
 
     Returns JSON with:
-      - events: list of {ts, event, threshold, utilization?, sleep_seconds?,
-                         resets_at?, cache_path?}  (most recent first)
+      - events: list of {ts, event, effective_threshold?, window_name?,
+                         utilization?, sleep_seconds?, resets_at?, cache_path?}
+                         (most recent first)
       - total_count: int  (total events in the log, before limiting to n)
 
     Args:
@@ -245,15 +295,23 @@ async def get_quota_events(n: int = 50) -> str:
 
     This tool requires the kitchen to be open (gated by open_kitchen).
     This tool sends no MCP progress notifications.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    from autoskillit.server import _get_ctx
+    try:
+        structlog.contextvars.clear_contextvars()
+        with structlog.contextvars.bound_contextvars(tool="get_quota_events"):
+            from autoskillit.server import _get_ctx
 
-    ctx = _get_ctx()
-    log_root = resolve_log_dir(ctx.config.linux_tracing.log_dir)
-    events, total = _read_quota_events(log_root, n)
-    return json.dumps({"events": events, "total_count": total})
+            ctx = _get_ctx()
+            log_root = resolve_log_dir(ctx.config.linux_tracing.log_dir)
+            events, total = _read_quota_events(log_root, n)
+            return json.dumps({"events": events, "total_count": total})
+    except Exception as exc:
+        logger.error("get_quota_events unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "telemetry"}, annotations={"readOnlyHint": True})
@@ -275,57 +333,67 @@ async def write_telemetry_files(
 
     Args:
         output_dir: Directory to write the markdown files into.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
 
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="write_telemetry_files", output_dir=output_dir)
-    logger.info("write_telemetry_files", output_dir=output_dir)
-    await _notify(
-        ctx,
-        "info",
-        f"write_telemetry_files: {output_dir}",
-        "autoskillit.write_telemetry_files",
-        extra={"output_dir": output_dir},
-    )
+    try:
+        structlog.contextvars.clear_contextvars()
+        with structlog.contextvars.bound_contextvars(
+            tool="write_telemetry_files", output_dir=output_dir
+        ):
+            logger.info("write_telemetry_files", output_dir=output_dir)
+            await _notify(
+                ctx,
+                "info",
+                f"write_telemetry_files: {output_dir}",
+                "autoskillit.write_telemetry_files",
+                extra={"output_dir": output_dir},
+            )
 
-    from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx
 
-    tool_ctx = _get_ctx()
-    out = Path(output_dir)
-    out.mkdir(parents=True, exist_ok=True)
+            tool_ctx = _get_ctx()
+            out = Path(output_dir)
+            out.mkdir(parents=True, exist_ok=True)
 
-    token_steps = _merge_wall_clock_seconds(
-        tool_ctx.token_log.get_report(), tool_ctx.timing_log.get_report()
-    )
-    token_total = tool_ctx.token_log.compute_total()
+            token_steps = _merge_wall_clock_seconds(
+                tool_ctx.token_log.get_report(), tool_ctx.timing_log.get_report()
+            )
+            token_total = tool_ctx.token_log.compute_total()
 
-    token_path = out / "token_summary.md"
-    atomic_write(token_path, TelemetryFormatter.format_token_table(token_steps, token_total))
+            token_path = out / "token_summary.md"
+            atomic_write(
+                token_path, TelemetryFormatter.format_token_table(token_steps, token_total)
+            )
 
-    timing_path = out / "timing_summary.md"
-    atomic_write(
-        timing_path,
-        TelemetryFormatter.format_timing_table(
-            tool_ctx.timing_log.get_report(), tool_ctx.timing_log.compute_total()
-        ),
-    )
+            timing_path = out / "timing_summary.md"
+            atomic_write(
+                timing_path,
+                TelemetryFormatter.format_timing_table(
+                    tool_ctx.timing_log.get_report(), tool_ctx.timing_log.compute_total()
+                ),
+            )
 
-    mcp_path = out / "mcp_response_metrics.json"
-    mcp_data = {
-        "steps": tool_ctx.response_log.get_report(),
-        "total": tool_ctx.response_log.compute_total(),
-    }
-    atomic_write(mcp_path, json.dumps(mcp_data, indent=2))
+            mcp_path = out / "mcp_response_metrics.json"
+            mcp_data = {
+                "steps": tool_ctx.response_log.get_report(),
+                "total": tool_ctx.response_log.compute_total(),
+            }
+            atomic_write(mcp_path, json.dumps(mcp_data, indent=2))
 
-    return json.dumps(
-        {
-            "token_summary_path": str(token_path),
-            "timing_summary_path": str(timing_path),
-            "mcp_response_metrics_path": str(mcp_path),
-        }
-    )
+            return json.dumps(
+                {
+                    "token_summary_path": str(token_path),
+                    "timing_summary_path": str(timing_path),
+                    "mcp_response_metrics_path": str(mcp_path),
+                }
+            )
+    except Exception as exc:
+        logger.error("write_telemetry_files unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
@@ -348,108 +416,128 @@ async def read_db(
         query: SQL SELECT query. Use ? for positional or :name for named placeholders.
         params: JSON-encoded array or object of query parameter values (default "[]").
         timeout: Query timeout in seconds. 0 uses the configured default.
+
+    Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
-    structlog.contextvars.clear_contextvars()
-    structlog.contextvars.bind_contextvars(tool="read_db")
-    logger.info("read_db", db_path=db_path, query=query[:80])
-    await _notify(
-        ctx, "info", f"read_db: {query[:80]}", "autoskillit.read_db", extra={"db_path": db_path}
-    )
-
-    # Parse params
     try:
-        parsed_params = json.loads(params)
-    except json.JSONDecodeError as exc:
-        await _notify(
-            ctx,
-            "error",
-            "read_db: invalid params JSON",
-            "autoskillit.read_db",
-            extra={"error": str(exc)},
-        )
-        return json.dumps({"error": f"Invalid params JSON: {exc}"})
-    if not isinstance(parsed_params, (list, dict)):
-        await _notify(
-            ctx,
-            "error",
-            "read_db: params must be JSON array or object",
-            "autoskillit.read_db",
-            extra={},
-        )
-        return json.dumps({"error": "params must be a JSON array or object"})
+        structlog.contextvars.clear_contextvars()
+        with structlog.contextvars.bound_contextvars(tool="read_db"):
+            logger.info("read_db", db_path=db_path, query=query[:80])
+            await _notify(
+                ctx,
+                "info",
+                f"read_db: {query[:80]}",
+                "autoskillit.read_db",
+                extra={"db_path": db_path},
+            )
 
-    # Validate db_path
-    db = Path(db_path).resolve()
-    if not db.exists():
-        await _notify(
-            ctx,
-            "error",
-            "read_db: database does not exist",
-            "autoskillit.read_db",
-            extra={"db_path": db_path},
-        )
-        return json.dumps({"error": f"Database does not exist: {db}"})
-    if not db.is_file():
-        await _notify(
-            ctx,
-            "error",
-            "read_db: path is not a file",
-            "autoskillit.read_db",
-            extra={"db_path": db_path},
-        )
-        return json.dumps({"error": f"Path is not a file: {db}"})
+            # Parse params
+            try:
+                parsed_params = json.loads(params)
+            except json.JSONDecodeError as exc:
+                await _notify(
+                    ctx,
+                    "error",
+                    "read_db: invalid params JSON",
+                    "autoskillit.read_db",
+                    extra={"error": str(exc)},
+                )
+                return json.dumps({"success": False, "error": f"Invalid params JSON: {exc}"})
+            if not isinstance(parsed_params, (list, dict)):
+                await _notify(
+                    ctx,
+                    "error",
+                    "read_db: params must be JSON array or object",
+                    "autoskillit.read_db",
+                    extra={},
+                )
+                return json.dumps(
+                    {"success": False, "error": "params must be a JSON array or object"}
+                )
 
-    from autoskillit.server import _get_config, _get_ctx
+            # Validate db_path
+            db = Path(db_path).resolve()
+            if not db.exists():
+                await _notify(
+                    ctx,
+                    "error",
+                    "read_db: database does not exist",
+                    "autoskillit.read_db",
+                    extra={"db_path": db_path},
+                )
+                return json.dumps({"success": False, "error": f"Database does not exist: {db}"})
+            if not db.is_file():
+                await _notify(
+                    ctx,
+                    "error",
+                    "read_db: path is not a file",
+                    "autoskillit.read_db",
+                    extra={"db_path": db_path},
+                )
+                return json.dumps({"success": False, "error": f"Path is not a file: {db}"})
 
-    tool_ctx = _get_ctx()
-    if tool_ctx.db_reader is None:
-        return json.dumps({"error": "Database reader not configured"})
+            from autoskillit.server import _get_config, _get_ctx
 
-    # Resolve timeout
-    effective_timeout = timeout if timeout > 0 else _get_config().read_db.timeout
-    max_rows = _get_config().read_db.max_rows
+            tool_ctx = _get_ctx()
+            if tool_ctx.db_reader is None:
+                return json.dumps({"success": False, "error": "Database reader not configured"})
 
-    # Execute in thread (sqlite3 is blocking)
-    loop = asyncio.get_running_loop()
-    try:
-        result = await loop.run_in_executor(
-            None,
-            tool_ctx.db_reader.query,
-            str(db),
-            query,
-            parsed_params,
-            effective_timeout,
-            max_rows,
-        )
-        return json.dumps(result)
-    except ValueError as exc:
-        # Non-SELECT SQL rejected by db_reader's defence-in-depth validation
-        await _notify(
-            ctx,
-            "error",
-            "read_db: non-SELECT query rejected",
-            "autoskillit.read_db",
-            extra={"error": str(exc)},
-        )
-        return json.dumps({"error": str(exc), "hint": "Only SELECT queries are allowed"})
-    except TimeoutError:
-        await _notify(
-            ctx,
-            "error",
-            "read_db: query timed out",
-            "autoskillit.read_db",
-            extra={"timeout": effective_timeout},
-        )
-        return json.dumps({"error": f"Query exceeded {effective_timeout}s timeout"})
+            # Resolve timeout
+            effective_timeout = timeout if timeout > 0 else _get_config().read_db.timeout
+            max_rows = _get_config().read_db.max_rows
+
+            # Execute in thread (sqlite3 is blocking)
+            loop = asyncio.get_running_loop()
+            try:
+                result = await loop.run_in_executor(
+                    None,
+                    tool_ctx.db_reader.query,
+                    str(db),
+                    query,
+                    parsed_params,
+                    effective_timeout,
+                    max_rows,
+                )
+                return json.dumps(result)
+            except ValueError as exc:
+                # Non-SELECT SQL rejected by db_reader's defence-in-depth validation
+                await _notify(
+                    ctx,
+                    "error",
+                    "read_db: non-SELECT query rejected",
+                    "autoskillit.read_db",
+                    extra={"error": str(exc)},
+                )
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": str(exc),
+                        "hint": "Only SELECT queries are allowed",
+                    }
+                )
+            except TimeoutError:
+                await _notify(
+                    ctx,
+                    "error",
+                    "read_db: query timed out",
+                    "autoskillit.read_db",
+                    extra={"timeout": effective_timeout},
+                )
+                return json.dumps(
+                    {"success": False, "error": f"Query exceeded {effective_timeout}s timeout"}
+                )
+            except Exception as exc:
+                logger.warning("read_db query failed", error=type(exc).__name__)
+                await _notify(
+                    ctx,
+                    "error",
+                    "read_db: query failed",
+                    "autoskillit.read_db",
+                    extra={"error": type(exc).__name__},
+                )
+                return json.dumps({"success": False, "error": f"Query failed: {exc}"})
     except Exception as exc:
-        logger.warning("read_db query failed", error=type(exc).__name__)
-        await _notify(
-            ctx,
-            "error",
-            "read_db: query failed",
-            "autoskillit.read_db",
-            extra={"error": type(exc).__name__},
-        )
-        return json.dumps({"error": f"Query failed: {exc}"})
+        logger.error("read_db unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

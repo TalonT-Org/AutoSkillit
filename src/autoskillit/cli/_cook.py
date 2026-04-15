@@ -2,19 +2,76 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 
 from autoskillit.cli._terminal import terminal_guard
+
+_DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Execution", ("run_cmd", "run_python", "run_skill")),
+    ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
+    (
+        "Git Operations",
+        ("merge_worktree", "create_unique_branch", "check_pr_mergeable", "set_commit_status"),
+    ),
+    ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
+    (
+        "Clone & Remote",
+        (
+            "clone_repo",
+            "remove_clone",
+            "push_to_remote",
+            "register_clone_status",
+            "batch_cleanup_clones",
+        ),
+    ),
+    (
+        "GitHub",
+        (
+            "fetch_github_issue",
+            "get_issue_title",
+            "report_bug",
+            "prepare_issue",
+            "enrich_issues",
+            "claim_issue",
+            "release_issue",
+            "get_pr_reviews",
+            "bulk_close_issues",
+        ),
+    ),
+    (
+        "CI & Automation",
+        (
+            "wait_for_ci",
+            "wait_for_merge_queue",
+            "check_repo_merge_state",
+            "toggle_auto_merge",
+            "get_ci_status",
+        ),
+    ),
+    (
+        "Telemetry & Diagnostics",
+        (
+            "read_db",
+            "write_telemetry_files",
+            "kitchen_status",
+            "get_pipeline_report",
+            "get_token_summary",
+            "get_timing_summary",
+            "get_quota_events",
+        ),
+    ),
+    ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard")),
+)
 
 
 def _run_cook_session(
     *,
     cmd: list[str],
-    env: dict[str, str],
+    env: Mapping[str, str],
     _first_run: bool,
     initial_prompt: str | None,
     project_dir: Path,
@@ -45,7 +102,6 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
 
     from autoskillit import __version__
     from autoskillit.cli._ansi import supports_color
-    from autoskillit.core import TOOL_CATEGORIES
 
     color = supports_color()
     _B = "\x1b[1m" if color else ""
@@ -57,7 +113,7 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
 
     print(f"{_B}{_C}AUTOSKILLIT {__version__}{_R} {_D}Kitchen open. All tools active.{_R}")
     skip = {"Telemetry & Diagnostics", "Kitchen"}
-    for name, tools in TOOL_CATEGORIES:
+    for name, tools in _DISPLAY_CATEGORIES:
         if name in skip:
             continue
         tool_list = f"{_D}, {_R}".join(f"{_G}{t}{_R}" for t in tools)
@@ -65,14 +121,16 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
     print()
 
     from autoskillit.cli._ansi import permissions_warning
-    from autoskillit.cli._init_helpers import _require_interactive_stdin
+    from autoskillit.cli._timed_input import timed_prompt
 
     print(permissions_warning())
-    _require_interactive_stdin("autoskillit cook")
-    confirm = input("\nLaunch session? [Enter/n]: ").strip().lower()
-    if confirm in ("n", "no"):
+    confirm = timed_prompt(
+        "\nLaunch session? [Enter/n]", default="", timeout=120, label="autoskillit cook"
+    )
+    if confirm.lower() in ("n", "no"):
         return
 
+    from autoskillit.cli._init_helpers import _is_plugin_installed
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.config import load_config
     from autoskillit.core import configure_logging, find_latest_session_id, pkg_root
@@ -101,16 +159,16 @@ def cook(*, resume: bool = False, session_id: str | None = None) -> None:
         session_id_local, cook_session=True, config=config, project_dir=project_dir
     )
 
-    cmd = build_interactive_cmd(
-        plugin_dir=pkg_root(),
+    plugin_dir = None if _is_plugin_installed() else pkg_root()
+    spec = build_interactive_cmd(
+        plugin_dir=plugin_dir,
         add_dirs=[skills_dir],
         initial_prompt=initial_prompt,
         resume_session_id=resume_session_id,
-    ).cmd
-    env = {**os.environ}
+    )
     _run_cook_session(
-        cmd=cmd,
-        env=env,
+        cmd=spec.cmd,
+        env=spec.env,
         _first_run=_first_run,
         initial_prompt=initial_prompt,
         project_dir=project_dir,

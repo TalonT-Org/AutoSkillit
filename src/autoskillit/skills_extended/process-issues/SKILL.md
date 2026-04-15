@@ -19,14 +19,14 @@ issues upfront, load recipe, execute session, collect result, report.
 
 ## When to Use
 
-- After `/autoskillit:triage-issues` has produced a manifest in `.autoskillit/temp/triage-issues/`
+- After `/autoskillit:triage-issues` has produced a manifest in `{{AUTOSKILLIT_TEMP}}/triage-issues/`
 - User says "process issues", "run issues", "execute pipeline for issues"
 - When a triage manifest exists and batched issues need implementation sessions launched
 
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `.autoskillit/temp/process-issues/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/process-issues/` directory
 - Apply `batch:N` labels to GitHub issues (batch assignments are internal — they live only
   in the manifest JSON, not on GitHub objects)
 - Modify any source code files
@@ -37,7 +37,7 @@ issues upfront, load recipe, execute session, collect result, report.
 - Process batches in ascending order: batch 1 before batch 2 before batch 3
 - Use `load_recipe` to execute the recipe for each issue
 - Emit `---process-issues-result---` result block on completion (success or failure)
-- Write the summary report to `.autoskillit/temp/process-issues/` (relative to the current working directory)
+- Write the summary report to `{{AUTOSKILLIT_TEMP}}/process-issues/` (relative to the current working directory)
 - Use `model: "sonnet"` when spawning subagents via the Task tool
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include `--force` in all `gh label create` calls
@@ -69,7 +69,7 @@ Parse arguments:
 1. If a positional path argument was given, use it directly.
 2. Otherwise, auto-discover the most recently modified manifest:
    ```bash
-   ls -t .autoskillit/temp/triage-issues/triage_manifest_*.json 2>/dev/null | head -1
+   ls -t {{AUTOSKILLIT_TEMP}}/triage-issues/triage_manifest_*.json 2>/dev/null | head -1
    ```
 3. If no manifest is found, abort:
    > "No triage manifest found. Run `/autoskillit:triage-issues` first,
@@ -162,10 +162,6 @@ After this phase:
 
 For each batch in **ascending order** (batch 1, then batch 2, etc.):
 
-**CRITICAL:** Do NOT output any prose status text between batches. After
-completing one batch (all issues processed, optional merge cycle done),
-immediately begin the batch header (3a) for the next batch.
-
 - If `--batch N` was given, skip all batches with a different number.
 
 **3a. Log batch header:**
@@ -177,11 +173,6 @@ Processing X issues:
 ```
 
 **3b. For each issue in the batch (process sequentially):**
-
-**CRITICAL:** Do NOT output any prose status text between issues. After
-completing one issue's processing (step 6), immediately begin step 1
-(check pre_claimed_urls) for the next issue. Inter-issue announcements
-create end_turn windows that cause stochastic session termination.
 
 1. **Check pre_claimed_urls:** If `issue_url` is NOT in `pre_claimed_urls` → skip
    (excluded by upfront claim phase — another session holds it).
@@ -260,21 +251,38 @@ run_skill("/autoskillit:analyze-prs {base_branch}")
 Parse the `pr_order_file` from the skill output. For each PR in the recommended
 merge order:
 
-**CRITICAL:** Do NOT output any prose status text between PRs. After one
-merge-pr completes, immediately call run_skill for the next PR.
-
 ```
 run_skill("/autoskillit:merge-pr {pr_number} {complexity}")
 ```
 
 Log merge results and proceed to the next batch.
 
+**3d. Batch Clone Cleanup (always, after all batches complete):**
+
+After all batches finish (whether or not `--merge-batch` was used), call:
+
+```
+batch_cleanup_clones()
+```
+
+This reads the shared registry at `{{AUTOSKILLIT_TEMP}}/clone-cleanup-registry.json`,
+deletes all clones registered with `status=success` by the **current kitchen** (their
+pipelines completed cleanly), and leaves all `status=error` clones on disk for investigation.
+
+The call is scoped to the current kitchen's entries by default — entries registered by other
+parallel orchestrator sessions are not touched.
+
+**Operator escape hatch (recovery only):** `batch_cleanup_clones(all_owners="true")` ignores
+owner scoping and deletes all success-status entries, including legacy orphan entries from
+registries created before the owner field was introduced. Do not use this on the normal happy
+path — it is intended for manual recovery of stale registry files only.
+
 ### Step 4: Write Summary Report
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.
-Create `.autoskillit/temp/process-issues/` if it does not exist.
+Create `{{AUTOSKILLIT_TEMP}}/process-issues/` if it does not exist.
 
-Write `.autoskillit/temp/process-issues/process_report_{ts}.md`:
+Write `{{AUTOSKILLIT_TEMP}}/process-issues/process_report_{ts}.md`:
 
 ```markdown
 # Process Issues Report — {ts}
@@ -313,7 +321,7 @@ Print the structured result for pipeline capture:
 ```
 ---process-issues-result---
 {
-    "report_path": ".autoskillit/temp/process-issues/process_report_{ts}.md",
+    "report_path": "{{AUTOSKILLIT_TEMP}}/process-issues/process_report_{ts}.md",
     "total_issues": N,
     "successes": X,
     "failures": Y,
@@ -330,7 +338,7 @@ Print the structured result for pipeline capture:
 ## Output Location
 
 ```
-.autoskillit/temp/process-issues/
+{{AUTOSKILLIT_TEMP}}/process-issues/
   process_report_{ts}.md   # Human-readable summary (created per run)
 ```
 

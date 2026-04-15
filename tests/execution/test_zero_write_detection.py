@@ -138,6 +138,416 @@ class TestZeroWriteDetection:
         assert sr.subtype == "zero_writes"
         assert sr.retry_reason == RetryReason.ZERO_WRITES
 
+    def test_conditional_already_green_worktree_not_demoted(self) -> None:
+        """resolve-failures conditional + 'verdict = already_green' → success preserved.
+
+        This is the Issue #603 false-positive scenario: worktree is already green,
+        skill emits 'fixes_applied = 0' AND 'verdict = already_green', and the gate
+        must NOT demote to zero_writes.
+
+        With the new write_expected_when pattern (verdict = real_fix), the gate only
+        triggers when the skill declares it actually applied a real fix.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": (
+                "Tests are green. fixes_applied = 0\nverdict = already_green\n"
+                "no changes needed\n%%ORDER_UP%%"
+            ),
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"verdict\s*=\s*real_fix",),
+            ),
+        )
+        assert sr.success is True, (
+            "Already-green worktree (verdict = already_green) must NOT be demoted. "
+            "The pattern 'verdict = real_fix' must not match 'verdict = already_green'."
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_conditional_no_verdict_not_demoted_but_write_not_expected(self) -> None:
+        """resolve-failures with no verdict token: write gate does not fire, result passes.
+
+        With the new write_expected_when (verdict = real_fix), a result emitting only
+        fixes_applied = 0 (no verdict token) does NOT trigger write expectation.
+        The verdict is now the load-bearing routing signal: fixes_applied alone is
+        insufficient to declare a real fix.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "fixes_applied = 0\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"verdict\s*=\s*real_fix",),
+            ),
+        )
+        # Write not expected (no verdict = real_fix) → success, NOT demoted
+        assert sr.success is True, (
+            "fixes_applied = 0 without verdict token must NOT be demoted — "
+            "the new gate only fires on 'verdict = real_fix'"
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_conditional_real_fix_verdict_without_writes_demoted(self) -> None:
+        """resolve-failures emitting verdict=real_fix but 0 writes → demoted to zero_writes.
+
+        When the skill declares 'verdict = real_fix', writes are expected.
+        If no Edit/Write calls were made, the write gate must fire and demote the result.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "verdict = real_fix\nfixes_applied = 1\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"verdict\s*=\s*real_fix",),
+            ),
+        )
+        assert sr.success is False, (
+            "verdict = real_fix with 0 writes must be demoted to zero_writes"
+        )
+        assert sr.subtype == "zero_writes"
+        assert sr.retry_reason == RetryReason.ZERO_WRITES
+
+    def test_conditional_fix_applied_but_no_writes_demoted(self) -> None:
+        """Conditional + 'fixes_applied = 1' + 0 writes → zero_writes (Bash-only fix, no artifact).
+
+        If the skill claims it applied fixes but produced no Edit/Write calls,
+        the gate must fire. This catches the Bash-only fix scenario where the
+        skill forgot to write the fix_log artifact.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "fixes_applied = 1\nfixed: uv.lock stale pin\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-failures /tmp/wt /tmp/plan.md main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"fixes_applied\s*=\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is False
+        assert sr.subtype == "zero_writes"
+        assert sr.retry_reason == RetryReason.ZERO_WRITES
+
+    def test_conditional_all_phases_done_not_demoted(self) -> None:
+        """retry-worktree with 'phases_implemented = 0' output → success preserved.
+
+        When called on a worktree where all phases are already complete,
+        retry-worktree emits 'phases_implemented = 0' and the gate must NOT fire.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": (
+                "worktree_path = /tmp/wt\nbranch_name = feature/123\n"
+                "phases_implemented = 0\nAll phases already complete.\n%%ORDER_UP%%"
+            ),
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:retry-worktree /tmp/plan.md /tmp/wt",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"phases_implemented\s*=\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, (
+            "All-phases-done worktree (phases_implemented = 0) must NOT be demoted to zero_writes."
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_conditional_no_pr_found_not_demoted(self) -> None:
+        """resolve-review graceful degradation (no PR found) → success preserved.
+
+        When no PR is found, resolve-review exits 0 with no writes and no
+        fixes_applied token. The conditional gate must not fire (no match → write not expected).
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "No PR found or gh unavailable — skipping review resolution\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-review feature-branch main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"fixes_applied\s*=\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, (
+            "No-PR graceful degradation (no fixes_applied token) must NOT be demoted."
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_resolve_claims_review_no_fixes_applied_not_demoted(self) -> None:
+        """resolve-claims-review: 'Fixes applied: 0' → gate inactive → success preserved.
+
+        The pattern [1-9][0-9]* excludes zero, so zero-fix runs are not demoted.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "Fixes applied: 0\nneeds_rerun = false\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-claims-review /tmp/wt main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, (
+            "'Fixes applied: 0' must NOT be demoted — pattern [1-9][0-9]* excludes zero."
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_resolve_claims_review_all_escalations_not_demoted(self) -> None:
+        """resolve-claims-review: all-escalations path → success preserved.
+
+        When all accepted findings are rerun_required/design_flaw, no code is written
+        and 'Fixes applied: 0' is emitted. The gate must not fire.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "Fixes applied: 0\nneeds_rerun = true\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-claims-review /tmp/wt main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, (
+            "All-escalations path (Fixes applied: 0, needs_rerun=true) must NOT be demoted."
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_resolve_claims_review_graceful_degradation_not_demoted(self) -> None:
+        """resolve-claims-review: no-PR graceful degradation → success preserved.
+
+        When no PR is found, the skill exits without a 'Fixes applied' line.
+        No pattern match → gate inactive → success preserved.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "No PR found or gh unavailable — skipping\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-claims-review /tmp/wt main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, (
+            "Graceful degradation (no 'Fixes applied' line) must NOT be demoted."
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_resolve_claims_review_fixes_applied_zero_writes_demoted(self) -> None:
+        """resolve-claims-review: 'Fixes applied: 3' + 0 writes → demoted to zero_writes.
+
+        When the skill claims fixes were applied but produced no Edit/Write calls,
+        this indicates silent degradation. The gate must fire.
+        """
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "Fixes applied: 3\nneeds_rerun = false\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-claims-review /tmp/wt main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is False, (
+            "'Fixes applied: 3' with 0 writes must be demoted — silent degradation detected."
+        )
+        assert sr.subtype == "zero_writes"
+        assert sr.retry_reason == RetryReason.ZERO_WRITES
+
+    def test_resolve_claims_review_fixes_applied_with_writes_passes(self) -> None:
+        """resolve-claims-review: 'Fixes applied: 3' + 3 writes → success preserved.
+
+        The gate short-circuits at write_call_count > 0 before evaluating result text.
+        """
+        stdout = _ndjson_with_tool_uses(["Edit", "Edit", "Edit"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-claims-review /tmp/wt main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, "Fixes applied with actual writes must NOT be demoted."
+        assert sr.subtype != "zero_writes"
+
+    def test_resolve_research_review_no_fixes_applied_not_demoted(self) -> None:
+        """resolve-research-review: 'Fixes applied: 0' → gate inactive → success preserved."""
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "Fixes applied: 0\nneeds_rerun = false\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-research-review /tmp/wt main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, (
+            "'Fixes applied: 0' must NOT be demoted — pattern [1-9][0-9]* excludes zero."
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_resolve_research_review_all_escalations_not_demoted(self) -> None:
+        """resolve-research-review: all-escalations path → success preserved."""
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "Fixes applied: 0\nneeds_rerun = true\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-research-review /tmp/wt main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, (
+            "All-escalations path (Fixes applied: 0, needs_rerun=true) must NOT be demoted."
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_resolve_research_review_graceful_degradation_not_demoted(self) -> None:
+        """resolve-research-review: no-PR graceful degradation → success preserved."""
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "No PR found or gh unavailable — skipping\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-research-review /tmp/wt main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, (
+            "Graceful degradation (no 'Fixes applied' line) must NOT be demoted."
+        )
+        assert sr.subtype != "zero_writes"
+
+    def test_resolve_research_review_fixes_applied_zero_writes_demoted(self) -> None:
+        """resolve-research-review: 'Fixes applied: 3' + 0 writes → demoted to zero_writes."""
+        result_record = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "Fixes applied: 3\nneeds_rerun = false\n%%ORDER_UP%%",
+            "session_id": "test-sess",
+        }
+        stdout = json.dumps(result_record)
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-research-review /tmp/wt main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is False, (
+            "'Fixes applied: 3' with 0 writes must be demoted — silent degradation detected."
+        )
+        assert sr.subtype == "zero_writes"
+        assert sr.retry_reason == RetryReason.ZERO_WRITES
+
+    def test_resolve_research_review_fixes_applied_with_writes_passes(self) -> None:
+        """resolve-research-review: 'Fixes applied: 3' + 3 writes → success preserved."""
+        stdout = _ndjson_with_tool_uses(["Edit", "Edit", "Edit"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:resolve-research-review /tmp/wt main",
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"Fixes applied:\s*[1-9][0-9]*",),
+            ),
+        )
+        assert sr.success is True, "Fixes applied with actual writes must NOT be demoted."
+        assert sr.subtype != "zero_writes"
+
 
 class TestWriteCallCountPropagation:
     """write_call_count must be accurately computed and propagated."""

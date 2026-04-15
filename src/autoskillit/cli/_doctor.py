@@ -4,14 +4,26 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path, _load_settings_data
-from autoskillit.cli._init_helpers import _KNOWN_SCANNERS, _detect_secret_scanner
-from autoskillit.core import _ROOT_GITIGNORE_ENTRIES, Severity
-from autoskillit.hook_registry import HOOK_REGISTRY
+from autoskillit.cli._init_helpers import (
+    _KNOWN_SCANNERS,
+    _check_dual_mcp_files,
+    _detect_secret_scanner,
+)
+from autoskillit.core import Severity, get_logger
+from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
+from autoskillit.hook_registry import (
+    _count_hook_registry_drift,
+    canonical_script_basenames,
+    find_broken_hook_scripts,
+)
+
+_log = get_logger(__name__)
 
 
 @dataclass
@@ -25,8 +37,6 @@ class DoctorResult:
 
 def _check_mcp_server_registered(claude_json_path: Path | None = None) -> DoctorResult:
     """Check that autoskillit MCP server is registered (via mcpServers or plugin)."""
-    import subprocess
-
     if claude_json_path is None:
         claude_json_path = Path.home() / ".claude.json"
 
@@ -83,6 +93,37 @@ def _check_mcp_server_registered(claude_json_path: Path | None = None) -> Doctor
     )
 
 
+def _check_dual_mcp_registration(
+    claude_json_path: Path | None = None,
+    plugins_json_path: Path | None = None,
+) -> DoctorResult:
+    """Check that autoskillit is not registered both as a direct entry and as a marketplace plugin.
+
+    Returns WARNING if both registrations are simultaneously present (split-brain condition).
+    Fail-open: unreadable files → cannot confirm dual registration, return OK.
+    """
+    _claude_json = claude_json_path or (Path.home() / ".claude.json")
+    _plugins_json = plugins_json_path or (
+        Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+    )
+    if _check_dual_mcp_files(_claude_json, _plugins_json):
+        return DoctorResult(
+            severity=Severity.WARNING,
+            check="dual_mcp_registration",
+            message=(
+                "autoskillit is registered both as a direct mcpServers entry "
+                "(~/.claude.json) and as a marketplace plugin. This spawns two "
+                "independent server processes per session with split gate state. "
+                "Run `autoskillit install` to remove the stale direct entry."
+            ),
+        )
+    return DoctorResult(
+        severity=Severity.OK,
+        check="dual_mcp_registration",
+        message="",
+    )
+
+
 def _check_hook_registration(settings_path: Path) -> DoctorResult:
     data = _load_settings_data(settings_path)
     registered = " ".join(
@@ -92,9 +133,7 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
         for entry in event_entries
         for hook in entry.get("hooks", [])
     )
-    missing = [
-        script for hdef in HOOK_REGISTRY for script in hdef.scripts if script not in registered
-    ]
+    missing = [script for script in canonical_script_basenames() if script not in registered]
     if missing:
         return DoctorResult(
             severity=Severity.WARNING,
@@ -108,60 +147,47 @@ def _check_hook_registration(settings_path: Path) -> DoctorResult:
     )
 
 
-def _count_hook_registry_drift(settings_path: Path) -> int:
-    """Return count of canonical hook commands not present in deployed settings.json."""
-    from autoskillit.hooks import generate_hooks_json
-
-    canonical = generate_hooks_json()
-    deployed_data = _load_settings_data(settings_path)
-
-    def _extract_cmds(hooks_dict: dict) -> set[str]:
-        return {
-            hook.get("command", "")
-            for event_entries in hooks_dict.values()
-            if isinstance(event_entries, list)
-            for entry in event_entries
-            for hook in entry.get("hooks", [])
-            if hook.get("command", "")
-        }
-
-    canonical_cmds = _extract_cmds(canonical.get("hooks", {}))
-    deployed_cmds = _extract_cmds(deployed_data.get("hooks", {}))
-    return len(canonical_cmds - deployed_cmds)
-
-
-def _check_hook_registry_drift(settings_path: Path) -> DoctorResult:
+def _check_hook_registry_drift(
+    settings_path: Path, scope_label: str | None = None
+) -> DoctorResult:
     """Compare generate_hooks_json() with what is deployed in settings.json."""
-    n = _count_hook_registry_drift(settings_path)
-    if n > 0:
+    result = _count_hook_registry_drift(settings_path)
+    if result.orphaned > 0:
+        ghost_scripts = sorted(result.orphaned_cmds)
+        msg = (
+            f"Orphaned hook entries detected: {', '.join(ghost_scripts)}. "
+            f"These scripts are missing from HOOK_REGISTRY but present in "
+            f"settings.json — every matching tool call will be denied with ENOENT. "
+            f"Run 'autoskillit install' to regenerate hooks."
+        )
+        if scope_label:
+            msg = f"[{scope_label}] {msg}"
+        return DoctorResult(Severity.ERROR, "hook_registry_drift", msg)
+    if result.missing > 0:
+        msg = (
+            f"Hook registry has changed since last install. "
+            f"Run 'autoskillit install' to deploy {result.missing} new/changed hook(s)."
+        )
+        if scope_label:
+            msg = f"[{scope_label}] {msg}"
         return DoctorResult(
             severity=Severity.WARNING,
             check="hook_registry_drift",
-            message=(
-                f"Hook registry has changed since last install. "
-                f"Run 'autoskillit install' to deploy {n} new/changed hook(s)."
-            ),
+            message=msg,
         )
+    msg = "Deployed hooks match HOOK_REGISTRY."
+    if scope_label:
+        msg = f"[{scope_label}] {msg}"
     return DoctorResult(
         severity=Severity.OK,
         check="hook_registry_drift",
-        message="Deployed hooks match HOOK_REGISTRY.",
+        message=msg,
     )
 
 
 def _check_hook_health(settings_path: Path) -> DoctorResult:
     """Verify all deployed hook scripts exist on disk for all event types."""
-    data = _load_settings_data(settings_path)
-    broken_hooks: list[str] = []
-    for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
-        for entry in data.get("hooks", {}).get(event_type, []):
-            for hook in entry.get("hooks", []):
-                cmd = hook.get("command", "")
-                parts = cmd.split()
-                if len(parts) >= 2:
-                    script_path = Path(parts[-1])
-                    if not script_path.is_file():
-                        broken_hooks.append(cmd)
+    broken_hooks = find_broken_hook_scripts(settings_path)
     if broken_hooks:
         return DoctorResult(
             severity=Severity.ERROR,
@@ -198,13 +224,6 @@ def _check_gitignore_completeness(project_dir: Path) -> DoctorResult:
     # Also check that every entry in the canonical list is present
     for entry in _AUTOSKILLIT_GITIGNORE_ENTRIES:
         if entry not in gitignore_content:
-            entry_name = entry.rstrip("/")
-            if entry_name not in uncovered:
-                uncovered.append(entry_name)
-    root_gitignore = project_dir / ".gitignore"
-    root_content = root_gitignore.read_text(encoding="utf-8") if root_gitignore.exists() else ""
-    for entry in _ROOT_GITIGNORE_ENTRIES:
-        if entry not in root_content:
             entry_name = entry.rstrip("/")
             if entry_name not in uncovered:
                 uncovered.append(entry_name)
@@ -283,8 +302,6 @@ def _check_editable_install_source_exists() -> DoctorResult:
 
 def _check_stale_entry_points() -> DoctorResult:
     """Detect autoskillit binaries on PATH outside ~/.local/bin (stale/poisoned installs)."""
-    import subprocess
-
     check_name = "stale_entry_points"
     primary = shutil.which("autoskillit")
     if not primary:
@@ -360,12 +377,272 @@ def _check_config_layers_for_secrets(
     )
 
 
+def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
+    """Network source-drift check.
+
+    Compares the installed commit SHA against the current HEAD of the branch
+    the binary was installed from.  Uses a network request to get the latest
+    SHA (with disk-cache TTL fallback).
+    """
+    check_name = "source_version_drift"
+    _home = home or Path.home()
+
+    try:
+        from autoskillit.cli._install_info import InstallType, detect_install
+        from autoskillit.cli._update_checks import resolve_reference_sha
+
+        info = detect_install()
+
+        if info.install_type == InstallType.LOCAL_EDITABLE:
+            return DoctorResult(
+                Severity.OK, check_name, "Local editable install — drift check not applicable"
+            )
+
+        if info.install_type in (InstallType.UNKNOWN, InstallType.LOCAL_PATH):
+            return DoctorResult(
+                Severity.OK,
+                check_name,
+                "Not a source-tracked install — drift check not applicable",
+            )
+
+        # GIT_VCS: resolve SHA via network (with disk-cache fallback)
+        ref_sha = resolve_reference_sha(info, _home, network=True)
+
+        if ref_sha is None:
+            return DoctorResult(
+                Severity.OK,
+                check_name,
+                "Source drift reference SHA unavailable — check network connectivity",
+            )
+
+        if info.commit_id == ref_sha:
+            return DoctorResult(Severity.OK, check_name, "No source drift detected")
+
+        installed_short = (info.commit_id or "unknown")[:8]
+        ref_short = ref_sha[:8]
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"Source drift: installed={installed_short}, reference={ref_short}. "
+            f"Run the appropriate install command to update.",
+        )
+
+    except Exception:
+        _log.debug("Source drift check failed", exc_info=True)
+        return DoctorResult(
+            Severity.OK, check_name, "Source drift check skipped (unexpected error)"
+        )
+
+
+def _check_install_classification() -> DoctorResult:
+    """Classify the current autoskillit install type via direct_url.json."""
+    check_name = "install_classification"
+    try:
+        from autoskillit.cli._install_info import InstallType, detect_install
+
+        info = detect_install()
+        if info.install_type == InstallType.UNKNOWN:
+            return DoctorResult(
+                Severity.WARNING,
+                check_name,
+                "install type could not be detected from direct_url.json",
+            )
+        commit_short = (info.commit_id or "")[:8]
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"install_type={info.install_type}, "
+            f"requested_revision={info.requested_revision}, "
+            f"commit_id={commit_short}",
+        )
+    except Exception:
+        _log.debug("Install classification check failed", exc_info=True)
+        return DoctorResult(
+            Severity.OK, check_name, "Install classification check skipped (unexpected error)"
+        )
+
+
+def _check_update_dismissal_state(home: Path | None = None) -> DoctorResult:
+    """Report the current update-prompt dismissal state."""
+    check_name = "update_dismissal_state"
+    _home = home or Path.home()
+    try:
+        from autoskillit.cli._install_info import detect_install, dismissal_window
+        from autoskillit.cli._update_checks import _read_dismiss_state
+
+        state = _read_dismiss_state(_home)
+        entry = state.get("update_prompt")
+        if not isinstance(entry, dict) or "dismissed_at" not in entry:
+            return DoctorResult(Severity.OK, check_name, "No active dismissal")
+
+        from datetime import datetime
+
+        info = detect_install()
+        window = dismissal_window(info)
+        dismissed_at = datetime.fromisoformat(str(entry["dismissed_at"]))
+        expiry = (dismissed_at + window).strftime("%Y-%m-%d")
+        conditions = entry.get("conditions", [])
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"update_prompt dismissed until {expiry}; conditions={conditions}",
+        )
+    except Exception:
+        _log.debug("Update dismissal state check failed", exc_info=True)
+        return DoctorResult(
+            Severity.OK, check_name, "Update dismissal state check skipped (unexpected error)"
+        )
+
+
+def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:
+    """Check the quota cache file for schema version drift."""
+    check_name = "quota_cache_schema"
+    path = cache_path or (Path.home() / ".claude" / "autoskillit_quota_cache.json")
+    if not path.exists():
+        return DoctorResult(Severity.OK, check_name, "No quota cache present.")
+    try:
+        raw = json.loads(path.read_text())
+    except Exception as exc:
+        _log.warning("quota_cache_parse_error", path=str(path), exc_info=True)
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"Quota cache at {path} could not be parsed: {type(exc).__name__}.",
+        )
+    observed = raw.get("schema_version") if isinstance(raw, dict) else None
+    if observed == QUOTA_CACHE_SCHEMA_VERSION:
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"Quota cache schema v{QUOTA_CACHE_SCHEMA_VERSION} at {path}.",
+        )
+    return DoctorResult(
+        Severity.WARNING,
+        check_name,
+        f"Quota cache schema drift at {path}: observed={observed!r}, "
+        f"expected={QUOTA_CACHE_SCHEMA_VERSION}.",
+    )
+
+
+def _check_claude_process_state_breakdown() -> DoctorResult:
+    """Check current D-state and CPU usage of claude processes via ps."""
+    check_name = "claude_process_state"
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid,state,pcpu,comm"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"ps unavailable ({type(exc).__name__}); skipping claude process check",
+        )
+
+    if result.returncode != 0:
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"ps exited {result.returncode}; skipping claude process check",
+        )
+
+    claude_rows: list[tuple[int, str, float]] = []
+    for line in result.stdout.splitlines()[1:]:
+        parts = line.split(maxsplit=3)
+        if len(parts) < 4:
+            continue
+        comm = parts[3]
+        if comm != "claude":
+            continue
+        try:
+            claude_rows.append((int(parts[0]), parts[1], float(parts[2])))
+        except ValueError:
+            continue
+
+    if not claude_rows:
+        return DoctorResult(Severity.OK, check_name, "No claude processes running")
+
+    breakdown: dict[str, int] = {}
+    for _, state, _ in claude_rows:
+        breakdown[state] = breakdown.get(state, 0) + 1
+
+    summary = ", ".join(f"{s}={c}" for s, c in sorted(breakdown.items()))
+
+    d_rows = [f"pid={pid} pcpu={pcpu}" for pid, state, pcpu in claude_rows if state == "D"]
+    if d_rows:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"claude processes in D state: {', '.join(d_rows)} (breakdown: {summary})",
+        )
+
+    return DoctorResult(
+        Severity.OK,
+        check_name,
+        f"claude process state breakdown: {summary}",
+    )
+
+
+def _check_plugin_cache_exists(
+    cache_dir: Path | None = None,
+) -> DoctorResult:
+    """Check that the plugin cache directory exists."""
+    from autoskillit.cli._install_info import InstallType, detect_install
+
+    info = detect_install()
+    if info.install_type == InstallType.LOCAL_EDITABLE:
+        return DoctorResult(
+            Severity.OK,
+            "plugin_cache_exists",
+            "Plugin cache check skipped (editable dev install)",
+        )
+
+    _cache_dir = cache_dir or (
+        Path.home() / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    )
+    if _cache_dir.is_dir():
+        return DoctorResult(
+            Severity.OK,
+            "plugin_cache_exists",
+            "Plugin cache directory exists",
+        )
+    return DoctorResult(
+        Severity.WARNING,
+        "plugin_cache_exists",
+        f"Plugin cache directory missing: {_cache_dir}. Run `autoskillit install` to recreate it.",
+    )
+
+
+def _check_installed_plugins_entry(
+    plugins_json_path: Path | None = None,
+) -> DoctorResult:
+    """Check that installed_plugins.json contains the autoskillit entry."""
+    from autoskillit.cli._installed_plugins import InstalledPluginsFile
+
+    store = InstalledPluginsFile(plugins_json_path)
+    if not store.path.exists():
+        return DoctorResult(
+            Severity.WARNING,
+            "installed_plugins_entry",
+            "installed_plugins.json not found. Run `autoskillit install`.",
+        )
+    if store.contains("autoskillit@autoskillit-local"):
+        return DoctorResult(
+            Severity.OK,
+            "installed_plugins_entry",
+            "autoskillit entry present in installed_plugins.json",
+        )
+    return DoctorResult(
+        Severity.WARNING,
+        "installed_plugins_entry",
+        "autoskillit entry missing from installed_plugins.json. Run `autoskillit install` to fix.",
+    )
+
+
 def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
-    from autoskillit.cli._marketplace import _clear_plugin_cache
-
-    _clear_plugin_cache()
-
     results: list[DoctorResult] = []
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
@@ -412,6 +689,15 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 2: MCP server registered in ~/.claude.json or via plugin
     results.append(_check_mcp_server_registered(claude_json_path=Path.home() / ".claude.json"))
+
+    # Check 2b: Dual MCP registration — direct entry and marketplace plugin both present
+    results.append(_check_dual_mcp_registration())
+
+    # Check 2c: Plugin cache directory exists
+    results.append(_check_plugin_cache_exists())
+
+    # Check 2d: installed_plugins.json has autoskillit entry
+    results.append(_check_installed_plugins_entry())
 
     # Check 3: autoskillit command on PATH
     if shutil.which("autoskillit") is None:
@@ -476,8 +762,11 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 7: Hook registration in settings.json
     results.append(_check_hook_registration(_claude_settings_path("user")))
 
-    # Check 7b: Hook registry drift (structural comparison via generate_hooks_json())
-    results.append(_check_hook_registry_drift(_claude_settings_path("user")))
+    # Check 7b: Hook registry drift (multi-scope)
+    from autoskillit.hook_registry import iter_all_scope_paths
+
+    for scope_label, settings_path in iter_all_scope_paths(Path.cwd()):
+        results.append(_check_hook_registry_drift(settings_path, scope_label=scope_label))
 
     # Check 8: Script version health
     from autoskillit import __version__
@@ -551,6 +840,21 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 12: No stale autoskillit entry points outside ~/.local/bin
     results.append(_check_stale_entry_points())
+
+    # Check 13: Source version drift (network, with disk-cache TTL fallback)
+    results.append(_check_source_version_drift())
+
+    # Check 14: Quota cache schema version
+    results.append(_check_quota_cache_schema())
+
+    # Check 15: claude process state breakdown
+    results.append(_check_claude_process_state_breakdown())
+
+    # Check 16: Install classification from direct_url.json
+    results.append(_check_install_classification())
+
+    # Check 17: Update-prompt dismissal state
+    results.append(_check_update_dismissal_state())
 
     # Output
     if output_json:

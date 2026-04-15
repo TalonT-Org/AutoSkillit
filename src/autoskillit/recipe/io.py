@@ -20,12 +20,45 @@ from autoskillit.recipe.schema import (
 logger = get_logger(__name__)
 
 
-def load_recipe(path: Path) -> Recipe:
-    """Parse a YAML recipe file into a Recipe dataclass."""
-    data = load_yaml(path)
+_TEMP_PLACEHOLDER = "{{AUTOSKILLIT_TEMP}}"
+
+
+def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
+    """Replace ``{{AUTOSKILLIT_TEMP}}`` in raw recipe/skill text.
+
+    Validates that ``temp_dir_relpath`` is YAML-safe (no newlines or
+    ``": "`` sequences); raises ``ValueError`` otherwise. Filesystem paths
+    should never contain these characters, but the guard makes the failure
+    loud and free.
+    """
+    if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
+        raise ValueError(f"temp_dir_relpath is YAML-unsafe: {temp_dir_relpath!r}")
+    return text.replace(_TEMP_PLACEHOLDER, temp_dir_relpath)
+
+
+def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Recipe:
+    """Parse a YAML recipe file into a Recipe dataclass.
+
+    Substitutes ``{{AUTOSKILLIT_TEMP}}`` in the raw text with
+    ``temp_dir_relpath`` *before* YAML parsing so the resulting Recipe
+    dataclass observes the resolved value uniformly.
+
+    After parsing, ``recipe.blocks`` is populated via ``extract_blocks`` from
+    ``_analysis.py``.  The import is deferred to break the circular dependency:
+    ``_analysis.py`` imports ``iter_steps_with_context`` from this module, so a
+    top-level import here would create a cycle.
+    """
+    raw_text = path.read_text(encoding="utf-8")
+    substituted = substitute_temp_placeholder(raw_text, temp_dir_relpath)
+    data = load_yaml(substituted)
     if not isinstance(data, dict):
         raise ValueError(f"Recipe file must contain a YAML mapping: {path}")
-    return _parse_recipe(data)
+    recipe = _parse_recipe(data)
+    # Deferred import breaks the circular dependency with _analysis.py.
+    from autoskillit.recipe._analysis import _build_step_graph, extract_blocks  # noqa: PLC0415
+
+    recipe.blocks = extract_blocks(recipe, _build_step_graph(recipe))
+    return recipe
 
 
 def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
@@ -102,6 +135,7 @@ def find_recipe_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
 # field name here — the assertion below will fail at import time otherwise.
 _PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
     {
+        "name",  # Set from YAML dict key in _parse_recipe, not from step data
         "tool",
         "action",
         "python",
@@ -123,6 +157,10 @@ _PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
         "description",
         "sub_recipe",
         "gate",
+        "optional_context_refs",
+        "stale_threshold",
+        "idle_output_timeout",
+        "block",  # Named block anchor; maps to step's block: key in YAML
     }
 )
 if _PARSE_STEP_HANDLED_FIELDS != frozenset(RecipeStep.__dataclass_fields__):
@@ -153,11 +191,19 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     steps: dict[str, RecipeStep] = {}
     for step_name, step_data in (data.get("steps") or {}).items():
         if isinstance(step_data, dict):
-            steps[step_name] = _parse_step(step_data)
+            step = _parse_step(step_data)
+            step.name = step_name
+            steps[step_name] = step
 
     kitchen_rules = data.get("kitchen_rules", [])
     if not isinstance(kitchen_rules, list):
         raise ValueError(f"'kitchen_rules' must be a list, got {type(kitchen_rules).__name__!r}")
+
+    requires_packs_raw = data.get("requires_packs") or []
+    if not isinstance(requires_packs_raw, list):
+        raise ValueError(
+            f"'requires_packs' must be a list, got {type(requires_packs_raw).__name__!r}"
+        )
 
     return Recipe(
         name=name,
@@ -168,6 +214,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         kitchen_rules=kitchen_rules,
         version=data.get(AUTOSKILLIT_VERSION_KEY),
         experimental=bool(data.get("experimental", False)),
+        requires_packs=requires_packs_raw,
     )
 
 
@@ -220,6 +267,10 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         description=data.get("description", ""),
         sub_recipe=data.get("sub_recipe"),
         gate=data.get("gate"),
+        optional_context_refs=data.get("optional_context_refs", []),
+        stale_threshold=data.get("stale_threshold"),
+        idle_output_timeout=data.get("idle_output_timeout"),
+        block=data.get("block"),
     )
 
 

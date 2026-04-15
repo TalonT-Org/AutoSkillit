@@ -101,6 +101,12 @@ def _check_unrouted_verdict_values(ctx: ValidationContext) -> list[RuleFinding]:
                 continue  # No on_result — other rules handle missing routing
 
             conditions = step.on_result.conditions or []
+            # Only check outputs that are actually used as routing discriminators.
+            # Context-forwarding captures (e.g. experiment_type) have allowed_values
+            # for schema validation, not for routing — skip them here.
+            if not any(c.when and f"result.{output_name}" in c.when for c in conditions):
+                continue
+
             unrouted = [
                 value
                 for value in allowed_values

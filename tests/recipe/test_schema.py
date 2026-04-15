@@ -288,3 +288,12 @@ def test_terminal_targets_defined_in_schema():
 
     assert "escalate" in _TERMINAL_TARGETS
     assert "done" in _TERMINAL_TARGETS
+
+
+def test_recipe_dataclass_has_requires_packs_field():
+    from autoskillit.recipe.schema import Recipe
+
+    fields = {f.name for f in dataclasses.fields(Recipe)}
+    assert "requires_packs" in fields
+    r = Recipe(name="x", description="y")
+    assert r.requires_packs == []

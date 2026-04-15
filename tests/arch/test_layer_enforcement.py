@@ -816,27 +816,41 @@ def test_native_tool_guard_absent_from_hook_registry():
 
 
 def test_hook_config_filename_and_dir_match_quota_check():
-    """quota_check.py must agree with tools_kitchen on the hook config path constants.
+    """Hook config path constants must agree across all readers and the server writer.
 
-    The server (tools_kitchen.py) writes the config; the hook (quota_check.py) reads it.
-    They must agree on both the filename and the directory components, or the quota hook
-    will silently fail to read its configuration.
+    The server (tools_kitchen.py) writes the config; all hooks read it.
+    Two reader contracts must hold:
+    - _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS == server.helpers._hook_config_path
+    - _hook_settings.py constants == server.helpers constants
     """
     import importlib
+    from pathlib import Path
 
+    from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
     from autoskillit.server.helpers import (
         _HOOK_CONFIG_FILENAME,
         _HOOK_DIR_COMPONENTS,
+        _hook_config_path,
     )
 
-    quota_mod = importlib.import_module("autoskillit.hooks.quota_check")
+    root = Path("/tmp/project-root")
+    expected = root.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    actual = _hook_config_path(root)
 
-    assert quota_mod.HOOK_CONFIG_FILENAME == _HOOK_CONFIG_FILENAME, (
-        f"quota_check.HOOK_CONFIG_FILENAME={quota_mod.HOOK_CONFIG_FILENAME!r} "
+    assert actual == expected, (
+        f"server.helpers._hook_config_path({root!r})={actual!r} "
+        f"does not match path derived from "
+        f"_fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS={expected!r}"
+    )
+
+    settings_mod = importlib.import_module("autoskillit.hooks._hook_settings")
+
+    assert settings_mod.HOOK_CONFIG_FILENAME == _HOOK_CONFIG_FILENAME, (
+        f"_hook_settings.HOOK_CONFIG_FILENAME={settings_mod.HOOK_CONFIG_FILENAME!r} "
         f"does not match tools_kitchen._HOOK_CONFIG_FILENAME={_HOOK_CONFIG_FILENAME!r}"
     )
-    assert quota_mod.HOOK_DIR_COMPONENTS == _HOOK_DIR_COMPONENTS, (
-        f"quota_check.HOOK_DIR_COMPONENTS={quota_mod.HOOK_DIR_COMPONENTS!r} "
+    assert settings_mod.HOOK_DIR_COMPONENTS == _HOOK_DIR_COMPONENTS, (
+        f"_hook_settings.HOOK_DIR_COMPONENTS={settings_mod.HOOK_DIR_COMPONENTS!r} "
         f"does not match tools_kitchen._HOOK_DIR_COMPONENTS={_HOOK_DIR_COMPONENTS!r}"
     )
 
@@ -844,26 +858,63 @@ def test_hook_config_filename_and_dir_match_quota_check():
 # ── Tool metadata single source of truth ──────────────────────────────────────
 
 
-def test_tool_categories_covers_all_tools() -> None:
-    """Every tool in GATED_TOOLS | HEADLESS_TOOLS | FREE_RANGE_TOOLS appears
-    in exactly one TOOL_CATEGORIES group, and no extra names exist."""
-    from autoskillit.core import (
-        FREE_RANGE_TOOLS,
-        GATED_TOOLS,
-        HEADLESS_TOOLS,
-        TOOL_CATEGORIES,
-    )
+def test_display_categories_sync() -> None:
+    """Both _DISPLAY_CATEGORIES copies cover all registered tools exactly."""
+    from autoskillit.cli._cook import _DISPLAY_CATEGORIES as cook_cats
+    from autoskillit.core import FREE_RANGE_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
+    from autoskillit.server.tools_kitchen import _DISPLAY_CATEGORIES as kitchen_cats
 
     all_registered = GATED_TOOLS | HEADLESS_TOOLS | FREE_RANGE_TOOLS
-    categorized: set[str] = set()
-    for _name, tools in TOOL_CATEGORIES:
-        for t in tools:
-            assert t not in categorized, f"Duplicate in TOOL_CATEGORIES: {t}"
-            categorized.add(t)
-    assert categorized == all_registered, (
-        f"Missing from TOOL_CATEGORIES: {all_registered - categorized}\n"
-        f"Extra in TOOL_CATEGORIES: {categorized - all_registered}"
-    )
+
+    for label, cats in (("kitchen", kitchen_cats), ("cook", cook_cats)):
+        flat: list[str] = []
+        for _name, tools in cats:
+            flat.extend(tools)
+        as_set = set(flat)
+        assert len(flat) == len(as_set), f"Duplicates in {label} _DISPLAY_CATEGORIES"
+        assert as_set == all_registered, (
+            f"{label} _DISPLAY_CATEGORIES mismatch:\n"
+            f"  Missing: {all_registered - as_set}\n"
+            f"  Extra: {as_set - all_registered}"
+        )
+
+    kitchen_flat = {t for _, tools in kitchen_cats for t in tools}
+    cook_flat = {t for _, tools in cook_cats for t in tools}
+    assert kitchen_flat == cook_flat, "kitchen and cook _DISPLAY_CATEGORIES differ"
+
+
+def test_tool_categories_not_in_core() -> None:
+    """TOOL_CATEGORIES must not be exported from the L0 core layer."""
+    import autoskillit.core
+    import autoskillit.core._type_constants
+
+    assert "TOOL_CATEGORIES" not in dir(autoskillit.core)
+    assert "TOOL_CATEGORIES" not in dir(autoskillit.core._type_constants)
+    assert "TOOL_CATEGORIES" not in autoskillit.core.__all__
+    assert "TOOL_CATEGORIES" not in autoskillit.core._type_constants.__all__
+
+
+def test_ci_tools_not_in_github_category() -> None:
+    """CI tools must be in 'CI & Automation', not in 'GitHub'."""
+    from autoskillit.cli._cook import _DISPLAY_CATEGORIES as cook_cats
+    from autoskillit.server.tools_kitchen import _DISPLAY_CATEGORIES as kitchen_cats
+
+    ci_tools = {"wait_for_ci", "wait_for_merge_queue", "toggle_auto_merge", "get_ci_status"}
+
+    for label, cats in (("kitchen", kitchen_cats), ("cook", cook_cats)):
+        github_tools: set[str] = set()
+        ci_cat_tools: set[str] = set()
+        for name, tools in cats:
+            if name == "GitHub":
+                github_tools = set(tools)
+            elif name == "CI & Automation":
+                ci_cat_tools = set(tools)
+        assert not (ci_tools & github_tools), (
+            f"{label}: CI tools found in GitHub category: {ci_tools & github_tools}"
+        )
+        assert ci_tools <= ci_cat_tools, (
+            f"{label}: CI tools missing from CI & Automation: {ci_tools - ci_cat_tools}"
+        )
 
 
 def test_tool_subset_tags_match_decorators() -> None:
@@ -936,4 +987,71 @@ def test_server_docstring_counts_accurate() -> None:
     assert not mismatches, (
         "server/__init__.py docstring count claims do not match frozenset sizes:\n"
         + "\n".join(f"  {m}" for m in mismatches)
+    )
+
+
+# ---------------------------------------------------------------------------
+# REQ-P12-002: Default* classes may only be instantiated in the Composition Root
+# (Finding 13.1) — AST gate with explicit allowlist
+# ---------------------------------------------------------------------------
+
+
+def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None:
+    """REQ-P12-002: Default* classes must be instantiated only in
+    server/_factory.py (the Composition Root). Five allowlisted exception
+    sites are recognized — they must remain in-place; introducing a sixth
+    requires either routing through make_context() or an explicit allowlist
+    update via this test."""
+    import ast
+
+    allowlist: dict[Path, set[str]] = {
+        Path("server/_factory.py"): {"*"},  # Composition Root
+        Path("cli/_workspace.py"): {"DefaultSubprocessRunner"},  # CLI worktree listing
+        Path("cli/_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
+        Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
+        Path("execution/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback
+        Path("pipeline/context.py"): {  # __post_init__ +
+            "DefaultBackgroundSupervisor",  # field default_factory
+            "DefaultMcpResponseLog",
+        },
+        Path("recipe/_api.py"): {"DefaultSkillResolver"},  # deferred default factory fallback
+        Path("recipe/contracts.py"): {"DefaultSkillResolver"},  # deferred default factory fallback
+        Path("recipe/rules_skill_content.py"): {
+            "DefaultSkillResolver"
+        },  # deferred default factory fallback
+        Path("recipe/rules_skills.py"): {
+            "DefaultSkillResolver"
+        },  # deferred default factory fallback
+        Path("workspace/session_skills.py"): {
+            "DefaultSkillResolver"
+        },  # ephemeral session resolver fallback
+    }
+
+    violations: list[str] = []
+    for f in SRC_ROOT.rglob("*.py"):
+        rel = f.relative_to(SRC_ROOT)
+        if "__pycache__" in rel.parts:
+            continue
+        if rel in allowlist and "*" in allowlist[rel]:
+            continue
+        tree = ast.parse(f.read_text(), filename=str(f))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = (
+                func.id
+                if isinstance(func, ast.Name)
+                else func.attr
+                if isinstance(func, ast.Attribute)
+                else None
+            )
+            if not (name and name.startswith("Default") and len(name) > 7 and name[7].isupper()):
+                continue
+            permitted = allowlist.get(rel, set())
+            if name not in permitted:
+                violations.append(f"{rel}:{node.lineno} {name}()")
+    assert not violations, (
+        "Default* classes may only be constructed in server/_factory.py "
+        "or in the allowlisted CLI/recording/context fallback sites:\n" + "\n".join(violations)
     )

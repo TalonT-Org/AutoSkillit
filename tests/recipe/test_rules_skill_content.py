@@ -354,9 +354,9 @@ def test_hardcoded_origin_does_not_fire_on_fixed_resolve_merge_conflicts(tmp_pat
     Uses SKILL_SEARCH_DIRS isolation: copies the real bundled skill content into tmp_path so
     the test fails with a clear assertion error (not an opaque ENOENT) if the skill is renamed.
     """
-    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+    from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
-    skill_info = SkillResolver().resolve("resolve-merge-conflicts")
+    skill_info = DefaultSkillResolver().resolve("resolve-merge-conflicts")
     assert skill_info is not None, "bundled resolve-merge-conflicts skill not found"
     skill_dir = tmp_path / "resolve-merge-conflicts"
     skill_dir.mkdir()
@@ -385,9 +385,9 @@ def test_hardcoded_origin_does_not_fire_on_fixed_retry_worktree(tmp_path: Path) 
     Uses SKILL_SEARCH_DIRS isolation: copies the real bundled skill content into tmp_path so
     the test fails with a clear assertion error (not an opaque ENOENT) if the skill is renamed.
     """
-    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+    from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
-    skill_info = SkillResolver().resolve("retry-worktree")
+    skill_info = DefaultSkillResolver().resolve("retry-worktree")
     assert skill_info is not None, "bundled retry-worktree skill not found"
     skill_dir = tmp_path / "retry-worktree"
     skill_dir.mkdir()

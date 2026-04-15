@@ -1,0 +1,16 @@
+name: clone-local-without-remote-url-capture-valid
+description: >
+  Positive fixture: clone_repo with strategy=clone_local captures only clone_path,
+  not remote_url. This is the legitimate local-clone usage that must pass the
+  clone-local-strategy-with-remote-url-capture rule.
+kitchen_rules: Use run_skill.
+
+steps:
+  clone:
+    tool: run_python
+    python: autoskillit.workspace.clone.clone_repo
+    with:
+      strategy: clone_local
+      run_name: test-run
+    capture:
+      clone_path: "${{ result.clone_path }}"

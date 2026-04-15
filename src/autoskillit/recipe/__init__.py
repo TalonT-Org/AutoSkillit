@@ -7,14 +7,20 @@ from autoskillit.core import get_logger
 _logger = get_logger(__name__)
 
 # Rule registration — import triggers @semantic_rule registration.
+from autoskillit.recipe import rules_blocks as _rules_blocks  # noqa: E402 F401
 from autoskillit.recipe import rules_bypass as _rules_bypass  # noqa: E402 F401
 from autoskillit.recipe import rules_ci as _rules_ci  # noqa: E402 F401
 from autoskillit.recipe import rules_clone as _rules_clone  # noqa: E402 F401
+from autoskillit.recipe import rules_cmd as _rules_cmd  # noqa: E402 F401
 from autoskillit.recipe import rules_contracts as _rules_contracts  # noqa: E402 F401
 from autoskillit.recipe import rules_dataflow as _rules_dataflow  # noqa: E402 F401
+from autoskillit.recipe import rules_fixing as _rules_fixing  # noqa: E402 F401
 from autoskillit.recipe import rules_graph as _rules_graph  # noqa: E402 F401
 from autoskillit.recipe import rules_inputs as _rules_inputs  # noqa: E402 F401
+from autoskillit.recipe import rules_isolation as _rules_isolation  # noqa: E402 F401
 from autoskillit.recipe import rules_merge as _rules_merge  # noqa: E402 F401
+from autoskillit.recipe import rules_packs as _rules_packs  # noqa: E402 F401
+from autoskillit.recipe import rules_reachability as _rules_reachability  # noqa: E402 F401
 from autoskillit.recipe import rules_recipe as _rules_recipe  # noqa: E402 F401
 from autoskillit.recipe import rules_skill_content as _rules_skill_content  # noqa: E402 F401
 from autoskillit.recipe import rules_skills as _rules_skills  # noqa: E402 F401
@@ -47,6 +53,10 @@ from autoskillit.recipe.diagrams import (  # noqa: E402
     diagram_stale_to_suggestions,
     load_recipe_diagram,
 )
+from autoskillit.recipe.experiment_type_registry import (  # noqa: E402
+    ExperimentTypeSpec,
+    load_all_experiment_types,
+)
 from autoskillit.recipe.io import (  # noqa: E402
     builtin_sub_recipes_dir,
     find_recipe_by_name,
@@ -61,6 +71,7 @@ from autoskillit.recipe.schema import (  # noqa: E402
     AUTOSKILLIT_VERSION_KEY,
     DataFlowReport,
     Recipe,
+    RecipeBlock,
     RecipeInfo,
     RecipeIngredient,
     RecipeStep,
@@ -87,6 +98,7 @@ __all__ = [
     "RecipeListItem",
     "build_ingredient_rows",
     "Recipe",
+    "RecipeBlock",
     "RecipeInfo",
     "RecipeIngredient",
     "RecipeStep",
@@ -127,4 +139,6 @@ __all__ = [
     "diagram_stale_to_suggestions",
     "builtin_sub_recipes_dir",
     "find_sub_recipe_by_name",
+    "ExperimentTypeSpec",
+    "load_all_experiment_types",
 ]

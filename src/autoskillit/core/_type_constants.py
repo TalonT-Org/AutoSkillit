@@ -23,9 +23,9 @@ __all__ = [
     "PACK_REGISTRY",
     "CATEGORY_TAGS",
     "TOOL_SUBSET_TAGS",
-    "TOOL_CATEGORIES",
     "SKILL_COMMAND_PREFIX",
     "AUTOSKILLIT_SKILL_PREFIX",
+    "RETIRED_READINESS_TOKENS",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
@@ -37,6 +37,8 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
     {
         "AUTOSKILLIT_HEADLESS",
         "AUTOSKILLIT_SKIP_STALE_CHECK",
+        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK",
+        "AUTOSKILLIT_FORCE_UPDATE_CHECK",
     }
 )
 
@@ -122,6 +124,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "release_issue",
         "wait_for_ci",
         "wait_for_merge_queue",
+        "check_repo_merge_state",
         "toggle_auto_merge",
         "create_unique_branch",
         "write_telemetry_files",
@@ -148,7 +151,9 @@ GATED_TOOLS: frozenset[str] = frozenset(
 
 HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check"})
 
-FREE_RANGE_TOOLS: frozenset[str] = frozenset({"open_kitchen", "close_kitchen"})
+FREE_RANGE_TOOLS: frozenset[str] = frozenset(
+    {"open_kitchen", "close_kitchen", "disable_quota_guard"}
+)
 
 UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS
 
@@ -169,6 +174,7 @@ PACK_REGISTRY: dict[str, PackDef] = {
     "audit": PackDef(True, "Codebase audit skills"),
     "research": PackDef(False, "Research recipe and experiment skills"),
     "exp-lens": PackDef(False, "Experimental design audit lenses"),
+    "vis-lens": PackDef(False, "Visualization planning lenses"),
 }
 
 CATEGORY_TAGS: frozenset[str] = frozenset(PACK_REGISTRY.keys())
@@ -194,6 +200,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     # ci
     "wait_for_ci": frozenset({"ci"}),
     "wait_for_merge_queue": frozenset({"ci"}),
+    "check_repo_merge_state": frozenset({"ci"}),
     "toggle_auto_merge": frozenset({"ci"}),
     "get_ci_status": frozenset({"ci"}),
     # clone
@@ -208,63 +215,21 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "get_quota_events": frozenset({"telemetry"}),
 }
 
-# Categorized tool listing for the open_kitchen response.
-# Each entry is (category_name, tuple_of_tool_names). Tool names must match the
-# registered MCP tool names exactly.
-TOOL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Execution", ("run_cmd", "run_python", "run_skill")),
-    ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
-    (
-        "Git Operations",
-        ("merge_worktree", "create_unique_branch", "check_pr_mergeable", "set_commit_status"),
-    ),
-    ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
-    (
-        "Clone & Remote",
-        (
-            "clone_repo",
-            "remove_clone",
-            "push_to_remote",
-            "register_clone_status",
-            "batch_cleanup_clones",
-        ),
-    ),
-    (
-        "GitHub",
-        (
-            "fetch_github_issue",
-            "get_issue_title",
-            "get_ci_status",
-            "report_bug",
-            "prepare_issue",
-            "enrich_issues",
-            "claim_issue",
-            "release_issue",
-            "wait_for_ci",
-            "wait_for_merge_queue",
-            "toggle_auto_merge",
-            "get_pr_reviews",
-            "bulk_close_issues",
-        ),
-    ),
-    (
-        "Telemetry & Diagnostics",
-        (
-            "read_db",
-            "write_telemetry_files",
-            "kitchen_status",
-            "get_pipeline_report",
-            "get_token_summary",
-            "get_timing_summary",
-            "get_quota_events",
-        ),
-    ),
-    ("Kitchen", ("open_kitchen", "close_kitchen")),
-)
-
 # Canonical prefix required for all skill_command values passed to run_skill.
 # Enforced at the Claude Code hook boundary by skill_command_guard.py.
 SKILL_COMMAND_PREFIX: str = "/"
 
 # Canonical prefix for bundled autoskillit slash commands.
 AUTOSKILLIT_SKILL_PREFIX: str = "/autoskillit:"
+
+# Log message tokens that were once used as subprocess readiness sync primitives
+# and have since been retired. Any logger call using these tokens as its first
+# positional argument is a structural anti-pattern — the lifespan's try: block
+# and the anyio signal receiver replaced them with a filesystem sentinel.
+# Consumed by test_lifespan_readiness_structural.py (AST Assertion C).
+RETIRED_READINESS_TOKENS: frozenset[str] = frozenset(
+    {
+        "lifespan_started",
+        "sigterm_handler_ready",
+    }
+)

@@ -34,7 +34,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `.autoskillit/temp/review-pr/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/review-pr/`
 - Approve a PR that has `changes_requested` findings
 - Post review comments when `gh` is unavailable — output `verdict=approved` and exit 0
 - Review files outside the PR diff — scope all audit to diff content only
@@ -105,7 +105,7 @@ gh pr diff {pr_number}
 gh repo view --json nameWithOwner -q .nameWithOwner
 ```
 
-Save the diff to `.autoskillit/temp/review-pr/diff_{pr_number}.txt`. (relative to the current working directory)
+Save the diff to `{{AUTOSKILLIT_TEMP}}/review-pr/diff_{pr_number}.txt`. (relative to the current working directory)
 
 ### Step 2.7: Deterministic Diff Annotation
 
@@ -435,6 +435,9 @@ Do not proceed to Step 7. Instead, investigate why zero comments were posted. Ch
 whether the line numbers in your findings match `VALID_LINE_RANGES`. If they do not,
 attempt to map each finding to the nearest valid hunk line before falling back.
 
+**CRITICAL — No Local File Paths in GitHub Output:**
+Never reference local file paths (e.g., `{{AUTOSKILLIT_TEMP}}/...`, `summary_*.md`, absolute paths) in the review body, inline comments, or any content posted to GitHub. The summary file is a local audit artifact only — GitHub readers cannot access local filesystem paths. Reference findings by file path and line number within the repository, not by local temp file locations.
+
 ### Step 7: Submit Summary Review
 
 ```bash
@@ -450,7 +453,9 @@ gh pr review {pr_number} --comment --body "AutoSkillit review: uncertain trade-o
 
 ### Step 8: Write Summary and Emit Verdict
 
-Save findings summary to `.autoskillit/temp/review-pr/summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
+**CRITICAL — Ordering:** Step 8 must execute after Steps 6 and 7. Do not write the summary file before posting inline comments and submitting the review verdict to GitHub. Writing the file first anchors you to treating it as the primary output rather than a local audit artifact.
+
+Save findings summary to `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
 
 Output the verdict as the final line:
 
@@ -472,4 +477,4 @@ Exit 1 only for unrecoverable tool-level errors.
 - `verdict=changes_requested` — Blocking issues found; recipe routes to `resolve_review`
 - `verdict=needs_human` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
 
-Summary written to: `.autoskillit/temp/review-pr/summary_{pr_number}_{timestamp}.md`
+Summary written to: `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md`

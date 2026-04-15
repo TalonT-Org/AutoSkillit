@@ -11,10 +11,14 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from autoskillit.core import CleanupResult, SubprocessRunner
+from autoskillit.core import CleanupResult, SubprocessRunner, resolve_temp_dir
 
 WORKTREES_DIR = "worktrees"
-_SIDECAR_ROOT = (".autoskillit", "temp", "worktrees")
+
+
+def _sidecar_root_for(temp_dir: Path) -> Path:
+    """Return the sidecar root directory for worktrees (``<temp_dir>/worktrees``)."""
+    return temp_dir / WORKTREES_DIR
 
 
 async def list_git_worktrees(
@@ -86,16 +90,24 @@ async def remove_git_worktree(
     return result
 
 
-def remove_worktree_sidecar(project_root: Path, worktree_name: str) -> CleanupResult:
-    """Remove the .autoskillit/temp/worktrees/<worktree_name>/ sidecar directory.
+def remove_worktree_sidecar(
+    project_root: Path,
+    worktree_name: str,
+    *,
+    temp_dir: Path | None = None,
+) -> CleanupResult:
+    """Remove the ``<temp_dir>/worktrees/<worktree_name>/`` sidecar directory.
 
     This directory is written by implement-worktree and implement-worktree-no-merge
-    skills to store the base-branch name. It lives inside the project root, not inside
+    skills to store the base-branch name. It lives inside the project root
+    (under the configured temp dir, default ``.autoskillit/temp``), not inside
     the worktree, so git worktree remove does not clean it up.
+    ``temp_dir`` defaults to the canonical ``<project_root>/.autoskillit/temp``.
     Never raises.
     """
     result = CleanupResult()
-    sidecar = project_root.joinpath(*_SIDECAR_ROOT, worktree_name)
+    resolved_temp = temp_dir if temp_dir is not None else resolve_temp_dir(project_root, None)
+    sidecar = _sidecar_root_for(resolved_temp) / worktree_name
     sidecar_str = str(sidecar)
     if not sidecar.exists():
         result.skipped.append(sidecar_str)

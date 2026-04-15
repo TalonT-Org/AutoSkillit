@@ -5,12 +5,12 @@ from __future__ import annotations
 import functools
 
 from autoskillit.core.types import SkillSource
-from autoskillit.workspace.skills import SkillResolver
+from autoskillit.workspace.skills import DefaultSkillResolver
 
 
 @functools.cache
 def _skill_text() -> str:
-    info = SkillResolver().resolve("validate-audit")
+    info = DefaultSkillResolver().resolve("validate-audit")
     assert info is not None, "validate-audit skill not found"
     return info.path.read_text()
 
@@ -18,14 +18,14 @@ def _skill_text() -> str:
 class TestValidateAuditSkillExists:
     # T-VAL-006
     def test_validate_audit_skill_exists(self) -> None:
-        info = SkillResolver().resolve("validate-audit")
+        info = DefaultSkillResolver().resolve("validate-audit")
         assert info is not None
         assert info.source == SkillSource.BUNDLED_EXTENDED
         assert info.path.exists()
 
     # T-VAL-007
     def test_validate_audit_has_audit_category(self) -> None:
-        info = SkillResolver().resolve("validate-audit")
+        info = DefaultSkillResolver().resolve("validate-audit")
         assert info is not None
         assert "audit" in info.categories
 
@@ -67,7 +67,7 @@ class TestValidateAuditContent:
 
     # T-VAL-014
     def test_output_dir(self) -> None:
-        assert ".autoskillit/temp/validate-audit/" in _skill_text()
+        assert "{{AUTOSKILLIT_TEMP}}/validate-audit/" in _skill_text()
 
     # T-VAL-015
     def test_history_research_agent(self) -> None:

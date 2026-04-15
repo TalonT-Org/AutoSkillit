@@ -1,6 +1,7 @@
 ---
 name: arch-lens-c4-container
 categories: [arch-lens]
+activate_deps: [mermaid]
 description: Create C4 Container architecture diagram showing static structure, building blocks, and technology choices. Anatomical lens answering "How is it built?"
 hooks:
   PreToolUse:
@@ -36,18 +37,38 @@ hooks:
 - Show technology choices for each container
 - Identify external systems and integrations
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
+- If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - After writing the diagram file, emit the **absolute path** as a structured output
-  token immediately before `%%ORDER_UP%%`. Resolve the relative `temp/arch-lens-c4-container/...`
+  token as your final output. Resolve the relative `temp/arch-lens-c4-container/...`
   save path to absolute by prepending the full CWD:
   ```
   diagram_path = /absolute/cwd/temp/arch-lens-c4-container/{filename}.md
-  %%ORDER_UP%%
   ```
   This token is MANDATORY — the pipeline cannot proceed without it.
+
+## Arguments
+
+`/autoskillit:arch-lens-c4-container [context_path]`
+
+- **context_path** (optional) — Absolute path to a PR context file containing new files
+  (★-prefixed) and modified files (●-prefixed) from the PR diff. When provided, read
+  this file before beginning analysis and focus the diagram on the architectural areas
+  affected by these specific files. When absent, explore the full CWD.
 
 ---
 
 ## Analysis Workflow
+
+### Step 0: Read PR context (when provided)
+
+If a `context_path` positional argument is present:
+1. Read the file at `context_path`
+2. Extract: new files list (★-prefixed), modified files list (●-prefixed)
+3. Focus Step 1 exploration on the modules/components these files belong to
+4. Apply ★ prefix on diagram nodes representing new files/components
+5. Apply ● prefix on diagram nodes representing modified files/components
+
+If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
 ### Step 1: Launch Parallel Exploration Subagents
 
@@ -133,7 +154,7 @@ Use the mermaid skill conventions to create a diagram with:
 
 ### Step 5: Write Output
 
-Write the diagram to: `.autoskillit/temp/arch-lens-c4-container/arch_diag_c4_container_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write the diagram to: `{{AUTOSKILLIT_TEMP}}/arch-lens-c4-container/arch_diag_c4_container_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 After writing the diagram file, emit a structured output line:
 

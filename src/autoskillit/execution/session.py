@@ -43,7 +43,13 @@ _TOKEN_FIELDS = (
 )
 
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
-    {CliSubtype.UNKNOWN, CliSubtype.EMPTY_OUTPUT, CliSubtype.UNPARSEABLE, CliSubtype.TIMEOUT}
+    {
+        CliSubtype.UNKNOWN,
+        CliSubtype.EMPTY_OUTPUT,
+        CliSubtype.UNPARSEABLE,
+        CliSubtype.TIMEOUT,
+        CliSubtype.IDLE_STALL,
+    }
 )
 
 
@@ -618,7 +624,11 @@ def _compute_success(
                     return False
                 logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
                 return True
-        case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
+        case (
+            ChannelConfirmation.CHANNEL_A
+            | ChannelConfirmation.UNMONITORED
+            | ChannelConfirmation.DIR_MISSING
+        ):
             pass  # fall through to termination dispatch
         case _ as _unreachable_cc:
             assert_never(_unreachable_cc)
@@ -628,6 +638,9 @@ def _compute_success(
             return False
 
         case TerminationReason.STALE:
+            return False
+
+        case TerminationReason.IDLE_STALL:
             return False
 
         case TerminationReason.COMPLETED:
@@ -650,9 +663,29 @@ def _compute_success(
             return content_ok
 
         case TerminationReason.NATURAL_EXIT:
-            # The process exited on its own. A non-zero returncode is treated
-            # as authoritative evidence of failure — no asymmetric bypass.
+            # The process exited on its own. A non-zero returncode is normally
+            # authoritative evidence of failure — no asymmetric bypass.
+            #
+            # Post-completion kill bypass: when an external watchdog kills the
+            # process AFTER it finished its work (e.g. trailing async task cleanup),
+            # the signal is a teardown artifact. The completion marker in the result
+            # provides strong evidence of completion — trust it over the returncode.
             if returncode != 0:
+                if (
+                    session.subtype == CliSubtype.SUCCESS
+                    and session.result.strip()
+                    and completion_marker
+                    and completion_marker in session.result
+                ):
+                    content_ok = _check_session_content(
+                        session, completion_marker, expected_output_patterns
+                    )
+                    logger.debug(
+                        "compute_success_natural_exit_post_completion_kill",
+                        returncode=returncode,
+                        content_check=content_ok,
+                    )
+                    return content_ok
                 return False
             content_ok = _check_session_content(
                 session, completion_marker, expected_output_patterns
@@ -798,7 +831,11 @@ def _compute_retry(
                         needs_retry=False,
                     )
                     return False, RetryReason.NONE
-                case ChannelConfirmation.CHANNEL_A | ChannelConfirmation.UNMONITORED:
+                case (
+                    ChannelConfirmation.CHANNEL_A
+                    | ChannelConfirmation.UNMONITORED
+                    | ChannelConfirmation.DIR_MISSING
+                ):
                     is_anomaly = _is_kill_anomaly(session)
                     logger.debug(
                         "compute_retry_result",
@@ -817,6 +854,12 @@ def _compute_retry(
             # _build_skill_result intercepts STALE before calling _compute_retry.
             # Explicit arm exists for exhaustiveness; unreachable in production.
             logger.debug("compute_retry_result", termination="STALE", needs_retry=False)
+            return False, RetryReason.NONE
+
+        case TerminationReason.IDLE_STALL:
+            # _build_skill_result intercepts IDLE_STALL before calling _compute_retry.
+            # Explicit arm exists for exhaustiveness; unreachable in production.
+            logger.debug("compute_retry_result", termination="IDLE_STALL", needs_retry=False)
             return False, RetryReason.NONE
 
         case TerminationReason.TIMED_OUT:
@@ -869,6 +912,7 @@ def _normalize_subtype(
             | CliSubtype.EMPTY_OUTPUT
             | CliSubtype.UNPARSEABLE
             | CliSubtype.TIMEOUT
+            | CliSubtype.IDLE_STALL
         ):
             # Failure subtypes: upward normalize to "success" when adjudicated SUCCEEDED
             if outcome == SessionOutcome.SUCCEEDED:
@@ -971,7 +1015,7 @@ def _compute_outcome(
                         content_state=content_state.value,
                         channel=channel_confirmation.value,
                     )
-            case ChannelConfirmation.UNMONITORED:
+            case ChannelConfirmation.UNMONITORED | ChannelConfirmation.DIR_MISSING:
                 pass  # legitimate terminal failure — no channel confirmed completion
             case _ as unreachable_cc:
                 assert_never(unreachable_cc)

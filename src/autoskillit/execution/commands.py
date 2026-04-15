@@ -121,6 +121,9 @@ _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
 # Variables that build_full_headless_cmd controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
 # parameters (exit_after_stop_delay_ms, scenario_step_name).
+# Note: these overlap with IDE_ENV_DENYLIST in core/_claude_env.py, which
+# strips the same keys as part of the broader IDE env scrubbing layer.
+# Both lists must be kept in sync when adding new exclusive variables.
 _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
     {
         "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",

@@ -15,7 +15,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from autoskillit.cli import _is_plugin_installed
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     SubprocessRunner,
@@ -121,6 +120,13 @@ def _gh_cli_token() -> str | None:
     return None
 
 
+def _check_plugin_installed() -> bool:
+    """Deferred import to avoid server→cli module-level dependency."""
+    from autoskillit.cli import _is_plugin_installed  # noqa: PLC0415
+
+    return _is_plugin_installed()
+
+
 def make_context(
     config: AutomationConfig,
     *,
@@ -144,7 +150,7 @@ def make_context(
         plugin_dir: Absolute path to the autoskillit plugin directory.
                     Pass None explicitly to indicate the plugin is installed
                     (marketplace install; no --plugin-dir needed). When omitted
-                    (sentinel), auto-detects via _is_plugin_installed().
+                    (sentinel), auto-detects via _check_plugin_installed().
 
     Returns:
         ToolContext with gate starting closed (enabled=False) in all contexts.
@@ -206,7 +212,7 @@ def make_context(
     resolved_dir = (
         plugin_dir
         if plugin_dir is not _UNSET
-        else (_default_plugin_dir() if not _is_plugin_installed() else None)
+        else (_default_plugin_dir() if not _check_plugin_installed() else None)
     )
     gate = DefaultGateState(enabled=False)
 

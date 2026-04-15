@@ -438,7 +438,7 @@ def test_make_context_sets_plugin_dir_none_when_plugin_installed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """make_context() sets plugin_dir=None when marketplace plugin is installed."""
-    monkeypatch.setattr("autoskillit.server._factory._is_plugin_installed", lambda: True)
+    monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: True)
     ctx = make_context(AutomationConfig(), runner=None)
     assert ctx.plugin_dir is None
 
@@ -447,7 +447,7 @@ def test_make_context_sets_plugin_dir_when_plugin_not_installed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """make_context() sets plugin_dir to package root when plugin is not installed."""
-    monkeypatch.setattr("autoskillit.server._factory._is_plugin_installed", lambda: False)
+    monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: False)
     ctx = make_context(AutomationConfig(), runner=None)
     assert ctx.plugin_dir is not None
     assert ctx.plugin_dir != ""

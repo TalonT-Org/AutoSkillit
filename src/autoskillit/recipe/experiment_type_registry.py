@@ -27,6 +27,13 @@ class ExperimentTypeSpec:
 def _parse_experiment_type(data: dict, source_path: Path) -> ExperimentTypeSpec:
     if "name" not in data:
         raise ValueError(f"Experiment type YAML missing 'name' field: {source_path}")
+    for field in ("dimension_weights", "applicable_lenses", "red_team_focus", "l1_severity"):
+        val = data.get(field)
+        if val is not None and not isinstance(val, dict):
+            raise TypeError(
+                f"Experiment type '{data['name']}' field '{field}' must be a dict, "
+                f"got {type(val).__name__}: {source_path}"
+            )
     return ExperimentTypeSpec(
         name=data["name"],
         classification_triggers=list(data.get("classification_triggers", [])),

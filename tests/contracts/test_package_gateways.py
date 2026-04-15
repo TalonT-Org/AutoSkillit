@@ -211,7 +211,7 @@ def test_factory_make_context_returns_toolcontext(monkeypatch):
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.server._factory import make_context
 
-    monkeypatch.setattr("autoskillit.server._factory._is_plugin_installed", lambda: False)
+    monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: False)
     ctx = make_context(AutomationConfig())
     assert isinstance(ctx, ToolContext)
     assert ctx.gate.enabled is False  # starts closed

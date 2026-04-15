@@ -154,12 +154,18 @@ async def revert_contamination(
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )
+    if reset_result.returncode != 0:
+        logger.warning(
+            "revert_contamination_reset_failed",
+            reset_rc=reset_result.returncode,
+        )
+        return dataclasses.replace(report, reverted=False)
     clean_result = await runner(
         ["git", "clean", "-fd"],
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )
-    reverted = reset_result.returncode == 0 and clean_result.returncode == 0
+    reverted = clean_result.returncode == 0
     if not reverted:
         logger.warning(
             "revert_contamination_failed",

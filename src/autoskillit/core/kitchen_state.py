@@ -113,7 +113,7 @@ def sweep_stale_markers(ttl_hours: int = 24) -> int:
             if age.total_seconds() >= ttl_hours * 3600:
                 p.unlink()
                 deleted += 1
-        except (OSError, json.JSONDecodeError, KeyError, ValueError):
+        except (OSError, json.JSONDecodeError, KeyError, ValueError, UnicodeDecodeError):
             # Malformed or unreadable markers are treated as stale and removed
             try:
                 p.unlink()

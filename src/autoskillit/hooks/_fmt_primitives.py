@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# Keep in sync with HOOK_DIR_COMPONENTS + HOOK_CONFIG_FILENAME in _hook_settings.py
+# (stdlib-only boundary prevents a shared import).
 _HOOK_CONFIG_PATH_COMPONENTS = (".autoskillit", "temp", ".hook_config.json")
 
 

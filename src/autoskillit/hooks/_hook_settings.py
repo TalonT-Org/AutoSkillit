@@ -19,6 +19,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+# Keep in sync with _HOOK_CONFIG_PATH_COMPONENTS in hooks/_fmt_primitives.py
+# (stdlib-only boundary prevents a shared import).
 HOOK_CONFIG_FILENAME = ".hook_config.json"
 HOOK_DIR_COMPONENTS = (".autoskillit", "temp")
 

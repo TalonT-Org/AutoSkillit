@@ -81,8 +81,6 @@ _CHANNEL_B_RECOVERABLE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {CliSubtype.UNPARSEABLE, CliSubtype.EMPTY_OUTPUT}
 )
 
-# Regex to detect path-capture patterns like ``plan_path\s*=\s*/.+`` in expected_output_patterns.
-# Used by _synthesize_from_write_artifacts and _extract_missing_token_hints.
 _PATH_CAPTURE: re.Pattern[str] = re.compile(r"^(\w+)\\s\*=\\s\*/.+")
 
 

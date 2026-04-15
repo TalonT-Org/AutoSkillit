@@ -133,3 +133,70 @@ def test_tool_ctx_log_dir_is_isolated_from_production(tool_ctx):
     xdg = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
     production_path = os.path.join(xdg, "autoskillit", "logs")
     assert not os.path.abspath(log_dir).startswith(production_path)
+
+
+def test_minimal_ctx_imports_only_core_pipeline_and_config():
+    """minimal_ctx fixture must only import from autoskillit.core, .pipeline, and .config."""
+    import ast
+    from pathlib import Path
+
+    conftest_path = Path(__file__).parent / "conftest.py"
+    tree = ast.parse(conftest_path.read_text(), filename=str(conftest_path))
+
+    func = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "minimal_ctx":
+            func = node
+            break
+    assert func is not None, "minimal_ctx fixture not found in conftest.py"
+
+    ALLOWED_PREFIXES = ("autoskillit.core", "autoskillit.pipeline", "autoskillit.config")
+
+    violations = []
+    for node in ast.walk(func):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module
+            and node.module.startswith("autoskillit.")
+        ):
+            if not any(node.module.startswith(p) for p in ALLOWED_PREFIXES):
+                violations.append(node.module)
+
+    assert not violations, (
+        f"minimal_ctx imports from forbidden modules: {violations}. "
+        f"Only autoskillit.core, autoskillit.pipeline, and autoskillit.config are allowed."
+    )
+
+
+def test_minimal_ctx_has_no_server_factory_dependency():
+    """minimal_ctx must not import from autoskillit.server or reference make_context."""
+    import ast
+    from pathlib import Path
+
+    conftest_path = Path(__file__).parent / "conftest.py"
+    tree = ast.parse(conftest_path.read_text(), filename=str(conftest_path))
+
+    func = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "minimal_ctx":
+            func = node
+            break
+    assert func is not None, "minimal_ctx fixture not found in conftest.py"
+
+    for node in ast.walk(func):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            assert not node.module.startswith("autoskillit.server"), (
+                f"minimal_ctx imports from server module: {node.module}"
+            )
+            names = [alias.name for alias in node.names]
+            assert "make_context" not in names, (
+                "minimal_ctx imports make_context — use direct ToolContext construction"
+            )
+
+
+def test_minimal_ctx_provides_isolated_gate(minimal_ctx):
+    """minimal_ctx fixture provides a ToolContext with gate enabled."""
+    from autoskillit.pipeline.gate import DefaultGateState
+
+    assert isinstance(minimal_ctx.gate, DefaultGateState)
+    assert minimal_ctx.gate.enabled is True

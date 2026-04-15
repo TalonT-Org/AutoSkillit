@@ -91,6 +91,23 @@ def _extract_merge_phase_section(skill_md: str) -> str:
     return "\n".join(extracted)
 
 
+def test_sous_chef_contains_step_execution_obligation() -> None:
+    text = _sous_chef_text()
+    assert "STEP EXECUTION IS NOT DISCRETIONARY" in text
+    assert "MUST execute every step" in text
+    assert "NEVER skip a step because" in text
+
+
+def test_sous_chef_contains_pr_pipeline_protection() -> None:
+    text = _sous_chef_text()
+    assert "review_pr" in text
+    assert "annotate_pr_diff" in text
+    assert "compose_pr" in text
+    # Must follow the pattern of the merge protection: named NEVER rule
+    idx = text.index("review_pr")
+    assert "NEVER" in text[max(0, idx - 400) : idx + 200]
+
+
 def test_sous_chef_merge_phase_documents_queue_no_auto_path() -> None:
     """MERGE PHASE section must document the queue_enqueue_no_auto routing cell."""
     skill_md = _sous_chef_text()

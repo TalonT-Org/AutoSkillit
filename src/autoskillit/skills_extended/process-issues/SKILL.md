@@ -36,6 +36,17 @@ issues upfront, load recipe, execute session, collect result, report.
 **ALWAYS:**
 - Process batches in ascending order: batch 1 before batch 2 before batch 3
 - Use `load_recipe` to execute the recipe for each issue
+- After loading a recipe via `load_recipe`, execute every step in the recipe's step
+  graph in sequence. Never skip, replace, or improvise steps.
+- `optional: true` means the step is skipped ONLY when its `skip_when_false` ingredient
+  evaluates to false. When the ingredient is true, the step is mandatory.
+- Follow `on_success`, `on_failure`, `on_result`, and `on_context_limit` routing exactly
+  as declared in the recipe YAML.
+- NEVER replace recipe PR steps (`prepare_pr`, `run_arch_lenses`, `compose_pr`,
+  `annotate_pr_diff`, `review_pr`) with manual `run_cmd` calls such as `gh pr create`.
+- Between issues: immediately begin step 1 for the next issue after completing the
+  previous issue. Do not output prose status between issues — inter-issue text creates
+  end_turn windows that cause stochastic session termination.
 - Emit `---process-issues-result---` result block on completion (success or failure)
 - Write the summary report to `{{AUTOSKILLIT_TEMP}}/process-issues/` (relative to the current working directory)
 - Use `model: "sonnet"` when spawning subagents via the Task tool

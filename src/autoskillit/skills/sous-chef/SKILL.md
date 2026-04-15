@@ -338,6 +338,40 @@ When `run_skill` output contains `--- QUOTA WARNING ---`:
 
 ---
 
+## STEP EXECUTION IS NOT DISCRETIONARY — MANDATORY
+
+You MUST execute every step the pipeline routes you to. The recipe step graph is the
+sole authority on what executes and in what order.
+
+### 1. Anti-skip rule
+
+- NEVER skip a step because the PR is small, the diff is trivial, the change looks
+  simple, or you judge the step unnecessary.
+- NEVER skip a step because you believe it has already been done or is redundant.
+- The ONLY mechanism for skipping a step is `skip_when_false` evaluating to false.
+  When `skip_when_false` evaluates to true (or is absent), the step MUST execute.
+- Consequence: skipping PR review steps results in unreviewed code, missing diff
+  annotations, and no architectural lens analysis — code reaches main without
+  quality gates. Skipping issue lifecycle steps breaks traceability.
+
+### 2. Anti-improvisation rule
+
+- NEVER replace recipe steps with manual tool calls. In particular, NEVER use `run_cmd`
+  with `gh pr create`, `gh pr review`, or `gh api` to substitute for recipe steps.
+- All PR creation and review must flow through the recipe's declared step chain
+  (`prepare_pr`, `run_arch_lenses`, `compose_pr`, `annotate_pr_diff`, `review_pr`).
+  Bypassing these steps skips diff annotation, architectural lens analysis, and
+  automated code review.
+
+### 3. The word "optional" in YAML
+
+`optional: true` on a recipe step does NOT mean the step is discretionary. It means:
+- The step is SKIPPED when its `skip_when_false` ingredient evaluates to false.
+- When the ingredient evaluates to true, the step is MANDATORY.
+- A running optional step that returns `success: false` MUST follow `on_failure`.
+
+---
+
 ## NARRATION SUPPRESSION — MANDATORY
 
 Do NOT output prose status text, phase announcements, or progress summaries between

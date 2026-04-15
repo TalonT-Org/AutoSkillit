@@ -19,6 +19,22 @@ def test_load_recipe_instructs_step_name_exact_yaml_key():
     )
 
 
+def test_load_recipe_docstring_contains_optional_step_semantics():
+    import inspect
+
+    from autoskillit.server.tools_recipe import load_recipe
+
+    doc = inspect.getdoc(load_recipe) or ""
+    assert "OPTIONAL STEP SEMANTICS" in doc
+
+
+def test_load_recipe_response_includes_orchestration_rules():
+    """load_and_validate result TypedDict must declare orchestration_rules."""
+    from autoskillit.recipe._api import LoadRecipeResult
+
+    assert "orchestration_rules" in LoadRecipeResult.__annotations__
+
+
 def test_load_recipe_does_not_instruct_get_token_summary_pre_staging():
     """
     The load_recipe docstring must not instruct the orchestrator to call

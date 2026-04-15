@@ -164,6 +164,7 @@ class LoadRecipeResult(TypedDict, total=False):
     error: str
     greeting: str
     ingredients_table: str
+    orchestration_rules: str
 
 
 class RecipeListItem(TypedDict):
@@ -519,6 +520,19 @@ def validate_from_path(
     }
 
 
+def _build_orchestration_rules() -> str:
+    return (
+        "STEP EXECUTION IS NOT DISCRETIONARY:\n"
+        "You MUST execute every step the pipeline routes you to. "
+        "The ONLY mechanism for skipping a step is skip_when_false evaluating to false. "
+        "When skip_when_false evaluates to true (or is absent), the step is MANDATORY. "
+        "NEVER skip a step because the PR is small, the diff is trivial, or you judge "
+        "the step unnecessary. NEVER replace recipe steps with manual tool calls. "
+        "Consequence: skipping PR review steps results in unreviewed code, missing "
+        "diff annotations, and no architectural lens analysis."
+    )
+
+
 def load_and_validate(
     name: str,
     project_dir: Path | None = None,
@@ -738,6 +752,7 @@ def load_and_validate(
         result["requires_packs"] = _serving_recipe.requires_packs
     if ing_table:
         result["ingredients_table"] = ing_table
+    result["orchestration_rules"] = _build_orchestration_rules()
 
     # Write to cache (only when recipe was found and fully processed)
     if match is not None:

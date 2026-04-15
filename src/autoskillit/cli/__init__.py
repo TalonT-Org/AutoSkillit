@@ -10,11 +10,7 @@ import subprocess  # noqa: F401 — tests patch autoskillit.cli.subprocess.run
 from pathlib import Path  # noqa: F401 — tests patch autoskillit.cli.Path.home
 
 from autoskillit.cli._cook import cook
-from autoskillit.cli._doctor import (
-    DoctorResult,
-    _check_hook_health,
-    _count_hook_registry_drift,
-)
+from autoskillit.cli._doctor import DoctorResult
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli._init_helpers import _prompt_recipe_choice
 from autoskillit.cli._prompts import (
@@ -59,9 +55,7 @@ __all__ = [
     "_build_orchestrator_prompt",
     "DoctorResult",
     "HookDriftResult",
-    "_check_hook_health",
     "_claude_settings_path",
-    "_count_hook_registry_drift",
     "_generate_config_yaml",
     "_prompt_recipe_choice",
     "_prompt_test_command",

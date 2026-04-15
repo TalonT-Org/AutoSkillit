@@ -8,7 +8,7 @@ from autoskillit.core import ValidatedAddDir
 
 
 @pytest.mark.anyio
-async def test_run_headless_core_no_add_dir_when_empty(tool_ctx, tmp_path):
+async def test_run_headless_core_no_add_dir_when_empty(minimal_ctx, tmp_path):
     """T-OVR-012: run_headless_core with empty add_dirs emits no --add-dir flags."""
     from autoskillit.execution.headless import run_headless_core
     from tests.conftest import _make_result
@@ -19,15 +19,15 @@ async def test_run_headless_core_no_add_dir_when_empty(tool_ctx, tmp_path):
         captured_cmd.extend(cmd)
         return _make_result()
 
-    tool_ctx.runner = mock_runner
+    minimal_ctx.runner = mock_runner
     proj = tmp_path / "proj"
     proj.mkdir()
-    await run_headless_core("/autoskillit:investigate foo", str(proj), tool_ctx, add_dirs=())
+    await run_headless_core("/autoskillit:investigate foo", str(proj), minimal_ctx, add_dirs=())
     assert "--add-dir" not in captured_cmd
 
 
 @pytest.mark.anyio
-async def test_run_headless_core_two_add_dirs(tool_ctx, tmp_path):
+async def test_run_headless_core_two_add_dirs(minimal_ctx, tmp_path):
     """T-OVR-013: run_headless_core with two ValidatedAddDir paths emits two --add-dir flags."""
     from autoskillit.execution.headless import run_headless_core
     from tests.conftest import _make_result
@@ -47,13 +47,13 @@ async def test_run_headless_core_two_add_dirs(tool_ctx, tmp_path):
         captured_cmd.extend(cmd)
         return _make_result()
 
-    tool_ctx.runner = mock_runner
+    minimal_ctx.runner = mock_runner
     proj = tmp_path / "proj"
     proj.mkdir()
     await run_headless_core(
         "/autoskillit:investigate foo",
         str(proj),
-        tool_ctx,
+        minimal_ctx,
         add_dirs=[dir_a, dir_b],
     )
     add_dir_positions = [i for i, x in enumerate(captured_cmd) if x == "--add-dir"]

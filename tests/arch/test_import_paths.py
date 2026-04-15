@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.arch._helpers import _runtime_import_froms
+
 SRC = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 PACKAGES = frozenset(
     [
@@ -338,3 +340,15 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
                     if other_pkg in forbidden_pkgs and other_pkg != pkg:
                         violations.append(f"{rel} → {mod}")
     assert not violations, "REQ-IMP-007 violations:\n" + "\n".join(violations)
+
+
+def test_helpers_no_recipe_imports() -> None:
+    """server/helpers.py must have zero runtime imports from autoskillit.recipe."""
+    helpers_path = SRC / "server" / "helpers.py"
+    runtime_imports = _runtime_import_froms(helpers_path)
+    recipe_imports = [
+        node.module
+        for node in runtime_imports
+        if node.module and node.module.startswith("autoskillit.recipe")
+    ]
+    assert recipe_imports == [], f"Forbidden recipe imports in helpers.py: {recipe_imports}"

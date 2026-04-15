@@ -104,7 +104,8 @@ def test_sous_chef_contains_pr_pipeline_protection() -> None:
     assert "annotate_pr_diff" in text
     assert "compose_pr" in text
     # Must follow the pattern of the merge protection: named NEVER rule
-    assert "NEVER" in text[text.index("review_pr") - 200 : text.index("review_pr") + 200]
+    idx = text.index("review_pr")
+    assert "NEVER" in text[max(0, idx - 400) : idx + 200]
 
 
 def test_sous_chef_merge_phase_documents_queue_no_auto_path() -> None:

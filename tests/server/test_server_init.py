@@ -485,11 +485,20 @@ class TestClaudeCodeCompatMiddleware:
         tool.name = "test_tool"
         tool.output_schema = {"type": "string"}
         tool.annotations = None
+        tool.model_copy.return_value = MagicMock(
+            name="test_tool",
+            output_schema=None,
+            annotations=None,
+            title=None,
+        )
 
         ctx = MagicMock()
         call_next = AsyncMock(return_value=[tool])
 
         result = await mw.on_list_tools(ctx, call_next)
+        tool.model_copy.assert_called_once_with(
+            update={"output_schema": None, "annotations": None, "title": None},
+        )
         assert result[0].output_schema is None
 
     @pytest.mark.anyio
@@ -504,6 +513,12 @@ class TestClaudeCodeCompatMiddleware:
         tool.name = "test_tool"
         tool.output_schema = None
         tool.annotations = MagicMock(readOnlyHint=True)
+        tool.model_copy.return_value = MagicMock(
+            name="test_tool",
+            output_schema=None,
+            annotations=None,
+            title=None,
+        )
 
         ctx = MagicMock()
         call_next = AsyncMock(return_value=[tool])
@@ -525,6 +540,14 @@ class TestClaudeCodeCompatMiddleware:
         tool.parameters = {"type": "object", "properties": {}}
         tool.output_schema = {"type": "string"}
         tool.annotations = MagicMock()
+        copy_mock = MagicMock()
+        copy_mock.name = "my_tool"
+        copy_mock.description = "Does things"
+        copy_mock.parameters = {"type": "object", "properties": {}}
+        copy_mock.output_schema = None
+        copy_mock.annotations = None
+        copy_mock.title = None
+        tool.model_copy.return_value = copy_mock
 
         ctx = MagicMock()
         call_next = AsyncMock(return_value=[tool])

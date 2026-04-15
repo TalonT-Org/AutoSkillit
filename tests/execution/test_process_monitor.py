@@ -586,13 +586,27 @@ class TestHasActiveApiConnection:
 
 
 class TestHasActiveChildProcesses:
-    """Unit tests for _has_active_child_processes."""
+    """Unit tests for _has_active_child_processes.
 
-    def _make_child(self, cpu: float | type[Exception]) -> MagicMock:
+    The function caches psutil.Process objects so cpu_percent(interval=0)
+    returns meaningful deltas on the second call.  First call primes the
+    baseline (always returns False); second call with the same child PIDs
+    uses the cached objects.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self, monkeypatch):
+        """Reset the module-level Process cache between tests."""
+        from autoskillit.execution import _process_monitor
+
+        monkeypatch.setattr(_process_monitor, "_child_process_cache", {})
+
+    def _make_child(self, cpu: float | type[Exception], *, pid: int = 999) -> MagicMock:
         """Build a mock psutil child process."""
         child = MagicMock()
+        child.pid = pid
         if isinstance(cpu, type) and issubclass(cpu, Exception):
-            child.cpu_percent.side_effect = cpu(pid=999)
+            child.cpu_percent.side_effect = cpu(pid=pid)
         else:
             child.cpu_percent.return_value = cpu
         return child
@@ -612,12 +626,29 @@ class TestHasActiveChildProcesses:
         )
 
     def test_returns_true_when_child_exceeds_threshold(self, monkeypatch):
-        self._patch_children([self._make_child(15.0)], monkeypatch)
+        child = self._make_child(15.0, pid=100)
+        self._patch_children([child], monkeypatch)
+        # First call primes baseline; second call returns meaningful delta.
+        _has_active_child_processes(1234)
+        # Cache now holds the child object; second call uses cached.cpu_percent.
+        from autoskillit.execution._process_monitor import _child_process_cache
+
+        _child_process_cache[100] = child
         assert _has_active_child_processes(1234) is True
 
     def test_returns_false_when_all_children_below_threshold(self, monkeypatch):
-        children = [self._make_child(0.0), self._make_child(5.0), self._make_child(9.9)]
+        children = [
+            self._make_child(0.0, pid=100),
+            self._make_child(5.0, pid=101),
+            self._make_child(9.9, pid=102),
+        ]
         self._patch_children(children, monkeypatch)
+        # Prime baseline
+        _has_active_child_processes(1234)
+        from autoskillit.execution._process_monitor import _child_process_cache
+
+        for c in children:
+            _child_process_cache[c.pid] = c
         assert _has_active_child_processes(1234) is False
 
     def test_returns_false_when_no_children(self, monkeypatch):
@@ -629,17 +660,43 @@ class TestHasActiveChildProcesses:
         assert _has_active_child_processes(1234) is False
 
     def test_skips_dead_child_gracefully(self, monkeypatch):
-        children = [self._make_child(psutil.NoSuchProcess), self._make_child(5.0)]
+        children = [
+            self._make_child(psutil.NoSuchProcess, pid=100),
+            self._make_child(5.0, pid=101),
+        ]
         self._patch_children(children, monkeypatch)
+        _has_active_child_processes(1234)
+        from autoskillit.execution._process_monitor import _child_process_cache
+
+        for c in children:
+            if c.pid in _child_process_cache:
+                pass  # Already cached by prime call
+            _child_process_cache[c.pid] = c
         assert _has_active_child_processes(1234) is False
 
     def test_skips_zombie_child_then_finds_active(self, monkeypatch):
-        children = [self._make_child(psutil.ZombieProcess), self._make_child(20.0)]
+        children = [
+            self._make_child(psutil.ZombieProcess, pid=100),
+            self._make_child(20.0, pid=101),
+        ]
         self._patch_children(children, monkeypatch)
+        # Prime baseline
+        _has_active_child_processes(1234)
+        from autoskillit.execution._process_monitor import _child_process_cache
+
+        for c in children:
+            _child_process_cache[c.pid] = c
         assert _has_active_child_processes(1234) is True
 
     def test_skips_access_denied_gracefully(self, monkeypatch):
-        self._patch_children([self._make_child(psutil.AccessDenied)], monkeypatch)
+        self._patch_children(
+            [self._make_child(psutil.AccessDenied, pid=100)],
+            monkeypatch,
+        )
+        _has_active_child_processes(1234)
+        from autoskillit.execution._process_monitor import _child_process_cache
+
+        _child_process_cache[100] = self._make_child(psutil.AccessDenied, pid=100)
         assert _has_active_child_processes(1234) is False
 
 

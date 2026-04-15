@@ -118,7 +118,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),
     # clone_registry.py — clones dict (CloneRegistry.__exit__ atomic write-back)
-    ("src/autoskillit/workspace/clone_registry.py", 77),
+    ("src/autoskillit/workspace/clone_registry.py", 82),
     # staleness_cache.py — cache dict
     ("src/autoskillit/recipe/staleness_cache.py", 67),
     # background.py — payload dict
@@ -127,7 +127,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/_lifespan.py", 55),
     # tools_kitchen.py — hook config dict
     ("src/autoskillit/server/tools_kitchen.py", 142),
-    ("src/autoskillit/server/tools_kitchen.py", 470),
+    ("src/autoskillit/server/tools_kitchen.py", 471),
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools_status.py", 385),
     # tools_github.py — bug report dict

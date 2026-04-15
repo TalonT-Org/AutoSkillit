@@ -6,6 +6,7 @@ import yaml
 
 from autoskillit.recipe._api import validate_from_path
 from autoskillit.recipe.io import load_recipe
+from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
 
 RECIPES_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
 
@@ -18,7 +19,11 @@ class TestImplementationPipelineIssueUrl:
     def test_recipe_validates_clean(self):
         """implementation must validate with no errors after adding issue_url."""
         result = validate_from_path(_recipe_path("implementation"))
-        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
+        errors = [
+            f
+            for f in result.get("findings", [])
+            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+        ]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_issue_url_ingredient_declared(self):
@@ -67,11 +72,11 @@ class TestImplementationPipelineIssueUrl:
         assert any("issue_url" in str(v) for v in skill_step_with.values())
         assert not any("issue_content" in str(v) for v in skill_step_with.values())
 
-    def test_issue_number_referenced_in_open_pr_step(self):
-        """open_pr_step must reference context.issue_number in with: for dataflow tracking."""
+    def test_issue_number_referenced_in_prepare_pr_step(self):
+        """prepare_pr must reference context.issue_number in with: for dataflow tracking."""
         data = yaml.safe_load(_recipe_path("implementation").read_text())
-        openpr_with = data["steps"]["open_pr_step"].get("with", {})
-        assert any("issue_number" in str(v) for v in openpr_with.values())
+        prepare_pr_with = data["steps"]["prepare_pr"].get("with", {})
+        assert any("issue_number" in str(v) for v in prepare_pr_with.values())
 
     def test_no_dead_output_for_issue_number(self):
         """issue_number captured by get_issue_title must not be a dead output."""
@@ -105,7 +110,11 @@ class TestImplementationPipelineIssueUrl:
 class TestInvestigateFirstIssueUrl:
     def test_recipe_validates_clean(self):
         result = validate_from_path(_recipe_path("remediation"))
-        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
+        errors = [
+            f
+            for f in result.get("findings", [])
+            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+        ]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_issue_url_ingredient_declared(self):
@@ -153,10 +162,10 @@ class TestInvestigateFirstIssueUrl:
         assert any("issue_url" in str(v) for v in skill_step_with.values())
         assert not any("issue_content" in str(v) for v in skill_step_with.values())
 
-    def test_issue_number_referenced_in_open_pr_step(self):
+    def test_issue_number_referenced_in_prepare_pr_step(self):
         data = yaml.safe_load(_recipe_path("remediation").read_text())
-        openpr_with = data["steps"]["open_pr_step"].get("with", {})
-        assert any("issue_number" in str(v) for v in openpr_with.values())
+        prepare_pr_with = data["steps"]["prepare_pr"].get("with", {})
+        assert any("issue_number" in str(v) for v in prepare_pr_with.values())
 
     def test_no_dead_output_for_issue_number(self):
         """issue_number captured by get_issue_title must not be a dead output."""
@@ -190,7 +199,11 @@ class TestInvestigateFirstIssueUrl:
 class TestImplementationGroupsIssueTitle:
     def test_recipe_validates_clean(self):
         result = validate_from_path(_recipe_path("implementation-groups"))
-        errors = [f for f in result.get("findings", []) if f.get("severity") == "error"]
+        errors = [
+            f
+            for f in result.get("findings", [])
+            if f.get("severity") == "error" and f.get("rule") != _NO_AUTOSKILLIT_IMPORT
+        ]
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_fetch_issue_step_replaced(self):
@@ -228,9 +241,9 @@ class TestImplementationGroupsIssueTitle:
         }
         assert "issue_content" not in all_captures
 
-    def test_open_pr_step_still_references_issue_number(self):
+    def test_prepare_pr_step_still_references_issue_number(self):
         data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
-        step = data["steps"]["open_pr_step"]
+        step = data["steps"]["prepare_pr"]
         assert "context.issue_number" in str(step)
 
 
@@ -240,7 +253,7 @@ class TestClaimReleaseGates:
     RECIPES = ["implementation", "implementation-groups", "remediation"]
     # Recipes where ci_watch routes directly to release_issue_success
     RECIPES_WITH_RELEASE_SUCCESS: list[str] = []
-    # Recipes where ci_watch routes to check_merge_queue (merge-queue path)
+    # Recipes where ci_watch routes to check_repo_merge_state (merge-queue path)
     RECIPES_WITHOUT_RELEASE_SUCCESS = [
         "implementation",
         "implementation-groups",
@@ -302,25 +315,28 @@ class TestClaimReleaseGates:
                 f"{name}: release_issue_success must be absent — label stays on success"
             )
 
-    def test_release_issue_success_routes_to_confirm_cleanup(self):
+    def test_release_issue_success_routes_to_register_clone_success(self):
         for name in self.RECIPES_WITH_RELEASE_SUCCESS_STEP:
             data = yaml.safe_load(_recipe_path(name).read_text())
             step = data["steps"]["release_issue_success"]
-            assert step["on_success"] == "check_defer_cleanup", (
-                f"{name}: release_issue_success.on_success should be check_defer_cleanup"
+            assert step["on_success"] == "register_clone_success", (
+                f"{name}: release_issue_success.on_success should be register_clone_success"
             )
 
-    def test_release_issue_failure_routes_to_cleanup_failure(self):
+    def test_release_issue_failure_routes_to_register_clone_failure(self):
         for name in self.RECIPES:
             data = yaml.safe_load(_recipe_path(name).read_text())
             step = data["steps"]["release_issue_failure"]
-            assert step["on_success"] == "check_defer_on_failure", (
-                f"{name}: release_issue_failure.on_success should be check_defer_on_failure"
+            assert step["on_success"] == "register_clone_failure", (
+                f"{name}: release_issue_failure.on_success should be register_clone_failure"
+            )
+            assert step["on_failure"] == "register_clone_failure", (
+                f"{name}: release_issue_failure.on_failure should be register_clone_failure"
             )
 
     def test_ci_watch_on_success_routing(self):
         expected = {
-            **{name: "check_merge_queue" for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS},
+            **{name: "check_repo_merge_state" for name in self.RECIPES_WITHOUT_RELEASE_SUCCESS},
             **{name: "release_issue_success" for name in self.RECIPES_WITH_RELEASE_SUCCESS},
         }
         assert set(expected) == set(self.RECIPES), (

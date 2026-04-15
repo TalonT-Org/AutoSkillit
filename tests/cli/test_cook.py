@@ -102,6 +102,17 @@ class TestCLIOrder:
         """Most order() paths require an interactive TTY — default to True for this class."""
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
+    @pytest.fixture(autouse=True)
+    def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub _is_plugin_installed in app.py to False to prevent subprocess.run collision."""
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
+
     # --- workspace init ---
 
     def test_prep_station_init_creates_dir_with_marker(
@@ -440,6 +451,70 @@ class TestCLIOrder:
         assert "stdin" not in kwargs
 
     @patch("autoskillit.cli.subprocess.run")
+    def test_order_suppresses_plugin_dir_when_plugin_installed(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order omits --plugin-dir when marketplace plugin is installed."""
+        import importlib
+        import sys as _sys
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: True)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.order("test-script")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert ClaudeFlags.PLUGIN_DIR not in cmd
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_includes_plugin_dir_when_no_plugin_installed(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order includes --plugin-dir when marketplace plugin is not installed."""
+        import importlib
+        import sys as _sys
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.order("test-script")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert ClaudeFlags.PLUGIN_DIR in cmd
+
+    @patch("autoskillit.cli.subprocess.run")
     def test_order_system_prompt_contains_behavioral_instructions(
         self,
         mock_run: MagicMock,
@@ -647,13 +722,12 @@ class TestCLIOrder:
             args=[], returncode=0, stdout="", stderr=""
         )
 
-        prompts_seen: list[str] = []
-        monkeypatch.setattr("builtins.input", lambda prompt="": prompts_seen.append(prompt) or "")
+        input_calls = []
+        monkeypatch.setattr("builtins.input", lambda prompt="": input_calls.append(prompt) or "")
 
         cli.order("test-script")
 
-        assert len(prompts_seen) == 1, "input() should be called exactly once (confirmation)"
-        assert "Launch session" in prompts_seen[0]
+        assert len(input_calls) == 1, "input() should be called exactly once (confirmation)"
 
     @patch("autoskillit.cli.subprocess.run")
     def test_order_command_includes_positional_greeting(
@@ -827,6 +901,91 @@ class TestCLIOrder:
             f"No open-kitchen greeting found as positional arg in: {cmd}"
         )
 
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_resume_discovered_session_id_in_subprocess_cmd(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order(resume=True) discovers session via find_latest_session_id and passes --resume."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        with patch("autoskillit.core.find_latest_session_id", return_value="sess_abc"):
+            cli.order("test-script", resume=True)
+
+        cmd = mock_run.call_args[0][0]
+        assert "--resume" in cmd
+        assert cmd[cmd.index("--resume") + 1] == "sess_abc"
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_resume_explicit_session_id_skips_discovery(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order(resume=True, session_id='explicit-abc') uses explicit id; discovery not called."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        discovery_calls: list = []
+
+        def fake_discover(cwd=None):
+            discovery_calls.append(cwd)
+            return "should-not-be-used"
+
+        with patch("autoskillit.core.find_latest_session_id", side_effect=fake_discover):
+            cli.order("test-script", resume=True, session_id="explicit-abc")
+
+        cmd = mock_run.call_args[0][0]
+        assert "--resume" in cmd
+        assert cmd[cmd.index("--resume") + 1] == "explicit-abc"
+        assert not discovery_calls, (
+            "find_latest_session_id must not be called when session_id is explicit"
+        )
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_resume_no_prior_session_starts_fresh(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order(resume=True) with no prior session omits --resume from subprocess command."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        with patch("autoskillit.core.find_latest_session_id", return_value=None):
+            cli.order("test-script", resume=True)
+
+        cmd = mock_run.call_args[0][0]
+        assert "--resume" not in cmd
+
 
 class TestOrderDisplayOwnership:
     """order() delegates recipe display to the Claude session via load_recipe."""
@@ -925,6 +1084,17 @@ class TestOrderSubsetGate:
             "autoskillit.cli._prompts.show_cook_preview",
             lambda *a, **kw: None,
         )
+
+    @pytest.fixture(autouse=True)
+    def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub _is_plugin_installed in app.py to False to prevent subprocess.run collision."""
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
 
     def _make_config_mock(self, disabled: list[str]) -> MagicMock:
         mock_cfg = MagicMock()
@@ -1088,3 +1258,172 @@ class TestRecipesCLI:
         captured = capsys.readouterr()
         assert captured.out.strip(), "Expected recipe names in output"
         assert "implementation" in captured.out
+
+
+_PLUGIN_KEY = "autoskillit@autoskillit-local"
+
+
+class TestOrderMcpPrefixSelection:
+    """order() must embed the resolved MCP prefix in the system prompt."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("autoskillit.cli._prompts.show_cook_preview", lambda *a, **kw: None)
+
+    @pytest.fixture(autouse=True)
+    def _interactive_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+    @pytest.fixture(autouse=True)
+    def _stub_is_plugin_installed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub _is_plugin_installed in app.py to False to prevent subprocess.run collision."""
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_prompt_uses_direct_prefix_when_no_marketplace_install(
+        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """order() builds a prompt with the direct prefix when installed_plugins.json lacks key."""
+        from autoskillit.cli._mcp_names import DIRECT_PREFIX
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "test-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        plugins_file = tmp_path / "plugins.json"
+        plugins_file.write_text('{"version": 2, "plugins": {}}')
+        monkeypatch.setattr(
+            "autoskillit.cli._mcp_names._installed_plugins_path", lambda: plugins_file
+        )
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.order("test-script")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
+        captured_prompt = cmd[prompt_idx + 1]
+        assert f"{DIRECT_PREFIX}open_kitchen" in captured_prompt
+
+    @patch("autoskillit.cli.subprocess.run")
+    def test_order_prompt_uses_marketplace_prefix_when_plugin_installed(
+        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """order() uses marketplace prefix when autoskillit is plugin-installed."""
+        from autoskillit.cli._mcp_names import MARKETPLACE_PREFIX
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "test-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        plugins_file = tmp_path / "plugins.json"
+        plugins_file.write_text(f'{{"version": 2, "plugins": {{"{_PLUGIN_KEY}": []}}}}')
+        monkeypatch.setattr(
+            "autoskillit.cli._mcp_names._installed_plugins_path", lambda: plugins_file
+        )
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.order("test-script")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
+        captured_prompt = cmd[prompt_idx + 1]
+        assert f"{MARKETPLACE_PREFIX}open_kitchen" in captured_prompt
+
+
+# SC-B-4: mark_onboarded() must NOT be called when the cook subprocess exits non-zero
+def test_cook_mark_onboarded_not_called_on_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """mark_onboarded() must not be called when the cook subprocess exits non-zero."""
+    import autoskillit.cli._cook as _cook
+
+    onboarded_calls: list[Path] = []
+    monkeypatch.setattr(
+        "autoskillit.cli._onboarding.mark_onboarded",
+        lambda project_dir: onboarded_calls.append(project_dir),
+    )
+
+    def fake_run(cmd: list[str], **kwargs: object) -> object:
+        return type("R", (), {"returncode": 1})()
+
+    monkeypatch.setattr(_cook.subprocess, "run", fake_run)
+
+    with pytest.raises(SystemExit):
+        _cook._run_cook_session(
+            cmd=["claude", "--test"],
+            env={},
+            _first_run=True,
+            initial_prompt="test",
+            project_dir=tmp_path,
+        )
+
+    assert onboarded_calls == [], (
+        "mark_onboarded() must not be called when the subprocess exits non-zero"
+    )
+
+
+# REQ-CLI-003
+class TestOrderResumeParsing:
+    """CLI-level parsing tests for `order --resume [session-id]`."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub terminal preview to avoid subprocess calls."""
+        monkeypatch.setattr(
+            "autoskillit.cli._prompts.show_cook_preview",
+            lambda *a, **kw: None,
+        )
+
+    @pytest.fixture(autouse=True)
+    def _interactive_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """order() requires an interactive TTY — default to True for this class."""
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+    def test_order_recipe_resume_with_session_id(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """order my-recipe --resume <uuid> passes session_id to launch — REQ-CLI-003."""
+        from autoskillit.cli.app import app
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict = {}
+
+        def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_session_id=None):
+            captured["resume_session_id"] = resume_session_id
+
+        with (
+            patch("autoskillit.cli.app._launch_cook_session", side_effect=fake_launch),
+            patch(
+                "autoskillit.recipe.find_recipe_by_name",
+                return_value=MagicMock(path=tmp_path / "dummy.yaml", name="my-recipe"),
+            ),
+            patch("autoskillit.recipe.load_recipe", return_value=MagicMock()),
+            patch("autoskillit.recipe.validate_recipe", return_value=[]),
+            patch("autoskillit.core.find_latest_session_id", return_value=None),
+            patch("builtins.input", return_value=""),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                app(["order", "my-recipe", "--resume", "fa910a41-d1ca-4cae-b878-01028a0c7c1c"])
+            assert exc_info.value.code == 0
+
+        assert captured["resume_session_id"] == "fa910a41-d1ca-4cae-b878-01028a0c7c1c"

@@ -11,33 +11,16 @@ ingredients:
   run_name:
     description: Run name prefix
     default: "pr-merge"
-  keep_clone_on_failure:
-    description: Keep clone on failure
-    default: "false"
   base_branch:
     description: Branch that PRs target
     required: false
     default: ""
   audit:
     description: Post-merge quality gate
-    default: "true"
+    default: "false"
   plans_dir:
     description: Plan files for audit
-    default: ".autoskillit/temp/merge-prs"
-  defer_cleanup:
-    description: >-
-      When 'true', skip per-pipeline interactive cleanup and register this clone
-      in the shared registry for batch deletion after all parallel pipelines
-      complete. Set to 'true' on every parallel instance; leave 'false' for
-      sequential single-pipeline runs.
-    default: "false"
-  registry_path:
-    description: >-
-      Absolute path to the shared clone cleanup registry file. Required when
-      defer_cleanup=true. Must be identical across all parallel pipeline runs in
-      the same batch (use a fixed path like
-      /path/to/project/.autoskillit/temp/clone-cleanup-registry.json).
-    default: ""
+    default: "{{AUTOSKILLIT_TEMP}}/merge-prs"
 
 kitchen_rules:
   - "NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write,
@@ -113,8 +96,8 @@ steps:
       cmd: "git remote set-url origin \"${{ context.remote_url }}\""
       cwd: "${{ context.work_dir }}"
       step_name: "setup_remote"
-    on_success: check_integration_exists
-    on_failure: cleanup_failure
+    on_success: check_repo_ci_event
+    on_failure: register_clone_failure
     note: >
       The clone's origin initially points to a file:// URL (set by clone_repo for isolation).
       This step replaces it with the actual GitHub remote URL so that gh CLI commands
@@ -122,13 +105,32 @@ steps:
       Skills that contact remotes (resolve-merge-conflicts, retry-worktree, implement-worktree)
       now use REMOTE=$(upstream || origin) internally and do not depend on this step.
 
+  check_repo_ci_event:
+    tool: check_repo_merge_state
+    block: pre_merge_prs_ci_gate
+    with:
+      branch: "${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+      step_name: "check_repo_ci_event"
+    capture:
+      ci_event: "${{ result.ci_event }}"
+    on_success: check_integration_exists
+    on_failure: check_integration_exists
+    note: >
+      Detects whether the repository's CI triggers on push or merge_group events.
+      Captures ci_event for use by wait_for_ci steps (wait_for_conflict_ci, ci_watch_pr)
+      and diagnose-ci skill invocations downstream. Routes to check_integration_exists
+      regardless of outcome — non-blocking gate: ci_event defaults to null (match-any)
+      on failure, which matches the ci.py scope.event=None behavior.
+
   check_integration_exists:
     tool: run_cmd
     with:
       cmd: "git ls-remote --exit-code --heads origin \"${{ inputs.base_branch }}\""
       cwd: "${{ context.work_dir }}"
       step_name: "check_integration_exists"
-    on_success: analyze_prs
+    on_success: fetch_merge_queue_data
     on_failure: confirm_create_integration
     note: >
       Checks whether base_branch exists on the remote. Exit code 0 means the
@@ -155,18 +157,35 @@ steps:
       cmd: "DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') && DEFAULT_BRANCH=${DEFAULT_BRANCH:-main} && git checkout \"$DEFAULT_BRANCH\" && git pull && git checkout -b '${{ inputs.base_branch }}' && git push origin '${{ inputs.base_branch }}'"
       cwd: "${{ context.work_dir }}"
       step_name: "create_persistent_integration"
-    on_success: analyze_prs
-    on_failure: cleanup_failure
+    on_success: fetch_merge_queue_data
+    on_failure: register_clone_failure
     note: >
       Creates base_branch from the repository's default branch (auto-detected
       via origin/HEAD, falls back to main). Only executes when the user confirmed
       branch creation in confirm_create_integration. Once created, subsequent
       pipeline runs skip directly from check_integration_exists to analyze_prs.
 
+  fetch_merge_queue_data:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.fetch_merge_queue_data"
+      base_branch: "${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/merge-prs"
+    capture:
+      merge_queue_data_path: "${{ result.merge_queue_data_path }}"
+    on_success: analyze_prs
+    on_failure: analyze_prs
+    note: >
+      Pre-fetches GitHub merge queue data server-side (where autoskillit is always
+      installed). Writes parsed queue entries to disk as JSON. On failure, falls
+      through to analyze_prs which uses the fallback empty QUEUE_ENTRIES path
+      (QUEUE_MODE=false). Eliminates the autoskillit import in analyze-prs SKILL.md.
+
   analyze_prs:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:analyze-prs ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:analyze-prs ${{ inputs.base_branch }} merge_queue_data_path=${{ context.merge_queue_data_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "analyze_prs"
     capture:
@@ -174,13 +193,14 @@ steps:
       integration_branch: "${{ result.integration_branch }}"
       queue_mode: "${{ result.queue_mode }}"
     on_success: route_by_queue_mode
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Captures pr_order_file (path to JSON with ordered PRs + complexity tags),
       integration_branch (e.g. integration/pr-merge-20250228-143052), and
       queue_mode ("true" when a GitHub merge queue with MERGEABLE entries is active
       on base_branch; "false" otherwise). If the skill reports pr_count=0 (no open
       PRs), skip directly to cleanup_success — no integration branch is needed.
+      merge_queue_data_path is pre-computed by fetch_merge_queue_data step.
 
   route_by_queue_mode:
     action: route
@@ -206,7 +226,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "enqueue_all_prs"
     on_success: get_first_pr_number
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Queue mode only. Submits all PRs in analyzed order to the merge queue via
       gh pr merge --squash --auto. Non-fatal per-PR failures are warned but do not
@@ -222,7 +242,7 @@ steps:
     capture:
       current_pr_number: "${{ result.stdout | trim }}"
     on_success: wait_queue_pr
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Queue mode only. Extracts the first PR's number from pr_order_file to initialize
       context.current_pr_number before the queue wait loop. The agent advances
@@ -244,14 +264,14 @@ steps:
         route: next_queue_pr_or_done
       - when: "${{ result.pr_state }} == ejected"
         route: get_ejected_pr_branch
-      - route: cleanup_failure
-    on_failure: cleanup_failure
+      - route: register_clone_failure
+    on_failure: register_clone_failure
     note: >
       Queue mode only. The agent reads context.pr_order_file at context.current_pr_index
       to get the current PR's number and appends it to the pr_number argument.
       merged → advance to next PR or finish.
       ejected → conflict resolution cycle (get_ejected_pr_branch → checkout → resolve → push → reenter).
-      timeout → cleanup_failure (900s budget = 15 min per PR).
+      timeout → register_clone_failure (900s budget = 15 min per PR).
 
   get_ejected_pr_branch:
     tool: run_cmd
@@ -262,7 +282,7 @@ steps:
     capture:
       ejected_pr_branch: "${{ result.stdout | trim }}"
     on_success: checkout_ejected_pr
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
 
   checkout_ejected_pr:
     tool: run_cmd
@@ -274,7 +294,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "checkout_ejected_pr"
     on_success: resolve_ejected_conflicts
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
 
   resolve_ejected_conflicts:
     tool: run_skill
@@ -288,11 +308,11 @@ steps:
       all_conflict_report_paths: "${{ result.conflict_report_path }}"
     on_result:
       - when: "${{ result.escalation_required }} == true"
-        route: cleanup_failure
+        route: register_clone_failure
       - route: push_ejected_fix
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     retries: 1
-    on_exhausted: cleanup_failure
+    on_exhausted: register_clone_failure
     note: >
       Resolves git-level rebase conflicts between the ejected PR's branch and the
       current base_branch HEAD. Uses the same resolve-merge-conflicts skill as the
@@ -304,8 +324,9 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.ejected_pr_branch }}"
+      force: "true"
     on_success: reenter_queue
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
 
   reenter_queue:
     tool: run_cmd
@@ -314,7 +335,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "reenter_queue"
     on_success: wait_queue_pr
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Re-submits the fixed PR to the merge queue after conflict resolution.
       Routes back to wait_queue_pr to continue monitoring.
@@ -340,7 +361,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "create_integration_branch"
     on_success: publish_integration_branch
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Creates the integration branch from the latest base_branch HEAD.
       context.integration_branch was computed by analyze_prs.
@@ -353,7 +374,7 @@ steps:
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.integration_branch }}"
     on_success: merge_pr
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Publishes the integration branch to origin immediately after creation so
       that merge_worktree can verify refs/remotes/origin/integration_branch exists
@@ -379,10 +400,10 @@ steps:
       - when: "${{ result.needs_plan }} == true"
         route: plan
       - route: next_part_or_next_pr
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     retries: 5
-    on_exhausted: cleanup_failure
-    on_context_limit: cleanup_failure
+    on_exhausted: register_clone_failure
+    on_context_limit: register_clone_failure
     note: >
       The agent reads context.pr_order_file at context.current_pr_index to get the
       current PR's number and complexity. Appends them to skill_command:
@@ -403,7 +424,7 @@ steps:
       plan_parts: "${{ result.plan_parts }}"
       all_plan_paths: "${{ result.plan_path }}"
     on_success: verify
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically
       into plan_parts[]. For a single-part plan, plan_parts has one entry equal
@@ -420,10 +441,10 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "verify"
     on_success: implement
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     retries: 5
-    on_exhausted: cleanup_failure
-    on_context_limit: cleanup_failure
+    on_exhausted: register_clone_failure
+    on_context_limit: register_clone_failure
     note: >
       SEQUENTIAL: For each plan_part, run the full cycle
       (verify → implement → test → push_worktree_branch → create_conflict_pr
@@ -431,6 +452,7 @@ steps:
 
   implement:
     tool: run_skill
+    stale_threshold: 2400
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.pr_plan_path }}"
       cwd: "${{ context.work_dir }}"
@@ -439,13 +461,14 @@ steps:
       worktree_path: "${{ result.worktree_path }}"
       worktree_branch_name: "${{ result.branch_name }}"
     on_success: test
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     retries: 0
     on_exhausted: retry_worktree
     on_context_limit: retry_worktree
 
   retry_worktree:
     tool: run_skill
+    stale_threshold: 2400
     with:
       skill_command: "/autoskillit:retry-worktree ${{ context.pr_plan_path }} ${{ context.worktree_path }}"
       cwd: "${{ context.worktree_path }}"
@@ -454,10 +477,10 @@ steps:
       worktree_path: "${{ result.worktree_path }}"
       worktree_branch_name: "${{ result.branch_name }}"
     on_success: test
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     retries: 3
-    on_exhausted: cleanup_failure
-    on_context_limit: cleanup_failure
+    on_exhausted: register_clone_failure
+    on_context_limit: register_clone_failure
 
   test:
     tool: test_check
@@ -473,13 +496,13 @@ steps:
       cwd: "${{ context.worktree_path }}"
       step_name: "push_worktree_branch"
     on_success: create_conflict_pr
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Pushes the conflict-resolution worktree branch to origin so GitHub can run CI.
       Uses --force-with-lease to prevent clobbering concurrent updates.
       context.worktree_branch_name is captured from implement step output (result.branch_name).
       Both a lease violation (concurrent push) and a network failure route to
-      cleanup_failure — the recipe cannot distinguish between the two, so no safe
+      register_clone_failure — the recipe cannot distinguish between the two, so no safe
       retry is possible without re-evaluating the worktree state.
 
   create_conflict_pr:
@@ -497,7 +520,7 @@ steps:
     capture:
       conflict_pr_number: "${{ result.stdout | trim }}"
     on_success: wait_for_conflict_ci
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Creates a GitHub PR from the worktree branch into the integration batch branch.
       Captures conflict_pr_number for the subsequent gh pr merge call.
@@ -510,15 +533,15 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.worktree_branch_name }}"
-      workflow: "tests.yml"
+      event: "${{ context.ci_event }}"
       timeout_seconds: 600
       cwd: "${{ context.work_dir }}"
     on_success: merge_conflict_pr
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Waits for CI to pass on the worktree branch before merging.
       600 second timeout matches the merge-pr skill poll timeout.
-      On CI failure, routes to cleanup_failure — no automated remediation
+      On CI failure, routes to register_clone_failure — no automated remediation
       for conflict-resolution CI failures.
 
   merge_conflict_pr:
@@ -528,7 +551,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "merge_conflict_pr"
     on_success: next_part_or_next_pr
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Merges the conflict-resolution PR into the integration batch branch via GitHub API.
       Uses --squash to keep integration history linear.
@@ -543,11 +566,22 @@ steps:
       cwd: "${{ context.worktree_path }}"
       step_name: "fix"
       base_branch: "${{ inputs.base_branch }}"
-    on_success: test
-    on_failure: cleanup_failure
+    capture:
+      verdict: "${{ result.verdict }}"
+      fixes_applied: "${{ result.fixes_applied }}"
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: test
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: test
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: test
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: register_clone_failure
+    on_failure: register_clone_failure
     retries: 3
-    on_exhausted: cleanup_failure
-    on_context_limit: cleanup_failure
+    on_exhausted: register_clone_failure
+    on_context_limit: register_clone_failure
     note: >
       Fixes test failures without merging. Routes back to test for
       re-validation before the GitHub-API merge sequence. The base_branch with:
@@ -575,7 +609,7 @@ steps:
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.integration_branch }}"
     on_success: collect_artifacts
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Single push after ALL PR merges complete. Uses push_to_remote MCP tool
       (consistent with all other push steps) rather than run_cmd git push.
@@ -583,14 +617,14 @@ steps:
   collect_artifacts:
     tool: run_cmd
     with:
-      cmd: "mkdir -p ${{ inputs.plans_dir }} && find .autoskillit/temp/make-plan/ -name '*_plan_*.md' -exec cp {} ${{ inputs.plans_dir }}/ \\; 2>/dev/null || true"
+      cmd: "mkdir -p ${{ inputs.plans_dir }} && find {{AUTOSKILLIT_TEMP}}/make-plan/ -name '*_plan_*.md' -exec cp {} ${{ inputs.plans_dir }}/ \\; 2>/dev/null || true"
       cwd: "${{ context.work_dir }}"
       step_name: "collect_artifacts"
     on_success: check_impl_plans
     on_failure: check_impl_plans
     note: >
-      Copies plan files generated during the pipeline (from .autoskillit/temp/make-plan/) into
-      .autoskillit/temp/merge-prs/ alongside any conflict reports already there.
+      Copies plan files generated during the pipeline (from {{AUTOSKILLIT_TEMP}}/make-plan/) into
+      {{AUTOSKILLIT_TEMP}}/merge-prs/ alongside any conflict reports already there.
       Always routes to check_impl_plans, which determines whether audit_impl
       is meaningful. In queue mode (context.queue_mode == true), the integration_branch
       is the base_branch itself — no batch branch push is needed. The step after
@@ -604,7 +638,7 @@ steps:
       step_name: "check_impl_plans"
     on_result:
       - when: "${{ result.stdout | trim }} == 0"
-        route: open_integration_pr
+        route: compute_domain_partitions
       - route: audit_impl
     on_failure: audit_impl
     note: >
@@ -626,10 +660,10 @@ steps:
     on_result:
       field: verdict
       routes:
-        GO: open_integration_pr
+        GO: compute_domain_partitions
         NO GO: remediate
-    on_failure: cleanup_failure
-    on_context_limit: cleanup_failure
+    on_failure: register_clone_failure
+    on_context_limit: register_clone_failure
     optional: true
     skip_when_false: "inputs.audit"
     note: >
@@ -651,16 +685,34 @@ steps:
       remediation_path: "${{ context.remediation_path }}"
     on_success: plan
 
+  compute_domain_partitions:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.compute_domain_partitions"
+      integration_branch: "${{ context.integration_branch }}"
+      base_branch: "${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/open-integration-pr"
+    capture:
+      domain_partitions_path: "${{ result.domain_partitions_path }}"
+    on_success: open_integration_pr
+    on_failure: open_integration_pr
+    note: >
+      Pre-computes domain partitions for open-integration-pr server-side (where
+      autoskillit is always installed). Writes the JSON result to disk. On failure,
+      falls through to open_integration_pr which uses an empty domain_partitions_path
+      fallback. Eliminates the autoskillit import in open-integration-pr SKILL.md.
+
   open_integration_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-integration-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }} \"${{ context.all_conflict_report_paths }}\""
+      skill_command: "/autoskillit:open-integration-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} ${{ context.pr_order_file }} ${{ context.verdict }} \"${{ context.all_conflict_report_paths }}\" domain_partitions_path=${{ context.domain_partitions_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "open_integration_pr"
     capture:
       pr_url: "${{ result.pr_url }}"
     on_success: wait_for_review_pr_mergeability
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
 
   wait_for_review_pr_mergeability:
     tool: run_cmd
@@ -679,7 +731,7 @@ steps:
     capture:
       review_pr_number: "${{ result.stdout | trim }}"
     on_success: check_mergeability
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Extracts the review PR number from context.pr_url and polls GitHub until the
       mergeable field is no longer UNKNOWN (GitHub computes this asynchronously after PR
@@ -693,16 +745,16 @@ steps:
       cwd: "${{ context.work_dir }}"
     on_result:
       - when: "${{ result.mergeable_status }} == MERGEABLE"
-        route: review_pr_integration
+        route: annotate_pr_diff
       - when: "${{ result.mergeable_status }} == CONFLICTING"
         route: resolve_integration_conflicts
-      - route: cleanup_failure
-    on_failure: cleanup_failure
+      - route: register_clone_failure
+    on_failure: register_clone_failure
     note: >
       Authoritative mergeability check via check_pr_mergeable MCP tool (REQ-MERGE-001).
       Routes MERGEABLE directly to review cycle. Routes CONFLICTING to automated
       conflict resolution. Any other state (UNKNOWN after timeout, tool error) escalates
-      to cleanup_failure (REQ-MERGE-005).
+      to register_clone_failure (REQ-MERGE-005).
 
   resolve_integration_conflicts:
     tool: run_skill
@@ -717,14 +769,14 @@ steps:
       all_conflict_report_paths: "${{ result.conflict_report_path }}"
     on_result:
       - when: "${{ result.escalation_required }} == true"
-        route: cleanup_failure
+        route: register_clone_failure
       - route: force_push_after_rebase
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003).
       Rebases context.integration_branch onto inputs.base_branch and resolves merge conflicts.
       Single attempt only — no retries — to prevent looping on unresolvable conflicts.
-      On failure, escalates to cleanup_failure with diagnostics (REQ-MERGE-004).
+      On failure, escalates to register_clone_failure with diagnostics (REQ-MERGE-004).
 
   force_push_after_rebase:
     tool: run_cmd
@@ -733,7 +785,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "force_push_after_rebase"
     on_success: wait_for_post_rebase_mergeability
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Force-pushes the rebased integration branch to update the review PR after conflict
       resolution. Uses --force-with-lease to reject if the remote diverged during the rebase.
@@ -755,7 +807,7 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "wait_for_post_rebase_mergeability"
     on_success: check_mergeability_post_rebase
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Polls GitHub until the integration PR's mergeable field is no longer UNKNOWN after the
       force-push following conflict resolution. GitHub resets mergeable to UNKNOWN asynchronously
@@ -770,19 +822,37 @@ steps:
       cwd: "${{ context.work_dir }}"
     on_result:
       - when: "${{ result.mergeable_status }} == MERGEABLE"
-        route: review_pr_integration
-      - route: cleanup_failure
-    on_failure: cleanup_failure
+        route: annotate_pr_diff
+      - route: register_clone_failure
+    on_failure: register_clone_failure
     note: >
       Re-checks mergeability after the rebase and force-push. MERGEABLE proceeds to the
       review cycle. Any other state means automated resolution did not succeed — escalates
-      to cleanup_failure for human intervention (REQ-MERGE-004). No second conflict
+      to register_clone_failure for human intervention (REQ-MERGE-004). No second conflict
       resolution attempt — one cycle only.
+
+  annotate_pr_diff:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.annotate_pr_diff"
+      pr_number: "${{ context.review_pr_number }}"
+      cwd: "${{ context.work_dir }}"
+      output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr"
+    capture:
+      annotated_diff_path: "${{ result.annotated_diff_path }}"
+      hunk_ranges_path: "${{ result.hunk_ranges_path }}"
+    on_success: review_pr_integration
+    on_failure: review_pr_integration
+    note: >
+      Pre-computes annotated diff and hunk ranges for review-pr server-side (where
+      autoskillit is always installed). Writes both files to disk. On failure, falls
+      through to review_pr_integration which uses empty VALID_LINE_RANGES fallback.
+      Eliminates the autoskillit import in review-pr SKILL.md.
 
   review_pr_integration:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:review-pr ${{ context.integration_branch }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:review-pr ${{ context.integration_branch }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr_integration"
     capture:
@@ -809,15 +879,27 @@ steps:
       skill_command: "/autoskillit:resolve-review ${{ context.integration_branch }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_review_integration"
+    capture:
+      verdict: "${{ result.verdict }}"
     retries: 2
-    on_exhausted: cleanup_failure
-    on_success: re_push_review_integration
-    on_failure: cleanup_failure
+    on_exhausted: register_clone_failure
+    on_context_limit: re_push_review_integration
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: re_push_review_integration
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: re_push_review_integration
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: register_clone_failure
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: register_clone_failure
+    on_failure: register_clone_failure
     note: >
       Resolves review findings on the integration PR (REQ-REVIEW-002). Fetches inline and
       summary review comments from GitHub and applies fixes. Retries up to 2 times (3 total
-      attempts) before escalating to cleanup_failure (REQ-REVIEW-005). On success, routes to
-      re_push_review_integration to push the fixes to remote.
+      attempts) before escalating to register_clone_failure (REQ-REVIEW-005). Routes via
+      on_result: verdict dispatch — real_fix/already_green push fixes; flake_suspected/
+      ci_only_failure escalate to register_clone_failure.
 
   re_push_review_integration:
     tool: push_to_remote
@@ -826,103 +908,63 @@ steps:
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.integration_branch }}"
     on_success: ci_watch_pr
-    on_failure: cleanup_failure
+    on_failure: register_clone_failure
     note: >
       Pushes the review-fixed integration branch to the remote (REQ-REVIEW-003). Routes to
-      ci_watch_pr for final CI validation. On push failure, escalates to cleanup_failure.
+      ci_watch_pr for final CI validation. On push failure, escalates to register_clone_failure.
 
   ci_watch_pr:
     tool: wait_for_ci
     with:
       branch: "${{ context.integration_branch }}"
-      workflow: "tests.yml"
+      event: "${{ context.ci_event }}"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       pr_url: "${{ context.pr_url }}"
-    on_success: check_defer_cleanup
+    on_success: register_clone_success
     on_failure: diagnose_ci
     note: >
       Waits for the GitHub Actions CI run on context.integration_branch to complete
       using the wait_for_ci MCP tool (timeout: 300 s). CI failures here indicate the
       integration branch has problems that the human reviewer should see. No automated
       remediation; on failure, routes to diagnose_ci to capture logs before
-      cleanup_failure preserves the clone for manual inspection.
+      register_clone_failure preserves the clone for manual inspection.
 
   diagnose_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:diagnose-ci ${{ context.integration_branch }} - - tests.yml"
+      skill_command: "/autoskillit:diagnose-ci ${{ context.integration_branch }} - - - ${{ context.ci_event }}"
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
     capture:
       diagnosis_path: "${{ result.diagnosis_path }}"
-    on_success: cleanup_failure
-    on_failure: cleanup_failure
+    on_success: register_clone_failure
+    on_failure: register_clone_failure
     note: >
       Runs when ci_watch_pr reports CI failure on the integration branch.
-      Fetches logs and writes a diagnosis to .autoskillit/temp/diagnose-ci/ for human inspection.
+      Fetches logs and writes a diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/ for human inspection.
       diagnosis_path is captured for observability — no automated remediation for
-      integration CI, so always routes to cleanup_failure.
+      integration CI, so always routes to register_clone_failure.
 
-  check_defer_cleanup:
-    description: "Route to deferred or immediate cleanup on success path"
-    tool: run_python
-    with:
-      callable: "autoskillit.smoke_utils.check_cleanup_mode"
-      defer_cleanup: "${{ inputs.defer_cleanup }}"
-    on_result:
-      - when: "result.deferred == 'true'"
-        route: register_success_deferred
-      - route: confirm_cleanup
-    on_failure: confirm_cleanup
-
-  register_success_deferred:
-    description: "Register clone as cleanup candidate (deferred batch cleanup mode)"
+  register_clone_success:
+    description: "Register clone as cleanup candidate for batch deletion"
     tool: register_clone_status
     with:
       clone_path: "${{ context.work_dir }}"
       status: "success"
-      registry_path: "${{ inputs.registry_path }}"
-      step_name: register_success_deferred
+      step_name: register_clone_success
     on_success: done
     on_failure: done
 
-  confirm_cleanup:
-    action: confirm
-    message: >-
-      PR-merge pipeline succeeded! PR: ${{ context.pr_url }}.
-      The clone at ${{ context.work_dir }} is preserved.
-      Delete it now? Keeping it lets you resume any session from this pipeline run.
-      Type yes to delete or no to keep.
-    on_success: delete_clone
-    on_failure: done
-    note: >-
-      User confirmation gate — preserves clone by default. On yes: delete_clone removes it.
-      On no: done is reached immediately, clone stays on disk.
-
-  delete_clone:
-    tool: remove_clone
+  register_clone_failure:
+    description: "Register clone as preserved (error pipeline)"
+    tool: register_clone_status
     with:
       clone_path: "${{ context.work_dir }}"
-      keep: "false"
-      step_name: delete_clone
-    on_success: done
-    on_failure: done
-    note: >-
-      Reached only after user explicitly confirms cleanup. Sync-check hook gates deletion —
-      removal approved only when branch is pushed.
-
-  cleanup_failure:
-    tool: remove_clone
-    with:
-      clone_path: "${{ context.work_dir }}"
-      keep: "${{ inputs.keep_clone_on_failure }}"
+      status: "error"
+      step_name: register_clone_failure
     on_success: escalate_stop
     on_failure: escalate_stop
-    note: >
-      Called on pipeline failure. Respects keep_clone_on_failure ingredient.
-      When keep=false, the sync-check hook gates deletion. Always routes
-      to escalate_stop.
 
   done:
     action: stop
@@ -930,30 +972,9 @@ steps:
 
   escalate_stop:
     action: stop
-    message: "Pipeline failed — human intervention needed. Check the integration branch and .autoskillit/temp/merge-prs/ for details."
+    message: "Pipeline failed — human intervention needed. Check the integration branch and {{AUTOSKILLIT_TEMP}}/merge-prs/ for details."
     note: >
       context.task may be null when reached via escalation_required=true from merge_pr
       (merge-pr does not set conflict_report_path on escalation paths). Do not rely on
       context.task being populated when handling this stop.
 
-  batch_confirm_cleanup:
-    action: confirm
-    message: >-
-      All parallel pipelines complete. Delete all registered successful clones?
-      Error pipeline clones will be preserved for investigation.
-      Type yes to delete or no to keep all.
-    note: >-
-      ORCHESTRATOR: Run this step ONCE after ALL parallel pipeline instances have
-      reached 'done' or 'escalate_stop'. Do NOT run per-pipeline instance.
-      Only applicable when run_mode=parallel and defer_cleanup=true.
-    on_success: batch_delete_clones
-    on_failure: done
-
-  batch_delete_clones:
-    description: "Delete all registered successful clones in one batch operation"
-    tool: batch_cleanup_clones
-    with:
-      registry_path: "${{ inputs.registry_path }}"
-      step_name: batch_delete_clones
-    on_success: done
-    on_failure: done

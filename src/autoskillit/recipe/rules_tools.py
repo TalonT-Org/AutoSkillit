@@ -12,7 +12,17 @@ _ALL_TOOLS: frozenset[str] = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
 # Intentionally hardcoded — recipe validation runs without a live MCP server.
 _TOOL_PARAMS: dict[str, frozenset[str]] = {
     # --- Execution tools ---
-    "run_skill": frozenset({"skill_command", "cwd", "model", "step_name"}),
+    "run_skill": frozenset(
+        {
+            "skill_command",
+            "cwd",
+            "model",
+            "step_name",
+            "order_id",
+            "stale_threshold",
+            "idle_output_timeout",
+        }
+    ),
     "run_cmd": frozenset({"cmd", "cwd", "timeout", "step_name"}),
     "run_python": frozenset({"callable", "args", "timeout"}),
     # --- Workspace tools ---
@@ -44,6 +54,22 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "branch",
             "source_dir",
             "remote_url",
+            "force",
+            "step_name",
+        }
+    ),
+    "register_clone_status": frozenset(
+        {
+            "clone_path",
+            "status",
+            "registry_path",
+            "step_name",
+        }
+    ),
+    "batch_cleanup_clones": frozenset(
+        {
+            "registry_path",
+            "all_owners",
             "step_name",
         }
     ),
@@ -55,8 +81,10 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "remote_url",
             "head_sha",
             "workflow",
+            "event",
             "timeout_seconds",
             "cwd",
+            "step_name",
         }
     ),
     "wait_for_merge_queue": frozenset(
@@ -71,9 +99,11 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "stall_grace_period",
             "max_stall_retries",
             "not_in_queue_confirmation_cycles",
+            "max_inconclusive_retries",
+            "step_name",
         }
     ),
-    "get_ci_status": frozenset({"branch", "run_id", "repo", "workflow", "cwd"}),
+    "get_ci_status": frozenset({"branch", "run_id", "repo", "workflow", "event", "cwd"}),
     "set_commit_status": frozenset(
         {
             "sha",
@@ -118,7 +148,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
         }
     ),
     "enrich_issues": frozenset({"issue_number", "batch", "dry_run", "repo"}),
-    "claim_issue": frozenset({"issue_url", "label"}),
+    "claim_issue": frozenset({"issue_url", "label", "allow_reentry"}),
     "release_issue": frozenset({"issue_url", "label", "target_branch", "staged_label"}),
     "fetch_github_issue": frozenset({"issue_url", "include_comments"}),
     "get_issue_title": frozenset({"issue_url"}),
@@ -238,4 +268,55 @@ def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
                         ),
                     )
                 )
+    return findings
+
+
+@semantic_rule(
+    name="rebase-then-push-requires-force",
+    description=(
+        "push_to_remote step that follows a resolve-merge-conflicts step must have force='true'"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_rebase_then_push_requires_force(ctx: ValidationContext) -> list[RuleFinding]:
+    """Detect push_to_remote steps that follow resolve-merge-conflicts without force='true'.
+
+    resolve-merge-conflicts rewrites commit SHAs via rebase. Without force-with-lease,
+    the subsequent push will be rejected by the remote as a non-fast-forward update.
+    """
+    # Build a predecessor map by inverting the successor-based step_graph.
+    predecessors: dict[str, set[str]] = {name: set() for name in ctx.step_graph}
+    for pred, succs in ctx.step_graph.items():
+        for succ in succs:
+            if succ in predecessors:
+                predecessors[succ].add(pred)
+
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "push_to_remote":
+            continue
+        # Check if any predecessor is a run_skill step that invokes resolve-merge-conflicts.
+        for pred_name in predecessors.get(step_name, set()):
+            pred_step = ctx.recipe.steps.get(pred_name)
+            if pred_step is None or pred_step.tool != "run_skill":
+                continue
+            skill_command = pred_step.with_args.get("skill_command", "")
+            if "resolve-merge-conflicts" not in skill_command:
+                continue
+            # Found a rebase predecessor — check that this push step has force='true'.
+            if step.with_args.get("force", "").strip().lower() != "true":
+                findings.append(
+                    RuleFinding(
+                        rule="rebase-then-push-requires-force",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"push_to_remote step '{step_name}' follows resolve-merge-conflicts "
+                            f"step '{pred_name}' but is missing 'force: true'. "
+                            "Rebase rewrites commit SHAs — a non-fast-forward force push "
+                            "(--force-with-lease) is required to update the remote."
+                        ),
+                    )
+                )
+                break  # one finding per push step is sufficient
     return findings

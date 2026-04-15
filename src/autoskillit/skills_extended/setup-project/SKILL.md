@@ -1,5 +1,6 @@
 ---
 name: setup-project
+activate_deps: [write-recipe]
 description: Explore a target project and generate tailored recipes and config through an interactive workflow. Use when user wants to onboard a new project to AutoSkillit, says "setup project", or wants a starting point config.
 hooks:
   PreToolUse:
@@ -33,7 +34,7 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 **NEVER:**
 - Modify any files in the target project without user confirmation at the summary gate
 - Run commands that change the target project
-- Create files outside `.autoskillit/temp/setup-project/` directory (until the summary gate)
+- Create files outside `{{AUTOSKILLIT_TEMP}}/setup-project/` directory (until the summary gate)
 - Assume test framework — detect it from evidence
 - Use Makefile or `make` in generated examples — use Taskfile/`task` if a task runner is needed
 - Suggest `reset_guard_marker` config — that's a workspace concern, not project setup
@@ -137,12 +138,12 @@ Consolidate subagent findings into a structured profile:
 - Current git branch (for `base_branch` default)
 - Discovered workflow patterns from conversation history (if opted in) — recurring tool sequences and skill chains, ranked by frequency, with candidate recipe drafts
 
-### Step 3: Write Analysis to .autoskillit/temp/ (relative to the current working directory)
+### Step 3: Write Analysis to {{AUTOSKILLIT_TEMP}}/ (relative to the current working directory)
 
 Before presenting anything interactively, write the full analysis (project profile, workflow patterns, candidate workflows, shell command patterns) to:
 
 ```
-.autoskillit/temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md
+{{AUTOSKILLIT_TEMP}}/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md
 ```
 
 Tell the user: "Full analysis saved to {path} for your review."
@@ -151,15 +152,9 @@ Tell the user: "Full analysis saved to {path} for your review."
 
 Interactive flow. For each candidate workflow discovered:
 
-**CRITICAL:** Do NOT output any prose status text between workflow iterations.
-After completing one workflow's presentation and user response, immediately
-begin presenting the next workflow.
-
 1. **Always offer the standard implementation pipeline first** (plan → dry-walkthrough → implement → test → merge), even if not discovered in history. This is the core AutoSkillit workflow.
 
 2. For each candidate workflow (including the standard one):
-   Do NOT output any prose status text between workflows — immediately begin the
-   next workflow's presentation after the user responds.
    - Present the workflow chain and explain what it automates
    - Ask the user: "Would you like me to generate a recipe for this workflow?"
    - Before generating, resolve skill references in the workflow:
@@ -173,6 +168,7 @@ begin presenting the next workflow.
        List each conflicting skill name on its own line in the prompt.
      - Record the user's preferences and pass them as context to write-recipe
    - If yes: LOAD `/autoskillit:write-recipe` using the Skill tool to generate the script. The agent already has full context from the exploration phases (workflow name, detected variables like project_dir/work_dir/base_branch, tool call sequence, routing logic) — no explicit parameter passing is needed. write-recipe uses that context directly to produce a clean script.
+   - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, proceed without recipe generation and prompt the user to create the recipe manually.
    - Explain what a recipe is (discovered via `list_recipes` MCP tool, loaded via `load_recipe`, the agent interprets the YAML and executes the steps), show the generated script content
    - Track the user's approval — do NOT write to disk yet
    - Move to the next candidate workflow
@@ -253,7 +249,7 @@ Do NOT include:
 ## Output
 
 Artifacts created:
-- `.autoskillit/temp/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
+- `{{AUTOSKILLIT_TEMP}}/setup-project/analysis_{project_name}_{YYYY-MM-DD_HHMMSS}.md` — full analysis (always)
 - `.autoskillit/recipes/{name}.yaml` — approved recipes
 - `.autoskillit/config.yaml` — updated config (if changes approved)
 

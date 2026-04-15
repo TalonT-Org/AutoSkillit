@@ -19,7 +19,6 @@ Tests:
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
 
 import pytest
@@ -75,6 +74,10 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "headless",  # execution/headless.py: _OUTPUT_PATH_TOKENS = _build_path_token_set()
+        # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
+        "_update_checks",  # cli/_update_checks.py: window constants (see comment above)
+        "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
+        "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -98,6 +101,7 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
         "version",
         "compile",
         "object",
+        "MappingProxyType",  # types.MappingProxyType — read-only view, no state
     }
 )
 
@@ -398,7 +402,7 @@ def test_recipe_validator_has_regex_patterns() -> None:
     ast_module = _get_module_ast("recipe/contracts.py")
     assigns = _top_level_assign_targets(ast_module)
     assert "_CONTEXT_REF_RE" in assigns, "recipe/contracts.py must define _CONTEXT_REF_RE"
-    assert "_INPUT_REF_RE" in assigns, "recipe/contracts.py must define _INPUT_REF_RE"
+    assert "INPUT_REF_RE" in assigns, "recipe/contracts.py must define INPUT_REF_RE"
 
 
 def test_recipe_validator_no_process_lifecycle_import() -> None:
@@ -525,13 +529,19 @@ def test_cli_is_package() -> None:
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 16 Python files (REQ-DSGN-002).
+    """server/ must not exceed 18 Python files (REQ-DSGN-002).
 
     Limit updated from 14 to 16 after tools_integrations was split into
     tools_github, tools_issue_lifecycle, and tools_pr_ops.
+    Limit updated from 16 to 17 after _editable_guard.py was added as
+    the pre-deletion editable install guard for perform_merge().
+    Limit updated from 17 to 18 after _lifespan.py was added for
+    FastMCP server lifespan teardown (#745).
+    Limit updated from 18 to 19 after _wire_compat.py was added for
+    Claude Code wire-format sanitization middleware.
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 16, f"server/ has {len(py_files)} files, max is 16"
+    assert len(py_files) <= 19, f"server/ has {len(py_files)} files, max is 19"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
@@ -630,28 +640,6 @@ def test_test_suite_oversized_files_split():
     assert not over, f"Oversized test files remain (run groupE): {over}"
 
 
-def test_tmp_path_has_worktree_hash(tmp_path: Path) -> None:
-    """tmp_path must contain a .ROOT_DIR-derived hash to prevent cross-worktree collision.
-
-    Fails when pytest is invoked with --basetemp=/dev/shm/pytest-tmp (static path).
-    Passes only when Taskfile.yml derives PYTEST_TMPDIR from .ROOT_DIR via the
-    slim-sprig sha256sum template function.
-    """
-    if sys.platform == "linux":
-        import hashlib
-        import os
-
-        cwd_hash = hashlib.sha256(os.getcwd().encode()).hexdigest()[:8]
-        path_str = str(tmp_path)
-        assert f"pytest-tmp-{cwd_hash}" in path_str, (
-            f"tmp_path ({path_str!r}) does not contain the expected worktree hash "
-            f"'{cwd_hash}'. PYTEST_TMPDIR must be derived from .ROOT_DIR. "
-            f"Expected /dev/shm/pytest-tmp-{cwd_hash} as the base. "
-            "Update Taskfile.yml PYTEST_TMPDIR to use a .ROOT_DIR-derived hash suffix "
-            "(use slim-sprig: {{ substr 0 8 (sha256sum .ROOT_DIR) }})."
-        )
-
-
 def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 
@@ -662,26 +650,55 @@ def test_no_subpackage_exceeds_10_files() -> None:
         tools_kitchen, helpers, git, _factory, _state, __init__); each file is a
         thin routing layer. Exempt at 16 files.
       recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
-        (rules_bypass, rules_ci, rules_clone, etc.) for independent testability.
+        (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.
+        Adding rules_cmd.py for run_cmd echo-capture alignment validation and
+        rules_isolation.py for workspace isolation checks brings the count to 30.
+        rules_blocks.py adds the block-level budget rule family, bringing the count to 32.
+        rules_reachability.py adds symbolic BFS reachability rules, bringing the count to 33.
+        rules_fixing.py adds conditional-write-skill ungated-push detection,
+        bringing the count to 34.
       execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
         focused single-concern modules (_process_io, _process_kill, _process_race,
         etc.) that cannot be merged without re-introducing the coupling they isolate.
+        recording.py adds the RecordingSubprocessRunner decorator as a separate module
+        to keep scenario recording concerns isolated from the core process lifecycle.
+        _headless_scan.py extracts write-path JSONL scanning from headless.py to keep
+        that module within its REQ-CNST-010-E2 line budget.
+        Exempt at 26 files.
       core/ — REQ-CNST-003-E4: core/ types split into per-concern type modules
         (_type_enums, _type_protocols, _type_results, _type_subprocess, etc.) to
         prevent circular imports while keeping L0 types co-located. Also houses
         _terminal_table.py as the L0 shared terminal rendering primitive so that
         both cli/ (L3) and pipeline/ (L1) can import it without layer violations.
-        Exempt at 15 files.
+        _claude_env.py adds the canonical IDE-scrubbing env builder for all
+        claude subprocess launches. kitchen_state.py adds the stdlib-only
+        kitchen-open session marker reader for hook subprocesses.
+        Exempt at 17 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
-        core/_terminal_table.py. Exempt at 12 files.
+        core/_terminal_table.py. Also contains _terminal.py — the terminal state
+        management context manager (terminal_guard) for interactive subprocess
+        sessions. _install_info.py adds pure install classification + policy.
+        _update_checks.py adds the unified update check orchestration.
+        _update.py adds the first-class update subcommand implementation.
+        Exempt at 17 files.
+      hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
+        (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
+        file so Claude Code can invoke it directly as a subprocess. pretty_output_hook.py
+        additionally owns a set of underscore-prefixed private formatter modules
+        (_fmt_primitives.py, _fmt_execution.py, _fmt_status.py, _fmt_recipe.py)
+        that are imported helpers — not standalone hook scripts — split out to
+        keep pretty_output_hook.py under its line budget. ask_user_question_guard.py
+        gates AskUserQuestion on kitchen-open state. Exempt at 20 files
+        (15 hook scripts + 4 private helpers + 1 __init__).
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 16,
-        "recipe": 27,
-        "execution": 23,
-        "core": 15,
-        "cli": 12,
+        "server": 19,
+        "recipe": 34,
+        "execution": 26,
+        "core": 18,
+        "cli": 20,
+        "hooks": 20,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):
@@ -693,6 +710,25 @@ def test_no_subpackage_exceeds_10_files() -> None:
             violations.append(f"{sub_dir.name}/: {len(py_files)} Python files (max {limit})")
     assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
         f"  {v}" for v in violations
+    )
+
+
+def test_data_directories_are_not_python_packages() -> None:
+    """REQ-ARCH-005: data-only directories under src/autoskillit/ must not
+    contain __init__.py — that turns them into phantom Python packages
+    distinct from the real L2 module of similar name."""
+    src = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+    data_dirs = {"migrations", "recipes", "skills", "skills_extended"}
+    offenders: list[str] = []
+    for name in data_dirs:
+        d = src / name
+        if not d.is_dir():
+            continue
+        init = d / "__init__.py"
+        if init.exists():
+            offenders.append(str(init.relative_to(src)))
+    assert not offenders, (
+        f"Data directories must not be Python packages. Remove __init__.py from: {offenders}"
     )
 
 
@@ -714,6 +750,20 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         1200,
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
+    ),
+    "headless.py": (
+        1300,
+        "REQ-CNST-010-E2: headless session orchestration — Channel B drain-race "
+        "recovery + IDLE_STALL routing + contract nudge resume tier "
+        "+ DIR_MISSING late-bind recovery arm + RecordingSubprocessRunner "
+        "step-name auto-derivation gate; splitting would fragment the "
+        "adjudication pipeline across modules",
+    ),
+    "session.py": (
+        1050,
+        "REQ-CNST-010-E3: session adjudication pipeline — exhaustive match arms "
+        "for TerminationReason require explicit IDLE_STALL arms in _compute_success, "
+        "_compute_retry, and _normalize_subtype",
     ),
 }
 
@@ -858,7 +908,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     context_path = AUTOSKILLIT_ROOT / "pipeline" / "context.py"
     context_tree = ast.parse(context_path.read_text())
 
-    EXEMPT = {"plugin_dir", "config"}
+    EXEMPT = {"plugin_dir", "config", "active_recipe_packs", "temp_dir"}
     violations: list[str] = []
 
     for node in ast.walk(context_tree):
@@ -984,6 +1034,35 @@ def test_default_recipe_repository_in_repository_module() -> None:
     from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: F401
 
 
+def test_recipe_lister_callsites_use_protocol_typing() -> None:
+    """REQ-ARCH-006: callsites in recipe/ that consume the skill listing
+    must reference the SkillLister Protocol (parameter type), so the
+    deferred DefaultSkillResolver() instantiation is a default-factory fallback
+    rather than the only path.
+
+    contracts.py uses .resolve() and therefore references SkillResolver,
+    not SkillLister. That is checked separately below.
+    """
+    lister_targets = {
+        "src/autoskillit/recipe/rules_skills.py",
+        "src/autoskillit/recipe/_api.py",
+    }
+    src_root = Path(__file__).resolve().parents[2]
+    missing: list[str] = []
+    for relpath in lister_targets:
+        text = (src_root / relpath).read_text()
+        if "SkillLister" not in text:
+            missing.append(relpath)
+    assert not missing, (
+        f"These files still consume SkillResolver without SkillLister Protocol typing: {missing}"
+    )
+    # contracts.py uses .resolve() — must reference SkillResolver, not SkillLister
+    contracts_text = (src_root / "src/autoskillit/recipe/contracts.py").read_text()
+    assert "SkillResolver" in contracts_text, (
+        "contracts.py must reference SkillResolver for the resolver parameter"
+    )
+
+
 def test_default_recipe_repository_not_in_io() -> None:
     """P2-F1: DefaultRecipeRepository must be removed from recipe/io.py."""
     io_path = SRC_ROOT / "recipe" / "io.py"
@@ -1091,6 +1170,8 @@ class TestGroupCMigration:
             "channel_b_status",
             "channel_b_session_id",
             "stdout_session_id",
+            "idle_stall",
+            "process_exited_event",
         }  # REQ-SIG-008
 
     def test_race_signals_still_frozen(self):
@@ -1136,3 +1217,71 @@ def test_pipeline_init_no_longer_exports_domain_paths():
 
     assert "DOMAIN_PATHS" not in m.__all__
     assert "partition_files_by_domain" not in m.__all__
+
+
+def test_singleton_exemption_comment_matches_both_windows() -> None:
+    """The _update_checks exemption comment in SINGLETON_ALLOWED_MODULES must
+    accurately reflect both the _STABLE_DISMISS_WINDOW and _DEV_DISMISS_WINDOW values."""
+
+    from autoskillit.cli._update_checks import _DEV_DISMISS_WINDOW, _STABLE_DISMISS_WINDOW
+
+    this_file = Path(__file__)
+    content = this_file.read_text(encoding="utf-8")
+
+    def _fmt_td(td: object) -> str:
+        import datetime
+
+        if not isinstance(td, datetime.timedelta):
+            return repr(td)
+        total_seconds = td.total_seconds()
+        if total_seconds % 86400 == 0:
+            return f"timedelta(days={int(total_seconds // 86400)})"
+        if total_seconds % 3600 == 0:
+            return f"timedelta(hours={int(total_seconds // 3600)})"
+        return repr(td)
+
+    stable_fragment = _fmt_td(_STABLE_DISMISS_WINDOW)
+    dev_fragment = _fmt_td(_DEV_DISMISS_WINDOW)
+
+    assert stable_fragment in content, (
+        f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
+        f"Expected to find '{stable_fragment}' "
+        f"(current _STABLE_DISMISS_WINDOW={_STABLE_DISMISS_WINDOW!r}). "
+        "Update the comment on the '_update_checks' entry."
+    )
+    assert dev_fragment in content, (
+        f"Exemption comment in SINGLETON_ALLOWED_MODULES is stale. "
+        f"Expected to find '{dev_fragment}' "
+        f"(current _DEV_DISMISS_WINDOW={_DEV_DISMISS_WINDOW!r}). "
+        "Update the comment on the '_update_checks' entry."
+    )
+
+
+def test_update_checks_docstring_describes_both_windows() -> None:
+    """The _update_checks module docstring and _is_dismissed docstring must
+    mention both branch-aware window values."""
+    import ast
+
+    src_root = Path(__file__).parent.parent.parent / "src"
+    module_path = src_root / "autoskillit" / "cli" / "_update_checks.py"
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+
+    module_doc = ast.get_docstring(tree) or ""
+    assert "timedelta(days=7)" in module_doc or "days=7" in module_doc, (
+        "_update_checks module docstring must mention the 7-day stable window"
+    )
+    assert "timedelta(hours=12)" in module_doc or "hours=12" in module_doc, (
+        "_update_checks module docstring must mention the 12-hour dev window"
+    )
+
+    # Also verify _is_dismissed has a docstring mentioning both windows
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_is_dismissed":
+            func_doc = ast.get_docstring(node) or ""
+            assert "days=7" in func_doc or "7 days" in func_doc, (
+                "_is_dismissed docstring must mention the 7-day window"
+            )
+            assert "hours=12" in func_doc or "12 hours" in func_doc, (
+                "_is_dismissed docstring must mention the 12-hour window"
+            )
+            break

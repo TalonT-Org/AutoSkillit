@@ -1,4 +1,4 @@
-"""Worktree and directory teardown utilities."""
+"""Directory teardown utilities (filesystem-level; no git operations)."""
 
 from __future__ import annotations
 

@@ -15,12 +15,14 @@ from __future__ import annotations
 import asyncio
 import random
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 
 from autoskillit.core import CIRunScope, get_logger
+from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
 
@@ -47,6 +49,20 @@ def _jittered_sleep(attempt: int) -> float:
     return random.uniform(0, ceiling)
 
 
+def _validate_run_matches_scope(run: dict[str, Any], scope: CIRunScope) -> bool:
+    """Verify a run returned by the API matches the requested scope fields.
+
+    This is a defense-in-depth check: the API query params should filter
+    server-side, but this client-side validation catches any discrepancy.
+    Each scope field is only checked when it is not None (i.e., was requested).
+    """
+    if scope.event and run.get("event") != scope.event:
+        return False
+    if scope.head_sha and run.get("head_sha") != scope.head_sha:
+        return False
+    return True
+
+
 class DefaultCIWatcher:
     """Concrete CI watcher using GitHub REST API via httpx.
 
@@ -54,18 +70,24 @@ class DefaultCIWatcher:
     Never raises — errors are returned as structured dicts.
     """
 
-    def __init__(self, *, token: str | None = None) -> None:
-        self._token = token
+    _UNRESOLVED = object()
+
+    def __init__(self, *, token: str | None | Callable[[], str | None] = None) -> None:
+        self._token_factory: Callable[[], str | None] | None
+        if callable(token):
+            self._token_factory = token
+            self._token: str | None = self._UNRESOLVED  # type: ignore[assignment]
+        else:
+            self._token_factory = None
+            self._token = token
+
+    def _resolve_token(self) -> str | None:
+        if self._token is self._UNRESOLVED:
+            self._token = self._token_factory() if self._token_factory is not None else None
+        return self._token
 
     def _headers(self) -> dict[str, str]:
-        h = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "autoskillit",
-        }
-        if self._token:
-            h["Authorization"] = f"Bearer {self._token}"
-        return h
+        return github_headers(self._resolve_token())
 
     async def _resolve_repo(self, repo: str | None, cwd: str) -> str | None:
         """Resolve owner/repo from argument or git remote."""
@@ -95,6 +117,8 @@ class DefaultCIWatcher:
             params["workflow_id"] = scope.workflow
         if scope.head_sha:
             params["head_sha"] = scope.head_sha
+        if scope.event:
+            params["event"] = scope.event
 
         resp = await client.get(url, headers=headers, params=params)
         resp.raise_for_status()
@@ -131,6 +155,8 @@ class DefaultCIWatcher:
             params["workflow_id"] = scope.workflow
         if scope.head_sha:
             params["head_sha"] = scope.head_sha
+        if scope.event:
+            params["event"] = scope.event
 
         resp = await client.get(url, headers=headers, params=params)
         resp.raise_for_status()
@@ -225,21 +251,35 @@ class DefaultCIWatcher:
                     lookback_seconds,
                 )
                 if completed:
-                    run = completed[0]
-                    run_id = run["id"]
-                    conclusion = run.get("conclusion", "unknown")
-                    failed_jobs = (
-                        await self._fetch_failed_jobs(
-                            client,
-                            headers,
-                            owner_repo,
-                            run_id,
+                    valid_completed = [
+                        r for r in completed if _validate_run_matches_scope(r, scope)
+                    ]
+                    if not valid_completed:
+                        _log.warning(
+                            "ci_watcher_scope_mismatch",
+                            count=len(completed),
+                            scope=str(scope),
                         )
-                        if conclusion in FAILED_CONCLUSIONS
-                        else []
-                    )
-                    _log.info("ci_watcher_lookback_hit", run_id=run_id, conclusion=conclusion)
-                    return {"run_id": run_id, "conclusion": conclusion, "failed_jobs": failed_jobs}
+                    else:
+                        run = valid_completed[0]
+                        run_id = run["id"]
+                        conclusion = run.get("conclusion", "unknown")
+                        failed_jobs = (
+                            await self._fetch_failed_jobs(
+                                client,
+                                headers,
+                                owner_repo,
+                                run_id,
+                            )
+                            if conclusion in FAILED_CONCLUSIONS
+                            else []
+                        )
+                        _log.info("ci_watcher_lookback_hit", run_id=run_id, conclusion=conclusion)
+                        return {
+                            "run_id": run_id,
+                            "conclusion": conclusion,
+                            "failed_jobs": failed_jobs,
+                        }
 
                 # Phase 2: Poll for active runs
                 _log.info("ci_watcher_polling", branch=branch, repo=owner_repo)
@@ -254,8 +294,10 @@ class DefaultCIWatcher:
                         scope,
                     )
                     if active:
-                        found_run = active[0]
-                        break
+                        valid_active = [r for r in active if _validate_run_matches_scope(r, scope)]
+                        if valid_active:
+                            found_run = valid_active[0]
+                            break
                     # Also re-check completed in case it finished between phases
                     completed = await self._fetch_completed_runs(
                         client,
@@ -266,24 +308,28 @@ class DefaultCIWatcher:
                         lookback_seconds,
                     )
                     if completed:
-                        run = completed[0]
-                        run_id = run["id"]
-                        conclusion = run.get("conclusion", "unknown")
-                        failed_jobs = (
-                            await self._fetch_failed_jobs(
-                                client,
-                                headers,
-                                owner_repo,
-                                run_id,
+                        valid_completed = [
+                            r for r in completed if _validate_run_matches_scope(r, scope)
+                        ]
+                        if valid_completed:
+                            run = valid_completed[0]
+                            run_id = run["id"]
+                            conclusion = run.get("conclusion", "unknown")
+                            failed_jobs = (
+                                await self._fetch_failed_jobs(
+                                    client,
+                                    headers,
+                                    owner_repo,
+                                    run_id,
+                                )
+                                if conclusion in FAILED_CONCLUSIONS
+                                else []
                             )
-                            if conclusion in FAILED_CONCLUSIONS
-                            else []
-                        )
-                        return {
-                            "run_id": run_id,
-                            "conclusion": conclusion,
-                            "failed_jobs": failed_jobs,
-                        }
+                            return {
+                                "run_id": run_id,
+                                "conclusion": conclusion,
+                                "failed_jobs": failed_jobs,
+                            }
 
                     sleep_duration = _jittered_sleep(attempt)
                     remaining = deadline - time.monotonic()

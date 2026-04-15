@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import get_args, get_type_hints
 
+import pytest
+
 from autoskillit.config import AutomationConfig
 from autoskillit.core import GitHubFetcher
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
@@ -156,6 +158,20 @@ def test_headless_executor_protocol_accepts_timeout() -> None:
     assert params["stale_threshold"].default is None
 
 
+def test_headless_executor_protocol_accepts_idle_output_timeout() -> None:
+    """HeadlessExecutor.run() signature must include optional idle_output_timeout."""
+    import inspect
+
+    from autoskillit.core import HeadlessExecutor
+
+    sig = inspect.signature(HeadlessExecutor.run)
+    params = sig.parameters
+    assert "idle_output_timeout" in params, (
+        "HeadlessExecutor.run missing idle_output_timeout param"
+    )
+    assert params["idle_output_timeout"].default is None
+
+
 def test_recipe_repository_protocol_has_rich_methods() -> None:
     """RecipeRepository protocol must expose load_and_validate, validate_from_path, list_all."""
     from autoskillit.core import RecipeRepository
@@ -185,7 +201,7 @@ def test_toolcontext_github_client_annotated_with_protocol():
 
 
 def test_toolcontext_response_log_annotated_with_mcp_response_store_protocol() -> None:
-    """ToolContext.response_log must be annotated with the McpResponseStore protocol.
+    """ToolContext.response_log must be annotated with the McpResponseLog protocol.
 
     response_log uses default_factory (Null Object pattern) not field(default=None),
     so it is excluded from test_toolcontext_optional_fields_all_have_protocol_annotations.
@@ -193,20 +209,73 @@ def test_toolcontext_response_log_annotated_with_mcp_response_store_protocol() -
     """
     from typing import get_type_hints
 
-    from autoskillit.core import McpResponseStore
+    from autoskillit.core import McpResponseLog
 
     hints = get_type_hints(ToolContext)
     assert "response_log" in hints, "ToolContext must have a response_log field"
-    assert hints["response_log"] is McpResponseStore, (
-        f"ToolContext.response_log must be annotated with McpResponseStore protocol, "
+    assert hints["response_log"] is McpResponseLog, (
+        f"ToolContext.response_log must be annotated with McpResponseLog protocol, "
         f"got: {hints['response_log']!r}"
     )
 
 
 def test_tool_context_has_timing_log_field(tmp_path):
-    """ToolContext.timing_log is a non-None TimingStore instance."""
-    from autoskillit.core import TimingStore
+    """ToolContext.timing_log is a non-None TimingLog instance."""
+    from autoskillit.core import TimingLog
 
     ctx = _make_ctx(tmp_path)
     assert ctx.timing_log is not None
-    assert isinstance(ctx.timing_log, TimingStore)
+    assert isinstance(ctx.timing_log, TimingLog)
+
+
+@pytest.mark.anyio
+async def test_toolcontext_default_background_wired_with_audit(tmp_path):
+    """ToolContext background supervisor records failures to ctx.audit."""
+    from autoskillit.pipeline.background import DefaultBackgroundSupervisor
+
+    audit = DefaultAuditLog()
+    ctx = ToolContext(
+        config=AutomationConfig(),
+        audit=audit,
+        token_log=DefaultTokenLog(),
+        timing_log=DefaultTimingLog(),
+        gate=DefaultGateState(),
+        plugin_dir=str(tmp_path),
+        runner=None,
+    )
+    assert isinstance(ctx.background, DefaultBackgroundSupervisor)
+
+    async def _fail() -> None:
+        raise RuntimeError("deliberate test failure")
+
+    ctx.background.submit(_fail(), label="test-task")
+    await ctx.background.drain()
+
+    records = audit.get_report()
+    assert any(r.subtype == "background_exception" for r in records)
+
+
+# ---------------------------------------------------------------------------
+# token_factory field
+# ---------------------------------------------------------------------------
+
+
+def test_tool_context_has_token_factory_field():
+    """ToolContext dataclass exposes token_factory as an optional callable Protocol field."""
+    import dataclasses
+    import typing
+
+    from autoskillit.core import TokenFactory
+    from autoskillit.pipeline.context import ToolContext
+
+    fields = {f.name: f for f in dataclasses.fields(ToolContext)}
+    assert "token_factory" in fields
+    assert fields["token_factory"].default is None
+
+    hints = typing.get_type_hints(ToolContext)
+    assert "token_factory" in hints
+    # Annotation must be a union that includes the TokenFactory Protocol (callable)
+    args = typing.get_args(hints["token_factory"])
+    assert TokenFactory in args, (
+        f"token_factory type hint {hints['token_factory']} does not include TokenFactory Protocol"
+    )

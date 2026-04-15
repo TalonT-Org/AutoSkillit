@@ -1,7 +1,7 @@
 """Tests that CLAUDE.md contains required critical rules and documentation.
 
 Encodes behavioral contracts derived from friction analysis (issue #250):
-- FRICT-1B-3: set_project_path initialization rule in §3.5
+- FRICT-1B-3: set_project_path initialization rule in §3.3
 - FRICT-3A-1: pre-commit critical rule in §3.1
 - FRICT-5-2: session diagnostics hyphen path convention documented
 - FRICT-7-1: session diagnostics under a dedicated heading, not trailing paragraph
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @pytest.fixture()
@@ -22,21 +22,21 @@ def claude_md() -> str:
 
 
 def test_claude_md_code_index_requires_set_project_path(claude_md: str) -> None:
-    """§3.5 must instruct agents to call set_project_path before using code-index tools.
+    """§3.3 must instruct agents to call set_project_path before using code-index tools.
 
     Without this call every code-index tool fails with 'Project path not set',
     cascading into parallel call cancellations (FRICT-1B-3).
     """
-    # Find the §3.5 section using the full heading to avoid false matches
-    assert "### **3.5" in claude_md, "§3.5 section not found in CLAUDE.md"
-    section_start = claude_md.index("### **3.5")
+    # Find the §3.3 section using the full heading to avoid false matches
+    assert "### **3.3" in claude_md, "§3.3 section not found in CLAUDE.md"
+    section_start = claude_md.index("### **3.3")
     # Find the next top-level section heading (### 3.) to bound the search
     next_section = claude_md.find("### **3.", section_start + 1)
     section_text = (
         claude_md[section_start:next_section] if next_section != -1 else claude_md[section_start:]
     )
     assert "set_project_path" in section_text, (
-        "CLAUDE.md §3.5 (Code Index MCP Usage) must instruct agents to call "
+        "CLAUDE.md §3.3 (Code Index MCP Usage) must instruct agents to call "
         "set_project_path before using any code-index tool in a new session (FRICT-1B-3)."
     )
 
@@ -92,4 +92,18 @@ def test_claude_md_session_diagnostics_mentions_hyphen_convention(claude_md: str
         "CLAUDE.md session diagnostics must clarify that path components (log "
         "directory names, session folder names) use hyphens, not underscores "
         "(FRICT-5-2). Without this, agents construct wrong paths."
+    )
+
+
+def test_claude_md_no_stale_fidelity_reference(claude_md: str) -> None:
+    """CLAUDE.md pipeline/ section must not list fidelity.py — it does not exist (P2-5).
+
+    The module was folded into execution/pr_analysis.py during refactor bcafe54f.
+    The correct documentation is already present at the execution/pr_analysis.py entry.
+    A stale reference misleads agents into searching for a file that does not exist.
+    """
+    assert "fidelity.py" not in claude_md, (
+        "CLAUDE.md references 'fidelity.py' under pipeline/ but this module does not exist. "
+        "The helpers extract_linked_issues and is_valid_fidelity_finding live in "
+        "execution/pr_analysis.py. Remove the stale pipeline/fidelity.py entry (P2-5)."
     )

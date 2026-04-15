@@ -106,10 +106,14 @@ def test_step6_uses_input_flag_not_field_for_comments():
     SKILL.md and confirm this test fails. Then restore it.
     """
     text = SKILL_TEXT
-    assert "--input -" in text, (
-        "review-pr/SKILL.md Step 6 must prescribe '--input -' for the reviews POST. "
-        "Using '--field' for the comments array creates one array entry per flag "
-        "instead of a proper JSON array (Issue #206 root cause)."
+    step6_start = text.find("### Step 6")
+    step65_start = text.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = text[step6_start:step65_start]
+    assert "--input -" in step6_section, (
+        "Step 6 must use '--input -' for the reviews POST payload. "
+        "This flag must appear within Step 6 specifically (not elsewhere in SKILL.md)."
     )
 
 
@@ -162,4 +166,126 @@ def test_step6_documents_event_mapping():
     assert "APPROVE" in text and "REQUEST_CHANGES" in text, (
         "review-pr/SKILL.md Step 6 must document the verdict-to-event mapping: "
         "approved → APPROVE, changes_requested → REQUEST_CHANGES."
+    )
+
+
+# --- Section-scoped regression guards ---
+
+
+def test_step6_builds_comments_from_jq_argjson():
+    """Step 6 must contain the jq -n --argjson pattern for building COMMENTS_JSON."""
+    text = SKILL_TEXT
+    step6_start = text.find("### Step 6")
+    step65_start = text.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = text[step6_start:step65_start]
+    assert "jq -n --argjson findings" in step6_section, (
+        "Step 6 must contain 'jq -n --argjson findings' for building COMMENTS_JSON "
+        "from FILTERED_FINDINGS. Without this, inline comment construction is unguided."
+    )
+
+
+def test_step6_uses_filtered_findings_as_comment_source():
+    """Step 6 must build COMMENTS_JSON from FILTERED_FINDINGS, not all findings."""
+    text = SKILL_TEXT
+    step6_start = text.find("### Step 6")
+    step65_start = text.find("### Step 6.5")
+    assert step6_start != -1
+    assert step65_start != -1
+    step6_section = text[step6_start:step65_start]
+    assert "FILTERED_FINDINGS" in step6_section, (
+        "Step 6 must reference FILTERED_FINDINGS as the source for inline comments. "
+        "Using all findings bypasses hunk-range validation from Step 4."
+    )
+
+
+def test_step65_positioned_between_step6_and_step7():
+    """Step 6.5 (Post-Completion Confirmation) must exist between Step 6 and Step 7."""
+    text = SKILL_TEXT
+    step6_idx = text.find("### Step 6:")
+    if step6_idx == -1:
+        step6_idx = text.find("### Step 6")
+    step65_idx = text.find("### Step 6.5")
+    step7_idx = text.find("### Step 7")
+    assert step6_idx != -1, "SKILL.md must contain Step 6"
+    assert step65_idx != -1, "SKILL.md must contain Step 6.5"
+    assert step7_idx != -1, "SKILL.md must contain Step 7"
+    assert step6_idx < step65_idx < step7_idx, (
+        f"Step 6.5 must be positioned between Step 6 and Step 7. "
+        f"Found: Step 6 at {step6_idx}, Step 6.5 at {step65_idx}, Step 7 at {step7_idx}"
+    )
+
+
+def test_step65_contains_do_not_proceed_gate():
+    """Step 6.5 must contain 'Do not proceed to Step 7' to prevent bypassing confirmation."""
+    text = SKILL_TEXT
+    step65_start = text.find("### Step 6.5")
+    step7_start = text.find("### Step 7")
+    assert step65_start != -1
+    assert step7_start != -1
+    step65_section = text[step65_start:step7_start]
+    assert "do not proceed to step 7" in step65_section.lower(), (
+        "Step 6.5 must contain 'Do not proceed to Step 7' as a hard gate. "
+        "Without this, a model that posted 0 inline comments can skip to verdict."
+    )
+
+
+def test_skill_prohibits_local_file_paths_in_review_body():
+    """SKILL.md must explicitly prohibit referencing local file paths in review body."""
+    text = SKILL_TEXT.lower()
+    assert any(
+        phrase in text
+        for phrase in [
+            "never reference local file path",
+            "do not reference local file path",
+            "do not include local file path",
+            "never include local file path",
+            "must not reference local",
+            "must not include local",
+        ]
+    ), (
+        "SKILL.md must explicitly prohibit referencing local file paths "
+        "(e.g., .autoskillit/temp/...) in the review body or inline comments. "
+        "GitHub readers cannot access local filesystem paths."
+    )
+
+
+def test_step8_ordering_enforcement():
+    """Step 8 must contain ordering enforcement — it must execute after Steps 6 and 7."""
+    text = SKILL_TEXT
+    step8_start = text.find("### Step 8")
+    assert step8_start != -1
+    step8_section = text[step8_start:]
+    step8_lower = step8_section.lower()
+    assert any(
+        phrase in step8_lower
+        for phrase in [
+            "after step",
+            "after steps 6 and 7",
+            "after posting",
+            "must execute after",
+        ]
+    ), (
+        "Step 8 must contain explicit ordering enforcement stating it runs "
+        "after Steps 6 and 7. Writing the summary file before posting inline "
+        "comments anchors the model to treating the file as primary output."
+    )
+
+
+def test_mandatory_echo_positioned_between_step4_and_step5():
+    """The mandatory 'I have N findings' echo must appear between Step 4 and Step 5."""
+    text = SKILL_TEXT
+    step4_idx = text.find("### Step 4")
+    step5_idx = text.find("### Step 5")
+    assert step4_idx != -1
+    assert step5_idx != -1
+    between = text[step4_idx:step5_idx]
+    assert "my primary job is to post inline comments" in between.lower(), (
+        "The mandatory echo ('My primary job is to post inline comments') must "
+        "appear between Step 4 and Step 5. This forces the model to acknowledge "
+        "its inline comment obligation before proceeding to verdict determination."
+    )
+    assert "do not proceed to step 5" in between.lower(), (
+        "The 'Do not proceed to Step 5' gate must appear between Step 4 and Step 5."
     )

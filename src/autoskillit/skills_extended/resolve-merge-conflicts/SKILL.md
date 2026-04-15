@@ -5,6 +5,13 @@ description: >
   Goal-aware resolution of rebase conflicts when merging a conflict-resolution worktree
   back into the integration branch. Analyzes the intent of each side of a conflict,
   resolves it in-place when confidence is HIGH or MEDIUM, and escalates when LOW.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: resolve-merge-conflicts] Resolving merge conflicts...'"
+          once: true
 ---
 
 # Resolve Merge Conflicts Skill
@@ -12,7 +19,7 @@ description: >
 ## Arguments (positional)
 
 - `{worktree_path}` — absolute path to the existing worktree (must exist; rebase was aborted cleanly)
-- `{plan_path}` — absolute path to the implementation plan (`.autoskillit/temp/make-plan/…_plan_….md`, relative to the current working directory)
+- `{plan_path}` — absolute path to the implementation plan (`{{AUTOSKILLIT_TEMP}}/make-plan/…_plan_….md`, relative to the current working directory)
 - `{base_branch}` — the integration branch to rebase onto (e.g. `integration/run-N`)
 
 ## Critical Constraints
@@ -30,7 +37,7 @@ description: >
 - Emit `worktree_path=` and `branch_name=` on successful resolution
 - Run `pre-commit run --all-files` after a successful rebase before emitting output tokens
 - Validate all three positional arguments before touching git state
-- Write `conflict_resolution_report_*.md` to `.autoskillit/temp/resolve-merge-conflicts/` and emit `conflict_report_path=` after successful conflict resolution
+- Write `conflict_resolution_report_*.md` to `{{AUTOSKILLIT_TEMP}}/resolve-merge-conflicts/` and emit `conflict_report_path=` after successful conflict resolution
 
 ## When to Use
 
@@ -100,7 +107,7 @@ git -C {worktree_path} rebase $REMOTE/{base_branch}
 ```
 
 **On success (clean rebase):** The integration branch advanced in a non-conflicting way
-since the last attempt. Proceed directly to Step 7 — emit output tokens and exit.
+since the last attempt. Proceed to Step 5a for manifest validation before emitting output tokens.
 
 **On conflict:** Proceed to Step 3.
 
@@ -248,17 +255,122 @@ re-run `pre-commit run --all-files` to confirm clean.
 which already ran and passed before `merge_to_integration` was first attempted. Running
 tests here would be redundant and is explicitly prohibited.
 
+### Step 5a — Language-aware manifest validation
+
+After `pre-commit run --all-files` succeeds, detect the project language and run a fast
+manifest validity check. This catches semantically broken merges (e.g., duplicate
+dependency keys in Cargo.toml) that produce no conflict markers and are not caught
+by pre-commit hooks.
+
+**Detection and validation commands (run the first matching check):**
+
+| Detected by | Command |
+|-------------|---------|
+| `Cargo.toml` present | `cargo metadata --no-deps --format-version 1 >/dev/null` |
+| `package.json` present | `node -e "JSON.parse(require('fs').readFileSync('package.json'))"` |
+| `uv.lock` present | `uv lock --check` |
+| `pyproject.toml` present (no uv.lock) | `python3 -c "import tomllib; tomllib.load(open('pyproject.toml','rb'))"` |
+
+Run in the worktree root:
+
+```bash
+cd {worktree_path}
+```
+
+If **no manifest files are detected**: skip this step and proceed to Step 5b.
+
+If the check **fails**: do NOT attempt to fix the manifest. The rebase produced a
+semantically invalid result. Escalate immediately:
+
+```bash
+git -C {worktree_path} rebase --abort
+```
+
+```
+escalation_required = true
+escalation_reason = Post-rebase manifest validation failed: <error output summary>. The rebase produced a semantically invalid manifest (e.g., duplicate dependency key). Manual inspection required.
+```
+
+If the check **passes**: proceed to Step 5b.
+
+### Step 5b — Duplicate key scan in cleanly-merged structured files
+
+Scan manifest files for duplicate keys. Both branches may have independently added
+the same dependency entry; git merges these without conflict markers but the result
+is semantically invalid.
+
+**Files to scan** (if present in `{worktree_path}`):
+- `Cargo.toml` — scan `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]` sections
+- `pyproject.toml` — scan `[project.dependencies]`, `[tool.uv.dev-dependencies]`
+- `package.json` — scan all top-level keys
+
+**TOML duplicate detection** (for each TOML manifest file):
+
+```bash
+python3 -c "
+import re, sys
+text = open(sys.argv[1]).read()
+in_dep_section = False
+counts = {}
+for line in text.splitlines():
+    if re.match(r'^\s*\[(dependencies|dev-dependencies|build-dependencies)\]', line):
+        in_dep_section = True
+        continue
+    if re.match(r'^\s*\[', line):
+        in_dep_section = False
+    if in_dep_section:
+        m = re.match(r'^\s*([a-zA-Z0-9_-]+)\s*[=\.]', line)
+        if m:
+            k = m.group(1)
+            counts[k] = counts.get(k, 0) + 1
+dups = {k: v for k, v in counts.items() if v > 1}
+if dups:
+    print('DUPLICATE_KEYS:', dups)
+    sys.exit(1)
+" Cargo.toml
+```
+
+**JSON duplicate detection** (for `package.json`):
+
+```bash
+python3 -c "
+import json, sys
+class _Dup(Exception): pass
+def check(pairs):
+    seen = {}
+    for k, v in pairs:
+        if k in seen:
+            raise _Dup(f'duplicate key: {k!r}')
+        seen[k] = v
+    return seen
+json.loads(open('package.json').read(), object_pairs_hook=check)
+" 2>&1
+```
+
+**If duplicates are found**: escalate immediately:
+
+```bash
+git -C {worktree_path} rebase --abort
+```
+
+```
+escalation_required = true
+escalation_reason = Duplicate key detected in <file>: key '<key>' appears multiple times in section '[<section>]'. This is a semantically invalid clean merge — both branches independently added the same dependency.
+```
+
+**If no duplicates are found** (or no manifest files are present): proceed to Step 6.
+
 ### Step 6 — Write Conflict Resolution Report
 
 Create the directory and write the conflict resolution report:
 
 ```bash
-mkdir -p {worktree_path}/.autoskillit/temp/resolve-merge-conflicts
+mkdir -p {worktree_path}/{{AUTOSKILLIT_TEMP}}/resolve-merge-conflicts
 ```
 
 Write the report to:
 ```
-{worktree_path}/.autoskillit/temp/resolve-merge-conflicts/conflict_resolution_report_{YYYY-MM-DD_HHMMSS}.md
+{worktree_path}/{{AUTOSKILLIT_TEMP}}/resolve-merge-conflicts/conflict_resolution_report_{YYYY-MM-DD_HHMMSS}.md
 ```
 
 Report format:

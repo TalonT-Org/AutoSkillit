@@ -59,18 +59,20 @@ def test_pmp_check_impl_plans_excludes_pr_analysis_plan(recipe) -> None:
 
 
 def test_pmp_check_impl_plans_routes_to_open_integration_pr_on_empty(recipe) -> None:
-    """check_impl_plans must route to open_integration_pr when no impl plans exist."""
+    """check_impl_plans routes to compute_domain_partitions when no impl plans exist.
+
+    compute_domain_partitions is the pre-staging step before open_integration_pr.
+    """
     step = recipe.steps["check_impl_plans"]
     assert step.on_result is not None, "check_impl_plans must use on_result routing"
     conds = step.on_result.conditions
     routes = {c.route for c in conds}
-    assert "open_integration_pr" in routes, (
-        "check_impl_plans must route to open_integration_pr when count is 0 — "
-        "skipping audit_impl when no implementation plans exist"
+    assert "compute_domain_partitions" in routes, (
+        "check_impl_plans must route to compute_domain_partitions when count is 0"
     )
     zero_conds = [c for c in conds if c.when is not None and "0" in (c.when or "")]
-    assert any(c.route == "open_integration_pr" for c in zero_conds), (
-        "the open_integration_pr route must be guarded by a zero-count condition"
+    assert any(c.route == "compute_domain_partitions" for c in zero_conds), (
+        "the compute_domain_partitions route must be guarded by a zero-count condition"
     )
 
 
@@ -197,8 +199,21 @@ def test_pmp_no_upstream_branch_ingredient(recipe) -> None:
 
 
 def test_pmp_setup_remote_routes_to_check_integration_exists(recipe) -> None:
-    """setup_remote.on_success must route to check_integration_exists, not analyze_prs."""
-    assert recipe.steps["setup_remote"].on_success == "check_integration_exists"
+    """setup_remote.on_success must route toward check_integration_exists.
+
+    With check_repo_ci_event inserted as a non-blocking pre-step that captures
+    ci_event, the chain is: setup_remote → check_repo_ci_event →
+    check_integration_exists.  Both hops are required.
+    """
+    setup_successor = recipe.steps["setup_remote"].on_success
+    assert setup_successor == "check_repo_ci_event", (
+        f"setup_remote.on_success must be 'check_repo_ci_event', got {setup_successor!r}"
+    )
+    ci_event_successor = recipe.steps["check_repo_ci_event"].on_success
+    assert ci_event_successor == "check_integration_exists", (
+        f"check_repo_ci_event.on_success must be 'check_integration_exists',"
+        f" got {ci_event_successor!r}"
+    )
 
 
 def test_pmp_has_check_integration_exists_step(recipe) -> None:
@@ -214,8 +229,8 @@ def test_pmp_check_integration_exists_cmd_uses_base_branch(recipe) -> None:
 
 
 def test_pmp_check_integration_exists_routes_to_analyze_prs_on_success(recipe) -> None:
-    """check_integration_exists must proceed to analyze_prs when branch exists."""
-    assert recipe.steps["check_integration_exists"].on_success == "analyze_prs"
+    """check_integration_exists routes to fetch_merge_queue_data when branch exists."""
+    assert recipe.steps["check_integration_exists"].on_success == "fetch_merge_queue_data"
 
 
 def test_pmp_check_integration_exists_routes_to_confirm_on_failure(recipe) -> None:
@@ -253,8 +268,8 @@ def test_pmp_create_persistent_integration_auto_detects_default_branch(recipe) -
 
 
 def test_pmp_create_persistent_integration_routes_to_analyze_prs(recipe) -> None:
-    """After creating integration branch, pipeline must proceed to analyze_prs."""
-    assert recipe.steps["create_persistent_integration"].on_success == "analyze_prs"
+    """After creating integration branch, routes to fetch_merge_queue_data."""
+    assert recipe.steps["create_persistent_integration"].on_success == "fetch_merge_queue_data"
 
 
 def test_pmp_merge_to_integration_removed(recipe) -> None:
@@ -344,9 +359,9 @@ def test_ci_watch_pr_uses_integration_branch(recipe) -> None:
 
 
 def test_ci_watch_pr_routing(recipe) -> None:
-    """ci_watch_pr on_success -> check_defer_cleanup; on_failure -> diagnose_ci."""
+    """ci_watch_pr on_success -> register_clone_success; on_failure -> diagnose_ci."""
     step = recipe.steps["ci_watch_pr"]
-    assert step.on_success == "check_defer_cleanup"
+    assert step.on_success == "register_clone_success"
     assert step.on_failure == "diagnose_ci"
 
 
@@ -398,12 +413,12 @@ def test_pmp_has_check_mergeability_step(recipe) -> None:
 
 
 def test_pmp_check_mergeability_routes_mergeable_to_review_pr_integration(recipe) -> None:
-    """B6: check_mergeability on_result must route MERGEABLE to review_pr_integration."""
+    """B6: check_mergeability routes MERGEABLE to annotate_pr_diff."""
     step = recipe.steps["check_mergeability"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
     mergeable_routes = [c for c in conditions if c.when and "MERGEABLE" in c.when]
-    assert any(c.route == "review_pr_integration" for c in mergeable_routes)
+    assert any(c.route == "annotate_pr_diff" for c in mergeable_routes)
 
 
 def test_pmp_check_mergeability_routes_conflicting_to_resolve_integration_conflicts(
@@ -472,12 +487,12 @@ def test_pmp_has_check_mergeability_post_rebase_step(recipe) -> None:
 
 
 def test_pmp_check_mergeability_post_rebase_routes_mergeable_to_review(recipe) -> None:
-    """B12: post_rebase mergeability check must route MERGEABLE to review_pr_integration."""
+    """B12: post_rebase mergeability check routes MERGEABLE to annotate_pr_diff."""
     step = recipe.steps["check_mergeability_post_rebase"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
     mergeable_routes = [c for c in conditions if c.when and "MERGEABLE" in c.when]
-    assert any(c.route == "review_pr_integration" for c in mergeable_routes)
+    assert any(c.route == "annotate_pr_diff" for c in mergeable_routes)
 
 
 def test_pmp_has_review_pr_integration_step(recipe) -> None:
@@ -530,9 +545,16 @@ def test_pmp_resolve_review_integration_has_retries(recipe) -> None:
 
 
 def test_pmp_resolve_review_integration_routes_to_re_push(recipe) -> None:
-    """B19: resolve_review_integration.on_success must route to re_push_review_integration."""
+    """B19: resolve_review_integration routes real_fix to re_push."""
     step = recipe.steps["resolve_review_integration"]
-    assert step.on_success == "re_push_review_integration"
+    assert step.on_success is None, (
+        "resolve_review_integration must use on_result: verdict dispatch"
+    )
+    assert step.on_result is not None, "resolve_review_integration must have on_result: block"
+    push_routes = [c.route for c in step.on_result.conditions if c.when and "real_fix" in c.when]
+    assert any("re_push_review_integration" in r for r in push_routes), (
+        "resolve_review_integration must route verdict=real_fix to re_push_review_integration"
+    )
 
 
 def test_pmp_has_re_push_review_integration_step(recipe) -> None:
@@ -578,4 +600,15 @@ def test_pmp_setup_remote_not_using_inputs_source_dir(recipe) -> None:
     assert "git -C" not in cmd or "inputs.source_dir" not in cmd, (
         "setup_remote must not use 'git -C ${{ inputs.source_dir }}' — "
         "fails when source_dir is empty (the default value)"
+    )
+
+
+def test_pmp_push_ejected_fix_has_force_true(recipe) -> None:
+    """T13: push_ejected_fix must have force='true' (post-rebase push needs --force-with-lease)."""
+    assert "push_ejected_fix" in recipe.steps
+    step = recipe.steps["push_ejected_fix"]
+    assert step.tool == "push_to_remote"
+    assert step.with_args.get("force") == "true", (
+        "push_ejected_fix must include force='true' — it follows a resolve-merge-conflicts "
+        "step that rewrites commit SHAs, so a non-fast-forward force push is required"
     )

@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_log import (
     flush_session_log,
     read_telemetry_clear_marker,
@@ -387,15 +391,36 @@ def test_recover_crashed_sessions_skips_recent_files(tmp_path):
 
 
 def _write_old_trace(tmpfs: Path, filename: str, content: str) -> Path:
-    """Write a trace file and backdate its mtime to 60 seconds ago."""
-    import time
+    """Write a trace file (backdated 60s) and its enrollment sidecar.
 
+    The enrollment sidecar uses the current boot_id so Gate 2 passes.
+    The PID embedded in the filename is expected to be dead (so Gate 3 passes).
+    """
     trace = tmpfs / filename
     trace.write_text(content)
     old_mtime = time.time() - 60
-    import os
-
     os.utime(trace, (old_mtime, old_mtime))
+
+    # Write companion enrollment sidecar so Gate 1 passes
+    try:
+        pid = int(Path(filename).stem.split("_")[-1])
+    except (ValueError, IndexError):
+        pid = 0
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    enrollment.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": pid,
+                "boot_id": read_boot_id() or "",
+                "starttime_ticks": None,
+                "session_id": "",
+                "enrolled_at": "2026-01-01T00:00:00+00:00",
+                "kitchen_id": "",
+                "order_id": "",
+            }
+        )
+    )
     return trace
 
 
@@ -565,6 +590,122 @@ def test_flush_writes_step_timing_json(tmp_path):
     )
     session_dir = tmp_path / "sessions" / "test-session-001"
     assert (session_dir / "step_timing.json").is_file()
+
+
+# ---------------------------------------------------------------------------
+# Test 1.10 — proc_trace.jsonl rows self-identify with comm field
+# ---------------------------------------------------------------------------
+
+
+def test_proc_trace_jsonl_rows_include_comm(tmp_path):
+    """proc_trace.jsonl rows must include a 'comm' field for post-hoc drift detection.
+
+    Test 1.10: after flush_session_log, every row in proc_trace.jsonl must carry
+    the process identity (comm). This makes any drift visible to anyone triaging
+    a session log — any row lacking comm is a drift indicator.
+    """
+    snaps = [
+        {**_snap(), "comm": "claude"},
+        {**_snap(), "comm": "claude"},
+        {**_snap(), "comm": "claude"},
+    ]
+    _flush(tmp_path, proc_snapshots=snaps, session_id="comm-test-001")
+
+    trace_path = tmp_path / "sessions" / "comm-test-001" / "proc_trace.jsonl"
+    assert trace_path.exists()
+    rows = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    for i, row in enumerate(rows):
+        assert "comm" in row, (
+            f"Row {i} in proc_trace.jsonl is missing 'comm' field. "
+            "Every snapshot row must self-identify the traced process."
+        )
+        assert row["comm"] == "claude", f"Expected comm='claude' in row {i}, got {row['comm']!r}"
+
+
+# ---------------------------------------------------------------------------
+# Test 1.11 — recovery path reads comm and excludes alien files
+# ---------------------------------------------------------------------------
+
+
+def _write_old_trace_with_comm(tmpfs: Path, pid: int, comm: str, *, n_snaps: int = 2) -> Path:
+    """Write a backdated trace file with snapshots that have a specific comm."""
+    filename = f"autoskillit_trace_{pid}.jsonl"
+    trace = tmpfs / filename
+    snaps = []
+    for _ in range(n_snaps):
+        snap_dict = {**_snap(), "comm": comm}
+        snaps.append(json.dumps(snap_dict))
+    trace.write_text("\n".join(snaps) + "\n")
+
+    # Backdate so Gate 1 (age > 30s) passes
+    old_mtime = time.time() - 60
+    os.utime(trace, (old_mtime, old_mtime))
+
+    # Write enrollment sidecar so Gate 1 (sidecar present) passes.
+    # Use schema_version=2 with comm='claude' — autoskillit always enrolls its own
+    # binary as 'claude'. Snapshots whose first comm != enrollment.comm are alien.
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    enrollment.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "pid": pid,
+                "boot_id": read_boot_id() or "",
+                "starttime_ticks": None,
+                "session_id": "",
+                "enrolled_at": "2026-01-01T00:00:00+00:00",
+                "kitchen_id": "",
+                "order_id": "",
+                "comm": "claude",
+            }
+        )
+    )
+    return trace
+
+
+def test_recover_crashed_sessions_excludes_non_claude_trace_files(tmp_path):
+    """recover_crashed_sessions tags alien trace files (non-claude comm) and excludes them.
+
+    Test 1.11: place two trace files — one with comm='claude' and one with
+    comm='sleep'. The 'sleep' file is an alien artifact (test pollution or a
+    non-autoskillit process). After the fix, recovery recognises it via comm
+    and either skips it or marks it with alien=true in the recovered record.
+    """
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    log_dir = tmp_path / "logs"
+
+    # One legitimate claude trace
+    _write_old_trace_with_comm(tmpfs, pid=20001, comm="claude")
+    # One alien trace (e.g., leftover from a test or wrong process)
+    _write_old_trace_with_comm(tmpfs, pid=20002, comm="sleep")
+
+    recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(log_dir))
+
+    sessions_dir = log_dir / "sessions"
+    recovered = list(sessions_dir.iterdir()) if sessions_dir.exists() else []
+    session_summaries = []
+    for s in recovered:
+        summary_file = s / "summary.json"
+        if summary_file.exists():
+            session_summaries.append(json.loads(summary_file.read_text()))
+
+    claude_sessions = [s for s in session_summaries if "20001" in s.get("session_id", "")]
+
+    # The claude trace must be recovered (not excluded)
+    assert claude_sessions, "The claude trace file must be recovered by recover_crashed_sessions"
+
+    # The alien trace should not produce a normal session — it should be excluded
+    # or marked as alien so it doesn't pollute capacity planning / anomaly analytics
+    alien_included_normally = [
+        s
+        for s in session_summaries
+        if "20002" in s.get("session_id", "") and not s.get("alien") and not s.get("pre_fix_data")
+    ]
+    assert not alien_included_normally, (
+        "Alien trace (comm='sleep') must not be recovered as a normal session. "
+        "It should be skipped or marked alien=true to prevent #771-style mis-attribution."
+    )
 
 
 def test_flush_writes_audit_log_json(tmp_path):
@@ -748,3 +889,168 @@ def test_flush_session_log_write_call_count_defaults_to_zero(tmp_path):
     _flush(tmp_path, session_id="wc-default", proc_snapshots=None)
     summary = json.loads((tmp_path / "sessions" / "wc-default" / "summary.json").read_text())
     assert summary["write_call_count"] == 0
+
+
+def test_flush_session_log_writes_kitchen_id(tmp_path):
+    """kitchen_id parameter is written to sessions.jsonl index entry."""
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/some/worktree",
+        kitchen_id="my-pipeline-123",
+        session_id="sess-001",
+        pid=12345,
+        skill_command="/autoskillit:implement",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-03-27T08:00:00",
+        proc_snapshots=None,
+    )
+
+    index = (tmp_path / "sessions.jsonl").read_text()
+    entry = json.loads(index.strip())
+    assert entry["kitchen_id"] == "my-pipeline-123"
+
+
+def test_flush_session_log_writes_order_id_to_index(tmp_path):
+    """order_id is written to sessions.jsonl index entry when provided."""
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/some/worktree",
+        kitchen_id="kitchen-abc",
+        order_id="issue-185",
+        session_id="sess-002",
+        pid=12345,
+        skill_command="/autoskillit:implement",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-03-27T08:00:00",
+        proc_snapshots=None,
+    )
+
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+    assert entry["order_id"] == "issue-185"
+
+
+def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
+    """order_id defaults to empty string when not supplied."""
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/some/worktree",
+        kitchen_id="kitchen-abc",
+        session_id="sess-003",
+        pid=12345,
+        skill_command="/autoskillit:implement",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-03-27T08:00:00",
+        proc_snapshots=None,
+    )
+
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+    assert "order_id" in entry
+    assert entry["order_id"] == ""
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux-only: uses /proc and boot_id")
+def test_recover_crashed_sessions_skips_live_pid(tmp_path):
+    """A trace file whose enrolled PID is still alive must not be recovered."""
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    pid = os.getpid()
+    trace = tmpfs / f"autoskillit_trace_{pid}.jsonl"
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    trace.write_text("")
+    enrollment.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": pid,
+                "boot_id": read_boot_id() or "",
+                "starttime_ticks": read_starttime_ticks(pid),
+                "session_id": "",
+                "enrolled_at": datetime.now(UTC).isoformat(),
+                "kitchen_id": "",
+                "order_id": "",
+            }
+        )
+    )
+    os.utime(trace, (time.time() - 60,) * 2)
+
+    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path))
+
+    assert count == 0
+    assert trace.exists(), "Trace file for alive PID must not be deleted"
+    assert enrollment.exists(), "Enrollment sidecar for alive PID must not be deleted"
+
+
+def test_recover_crashed_sessions_skips_file_without_enrollment(tmp_path):
+    """A trace file with no enrollment sidecar must be skipped — it is not
+    an autoskillit-owned trace (e.g. a test artifact or alien file)."""
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    trace = tmpfs / "autoskillit_trace_99997.jsonl"
+    trace.write_text("")
+    os.utime(trace, (time.time() - 60,) * 2)
+
+    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path))
+
+    assert count == 0
+    assert trace.exists(), "Alien trace file must not be deleted"
+
+
+def test_recover_crashed_sessions_skips_wrong_boot_id(tmp_path, monkeypatch):
+    """An enrollment sidecar with a different boot_id must be rejected."""
+    monkeypatch.setattr(
+        "autoskillit.execution.session_log.read_boot_id",
+        lambda: "current-boot-id",
+    )
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    pid = 99996
+    trace = tmpfs / f"autoskillit_trace_{pid}.jsonl"
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    trace.write_text("")
+    enrollment.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": pid,
+                "boot_id": "stale-boot-id",
+                "starttime_ticks": 1234,
+                "session_id": "",
+                "enrolled_at": "2026-01-01T00:00:00+00:00",
+                "kitchen_id": "",
+                "order_id": "",
+            }
+        )
+    )
+    os.utime(trace, (time.time() - 60,) * 2)
+
+    count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path))
+
+    assert count == 0
+
+
+def test_flush_writes_crash_exception_file(tmp_path):
+    """When exception_text is provided, flush_session_log writes crash_exception.txt."""
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="test-session",
+        pid=1234,
+        skill_command="/test",
+        success=False,
+        subtype="crashed",
+        exit_code=-1,
+        start_ts=datetime.now(UTC).isoformat(),
+        proc_snapshots=None,
+        termination_reason="CRASHED",
+        exception_text="RuntimeError: boom\n  at headless.py:1023",
+    )
+    session_dir = tmp_path / "sessions" / "test-session"
+    crash_file = session_dir / "crash_exception.txt"
+    assert crash_file.exists()
+    assert "RuntimeError: boom" in crash_file.read_text()

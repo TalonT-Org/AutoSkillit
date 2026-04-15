@@ -14,8 +14,34 @@ from unittest.mock import patch
 
 from autoskillit.core.types import ChannelConfirmation, TerminationReason
 from autoskillit.execution.headless import _build_skill_result
-from autoskillit.hooks.pretty_output import _format_response
+from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+from autoskillit.hooks.pretty_output_hook import _format_response
 from tests.conftest import _make_result
+
+# Realistic recipe YAML that mirrors actual bundled recipes.
+# Must include an `ingredients:` block to reproduce the raw/derived duplication scenario.
+# All formatter tests using `content` should reference this constant.
+REALISTIC_RECIPE_YAML = """\
+name: implementation
+description: Full implementation pipeline
+autoskillit_version: "0.3.0"
+ingredients:
+  task:
+    description: What to implement
+    required: true
+  source_dir:
+    description: Path to source directory
+    default: ""
+  review_approach:
+    description: Run review-approach before planning
+    default: "false"
+kitchen_rules:
+  - Always commit before merging
+steps:
+  implement:
+    tool: run_skill
+    skill_command: /implement
+"""
 
 
 def _run_hook(
@@ -27,7 +53,7 @@ def _run_hook(
 
     Returns (stdout_output, exit_code).
     """
-    from autoskillit.hooks.pretty_output import main
+    from autoskillit.hooks.pretty_output_hook import main
 
     stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
 
@@ -39,7 +65,7 @@ def _run_hook(
         stack.enter_context(redirect_stdout(buf))
         if cwd is not None:
             stack.enter_context(
-                patch("autoskillit.hooks.pretty_output.Path.cwd", return_value=cwd)
+                patch("autoskillit.hooks.pretty_output_hook.Path.cwd", return_value=cwd)
             )
         try:
             main()
@@ -87,7 +113,7 @@ def test_hook_script_exists():
     """pretty_output.py must exist in the hooks directory."""
     from autoskillit.core.paths import pkg_root
 
-    assert (pkg_root() / "hooks" / "pretty_output.py").exists()
+    assert (pkg_root() / "hooks" / "pretty_output_hook.py").exists()
 
 
 # PHK-2
@@ -223,7 +249,7 @@ def test_format_test_check_pass():
     """test_check pass must show tool name, checkmark, PASS, passed: True."""
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__test_check",
-        "tool_response": json.dumps({"passed": True, "output": "...245 passed..."}),
+        "tool_response": json.dumps({"passed": True, "stdout": "...245 passed..."}),
     }
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
@@ -247,7 +273,7 @@ def test_format_test_check_fail_shows_failure_lines():
     )
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__test_check",
-        "tool_response": json.dumps({"passed": False, "output": pytest_output}),
+        "tool_response": json.dumps({"passed": False, "stdout": pytest_output}),
     }
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
@@ -351,13 +377,14 @@ def test_format_get_token_summary_compact():
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "token_summary" in text
-    # Assert specific compact line format: name xN [in:Xk out:Xk cached:XM t:Xs]
-    assert "investigate x1 [in:45.2k out:12.8k cached:1.2M t:0.0s]" in text
-    assert "make_plan x2 [in:30.0k out:8.0k cached:500.0k t:0.0s]" in text
-    assert "implement x1 [in:60.0k out:15.0k cached:2.0M t:0.0s]" in text
-    assert "total_in:" in text
+    # Assert specific compact line format: name xN [uc:Xk out:Xk cr:XM cw:XM t:Xs]
+    assert "investigate x1 [uc:45.2k out:12.8k cr:1.2M cw:0 t:0.0s]" in text
+    assert "make_plan x2 [uc:30.0k out:8.0k cr:0 cw:500.0k t:0.0s]" in text
+    assert "implement x1 [uc:60.0k out:15.0k cr:2.0M cw:0 t:0.0s]" in text
+    assert "total_uncached:" in text
     assert "total_out:" in text
-    assert "total_cached:" in text
+    assert "total_cache_read:" in text
+    assert "total_cache_write:" in text
 
 
 # PHK-16
@@ -389,9 +416,9 @@ def test_format_kitchen_status():
 def test_pipeline_mode_compact_run_skill(tmp_path):
     """In pipeline mode (hook config present), run_skill output uses compact format."""
     # Create the hook config file to signal pipeline mode
-    config_dir = tmp_path / ".autoskillit" / "temp"
-    config_dir.mkdir(parents=True)
-    (config_dir / ".autoskillit_hook_config.json").write_text('{"quota_guard": {}}')
+    config_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text('{"quota_guard": {}}')
 
     event = _make_run_skill_event(success=False, needs_retry=True, retry_reason="budget_exhausted")
 
@@ -566,9 +593,9 @@ def test_fmt_merge_worktree_dirty_tree_shows_files():
 # PHK-26
 def test_fmt_run_skill_pipeline_includes_stderr(tmp_path):
     """run_skill pipeline mode must include stderr."""
-    config_dir = tmp_path / ".autoskillit" / "temp"
-    config_dir.mkdir(parents=True)
-    (config_dir / ".autoskillit_hook_config.json").write_text('{"quota_guard": {}}')
+    config_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text('{"quota_guard": {}}')
 
     event = _make_run_skill_event(
         success=False,
@@ -1030,7 +1057,7 @@ def test_formatter_coverage_contract():
     formatters, and forces an explicit choice when adding new tools.
     """
     from autoskillit.core.types import GATED_TOOLS, UNGATED_TOOLS
-    from autoskillit.hooks.pretty_output import _FORMATTERS, _UNFORMATTED_TOOLS
+    from autoskillit.hooks.pretty_output_hook import _FORMATTERS, _UNFORMATTED_TOOLS
 
     all_tools = GATED_TOOLS | UNGATED_TOOLS
     covered = set(_FORMATTERS.keys()) | _UNFORMATTED_TOOLS
@@ -1196,7 +1223,7 @@ def test_fmt_generic_list_of_dicts_caps_at_20_items():
 def test_hook_token_summary_output_equivalent_to_canonical():
     """1g: Hook inline _fmt_get_token_summary produces identical output to
     TelemetryFormatter.format_compact_kv for the same input data."""
-    from autoskillit.hooks.pretty_output import _fmt_get_token_summary
+    from autoskillit.hooks.pretty_output_hook import _fmt_get_token_summary
     from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 
     data = {
@@ -1243,6 +1270,60 @@ def test_hook_token_summary_output_equivalent_to_canonical():
         f"Hook and canonical formatter produce different output:\n"
         f"HOOK:\n{hook_output}\n\nCANONICAL:\n{canonical_output}"
     )
+
+
+def test_fmt_run_skill_interactive_shows_four_token_fields():
+    """_fmt_run_skill interactive mode shows all 4 token fields."""
+    data = {
+        "success": True,
+        "subtype": "COMPLETED",
+        "exit_code": 0,
+        "needs_retry": False,
+        "result": "done",
+        "token_usage": {
+            "input_tokens": 5000,
+            "output_tokens": 3000,
+            "cache_read_input_tokens": 200000,
+            "cache_creation_input_tokens": 8000,
+        },
+    }
+    rendered = _format_response(
+        "mcp__plugin_autoskillit_autoskillit__run_skill",
+        json.dumps({"result": json.dumps(data)}),
+        pipeline=False,
+    )
+    assert rendered is not None
+    assert "tokens_uncached:" in rendered
+    assert "tokens_out:" in rendered
+    assert "tokens_cache_read:" in rendered
+    assert "tokens_cache_write:" in rendered
+
+
+def test_fmt_run_skill_suppresses_zero_cache_fields():
+    """_fmt_run_skill suppresses tokens_cache_read and tokens_cache_write when both are 0."""
+    data = {
+        "success": True,
+        "subtype": "COMPLETED",
+        "exit_code": 0,
+        "needs_retry": False,
+        "result": "done",
+        "token_usage": {
+            "input_tokens": 5000,
+            "output_tokens": 3000,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+        },
+    }
+    rendered = _format_response(
+        "mcp__plugin_autoskillit_autoskillit__run_skill",
+        json.dumps({"result": json.dumps(data)}),
+        pipeline=False,
+    )
+    assert rendered is not None
+    assert "tokens_uncached:" in rendered
+    assert "tokens_out:" in rendered
+    assert "tokens_cache_read:" not in rendered
+    assert "tokens_cache_write:" not in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -1344,7 +1425,7 @@ def test_fmt_run_skill_contradictory_subtype_never_renders_fail_success():
 
 def test_fmt_load_recipe_field_coverage():
     """Every LoadRecipeResult field must be in RENDERED or SUPPRESSED."""
-    from autoskillit.hooks.pretty_output import (
+    from autoskillit.hooks.pretty_output_hook import (
         _FMT_LOAD_RECIPE_RENDERED,
         _FMT_LOAD_RECIPE_SUPPRESSED,
     )
@@ -1361,6 +1442,26 @@ def test_fmt_load_recipe_field_coverage():
     assert extra == set(), (
         f"Coverage registry references non-existent fields: {sorted(extra)}. Remove stale entries."
     )
+
+
+def test_fmt_load_recipe_derivation_map_coverage():
+    """Every key/value in _LOAD_RECIPE_CONTENT_DERIVED_FROM must be in _FMT_LOAD_RECIPE_RENDERED.
+    Catches when a new derived field is added without declaring its source relationship."""
+    from autoskillit.hooks.pretty_output_hook import (
+        _FMT_LOAD_RECIPE_RENDERED,
+        _LOAD_RECIPE_CONTENT_DERIVED_FROM,
+    )
+
+    for derived_field, source_field in _LOAD_RECIPE_CONTENT_DERIVED_FROM.items():
+        assert derived_field in _FMT_LOAD_RECIPE_RENDERED, (
+            f"Derived field '{derived_field}' must be in _FMT_LOAD_RECIPE_RENDERED. "
+            f"If it was moved to SUPPRESSED, remove it from _LOAD_RECIPE_CONTENT_DERIVED_FROM."
+        )
+        assert source_field in _FMT_LOAD_RECIPE_RENDERED, (
+            f"Source field '{source_field}' must be in _FMT_LOAD_RECIPE_RENDERED "
+            f"(it is the source for derived field '{derived_field}'). "
+            f"If the source is suppressed, the derivation map entry is stale."
+        )
 
 
 def test_fmt_load_recipe_renders_error():
@@ -1418,7 +1519,7 @@ def test_fmt_load_recipe_suppresses_greeting():
 
 def test_fmt_list_recipes_field_coverage():
     """Every ListRecipesResult field must be in RENDERED or SUPPRESSED."""
-    from autoskillit.hooks.pretty_output import (
+    from autoskillit.hooks.pretty_output_hook import (
         _FMT_LIST_RECIPES_RENDERED,
         _FMT_LIST_RECIPES_SUPPRESSED,
     )
@@ -1439,7 +1540,7 @@ def test_fmt_list_recipes_field_coverage():
 
 def test_fmt_recipe_list_item_field_coverage():
     """Every RecipeListItem field must be in RENDERED or SUPPRESSED."""
-    from autoskillit.hooks.pretty_output import (
+    from autoskillit.hooks.pretty_output_hook import (
         _FMT_RECIPE_LIST_ITEM_RENDERED,
         _FMT_RECIPE_LIST_ITEM_SUPPRESSED,
     )
@@ -1540,7 +1641,7 @@ def test_wrap_plain_str_helper_produces_correct_shape():
 
 def test_unformatted_tools_and_formatters_are_disjoint():
     """_UNFORMATTED_TOOLS and _FORMATTERS must be mutually exclusive."""
-    from autoskillit.hooks.pretty_output import _FORMATTERS, _UNFORMATTED_TOOLS
+    from autoskillit.hooks.pretty_output_hook import _FORMATTERS, _UNFORMATTED_TOOLS
 
     overlap = set(_FORMATTERS) & _UNFORMATTED_TOOLS
     assert not overlap, f"Tools in both dispatch tables: {overlap}"
@@ -1559,3 +1660,212 @@ def test_unformatted_tool_routes_to_generic_not_named_formatter(tmp_path):
     assert code == 0
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "get_pipeline_report" in text
+
+
+# ---------------------------------------------------------------------------
+# Raw/derived field deduplication: ingredients_table vs content
+# ---------------------------------------------------------------------------
+
+
+def test_fmt_recipe_body_ingredients_not_duplicated_when_table_present():
+    """When ingredients_table is present, ingredient names must not appear
+    in the --- RECIPE --- section. This is the canonical test for the
+    raw/derived field duplication bug."""
+    from autoskillit.hooks.pretty_output_hook import _fmt_recipe_body
+
+    data = {
+        "content": REALISTIC_RECIPE_YAML,
+        "ingredients_table": (
+            "| Name | Description | Default |\n"
+            "| task | What to implement | (required) |\n"
+            "| review_approach | Run review-approach before planning | false |\n"
+        ),
+        "valid": True,
+        "suggestions": [],
+    }
+    result = "\n".join(_fmt_recipe_body(data))
+    assert "--- INGREDIENTS TABLE" in result, (
+        "_fmt_recipe_body did not emit the INGREDIENTS TABLE header — "
+        "deduplication guarantee cannot be tested."
+    )
+    recipe_section = result.split("--- INGREDIENTS TABLE")[0]
+    # Ingredient names must appear ONLY in the table, not in the raw YAML block.
+    # `task:` and `review_approach:` as YAML keys indicate the ingredients: block.
+    assert "review_approach:" not in recipe_section
+    assert "  task:" not in recipe_section
+    # But the steps and kitchen_rules sections should remain in the RECIPE block.
+    assert "implement" in recipe_section
+    assert "kitchen_rules" in recipe_section
+    # And the table section must contain the ingredient data.
+    table_section = result.split("--- INGREDIENTS TABLE")[1]
+    assert "review_approach" in table_section
+    assert "task" in table_section
+
+
+def test_strip_yaml_ingredients_block_removes_ingredients_section():
+    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
+
+    yaml = "name: test\ningredients:\n  task:\n    description: a task\nsteps:\n  do: {}\n"
+    result = _strip_yaml_ingredients_block(yaml)
+    assert "ingredients:" not in result
+    assert "  task:" not in result
+    assert "steps:" in result
+    assert "name: test" in result
+
+
+def test_strip_yaml_ingredients_block_noop_when_no_ingredients_key():
+    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
+
+    yaml = "name: test\nsteps:\n  do: {}\n"
+    result = _strip_yaml_ingredients_block(yaml)
+    assert result == yaml
+
+
+def test_strip_yaml_ingredients_block_at_end_of_file():
+    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
+
+    yaml = "name: test\nsteps:\n  do: {}\ningredients:\n  foo:\n    description: bar\n"
+    result = _strip_yaml_ingredients_block(yaml)
+    assert "ingredients:" not in result
+    assert "steps:" in result
+
+
+def test_strip_yaml_ingredients_block_multiline_description():
+    from autoskillit.hooks.pretty_output_hook import _strip_yaml_ingredients_block
+
+    yaml = (
+        "name: test\n"
+        "ingredients:\n"
+        "  task:\n"
+        "    description: >\n"
+        "      Long description\n"
+        "      spanning multiple lines\n"
+        "    required: true\n"
+        "steps:\n"
+        "  do: {}\n"
+    )
+    result = _strip_yaml_ingredients_block(yaml)
+    assert "ingredients:" not in result
+    assert "steps:" in result
+
+
+def test_fmt_open_kitchen_ingredients_not_duplicated_when_table_present():
+    """open_kitchen routes through _fmt_recipe_body — verify same deduplication applies."""
+    from autoskillit.hooks.pretty_output_hook import _fmt_open_kitchen
+
+    data = {
+        "content": REALISTIC_RECIPE_YAML,
+        "ingredients_table": "| task | What to implement | (required) |",
+        "valid": True,
+        "suggestions": [],
+        "kitchen": "open",
+        "version": "0.6.0",
+    }
+    # _fmt_open_kitchen returns str (not list[str]); no join needed.
+    result = _fmt_open_kitchen(data, pipeline=False)
+    assert "--- INGREDIENTS TABLE" in result, (
+        "_fmt_open_kitchen did not emit the INGREDIENTS TABLE header — "
+        "deduplication guarantee cannot be tested."
+    )
+    recipe_section = result.split("--- INGREDIENTS TABLE")[0]
+    assert "  task:" not in recipe_section
+    assert "review_approach:" not in recipe_section
+
+
+def test_pretty_output_public_surface_unchanged() -> None:
+    """T-5 (audit finding 8.3): the hook entrypoint and the format router are
+    the only public surface; the four-way split must preserve them."""
+    import autoskillit.hooks.pretty_output_hook as p
+
+    assert callable(p.main)
+    assert callable(p._format_response)
+
+
+# PHK-kill-reason: formatter branches on kill_reason (1e)
+
+
+def test_fmt_run_skill_success_with_kill_after_completion_annotates_exit_code() -> None:
+    """kill_reason=kill_after_completion must annotate exit_code line."""
+    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Implementation complete.",
+        "session_id": "abc123",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": -9,
+        "kill_reason": "kill_after_completion",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    assert "exit_code: -9 (infra-terminated after completion" in text, (
+        f"Expected kill_after_completion annotation in exit_code line, got: {text!r}"
+    )
+
+
+def test_fmt_run_skill_success_with_natural_exit_shows_bare_exit_code() -> None:
+    """kill_reason=natural_exit must render bare exit_code without annotation."""
+    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc123",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "kill_reason": "natural_exit",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    assert "exit_code: 0" in text
+    assert "infra-terminated" not in text
+    assert "infra-killed" not in text
+
+
+def test_fmt_run_skill_infra_kill_annotates_reason() -> None:
+    """kill_reason=infra_kill must annotate exit_code with infra-killed."""
+    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": False,
+        "result": "",
+        "session_id": "abc123",
+        "subtype": "timeout",
+        "is_error": True,
+        "exit_code": -9,
+        "kill_reason": "infra_kill",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    assert "infra-killed" in text, (
+        f"Expected 'infra-killed' annotation for infra_kill reason, got: {text!r}"
+    )
+
+
+def test_fmt_run_skill_legacy_payload_without_kill_reason_renders_bare() -> None:
+    """Payload without kill_reason field must render bare exit_code (backward compat)."""
+    from autoskillit.hooks._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc123",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        # no kill_reason key
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+    }
+    text = _fmt_run_skill(data, pipeline=False)
+    assert "exit_code: 0" in text
+    assert "infra" not in text

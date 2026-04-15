@@ -47,5 +47,5 @@ When bumping the version, update three locations:
 
 ## Further Reading
 
-- **[Session Diagnostics](session-diagnostics.md)** — Process-level diagnostic logging for headless sessions
+- **[Session Diagnostics](diagnostics.md)** — Process-level diagnostic logging for headless sessions
 - **[End-Turn Hazards](end-turn-hazards.md)** — Stochastic failure modes in skill authoring and how to prevent them

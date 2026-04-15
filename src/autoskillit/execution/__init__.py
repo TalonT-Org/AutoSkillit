@@ -13,9 +13,11 @@ from autoskillit.execution.anomaly_detection import (
 )
 from autoskillit.execution.ci import DefaultCIWatcher
 from autoskillit.execution.commands import (
+    _MAX_MCP_OUTPUT_TOKENS_VALUE,  # noqa: F401
     ClaudeHeadlessCmd,
     ClaudeInteractiveCmd,
     build_headless_cmd,
+    build_headless_resume_cmd,
     build_interactive_cmd,
 )
 from autoskillit.execution.db import (
@@ -30,7 +32,11 @@ from autoskillit.execution.diff_annotator import (
     filter_findings,
     parse_hunk_ranges,
 )
-from autoskillit.execution.github import DefaultGitHubFetcher
+from autoskillit.execution.github import (
+    DefaultGitHubFetcher,
+    github_headers,
+    parse_merge_queue_response,
+)
 from autoskillit.execution.headless import (
     DefaultHeadlessExecutor,
     run_headless_core,
@@ -43,7 +49,7 @@ from autoskillit.execution.linux_tracing import (
     read_starttime_ticks,
     start_linux_tracing,
 )
-from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
+from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, fetch_repo_merge_state
 from autoskillit.execution.pr_analysis import (
     DOMAIN_PATHS,
     extract_linked_issues,
@@ -55,7 +61,24 @@ from autoskillit.execution.process import (
     run_managed_async,
     run_managed_sync,
 )
-from autoskillit.execution.quota import QuotaStatus, check_and_sleep_if_needed
+from autoskillit.execution.quota import (
+    QUOTA_CACHE_SCHEMA_VERSION,
+    QuotaStatus,
+    _refresh_quota_cache,  # noqa: F401 — imported for re-export via server.helpers; not in __all__
+    check_and_sleep_if_needed,
+)
+from autoskillit.execution.recording import (
+    RECORD_SCENARIO_DIR_ENV,
+    RECORD_SCENARIO_ENV,
+    RECORD_SCENARIO_RECIPE_ENV,
+    REPLAY_SCENARIO_DIR_ENV,
+    REPLAY_SCENARIO_ENV,
+    SCENARIO_STEP_NAME_ENV,
+    RecordingSubprocessRunner,
+    ReplayingSubprocessRunner,
+    ScenarioReplayError,
+    build_replay_runner,
+)
 from autoskillit.execution.remote_resolver import REMOTE_PRECEDENCE, resolve_remote_repo
 from autoskillit.execution.session import (
     ClaudeSessionResult,
@@ -82,11 +105,24 @@ __all__ = [
     "ClaudeHeadlessCmd",
     "build_interactive_cmd",
     "build_headless_cmd",
+    "build_headless_resume_cmd",
     # process
     "DefaultSubprocessRunner",
     "run_managed_async",
     "run_managed_sync",
+    # recording
+    "RecordingSubprocessRunner",
+    "ReplayingSubprocessRunner",
+    "ScenarioReplayError",
+    "build_replay_runner",
+    "RECORD_SCENARIO_ENV",
+    "RECORD_SCENARIO_DIR_ENV",
+    "RECORD_SCENARIO_RECIPE_ENV",
+    "REPLAY_SCENARIO_ENV",
+    "REPLAY_SCENARIO_DIR_ENV",
+    "SCENARIO_STEP_NAME_ENV",
     # quota
+    "QUOTA_CACHE_SCHEMA_VERSION",
     "QuotaStatus",
     "check_and_sleep_if_needed",
     # session
@@ -106,6 +142,7 @@ __all__ = [
     "DefaultCIWatcher",
     # merge_queue
     "DefaultMergeQueueWatcher",
+    "fetch_repo_merge_state",
     # remote_resolver
     "REMOTE_PRECEDENCE",
     "resolve_remote_repo",
@@ -119,6 +156,8 @@ __all__ = [
     "DefaultDatabaseReader",
     # github
     "DefaultGitHubFetcher",
+    "github_headers",
+    "parse_merge_queue_response",
     # linux_tracing
     "LINUX_TRACING_AVAILABLE",
     "LinuxTracingHandle",

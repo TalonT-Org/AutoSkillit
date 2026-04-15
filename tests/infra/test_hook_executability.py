@@ -11,6 +11,7 @@ import json
 import shlex
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -21,12 +22,14 @@ from autoskillit.hooks import HOOK_REGISTRY, generate_hooks_json
 def _extract_hook_commands() -> list[str]:
     """Extract all command strings from generate_hooks_json() output."""
     data = generate_hooks_json()
+    hooks = data.get("hooks", {})
     commands: list[str] = []
-    for entry in data.get("hooks", {}).get("PreToolUse", []):
-        for hook in entry.get("hooks", []):
-            cmd = hook.get("command", "")
-            if cmd:
-                commands.append(cmd)
+    for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
+        for entry in hooks.get(event_type, []):
+            for hook in entry.get("hooks", []):
+                cmd = hook.get("command", "")
+                if cmd:
+                    commands.append(cmd)
     return commands
 
 
@@ -54,7 +57,7 @@ def test_hook_registry_matches_generated_hooks_json() -> None:
     generated_pairs: set[tuple[str, str]] = set()
     for event_entries in data.get("hooks", {}).values():
         for entry in event_entries:
-            matcher = entry["matcher"]
+            matcher = entry.get("matcher", "")
             for hook in entry["hooks"]:
                 cmd = hook["command"]
                 script_name = cmd.split("/")[-1]
@@ -68,6 +71,26 @@ def test_hook_registry_matches_generated_hooks_json() -> None:
     assert registry_pairs == generated_pairs
 
 
+def test_committed_registry_hash_matches_live_registry() -> None:
+    """registry.sha256 (committed) must match the live HOOK_REGISTRY_HASH.
+
+    Fails when HOOK_REGISTRY is edited without running `task sync-hooks-hash`.
+    Unlike the old byte-equality test, this cannot be silenced by CI pre-regen
+    because the anchor is committed.
+    """
+    from autoskillit.hook_registry import HOOK_REGISTRY_HASH, HOOKS_DIR
+
+    sha_file = HOOKS_DIR / "registry.sha256"
+    assert sha_file.exists(), (
+        "src/autoskillit/hooks/registry.sha256 is missing. "
+        "Run `task sync-hooks-hash` and commit the result."
+    )
+    committed = sha_file.read_text().strip()
+    assert committed == HOOK_REGISTRY_HASH, (
+        "registry.sha256 is stale. Run `task sync-hooks-hash` and commit the result."
+    )
+
+
 def test_hook_registry_scripts_exist_on_disk() -> None:
     """Every script referenced in HOOK_REGISTRY must exist as a file in hooks/."""
     hooks_dir = pkg_root() / "hooks"
@@ -75,3 +98,79 @@ def test_hook_registry_scripts_exist_on_disk() -> None:
         for script in hook_def.scripts:
             script_path = hooks_dir / script
             assert script_path.is_file(), f"Registry script not found on disk: {script_path}"
+
+
+# REQ-HOOK-001
+def test_hook_registry_has_session_start_entry() -> None:
+    session_start_entries = [h for h in HOOK_REGISTRY if h.event_type == "SessionStart"]
+    assert session_start_entries, "HOOK_REGISTRY must contain a SessionStart entry"
+
+
+def test_generate_hooks_json_session_start_no_matcher() -> None:
+    result = generate_hooks_json()
+    session_start_entries = result["hooks"].get("SessionStart", [])
+    assert session_start_entries, "hooks.json must include SessionStart"
+    for entry in session_start_entries:
+        assert "matcher" not in entry, "SessionStart entries must not have a matcher key"
+
+
+# T-CROSS-2
+def test_generate_hooks_json_and_sync_produce_equivalent_entries(tmp_path) -> None:
+    """Both generation paths must produce structurally identical hook entries
+    for every event type. Verifies that _build_hook_entry() is shared,
+    preventing path A/B divergence.
+    """
+    from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
+
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text('{"hooks": {}}')
+    _evict_stale_autoskillit_hooks(settings)
+    sync_hooks_to_settings(settings)
+    deployed = json.loads(settings.read_text())
+
+    canonical = generate_hooks_json()
+
+    for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
+        canonical_entries = canonical.get("hooks", {}).get(event_type, [])
+        deployed_entries = deployed.get("hooks", {}).get(event_type, [])
+        assert len(canonical_entries) == len(deployed_entries), (
+            f"{event_type}: canonical has {len(canonical_entries)} entries, "
+            f"deployed has {len(deployed_entries)}"
+        )
+        for i, (c_entry, d_entry) in enumerate(zip(canonical_entries, deployed_entries)):
+            assert set(c_entry.keys()) == set(d_entry.keys()), (
+                f"{event_type}[{i}]: key mismatch. "
+                f"canonical keys={set(c_entry.keys())}, "
+                f"deployed keys={set(d_entry.keys())}"
+            )
+            if "matcher" in c_entry:
+                assert c_entry["matcher"] == d_entry["matcher"], (
+                    f"{event_type}[{i}]: matcher mismatch"
+                )
+
+
+def test_generated_hooks_json_includes_ask_user_question_gate() -> None:
+    from autoskillit.hook_registry import generate_hooks_json
+
+    h = generate_hooks_json()
+    pretool = h["hooks"].get("PreToolUse", [])
+    matchers = [entry["matcher"] for entry in pretool]
+    assert "AskUserQuestion" in matchers
+
+
+def test_generated_hooks_json_embeds_registry_hash() -> None:
+    from autoskillit.hook_registry import HOOK_REGISTRY_HASH, generate_hooks_json
+
+    h = generate_hooks_json()
+    assert h.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH
+
+
+def test_synced_settings_json_embeds_registry_hash(tmp_path: Path) -> None:
+    from autoskillit.cli._hooks import sync_hooks_to_settings
+    from autoskillit.hook_registry import HOOK_REGISTRY_HASH
+
+    settings_path = tmp_path / "settings.json"
+    sync_hooks_to_settings(settings_path)
+    data = json.loads(settings_path.read_text())
+    assert data.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH

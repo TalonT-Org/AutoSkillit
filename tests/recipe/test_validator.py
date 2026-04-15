@@ -36,12 +36,6 @@ class TestValidateRecipe:
         errors = validate_recipe(wf)
         assert errors == []
 
-    def test_missing_name_produces_error(self) -> None:
-        data = {**VALID_RECIPE, "name": ""}
-        wf = _parse_recipe(data)
-        errors = validate_recipe(wf)
-        assert any("name" in e.lower() for e in errors)
-
     # WF2
     def test_recipe_requires_name(self, tmp_path: Path) -> None:
         data = {**VALID_RECIPE, "name": ""}
@@ -373,6 +367,67 @@ class TestValidateRecipe:
         errors = validate_recipe(wf)
         assert errors == []
 
+    def test_validator_rejects_zero_stale_threshold(self) -> None:
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"s": RecipeStep(tool="run_skill", on_success="done", stale_threshold=0)},
+            kitchen_rules=["test"],
+        )
+        errors = validate_recipe(recipe)
+        assert any("stale_threshold" in e for e in errors)
+
+    def test_validator_rejects_negative_stale_threshold(self) -> None:
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"s": RecipeStep(tool="run_skill", on_success="done", stale_threshold=-1)},
+            kitchen_rules=["test"],
+        )
+        errors = validate_recipe(recipe)
+        assert any("stale_threshold" in e for e in errors)
+
+    def test_validator_accepts_positive_stale_threshold(self) -> None:
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"s": RecipeStep(tool="run_skill", on_success="done", stale_threshold=2400)},
+            kitchen_rules=["test"],
+        )
+        errors = validate_recipe(recipe)
+        assert not any("stale_threshold" in e for e in errors)
+
+    def test_validator_rejects_negative_idle_output_timeout(self) -> None:
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"s": RecipeStep(tool="run_skill", on_success="done", idle_output_timeout=-1)},
+            kitchen_rules=["test"],
+        )
+        errors = validate_recipe(recipe)
+        assert any("idle_output_timeout" in e for e in errors)
+
+    def test_validator_accepts_zero_idle_output_timeout(self) -> None:
+        # 0 = disabled, must NOT be rejected
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"s": RecipeStep(tool="run_skill", on_success="done", idle_output_timeout=0)},
+            kitchen_rules=["test"],
+        )
+        errors = validate_recipe(recipe)
+        assert not any("idle_output_timeout" in e for e in errors)
+
+    def test_validator_accepts_positive_idle_output_timeout(self) -> None:
+        recipe = Recipe(
+            name="test",
+            description="test",
+            steps={"s": RecipeStep(tool="run_skill", on_success="done", idle_output_timeout=120)},
+            kitchen_rules=["test"],
+        )
+        errors = validate_recipe(recipe)
+        assert not any("idle_output_timeout" in e for e in errors)
+
 
 # ---------------------------------------------------------------------------
 # TestDataFlowQuality — migrated from test_recipe_parser.py
@@ -586,6 +641,9 @@ class TestIsInstanceGuards:
         recipe = _parse_recipe(data)
         result = validate_recipe(recipe)
         assert isinstance(result, list)
+        assert not any("dead" in str(f).lower() for f in result), (
+            "DEAD_OUTPUT rule fired on a valid recipe — false positive"
+        )
 
 
 # ---------------------------------------------------------------------------

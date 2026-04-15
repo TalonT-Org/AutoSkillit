@@ -99,7 +99,7 @@ def test_bundled_skill_names_not_computed_at_import_v2() -> None:
     mod_name = "autoskillit.recipe.rules_skills"
     sys.modules.pop(mod_name, None)
 
-    with patch("autoskillit.workspace.skills.SkillResolver.list_all") as mock_list:
+    with patch("autoskillit.workspace.skills.DefaultSkillResolver.list_all") as mock_list:
         importlib.import_module(mod_name)
         mock_list.assert_not_called()
 

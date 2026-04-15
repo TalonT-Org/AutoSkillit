@@ -26,17 +26,10 @@ class TerminalColumn(NamedTuple):
     align: str  # "<" (left) or ">" (right)
 
 
-def _render_terminal_table(
+def _compute_col_widths(
     columns: Sequence[TerminalColumn],
     rows: Sequence[Sequence[str]],
-) -> str:
-    """Render a terminal table from structured rows using TerminalColumn specs.
-
-    Each column's width is the minimum of (max(len(cell) for cell in column), max_width).
-    Cells exceeding max_width are truncated with '…'. Every output line is
-    prefixed with two spaces for visual indentation.
-    """
-    # Compute capped column widths
+) -> list[int]:
     col_widths = []
     for i, col in enumerate(columns):
         data_width = max(
@@ -47,11 +40,26 @@ def _render_terminal_table(
         if col.max_width is not None:
             data_width = min(data_width, col.max_width)
         col_widths.append(data_width)
+    return col_widths
 
-    def _cell(value: str, width: int, align: str) -> str:
-        if len(value) > width:
-            value = value[: width - 1] + "…"
-        return format(value, f"{align}{width}")
+
+def _cell(value: str, width: int, align: str) -> str:
+    if len(value) > width:
+        value = value[: width - 1] + "…"
+    return format(value, f"{align}{width}")
+
+
+def _render_terminal_table(
+    columns: Sequence[TerminalColumn],
+    rows: Sequence[Sequence[str]],
+) -> str:
+    """Render a terminal table from structured rows using TerminalColumn specs.
+
+    Each column's width is the minimum of (max(len(cell) for cell in column), max_width).
+    Cells exceeding max_width are truncated with '…'. Every output line is
+    prefixed with two spaces for visual indentation.
+    """
+    col_widths = _compute_col_widths(columns, rows)
 
     lines: list[str] = []
     # Header row
@@ -79,21 +87,7 @@ def _render_gfm_table(
     Cells exceeding max_width are truncated with '…'. Output is flush-left GFM syntax
     with no two-space indent prefix.
     """
-    col_widths = []
-    for i, col in enumerate(columns):
-        data_width = max(
-            (len(row[i]) for row in rows if i < len(row)),
-            default=0,
-        )
-        data_width = max(data_width, len(col.label))
-        if col.max_width is not None:
-            data_width = min(data_width, col.max_width)
-        col_widths.append(data_width)
-
-    def _cell(value: str, width: int, align: str) -> str:
-        if len(value) > width:
-            value = value[: width - 1] + "…"
-        return format(value, f"{align}{width}")
+    col_widths = _compute_col_widths(columns, rows)
 
     lines: list[str] = []
 

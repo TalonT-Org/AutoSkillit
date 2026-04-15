@@ -51,6 +51,27 @@ Parse ARGUMENTS for:
 - `--repo owner/repo` → set `repo = "owner/repo"`
 - Remaining tokens → `description`
 
+### Step 1b: Detect Validated Audit Report
+
+After parsing arguments, check whether the description is a validated audit report:
+
+1. If `description` is a file path (relative or absolute) pointing to an existing `.md` file,
+   read the first non-blank line of that file. If the file cannot be read (e.g., permission
+   error), skip to case 4 and set `is_validated_report = false`.
+2. If that first non-blank line, after stripping trailing whitespace (including `\r`), is
+   exactly `validated: true`, set `is_validated_report = true` and record
+   `report_path = description`.
+3. If `description` itself (not a file path) begins with `validated: true` (after stripping
+   trailing whitespace) as its first non-blank line, set `is_validated_report = true` and
+   treat `description` as the report content directly.
+4. Otherwise set `is_validated_report = false`.
+
+When `is_validated_report = true`:
+- In **Step 5**, use the validated report body construction procedure below instead of
+  the standard summarization.
+- In **Step 7a** (`is_validated_report = true`): skip requirement generation entirely.
+- Set `requirements_generated: false` in the final result block.
+
 ### Step 2: Authenticate
 
 ```bash
@@ -115,9 +136,12 @@ Your choice [C]:
 3. If **edit**:
    ```bash
    # Fetch current body and append new context using a temp file to avoid shell injection
-   gh issue view {selected_number} --json body -q .body > /tmp/issue_edit_body.txt
-   printf '\n## Additional Context\n\n%s' "{description}" >> /tmp/issue_edit_body.txt
-   gh issue edit {selected_number} --body-file /tmp/issue_edit_body.txt
+   ts=$(date +%Y-%m-%d_%H%M%S)
+   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_${ts}.md"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
+   gh issue view {selected_number} --json body -q .body > "${EDIT_BODY_FILE}"
+   printf '\n## Additional Context\n\n%s' "{description}" >> "${EDIT_BODY_FILE}"
+   gh issue edit {selected_number} --body-file "${EDIT_BODY_FILE}"
    ```
 4. Set `issue_number = selected_number` (no new issue will be created).
 5. Fetch the updated issue for triage:
@@ -155,6 +179,59 @@ provided (adopting an existing issue) or when `--dry-run` is active.
 ### Step 5: Create Issue or Adopt Existing
 
 **Creating new:**
+
+**Validated audit report input (`is_validated_report = true`):**
+
+1. Derive the issue title from the validated report's H1 heading: strip the leading `# `
+   and use the result verbatim.
+2. Apply all strip transforms in a single deterministic shell pipeline:
+
+   ```bash
+   ts=$(date +%Y-%m-%d_%H%M%S)
+   ISSUE_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_${ts}.md"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
+
+   grep -v 'validated: true' "$report_path" \
+     | grep -v '\.autoskillit/' \
+     | grep -v 'contested_findings_' \
+     | grep -v '| CONTESTED |' \
+     | grep -v '| VALID BUT EXCEPTION WARRANTED |' \
+     | sed 's/ | \*\*Contested:\*\* [0-9][0-9]*//' \
+     | sed 's/ | \*\*Exception warranted:\*\* [0-9][0-9]*//' \
+   > "${ISSUE_BODY_FILE}" || { echo 'ERROR: failed to process report_path'; exit 1; }
+
+   # Strip the ## Findings with Exceptions section entirely:
+   awk '/^## Findings with Exceptions/{skip=1} skip && /^---/{skip=0; next} !skip' \
+     "${ISSUE_BODY_FILE}" > "${ISSUE_BODY_FILE}.tmp" \
+     && mv "${ISSUE_BODY_FILE}.tmp" "${ISSUE_BODY_FILE}"
+   ```
+
+   **What each transform removes:**
+   - `validated: true` — YAML front-matter sentinel (not content)
+   - `.autoskillit/` lines — all artifact paths (`**Original report:**` and any future variants)
+   - `contested_findings_` lines — footer reference to the excluded-findings file
+   - `| CONTESTED |` rows — CONTESTED verdict rows from `## Validation Status` table
+   - `| VALID BUT EXCEPTION WARRANTED |` rows — exception verdict rows from `## Validation Status`
+   - `| **Contested:** N` and `| **Exception warranted:** N` — count segments from the
+     `**Findings processed:**` summary line; leaves `**Findings processed:** {total} | **Valid:** {N}`
+   - `## Findings with Exceptions` through next `---` — the entire exception-findings section
+
+3. Call `gh issue create` using the temp file:
+
+   ```bash
+   gh issue create \
+     --title "{title}" \
+     --body-file "${ISSUE_BODY_FILE}"
+   ```
+
+   Capture the returned issue URL and extract the issue number from it.
+
+The resulting body contains **only** actionable, VALID findings: the H1 title, the
+`## Validation Status` table (VALID rows only), and the `## Validated Findings` section.
+No artifact paths, no contested content, no exception-warranted content.
+
+**Standard input (`is_validated_report = false`):**
+
 Derive a concise title (first sentence of description, max 80 chars) and a structured
 body from the full description:
 
@@ -197,6 +274,10 @@ If `confidence == "low"`:
 
 ### Step 7a: Requirement Generation (recipe:implementation only)
 
+**Skip entirely when `is_validated_report = true`** — the validated report IS the
+specification. No requirements section will be generated or appended.
+Set `requirements_generated: false` in the result block and proceed directly to Step 8.
+
 Skip if route is `recipe:remediation` — proceed directly to Step 8.
 
 If route is `recipe:implementation`:
@@ -218,18 +299,19 @@ If route is `recipe:implementation`:
    `gh issue edit`. Set `requirements_generated: true`, `requirements_appended: false`.
 7. Otherwise, append the Requirements section:
    ```bash
-   gh issue edit {N} --body "$(gh issue view {N} --json body -q .body)
+   ts=$(date +%Y-%m-%d_%H%M%S)
+   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_${ts}.md"
+   REQUIREMENTS_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/requirements_${ts}.md"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
 
-## Requirements
+   # Fetch current issue body to temp file (avoids shell interpolation):
+   gh issue view {N} --json body -q .body > "${EDIT_BODY_FILE}"
 
-### {Group Name}
+   # Populate ${REQUIREMENTS_FILE} with the generated requirements content, then:
+   printf '\n\n## Requirements\n\n' >> "${EDIT_BODY_FILE}"
+   cat "${REQUIREMENTS_FILE}" >> "${EDIT_BODY_FILE}"
 
-- **REQ-{GRP}-001:** ...
-- **REQ-{GRP}-002:** ...
-
-### {Group 2 Name}
-
-- **REQ-{GRP2}-001:** ..."
+   gh issue edit {N} --body-file "${EDIT_BODY_FILE}"
    ```
 8. If the issue is too vague for clean requirement extraction (no clear goal,
    contradictory claims, or entirely implementation-prescriptive): do not force it.
@@ -286,6 +368,11 @@ gh issue edit {issue_number} --add-label "{issue_type}"
 - Proceed past Step 2 (Auth) if `gh auth status` fails
 - Create a GitHub issue without displaying the draft and receiving explicit Y confirmation
   (unless `--issue N` or `--dry-run` is active)
+- Use `--body` inline for the validated-report `gh issue create` — always write the
+  stripped body to `{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{timestamp}.md` and
+  pass `--body-file` (prevents LLM paraphrase, shell truncation, and special-character injection)
+- Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
+  `{{AUTOSKILLIT_TEMP}}/prepare-issue/req_body_{timestamp}.md` and use `--body-file`
 
 **ALWAYS:**
 - Confirm repo access with `gh repo view` before any issue operations

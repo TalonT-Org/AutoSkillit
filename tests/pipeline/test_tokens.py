@@ -247,7 +247,7 @@ class TestDefaultTokenLog:
             end_ts="2026-01-01T12:00:00+00:00",  # earlier
         )
         entries = log.get_report()
-        assert entries[0]["elapsed_seconds"] >= 0
+        assert entries[0]["elapsed_seconds"] == pytest.approx(0.0)
 
     def test_record_uses_elapsed_seconds_param_over_iso_subtraction(self):
         """When elapsed_seconds kwarg is provided, it is used directly, not ISO subtraction."""
@@ -394,6 +394,26 @@ class TestDefaultTokenLogLoadFromLogDir:
         log = DefaultTokenLog()
         n = log.load_from_log_dir(tmp_path)
         assert n == 0
+
+    def test_load_null_timing_seconds(self, tmp_path):
+        """TokenLog must handle timing_seconds: null without TypeError."""
+        _write_session(
+            tmp_path,
+            "s001",
+            {
+                "step_name": "implement",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "timing_seconds": None,
+            },
+        )
+        log = DefaultTokenLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 1
+        report = log.get_report()
+        assert report[0]["elapsed_seconds"] == 0.0
 
 
 class TestLoadFromLogDirDesignDocumentation:
@@ -643,3 +663,104 @@ def test_load_from_log_dir_normalizes_suffixed_step_names(tmp_path):
     assert report[0]["step_name"] == "plan"
     assert report[0]["invocation_count"] == 2
     assert report[0]["input_tokens"] == 200
+
+
+class TestOrderIdScoping:
+    """Group A: order_id scoping for DefaultTokenLog."""
+
+    def _make_usage(self, **overrides: int) -> dict:
+        base = {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 10,
+            "cache_read_input_tokens": 5,
+        }
+        return {**base, **overrides}
+
+    def test_record_with_order_id_creates_scoped_entry(self):
+        """A-1: two different order_ids produce separate entries, no cross-contamination."""
+        log = DefaultTokenLog()
+        log.record("plan", self._make_usage(), order_id="issue-185")
+        log.record("plan", self._make_usage(), order_id="issue-186")
+
+        report_185 = log.get_report(order_id="issue-185")
+        report_186 = log.get_report(order_id="issue-186")
+
+        assert len(report_185) == 1
+        assert len(report_186) == 1
+        assert report_185[0]["step_name"] == "plan"
+        assert report_186[0]["step_name"] == "plan"
+        # No cross-contamination: each order has invocation_count=1
+        assert report_185[0]["invocation_count"] == 1
+        assert report_186[0]["invocation_count"] == 1
+
+    def test_same_step_different_orders_do_not_contaminate(self):
+        """A-2: same step name in two orders does not aggregate to one entry."""
+        log = DefaultTokenLog()
+        log.record("plan", self._make_usage(), order_id="issue-185")
+        log.record("plan", self._make_usage(), order_id="issue-186")
+
+        # get_report() with no filter returns both entries
+        all_entries = log.get_report()
+        assert len(all_entries) == 1  # aggregated by step_name → 1 canonical entry
+        # But the aggregate invocation_count is 2 (one per order)
+        assert all_entries[0]["invocation_count"] == 2
+
+    def test_get_report_order_id_filter_isolates_by_order(self):
+        """A-3: get_report(order_id='A') returns only A's entries; B's are absent."""
+        log = DefaultTokenLog()
+        log.record("plan", self._make_usage(input_tokens=111), order_id="A")
+        log.record("implement", self._make_usage(input_tokens=222), order_id="B")
+
+        report_a = log.get_report(order_id="A")
+        report_b = log.get_report(order_id="B")
+
+        assert len(report_a) == 1
+        assert report_a[0]["step_name"] == "plan"
+        assert report_a[0]["input_tokens"] == 111
+
+        assert len(report_b) == 1
+        assert report_b[0]["step_name"] == "implement"
+        assert report_b[0]["input_tokens"] == 222
+
+    def test_get_report_no_filter_aggregates_all_orders(self):
+        """A-4: get_report() with no order_id aggregates across all orders (backward compat)."""
+        log = DefaultTokenLog()
+        log.record("plan", self._make_usage(input_tokens=100), order_id="A")
+        log.record("plan", self._make_usage(input_tokens=200), order_id="B")
+
+        all_entries = log.get_report()
+        assert len(all_entries) == 1
+        assert all_entries[0]["step_name"] == "plan"
+        assert all_entries[0]["input_tokens"] == 300  # 100 + 200
+        assert all_entries[0]["invocation_count"] == 2
+
+    def test_compute_total_order_id_filter(self):
+        """A-5: compute_total(order_id='issue-185') sums only that order's tokens."""
+        log = DefaultTokenLog()
+        log.record("plan", self._make_usage(input_tokens=100), order_id="issue-185")
+        log.record("plan", self._make_usage(input_tokens=200), order_id="issue-186")
+
+        total_185 = log.compute_total(order_id="issue-185")
+        assert total_185["input_tokens"] == 100
+        assert total_185["output_tokens"] == 50
+
+    def test_compute_total_no_filter_aggregates_all(self):
+        """A-6: compute_total() with no filter aggregates all orders (backward compat)."""
+        log = DefaultTokenLog()
+        log.record("plan", self._make_usage(input_tokens=100), order_id="issue-185")
+        log.record("plan", self._make_usage(input_tokens=200), order_id="issue-186")
+
+        total = log.compute_total()
+        assert total["input_tokens"] == 300
+
+    def test_unscoped_record_aggregates_with_no_filter(self):
+        """A-7: unscoped record and scoped record both appear in get_report() with no filter."""
+        log = DefaultTokenLog()
+        log.record("plan", self._make_usage(input_tokens=100))  # no order_id
+        log.record("plan", self._make_usage(input_tokens=200), order_id="X")
+
+        all_entries = log.get_report()
+        assert len(all_entries) == 1  # same step_name → aggregated
+        assert all_entries[0]["invocation_count"] == 2
+        assert all_entries[0]["input_tokens"] == 300

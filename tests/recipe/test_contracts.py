@@ -81,6 +81,15 @@ def test_resolve_skill_name_dynamic() -> None:
     assert resolve_skill_name("/audit-${{ inputs.audit_type }}") is None
 
 
+def test_resolve_skill_name_bash_placeholder_truncation() -> None:
+    """Skill names truncated by a bash {placeholder} suffix must be treated as dynamic."""
+    from autoskillit.recipe.contracts import resolve_skill_name
+
+    # "/autoskillit:exp-lens-{slug}" — regex extracts "exp-lens-" (stops at {)
+    # but the true name is dynamic; must return None to skip contract validation.
+    assert resolve_skill_name("/autoskillit:exp-lens-{slug} {ctx} ${{ context.plan }}") is None
+
+
 # ---------------------------------------------------------------------------
 # Shared YAML fixtures
 # ---------------------------------------------------------------------------
@@ -440,10 +449,17 @@ def test_sc1_audit_impl_has_real_inputs_and_outputs() -> None:
     assert remediation_out["type"] == "file_path"
 
 
-def test_sc2_resolve_failures_has_empty_outputs() -> None:
-    """T_SC2: resolve-failures has outputs: []."""
+def test_sc2_resolve_failures_declares_verdict_output() -> None:
+    """T_SC2: resolve-failures declares a verdict output with allowed_values."""
     manifest = load_bundled_manifest()
-    assert manifest["skills"]["resolve-failures"]["outputs"] == []
+    outputs = manifest["skills"]["resolve-failures"]["outputs"]
+    output_names = {o["name"] for o in outputs}
+    assert "verdict" in output_names, (
+        "resolve-failures must declare a 'verdict' output after Part B implementation"
+    )
+    verdict_out = next(o for o in outputs if o["name"] == "verdict")
+    assert "allowed_values" in verdict_out, "verdict output must have allowed_values"
+    assert "real_fix" in verdict_out["allowed_values"]
 
 
 def test_sc3_dry_walkthrough_has_empty_outputs() -> None:
@@ -512,7 +528,8 @@ FILE_PRODUCING_SKILLS_WITH_CONTRACTS: list[str] = [
     "triage-issues",
     "analyze-prs",
     "merge-pr",
-    "open-pr",
+    "prepare-pr",
+    "compose-pr",
     "open-integration-pr",
     "implement-worktree",
     "implement-worktree-no-merge",
@@ -552,9 +569,9 @@ def test_file_producing_skill_has_output_patterns(skill_name: str) -> None:
 def test_generate_recipe_card_includes_output_patterns(tmp_path: Path) -> None:
     """Recipe card serialization must preserve expected_output_patterns."""
     manifest = load_bundled_manifest()
-    contract = get_skill_contract("open-pr", manifest)
+    contract = get_skill_contract("compose-pr", manifest)
     assert contract is not None
-    assert contract.expected_output_patterns, "Precondition: open-pr must have patterns"
+    assert contract.expected_output_patterns, "Precondition: compose-pr must have patterns"
 
     from autoskillit.core.paths import pkg_root
 
@@ -566,14 +583,13 @@ def test_generate_recipe_card_includes_output_patterns(tmp_path: Path) -> None:
     recipes_dir.mkdir()
     card = generate_recipe_card(recipe_path, recipes_dir)
     card_skills = card.get("skills", {})
-    open_pr_card = card_skills.get("open-pr")
-    if open_pr_card is None:
-        pytest.skip("open-pr not used in implementation recipe")
+    compose_pr_card = card_skills.get("compose-pr")
+    assert compose_pr_card is not None, "compose-pr must be used in implementation recipe"
 
-    assert "expected_output_patterns" in open_pr_card, (
+    assert "expected_output_patterns" in compose_pr_card, (
         "generate_recipe_card() must include expected_output_patterns"
     )
-    assert open_pr_card["expected_output_patterns"], (
+    assert compose_pr_card["expected_output_patterns"], (
         "expected_output_patterns must be non-empty in the card"
     )
 
@@ -614,9 +630,6 @@ ALWAYS_WRITE_SKILLS = {
     "dry-walkthrough",
     "implement-worktree",
     "implement-worktree-no-merge",
-    "resolve-failures",
-    "resolve-review",
-    "retry-worktree",
     "rectify",
     "make-plan",
     "report-bug",
@@ -634,6 +647,44 @@ def test_every_always_write_skill_has_contract(skill_name: str) -> None:
     assert contract is not None, f"Skill '{skill_name}' missing from skill_contracts.yaml"
     assert contract.write_behavior == "always", (
         f"Skill '{skill_name}' expected write_behavior='always', got '{contract.write_behavior}'"
+    )
+
+
+# Skills that write conditionally — write expected only when the completion
+# token indicates actual work was performed.
+CONDITIONAL_WRITE_SKILLS: dict[str, str] = {
+    # skill_name → substring that must appear in write_expected_when patterns
+    "resolve-failures": "verdict",
+    "resolve-merge-conflicts": "conflict_report_path",
+    "resolve-review": "verdict",
+    "retry-worktree": "phases_implemented",
+    "resolve-claims-review": "verdict",
+    "resolve-research-review": "verdict",
+}
+
+
+@pytest.mark.parametrize("skill_name,pattern_substring", sorted(CONDITIONAL_WRITE_SKILLS.items()))
+def test_every_conditional_write_skill_has_correct_contract(
+    skill_name: str, pattern_substring: str
+) -> None:
+    """Skills with legitimate no-write exits must declare write_behavior='conditional'.
+
+    Each conditional skill must have at least one write_expected_when pattern
+    containing the expected token substring. This prevents regression to 'always'.
+    """
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract(skill_name, manifest)
+    assert contract is not None, f"Skill '{skill_name}' missing from skill_contracts.yaml"
+    assert contract.write_behavior == "conditional", (
+        f"Skill '{skill_name}' must use write_behavior='conditional'. "
+        f"It has a legitimate no-write success path. Got: '{contract.write_behavior}'"
+    )
+    assert len(contract.write_expected_when) > 0, (
+        f"Skill '{skill_name}': conditional mode requires non-empty write_expected_when"
+    )
+    assert any(pattern_substring in p for p in contract.write_expected_when), (
+        f"Skill '{skill_name}': write_expected_when must contain a pattern with "
+        f"'{pattern_substring}' (the structured completion token)"
     )
 
 

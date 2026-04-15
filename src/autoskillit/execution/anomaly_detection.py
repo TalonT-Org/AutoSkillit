@@ -18,12 +18,37 @@ class AnomalyKind(StrEnum):
     SIGNALS_PENDING = "signals_pending"
     RSS_GROWTH = "rss_growth"
     FD_HIGH = "fd_high"
+    D_STATE_SUSTAINED = "d_state_sustained"
+    HIGH_CPU_SUSTAINED = "high_cpu_sustained"
+    IDENTITY_DRIFT = "identity_drift"
 
 
 class AnomalySeverity(StrEnum):
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
+
+
+# Kernel wait-channel values that are normal for a healthy process in
+# uninterruptible sleep.  D-state snapshots whose wchan matches any of these
+# are NOT counted toward the D_STATE_SUSTAINED threshold.
+# "" and "0" guard against missing-data snapshots (unreadable /proc/wchan).
+BENIGN_WCHANS: frozenset[str] = frozenset(
+    {
+        "do_nanosleep",
+        "do_epoll_wait",
+        "schedule_hrtimeout_range",
+        "",  # /proc returns empty when unreadable — treat as benign
+        "0",  # kernel reports literal "0" when thread is runnable
+    }
+)
+
+
+def _safe_int(value: object, *, default: int) -> int:
+    try:
+        return int(value)  # type: ignore[call-overload]
+    except (ValueError, TypeError):
+        return default
 
 
 def _anomaly(
@@ -60,6 +85,8 @@ def detect_anomalies(
         return anomalies
 
     consecutive_zombie = 0
+    consecutive_d_state = 0
+    consecutive_high_cpu = 0
     prev_sig_pnd: str | None = None
     initial_rss: int | None = None
 
@@ -115,7 +142,7 @@ def detect_anomalies(
                         pid,
                     )
                 )
-            if consecutive_zombie >= 3:
+            if consecutive_zombie == 3:
                 anomalies.append(
                     _anomaly(
                         AnomalyKind.ZOMBIE_PERSISTENT,
@@ -128,6 +155,49 @@ def detect_anomalies(
                 )
         else:
             consecutive_zombie = 0
+
+        # D-state sustained: process stuck in uninterruptible sleep
+        wchan = snap.get("wchan", "")
+        if state == "disk-sleep" and isinstance(wchan, str) and wchan not in BENIGN_WCHANS:
+            consecutive_d_state += 1
+            if consecutive_d_state >= 2:
+                anomalies.append(
+                    _anomaly(
+                        AnomalyKind.D_STATE_SUSTAINED,
+                        AnomalySeverity.WARNING,
+                        {
+                            "state": state,
+                            "wchan": wchan,
+                            "consecutive_count": consecutive_d_state,
+                        },
+                        snap,
+                        seq,
+                        pid,
+                    )
+                )
+        else:
+            consecutive_d_state = 0
+
+        # High-CPU sustained: process burning CPU >= 90% (suspected infinite loop)
+        cpu_percent = snap.get("cpu_percent", 0.0)
+        if isinstance(cpu_percent, (int, float)) and cpu_percent >= 90.0:
+            consecutive_high_cpu += 1
+            if consecutive_high_cpu >= 2:
+                anomalies.append(
+                    _anomaly(
+                        AnomalyKind.HIGH_CPU_SUSTAINED,
+                        AnomalySeverity.WARNING,
+                        {
+                            "cpu_percent": float(cpu_percent),
+                            "consecutive_count": consecutive_high_cpu,
+                        },
+                        snap,
+                        seq,
+                        pid,
+                    )
+                )
+        else:
+            consecutive_high_cpu = 0
 
         # Signals pending: transition from all-zeros to non-zero
         _all_zeros = "0000000000000000"
@@ -188,5 +258,50 @@ def detect_anomalies(
                     pid,
                 )
             )
+
+    return anomalies
+
+
+def detect_identity_drift(
+    snapshots: list[dict[str, object]],
+    expected_comm: str,
+) -> list[dict[str, object]]:
+    """Detect process identity drift: snapshots whose comm != expected_comm.
+
+    This is the architectural immunity check introduced in #806. If PTY wrapping
+    somehow bypasses the TraceTarget resolver, every snapshot will carry the wrong
+    comm (e.g., 'script' instead of 'claude'). This detector surfaces it immediately
+    rather than letting wrong telemetry accumulate silently for months.
+
+    Args:
+        snapshots: List of snapshot dicts (each may have a 'comm' field).
+        expected_comm: The process name we expect every snapshot to describe.
+
+    Returns:
+        List of IDENTITY_DRIFT anomaly records (one per first-seen mismatch).
+    """
+    anomalies: list[dict[str, object]] = []
+    if not snapshots or not expected_comm:
+        return anomalies
+
+    for seq, snap in enumerate(snapshots):
+        actual_comm = snap.get("comm", "")
+        if actual_comm and actual_comm != expected_comm:
+            anomalies.append(
+                _anomaly(
+                    AnomalyKind.IDENTITY_DRIFT,
+                    AnomalySeverity.CRITICAL,
+                    {
+                        "expected_comm": expected_comm,
+                        "actual_comm": actual_comm,
+                        "seq": seq,
+                    },
+                    snap,
+                    seq,
+                    _safe_int(snap.get("pid"), default=0),
+                )
+            )
+            # Report on first occurrence only — one anomaly is enough to diagnose the drift
+            break
 
     return anomalies

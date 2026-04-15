@@ -1,12 +1,12 @@
-#!/usr/bin/env python3
 """MCP server for orchestrating automated skill-driven workflows.
 
-Kitchen tools (39 gated + 1 headless-tagged) are hidden at startup via FastMCP v3
+Kitchen tools (40 gated + 1 headless-tagged) are hidden at startup via FastMCP v3
 mcp.disable(tags={'kitchen'}) applied once after all tool modules are imported.
-Each new session sees only the 2 free-range tools (open_kitchen and close_kitchen).
+Each new session sees only the 3 free-range tools (open_kitchen, close_kitchen,
+and disable_quota_guard).
 Headless sessions (AUTOSKILLIT_HEADLESS=1) pre-reveal only headless-tagged tools
 (test_check) via mcp.enable(tags={'headless'}) — not all kitchen tools.
-Calling the open_kitchen tool reveals all 40 kitchen-tagged tools for that session
+Calling the open_kitchen tool reveals all 41 kitchen-tagged tools for that session
 via ctx.enable_components(tags={'kitchen'}).
 
 Transport: stdio (default for FastMCP).
@@ -24,6 +24,9 @@ from autoskillit.pipeline import (  # noqa: F401
     ToolContext,
     gate_error_result,
 )
+from autoskillit.server._lifespan import (  # noqa: F401
+    _autoskillit_lifespan,
+)
 from autoskillit.server._state import (  # noqa: E402, F401
     _ctx,
     _get_config,
@@ -33,7 +36,7 @@ from autoskillit.server._state import (  # noqa: E402, F401
     version_info,
 )
 
-mcp: FastMCP = FastMCP("autoskillit")
+mcp: FastMCP = FastMCP("autoskillit", lifespan=_autoskillit_lifespan)
 
 logger = get_logger(__name__)
 
@@ -43,6 +46,8 @@ __all__ = [
     # Public utilities consumed by CLI and tests
     "version_info",
     "make_context",
+    # Wire-format compatibility middleware
+    "ClaudeCodeCompatMiddleware",
 ]
 
 # Import all tool sub-modules to trigger @mcp.tool() registration.
@@ -71,6 +76,12 @@ from autoskillit.server.tools_kitchen import _build_tool_category_listing  # noq
 # Apply global visibility transform: all sessions start with kitchen tools hidden.
 # Must appear after all tool module imports so the registered tools are in place.
 mcp.disable(tags={"kitchen"})
+
+# Wire-format sanitization: strip fields that trigger Claude Code #25081
+# (silent full-tool-list rejection when outputSchema/annotations are present).
+from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware  # noqa: E402
+
+mcp.add_middleware(ClaudeCodeCompatMiddleware())
 
 # Headless sessions (AUTOSKILLIT_HEADLESS=1) pre-reveal only headless-tagged tools
 # (test_check) so the session starts with test_check visible without calling open_kitchen.

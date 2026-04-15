@@ -1,7 +1,15 @@
 ---
 name: make-arch-diag
 categories: [arch-lens]
+activate_deps: [arch-lens]
 description: Generate architecture diagram for a specific component or system. Prompts user to select which area to document, then creates comprehensive mermaid diagrams.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: make-arch-diag] Generating architecture diagram...'"
+          once: true
 ---
 
 # Make-Arch-Diag: Architecture Diagram Generation
@@ -22,7 +30,7 @@ Creates comprehensive architecture diagrams for selected components or systems u
 - Ask user which component/system to diagram
 - Use the `/autoskillit:mermaid` skill for diagram creation
 - Include multiple views (data flow, component structure, sequence diagrams)
-- Save diagrams to `.autoskillit/temp/make-arch-diag/{component-name}/` (relative to the current working directory)
+- Save diagrams to `{{AUTOSKILLIT_TEMP}}/make-arch-diag/{component-name}/` (relative to the current working directory)
 - Use consistent color coding across all diagrams
 
 **NEVER:**
@@ -96,6 +104,7 @@ Choose appropriate diagram types:
 ### Step 5: Create Diagrams
 
 Use `/autoskillit:mermaid` skill to create each diagram:
+- Using ONLY classDef styles from the mermaid skill (no invented colors)
 - Follow standard color palette
 - Include legends
 - Add clear labels and descriptions
@@ -103,7 +112,7 @@ Use `/autoskillit:mermaid` skill to create each diagram:
 
 ### Step 6: Write Architecture Description
 
-Create `.autoskillit/temp/make-arch-diag/{component}/architecture.md`:
+Create `{{AUTOSKILLIT_TEMP}}/make-arch-diag/{component}/architecture.md`:
 
 ```markdown
 # {Component} Architecture

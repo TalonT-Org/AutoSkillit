@@ -1,0 +1,21 @@
+name: causal_inference
+classification_triggers:
+  - "Causal language (\"causes\", \"effect of\"), confounders in threats"
+dimension_weights:
+  causal_structure: H
+  variance_protocol: L
+  statistical_corrections: H
+  ecological_validity: L
+  measurement_alignment: M
+  resource_proportionality: L
+  data_acquisition: M
+  agent_implementability: M
+applicable_lenses:
+  primary: exp-lens-estimand-clarity
+  secondary: null
+red_team_focus:
+  specific: unblocked backdoor path
+  severity_cap: critical
+l1_severity:
+  estimand_clarity: critical
+  hypothesis_falsifiability: critical

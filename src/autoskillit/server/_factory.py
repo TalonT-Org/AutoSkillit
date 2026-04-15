@@ -11,22 +11,37 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import SubprocessRunner, WriteBehaviorSpec, get_logger, pkg_root
+from autoskillit.core import (
+    SubprocessRunner,
+    WriteBehaviorSpec,
+    get_logger,
+    pkg_root,
+    resolve_temp_dir,
+    temp_dir_display_str,
+)
 from autoskillit.execution import (
+    RECORD_SCENARIO_DIR_ENV,
+    RECORD_SCENARIO_ENV,
+    RECORD_SCENARIO_RECIPE_ENV,
+    REPLAY_SCENARIO_DIR_ENV,
+    REPLAY_SCENARIO_ENV,
     DefaultCIWatcher,
     DefaultDatabaseReader,
     DefaultGitHubFetcher,
     DefaultHeadlessExecutor,
     DefaultMergeQueueWatcher,
     DefaultTestRunner,
+    build_replay_runner,
 )
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import (
-    BackgroundTaskSupervisor,
     DefaultAuditLog,
+    DefaultBackgroundSupervisor,
     DefaultGateState,
     DefaultTimingLog,
     DefaultTokenLog,
@@ -50,6 +65,33 @@ logger = get_logger(__name__)
 
 # Sentinel: distinguish "caller passed runner=None explicitly" from "not provided"
 _UNSET: Any = object()
+
+
+class TokenFactory:
+    """Lazy-resolving, caching token factory.
+
+    Wraps the config -> env -> gh CLI token resolution chain.  Does NOT
+    resolve at construction time.  First call resolves and caches the
+    result; subsequent calls return the cached value.
+
+    Thread-safe for single-writer scenarios (GIL-safe sentinel + assignment
+    pattern; the MCP server is single-threaded asyncio).
+    """
+
+    _UNRESOLVED = object()
+
+    def __init__(self, resolver: Callable[[], str | None]) -> None:
+        self._resolver = resolver
+        self._resolved: str | None = self._UNRESOLVED  # type: ignore[assignment]
+
+    def __call__(self) -> str | None:
+        if self._resolved is self._UNRESOLVED:
+            self._resolved = self._resolver()
+        return self._resolved
+
+    @property
+    def is_resolved(self) -> bool:
+        return self._resolved is not self._UNRESOLVED
 
 
 def _default_plugin_dir() -> str:
@@ -78,11 +120,18 @@ def _gh_cli_token() -> str | None:
     return None
 
 
+def _check_plugin_installed() -> bool:
+    """Deferred import to avoid server→cli module-level dependency."""
+    from autoskillit.cli import _is_plugin_installed  # noqa: PLC0415
+
+    return _is_plugin_installed()
+
+
 def make_context(
     config: AutomationConfig,
     *,
     runner: SubprocessRunner | None = _UNSET,
-    plugin_dir: str | None = None,
+    plugin_dir: str | None = _UNSET,
 ) -> ToolContext:
     """Create a fully-wired ToolContext with all 22 service fields populated.
 
@@ -98,8 +147,10 @@ def make_context(
         runner: Subprocess runner implementation. Defaults to DefaultSubprocessRunner()
                 for production use. Pass runner=None explicitly to disable the
                 tester (useful in tests that don't need real subprocess execution).
-        plugin_dir: Absolute path to the autoskillit plugin directory. Defaults
-                    to the autoskillit package directory (parent of server/).
+        plugin_dir: Absolute path to the autoskillit plugin directory.
+                    Pass None explicitly to indicate the plugin is installed
+                    (marketplace install; no --plugin-dir needed). When omitted
+                    (sentinel), auto-detects via _check_plugin_installed().
 
     Returns:
         ToolContext with gate starting closed (enabled=False) in all contexts.
@@ -113,13 +164,67 @@ def make_context(
 
         runner = DefaultSubprocessRunner()
 
-    # Resolve token: config → GITHUB_TOKEN env var → gh CLI → None (unauthenticated)
-    github_token = config.github.token or os.environ.get("GITHUB_TOKEN") or _gh_cli_token()
+    if runner is not None and os.environ.get(REPLAY_SCENARIO_ENV):
+        replay_dir = os.environ.get(REPLAY_SCENARIO_DIR_ENV, "")
+        if not replay_dir:
+            logger.warning(
+                "REPLAY_SCENARIO is set but REPLAY_SCENARIO_DIR is empty — skipping replay"
+            )
+        elif not os.path.isdir(replay_dir):
+            logger.warning(
+                "REPLAY_SCENARIO_DIR=%r is not an existing directory — skipping replay",
+                replay_dir,
+            )
+        else:
+            runner = build_replay_runner(replay_dir)
 
-    resolved_dir = plugin_dir if plugin_dir is not None else _default_plugin_dir()
+    elif runner is not None and os.environ.get(RECORD_SCENARIO_ENV):
+        scenario_dir = os.environ.get(RECORD_SCENARIO_DIR_ENV, "")
+        recipe_name = os.environ.get(RECORD_SCENARIO_RECIPE_ENV, "unknown")
+        if scenario_dir:
+            if not os.path.isdir(scenario_dir):
+                logger.warning(
+                    "RECORD_SCENARIO_DIR=%r is not an existing directory — skipping recording",
+                    scenario_dir,
+                )
+            else:
+                try:
+                    from api_simulator.claude import make_scenario_recorder
+                except ImportError:
+                    logger.warning(
+                        "RECORD_SCENARIO is set but 'api_simulator' is not installed "
+                        "— skipping recording"
+                    )
+                    make_scenario_recorder = None  # type: ignore[assignment]
+
+                if make_scenario_recorder is not None:
+                    from autoskillit.execution import RecordingSubprocessRunner
+
+                    recorder = make_scenario_recorder(
+                        output_dir=scenario_dir, recipe_name=recipe_name
+                    )
+                    runner = RecordingSubprocessRunner(recorder=recorder, inner=runner)
+
+    # Lazy token resolution: config → GITHUB_TOKEN env var → gh CLI → None.
+    # The _gh_cli_token() subprocess (up to 5s) is deferred until the first
+    # gated tool actually needs a GitHub token, keeping the MCP server startup
+    # path free of subprocess calls (REQ-STARTUP-001).
+    token_factory = TokenFactory(
+        lambda: config.github.token or os.environ.get("GITHUB_TOKEN") or _gh_cli_token()
+    )
+
+    resolved_dir = (
+        plugin_dir
+        if plugin_dir is not _UNSET
+        else (_default_plugin_dir() if not _check_plugin_installed() else None)
+    )
     gate = DefaultGateState(enabled=False)
 
-    provider = SkillsDirectoryProvider()
+    project_dir = Path.cwd()
+    temp_dir = resolve_temp_dir(project_dir, config.workspace.temp_dir)
+    temp_dir_relpath = temp_dir_display_str(config.workspace.temp_dir)
+
+    provider = SkillsDirectoryProvider(temp_dir_relpath=temp_dir_relpath)
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root)
 
@@ -127,22 +232,24 @@ def make_context(
     ctx = ToolContext(
         config=config,
         audit=audit,
-        background=BackgroundTaskSupervisor(audit=audit),
+        background=DefaultBackgroundSupervisor(audit=audit),
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=gate,
         plugin_dir=resolved_dir,
         runner=runner,
+        temp_dir=temp_dir,
         tester=DefaultTestRunner(config=config, runner=runner) if runner is not None else None,
         recipes=DefaultRecipeRepository(),
         db_reader=DefaultDatabaseReader(),
         workspace_mgr=DefaultWorkspaceManager(),
         clone_mgr=DefaultCloneManager(),
-        github_client=DefaultGitHubFetcher(token=github_token),
-        ci_watcher=DefaultCIWatcher(token=github_token),
-        merge_queue_watcher=DefaultMergeQueueWatcher(token=github_token),
+        github_client=DefaultGitHubFetcher(token=token_factory),
+        ci_watcher=DefaultCIWatcher(token=token_factory),
+        merge_queue_watcher=DefaultMergeQueueWatcher(token=token_factory),
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
+        quota_refresh_task=None,
     )
 
     def _resolve_output_patterns(skill_command: str) -> list[str]:
@@ -168,6 +275,7 @@ def make_context(
 
     ctx.output_pattern_resolver = _resolve_output_patterns
     ctx.write_expected_resolver = _resolve_write_behavior
+    ctx.token_factory = token_factory
     ctx.executor = DefaultHeadlessExecutor(ctx)
     ctx.migrations = DefaultMigrationService(
         default_migration_engine(), run_headless=ctx.executor.run

@@ -11,14 +11,14 @@ Public API:
 from __future__ import annotations
 
 import dataclasses
-import json
 import os
 import re
 import time
+import traceback
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 import structlog
 
@@ -34,11 +34,20 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     claude_code_project_dir,
     get_logger,
+    is_git_worktree,
     load_yaml,
     pkg_root,
+    temp_dir_display_str,
 )
-from autoskillit.execution.commands import build_full_headless_cmd
+from autoskillit.execution._headless_scan import _scan_jsonl_write_paths
+from autoskillit.execution.clone_guard import (
+    check_and_revert_clone_contamination,
+    is_worktree_skill,
+    snapshot_clone_state,
+)
+from autoskillit.execution.commands import build_full_headless_cmd, build_headless_resume_cmd
 from autoskillit.execution.process import _marker_is_standalone
+from autoskillit.execution.recording import RecordingSubprocessRunner
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     _check_expected_patterns,
@@ -53,20 +62,46 @@ if TYPE_CHECKING:
     from autoskillit.config import (
         AutomationConfig,
     )
-    from autoskillit.core import AuditStore, SubprocessResult
+    from autoskillit.core import AuditLog, SubprocessResult, SubprocessRunner
     from autoskillit.pipeline.context import (
         ToolContext,
     )
 
 logger = get_logger(__name__)
 
+# Subtypes eligible for Channel B drain-race recovery.
+#
+# These are the failure subtypes that can arise when Claude Code defers ``type=result``
+# until all background agents finish.  The deferred record is never flushed if the
+# process tree is killed after Channel B fires on the session JSONL marker.
+#
+# TIMEOUT is excluded — it indicates a genuine time limit breach, not a drain-race.
+# UNKNOWN is excluded — it indicates unrecognised CLI behaviour, not a missing record.
+_CHANNEL_B_RECOVERABLE_SUBTYPES: frozenset[CliSubtype] = frozenset(
+    {CliSubtype.UNPARSEABLE, CliSubtype.EMPTY_OUTPUT}
+)
+
+_PATH_CAPTURE: re.Pattern[str] = re.compile(r"^(\w+)\\s\*=\\s\*/.+")
+
 
 def _session_log_dir(cwd: str) -> Path:
-    """Derive Claude Code session log directory from project cwd."""
+    """Derive Claude Code session log directory from project cwd.
+
+    Pre-creates the directory if absent so Channel B always has a directory
+    to poll.  Without this, a fresh clone path whose encoded project dir
+    doesn't exist yet causes ``_session_log_monitor`` to burn its entire
+    phase-1 timeout absorbing ``OSError``, ultimately producing a false
+    ``EMPTY_OUTPUT`` retry.
+    """
     log_dir = claude_code_project_dir(cwd)
     logger.info("session_log_dir_computed", path=str(log_dir), cwd=cwd)
     if not log_dir.exists():
-        logger.warning("session_log_dir_missing", path=str(log_dir), cwd=cwd)
+        logger.info("session_log_dir_precreating", path=str(log_dir), cwd=cwd)
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.warning("session_log_dir_mkdir_failed", path=str(log_dir), cwd=cwd)
+            raise
     return log_dir
 
 
@@ -77,7 +112,7 @@ def _capture_failure(
     needs_retry: bool,
     retry_reason: str,
     stderr: str,
-    audit: AuditStore | None,
+    audit: AuditLog | None,
 ) -> None:
     """Record a failure in the audit log. No-op if skill_command is empty or audit is None."""
     if not skill_command or audit is None:
@@ -169,8 +204,6 @@ def _synthesize_from_write_artifacts(
 
     # Only synthesize for path-capture patterns (token_name\s*=\s*/.+).
     # Non-path patterns (verdict=, merged=) must remain text-compliance-only.
-    # Note: re is already imported at the top of headless.py — no new import needed.
-    _PATH_CAPTURE = re.compile(r"^(\w+)\\s\*=\\s\*/.+")
 
     synthesized_lines: list[str] = []
     for pattern in expected_output_patterns:
@@ -181,19 +214,161 @@ def _synthesize_from_write_artifacts(
         # Skip if the pattern is already satisfied in the current result.
         if re.search(pattern, session.result):
             continue
-        # Find the first Write/Edit tool_use with an absolute file_path.
-        for tool_use in session.tool_uses:
-            if tool_use.get("name") in {"Write", "Edit"}:
-                fp = tool_use.get("file_path", "")
-                if fp.startswith("/"):
-                    synthesized_lines.append(f"{token_name} = {fp}")
-                    break  # one synthesis per pattern
+        # Collect ALL absolute Write/Edit paths; use the LAST one (final deliverable).
+        # Multi-artifact skills write intermediate files first, final deliverable last.
+        candidate_paths = [
+            t.get("file_path", "")
+            for t in session.tool_uses
+            if t.get("name") in {"Write", "Edit"} and t.get("file_path", "").startswith("/")
+        ]
+        if candidate_paths:
+            synthesized_lines.append(f"{token_name} = {candidate_paths[-1]}")
 
     if not synthesized_lines:
         return None
 
     injected = "\n".join(synthesized_lines) + "\n" + session.result
     return dataclasses.replace(session, result=injected)
+
+
+def _extract_missing_token_hints(
+    stdout: str,
+    expected_output_patterns: Sequence[str],
+) -> list[tuple[str, str]]:
+    """Extract (token_name, write_path) pairs for patterns missing from the result.
+
+    Parses raw NDJSON stdout to find Write/Edit tool_use file_path entries,
+    then matches them against path-capture patterns that are NOT satisfied in
+    the result text. Returns the hints needed to build the nudge prompt.
+    """
+    session = parse_session_result(stdout)
+    hints: list[tuple[str, str]] = []
+
+    for pattern in expected_output_patterns:
+        m = _PATH_CAPTURE.match(pattern)
+        if not m:
+            continue
+        token_name = m.group(1)
+        # Skip if already satisfied
+        if re.search(pattern, session.result):
+            continue
+        # Collect absolute Write/Edit paths; use the LAST one (final deliverable)
+        candidate_paths = [
+            t.get("file_path", "")
+            for t in session.tool_uses
+            if t.get("name") in {"Write", "Edit"} and t.get("file_path", "").startswith("/")
+        ]
+        if candidate_paths:
+            hints.append((token_name, candidate_paths[-1]))
+
+    return hints
+
+
+_NUDGE_TIMEOUT: float = 60.0
+
+
+async def _attempt_contract_nudge(
+    skill_result: SkillResult,
+    subprocess_result: SubprocessResult,
+    expected_output_patterns: Sequence[str],
+    completion_marker: str,
+    cwd: str,
+    runner: SubprocessRunner,
+) -> SkillResult | None:
+    """Attempt a lightweight resume nudge to recover missing structured output tokens.
+
+    When ``_build_skill_result`` returns CONTRACT_RECOVERY, the model wrote the artifact
+    but omitted the structured output token. Instead of a full retry, resume the same
+    session with a short feedback prompt asking the model to emit the missing token.
+
+    Returns a patched SkillResult(success=True) on success, or None to indicate the
+    nudge failed and the caller should fall through to the original CONTRACT_RECOVERY path.
+    """
+    hints = _extract_missing_token_hints(subprocess_result.stdout, expected_output_patterns)
+    if not hints:
+        logger.debug("nudge_skip_no_hints")
+        return None
+
+    # Build the feedback prompt
+    token_lines = "\n".join(f"{name} = {path}" for name, path in hints)
+    prompt = (
+        "You completed your task and wrote the output file, but you omitted the "
+        "required structured output token in your final text response.\n\n"
+        f"Please emit ONLY the following (no other text):\n"
+        f"{token_lines}\n"
+        f"{completion_marker}"
+    )
+
+    spec = build_headless_resume_cmd(
+        resume_session_id=skill_result.session_id,
+        prompt=prompt,
+        output_format="json",
+    )
+
+    try:
+        nudge_result = await runner(
+            spec.cmd,
+            cwd=Path(cwd),
+            timeout=_NUDGE_TIMEOUT,
+            env=spec.env,
+        )
+    except OSError:
+        logger.debug("nudge_runner_failed", exc_info=True)
+        return None
+    except Exception:
+        logger.warning("nudge_runner_failed_unexpected", exc_info=True)
+        return None
+
+    # Parse the nudge response and check for the missing patterns
+    nudge_session = parse_session_result(nudge_result.stdout)
+    combined_result = skill_result.result + "\n" + nudge_session.result
+
+    if not _check_expected_patterns(combined_result, list(expected_output_patterns)):
+        logger.debug(
+            "nudge_patterns_not_found",
+            nudge_result_len=len(nudge_session.result),
+        )
+        return None
+
+    logger.info(
+        "nudge_recovery_success",
+        session_id=skill_result.session_id,
+        nudge_output_count=nudge_session.token_usage.get("output_tokens", 0)
+        if nudge_session.token_usage
+        else 0,
+    )
+    return dataclasses.replace(
+        skill_result,
+        success=True,
+        result=combined_result,
+        subtype="success",
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        token_usage=_merge_token_usage(skill_result.token_usage, nudge_session.token_usage),
+    )
+
+
+def _merge_token_usage(
+    base: dict[str, object] | None,
+    nudge: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Additively merge token usage dicts from main session and nudge."""
+    if base is None:
+        return nudge
+    if nudge is None:
+        return base
+    merged = dict(base)
+    for key in (
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+    ):
+        base_val = base.get(key, 0)
+        nudge_val = nudge.get(key, 0)
+        if isinstance(base_val, (int, float)) and isinstance(nudge_val, (int, float)):
+            merged[key] = base_val + nudge_val
+    return merged
 
 
 def _resolve_model(step_model: str, config: AutomationConfig) -> str | None:
@@ -316,86 +491,10 @@ def _validate_output_paths(
     return "; ".join(violations) if violations else None
 
 
-_WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})
-_BASH_TOOL_NAME: str = "Bash"
-_ABS_PATH_PATTERN: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+:-]+))')
-# Exclude paths of 4 chars or fewer (/tmp, /etc, /bin, /var) as low-signal noise.
-_MIN_BASH_PATH_LEN: int = 5
-
-
-def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
-    """Scan raw JSONL stdout for Write/Edit/Bash tool calls outside cwd.
-
-    Parses assistant records from the JSONL stream and extracts file_path
-    arguments from Write and Edit tool_use blocks, plus absolute paths from
-    Bash commands. Returns warning strings for any path outside cwd.
-
-    Non-blocking: caller decides whether to surface or suppress warnings.
-    Returns [] when stdout is empty or cwd is empty/relative.
-    """
-    if not stdout.strip() or not cwd or not os.path.isabs(cwd):
-        return []
-
-    cwd_prefix = cwd.rstrip("/") + "/"
-    warnings: list[str] = []
-
-    for raw_line in stdout.strip().splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(obj, dict) or obj.get("type") != "assistant":
-            continue
-        msg = obj.get("message")
-        if not isinstance(msg, dict):
-            continue
-        content = msg.get("content", [])
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if not isinstance(block, dict) or block.get("type") != "tool_use":
-                continue
-            tool_name = block.get("name", "")
-            inputs = block.get("input") or {}
-            if not isinstance(inputs, dict):
-                continue
-
-            if tool_name in _WRITE_TOOL_NAMES:
-                file_path = inputs.get("file_path", "")
-                if (
-                    isinstance(file_path, str)
-                    and os.path.isabs(file_path)
-                    and not file_path.startswith(cwd_prefix)
-                    and file_path != cwd.rstrip("/")
-                ):
-                    warnings.append(
-                        f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'"
-                    )
-
-            elif tool_name == _BASH_TOOL_NAME:
-                command = inputs.get("command", "")
-                if isinstance(command, str):
-                    for match in _ABS_PATH_PATTERN.finditer(command):
-                        path = match.group(1)
-                        if (
-                            len(path) >= _MIN_BASH_PATH_LEN
-                            and not path.startswith(cwd_prefix)
-                            and path != cwd.rstrip("/")
-                        ):
-                            warnings.append(
-                                f"Bash command contained path '{path}' outside session cwd '{cwd}'"
-                            )
-
-    return warnings
-
-
 def _apply_budget_guard(
     sr: SkillResult,
     skill_command: str,
-    audit: AuditStore | None,
+    audit: AuditLog | None,
     max_consecutive_retries: int,
 ) -> SkillResult:
     """Override needs_retry to False when the consecutive-failure budget is exhausted.
@@ -422,11 +521,26 @@ def _apply_budget_guard(
     return sr
 
 
+def _resolve_skill_session_id(
+    session: ClaudeSessionResult | None,
+    result: SubprocessResult,
+) -> str:
+    """Return the best-available Claude session UUID.
+
+    Precedence: stdout-parsed session_id (Channel A) > transport-resolved
+    session_id (process.py) > Channel B JSONL filename stem.
+    Returns "" only when all sources are empty.
+    """
+    if session is not None and session.session_id:
+        return session.session_id
+    return result.session_id or result.channel_b_session_id
+
+
 def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
     skill_command: str = "",
-    audit: AuditStore | None = None,
+    audit: AuditLog | None = None,
     max_consecutive_retries: int = 3,
     expected_output_patterns: Sequence[str] = (),
     cwd: str = "",
@@ -434,7 +548,9 @@ def _build_skill_result(
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     branch = (
-        "stale"
+        "idle_stall"
+        if result.termination == TerminationReason.IDLE_STALL
+        else "stale"
         if result.termination == TerminationReason.STALE
         else "timed_out"
         if result.termination == TerminationReason.TIMED_OUT
@@ -474,7 +590,7 @@ def _build_skill_result(
                 return SkillResult(
                     success=True,
                     result=_truncate(stale_session.agent_result),
-                    session_id=stale_session.session_id,
+                    session_id=stale_session.session_id or _resolve_skill_session_id(None, result),
                     subtype="recovered_from_stale",
                     is_error=False,
                     exit_code=stale_returncode,
@@ -489,7 +605,7 @@ def _build_skill_result(
             exit_code=result.returncode if result.returncode is not None else -1,
             subtype="stale",
             needs_retry=True,
-            retry_reason=RetryReason.RESUME,
+            retry_reason=RetryReason.STALE,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
@@ -499,16 +615,46 @@ def _build_skill_result(
                 "Session went stale (no activity for configured threshold). "
                 "Partial progress may have been made. Retry to continue."
             ),
-            session_id="",
+            session_id=_resolve_skill_session_id(None, result),
             subtype="stale",
             is_error=False,
             exit_code=-1,
             needs_retry=True,
-            retry_reason=RetryReason.RESUME,
+            retry_reason=RetryReason.STALE,
             stderr="",
             token_usage=None,
         )
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
+
+    if result.termination == TerminationReason.IDLE_STALL:
+        _capture_failure(
+            skill_command,
+            exit_code=result.returncode if result.returncode is not None else -1,
+            subtype="idle_stall",
+            needs_retry=True,
+            retry_reason=RetryReason.STALE,
+            stderr=result.stderr if result.stderr else "",
+            audit=audit,
+        )
+        logger.warning(
+            "Headless session killed: stdout idle for configured threshold (IDLE_STALL)"
+        )
+        idle_sr = SkillResult(
+            success=False,
+            result=(
+                "Session killed: stdout idle for configured threshold (no output growth). "
+                "Partial progress may have been made. Retry to continue."
+            ),
+            session_id=_resolve_skill_session_id(None, result),
+            subtype="idle_stall",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=True,
+            retry_reason=RetryReason.STALE,
+            stderr="",
+            token_usage=None,
+        )
+        return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
@@ -521,7 +667,7 @@ def _build_skill_result(
                 subtype=CliSubtype.TIMEOUT,
                 is_error=True,
                 result="",
-                session_id="",
+                session_id=_resolve_skill_session_id(None, result),
                 errors=[],
             )
     else:
@@ -531,40 +677,113 @@ def _build_skill_result(
     # Moved earlier: needed by synthesis recovery step before _compute_outcome.
     write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
 
-    # Recovery check: attempt before _compute_outcome so the recovered session
-    # is the input for outcome computation rather than the original.
-    if completion_marker:
-        recovered = _recover_from_separate_marker(session, completion_marker)
-        if recovered is not None:
-            session = recovered
+    # ── Channel B drain-race recovery ──────────────────────────────────────
+    # When Channel B confirmed completion but stdout never received the
+    # type=result record (UNPARSEABLE / EMPTY_OUTPUT), the session completed
+    # but Claude Code deferred type=result until all background agents finished.
+    # If we killed the process tree after Channel B fired, the deferred record
+    # was never flushed to stdout.
+    #
+    # assistant_messages are accumulated from stdout NDJSON records of type
+    # "assistant" — these are written BEFORE the deferred type=result. If the
+    # completion marker is standalone in assistant_messages with substantive
+    # content, reconstruct the result and promote the session so downstream
+    # recovery paths and the Channel B bypass in _compute_success operate on
+    # valid state.
+    match result.channel_confirmation:
+        case ChannelConfirmation.CHANNEL_B if (
+            session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES and completion_marker
+        ):
+            cb_recovered = _recover_from_separate_marker(session, completion_marker)
+            if cb_recovered is not None:
+                original_subtype = session.subtype
+                session = dataclasses.replace(
+                    cb_recovered,
+                    subtype=CliSubtype.SUCCESS,
+                    is_error=False,
+                )
+                logger.warning(
+                    "channel_b_drain_race_recovery",
+                    original_subtype=str(original_subtype),
+                    assistant_message_count=len(session.assistant_messages),
+                )
+        case ChannelConfirmation.DIR_MISSING if (
+            session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES and completion_marker
+        ):
+            # Late-bind recovery: the directory may have been created by
+            # Claude Code during the run even though it was absent at
+            # monitor start.  Attempt the same marker-based recovery as
+            # the CHANNEL_B arm.
+            cb_recovered = _recover_from_separate_marker(session, completion_marker)
+            if cb_recovered is not None:
+                original_subtype = session.subtype
+                session = dataclasses.replace(
+                    cb_recovered,
+                    subtype=CliSubtype.SUCCESS,
+                    is_error=False,
+                )
+                logger.warning(
+                    "dir_missing_late_bind_recovery",
+                    original_subtype=str(original_subtype),
+                    assistant_message_count=len(session.assistant_messages),
+                )
+            else:
+                logger.warning(
+                    "dir_missing_late_bind_recovery_failed",
+                    subtype=str(session.subtype),
+                    assistant_message_count=len(session.assistant_messages),
+                )
+        case (
+            ChannelConfirmation.CHANNEL_B
+            | ChannelConfirmation.CHANNEL_A
+            | ChannelConfirmation.UNMONITORED
+            | ChannelConfirmation.DIR_MISSING
+        ):
+            pass  # no drain-race recovery applicable
+        case _ as _unreachable_cc:
+            assert_never(_unreachable_cc)
 
-    # Pattern recovery: when a drain-race occurs on either channel, expected_output_patterns
-    # content may only exist in assistant_messages. Attempt recovery so that _compute_success
-    # sees the block in session.result.
-    if (
-        result.channel_confirmation != ChannelConfirmation.UNMONITORED
-        and expected_output_patterns
-        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
-    ):
-        pattern_recovered = _recover_block_from_assistant_messages(
-            session, expected_output_patterns
-        )
-        if pattern_recovered is not None:
-            session = pattern_recovered
+    # Recovery is only valid for sessions that completed normally.
+    # For incomplete sessions (UNPARSEABLE, TIMEOUT, etc.), any Write calls were
+    # intermediate artifacts, not final deliverables. Recovery or synthesis on these
+    # sessions would fabricate success evidence for a session that never finished.
+    if session.session_complete:
+        # Recovery check: attempt before _compute_outcome so the recovered session
+        # is the input for outcome computation rather than the original.
+        if completion_marker:
+            recovered = _recover_from_separate_marker(session, completion_marker)
+            if recovered is not None:
+                session = recovered
 
-    # Artifact-aware synthesis: when write evidence exists but the structured output token
-    # is absent, synthesize it from the Write/Edit tool_use file_path. Runs regardless of
-    # channel_confirmation — write evidence is available from all sessions.
-    if (
-        expected_output_patterns
-        and write_call_count >= 1
-        and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
-    ):
-        artifact_recovered = _synthesize_from_write_artifacts(
-            session, list(expected_output_patterns), write_call_count
-        )
-        if artifact_recovered is not None:
-            session = artifact_recovered
+        # Pattern recovery: when a drain-race occurs on either channel, expected_output_patterns
+        # content may only exist in assistant_messages. Attempt recovery so that _compute_success
+        # sees the block in session.result.
+        if (
+            result.channel_confirmation != ChannelConfirmation.UNMONITORED
+            and expected_output_patterns
+            and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
+        ):
+            pattern_recovered = _recover_block_from_assistant_messages(
+                session, expected_output_patterns
+            )
+            if pattern_recovered is not None:
+                session = pattern_recovered
+
+        # Artifact-aware synthesis: only for UNMONITORED sessions where
+        # _recover_block_from_assistant_messages is unavailable. For CHANNEL_A/B
+        # sessions, if the pattern was absent from assistant_messages the agent never
+        # emitted it — synthesis would fabricate a token the agent did not produce.
+        if (
+            expected_output_patterns
+            and write_call_count >= 1
+            and result.channel_confirmation == ChannelConfirmation.UNMONITORED
+            and not _check_expected_patterns(session.result.strip(), expected_output_patterns)
+        ):
+            artifact_recovered = _synthesize_from_write_artifacts(
+                session, list(expected_output_patterns), write_call_count
+            )
+            if artifact_recovered is not None:
+                session = artifact_recovered
 
     outcome, retry_reason = _compute_outcome(
         session,
@@ -609,9 +828,7 @@ def _build_skill_result(
     if completion_marker:
         result_text = result_text.replace(completion_marker, "").strip()
 
-    extracted_worktree_path: str | None = None
-    if needs_retry:
-        extracted_worktree_path = _extract_worktree_path(session.assistant_messages)
+    extracted_worktree_path = _extract_worktree_path(session.assistant_messages)
 
     # Path contamination detection
     path_contamination: str | None = None
@@ -638,7 +855,7 @@ def _build_skill_result(
         sr = SkillResult(
             success=False,
             result=result_text,
-            session_id=session.session_id,
+            session_id=session.session_id or result.session_id,
             subtype="path_contamination",
             is_error=session.is_error,
             exit_code=returncode,
@@ -655,7 +872,7 @@ def _build_skill_result(
         sr = SkillResult(
             success=success,
             result=result_text,
-            session_id=session.session_id,
+            session_id=session.session_id or result.session_id,
             subtype=normalized_subtype,
             is_error=session.is_error,
             exit_code=returncode,
@@ -667,6 +884,7 @@ def _build_skill_result(
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
             write_call_count=write_call_count,
+            kill_reason=result.kill_reason,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
@@ -724,6 +942,24 @@ def _build_skill_result(
     return sr
 
 
+def _derive_step_name_from_skill_command(skill_command: str) -> str:
+    """Extract a recording step name from a skill command string.
+
+    Examples:
+        "/autoskillit:smoke-task arg1" -> "smoke-task"
+        "/investigate foo"             -> "investigate"
+        "/autoskillit:make-plan"       -> "make-plan"
+        ""                             -> ""
+    """
+    stripped = skill_command.strip()
+    if not stripped:
+        return ""
+    token = stripped.split()[0].lstrip("/")
+    if ":" in token:
+        token = token.rsplit(":", 1)[-1]
+    return token
+
+
 async def run_headless_core(
     skill_command: str,
     cwd: str,
@@ -731,11 +967,15 @@ async def run_headless_core(
     *,
     model: str = "",
     step_name: str = "",
+    kitchen_id: str = "",
+    order_id: str = "",
     add_dirs: Sequence[ValidatedAddDir] = (),
     timeout: float | None = None,
     stale_threshold: float | None = None,
+    idle_output_timeout: float | None = None,
     expected_output_patterns: Sequence[str] = (),
     write_behavior: WriteBehaviorSpec | None = None,
+    completion_marker: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -743,7 +983,11 @@ async def run_headless_core(
     Accepts explicit ToolContext so this module has no server.py dependency.
     """
     cfg = ctx.config.run_skill
+    effective_marker = completion_marker or cfg.completion_marker
     original_skill_command = skill_command
+
+    if not step_name and isinstance(ctx.runner, RecordingSubprocessRunner):
+        step_name = _derive_step_name_from_skill_command(skill_command)
 
     with structlog.contextvars.bound_contextvars(
         skill_command=original_skill_command[:100],
@@ -751,20 +995,28 @@ async def run_headless_core(
     ):
         effective_plugin_dir = ctx.plugin_dir
         resolved_model = _resolve_model(model, ctx.config)
-        cmd = build_full_headless_cmd(
+        spec = build_full_headless_cmd(
             skill_command,
             cwd=cwd,
-            completion_marker=cfg.completion_marker,
+            completion_marker=effective_marker,
             model=resolved_model,
             plugin_dir=effective_plugin_dir,
             output_format_value=cfg.output_format.value,
             output_format_required_flags=cfg.output_format.required_cli_flags,
             add_dirs=add_dirs,
             exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
+            scenario_step_name=step_name,
+            temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
         )
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
+        _raw_idle = (
+            idle_output_timeout
+            if idle_output_timeout is not None
+            else float(cfg.idle_output_timeout)
+        )
+        effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
 
         logger.debug(
             "run_headless_core_entry",
@@ -783,43 +1035,63 @@ async def run_headless_core(
         _start_ts = datetime.now(UTC).isoformat()
         _start_mono = time.monotonic()
 
+        _clone_snapshot = None
+        if is_worktree_skill(original_skill_command) and not is_git_worktree(Path(cwd)):
+            _clone_snapshot = await snapshot_clone_state(cwd, runner)
+
         _result: SubprocessResult | None = None
         try:
             _result = await runner(
-                cmd,
+                spec.cmd,
                 cwd=Path(cwd),
                 timeout=effective_timeout,
+                env=spec.env,
                 pty_mode=True,
                 session_log_dir=_session_log_dir(cwd),
-                completion_marker=cfg.completion_marker,
+                completion_marker=effective_marker,
                 stale_threshold=effective_stale,
                 completion_drain_timeout=cfg.completion_drain_timeout,
                 linux_tracing_config=linux_tracing_cfg,
+                idle_output_timeout=effective_idle,
+                max_suppression_seconds=cfg.max_suppression_seconds,
             )
-        finally:
-            if _result is None:
-                # Runner raised — write a crash entry so sessions.jsonl stays consistent
-                _log_dir = ctx.config.linux_tracing.log_dir
-                try:
-                    from autoskillit.execution import flush_session_log
+        except Exception as exc:
+            logger.error("run_headless_core runner crashed", exc_info=True)
+            _exc_text = traceback.format_exc()
+            _log_dir = ctx.config.linux_tracing.log_dir
+            try:
+                # Deferred: autoskillit.execution.__init__ imports headless.py (L39-42);
+                # a top-level import of autoskillit.execution would be circular.
+                from autoskillit.execution import flush_session_log
 
-                    flush_session_log(
-                        log_dir=_log_dir,
-                        cwd=str(cwd),
-                        session_id="",
-                        pid=0,
-                        skill_command=skill_command,
-                        success=False,
-                        subtype="crashed",
-                        exit_code=-1,
-                        start_ts=_start_ts,
-                        proc_snapshots=None,
-                        termination_reason="CRASHED",
-                    )
-                except Exception:
-                    logger.debug("flush_session_log during crash failed", exc_info=True)
+                flush_session_log(
+                    log_dir=_log_dir,
+                    cwd=str(cwd),
+                    kitchen_id=kitchen_id,
+                    order_id=order_id,
+                    session_id="",
+                    pid=0,
+                    skill_command=original_skill_command,
+                    success=False,
+                    subtype="crashed",
+                    exit_code=-1,
+                    start_ts=_start_ts,
+                    proc_snapshots=None,
+                    termination_reason="CRASHED",
+                    exception_text=_exc_text,
+                )
+            except Exception:
+                logger.debug("flush_session_log during crash failed", exc_info=True)
+            return SkillResult.crashed(
+                exception=exc,
+                skill_command=original_skill_command,
+                order_id=order_id,
+            )
         if _result is None:
-            raise RuntimeError("runner() did not return a result — cannot build SkillResult")
+            return SkillResult.crashed(
+                exception=RuntimeError("runner() did not return a result"),
+                order_id=order_id,
+            )
         _elapsed = time.monotonic() - _start_mono
         _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
         result = dataclasses.replace(  # type: ignore[arg-type]
@@ -829,13 +1101,43 @@ async def run_headless_core(
         audit_count_before = len(ctx.audit.get_report())
         skill_result = _build_skill_result(
             result,
-            completion_marker=cfg.completion_marker,
+            completion_marker=effective_marker,
             skill_command=original_skill_command,
             audit=ctx.audit,
             expected_output_patterns=expected_output_patterns,
             cwd=cwd,
             write_behavior=write_behavior,
         )
+
+        # CONTRACT NUDGE: lightweight resume recovery before full retry.
+        # Fires only when _build_skill_result returns CONTRACT_RECOVERY with a
+        # valid session_id (budget-exhausted cases have retry_reason=BUDGET_EXHAUSTED).
+        if (
+            skill_result.retry_reason == RetryReason.CONTRACT_RECOVERY
+            and skill_result.needs_retry
+            and skill_result.session_id
+        ):
+            nudge_success = await _attempt_contract_nudge(
+                skill_result,
+                result,
+                expected_output_patterns,
+                effective_marker,
+                cwd,
+                runner,
+            )
+            if nudge_success is not None:
+                skill_result = nudge_success
+
+        _clone_reverted = False
+        if _clone_snapshot is not None:
+            skill_result, _clone_reverted = await check_and_revert_clone_contamination(
+                _clone_snapshot,
+                skill_result,
+                cwd,
+                runner,
+                ctx.audit,
+                skill_command=original_skill_command,
+            )
 
         # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
         # brackets in run_managed_async. Never re-derive from ISO strings (backward-clock risk).
@@ -845,9 +1147,6 @@ async def run_headless_core(
         new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
         audit_record = new_audit_records[0] if new_audit_records else None
 
-        # Resolve effective session ID: prefer stdout-parsed, fall back to Channel B discovery
-        effective_session_id = skill_result.session_id or result.channel_b_session_id
-
         if result.proc_snapshots is not None or not skill_result.success or bool(step_name):
             from autoskillit.execution.session_log import flush_session_log
 
@@ -855,7 +1154,9 @@ async def run_headless_core(
                 flush_session_log(
                     log_dir=ctx.config.linux_tracing.log_dir,
                     cwd=cwd,
-                    session_id=effective_session_id,
+                    kitchen_id=kitchen_id,
+                    order_id=order_id,
+                    session_id=skill_result.session_id,
                     pid=result.pid,
                     skill_command=original_skill_command,
                     success=skill_result.success,
@@ -866,6 +1167,7 @@ async def run_headless_core(
                     end_ts=result.end_ts,
                     elapsed_seconds=result.elapsed_seconds,
                     termination_reason=result.termination.value,
+                    kill_reason=skill_result.kill_reason.value,
                     snapshot_interval_seconds=ctx.config.linux_tracing.proc_interval,
                     proc_snapshots=result.proc_snapshots,
                     step_name=step_name,
@@ -874,6 +1176,8 @@ async def run_headless_core(
                     audit_record=audit_record,
                     write_path_warnings=skill_result.write_path_warnings,
                     write_call_count=skill_result.write_call_count,
+                    clone_contamination_reverted=_clone_reverted,
+                    tracked_comm=result.tracked_comm,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)
@@ -894,6 +1198,7 @@ async def run_headless_core(
                     start_ts=result.start_ts,
                     end_ts=result.end_ts,
                     elapsed_seconds=result.elapsed_seconds,
+                    order_id=order_id,
                 )
             except Exception:
                 logger.debug("token_log_record_failed", exc_info=True)
@@ -913,11 +1218,15 @@ class DefaultHeadlessExecutor:
         *,
         model: str = "",
         step_name: str = "",
+        kitchen_id: str = "",
+        order_id: str = "",
         add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
+        idle_output_timeout: float | None = None,
         expected_output_patterns: Sequence[str] = (),
         write_behavior: WriteBehaviorSpec | None = None,
+        completion_marker: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -928,9 +1237,13 @@ class DefaultHeadlessExecutor:
             self._ctx,
             model=model,
             step_name=step_name,
+            kitchen_id=kitchen_id,
+            order_id=order_id,
             add_dirs=add_dirs,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
+            idle_output_timeout=idle_output_timeout,
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_behavior,
+            completion_marker=completion_marker,
         )

@@ -18,15 +18,19 @@ __all__ = [
     "OutputFormat",
     "Severity",
     "TerminationReason",
+    "TerminationAction",
+    "KillReason",
     "ChannelConfirmation",
     "SessionOutcome",
     "CliSubtype",
     "ChannelBStatus",
+    "PRState",
 ]
 
 
 class RetryReason(StrEnum):
     RESUME = "resume"
+    STALE = "stale"  # Transient stale session — retry from scratch; not a context limit
     NONE = "none"
     BUDGET_EXHAUSTED = "budget_exhausted"
     EARLY_STOP = "early_stop"
@@ -37,6 +41,7 @@ class RetryReason(StrEnum):
     CONTRACT_RECOVERY = (
         "contract_recovery"  # marker present + write evidence — omission not structural
     )
+    CLONE_CONTAMINATION = "clone_contamination"
 
 
 class MergeFailedStep(StrEnum):
@@ -52,6 +57,7 @@ class MergeFailedStep(StrEnum):
     GENERATED_FILE_CLEANUP = "generated_file_cleanup"
     POST_REBASE_TEST_GATE = "post_rebase_test_gate"
     MERGE = "merge"
+    EDITABLE_INSTALL_GUARD = "editable_install_guard"
 
 
 class MergeState(StrEnum):
@@ -64,6 +70,7 @@ class MergeState(StrEnum):
     WORKTREE_DIRTY_MID_OPERATION = "worktree_dirty_mid_operation"
     MAIN_REPO_MERGE_ABORTED = "main_repo_merge_aborted"
     MAIN_REPO_DIRTY_ABORT_FAILED = "main_repo_dirty_abort_failed"
+    MERGE_SUCCEEDED_CLEANUP_BLOCKED = "merge_succeeded_cleanup_blocked"
 
 
 class RestartScope(StrEnum):
@@ -112,6 +119,9 @@ class ClaudeFlags(StrEnum):
     # Output format
     OUTPUT_FORMAT = "--output-format"
     VERBOSE = "--verbose"
+
+    # Session resume
+    RESUME = "--resume"
 
     # Interactive session restrictions
     TOOLS = "--tools"
@@ -172,7 +182,40 @@ class TerminationReason(StrEnum):
     NATURAL_EXIT = "natural_exit"
     COMPLETED = "completed"
     STALE = "stale"
+    IDLE_STALL = "idle_stall"
     TIMED_OUT = "timed_out"
+
+
+class TerminationAction(StrEnum):
+    """What execute_termination_action should do with a subprocess after the race loop.
+
+    Produced by decide_termination_action (pure function) and consumed by
+    execute_termination_action (the single authorized kill caller in process.py).
+
+    - NO_KILL: process already exited naturally; no kill needed.
+    - DRAIN_THEN_KILL_IF_ALIVE: channel confirmed completion but process is still
+      alive; wait up to grace_seconds for natural exit, then kill if still running.
+    - IMMEDIATE_KILL: timeout, stall, or stale — kill without draining.
+    """
+
+    NO_KILL = "no_kill"
+    DRAIN_THEN_KILL_IF_ALIVE = "drain_then_kill_if_alive"
+    IMMEDIATE_KILL = "immediate_kill"
+
+
+class KillReason(StrEnum):
+    """Why the subprocess was (or was not) killed.
+
+    Carried by SubprocessResult and SkillResult so the formatter can annotate
+    the exit_code line and resolve the cognitive contradiction
+    "success=True + exit_code=-9".
+    """
+
+    NATURAL_EXIT = "natural_exit"
+    KILL_AFTER_COMPLETION = "kill_after_completion"  # drain window expired
+    INFRA_KILL = "infra_kill"  # timeout / stall / stale
+    EXCEPTION = "exception"  # runner raised an unhandled exception
+    NOT_APPLICABLE = "not_applicable"  # no subprocess ran (gate/headless error)
 
 
 class ChannelConfirmation(StrEnum):
@@ -187,11 +230,15 @@ class ChannelConfirmation(StrEnum):
       stdout may be empty. Downstream must not require stdout content.
     - UNMONITORED: no channel monitoring active (NATURAL_EXIT, STALE, TIMED_OUT,
       sync path, or heartbeat disabled with no Channel B win).
+    - DIR_MISSING: session log directory did not exist when monitoring started.
+      Monitoring was structurally impossible. Distinct from UNMONITORED (which
+      means monitoring ran but produced no confirmation).
     """
 
     CHANNEL_A = "channel_a"
     CHANNEL_B = "channel_b"
     UNMONITORED = "unmonitored"
+    DIR_MISSING = "dir_missing"
 
 
 class SessionOutcome(StrEnum):
@@ -231,6 +278,7 @@ class CliSubtype(StrEnum):
     UNPARSEABLE = "unparseable"
     TIMEOUT = "timeout"
     INTERRUPTED = "interrupted"
+    IDLE_STALL = "idle_stall"
 
     @classmethod
     def from_cli(cls, raw: str) -> CliSubtype:
@@ -249,7 +297,31 @@ class ChannelBStatus(StrEnum):
 
     Replaces the raw string ``"completion"`` / ``"stale"`` convention with
     compile-time exhaustiveness enforcement via assert_never.
+
+    - COMPLETION: session JSONL marker was found; monitoring succeeded.
+    - STALE: monitoring ran but timed out with no marker found.
+    - DIR_MISSING: session log directory did not exist when monitoring started.
+      Monitoring was structurally impossible. Distinct from STALE (which
+      means monitoring ran but produced no marker).
     """
 
     COMPLETION = "completion"
     STALE = "stale"
+    DIR_MISSING = "dir_missing"
+
+
+class PRState(StrEnum):
+    """Terminal state of a PR as classified by the merge queue watcher.
+
+    Each member is returned only when a positive signal confirms the state.
+    EJECTED requires either state=CLOSED or mergeable=CONFLICTING.
+    DROPPED_HEALTHY means auto_merge was cleared on an otherwise healthy PR.
+    """
+
+    MERGED = "merged"
+    EJECTED = "ejected"
+    EJECTED_CI_FAILURE = "ejected_ci_failure"
+    STALLED = "stalled"
+    DROPPED_HEALTHY = "dropped_healthy"
+    TIMEOUT = "timeout"
+    ERROR = "error"

@@ -316,3 +316,48 @@ class TestJsonlHasRecordTypeResultContent:
         assert not _jsonl_has_record_type(
             line, frozenset({"result"}), completion_marker="%%ORDER_UP%%"
         )
+
+
+class TestMarkerDiscrimination:
+    """Regression guards: per-invocation markers are structurally incompatible with static ones."""
+
+    def test_session_marker_does_not_match_global_marker(self):
+        """A JSONL record with static %%ORDER_UP%% must NOT match a per-invocation marker."""
+        content = (
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": "%%ORDER_UP%%"}]},
+                }
+            )
+            + "\n"
+        )
+        assert not _jsonl_contains_marker(
+            content, "%%ORDER_UP::abc12345%%", frozenset({"assistant"})
+        )
+
+    def test_session_marker_matches_itself(self):
+        """A per-invocation marker matches itself in JSONL detection."""
+        content = (
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": "%%ORDER_UP::abc12345%%"}]},
+                }
+            )
+            + "\n"
+        )
+        assert _jsonl_contains_marker(content, "%%ORDER_UP::abc12345%%", frozenset({"assistant"}))
+
+    def test_different_session_markers_dont_collide(self):
+        """Two different per-invocation markers do not cross-match."""
+        content = (
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": "%%ORDER_UP::aaa%%"}]},
+                }
+            )
+            + "\n"
+        )
+        assert not _jsonl_contains_marker(content, "%%ORDER_UP::bbb%%", frozenset({"assistant"}))

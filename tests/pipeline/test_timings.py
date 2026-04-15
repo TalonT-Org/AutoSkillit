@@ -210,6 +210,17 @@ class TestDefaultTimingLogLoadFromLogDir:
         n = log.load_from_log_dir(tmp_path)
         assert n == 2
 
+    def test_load_null_total_seconds(self, tmp_path):
+        """TimingLog must handle total_seconds: null without TypeError."""
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        _write_timing_session(tmp_path, "s001", {"step_name": "implement", "total_seconds": None})
+        log = DefaultTimingLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 1
+        report = log.get_report()
+        assert report[0]["total_seconds"] == 0.0
+
 
 class TestLoadFromLogDirCwdFilterTiming:
     """
@@ -326,3 +337,56 @@ class TestTimingLogStepNameNormalization:
         assert len(report) == 1
         assert report[0]["step_name"] == "implement"
         assert report[0]["total_seconds"] == pytest.approx(115.0)
+
+
+class TestOrderIdScopingTimings:
+    """Group B: order_id scoping for DefaultTimingLog."""
+
+    def test_timing_record_with_order_id_creates_scoped_entry(self):
+        """B-1: two different order_ids produce separate entries, no cross-contamination."""
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        log = DefaultTimingLog()
+        log.record("plan", 10.0, order_id="issue-185")
+        log.record("plan", 20.0, order_id="issue-186")
+
+        report_185 = log.get_report(order_id="issue-185")
+        report_186 = log.get_report(order_id="issue-186")
+
+        assert len(report_185) == 1
+        assert report_185[0]["total_seconds"] == 10.0
+        assert report_185[0]["invocation_count"] == 1
+
+        assert len(report_186) == 1
+        assert report_186[0]["total_seconds"] == 20.0
+        assert report_186[0]["invocation_count"] == 1
+
+    def test_timing_get_report_order_id_filter_isolates(self):
+        """B-2: get_report(order_id='A') returns only A's entries; B's are absent."""
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        log = DefaultTimingLog()
+        log.record("plan", 5.0, order_id="A")
+        log.record("implement", 15.0, order_id="B")
+
+        report_a = log.get_report(order_id="A")
+        assert len(report_a) == 1
+        assert report_a[0]["step_name"] == "plan"
+
+        report_b = log.get_report(order_id="B")
+        assert len(report_b) == 1
+        assert report_b[0]["step_name"] == "implement"
+
+    def test_timing_no_filter_aggregates_all_orders(self):
+        """B-3: get_report() with no order_id aggregates across all orders (backward compat)."""
+        from autoskillit.pipeline.timings import DefaultTimingLog
+
+        log = DefaultTimingLog()
+        log.record("plan", 5.0, order_id="A")
+        log.record("plan", 10.0, order_id="B")
+
+        all_entries = log.get_report()
+        assert len(all_entries) == 1
+        assert all_entries[0]["step_name"] == "plan"
+        assert all_entries[0]["total_seconds"] == 15.0
+        assert all_entries[0]["invocation_count"] == 2

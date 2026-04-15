@@ -13,12 +13,21 @@ from __future__ import annotations
 
 import subprocess
 import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 import anyio
+import anyio.abc
 
-from autoskillit.core import ChannelConfirmation, SubprocessResult, TerminationReason, get_logger
+from autoskillit.core import (
+    ChannelConfirmation,
+    KillReason,
+    SubprocessResult,
+    TerminationAction,
+    TerminationReason,
+    get_logger,
+)
 from autoskillit.execution._process_io import create_temp_io, read_temp_output
 from autoskillit.execution._process_jsonl import (
     _jsonl_contains_marker,
@@ -32,6 +41,7 @@ from autoskillit.execution._process_kill import (
 )
 from autoskillit.execution._process_monitor import (
     _has_active_api_connection,
+    _has_active_child_processes,
     _heartbeat,
     _session_log_monitor,
 )
@@ -43,11 +53,15 @@ from autoskillit.execution._process_race import (
     _watch_heartbeat,
     _watch_process,
     _watch_session_log,
+    _watch_stdout_idle,
     resolve_termination,
 )
 
 if TYPE_CHECKING:
+    import structlog
+
     from autoskillit.config import LinuxTracingConfig
+    from autoskillit.execution.linux_tracing import TraceTarget
 
 logger = get_logger(__name__)
 
@@ -58,9 +72,11 @@ logger = get_logger(__name__)
 __all__ = [
     "DefaultSubprocessRunner",
     "_extract_stdout_session_id",
+    "_resolve_session_id",
     "RaceAccumulator",
     "RaceSignals",
     "_has_active_api_connection",
+    "_has_active_child_processes",
     "_heartbeat",
     "_jsonl_contains_marker",
     "_jsonl_has_record_type",
@@ -72,6 +88,8 @@ __all__ = [
     "_watch_session_log",
     "async_kill_process_tree",
     "create_temp_io",
+    "decide_termination_action",
+    "execute_termination_action",
     "kill_process_tree",
     "pty_wrap_command",
     "read_temp_output",
@@ -81,13 +99,89 @@ __all__ = [
 ]
 
 
+def _resolve_session_id(
+    stdout_session_id: str | None,
+    channel_b_session_id: str,
+) -> str:
+    """Merge session ID sources: stdout type=system wins; Channel B JSONL filename fallback."""
+    return stdout_session_id or channel_b_session_id or ""
+
+
+def decide_termination_action(
+    termination: TerminationReason,
+    *,
+    timeout_fired: bool,
+    process_exited: bool,
+) -> TerminationAction:
+    """Pure decision function: maps race signals to a TerminationAction.
+
+    Priority:
+    1. timeout_fired → IMMEDIATE_KILL (always overrides)
+    2. process_exited → NO_KILL (process already gone, no signal needed)
+    3. termination-reason dispatch:
+       - COMPLETED: channel won but process alive → DRAIN_THEN_KILL_IF_ALIVE
+       - NATURAL_EXIT: fallback case → NO_KILL
+       - IDLE_STALL / STALE / TIMED_OUT: infra kill → IMMEDIATE_KILL
+
+    The function is deliberately free of anyio and I/O so it can be tested
+    as a pure decision table without any async or process infrastructure.
+    """
+    if timeout_fired:
+        return TerminationAction.IMMEDIATE_KILL
+    if process_exited:
+        return TerminationAction.NO_KILL
+    match termination:
+        case TerminationReason.NATURAL_EXIT:
+            return TerminationAction.NO_KILL
+        case TerminationReason.COMPLETED:
+            return TerminationAction.DRAIN_THEN_KILL_IF_ALIVE
+        case TerminationReason.IDLE_STALL | TerminationReason.STALE | TerminationReason.TIMED_OUT:
+            return TerminationAction.IMMEDIATE_KILL
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+async def execute_termination_action(
+    action: TerminationAction,
+    *,
+    proc: anyio.abc.Process,
+    process_exited_event: anyio.Event,
+    grace_seconds: float,
+    proc_log: structlog.BoundLogger,
+) -> KillReason:
+    """Single authorized executor for all kill decisions in run_managed_async.
+
+    This is the ONLY function in process.py permitted to call
+    async_kill_process_tree (enforced by test_no_direct_async_kill_process_tree_outside_executor).
+
+    Returns the KillReason that surfaces to SubprocessResult.kill_reason.
+    """
+    match action:
+        case TerminationAction.NO_KILL:
+            return KillReason.NATURAL_EXIT
+        case TerminationAction.DRAIN_THEN_KILL_IF_ALIVE:
+            with anyio.move_on_after(grace_seconds):
+                await process_exited_event.wait()
+            if proc.returncode is not None:
+                proc_log.debug("natural_exit_after_drain", returncode=proc.returncode)
+                return KillReason.NATURAL_EXIT
+            proc_log.debug("grace_expired_killing", grace_seconds=grace_seconds)
+            await async_kill_process_tree(proc.pid)
+            return KillReason.KILL_AFTER_COMPLETION
+        case TerminationAction.IMMEDIATE_KILL:
+            await async_kill_process_tree(proc.pid)
+            return KillReason.INFRA_KILL
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
 async def run_managed_async(
     cmd: list[str],
     *,
     cwd: Path,
     timeout: float,
     input_data: str | None = None,
-    env: dict[str, str] | None = None,
+    env: Mapping[str, str] | None = None,
     pty_mode: bool = False,
     heartbeat_record_types: frozenset[str] = frozenset({"result"}),
     session_log_dir: Path | None = None,
@@ -95,7 +189,10 @@ async def run_managed_async(
     stale_threshold: float = 1200,
     session_record_types: frozenset[str] = frozenset({"assistant"}),
     completion_drain_timeout: float = 5.0,
+    natural_exit_grace_seconds: float = 3.0,
     linux_tracing_config: LinuxTracingConfig | None = None,
+    idle_output_timeout: float | None = None,
+    max_suppression_seconds: float | None = None,
     _phase1_poll: float = 1.0,
     _phase2_poll: float = 2.0,
     _heartbeat_poll: float = 0.5,
@@ -112,6 +209,9 @@ async def run_managed_async(
     6. read_temp_output for results
     7. cleanup temp files via context manager
     """
+    # Capture workload basename before PTY wrapping rewrites cmd (#806)
+    _workload_basename = Path(cmd[0]).name if cmd else ""
+
     if pty_mode:
         cmd = pty_wrap_command(cmd)
 
@@ -136,10 +236,39 @@ async def run_managed_async(
                 start_new_session=True,
             )
 
+            # Resolve the workload TraceTarget — the PID that should be observed.
+            # anyio.open_process returns the spawn PID, which in PTY mode is the
+            # script(1) wrapper, not claude. resolve_trace_target walks descendants
+            # to find the actual workload by basename. Raising here (on miss) is
+            # intentional: a silent fallback to proc.pid recreates issue #806.
+            _target: TraceTarget | None = None
+            _observed_pid: int = proc.pid
+            _tracked_comm: str | None = None
+            if linux_tracing_config is not None:
+                from autoskillit.execution.linux_tracing import (
+                    LINUX_TRACING_AVAILABLE,
+                    resolve_trace_target,
+                    trace_target_from_pid,
+                )
+
+                if pty_mode and LINUX_TRACING_AVAILABLE:
+                    # PTY mode: proc.pid is the script(1) wrapper — resolve to workload
+                    _target = resolve_trace_target(
+                        root_pid=proc.pid,
+                        expected_basename=_workload_basename,
+                        timeout=2.0,
+                    )
+                else:
+                    # Non-PTY mode: proc.pid IS the workload (direct child)
+                    _target = trace_target_from_pid(proc.pid)
+                assert _target is not None
+                _observed_pid = _target.pid
+                _tracked_comm = _target.comm
+
             termination = TerminationReason.NATURAL_EXIT
             _channel_confirmation = ChannelConfirmation.UNMONITORED
 
-            proc_log = logger.bind(pid=proc.pid)
+            proc_log = logger.bind(pid=_observed_pid, comm=_tracked_comm)
             proc_log.debug(
                 "run_managed_async_entry",
                 cmd_summary=cmd[0] if cmd else "<empty>",
@@ -181,7 +310,7 @@ async def run_managed_async(
                         stale_threshold,
                         time.time(),
                         session_record_types,
-                        proc.pid,
+                        _observed_pid,
                         completion_drain_timeout,
                         acc,
                         trigger,
@@ -190,13 +319,22 @@ async def run_managed_async(
                         _phase2_poll,
                         _phase1_timeout,
                         stdout_session_id_ready,
+                        max_suppression_seconds,
+                    )
+                if idle_output_timeout is not None and idle_output_timeout > 0:
+                    tg.start_soon(
+                        _watch_stdout_idle,
+                        stdout_path,
+                        idle_output_timeout,
+                        acc,
+                        trigger,
                     )
                 tracing_handle = None
-                if linux_tracing_config is not None:
+                if linux_tracing_config is not None and _target is not None:
                     from autoskillit.execution.linux_tracing import start_linux_tracing
 
                     tracing_handle = start_linux_tracing(
-                        pid=proc.pid,
+                        target=_target,
                         config=linux_tracing_config,
                         tg=tg,
                     )
@@ -232,35 +370,34 @@ async def run_managed_async(
                 from autoskillit.execution.linux_tracing import read_proc_snapshot
 
                 accumulated = tracing_handle.stop()
-                final_snap = read_proc_snapshot(proc.pid)
+                final_snap = read_proc_snapshot(_observed_pid)
                 if final_snap:
                     accumulated.append(final_snap)
                 snapshots_data = [s.__dict__ for s in accumulated]
 
-            if timeout_scope.cancelled_caught:
+            if timeout_scope is not None and timeout_scope.cancelled_caught:
                 termination = TerminationReason.TIMED_OUT
-                proc_log.debug("kill_decision", reason="timeout", timeout=timeout)
-                logger.warning("Process %d timed out after %ss, killing tree", proc.pid, timeout)
-                await async_kill_process_tree(proc.pid)
-            elif signals.process_exited:
-                proc_log.debug(
-                    "kill_decision",
-                    reason="natural_exit",
-                    returncode=signals.process_returncode,
-                )
-            elif termination == TerminationReason.STALE:
-                proc_log.debug("kill_decision", reason="stale", stale_threshold=stale_threshold)
-                logger.warning("Session stale for %ss, killing tree", stale_threshold)
-                await async_kill_process_tree(proc.pid)
-            else:
-                proc_log.debug(
-                    "kill_decision",
-                    reason="channel_won",
-                    channel_a=signals.channel_a_confirmed,
-                    channel_b=signals.channel_b_status,
-                )
-                # Channel A or B won; process still alive — kill immediately.
-                await async_kill_process_tree(proc.pid)
+            action = decide_termination_action(
+                termination,
+                timeout_fired=timeout_scope is not None and timeout_scope.cancelled_caught,
+                process_exited=signals.process_exited,
+            )
+            proc_log.debug(
+                "kill_decision",
+                termination=str(termination),
+                action=str(action),
+                reason=str(action),
+                process_exited=signals.process_exited,
+                channel_a=signals.channel_a_confirmed,
+                channel_b=signals.channel_b_status,
+            )
+            kill_reason = await execute_termination_action(
+                action,
+                proc=proc,
+                process_exited_event=signals.process_exited_event,
+                grace_seconds=natural_exit_grace_seconds,
+                proc_log=proc_log,
+            )
 
             # Flush and close before reading
             stdout_file.close()
@@ -273,10 +410,15 @@ async def run_managed_async(
                 stdout=stdout,
                 stderr=stderr,
                 termination=termination,
-                pid=proc.pid,
+                pid=_observed_pid,
                 channel_confirmation=_channel_confirmation,
                 proc_snapshots=snapshots_data,
                 channel_b_session_id=signals.channel_b_session_id,
+                session_id=_resolve_session_id(
+                    signals.stdout_session_id, signals.channel_b_session_id
+                ),
+                kill_reason=kill_reason,
+                tracked_comm=_tracked_comm,
             )
             proc_log.debug(
                 "run_managed_async_result",
@@ -308,7 +450,7 @@ def run_managed_sync(
     cwd: Path | None,
     timeout: float,
     input_data: str | None = None,
-    env: dict[str, str] | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> SubprocessResult:
     """Sync subprocess execution with temp file I/O and process tree cleanup.
 
@@ -384,7 +526,7 @@ class DefaultSubprocessRunner:
         *,
         cwd: Path,
         timeout: float,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] | None = None,
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,
@@ -392,6 +534,8 @@ class DefaultSubprocessRunner:
         input_data: str | None = None,
         completion_drain_timeout: float = 5.0,
         linux_tracing_config: LinuxTracingConfig | None = None,
+        idle_output_timeout: float | None = None,
+        max_suppression_seconds: float | None = None,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -405,4 +549,6 @@ class DefaultSubprocessRunner:
             input_data=input_data,
             completion_drain_timeout=completion_drain_timeout,
             linux_tracing_config=linux_tracing_config,
+            idle_output_timeout=idle_output_timeout,
+            max_suppression_seconds=max_suppression_seconds,
         )

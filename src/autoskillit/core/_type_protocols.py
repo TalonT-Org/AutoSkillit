@@ -13,18 +13,20 @@ from typing import Any, Protocol, runtime_checkable
 from ._type_results import (
     CIRunScope,
     CleanupResult,
+    CloneResult,
     FailureRecord,
     SkillResult,
+    TestResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
 )
 
 __all__ = [
-    "GatePolicy",
-    "AuditStore",
-    "TokenStore",
-    "TimingStore",
-    "McpResponseStore",
+    "GateState",
+    "AuditLog",
+    "TokenLog",
+    "TimingLog",
+    "McpResponseLog",
     "TestRunner",
     "HeadlessExecutor",
     "RecipeRepository",
@@ -38,13 +40,16 @@ __all__ = [
     "CIWatcher",
     "MergeQueueWatcher",
     "SessionSkillManager",
-    "TargetSkillResolver",
+    "SkillLister",
+    "SkillResolver",
     "BackgroundSupervisor",
+    "QuotaRefreshTask",
+    "TokenFactory",
 ]
 
 
 @runtime_checkable
-class GatePolicy(Protocol):
+class GateState(Protocol):
     """Protocol for gate enable/disable state."""
 
     @property
@@ -56,7 +61,7 @@ class GatePolicy(Protocol):
 
 
 @runtime_checkable
-class AuditStore(Protocol):
+class AuditLog(Protocol):
     """Protocol for pipeline failure accumulation."""
 
     def record_failure(self, record: FailureRecord) -> None: ...
@@ -72,12 +77,17 @@ class AuditStore(Protocol):
     def record_success(self, skill_command: str) -> None: ...
 
     def load_from_log_dir(
-        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+        self,
+        log_root: Path,
+        *,
+        since: str = "",
+        cwd_filter: str = "",
+        kitchen_id_filter: str = "",
     ) -> int: ...
 
 
 @runtime_checkable
-class TokenStore(Protocol):
+class TokenLog(Protocol):
     """Protocol for per-step token usage accumulation."""
 
     def record(
@@ -88,38 +98,49 @@ class TokenStore(Protocol):
         start_ts: str = "",
         end_ts: str = "",
         elapsed_seconds: float | None = None,
+        order_id: str = "",
     ) -> None: ...
 
-    def get_report(self) -> list[dict[str, Any]]: ...
+    def get_report(self, *, order_id: str = "") -> list[dict[str, Any]]: ...
 
-    def compute_total(self) -> dict[str, Any]: ...
+    def compute_total(self, *, order_id: str = "") -> dict[str, Any]: ...
 
     def clear(self) -> None: ...
 
     def load_from_log_dir(
-        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+        self,
+        log_root: Path,
+        *,
+        since: str = "",
+        cwd_filter: str = "",
+        kitchen_id_filter: str = "",
     ) -> int: ...
 
 
 @runtime_checkable
-class TimingStore(Protocol):
+class TimingLog(Protocol):
     """Protocol for per-step wall-clock timing accumulation."""
 
-    def record(self, step_name: str, duration_seconds: float) -> None: ...
+    def record(self, step_name: str, duration_seconds: float, *, order_id: str = "") -> None: ...
 
-    def get_report(self) -> list[dict[str, Any]]: ...
+    def get_report(self, *, order_id: str = "") -> list[dict[str, Any]]: ...
 
-    def compute_total(self) -> dict[str, Any]: ...
+    def compute_total(self, *, order_id: str = "") -> dict[str, Any]: ...
 
     def clear(self) -> None: ...
 
     def load_from_log_dir(
-        self, log_root: Path, *, since: str = "", cwd_filter: str = ""
+        self,
+        log_root: Path,
+        *,
+        since: str = "",
+        cwd_filter: str = "",
+        kitchen_id_filter: str = "",
     ) -> int: ...
 
 
 @runtime_checkable
-class McpResponseStore(Protocol):
+class McpResponseLog(Protocol):
     """Protocol for per-tool MCP response size accumulation."""
 
     def record(
@@ -139,9 +160,12 @@ class McpResponseStore(Protocol):
 
 @runtime_checkable
 class TestRunner(Protocol):
-    """Protocol for running a test suite and reporting pass/fail."""
+    """Protocol for running a test suite and reporting pass/fail.
 
-    async def run(self, cwd: Path) -> tuple[bool, str]: ...
+    Returns a TestResult with passed, stdout, and stderr from the test run.
+    """
+
+    async def run(self, cwd: Path) -> TestResult: ...
 
 
 @runtime_checkable
@@ -155,11 +179,15 @@ class HeadlessExecutor(Protocol):
         *,
         model: str = "",
         step_name: str = "",
+        kitchen_id: str = "",
+        order_id: str = "",
         add_dirs: Sequence[ValidatedAddDir] = (),
         timeout: float | None = None,
         stale_threshold: float | None = None,
+        idle_output_timeout: float | None = None,
         expected_output_patterns: Sequence[str] = (),
         write_behavior: WriteBehaviorSpec | None = None,
+        completion_marker: str = "",
     ) -> SkillResult: ...
 
 
@@ -179,9 +207,13 @@ class RecipeRepository(Protocol):
         suppressed: Sequence[str] | None = None,
         resolved_defaults: dict[str, str] | None = None,
         ingredient_overrides: dict[str, str] | None = None,
+        temp_dir: Path | None = None,
+        temp_dir_relpath: str | None = None,
     ) -> dict[str, Any]: ...
 
-    def validate_from_path(self, script_path: Any) -> dict[str, Any]: ...
+    def validate_from_path(
+        self, script_path: Any, temp_dir_relpath: str = ".autoskillit/temp"
+    ) -> dict[str, Any]: ...
 
     def list_all(self, project_dir: Any | None = None) -> dict[str, Any]: ...
 
@@ -243,7 +275,7 @@ class CloneManager(Protocol):
         branch: str = "",
         strategy: str = "",
         remote_url: str = "",
-    ) -> dict[str, str]: ...
+    ) -> CloneResult: ...
 
     def remove_clone(self, clone_path: str, keep: str = "false") -> dict[str, str]: ...
 
@@ -255,6 +287,7 @@ class CloneManager(Protocol):
         *,
         remote_url: str = "",
         protected_branches: list[str] | None = None,
+        force: bool = False,
     ) -> dict[str, str | bool]: ...
 
 
@@ -382,6 +415,7 @@ class MergeQueueWatcher(Protocol):
         stall_grace_period: int = 60,
         max_stall_retries: int = 3,
         not_in_queue_confirmation_cycles: int = 2,
+        max_inconclusive_retries: int = 5,
     ) -> dict[str, Any]: ...
 
     async def toggle(
@@ -404,18 +438,36 @@ class SessionSkillManager(Protocol):
         cook_session: bool = False,
         config: Any | None = None,
         project_dir: Path | None = None,
+        recipe_packs: frozenset[str] | None = None,
+        allow_only: frozenset[str] | None = None,
     ) -> ValidatedAddDir: ...
 
-    def activate_tier2(self, session_id: str, skill_name: str) -> bool: ...
+    def compute_skill_closure(self, skill_name: str) -> frozenset[str]: ...
+
+    def activate_skill_deps(self, session_id: str, skill_name: str) -> bool: ...
 
     def cleanup_stale(self, max_age_seconds: int = 86400) -> int: ...
 
 
 @runtime_checkable
-class TargetSkillResolver(Protocol):
+class SkillResolver(Protocol):
     """Protocol for resolving skill names to their source tier."""
 
     def resolve(self, name: str) -> Any: ...
+
+
+@runtime_checkable
+class SkillLister(Protocol):
+    """L0 contract for listing all available skills.
+
+    Allows L2 recipe rules to type their skill-listing dependency
+    against an L0 protocol instead of binding to the L1 workspace
+    concrete class. The default implementation lives at
+    autoskillit.workspace.skills.DefaultSkillResolver and satisfies this
+    protocol structurally.
+    """
+
+    def list_all(self) -> list[Any]: ...
 
 
 @runtime_checkable
@@ -435,3 +487,27 @@ class BackgroundSupervisor(Protocol):
     ) -> Any: ...
 
     async def drain(self) -> None: ...
+
+
+@runtime_checkable
+class QuotaRefreshTask(Protocol):
+    """Protocol for a cancellable background task handle.
+
+    Satisfied by asyncio.Task — used to type the kitchen-scoped quota
+    refresh task stored in ToolContext without leaking asyncio.Task into the
+    core layer.
+    """
+
+    def cancel(self, msg: Any = None) -> bool: ...
+
+
+@runtime_checkable
+class TokenFactory(Protocol):
+    """Protocol for resolving a GitHub token via the config → env → CLI fallback chain.
+
+    Satisfied by any zero-argument callable that returns a token string or None.
+    Set by make_context() on ToolContext; None in test ToolContext instances unless
+    explicitly provided.
+    """
+
+    def __call__(self) -> str | None: ...

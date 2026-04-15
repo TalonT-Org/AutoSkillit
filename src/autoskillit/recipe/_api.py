@@ -14,12 +14,14 @@ from typing import Any, TypedDict
 from autoskillit.core import (
     LoadResult,
     RecipeSource,
+    SkillLister,
     TerminalColumn,
     YAMLError,
     _render_gfm_table,
     get_logger,
     load_yaml,
     pkg_root,
+    resolve_temp_dir,
 )
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.contracts import (
@@ -41,6 +43,7 @@ from autoskillit.recipe.io import (
     find_recipe_by_name,
     find_sub_recipe_by_name,
     list_recipes,
+    substitute_temp_placeholder,
 )
 from autoskillit.recipe.io import (
     load_recipe as _load_recipe_from_path,
@@ -112,10 +115,10 @@ def build_ingredient_rows(
         sort_key = _ingredient_sort_key(name, required, default)
         if default is None and required:
             default_str, name_str = "(required)", f"{name} *"
+        elif res := resolved.get(name):
+            default_str, name_str = res, name
         elif default == "":
-            res = resolved.get(name)
-            default_str = res if res else "auto-detect"
-            name_str = name
+            default_str, name_str = "auto-detect", name
         elif default == "true":
             default_str, name_str = "on", name
         elif default == "false":
@@ -157,6 +160,7 @@ class LoadRecipeResult(TypedDict, total=False):
     suggestions: list[dict[str, Any]]
     valid: bool
     kitchen_rules: list[str]
+    requires_packs: list[str]
     error: str
     greeting: str
     ingredients_table: str
@@ -353,6 +357,8 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
     # Merge ingredients: sub-recipe non-hidden ingredients into parent
     merged_ingredients = dict(parent.ingredients)
     for ing_name, ing in sub.ingredients.items():
+        if getattr(ing, "hidden", False):
+            continue  # do not propagate hidden sub-recipe ingredients to parent
         if ing_name not in merged_ingredients:
             merged_ingredients[ing_name] = ing
 
@@ -364,11 +370,20 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
             merged_rules.append(rule)
             seen_rules.add(rule)
 
+    # Merge requires_packs: union (parent first, then sub-recipe additions)
+    seen_packs: set[str] = set(parent.requires_packs)
+    merged_packs = list(parent.requires_packs)
+    for pack in sub.requires_packs:
+        if pack not in seen_packs:
+            merged_packs.append(pack)
+            seen_packs.add(pack)
+
     return dataclasses.replace(
         parent,
         steps=new_steps,
         ingredients=merged_ingredients,
         kitchen_rules=merged_rules,
+        requires_packs=merged_packs,
     )
 
 
@@ -376,6 +391,7 @@ def _build_active_recipe(
     recipe: Any,
     ingredient_overrides: dict[str, str] | None,
     project_dir: Path,
+    temp_dir_relpath: str = ".autoskillit/temp",
 ) -> tuple[Any, Any | None]:
     """Return (active_recipe, combined_recipe | None).
 
@@ -416,7 +432,7 @@ def _build_active_recipe(
                     f"Expected in recipes/sub-recipes/{current_step.sub_recipe}.yaml"
                 )
             try:
-                sub_recipe = _load_recipe_from_path(sr_path)
+                sub_recipe = _load_recipe_from_path(sr_path, temp_dir_relpath)
             except (YAMLError, ValueError, OSError) as exc:
                 raise ValueError(
                     f"Failed to load sub-recipe '{current_step.sub_recipe}' "
@@ -430,8 +446,19 @@ def _build_active_recipe(
     return working, combined
 
 
-def validate_from_path(path: Path) -> dict[str, Any]:
+def validate_from_path(
+    path: Path,
+    temp_dir_relpath: str = ".autoskillit/temp",
+    *,
+    lister: SkillLister | None = None,
+) -> dict[str, Any]:
     """Validate a recipe YAML file at the given path.
+
+    Args:
+        path: Path to the recipe YAML file.
+        temp_dir_relpath: Relative path to the temp directory used for
+            ``{{AUTOSKILLIT_TEMP}}`` substitution. Defaults to
+            ``.autoskillit/temp``.
 
     Returns:
         {"valid": bool, "errors": list, "quality": dict, "semantic": list, "contracts": list}
@@ -444,7 +471,9 @@ def validate_from_path(path: Path) -> dict[str, Any]:
         }
 
     try:
-        data = load_yaml(path)
+        raw_text = path.read_text(encoding="utf-8")
+        substituted = substitute_temp_placeholder(raw_text, temp_dir_relpath)
+        data = load_yaml(substituted)
     except YAMLError as exc:
         return {
             "valid": False,
@@ -457,11 +486,14 @@ def validate_from_path(path: Path) -> dict[str, Any]:
             "findings": [{"error": "File must contain a YAML mapping"}],
         }
 
-    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+    if lister is None:
+        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+
+        lister = DefaultSkillResolver()
 
     recipe = _parse_recipe(data)
     errors = validate_recipe(recipe)
-    known_skills = frozenset(s.name for s in SkillResolver().list_all())
+    known_skills = frozenset(s.name for s in lister.list_all())
     ctx = make_validation_context(recipe, available_skills=known_skills)
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)
@@ -495,6 +527,9 @@ def load_and_validate(
     recipe_info: RecipeInfo | None = None,
     resolved_defaults: dict[str, str] | None = None,
     ingredient_overrides: dict[str, str] | None = None,
+    temp_dir: Path | None = None,
+    temp_dir_relpath: str | None = None,
+    lister: SkillLister | None = None,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -552,6 +587,8 @@ def load_and_validate(
         return {"error": f"No recipe named '{name}' found"}
 
     raw = match.content if match.content is not None else match.path.read_text()
+    _temp_relpath = temp_dir_relpath or ".autoskillit/temp"
+    raw = substitute_temp_placeholder(raw, _temp_relpath)
     suggestions: list[dict[str, Any]] = []
     valid = True
     recipe = None
@@ -573,7 +610,7 @@ def load_and_validate(
 
             # Stage: sub-recipe composition (lazy-loaded prefixes)
             active_recipe, combined_recipe = _build_active_recipe(
-                recipe, ingredient_overrides, _pdir
+                recipe, ingredient_overrides, _pdir, _temp_relpath
             )
 
             # Stage: structural validation on active recipe
@@ -585,10 +622,13 @@ def load_and_validate(
             t0 = _t("validate_recipe", t0, name)
 
             # Stage: semantic rules (builds ValidationContext once — shared computation)
-            from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+            if lister is None:
+                from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+
+                lister = DefaultSkillResolver()
 
             known = frozenset(r.name for r in list_recipes(_pdir).items)
-            known_skills = frozenset(s.name for s in SkillResolver().list_all())
+            known_skills = frozenset(s.name for s in lister.list_all())
             sub_recipes_dir = builtin_sub_recipes_dir()
             known_sub_recipes: frozenset[str] = (
                 frozenset(p.stem for p in sub_recipes_dir.glob("*.yaml"))
@@ -624,9 +664,8 @@ def load_and_validate(
 
             # Stage: staleness check
             if contract:
-                staleness_cache_path = (
-                    _pdir / ".autoskillit" / "temp" / "recipe_staleness_cache.json"
-                )
+                resolved_temp = temp_dir if temp_dir is not None else resolve_temp_dir(_pdir, None)
+                staleness_cache_path = resolved_temp / "recipe_staleness_cache.json"
                 stale = check_contract_staleness(
                     contract, recipe_path=match.path, cache_path=staleness_cache_path
                 )
@@ -695,6 +734,8 @@ def load_and_validate(
     }
     if _serving_recipe is not None and _serving_recipe.kitchen_rules:
         result["kitchen_rules"] = _serving_recipe.kitchen_rules
+    if _serving_recipe is not None and _serving_recipe.requires_packs:
+        result["requires_packs"] = _serving_recipe.requires_packs
     if ing_table:
         result["ingredients_table"] = ing_table
 

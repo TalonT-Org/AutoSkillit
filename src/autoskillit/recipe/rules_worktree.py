@@ -8,15 +8,16 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.contracts import resolve_skill_name
+from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
 
-_WORKTREE_CREATING_SKILLS = frozenset(
+_WORKTREE_MODIFYING_SKILLS = frozenset(
     {
         "implement-worktree",
         "implement-worktree-no-merge",
+        "implement-experiment",
     }
 )
 
@@ -47,11 +48,11 @@ def _check_model_on_non_skill(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
-    name="retries-on-worktree-creating-skill",
-    description="Worktree-creating skills must not have retries > 0.",
+    name="retries-on-worktree-modifying-skill",
+    description="Worktree-modifying skills must not have retries > 0.",
     severity=Severity.ERROR,
 )
-def _check_retries_on_worktree_creating_skill(ctx: ValidationContext) -> list[RuleFinding]:
+def _check_retries_on_worktree_modifying_skill(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
     findings: list[RuleFinding] = []
     for step_name, step in wf.steps.items():
@@ -61,10 +62,10 @@ def _check_retries_on_worktree_creating_skill(ctx: ValidationContext) -> list[Ru
             continue
         skill_cmd = step.with_args.get("skill_command", "")
         skill_name = resolve_skill_name(skill_cmd)
-        if skill_name and skill_name in _WORKTREE_CREATING_SKILLS:
+        if skill_name and skill_name in _WORKTREE_MODIFYING_SKILLS:
             findings.append(
                 RuleFinding(
-                    rule="retries-on-worktree-creating-skill",
+                    rule="retries-on-worktree-modifying-skill",
                     severity=Severity.ERROR,
                     step_name=step_name,
                     message=(
@@ -81,7 +82,7 @@ def _check_retries_on_worktree_creating_skill(ctx: ValidationContext) -> list[Ru
 @semantic_rule(
     name="missing-context-limit-on-worktree",
     description=(
-        "A step invoking a worktree-creating skill with retries:0 has no on_context_limit "
+        "A step invoking a worktree-modifying skill with retries:0 has no on_context_limit "
         "route. If the session hits a context limit, the worktree partial progress is "
         "unreachable: the step falls through to on_failure instead of routing to retry_worktree. "
         "Add on_context_limit pointing to a retry_worktree step to preserve partial progress."
@@ -96,7 +97,7 @@ def _check_missing_context_limit_on_worktree(ctx: ValidationContext) -> list[Rul
             continue
         skill_cmd = step.with_args.get("skill_command", "")
         skill = resolve_skill_name(skill_cmd)
-        if not skill or skill not in _WORKTREE_CREATING_SKILLS:
+        if not skill or skill not in _WORKTREE_MODIFYING_SKILLS:
             continue
         if step.retries <= 0 and step.on_context_limit is None:
             findings.append(
@@ -138,4 +139,59 @@ def _check_retry_worktree_cwd(ctx: ValidationContext) -> list[RuleFinding]:
                     message=f"Step '{step_name}': retry-worktree cwd must use a context variable.",
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name="file-writing-skill-missing-context-limit",
+    description=(
+        "A step invoking a write_behavior='always' skill has no on_context_limit route. "
+        "If the session hits a context limit mid-edit, uncommitted changes strand on disk "
+        "and the step falls through to on_failure, losing progress."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_file_writing_skill_missing_context_limit(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+
+    manifest = load_bundled_manifest()
+    if manifest is None:
+        logger.warning(
+            "file-writing-skill-missing-context-limit: failed to load manifest; skipping"
+        )
+        return findings
+
+    skills = manifest.get("skills", {})
+
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        # Advisory steps (skip_when_false) are covered by advisory-step-missing-context-limit.
+        if step.skip_when_false:
+            continue
+        if step.on_context_limit is not None:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill = resolve_skill_name(skill_cmd)
+        if not skill:
+            continue
+        skill_data = skills.get(skill, {})
+        if skill_data.get("write_behavior") != "always":
+            continue
+        findings.append(
+            RuleFinding(
+                rule="file-writing-skill-missing-context-limit",
+                severity=Severity.WARNING,
+                step_name=step_name,
+                message=(
+                    f"Step '{step_name}' invokes '{skill}' (write_behavior=always) "
+                    f"but has no on_context_limit route. Context exhaustion mid-edit "
+                    f"will strand uncommitted changes on disk and fall through to "
+                    f"on_failure, losing progress. Add on_context_limit routing."
+                ),
+            )
+        )
     return findings

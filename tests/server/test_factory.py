@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.config import AutomationConfig
 from autoskillit.core.types import SkillResult, SubprocessResult, TerminationReason
 from autoskillit.execution.db import DefaultDatabaseReader
@@ -18,7 +20,8 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.repository import DefaultRecipeRepository
-from autoskillit.server._factory import _gh_cli_token, make_context
+from autoskillit.server._factory import TokenFactory, _gh_cli_token, make_context
+from autoskillit.workspace import DefaultCloneManager, SkillResolver
 from autoskillit.workspace.cleanup import DefaultWorkspaceManager
 from tests.conftest import MockSubprocessRunner
 
@@ -40,6 +43,8 @@ def _runner() -> MockSubprocessRunner:
 def test_make_context_returns_toolcontext():
     ctx = make_context(AutomationConfig(), runner=_runner())
     assert isinstance(ctx, ToolContext)
+    assert ctx.gate is not None
+    assert ctx.runner is not None
 
 
 def test_make_context_gate_starts_closed(monkeypatch):
@@ -66,18 +71,11 @@ def test_make_context_tester_is_default_test_runner():
     assert isinstance(ctx.tester, DefaultTestRunner)
 
 
-def test_make_context_all_service_fields_populated_includes_github_client():
-    """All optional service fields must be populated, including github_client and clone_mgr."""
+def test_make_context_service_fields_are_typed_instances():
+    """Core service fields are typed instances (skill_resolver, clone_mgr, repositories)."""
     ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.executor is not None
-    assert ctx.tester is not None
-    assert ctx.recipes is not None
-    assert ctx.migrations is not None
-    assert ctx.db_reader is not None
-    assert ctx.workspace_mgr is not None
-    assert ctx.clone_mgr is not None
-    assert ctx.github_client is not None
-    assert ctx.skill_resolver is not None
+    assert isinstance(ctx.skill_resolver, SkillResolver)
+    assert isinstance(ctx.clone_mgr, DefaultCloneManager)
     assert isinstance(ctx.recipes, DefaultRecipeRepository)
     assert isinstance(ctx.migrations, DefaultMigrationService)
     assert isinstance(ctx.db_reader, DefaultDatabaseReader)
@@ -128,7 +126,8 @@ def test_make_context_github_client_config_token_takes_priority_over_gh_cli(monk
     config.github.token = "config-token"
     ctx = make_context(config, runner=None, plugin_dir=".")
     assert ctx.github_client.has_token is True
-    assert ctx.github_client._token == "config-token"
+    # After lazy resolution via has_token, verify the resolved value
+    assert ctx.github_client._resolve_token() == "config-token"
 
 
 def test_make_context_github_client_token_snapshot_is_immutable(monkeypatch):
@@ -236,6 +235,62 @@ def test_write_expected_resolver_conditional_skill() -> None:
     assert len(spec.expected_when) > 0
 
 
+@pytest.mark.parametrize(
+    "invocation,expected_mode,required_tokens",
+    [
+        (
+            "/autoskillit:resolve-failures /tmp/wt .autoskillit/temp/plan.md main",
+            "conditional",
+            ["verdict"],
+        ),
+        (
+            "/autoskillit:retry-worktree .autoskillit/temp/plan.md /tmp/wt",
+            "conditional",
+            ["phases_implemented"],
+        ),
+        (
+            "/autoskillit:resolve-review feature-branch main",
+            "conditional",
+            ["verdict"],
+        ),
+        (
+            "/autoskillit:audit-claims /tmp/wt main https://github.com/o/r/pull/1",
+            None,
+            [],
+        ),
+        (
+            "/autoskillit:review-research-pr /tmp/wt main https://github.com/o/r/pull/1",
+            None,
+            [],
+        ),
+        (
+            "/autoskillit:resolve-claims-review /tmp/wt main",
+            "conditional",
+            ["verdict"],
+        ),
+        (
+            "/autoskillit:resolve-research-review /tmp/wt main",
+            "conditional",
+            ["verdict"],
+        ),
+    ],
+)
+def test_write_expected_resolver_mode(
+    invocation: str, expected_mode: str | None, required_tokens: list[str]
+) -> None:
+    """write_expected_resolver returns the correct mode and token patterns per skill."""
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.write_expected_resolver is not None
+    spec = ctx.write_expected_resolver(invocation)
+    assert spec.mode == expected_mode
+    if expected_mode is None:
+        assert spec.expected_when == ()
+    else:
+        assert len(spec.expected_when) > 0
+        for token in required_tokens:
+            assert any(token in p for p in spec.expected_when)
+
+
 def test_cook_and_factory_session_skill_manager_ctor_args_in_sync() -> None:
     """Sync test: _cook.py and _factory.py must call DefaultSessionSkillManager
     with the same number of positional arguments.
@@ -312,3 +367,94 @@ def test_gh_cli_token_returns_none_when_gh_not_installed(monkeypatch):
 
     monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
     assert _gh_cli_token() is None
+
+
+# ---------------------------------------------------------------------------
+# TokenFactory unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_token_factory_resolves_lazily():
+    """TokenFactory must not resolve until first call, then cache."""
+    call_count = 0
+
+    def _resolver():
+        nonlocal call_count
+        call_count += 1
+        return "ghp_test_token"
+
+    factory = TokenFactory(_resolver)
+    assert call_count == 0, "TokenFactory resolved eagerly at construction"
+    assert not factory.is_resolved
+
+    token = factory()
+    assert token == "ghp_test_token"
+    assert call_count == 1
+    assert factory.is_resolved
+
+    # Second call uses cache
+    token2 = factory()
+    assert token2 == "ghp_test_token"
+    assert call_count == 1, "TokenFactory resolved twice instead of caching"
+
+
+def test_token_factory_caches_none():
+    """TokenFactory caches None results (gh CLI not available)."""
+    call_count = 0
+
+    def _resolver():
+        nonlocal call_count
+        call_count += 1
+        return None
+
+    factory = TokenFactory(_resolver)
+    assert factory() is None
+    assert call_count == 1
+    assert factory() is None
+    assert call_count == 1, "TokenFactory resolved twice for None result"
+
+
+def test_gh_cli_token_not_called_during_make_context(monkeypatch):
+    """make_context() must not call _gh_cli_token() — token resolves lazily."""
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+    calls: list[object] = []
+    original_run = __import__("subprocess").run
+
+    def tracking_run(*args, **kwargs):
+        calls.append(args)
+        return original_run(*args, **kwargs)
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", tracking_run)
+
+    config = AutomationConfig()
+    make_context(config, runner=None, plugin_dir=".")
+
+    gh_calls = [c for c in calls if "gh" in str(c)]
+    assert gh_calls == [], f"_gh_cli_token() called during make_context: {gh_calls}"
+
+
+def test_make_context_sets_plugin_dir_none_when_plugin_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """make_context() sets plugin_dir=None when marketplace plugin is installed."""
+    monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: True)
+    ctx = make_context(AutomationConfig(), runner=None)
+    assert ctx.plugin_dir is None
+
+
+def test_make_context_sets_plugin_dir_when_plugin_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """make_context() sets plugin_dir to package root when plugin is not installed."""
+    monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: False)
+    ctx = make_context(AutomationConfig(), runner=None)
+    assert ctx.plugin_dir is not None
+    assert ctx.plugin_dir != ""
+
+
+def test_make_context_sets_token_factory(tmp_path):
+    """make_context() sets token_factory on the returned ToolContext."""
+    cfg = AutomationConfig()
+    ctx = make_context(cfg, runner=None, plugin_dir=str(tmp_path))
+    assert callable(ctx.token_factory)

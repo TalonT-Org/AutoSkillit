@@ -93,6 +93,7 @@ def test_run_onboarding_menu_decline_returns_none_and_marks(
     """User inputs 'n' to the initial prompt. Returns None and marker is created."""
     _make_initialized_project(tmp_path)
     inputs = iter(["n"])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
     result = run_onboarding_menu(tmp_path, color=False)
     assert result is None
@@ -106,6 +107,7 @@ def test_run_onboarding_menu_skip_e_returns_none_and_marks(
     """User inputs 'y', then 'E'. Returns None and marker is created."""
     _make_initialized_project(tmp_path)
     inputs = iter(["y", "E"])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
     monkeypatch.setattr("autoskillit.cli._onboarding.gather_intel", lambda _p: OnboardingIntel())
     result = run_onboarding_menu(tmp_path, color=False)
@@ -120,6 +122,7 @@ def test_run_onboarding_menu_option_a_returns_setup_project(
     """User inputs 'y', then 'A'. Returns /autoskillit:setup-project. Marker NOT created yet."""
     _make_initialized_project(tmp_path)
     inputs = iter(["y", "A"])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
     monkeypatch.setattr("autoskillit.cli._onboarding.gather_intel", lambda _p: OnboardingIntel())
     result = run_onboarding_menu(tmp_path, color=False)
@@ -135,6 +138,7 @@ def test_run_onboarding_menu_option_b_with_url_returns_prepare_issue(
     """User inputs 'y', then 'B', then a URL. Returns string with /autoskillit:prepare-issue."""
     _make_initialized_project(tmp_path)
     inputs = iter(["y", "B", "https://github.com/org/repo/issues/42"])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
     monkeypatch.setattr("autoskillit.cli._onboarding.gather_intel", lambda _p: OnboardingIntel())
     result = run_onboarding_menu(tmp_path, color=False)
@@ -149,6 +153,7 @@ def test_run_onboarding_menu_option_d_returns_write_recipe(
     """User inputs 'y', then 'D'. Returns string with /autoskillit:write-recipe."""
     _make_initialized_project(tmp_path)
     inputs = iter(["y", "D"])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
     monkeypatch.setattr("autoskillit.cli._onboarding.gather_intel", lambda _p: OnboardingIntel())
     result = run_onboarding_menu(tmp_path, color=False)
@@ -163,6 +168,7 @@ def test_run_onboarding_menu_option_c_returns_setup_project_prompt(
     """User inputs 'y', then 'C'. Returns string starting with /autoskillit:setup-project."""
     _make_initialized_project(tmp_path)
     inputs = iter(["y", "C"])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
     monkeypatch.setattr("autoskillit.cli._onboarding.gather_intel", lambda _p: OnboardingIntel())
     result = run_onboarding_menu(tmp_path, color=False)

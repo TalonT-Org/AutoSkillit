@@ -1,17 +1,20 @@
 <p align="center">
-  <img src="assets/banner.gif" alt="AutoSkillit — Skill-driven automation for agentic workflows" width="830">
+  <img src="assets/banner.gif" alt="AutoSkillit" width="830">
 </p>
 
-Automate your processes with skills, automate your skills with Autoskillit.
+AutoSkillit is a Claude Code plugin that runs YAML recipes through a two-tier
+orchestrator. Bundled recipes turn GitHub issues into merged PRs by chaining
+plan, dry-walkthrough, worktree, test, and PR-review skills against 42 MCP
+tools and 109 bundled skills.
 
 https://github.com/user-attachments/assets/bcd910c8-7269-46d6-a496-53b2cb24d212
 
-## Prerequisites
+## Requirements
 
-- **Python 3.11+**
-- **[uv](https://docs.astral.sh/uv/)** — package manager (`pip install uv` or see uv docs)
-- **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)** — `npm install -g @anthropic-ai/claude-code`
-- **[gh CLI](https://cli.github.com/)** — required for GitHub features (PR creation, issue management, CI status)
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) — package manager
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) — `npm install -g @anthropic-ai/claude-code`
+- [gh CLI](https://cli.github.com/) — required for PR creation, issue management, CI status
 
 ## Install
 
@@ -19,68 +22,39 @@ https://github.com/user-attachments/assets/bcd910c8-7269-46d6-a496-53b2cb24d212
 curl -fsSL https://raw.githubusercontent.com/TalonT-Org/AutoSkillit/stable/install.sh | sh
 ```
 
-## Quick Start
+## Quick try
 
 ```bash
-# 1. Set up your project
 cd your-project
 autoskillit init
-
-# 2. Run the implementation recipe
 autoskillit order implementation
 ```
 
-### First-Time Project Setup
+## What it does
 
-After installation, run the setup wizard to configure AutoSkillit for your project:
-
-```bash
-autoskillit cook
-# Then in the Claude session:
-/autoskillit:setup-project
-```
-
-This explores your codebase and generates project-tailored recipes and config.
-
-That's it. Describe what you want to build, and AutoSkillit handles the rest:
-
-```
-Plan ─── Dry-walkthrough ─── Implement ─── Test ─── Merge ─── Push ─── PR ─── Review
- │                                │
- ▼                                ▼
-Deep codebase              Isolated worktree
-analysis
-```
-
-## Bundled Recipes
-
-| Recipe | What it automates |
-|--------|-------------------|
-| `implementation` | Plan → dry-walkthrough → implement → test → merge → PR → review |
-| `remediation` | Investigate → plan → implement → test → merge → PR |
-| `implementation-groups` | Decompose large docs → sequenced group implementation |
-| `merge-prs` | Analyze open PRs → merge in order → single integration PR |
-
-## CLI
-
-| Command | Purpose |
-|---------|---------|
-| `autoskillit install` | Register plugin with Claude Code |
-| `autoskillit init` | Create project config |
-| `autoskillit order [recipe]` | Run a recipe (prompts if omitted) |
-| `autoskillit cook` | Launch Claude with all bundled skills as slash commands |
-
-See the [CLI Reference](docs/cli-reference.md) for all commands.
+Each bundled recipe is a sequenced graph of skill invocations. The orchestrator
+holds a kitchen of 40 kitchen-tagged MCP tools plus 2 free range tools (`open_kitchen`,
+`close_kitchen`), launches headless Claude sessions for the heavy work, and
+routes verdicts through retry, merge, and review gates. The 5 bundled recipes
+are `implementation`, `implementation-groups`, `merge-prs`, `remediation`, and
+`research`.
 
 ## Documentation
 
-- **[Getting Started](docs/getting-started.md)** — Walk through the implementation workflow step by step
-- **[Installation](docs/installation.md)** — Prerequisites, install, troubleshooting
-- **[Recipes](docs/recipes.md)** — All recipes with flow diagrams and input reference
-- **[CLI Reference](docs/cli-reference.md)** — All commands and options
-- **[Configuration](docs/configuration.md)** — Layered config, all settings, examples
-- **[Architecture](docs/architecture.md)** — Gating, clone isolation, headless sessions, hooks
-- **[Contributing](docs/developer/contributing.md)** — Development setup, testing, architecture layers
+Full docs are under [docs/](docs/README.md). Topic entry points:
+
+- [docs/getting-started.md](docs/getting-started.md)
+- [docs/installation.md](docs/installation.md)
+- [docs/configuration.md](docs/configuration.md)
+- [docs/recipes/overview.md](docs/recipes/overview.md)
+- [docs/execution/architecture.md](docs/execution/architecture.md)
+- [docs/safety/hooks.md](docs/safety/hooks.md)
+- [docs/developer/contributing.md](docs/developer/contributing.md)
+
+## Examples
+
+Real end-to-end runs against `TalonT-Org/spectral-init` are in
+[docs/examples/research-pipeline.md](docs/examples/research-pipeline.md).
 
 ## License
 

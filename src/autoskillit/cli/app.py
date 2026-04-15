@@ -13,6 +13,10 @@ from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
+import anyio
+
+from autoskillit.cli._serve_guard import serve_with_signal_guard
+
 if TYPE_CHECKING:
     from autoskillit.recipe import Recipe, RecipeInfo
 
@@ -23,11 +27,12 @@ from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _check_secret_scanning,
     _generate_config_yaml,
+    _is_plugin_installed,
     _log_secret_scan_bypass,
     _prompt_test_command,
     _register_all,
-    _require_interactive_stdin,
 )
+from autoskillit.cli._terminal import terminal_guard
 from autoskillit.core import ClaudeFlags, RecipeSource, atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
 
@@ -45,6 +50,10 @@ app.command(config_app)
 app.command(skills_app)
 app.command(recipes_app)
 app.command(workspace_app)
+
+
+class CliError(Exception):
+    """Raised by CLI helpers to signal a user-facing error that should abort the command."""
 
 
 @app.default
@@ -110,10 +119,14 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
             ",".join(cfg.safety.protected_branches),
         )
 
-    plugin_dir = str(pkg_root())
+    plugin_dir: str | None = None if _is_plugin_installed() else str(pkg_root())
     ctx = make_context(cfg, plugin_dir=plugin_dir)
     _initialize(ctx)
-    mcp.run()
+
+    try:
+        anyio.run(serve_with_signal_guard, mcp)
+    except KeyboardInterrupt:
+        pass  # Ctrl+C before anyio loop starts — rare during heavy import phase
 
 
 @app.command
@@ -165,7 +178,11 @@ def init(
         onboarded_marker = config_dir / ".onboarded"
         onboarded_marker.unlink(missing_ok=True)
 
-    _register_all(scope, project_dir)
+    try:
+        _register_all(scope, project_dir)
+    except CliError as exc:
+        print(f"\n  ERROR: {exc}")
+        raise SystemExit(1) from None
 
 
 @app.command
@@ -177,8 +194,9 @@ def install(
     from autoskillit.cli._init_helpers import _print_next_steps
     from autoskillit.cli._marketplace import install as _install
 
-    _install(scope=scope)
-    _print_next_steps(context="install")
+    completed = _install(scope=scope)
+    if completed:
+        _print_next_steps(context="install")
 
 
 @app.command
@@ -187,6 +205,14 @@ def upgrade() -> None:
     from autoskillit.cli._marketplace import upgrade as _upgrade
 
     _upgrade()
+
+
+@app.command
+def update() -> None:
+    """Upgrade autoskillit to the latest version on your install's branch."""
+    from autoskillit.cli._update import run_update_command
+
+    run_update_command()
 
 
 @app.command
@@ -256,7 +282,7 @@ def migrate(*, check: bool = False):
 
 @app.command
 def quota_status() -> None:
-    """Check current 5-hour quota utilization. Exits 0 always; outputs JSON."""
+    """Check quota utilization across all rate-limit windows. Exits 0 always; outputs JSON."""
     import asyncio
 
     from autoskillit.config import load_config
@@ -279,9 +305,9 @@ def config_show():
 @skills_app.command(name="list")
 def skills_list():
     """List bundled skills provided by the plugin."""
-    from autoskillit.workspace import SkillResolver
+    from autoskillit.workspace import DefaultSkillResolver
 
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     skills = resolver.list_all()
 
     if not skills:
@@ -355,9 +381,11 @@ def workspace_clean(
     force
         Skip the confirmation prompt and delete stale directories immediately.
     """
+    import asyncio
+
     from autoskillit.cli._workspace import run_workspace_clean  # deferred: avoids scan overhead
 
-    run_workspace_clean(dir=dir, force=force)
+    asyncio.run(run_workspace_clean(dir=dir, force=force))
 
 
 @recipes_app.command(name="list")
@@ -418,24 +446,28 @@ def _launch_cook_session(
     *,
     initial_message: str | None = None,
     extra_env: dict[str, str] | None = None,
+    resume_session_id: str | None = None,
 ) -> None:
     """Launch an interactive Claude Code cook session with the given system prompt."""
     if shutil.which("claude") is None:
         print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
         sys.exit(1)
-    spec = build_interactive_cmd(initial_prompt=initial_message)
-    cmd = spec.cmd + [
-        ClaudeFlags.PLUGIN_DIR,
-        str(pkg_root()),
+    spec = build_interactive_cmd(
+        initial_prompt=initial_message,
+        resume_session_id=resume_session_id,
+        env_extras=extra_env,
+    )
+    plugin_flags = [] if _is_plugin_installed() else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
+    cmd = [
+        *spec.cmd,
+        *plugin_flags,
         ClaudeFlags.TOOLS,
         "AskUserQuestion",
         ClaudeFlags.APPEND_SYSTEM_PROMPT,
         system_prompt,
     ]
-    env = {**os.environ, **spec.env}
-    if extra_env:
-        env.update(extra_env)
-    result = subprocess.run(cmd, env=env)
+    with terminal_guard():
+        result = subprocess.run(cmd, env=spec.env)
     if result.returncode != 0:
         sys.exit(result.returncode)
 
@@ -458,6 +490,30 @@ def _get_subsets_needed(recipe: Recipe, disabled_subsets: frozenset[str]) -> fro
     return frozenset(needed)
 
 
+def _get_packs_needed(recipe: Recipe, default_disabled_packs: frozenset[str]) -> frozenset[str]:
+    """Return pack names from default_disabled_packs that are required by recipe."""
+    requires = frozenset(getattr(recipe, "requires_packs", []))
+    return requires & default_disabled_packs
+
+
+def _enable_packs_permanently(project_dir: Path, packs: frozenset[str]) -> None:
+    """Add specified packs to packs.enabled in .autoskillit/config.yaml."""
+    from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
+
+    config_path = project_dir / ".autoskillit" / "config.yaml"
+    try:
+        data: dict = (load_yaml(config_path) or {}) if config_path.exists() else {}
+    except YAMLError:
+        data = {}
+    packs_section = data.setdefault("packs", {})
+    current_enabled: list[str] = packs_section.get("enabled", [])
+    new_enabled = sorted(set(current_enabled) | packs)
+    packs_section["enabled"] = new_enabled
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(config_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
+    print(f"Updated {config_path}: added {sorted(packs)} to packs.enabled")
+
+
 def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> None:
     """Remove specified subsets from subsets.disabled in .autoskillit/config.yaml."""
     from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, load_yaml
@@ -476,13 +532,18 @@ def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> N
 
 
 @app.command(name="cook", alias="c")
-def _cook_cmd() -> None:
-    """Launch an interactive Claude session with all skills and kitchen tools."""
-    cook_interactive()
+def _cook_cmd(session_id: str | None = None, *, resume: bool = False) -> None:
+    """Launch an interactive Claude session with all skills and kitchen tools.
+
+    Use --resume to restore a previous session. Optionally provide a session ID
+    directly after --resume to target a specific session; omit for automatic
+    discovery of the most recent session.
+    """
+    cook_interactive(resume=resume or (session_id is not None), session_id=session_id)
 
 
 @app.command
-def order(recipe: str | None = None):
+def order(recipe: str | None = None, session_id: str | None = None, *, resume: bool = False):
     """Launch an interactive Claude Code session to execute a recipe.
 
     Starts Claude Code with hard tool restrictions: only AskUserQuestion
@@ -493,7 +554,13 @@ def order(recipe: str | None = None):
     ----------
     recipe
         Name of the recipe (from .autoskillit/recipes/). Prompts if omitted.
+    session_id
+        Explicit session ID to resume. Provide after the recipe name.
+        Implies --resume when non-None.
+    resume
+        When True, attempt to restore a previous session.
     """
+    from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
     from autoskillit.cli._prompts import _build_orchestrator_prompt
     from autoskillit.recipe import (
         find_recipe_by_name,
@@ -507,6 +574,19 @@ def order(recipe: str | None = None):
         print("Run this command in a regular terminal.")
         sys.exit(1)
 
+    # Resolve resume session ID — must come before the 'if recipe is None:' block
+    from autoskillit.core import find_latest_session_id
+
+    resume_session_id: str | None = None
+    if resume or session_id:
+        resume_session_id = session_id or find_latest_session_id()
+        if resume_session_id is None:
+            print("No previous session found. Starting a fresh session.")
+
+    mcp_prefix = detect_autoskillit_mcp_prefix()
+
+    from autoskillit.cli._timed_input import timed_prompt
+
     if recipe is None:
         from autoskillit.cli._prompts import (
             _OPEN_KITCHEN_CHOICE,
@@ -514,7 +594,6 @@ def order(recipe: str | None = None):
             _resolve_recipe_input,
         )
 
-        _require_interactive_stdin("autoskillit order")
         available = list_recipes(Path.cwd()).items
         if not available:
             print("No recipes found. Run 'autoskillit recipes list' to check.")
@@ -523,13 +602,22 @@ def order(recipe: str | None = None):
         print("  0. Open kitchen (no recipe)")
         for i, r in enumerate(available, 1):
             print(f"  {i}. {r.name}")
-        raw = input(f"Select recipe [0-{len(available)}]: ").strip()
+        raw = timed_prompt(
+            f"Select recipe [0-{len(available)}]:",
+            default="",
+            timeout=120,
+            label="autoskillit order",
+        )
         resolved = _resolve_recipe_input(raw, available)
         if resolved is _OPEN_KITCHEN_CHOICE:
             from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
 
             greeting = random.choice(_OPEN_KITCHEN_GREETINGS)
-            _launch_cook_session(_build_open_kitchen_prompt(), initial_message=greeting)
+            _launch_cook_session(
+                _build_open_kitchen_prompt(mcp_prefix=mcp_prefix),
+                initial_message=greeting,
+                resume_session_id=resume_session_id,
+            )
             return
         elif resolved is None:
             print(f"Invalid selection: '{raw}'")
@@ -581,15 +669,47 @@ def order(recipe: str | None = None):
         if _needed:
             subset_list = ", ".join(sorted(_needed))
             print(f"\nThis recipe requires subset(s): {subset_list}")
-            _require_interactive_stdin("autoskillit order")
             print("  1. Enable temporarily (for this run only)")
             print("  2. Enable permanently (update .autoskillit/config.yaml)")
             print("  3. Cancel")
-            _choice = input("Choose [1/2/3]: ").strip()
+            _choice = timed_prompt(
+                "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
+            )
             if _choice == "1":
                 _extra_env["AUTOSKILLIT_SUBSETS__DISABLED"] = "@json []"
             elif _choice == "2":
                 _enable_subsets_permanently(Path.cwd(), _needed)
+            else:
+                return
+
+    # Pack gate — check default-disabled packs (REQ-PACK-010)
+    from autoskillit.core import PACK_REGISTRY as _PACK_REGISTRY
+
+    _default_disabled = frozenset(
+        tag for tag, pack_def in _PACK_REGISTRY.items() if not pack_def.default_enabled
+    )
+    _pack_enabled = frozenset(_cfg.packs.enabled)
+    _default_disabled_packs = _default_disabled - _pack_enabled
+
+    if _default_disabled_packs:
+        _packs_needed = _get_packs_needed(parsed, _default_disabled_packs)
+        if _packs_needed:
+            pack_list = ", ".join(sorted(_packs_needed))
+            print(f"\nThis recipe requires pack(s): {pack_list}")
+            print("  1. Enable temporarily (for this run only)")
+            print("  2. Enable permanently (update .autoskillit/config.yaml)")
+            print("  3. Cancel")
+            _pack_choice = timed_prompt(
+                "Choose [1/2/3]:", default="3", timeout=120, label="autoskillit order"
+            )
+            if _pack_choice == "1":
+                import json as _json
+
+                _extra_env["AUTOSKILLIT_PACKS__ENABLED"] = "@json " + _json.dumps(
+                    sorted(_packs_needed)
+                )
+            elif _pack_choice == "2":
+                _enable_packs_permanently(Path.cwd(), _packs_needed)
             else:
                 return
 
@@ -600,19 +720,30 @@ def order(recipe: str | None = None):
     from autoskillit.cli._ansi import permissions_warning
 
     print(permissions_warning())
-    _require_interactive_stdin("autoskillit order")
-    confirm = input("Launch session? [Enter/n]: ").strip().lower()
-    if confirm in ("n", "no"):
+    confirm = timed_prompt(
+        "Launch session? [Enter/n]", default="", timeout=120, label="autoskillit order"
+    )
+    if confirm.lower() in ("n", "no"):
         return
 
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
     _launch_cook_session(
-        _build_orchestrator_prompt(recipe),
+        _build_orchestrator_prompt(recipe, mcp_prefix=mcp_prefix),
         initial_message=greeting,
         extra_env=_extra_env if _extra_env else None,
+        resume_session_id=resume_session_id,
     )
 
 
 def main() -> None:
     """Entry point for autoskillit."""
+    _first_arg = sys.argv[1] if len(sys.argv) > 1 else "serve"
+    if _first_arg != "serve":
+        from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
+
+        evict_direct_mcp_entry(_user_claude_json_path())
+
+        from autoskillit.cli._update_checks import run_update_checks
+
+        run_update_checks()
     app()

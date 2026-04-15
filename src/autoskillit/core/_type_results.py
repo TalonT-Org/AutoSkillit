@@ -10,22 +10,36 @@ import json
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypedDict, TypeVar
 
-from ._type_enums import RetryReason, SessionOutcome
+from ._type_enums import KillReason, RetryReason, SessionOutcome
 
 T = TypeVar("T")
 
 __all__ = [
     "LoadReport",
     "LoadResult",
+    "TestResult",
     "ValidatedAddDir",
     "WriteBehaviorSpec",
     "FailureRecord",
     "SkillResult",
     "CleanupResult",
     "CIRunScope",
+    "CloneSuccessResult",
+    "CloneGateUncommitted",
+    "CloneGateUnpublished",
+    "CloneResult",
 ]
+
+
+@dataclass
+class TestResult:
+    """Result of a test runner invocation."""
+
+    passed: bool
+    stdout: str
+    stderr: str
 
 
 @dataclass
@@ -134,6 +148,13 @@ class SkillResult:
     cli_subtype: str = field(default="")
     write_path_warnings: list[str] = field(default_factory=list)
     write_call_count: int = 0
+    order_id: str = ""
+    kill_reason: KillReason = KillReason.NATURAL_EXIT
+    """Why the subprocess was (or was not) killed after the race loop.
+
+    Surfaces from SubprocessResult so the formatter can annotate exit_code
+    with the kill cause, resolving the "success=True + exit_code=-9" contradiction.
+    """
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -144,6 +165,7 @@ class SkillResult:
             "cli_subtype": self.cli_subtype,
             "is_error": self.is_error,
             "exit_code": self.exit_code,
+            "kill_reason": self.kill_reason.value,
             "needs_retry": self.needs_retry,
             "retry_reason": self.retry_reason,
             "stderr": self.stderr,
@@ -153,7 +175,39 @@ class SkillResult:
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path
+        if self.order_id:
+            data["order_id"] = self.order_id
         return json.dumps(data, default=lambda o: o.value if isinstance(o, Enum) else str(o))
+
+    @classmethod
+    def crashed(
+        cls,
+        exception: Exception,
+        skill_command: str = "",
+        session_id: str = "",
+        order_id: str = "",
+    ) -> SkillResult:
+        """Construct a SkillResult for a runner crash (pre-launch or mid-flight exception).
+
+        Produces the same 13+ field envelope as _build_skill_result, ensuring
+        pipeline orchestrators can route crash responses without schema inspection.
+        """
+        _result = f"{type(exception).__name__}: {exception}"
+        if skill_command:
+            _result += f" | skill_command={skill_command!r}"
+        return cls(
+            success=False,
+            result=_result,
+            session_id=session_id,
+            subtype="crashed",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+            kill_reason=KillReason.EXCEPTION,
+            order_id=order_id,
+        )
 
     @property
     def outcome(self) -> SessionOutcome:
@@ -193,9 +247,45 @@ class CIRunScope:
     """Immutable scope parameters that uniquely identify which CI workflow runs are relevant.
 
     Passed as a single argument through the CIWatcher protocol so that adding a new
-    scope axis (e.g. event: str | None) requires changing only this dataclass and the
-    API params builder — not every method signature in the call chain.
+    scope axis requires changing only this dataclass and the API params builder —
+    not every method signature in the call chain.
     """
 
     workflow: str | None = None  # workflow filename, e.g. "tests.yml"
     head_sha: str | None = None  # commit SHA to pin results to
+    event: str | None = None  # trigger event, e.g. "push", "pull_request"
+
+
+class CloneSuccessResult(TypedDict):
+    """Typed return contract for a successful clone_repo invocation.
+
+    Precedent: PRFetchState(TypedDict) in execution/merge_queue.py for
+    typed discriminated returns in the same codebase.
+    """
+
+    clone_path: str
+    source_dir: str
+    remote_url: str
+    clone_source_type: Literal["remote", "local"]
+    clone_source_reason: str
+
+
+class CloneGateUncommitted(TypedDict):
+    """Returned by clone_repo when uncommitted changes are detected (strategy="")."""
+
+    uncommitted_changes: Literal["true"]
+    source_dir: str
+    branch: str
+    changed_files: str
+    total_changed: str
+
+
+class CloneGateUnpublished(TypedDict):
+    """Returned by clone_repo when the branch is unpublished (strategy="")."""
+
+    unpublished_branch: Literal["true"]
+    branch: str
+    source_dir: str
+
+
+CloneResult = CloneSuccessResult | CloneGateUncommitted | CloneGateUnpublished

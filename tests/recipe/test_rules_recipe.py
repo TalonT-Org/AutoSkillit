@@ -155,3 +155,18 @@ def test_all_bundled_recipes_pass_rules_recipe() -> None:
             f"Recipe '{recipe_path.name}' has rules_recipe findings: "
             f"{[f.message for f in recipe_rules]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# T8 — rules_recipe.py functions use _check_* prefix
+# ---------------------------------------------------------------------------
+
+
+def test_rules_recipe_uses_check_prefix() -> None:
+    """Rule functions in rules_recipe.py must use the _check_* naming convention."""
+    import autoskillit.recipe.rules_recipe as m
+
+    assert hasattr(m, "_check_unknown_sub_recipe"), "_check_unknown_sub_recipe not found"
+    assert hasattr(m, "_check_circular_sub_recipe"), "_check_circular_sub_recipe not found"
+    assert not hasattr(m, "_unknown_sub_recipe"), "_unknown_sub_recipe should be renamed"
+    assert not hasattr(m, "_circular_sub_recipe"), "_circular_sub_recipe should be renamed"

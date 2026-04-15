@@ -1,13 +1,93 @@
-generated_at: '2026-03-02T02:12:42.454223+00:00'
+generated_at: '2026-04-05T02:19:56.074977+00:00'
 bundled_manifest_version: 0.1.0
-skill_hashes:
-  make-plan: sha256:4d33f1e86f9ffb91d29924a65b968d056887c271a73249f4472b874126291e0c
-  dry-walkthrough: sha256:a479c92bcf9afe200fb84fdbe8cd46b7b376e63d9e3b134a1caab2fe5611e095
-  implement-worktree-no-merge: sha256:86515d79175468eb205e964d033ad48598812e7997014f7c0e6b52d80a7c002d
-  retry-worktree: sha256:c66703245d49df7f94a71456a4f76da62c3527652f03bec62b71cc344d5028b9
-  resolve-failures: sha256:81ee708f6c8f1e75edb27a5f68dde6d1eac7db229fd5e18690f4c74185de8b45
-  audit-impl: sha256:d8fca36db95f0de3ca32c1d1201d6b913f0dbcd541dfa12c7f868f04c8f4c411
+skill_hashes: {}
 skills:
+  analyze-prs:
+    inputs:
+    - name: base_branch
+      type: string
+      required: true
+    - name: merge_queue_data_path
+      type: file_path
+      required: false
+    outputs:
+    - name: pr_order_file
+      type: file_path
+    - name: analysis_file
+      type: file_path
+    - name: integration_branch
+      type: string
+    - name: pr_count
+      type: string
+    - name: simple_count
+      type: string
+    - name: needs_check_count
+      type: string
+    - name: queue_mode
+      type: string
+    expected_output_patterns:
+    - pr_order_file\s*=\s*.+
+    pattern_examples:
+    - 'pr_order_file = /tmp/pr_order.json'
+  resolve-merge-conflicts:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: plan_path
+      type: file_path
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs:
+    - name: worktree_path
+      type: directory_path
+    - name: branch_name
+      type: string
+    - name: conflict_report_path
+      type: file_path
+    - name: escalation_required
+      type: string
+    - name: escalation_reason
+      type: string
+    expected_output_patterns:
+    - worktree_path\s*=\s*/.+
+    pattern_examples:
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
+    write_behavior: conditional
+    write_expected_when:
+    - conflict_report_path\s*=\s*/.+
+  merge-pr:
+    inputs:
+    - name: pr_number
+      type: string
+      required: true
+    - name: complexity
+      type: string
+      required: true
+    outputs:
+    - name: merged
+      type: string
+    - name: needs_plan
+      type: string
+    - name: escalation_required
+      type: string
+    - name: escalation_reason
+      type: string
+    - name: pr_number
+      type: string
+    - name: pr_branch
+      type: string
+    - name: pr_title
+      type: string
+    - name: conflict_report_path
+      type: file_path
+    expected_output_patterns:
+    - merged\s*=\s*(true|false)
+    pattern_examples:
+    - 'merged = true'
+    - 'merged = false'
   make-plan:
     inputs:
     - name: task
@@ -18,12 +98,20 @@ skills:
       type: file_path
     - name: plan_parts
       type: file_path_list
+    expected_output_patterns:
+    - plan_path\s*=\s*/.+
+    pattern_examples:
+    - 'plan_path = /tmp/plan.md'
+    write_behavior: always
   dry-walkthrough:
     inputs:
     - name: plan_path
       type: file_path
       required: true
     outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+    write_behavior: always
   implement-worktree-no-merge:
     inputs:
     - name: plan_path
@@ -34,6 +122,11 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
+    expected_output_patterns:
+    - worktree_path\s*=\s*/.+
+    pattern_examples:
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
+    write_behavior: always
   retry-worktree:
     inputs:
     - name: plan_path
@@ -47,6 +140,11 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
+    expected_output_patterns:
+    - worktree_path\s*=\s*/.+
+    pattern_examples:
+    - 'worktree_path = /tmp/worktrees/impl-foo-20260316'
+    write_behavior: always
   resolve-failures:
     inputs:
     - name: worktree_path
@@ -59,6 +157,9 @@ skills:
       type: string
       required: true
     outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+    write_behavior: always
   audit-impl:
     inputs:
     - name: plan_path
@@ -75,32 +176,170 @@ skills:
       type: string
     - name: remediation_path
       type: file_path
+    expected_output_patterns:
+    - verdict\s*=\s*(GO|NO GO)
+    pattern_examples:
+    - 'verdict = GO'
+    - 'verdict = NO GO
+
+      remediation_path = /tmp/remediation.md'
+  open-integration-pr:
+    inputs:
+    - name: integration_branch
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: pr_order_file
+      type: file_path
+      required: true
+    - name: audit_verdict
+      type: string
+      required: false
+    - name: domain_partitions_path
+      type: file_path
+      required: false
+    outputs:
+    - name: pr_url
+      type: string
+    expected_output_patterns:
+    - https://github\.com/.*/pull/\d+
+    pattern_examples:
+    - 'https://github.com/owner/repo/pull/42'
+  review-pr:
+    inputs:
+    - name: feature_branch
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    - name: annotated_diff_path
+      type: string
+      required: false
+    - name: hunk_ranges_path
+      type: string
+      required: false
+    outputs:
+    - name: verdict
+      type: string
+    expected_output_patterns:
+    - verdict\s*=\s*(approved|changes_requested|needs_human)
+    pattern_examples:
+    - 'verdict = approved'
+    - 'verdict = changes_requested'
+    - 'verdict = needs_human'
+  resolve-review:
+    inputs:
+    - name: feature_branch
+      type: string
+      required: true
+    - name: base_branch
+      type: string
+      required: true
+    outputs: []
+    expected_output_patterns: []
+    pattern_examples: []
+    write_behavior: always
+  diagnose-ci:
+    inputs:
+    - name: branch
+      type: string
+      required: true
+    - name: run_id
+      type: string
+      required: false
+    - name: ci_failed_jobs
+      type: string
+      required: false
+    outputs:
+    - name: diagnosis_path
+      type: file_path
+    - name: failure_type
+      type: string
+    - name: is_fixable
+      type: string
+    expected_output_patterns:
+    - diagnosis_path\s*=\s*/.+
+    pattern_examples:
+    - 'diagnosis_path = /tmp/diagnosis.md'
+    write_behavior: always
 dataflow:
 - step: clone
   available:
   - audit
   - base_branch
-  - keep_clone_on_failure
+  - plans_dir
   - run_name
   - source_dir
   required: []
   produced:
   - work_dir
+  - remote_url
 - step: setup_remote
   available:
   - audit
   - base_branch
-  - keep_clone_on_failure
+  - plans_dir
+  - remote_url
   - run_name
   - source_dir
   - work_dir
   required: []
   produced: []
+- step: check_integration_exists
+  available:
+  - audit
+  - base_branch
+  - plans_dir
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: confirm_create_integration
+  available:
+  - audit
+  - base_branch
+  - plans_dir
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: create_persistent_integration
+  available:
+  - audit
+  - base_branch
+  - plans_dir
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: fetch_merge_queue_data
+  available:
+  - audit
+  - base_branch
+  - plans_dir
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - merge_queue_data_path
 - step: analyze_prs
   available:
   - audit
   - base_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
+  - plans_dir
+  - remote_url
   - run_name
   - source_dir
   - work_dir
@@ -108,13 +347,215 @@ dataflow:
   produced:
   - pr_order_file
   - integration_branch
-- step: create_integration_branch
+  - queue_mode
+- step: route_by_queue_mode
   available:
   - audit
   - base_branch
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
+  - plans_dir
   - pr_order_file
+  - queue_mode
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: enqueue_all_prs
+  available:
+  - audit
+  - base_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: get_first_pr_number
+  available:
+  - audit
+  - base_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - current_pr_number
+- step: wait_queue_pr
+  available:
+  - audit
+  - base_branch
+  - current_pr_number
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - queue_pr_state
+- step: get_ejected_pr_branch
+  available:
+  - audit
+  - base_branch
+  - current_pr_number
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - ejected_pr_branch
+- step: checkout_ejected_pr
+  available:
+  - audit
+  - base_branch
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: resolve_ejected_conflicts
+  available:
+  - audit
+  - base_branch
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced:
+  - conflict_escalation_required
+- step: push_ejected_fix
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: reenter_queue
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: next_queue_pr_or_done
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: create_integration_branch
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - work_dir
+  required: []
+  produced: []
+- step: publish_integration_branch
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - integration_branch
+  - merge_queue_data_path
+  - plans_dir
+  - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - work_dir
@@ -124,143 +565,316 @@ dataflow:
   available:
   - audit
   - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
+  - plans_dir
   - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - work_dir
   required: []
   produced:
   - needs_plan
+  - escalation_required
+  - escalation_reason
   - task
+  - current_pr_number
 - step: plan
   available:
   - audit
   - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
+  - plans_dir
   - pr_order_file
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - task
   - work_dir
   required: []
   produced:
-  - plan_path
+  - pr_plan_path
 - step: verify
   available:
   - audit
   - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - task
   - work_dir
-  required: []
+  required:
+  - plan_path
   produced: []
 - step: implement
   available:
   - audit
   - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - task
   - work_dir
-  required: []
+  required:
+  - plan_path
   produced:
   - worktree_path
+  - worktree_branch_name
 - step: retry_worktree
   available:
   - audit
   - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - task
   - work_dir
+  - worktree_branch_name
   - worktree_path
-  required: []
+  required:
+  - plan_path
   produced:
   - worktree_path
+  - worktree_branch_name
 - step: test
   available:
   - audit
   - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - task
   - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
   produced: []
-- step: merge_to_integration
+- step: push_worktree_branch
   available:
   - audit
   - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - task
   - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
+- step: create_conflict_pr
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
   produced:
-  - cleanup_succeeded
+  - conflict_pr_number
+- step: wait_for_conflict_ci
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
+- step: merge_conflict_pr
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
 - step: fix
   available:
   - audit
   - base_branch
-  - cleanup_succeeded
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - task
   - work_dir
+  - worktree_branch_name
   - worktree_path
-  required: []
+  required:
+  - plan_path
   produced: []
 - step: next_part_or_next_pr
   available:
   - audit
   - base_branch
-  - cleanup_succeeded
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - task
   - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
   produced: []
@@ -268,16 +882,26 @@ dataflow:
   available:
   - audit
   - base_branch
-  - cleanup_succeeded
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - task
   - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
   produced: []
@@ -285,16 +909,53 @@ dataflow:
   available:
   - audit
   - base_branch
-  - cleanup_succeeded
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - task
   - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
+- step: check_impl_plans
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
+  - run_name
+  - source_dir
+  - task
+  - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
   produced: []
@@ -302,16 +963,26 @@ dataflow:
   available:
   - audit
   - base_branch
-  - cleanup_succeeded
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remote_url
   - run_name
   - source_dir
   - task
   - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
   produced:
@@ -321,113 +992,653 @@ dataflow:
   available:
   - audit
   - base_branch
-  - cleanup_succeeded
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
   - remediation_path
+  - remote_url
   - run_name
   - source_dir
   - task
   - verdict
   - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
   produced: []
+- step: compute_domain_partitions
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced:
+  - domain_partitions_path
 - step: open_integration_pr
   available:
   - audit
   - base_branch
-  - cleanup_succeeded
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - queue_mode
+  - queue_pr_state
   - remediation_path
+  - remote_url
   - run_name
   - source_dir
   - task
   - verdict
   - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
-  produced: []
-- step: cleanup_success
+  produced:
+  - pr_url
+- step: wait_for_review_pr_mergeability
   available:
   - audit
   - base_branch
-  - cleanup_succeeded
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
   - remediation_path
+  - remote_url
   - run_name
   - source_dir
   - task
   - verdict
   - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
-  produced: []
-- step: cleanup_failure
+  produced:
+  - review_pr_number
+- step: check_mergeability
   available:
   - audit
   - base_branch
-  - cleanup_succeeded
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
   - remediation_path
+  - remote_url
+  - review_pr_number
   - run_name
   - source_dir
   - task
   - verdict
   - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
+- step: resolve_integration_conflicts
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required:
+  - worktree_path
+  - plan_path
+  produced:
+  - conflict_escalation_required
+  - conflict_escalation_reason
+- step: force_push_after_rebase
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
+- step: wait_for_post_rebase_mergeability
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
+- step: check_mergeability_post_rebase
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
+- step: annotate_pr_diff
+  available:
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced:
+  - annotated_diff_path
+  - hunk_ranges_path
+- step: review_pr_integration
+  available:
+  - annotated_diff_path
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - hunk_ranges_path
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced:
+  - review_verdict
+- step: resolve_review_integration
+  available:
+  - annotated_diff_path
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - hunk_ranges_path
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - review_verdict
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required:
+  - feature_branch
+  produced: []
+- step: re_push_review_integration
+  available:
+  - annotated_diff_path
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - hunk_ranges_path
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - review_verdict
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
+- step: ci_watch_pr
+  available:
+  - annotated_diff_path
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - hunk_ranges_path
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - review_verdict
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
+- step: diagnose_ci
+  available:
+  - annotated_diff_path
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - hunk_ranges_path
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - review_verdict
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced:
+  - diagnosis_path
+- step: register_clone_success
+  available:
+  - annotated_diff_path
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - diagnosis_path
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - hunk_ranges_path
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - review_verdict
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
+  - worktree_path
+  required: []
+  produced: []
+- step: register_clone_failure
+  available:
+  - annotated_diff_path
+  - audit
+  - base_branch
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - diagnosis_path
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - hunk_ranges_path
+  - integration_branch
+  - merge_queue_data_path
+  - needs_plan
+  - plans_dir
+  - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
+  - remediation_path
+  - remote_url
+  - review_pr_number
+  - review_verdict
+  - run_name
+  - source_dir
+  - task
+  - verdict
+  - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
   produced: []
 - step: done
   available:
+  - annotated_diff_path
   - audit
   - base_branch
-  - cleanup_succeeded
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - diagnosis_path
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - hunk_ranges_path
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
   - remediation_path
+  - remote_url
+  - review_pr_number
+  - review_verdict
   - run_name
   - source_dir
   - task
   - verdict
   - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
   produced: []
 - step: escalate_stop
   available:
+  - annotated_diff_path
   - audit
   - base_branch
-  - cleanup_succeeded
+  - conflict_escalation_reason
+  - conflict_escalation_required
+  - conflict_pr_number
+  - current_pr_number
+  - diagnosis_path
+  - domain_partitions_path
+  - ejected_pr_branch
+  - escalation_reason
+  - escalation_required
+  - hunk_ranges_path
   - integration_branch
-  - keep_clone_on_failure
+  - merge_queue_data_path
   - needs_plan
-  - plan_path
+  - plans_dir
   - pr_order_file
+  - pr_plan_path
+  - pr_url
+  - queue_mode
+  - queue_pr_state
   - remediation_path
+  - remote_url
+  - review_pr_number
+  - review_verdict
   - run_name
   - source_dir
   - task
   - verdict
   - work_dir
+  - worktree_branch_name
   - worktree_path
   required: []
   produced: []

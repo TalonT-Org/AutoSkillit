@@ -1,19 +1,57 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — blocks open_kitchen from headless sessions.
+"""PreToolUse hook — blocks open_kitchen from headless sessions and writes kitchen marker.
 
 Headless sessions launched by run_skill have AUTOSKILLIT_HEADLESS=1 in their
 environment. This hook denies open_kitchen calls from those sessions, enforcing
 that only humans (via /autoskillit:open-kitchen) can open the kitchen.
+
+On the permit path (non-headless), writes a kitchen-open session marker so that
+ask_user_question_guard can verify the kitchen is open before allowing AskUserQuestion.
 """
 
 import json
 import os
 import sys
+from datetime import UTC
+
+
+def _write_kitchen_marker(session_id: str, recipe_name: str | None) -> None:
+    """Write the kitchen-open session marker (stdlib-only, inline implementation)."""
+    import tempfile
+    from datetime import datetime
+    from pathlib import Path as _Path
+
+    state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
+    if state_override:
+        state_dir = _Path(state_override) / "kitchen_state"
+    else:
+        state_dir = _Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    marker_path = state_dir / f"{session_id}.json"
+    payload = json.dumps(
+        {
+            "session_id": session_id,
+            "opened_at": datetime.now(UTC).isoformat(),
+            "recipe_name": recipe_name,
+            "marker_version": 1,
+        }
+    )
+    fd, tmp = tempfile.mkstemp(dir=state_dir, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+        os.replace(tmp, marker_path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def main() -> None:
     try:
-        json.loads(sys.stdin.read())
+        data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)  # fail-open on malformed input or broken pipe
 
@@ -31,6 +69,38 @@ def main() -> None:
             }
         )
         sys.stdout.write(payload + "\n")
+        sys.exit(0)
+
+    # Permit path: write a kitchen-open session marker so ask_user_question_guard
+    # can verify the kitchen is open before allowing AskUserQuestion.
+    # The marker is written here (from the PreToolUse hook) rather than from the
+    # MCP server tool because the hook receives the Claude Code session_id on stdin;
+    # the FastMCP Context does not expose it.
+    try:
+        session_id = data.get("session_id", "")
+        recipe_name: str | None = None
+        tool_input = data.get("tool_input") or {}
+        if isinstance(tool_input, dict):
+            recipe_name = tool_input.get("name") or None
+        if session_id:
+            _write_kitchen_marker(session_id, recipe_name)
+    except Exception as e:
+        print(f"[open_kitchen_guard] marker write failed: {e}", file=sys.stderr)
+        # Surface the failure so the user knows AskUserQuestion will be blocked
+        # in headless sub-sessions (ask_user_question_guard relies on the marker).
+        payload = json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "message": (
+                        f"Warning: kitchen marker write failed ({e}). "
+                        "AskUserQuestion may be blocked in headless sub-sessions."
+                    ),
+                }
+            }
+        )
+        sys.stdout.write(payload + "\n")
+
     sys.exit(0)
 
 

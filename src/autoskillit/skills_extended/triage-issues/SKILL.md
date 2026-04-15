@@ -31,12 +31,14 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Apply GitHub labels when `--no-label` is passed
 - Skip human escalation for ambiguous issues
 - Add useless comments to the codebase — do not use the codebase as a notepad
-- Create files outside `.autoskillit/temp/triage-issues/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/triage-issues/` directory
+- Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
+  `{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_{timestamp}.md` and use `--body-file`
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Pause for human input on ambiguous classifications
-- Write the triage report and manifest to `.autoskillit/temp/triage-issues/` (relative to the current working directory)
+- Write the triage report and manifest to `{{AUTOSKILLIT_TEMP}}/triage-issues/` (relative to the current working directory)
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include rationale for every recipe classification
 - Record human decisions in the final report
@@ -225,14 +227,19 @@ For each issue in the working set classified as `recipe:implementation`:
    per issue but skip `gh issue edit`. Record `requirements_generated: true` in manifest.
 5. Otherwise, append via:
    ```bash
-   gh issue edit {N} --body "$(gh issue view {N} --json body -q .body)
+   ts=$(date +%Y-%m-%d_%H%M%S)
+   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_${ts}.md"
+   REQUIREMENTS_FILE="{{AUTOSKILLIT_TEMP}}/triage-issues/requirements_${ts}.md"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/triage-issues"
 
-## Requirements
+   # Fetch current body to temp file (avoids shell interpolation):
+   gh issue view {N} --json body -q .body > "${EDIT_BODY_FILE}"
 
-### {Group Name}
+   # Populate ${REQUIREMENTS_FILE} with the generated requirements content, then:
+   printf '\n\n## Requirements\n\n' >> "${EDIT_BODY_FILE}"
+   cat "${REQUIREMENTS_FILE}" >> "${EDIT_BODY_FILE}"
 
-- **REQ-{GRP}-001:** ...
-..."
+   gh issue edit {N} --body-file "${EDIT_BODY_FILE}"
    ```
 6. If the issue is too vague for clean extraction: skip silently and record
    `requirements_generated: false` in the manifest for that issue.
@@ -271,9 +278,9 @@ Order the batches for sequential execution:
 ### Step 7: Write Outputs
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.
-Ensure `.autoskillit/temp/triage-issues/` exists.
+Ensure `{{AUTOSKILLIT_TEMP}}/triage-issues/` exists.
 
-**7a. Triage report:** `.autoskillit/temp/triage-issues/triage_report_{ts}.md`
+**7a. Triage report:** `{{AUTOSKILLIT_TEMP}}/triage-issues/triage_report_{ts}.md`
 
 The report contains:
 - Ordered list of batches with issues, recipe assignments, and rationale
@@ -281,7 +288,7 @@ The report contains:
 - Summary statistics (total issues, batch count, recipe distribution)
 - Human decisions section (which issues were escalated, what was decided)
 
-**7b. Machine-readable manifest:** `.autoskillit/temp/triage-issues/triage_manifest_{ts}.json`
+**7b. Machine-readable manifest:** `{{AUTOSKILLIT_TEMP}}/triage-issues/triage_manifest_{ts}.json`
 
 ```json
 {
@@ -334,7 +341,7 @@ gh issue edit {number} --add-label "recipe:{recipe}"
 ## Output Location
 
 ```
-.autoskillit/temp/triage-issues/
+{{AUTOSKILLIT_TEMP}}/triage-issues/
   triage_report_{ts}.md       # Human-readable triage report
   triage_manifest_{ts}.json   # Machine-readable manifest for downstream pipelines
 ```
@@ -363,8 +370,8 @@ These emit lines are consumed by `capture:` in orchestrating recipes. The
 Example emit block:
 
 ```
-triage_report = .autoskillit/temp/triage-issues/triage_report_20260310_120000.md
-triage_manifest = .autoskillit/temp/triage-issues/triage_manifest_20260310_120000.json
+triage_report = {{AUTOSKILLIT_TEMP}}/triage-issues/triage_report_20260310_120000.md
+triage_manifest = {{AUTOSKILLIT_TEMP}}/triage-issues/triage_manifest_20260310_120000.json
 total_issues = 12
 batch_count = 3
 recipe_distribution = {"implementation": 8, "remediation": 4}

@@ -68,7 +68,7 @@ Correct orchestration on `needs_retry=true`:
 ### Step 0: Validate Prerequisites
 
 1. Extract and verify the plan path using **path detection**: scan the tokens
-   after the skill name for the first one that starts with `/`, `./`, `.autoskillit/temp/`,
+   after the skill name for the first one that starts with `/`, `./`, `{{AUTOSKILLIT_TEMP}}/`,
    or `.autoskillit/` — that token is the plan path. Ignore any non-path words
    that appear before it (orchestrators sometimes prepend descriptive text such
    as "the verified plan"). If no path-like token is found, treat the entire
@@ -84,7 +84,7 @@ Correct orchestration on `needs_retry=true`:
 5. **Multi-Part Plan Detection:** Examine the plan filename. If it contains `_part_` (e.g., `_part_a`, `_part_b`, `_part_1`):
    - Extract the part identifier (A, B, C… or number) from the suffix.
    - **SCOPE FENCE — MANDATORY:** Before any exploration or implementation begins, output the following constraint:
-     > "🚧 SCOPE FENCE ACTIVE: I am implementing PART {X} ONLY. I MUST NOT open, read, or execute any other part files, regardless of what I encounter in .autoskillit/temp/ or any other directory. Sibling part files are out of scope for this entire session."
+     > "🚧 SCOPE FENCE ACTIVE: I am implementing PART {X} ONLY. I MUST NOT open, read, or execute any other part files, regardless of what I encounter in {{AUTOSKILLIT_TEMP}}/ or any other directory. Sibling part files are out of scope for this entire session."
    - When launching subagents in Step 2, include this fence instruction explicitly in each subagent prompt so that the subagents do not open, read, or reference sibling part files.
 
 ### Step 1: Create Git Worktree
@@ -98,8 +98,8 @@ WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)"
 
 # Record the base branch in two ways for reliable discovery by retry-worktree:
 # 1) Write an explicit file store (works with any Git version, works offline)
-mkdir -p ".autoskillit/temp/worktrees/${WORKTREE_NAME}"
-echo "${CURRENT_BRANCH}" > ".autoskillit/temp/worktrees/${WORKTREE_NAME}/base-branch"
+mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}"
+echo "${CURRENT_BRANCH}" > "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch"
 # 2) Set git upstream tracking (requires remote tracking ref in local fetch cache)
 if ! git fetch origin "${CURRENT_BRANCH}" 2>/dev/null; then
     echo "NOTE: Branch '${CURRENT_BRANCH}' has no remote tracking ref on origin."
@@ -176,14 +176,12 @@ mcp__code-index__set_project_path(path="${WORKTREE_PATH}")
 
 ### Step 4: Implement Phase by Phase
 
-For each phase:
-1. Announce phase objective and files to modify
-2. Implement changes guided by understanding from Step 2
-3. Run per-phase verification if plan specifies it
-4. Commit per phase with descriptive messages. If the project has pre-commit
+For each phase, begin implementation immediately (no announcement):
+1. Implement changes guided by understanding from Step 2
+2. Run per-phase verification if plan specifies it
+3. Commit per phase with descriptive messages. If the project has pre-commit
    hooks, run `pre-commit run --all-files` and stage any auto-fixed files
    before each commit.
-5. Report phase completion
 
 Where practical, delegate test updates to subagents to keep main conversation context lean.
 

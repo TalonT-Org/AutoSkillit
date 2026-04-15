@@ -189,11 +189,26 @@ def test_req_imp_004_cli_app_namespace_limit() -> None:
 
 
 def test_req_imp_005_git_only_core_at_runtime() -> None:
-    """server/git.py runtime imports (outside TYPE_CHECKING) must be from autoskillit.core."""
+    """server/git.py runtime imports (outside TYPE_CHECKING) must be from autoskillit.core.
+
+    Exception: autoskillit.server._editable_guard is allowed — it is a same-package
+    pure-stdlib module that implements the pre-deletion editable install guard, and
+    has zero upward imports into config/pipeline/execution layers.
+    """
+    _ALLOWED = frozenset(
+        {
+            "autoskillit.server._editable_guard",
+            # workspace is L1; git.py delegates worktree removal to the
+            # single L1 implementation rather than inlining subprocess calls.
+            "autoskillit.workspace",
+        }
+    )
     path = SRC / "server" / "git.py"
     violations: list[str] = []
     for mod, in_tc in _parse_imports(path):
         if in_tc:
+            continue
+        if mod in _ALLOWED:
             continue
         top2 = ".".join(mod.split(".")[:2])
         if top2 != "autoskillit.core":
@@ -221,3 +236,105 @@ def test_req_imp_006_prompts_no_gate_state_import() -> None:
             if node.module == "autoskillit.pipeline.gate":
                 violations.append(f"sub-module import: {node.module}")
     assert not violations, "REQ-IMP-006 violations:\n" + "\n".join(violations)
+
+
+def test_req_imp_007_pretty_output_no_private_recipe_api_import() -> None:
+    """hooks/pretty_output_hook.py TYPE_CHECKING must not use recipe._api.
+
+    ListRecipesResult and LoadRecipeResult are re-exported via autoskillit.recipe.__all__.
+    Importing from the private recipe._api sub-module bypasses the canonical surface (P14-1).
+    """
+    path = SRC / "hooks" / "pretty_output_hook.py"
+    for mod, in_tc in _parse_imports(path):
+        if in_tc and mod == "autoskillit.recipe._api":
+            pytest.fail(
+                "hooks/pretty_output_hook.py TYPE_CHECKING must use "
+                "'from autoskillit.recipe import ...' "
+                "instead of 'from autoskillit.recipe._api import ...' (P14-1). "
+                "Both ListRecipesResult and LoadRecipeResult are in recipe.__all__."
+            )
+
+
+def test_req_imp_008_server_helpers_no_execution_process_import() -> None:
+    """server/helpers.py TYPE_CHECKING must import SubprocessResult from autoskillit.core.
+
+    SubprocessResult originates in core._type_subprocess and is re-exported via
+    autoskillit.core.__all__ (line 201). Importing from execution.process bypasses the
+    canonical L0 surface (P14-3).
+    """
+    path = SRC / "server" / "helpers.py"
+    for mod, in_tc in _parse_imports(path):
+        if in_tc and mod == "autoskillit.execution.process":
+            pytest.fail(
+                "server/helpers.py TYPE_CHECKING must use "
+                "'from autoskillit.core import SubprocessResult' "
+                "instead of 'from autoskillit.execution.process import SubprocessResult' "
+                "(P14-3). SubprocessResult is available via autoskillit.core.__all__."
+            )
+
+
+def test_req_imp_009_session_skills_no_config_settings_import() -> None:
+    """workspace/session_skills.py TYPE_CHECKING must use autoskillit.config.
+
+    AutomationConfig is the first entry in autoskillit.config.__all__ and is re-exported
+    from config/__init__.py. Importing from config.settings bypasses the canonical public
+    surface (P14-4).
+    """
+    path = SRC / "workspace" / "session_skills.py"
+    for mod, in_tc in _parse_imports(path):
+        if in_tc and mod == "autoskillit.config.settings":
+            pytest.fail(
+                "workspace/session_skills.py TYPE_CHECKING must use "
+                "'from autoskillit.config import AutomationConfig' "
+                "instead of 'from autoskillit.config.settings import AutomationConfig' "
+                "(P14-4). AutomationConfig is available via autoskillit.config.__all__."
+            )
+
+
+# ---------------------------------------------------------------------------
+# REQ-IMP-007: server/ and cli/ files must not import cross-package sub-modules
+# (Finding 13.3) — extends REQ-IMP-001 coverage to L3 layers
+# ---------------------------------------------------------------------------
+
+
+def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> None:
+    """REQ-IMP-007: every file in server/ and cli/ must obey the same
+    cross-package submodule rule that REQ-IMP-001 enforces for the L0–L2
+    layers, with a small explicit allowlist:
+
+      server/_factory.py     — Composition Root, may import any layer
+      server/git.py          — REQ-IMP-005 exemption
+      server/tools_kitchen.py — REQ-IMP-006 ban (covered separately)
+      cli/app.py             — REQ-IMP-004 exemption (Typer composition)
+      cli/_cook.py           — allowlisted composition boundary
+      cli/_workspace.py      — allowlisted composition boundary
+
+    Every other file in server/ and cli/ must import only:
+      autoskillit.core, autoskillit.config, autoskillit.pipeline,
+      autoskillit.{own_pkg}, and gateway-level (`autoskillit.X`, not
+      `autoskillit.X.Y`) imports of other packages.
+    """
+    allowlist = {
+        Path("server/_factory.py"),
+        Path("server/git.py"),
+        Path("server/tools_kitchen.py"),
+        Path("cli/app.py"),
+        Path("cli/_cook.py"),
+        Path("cli/_workspace.py"),
+    }
+    forbidden_pkgs = {"execution", "workspace", "recipe", "migration"}
+    violations: list[str] = []
+    for pkg in ("server", "cli"):
+        for f in (SRC / pkg).rglob("*.py"):
+            rel = f.relative_to(SRC)
+            if rel in allowlist or "__pycache__" in rel.parts:
+                continue
+            for mod, in_tc in _parse_imports(f):
+                if in_tc:
+                    continue
+                if mod.startswith("autoskillit.") and mod.count(".") >= 2:
+                    parts = mod.split(".")
+                    other_pkg = parts[1]
+                    if other_pkg in forbidden_pkgs and other_pkg != pkg:
+                        violations.append(f"{rel} → {mod}")
+    assert not violations, "REQ-IMP-007 violations:\n" + "\n".join(violations)

@@ -51,6 +51,19 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Run the project's test suite from the worktree directory
 - Rebase onto base branch before completion (ready for squash-and-merge)
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, implementation changes may be on disk but
+not yet committed. The recipe routes to `on_context_limit`, preserving the worktree.
+
+**Before emitting structured output tokens:**
+1. Run `git -C {WORKTREE_PATH} status --porcelain`
+2. If any files are dirty: `git -C {WORKTREE_PATH} add -A && git -C {WORKTREE_PATH} commit -m "chore: commit pending changes before context limit"`
+3. Only then emit the `worktree_path`, `branch_name`, and `phases_implemented` tokens
+
+This ensures that all implementation progress is committed and the downstream
+merge gate receives a clean worktree when the recipe resumes.
+
 ## Workflow
 
 ### Step 0: Receive and Validate Arguments
@@ -60,7 +73,7 @@ Parse two positional arguments from the prompt:
 2. **Worktree path** — verify the directory exists and is a git worktree. Check that the development environment is set up (e.g. `.venv` exists for Python projects)
 
 **Path Detection:** Use path detection to locate both arguments. Scan all
-tokens after the skill name for those starting with `/`, `./`, `.autoskillit/temp/`, or
+tokens after the skill name for those starting with `/`, `./`, `{{AUTOSKILLIT_TEMP}}/`, or
 `.autoskillit/`. The first such token is `plan_path`; the second is
 `worktree_path`. Ignore any non-path tokens that appear before them (e.g.,
 extra descriptive text like "use this plan" or "from worktree"). If fewer than
@@ -98,14 +111,14 @@ if [ -z "$BASE_BRANCH" ]; then
     # Fallback: read explicit file store written by implement-worktree-no-merge
     MAIN_GIT_DIR=$(git rev-parse --git-common-dir)
     MAIN_REPO_ROOT=$(dirname "${MAIN_GIT_DIR}")
-    STORE_FILE="${MAIN_REPO_ROOT}/.autoskillit/temp/worktrees/${CURRENT_BRANCH}/base-branch"
+    STORE_FILE="${MAIN_REPO_ROOT}/{{AUTOSKILLIT_TEMP}}/worktrees/${CURRENT_BRANCH}/base-branch"
     BASE_BRANCH=$(cat "${STORE_FILE}" 2>/dev/null)
 fi
 
 if [ -z "$BASE_BRANCH" ]; then
     echo "ERROR: Cannot determine base branch from git structure."
     echo "Both the upstream tracking ref and the explicit base-branch file at"
-    echo ".autoskillit/temp/worktrees/${CURRENT_BRANCH}/base-branch are missing."
+    echo "{{AUTOSKILLIT_TEMP}}/worktrees/${CURRENT_BRANCH}/base-branch are missing."
     echo "Ensure the worktree was created by implement-worktree-no-merge,"
     echo "which writes both stores at worktree creation time."
     exit 1
@@ -146,12 +159,13 @@ Only explore systems related to the **remaining** phases. Do NOT re-explore alre
 
 **All commands must run from `{WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
 
-For each remaining/incomplete phase:
-1. Announce phase objective and files to modify
-2. Implement changes
-3. Run per-phase verification if plan specifies it
-4. Commit per phase if possible
-5. Report phase completion
+Initialize a counter before iterating: `PHASES_IMPLEMENTED=0`
+
+For each remaining/incomplete phase, begin implementation immediately (no announcement):
+1. Implement changes
+2. Run per-phase verification if plan specifies it
+3. Commit per phase if possible
+4. Increment the counter: `PHASES_IMPLEMENTED=$((PHASES_IMPLEMENTED + 1))`
 
 Where practical, delegate test updates to subagents to keep main conversation context lean.
 
@@ -193,7 +207,11 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${CURRENT_BRANCH}
+phases_implemented = ${PHASES_IMPLEMENTED}
 ```
+
+Where `PHASES_IMPLEMENTED` is the count from Step 3. If Step 3 was skipped entirely
+(all phases already complete), emit `phases_implemented = 0`.
 
 ### Step 6.5: Reset Code Index to Original Project (REQUIRED)
 

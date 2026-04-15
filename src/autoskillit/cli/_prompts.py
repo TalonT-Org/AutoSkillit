@@ -54,7 +54,7 @@ _OPEN_KITCHEN_GREETINGS: list[str] = [
 ]
 
 
-def _build_orchestrator_prompt(recipe_name: str) -> str:
+def _build_orchestrator_prompt(recipe_name: str, mcp_prefix: str) -> str:
     """Build the --append-system-prompt content for a cook session.
 
     The prompt contains behavioral instructions (routing rules, failure
@@ -70,8 +70,25 @@ def _build_orchestrator_prompt(recipe_name: str) -> str:
     return f"""\
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
+DEFERRED-TOOL RECOVERY — If the session's deferred-tool list (the system-reminder \
+that says "schemas NOT loaded — calling directly will fail with InputValidationError") \
+includes {mcp_prefix}open_kitchen:
+  1. Call ToolSearch with query='select:{mcp_prefix}open_kitchen' to load its schema.
+  2. Only then call {mcp_prefix}open_kitchen(name='{recipe_name}').
+  Do NOT call AskUserQuestion — the tool is not unavailable; it only needs its \
+schema loaded on demand via ToolSearch.
+
+SERVER-STARTUP RECOVERY — If Claude Code reports "No such tool available" for \
+an AutoSkillit tool, the MCP server was still starting when the tool was called. \
+Wait a few seconds and retry the same tool call. Deferred startup I/O (audit \
+recovery, drift checks) runs in the background after the transport opens; tools \
+become available once the server finishes initializing.
+
 FIRST ACTION — before prompting for any inputs:
-0. Call open_kitchen('{recipe_name}') to open the kitchen and load the recipe.
+0. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to open the kitchen and load the recipe.
+   DO NOT call AskUserQuestion or any other tool before open_kitchen.
+   If the call returns "No such tool available", the MCP server is still
+   initializing. Wait 3 seconds and retry — this is normal on session start.
 1. The response contains a pre-formatted ingredients table
    between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
    Display it verbatim in your response — do not reformat or re-render it.
@@ -113,14 +130,24 @@ FAILURE PREDICATES — when to follow on_failure:
 - run_skill: "success: False" in output
 - classify_fix: "error:" line present in output
 
+FAILURE PREDICATE — open_kitchen:
+  If the open_kitchen response contains `"success": false` OR does not
+  contain the substring `--- INGREDIENTS TABLE ---`:
+    1. Extract and print the value of "user_visible_message" from the
+       JSON response verbatim (fall back to the raw response text if
+       parsing fails).
+    2. DO NOT call AskUserQuestion.
+    3. End the session with a final text response.
+
 CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
 - When run_skill returns "success: False" AND "needs_retry: true" AND "retry_reason: resume":
-  - If the current step defines an on_context_limit route → follow on_context_limit.
-  - If the current step has NO on_context_limit route → fall through to on_failure.
-  - "retry_reason: resume" means the session hit a context or turn limit with partial
-    progress on disk. on_context_limit (e.g., retry_worktree or test) checks whether
-    partial work was sufficient before re-running from scratch.
-  - NEVER route retry_reason=resume directly to on_failure when on_context_limit exists.
+  - Check "subtype" to discriminate the termination cause:
+    - If subtype=stale: a transient hung process was killed by the watchdog. Retry
+      the step (decrement the retries counter). Do NOT follow on_context_limit.
+      If retries are exhausted, follow on_exhausted.
+    - If subtype≠stale (e.g. context_exhaustion, error_max_turns): follow on_context_limit
+      if defined, fall through to on_failure otherwise. This is the default resume path.
+  - NEVER route retry_reason=resume with subtype=stale to on_context_limit.
 - When run_skill returns "needs_retry: true" AND "retry_reason: drain_race":
   - The infrastructure confirmed session completion (Channel A or B) but stdout was not
     fully flushed before the process was killed. Partial progress was confirmed by the
@@ -137,6 +164,19 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
   - Fall through to on_failure regardless of whether on_context_limit is defined.
 - When run_skill returns "needs_retry: true" AND "retry_reason: early_stop" or "zero_writes":
   - These are not context limit conditions. Fall through to on_failure.
+
+QUOTA DENIAL ROUTING — run_skill only (check BEFORE on_failure):
+- When a PreToolUse hook DENIES run_skill with "QUOTA WAIT REQUIRED":
+  - This is a TEMPORARY block. The API quota resets on a rolling window.
+  - The deny message contains a run_cmd sleep command. Execute it immediately.
+  - After the sleep completes, retry the EXACT same run_skill call (same arguments).
+  - NEVER treat a quota denial as a permanent failure or pipeline-stopping error.
+  - NEVER report quota denials to the user — handle them silently and automatically.
+  - Before executing the sleep, state aloud: "Quota denied. Sleeping N seconds, then retrying."
+- When run_skill output contains "--- QUOTA WARNING ---":
+  - A post-execution quota check detected high utilization.
+  - The warning contains a run_cmd sleep command. Execute it BEFORE the next run_skill call.
+  - After sleeping, proceed normally with the next pipeline step.
 
 TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
 - Tool-level failure (run_skill returns "success: False"): Follow on_failure. This fires
@@ -164,7 +204,7 @@ ACTION: CONFIRM STEP SEMANTICS:
 """
 
 
-def _build_open_kitchen_prompt() -> str:
+def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     """Build the --append-system-prompt content for an open-kitchen cook session (no recipe)."""
     sous_chef_content = ""
     _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
@@ -173,8 +213,16 @@ def _build_open_kitchen_prompt() -> str:
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
-        "Call the open_kitchen tool to open the AutoSkillit kitchen and gain access to "
-        "all automation tools.\n\n"
+        f"DEFERRED-TOOL RECOVERY — If the session's deferred-tool list includes "
+        f"{mcp_prefix}open_kitchen:\n"
+        f"  1. Call ToolSearch with query='select:{mcp_prefix}open_kitchen' to load its schema.\n"
+        f"  2. Only then call {mcp_prefix}open_kitchen.\n"
+        "  Do NOT call AskUserQuestion — the tool is not unavailable; it only needs "
+        "its schema loaded on demand via ToolSearch.\n\n"
+        'If the call returns "No such tool available", the MCP server is still '
+        "initializing. Wait 3 seconds and retry — this is normal on session start.\n\n"
+        f"Call the {mcp_prefix}open_kitchen tool to open the AutoSkillit kitchen "
+        "and gain access to all automation tools.\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "

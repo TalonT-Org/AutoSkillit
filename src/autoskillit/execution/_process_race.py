@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import assert_never
 
@@ -23,6 +23,10 @@ class RaceSignals:
     Captures what happened without making any decisions about what it means.
     All fields are independent: multiple can be True simultaneously when tasks
     complete in the same event loop tick.
+
+    ``process_exited_event`` is the same object as on RaceAccumulator — setting
+    it on the accumulator automatically reflects here (shared reference).
+    execute_termination_action awaits this event inside DRAIN_THEN_KILL_IF_ALIVE.
     """
 
     process_exited: bool
@@ -31,6 +35,8 @@ class RaceSignals:
     channel_b_status: ChannelBStatus | None
     channel_b_session_id: str = ""  # Claude Code session ID from JSONL filename stem, or ""
     stdout_session_id: str | None = None  # Session ID extracted from stdout type=system record
+    idle_stall: bool = False
+    process_exited_event: anyio.Event = field(default_factory=anyio.Event)
 
 
 @dataclass
@@ -41,6 +47,10 @@ class RaceAccumulator:
     In async cooperative concurrency there are no concurrent writes — only one
     coroutine runs between yield points. to_race_signals() converts to the
     frozen RaceSignals consumed by resolve_termination.
+
+    ``process_exited_event`` is set by _watch_process BEFORE setting trigger,
+    so downstream code can await it as a race primitive. It is passed (by reference)
+    to execute_termination_action to support the DRAIN_THEN_KILL_IF_ALIVE window.
     """
 
     process_exited: bool = False
@@ -49,6 +59,8 @@ class RaceAccumulator:
     channel_b_status: ChannelBStatus | None = None
     channel_b_session_id: str = ""
     stdout_session_id: str | None = None
+    idle_stall: bool = False
+    process_exited_event: anyio.Event = field(default_factory=anyio.Event)
 
     def to_race_signals(self) -> RaceSignals:
         return RaceSignals(
@@ -58,6 +70,8 @@ class RaceAccumulator:
             channel_b_status=self.channel_b_status,
             channel_b_session_id=self.channel_b_session_id,
             stdout_session_id=self.stdout_session_id,
+            idle_stall=self.idle_stall,
+            process_exited_event=self.process_exited_event,
         )
 
 
@@ -66,11 +80,17 @@ async def _watch_process(
     acc: RaceAccumulator,
     trigger: anyio.Event,
 ) -> None:
-    """Wait for the subprocess to exit and deposit the process-exit signal."""
+    """Wait for the subprocess to exit and deposit the process-exit signal.
+
+    Ordering guarantee: ``acc.process_exited_event`` is set BEFORE ``trigger``
+    so that execute_termination_action's DRAIN_THEN_KILL_IF_ALIVE path can
+    await the event inside the drain window.
+    """
     await proc.wait()
     logger.debug("process_exited", pid=proc.pid, returncode=proc.returncode)
     acc.process_exited = True
     acc.process_returncode = proc.returncode
+    acc.process_exited_event.set()
     trigger.set()
 
 
@@ -96,6 +116,41 @@ async def _watch_heartbeat(
     )
     acc.channel_a_confirmed = True
     trigger.set()
+
+
+async def _watch_stdout_idle(
+    stdout_path: Path,
+    idle_output_timeout: float,
+    acc: RaceAccumulator,
+    trigger: anyio.Event,
+    _poll_interval: float = 5.0,
+) -> None:
+    """Kill the child if stdout stops growing for idle_output_timeout seconds.
+
+    Orthogonal to Channel A/B: NOT suppressed by active API connections.
+    Monitors raw byte count (st_size), not JSONL record structure.
+    """
+    import time as _time
+
+    last_size: int = 0
+    last_growth_time: float = _time.monotonic()
+    while True:
+        await anyio.sleep(_poll_interval)
+        try:
+            current_size = stdout_path.stat().st_size
+        except OSError:
+            continue
+        if current_size > last_size:
+            last_size = current_size
+            last_growth_time = _time.monotonic()
+        elif _time.monotonic() - last_growth_time >= idle_output_timeout:
+            logger.warning(
+                "stdout idle for %ss — firing IDLE_STALL",
+                idle_output_timeout,
+            )
+            acc.idle_stall = True
+            trigger.set()
+            return
 
 
 async def _extract_stdout_session_id(
@@ -160,6 +215,7 @@ async def _watch_session_log(
     _phase2_poll: float,
     _phase1_timeout: float,
     stdout_session_id_ready: anyio.Event | None = None,
+    max_suppression_seconds: float | None = None,
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
@@ -174,17 +230,22 @@ async def _watch_session_log(
         with anyio.move_on_after(1.0):
             await stdout_session_id_ready.wait()
 
+    _monitor_kwargs: dict[str, object] = {
+        "pid": pid,
+        "_phase1_poll": _phase1_poll,
+        "_phase2_poll": _phase2_poll,
+        "_phase1_timeout": _phase1_timeout,
+        "expected_session_id": acc.stdout_session_id,
+    }
+    if max_suppression_seconds is not None:
+        _monitor_kwargs["max_suppression_seconds"] = max_suppression_seconds
     monitor_result = await _session_log_monitor(
         session_log_dir,
         completion_marker,
         stale_threshold,
         spawn_time,
         session_record_types,
-        pid=pid,
-        _phase1_poll=_phase1_poll,
-        _phase2_poll=_phase2_poll,
-        _phase1_timeout=_phase1_timeout,
-        expected_session_id=acc.stdout_session_id,
+        **_monitor_kwargs,  # type: ignore[arg-type]
     )
     if monitor_result.status == ChannelBStatus.COMPLETION:
         # Drain-wait: give Channel A a window to confirm before Channel B wins.
@@ -215,7 +276,7 @@ def resolve_termination(
     reason are resolved independently so that simultaneous task completion
     never discards a channel signal.
 
-    Priority for termination: process exit > stale > channel win.
+    Priority for termination: process exit > idle stall > stale > channel win.
     Channel confirmation is independent of termination.
 
     Exhaustive match over ChannelBStatus ensures mypy flags any new member
@@ -230,15 +291,26 @@ def resolve_termination(
                 channel = ChannelConfirmation.CHANNEL_B
             case ChannelBStatus.STALE | None:
                 channel = ChannelConfirmation.UNMONITORED
+            case ChannelBStatus.DIR_MISSING:
+                channel = ChannelConfirmation.DIR_MISSING
             case _ as unreachable:
                 assert_never(unreachable)
 
-    # Termination reason: priority order (process exit > stale > channel win)
+    # Termination reason: priority order (process exit > idle stall > stale > channel win)
     if signals.process_exited:
         termination = TerminationReason.NATURAL_EXIT
+    elif signals.idle_stall:
+        termination = TerminationReason.IDLE_STALL
     else:
         match signals.channel_b_status:
-            case ChannelBStatus.STALE:
+            case ChannelBStatus.STALE | ChannelBStatus.DIR_MISSING:
+                # DIR_MISSING maps to STALE: both represent inconclusive monitoring
+                # that triggered an external kill, not a clean process exit.
+                # TerminationReason does not need a DIR_MISSING variant because
+                # downstream consumers only care whether the process exited cleanly
+                # (NATURAL_EXIT) or was forcibly terminated (STALE/COMPLETED).
+                # The DIR_MISSING structural distinction is preserved at the
+                # ChannelConfirmation level for recovery-gate decisions.
                 termination = TerminationReason.STALE
             case ChannelBStatus.COMPLETION:
                 termination = TerminationReason.COMPLETED
@@ -257,6 +329,7 @@ def resolve_termination(
         channel_a_confirmed=signals.channel_a_confirmed,
         channel_b_status=signals.channel_b_status,
         channel_b_session_id=signals.channel_b_session_id,
+        idle_stall=signals.idle_stall,
         resolved_termination=str(termination),
         resolved_channel=str(channel),
     )

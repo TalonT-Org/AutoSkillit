@@ -1,6 +1,13 @@
 ---
 name: sprint-planner
 description: Select a focused, conflict-free sprint from an existing triage manifest. Use when orchestrating a sprint planning step that needs issue overlap analysis and sprint manifest production.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: sprint-planner] Planning sprint...'"
+          once: true
 ---
 
 # Sprint Planner
@@ -18,7 +25,7 @@ an existing triage manifest.
 
 **NEVER:**
 - Implement any issues — this skill is planning only
-- Create files outside `.autoskillit/temp/sprint-planner/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/sprint-planner/` directory
 - Use native Claude Code tools (Read, Grep, Edit, Write, Bash) to modify the repo
 - Exceed the requested `sprint_size` when selecting issues
 

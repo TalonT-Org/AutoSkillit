@@ -208,3 +208,166 @@ def test_prepare_issue_dedup_bypass_with_issue_flag_still_documented():
     # Both the interface docs and the step header must reference the bypass
     assert "--issue N" in text and "issue_number" in text
     assert "skip" in text.lower() or "bypass" in text.lower() or "skip if" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# VALIDATED REPORT: Detection and handling tests
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_issue_detects_validated_audit_report_input():
+    """Skill must document detection of 'validated: true' marker for validated report inputs."""
+    text = SKILL_MD.read_text()
+    assert "validated: true" in text, (
+        "prepare-issue SKILL.md must document detecting the 'validated: true' marker"
+    )
+    assert "is_validated_report" in text, (
+        "prepare-issue must use 'is_validated_report' flag to gate validated-report behavior"
+    )
+
+
+def test_prepare_issue_skips_requirements_for_validated_report():
+    """Step 7a must explicitly skip requirements generation when is_validated_report is true."""
+    text = SKILL_MD.read_text()
+    # Find the requirements generation step
+    req_step_pos = text.find("Step 7a")
+    assert req_step_pos != -1, "Step 7a must exist in the skill"
+    req_step_text = text[req_step_pos : req_step_pos + 600]
+    assert "is_validated_report" in req_step_text, (
+        "Step 7a must reference is_validated_report to gate requirements generation"
+    )
+    skip_keywords = ["skip", "Skip"]
+    assert any(kw in req_step_text for kw in skip_keywords), (
+        "Step 7a must document skipping requirements generation for validated reports"
+    )
+
+
+def test_prepare_issue_excludes_contested_refs_from_validated_report_body():
+    """Skill must document removing the contested findings reference line from the issue body."""
+    text = SKILL_MD.read_text()
+    assert "contested_findings_" in text, (
+        "Skill must reference 'contested_findings_' in the strip rules for validated report body"
+    )
+    # Anchor: strip rules must appear after validated report handling is introduced
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1
+    body_section = text[validated_pos:]
+    assert "contested" in body_section.lower(), (
+        "Contested findings exclusion must be documented within the validated report handling"
+        " section"
+    )
+
+
+def test_prepare_issue_strips_artifact_paths_from_validated_report_body():
+    """Skill must document stripping 'Original report:' and artifact paths from issue body."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1
+    body_section = text[validated_pos:]
+    assert "Original report" in body_section, (
+        "Skill must document removing the 'Original report:' line (artifact path) from the body"
+    )
+
+
+# ---------------------------------------------------------------------------
+# DETERMINISTIC STRIP: New tests for validated-report strip completeness
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_issue_does_not_keep_findings_with_exceptions():
+    """## Findings with Exceptions must be stripped, not kept."""
+    text = SKILL_MD.read_text()
+    # Confirm the section name is referenced (validates the test is meaningful)
+    assert "Findings with Exceptions" in text, (
+        "Sanity: 'Findings with Exceptions' not found at all in SKILL.md"
+    )
+    # No line in the file may simultaneously contain 'Keep' and 'Findings with Exceptions'
+    for line in text.splitlines():
+        assert not ("Keep" in line and "Findings with Exceptions" in line), (
+            f"prepare-issue must NOT Keep '## Findings with Exceptions'. Offending line: {line!r}"
+        )
+
+
+def test_prepare_issue_strips_contested_table_rows():
+    """prepare-issue must explicitly strip '| CONTESTED |' table rows."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1, "Sanity: 'is_validated_report' not found"
+    body_section = text[validated_pos:]
+    assert "| CONTESTED |" in body_section, (
+        "prepare-issue validated-report section must reference '| CONTESTED |' "
+        "as a strip target (e.g. grep -v or Remove rule)"
+    )
+
+
+def test_prepare_issue_strips_exception_warranted_table_rows():
+    """prepare-issue must explicitly strip '| VALID BUT EXCEPTION WARRANTED |' rows."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1, "Sanity: 'is_validated_report' not found"
+    body_section = text[validated_pos:]
+    assert (
+        "VALID BUT EXCEPTION WARRANTED" in body_section or "EXCEPTION WARRANTED" in body_section
+    ), (
+        "prepare-issue validated-report section must reference 'VALID BUT EXCEPTION WARRANTED' "
+        "as a strip target"
+    )
+
+
+def test_prepare_issue_validated_report_uses_body_file():
+    """prepare-issue must use --body-file (not inline --body) for validated report creation."""
+    text = SKILL_MD.read_text()
+    validated_pos = text.find("is_validated_report")
+    assert validated_pos != -1, "Sanity: 'is_validated_report' not found"
+    body_section = text[validated_pos:]
+    # --body-file must appear in the validated-report section
+    assert "--body-file" in body_section, (
+        "prepare-issue must use 'gh issue create --body-file' for validated-report input, "
+        "not inline '--body'"
+    )
+    # The temp file must live under AUTOSKILLIT_TEMP
+    assert "AUTOSKILLIT_TEMP" in body_section and "issue_body_" in body_section, (
+        "prepare-issue must write the issue body to "
+        "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_*.md before calling gh issue create"
+    )
+
+
+def test_prepare_issue_never_constraint_prohibits_inline_body():
+    """CRITICAL CONSTRAINTS must explicitly prohibit inline --body for validated-report path."""
+    text = SKILL_MD.read_text()
+    # Find the NEVER block within Critical Constraints
+    never_pos = text.find("**NEVER:**")
+    assert never_pos != -1, "Sanity: '**NEVER:**' block not found"
+    # Find end of NEVER block (next **ALWAYS:** or end of constraints section)
+    always_pos = text.find("**ALWAYS:**", never_pos)
+    never_block = (
+        text[never_pos:always_pos] if always_pos != -1 else text[never_pos : never_pos + 800]
+    )
+    lower = never_block.lower()
+    assert "--body" in never_block and "inline" in lower, (
+        "prepare-issue NEVER block must prohibit inline '--body' for validated-report "
+        "issue creation. Add: 'Use --body inline for the path — always use --body-file'"
+    )
+
+
+def test_prepare_issue_requirements_append_uses_body_file():
+    """prepare-issue Step 7a (requirements append via gh issue edit) must use --body-file."""
+    import re
+
+    text = SKILL_MD.read_text()
+    # Ensure no gh issue edit call uses inline --body with shell substitution ($(...))
+    inline_pattern = re.compile(r'gh issue edit[^\n]+--body\s+"\$\(')
+    matches = inline_pattern.findall(text)
+    assert not matches, (
+        "prepare-issue 'gh issue edit' (requirements append) must use --body-file, "
+        "not inline --body shell substitution"
+    )
+
+
+def test_prepare_issue_no_tmp_paths():
+    """prepare-issue must not use /tmp/ paths — all temp files go in {{AUTOSKILLIT_TEMP}}."""
+    text = SKILL_MD.read_text()
+    assert "/tmp/" not in text, (
+        "prepare-issue uses /tmp/ path(s). All temp files must live in "
+        "{{AUTOSKILLIT_TEMP}}/prepare-issue/ per project convention"
+    )

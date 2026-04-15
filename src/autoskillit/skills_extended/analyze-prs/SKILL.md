@@ -27,7 +27,7 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
 **NEVER:**
 - Merge, close, or modify any PR
 - Modify any source code files
-- Create files outside `.autoskillit/temp/merge-prs/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/merge-prs/` directory
 
 **ALWAYS:**
 - Use subagents to fetch PR data in parallel
@@ -42,7 +42,10 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
 
 ## Arguments
 
-`{base_branch}` — the base branch to list PRs against (e.g., `main`)
+`{base_branch} [merge_queue_data_path=<path>]`
+
+- `base_branch` — the base branch to list PRs against (e.g., `main`)
+- `merge_queue_data_path` (optional) — absolute path to a JSON file containing pre-fetched merge queue data (produced by `fetch_merge_queue_data` run_python step). When provided and present, read from file instead of calling GitHub GraphQL API inline.
 
 ## Workflow
 
@@ -60,48 +63,32 @@ If `gh` returns an auth error: abort with a clear message.
 
 ### Step 0.5: Detect GitHub Merge Queue
 
-Before fetching diffs, query the GitHub GraphQL API to determine whether a merge queue
+Before fetching diffs, load pre-fetched merge queue data to determine whether a merge queue
 is active on `{base_branch}` with `MERGEABLE` entries.
 
-1. Resolve the repo owner and name:
+1. Read pre-fetched merge queue data from disk when available:
+   ```bash
+   if [ -n "${merge_queue_data_path:-}" ]; then
+       if [ -f "$merge_queue_data_path" ]; then
+           QUEUE_ENTRIES="$(cat "$merge_queue_data_path")"
+       else
+           echo "WARNING: merge_queue_data_path='$merge_queue_data_path' provided but file not found — possible misconfiguration. Falling back to no-queue mode."
+           QUEUE_ENTRIES="[]"
+       fi
+   else
+       QUEUE_ENTRIES="[]"  # no path provided (standalone invocation) → QUEUE_MODE=false
+   fi
    ```
-   gh repo view --json owner,name
-   ```
-   Extract `OWNER` and `REPO` from the JSON output.
+   `QUEUE_ENTRIES` is a JSON array of `{position, state, pr_number, pr_title}` objects,
+   pre-fetched by the `fetch_merge_queue_data` run_python step in the recipe. When
+   `merge_queue_data_path` is absent (standalone invocation), `QUEUE_ENTRIES` defaults to
+   `[]`, which sets `QUEUE_MODE = false`.
 
-2. Query the merge queue:
-   ```
-   gh api graphql -f query='{
-     repository(owner: "OWNER", name: "REPO") {
-       mergeQueue(branch: "BASE_BRANCH") {
-         entries(first: 50) {
-           nodes {
-             position
-             state
-             pullRequest { number title }
-           }
-         }
-       }
-     }
-   }'
-   ```
-   Pipe the JSON output through `autoskillit.execution.github.parse_merge_queue_response`:
-   ```
-   python -c "
-   import sys, json
-   _m = __import__('autoskillit' + '.execution.github', fromlist=[''])
-   data = json.load(sys.stdin)
-   entries = _m.parse_merge_queue_response(data)
-   print(json.dumps(entries))
-   "
-   ```
-
-3. Determine mode:
+2. Determine mode:
    - If the resulting entry list contains at least one entry with `state == "MERGEABLE"`:
      set **`QUEUE_MODE = true`** and store the full sorted entry list as `QUEUE_ENTRIES`.
-   - Otherwise (empty list, no MERGEABLE entries, or `gh api graphql` returned a
-     non-zero exit code): set **`QUEUE_MODE = false`** and proceed with the existing
-     analysis path.
+   - Otherwise (empty list or no MERGEABLE entries):
+     set **`QUEUE_MODE = false`** and proceed with the existing analysis path.
 
    Log which mode was selected and the entry count to the terminal so pipeline runs are
    observable.
@@ -255,9 +242,9 @@ Compute a timestamp: `YYYY-MM-DD_HHMMSS`.
 
 Compute integration branch name: `pr-batch/pr-merge-{YYYYMMDD-HHMMSS}`.
 
-Ensure `.autoskillit/temp/merge-prs/` exists.
+Ensure `{{AUTOSKILLIT_TEMP}}/merge-prs/` exists.
 
-**5a. Machine-readable order file:** `.autoskillit/temp/merge-prs/pr_order_{ts}.json`
+**5a. Machine-readable order file:** `{{AUTOSKILLIT_TEMP}}/merge-prs/pr_order_{ts}.json`
 
 ```json
 {
@@ -300,7 +287,7 @@ Ensure `.autoskillit/temp/merge-prs/` exists.
 
 `pr_count` reflects the number of **eligible** PRs (i.e., `${#ELIGIBLE_PRS[@]}`).
 
-**5b. Human-readable analysis plan:** `.autoskillit/temp/merge-prs/pr_analysis_plan_{ts}.md`
+**5b. Human-readable analysis plan:** `{{AUTOSKILLIT_TEMP}}/merge-prs/pr_analysis_plan_{ts}.md`
 
 This file is named `*_plan_*.md` so `audit-impl` can discover it as the baseline specification.
 
@@ -376,7 +363,7 @@ Report to terminal:
 ## Output Location
 
 ```
-.autoskillit/temp/merge-prs/
+{{AUTOSKILLIT_TEMP}}/merge-prs/
 ├── pr_order_{ts}.json              # Machine-readable manifest (captured by recipe)
 └── pr_analysis_plan_{ts}.md        # Human-readable analysis (discovered by audit-impl)
 ```
@@ -407,4 +394,4 @@ queue_mode = {queue_mode}   # true when merge queue has ≥1 MERGEABLE entry; fa
 
 - **`/autoskillit:merge-pr`** — Merges individual PRs from this skill's ordered list
 - **`/autoskillit:make-plan`** — Called for complex PRs that need conflict resolution plans
-- **`/autoskillit:audit-impl`** — Receives `.autoskillit/temp/merge-prs/` as plans_input
+- **`/autoskillit:audit-impl`** — Receives `{{AUTOSKILLIT_TEMP}}/merge-prs/` as plans_input

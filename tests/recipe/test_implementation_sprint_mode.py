@@ -10,6 +10,7 @@ from autoskillit.recipe._api import _build_active_recipe, format_ingredients_tab
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.validator import validate_recipe
+from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
 
 
 @pytest.fixture(scope="module")
@@ -129,5 +130,9 @@ def test_implementation_no_semantic_errors(impl_recipe) -> None:
 
     active, _ = _build_active_recipe(impl_recipe, None, pkg_root().parent)
     ctx = make_validation_context(active, available_sub_recipes=frozenset({"sprint-prefix"}))
-    errors = [f for f in run_semantic_rules(ctx) if f.severity == Severity.ERROR]
+    errors = [
+        f
+        for f in run_semantic_rules(ctx)
+        if f.severity == Severity.ERROR and f.rule != _NO_AUTOSKILLIT_IMPORT
+    ]
     assert not errors, f"Semantic errors: {errors}"

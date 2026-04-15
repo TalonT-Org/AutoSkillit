@@ -24,7 +24,7 @@ from autoskillit.server.tools_execution import run_skill
 from tests._helpers import _flush_structlog_proxy_caches as _flush_logger_proxy_caches
 
 
-def _make_result(
+def _make_session_result(
     returncode: int = 0,
     stdout: str = "",
     stderr: str = "",
@@ -278,7 +278,7 @@ class TestResponseFieldsAreTypeSafe:
                 "errors": [],
             }
         )
-        tool_ctx.runner.push(_make_result(1, stdout, ""))
+        tool_ctx.runner.push(_make_session_result(1, stdout, ""))
         result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
 
@@ -294,7 +294,7 @@ class TestResponseFieldsAreTypeSafe:
                 "num_turns": 50,
             }
         )
-        tool_ctx.runner.push(_make_result(0, stdout, ""))
+        tool_ctx.runner.push(_make_session_result(0, stdout, ""))
         result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
 
@@ -1067,6 +1067,7 @@ class TestSkillResult:
             "cli_subtype",
             "is_error",
             "exit_code",
+            "kill_reason",
             "needs_retry",
             "retry_reason",
             "stderr",

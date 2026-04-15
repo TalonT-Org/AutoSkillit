@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
 
 
@@ -279,7 +280,7 @@ class TestOrchestratorPromptDelegation:
         """
         from autoskillit.cli._prompts import _build_orchestrator_prompt
 
-        prompt = _build_orchestrator_prompt("implementation")
+        prompt = _build_orchestrator_prompt("implementation", mcp_prefix=DIRECT_PREFIX)
         # Must NOT contain recipe YAML markers
         assert "--- RECIPE ---" not in prompt
         assert "--- END RECIPE ---" not in prompt
@@ -352,6 +353,28 @@ class TestSourceIsolationContract:
             "autoskillit.workspace.clone module docstring must contain 'SOURCE ISOLATION'"
         )
 
+    def test_git_mutating_recipes_have_clone_step(self):
+        """Recipes using MCP git-mutation tools must use clone_repo."""
+        from autoskillit.recipe.io import list_recipes, load_recipe
+
+        GIT_MUTATION_TOOLS = {"create_unique_branch", "push_to_remote"}
+        workflows = list_recipes(Path("/nonexistent"))
+        bundled = [w for w in workflows.items if w.source.value == "builtin"]
+        for wf_info in bundled:
+            wf = load_recipe(wf_info.path)
+            uses_mutation_tool = any(step.tool in GIT_MUTATION_TOOLS for step in wf.steps.values())
+            if not uses_mutation_tool:
+                continue
+            has_clone = any(
+                step.tool == "clone_repo" or (step.python and "clone_repo" in step.python)
+                for step in wf.steps.values()
+            )
+            assert has_clone, (
+                f"{wf_info.name} uses MCP git-mutation tools "
+                f"({GIT_MUTATION_TOOLS & {s.tool for s in wf.steps.values()}}) "
+                f"but never calls clone_repo — workspace isolation is missing."
+            )
+
 
 class TestSousChefMergePhaseContract:
     """sous-chef/SKILL.md must carry a MERGE PHASE mandatory section."""
@@ -410,25 +433,6 @@ class TestSousChefMergePhaseContract:
         )
 
 
-def test_open_pr_skill_does_not_contain_git_push():
-    """The open-pr SKILL.md must not contain 'git push -u origin' as a workflow step.
-    The recipe manages all push operations via push_to_remote. The skill is a pure
-    PR creation operation."""
-    import re
-
-    from autoskillit.core.paths import pkg_root
-
-    skill_path = pkg_root() / "skills_extended" / "open-pr" / "SKILL.md"
-    content = skill_path.read_text()
-    # Match lines that start with a step number and contain 'git push -u origin'
-    push_step_pattern = re.compile(r"^\s*\d+\.\s.*git push\s+-u origin", re.MULTILINE)
-    matches = push_step_pattern.findall(content)
-    assert not matches, (
-        "open-pr SKILL.md must not contain 'git push -u origin' as a workflow step. "
-        "The recipe's push_to_remote step manages publishing the branch."
-    )
-
-
 class TestPathArgSkillsContract:
     """Path-argument skills must document path-detection parsing in their SKILL.md."""
 
@@ -472,6 +476,99 @@ class TestResolveFailuresDirtyTreeContract:
         )
 
 
+class TestResolveFailuresCITruthContract:
+    """resolve-failures SKILL.md must document the CI-truth rule."""
+
+    def test_resolve_failures_rejects_local_pass_when_ci_failing(self):
+        skill_md = _project_root() / "src/autoskillit/skills_extended/resolve-failures/SKILL.md"
+        content = skill_md.read_text().lower()
+        # Must mention that CI is the source of truth and local pass != resolution
+        assert "ci is the source of truth" in content, (
+            "resolve-failures SKILL.md must state CI is the source of truth"
+        )
+
+    def test_resolve_failures_documents_flaky_test_investigation(self):
+        skill_md = _project_root() / "src/autoskillit/skills_extended/resolve-failures/SKILL.md"
+        content = skill_md.read_text().lower()
+        # Must describe what to do when tests pass locally but CI failed
+        assert "passes locally" in content or "flak" in content, (
+            "resolve-failures SKILL.md must document the flaky test / "
+            "local-pass != resolution case"
+        )
+
+    def test_resolve_failures_parses_ci_context_args(self):
+        skill_md = _project_root() / "src/autoskillit/skills_extended/resolve-failures/SKILL.md"
+        content = skill_md.read_text()
+        # Must document parsing of ci_conclusion and diagnosis_path
+        assert (
+            "ci_conclusion" in content or "ci_failed" in content or "diagnosis_path" in content
+        ), (
+            "resolve-failures SKILL.md must document parsing of CI context arguments "
+            "passed by the resolve_ci recipe step"
+        )
+
+
+class TestContextLimitBehaviorContract:
+    """File-writing skills in pipeline recipes must document Context Limit Behavior."""
+
+    _SKILLS_ROOT = (
+        Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit" / "skills_extended"
+    )
+
+    def test_resolve_failures_has_context_limit_section(self):
+        """resolve-failures SKILL.md must contain '## Context Limit Behavior'."""
+        skill_md = self._SKILLS_ROOT / "resolve-failures" / "SKILL.md"
+        content = skill_md.read_text()
+        assert "## Context Limit Behavior" in content, (
+            "resolve-failures/SKILL.md must contain a '## Context Limit Behavior' section. "
+            "This skill commits during execution; context exhaustion can leave edits "
+            "uncommitted on disk. The section must instruct the skill to verify tree "
+            "cleanliness before emitting structured output."
+        )
+
+    def test_pipeline_file_writing_skills_have_context_limit_section(self):
+        """Every write_behavior=always skill used in a step with on_context_limit must
+        document Context Limit Behavior in its SKILL.md.
+
+        Checks all bundled recipe steps: if a step has on_context_limit AND invokes a
+        skill with write_behavior=always, that skill's SKILL.md must contain the section.
+        """
+        from autoskillit.core import SKILL_TOOLS
+        from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+        manifest = load_bundled_manifest()
+        assert manifest is not None, "load_bundled_manifest() returned None"
+        skills = manifest.get("skills", {})
+
+        missing: list[str] = []
+        for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+            recipe = load_recipe(yaml_path)
+            for _step_name, step in recipe.steps.items():
+                if step.tool not in SKILL_TOOLS:
+                    continue
+                if step.on_context_limit is None:
+                    continue
+                skill_cmd = step.with_args.get("skill_command", "")
+                skill = resolve_skill_name(skill_cmd)
+                if not skill:
+                    continue
+                skill_data = skills.get(skill, {})
+                if skill_data.get("write_behavior") != "always":
+                    continue
+                skill_md_path = self._SKILLS_ROOT / skill / "SKILL.md"
+                if not skill_md_path.exists():
+                    continue
+                content = skill_md_path.read_text()
+                if "## Context Limit Behavior" not in content:
+                    missing.append(f"{skill} (used in {yaml_path.name})")
+
+        assert not missing, (
+            "These write_behavior=always skills lack a '## Context Limit Behavior' section "
+            f"in their SKILL.md: {', '.join(sorted(set(missing)))}"
+        )
+
+
 def test_claude_md_documents_all_source_modules() -> None:
     """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md.
 
@@ -500,3 +597,17 @@ def test_claude_md_documents_all_source_modules() -> None:
         f"Modules not documented in CLAUDE.md: {', '.join(missing)}. "
         "Update the Architecture section in CLAUDE.md."
     )
+
+
+@pytest.mark.parametrize("mcp_prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
+def test_orchestrator_tool_name_matches_open_kitchen_hook_matcher(mcp_prefix: str) -> None:
+    """The fully-qualified tool name in the prompt must satisfy the hook registry matcher."""
+    from autoskillit.hook_registry import HOOK_REGISTRY
+
+    open_kitchen_matchers = [h.matcher for h in HOOK_REGISTRY if "open_kitchen" in h.matcher]
+    assert open_kitchen_matchers, "Expected at least one open_kitchen hook matcher"
+    qualified_name = f"{mcp_prefix}open_kitchen"
+    for matcher in open_kitchen_matchers:
+        assert re.search(matcher, qualified_name), (
+            f"Prompt tool name '{qualified_name}' does not match hook matcher '{matcher}'"
+        )

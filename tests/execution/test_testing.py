@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.config import AutomationConfig
@@ -247,16 +249,18 @@ def test_check_test_passed_true_for_xfailed_skipped():
     assert check_test_passed(0, "= 97 passed, 3 xfailed, 1 skipped =") is True
 
 
-def test_check_test_passed_false_when_no_summary_empty_output():
+def test_check_test_passed_true_when_no_summary_empty_output():
     from autoskillit.execution.testing import check_test_passed
 
-    assert check_test_passed(0, "") is False
+    # Non-pytest runner: rc=0, no output — trust exit code
+    assert check_test_passed(0, "") is True
 
 
-def test_check_test_passed_false_when_no_summary_log_only():
+def test_check_test_passed_true_when_no_summary_log_only():
     from autoskillit.execution.testing import check_test_passed
 
-    assert check_test_passed(0, "collected 100 items\nsome log output\n") is False
+    # Non-pytest runner: rc=0, non-pytest stdout — trust exit code
+    assert check_test_passed(0, "collected 100 items\nsome log output\n") is True
 
 
 def test_check_test_passed_false_bare_q_failures():
@@ -269,3 +273,57 @@ def test_check_test_passed_true_bare_q_clean():
     from autoskillit.execution.testing import check_test_passed
 
     assert check_test_passed(0, "100 passed in 1.50s") is True
+
+
+def test_check_test_passed_true_when_no_summary_stderr_only() -> None:
+    from autoskillit.execution.testing import check_test_passed
+
+    # Non-pytest runner: rc=0, empty stdout, stderr pass signal → PASS
+    assert check_test_passed(0, "", "test result: ok. 42 passed; 0 failed\n") is True
+
+
+def test_check_test_passed_true_when_non_pytest_stdout() -> None:
+    from autoskillit.execution.testing import check_test_passed
+
+    # Non-pytest runner: rc=0, stdout-only non-pytest output → PASS
+    assert check_test_passed(0, "All tests passed.\n", "") is True
+
+
+def test_check_test_passed_false_when_nonzero_rc_no_output() -> None:
+    from autoskillit.execution.testing import check_test_passed
+
+    # Non-zero rc still fails regardless of output
+    assert check_test_passed(1, "", "") is False
+
+
+def test_check_test_passed_parses_pytest_summary_in_stderr() -> None:
+    from autoskillit.execution.testing import check_test_passed
+
+    # Pytest summary found in stderr — parse it
+    assert check_test_passed(0, "", "= 5 passed in 1.2s =\n") is True
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_returns_test_result_with_stderr(tmp_path: Path) -> None:
+    from autoskillit.config import AutomationConfig
+    from autoskillit.core import TestResult
+    from autoskillit.execution.testing import DefaultTestRunner
+    from tests.conftest import MockSubprocessRunner, _make_result
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(0, "", stderr="PASSED [0.5s] all tests"))
+    config = AutomationConfig()
+    tester = DefaultTestRunner(config=config, runner=runner)
+    result = await tester.run(tmp_path)
+    assert isinstance(result, TestResult)
+    assert result.passed is True
+    assert result.stderr == "PASSED [0.5s] all tests"
+
+
+def test_test_result_dataclass_fields() -> None:
+    from autoskillit.core import TestResult
+
+    r = TestResult(passed=True, stdout="out", stderr="err")
+    assert r.passed is True
+    assert r.stdout == "out"
+    assert r.stderr == "err"

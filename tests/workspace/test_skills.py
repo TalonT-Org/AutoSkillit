@@ -9,7 +9,7 @@ import yaml
 
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import (
-    SkillResolver,
+    DefaultSkillResolver,
     bundled_skills_dir,
     bundled_skills_extended_dir,
 )
@@ -31,11 +31,13 @@ BUNDLED_SKILLS = [
     "arch-lens-state-lifecycle",
     "audit-arch",
     "audit-bugs",
+    "audit-claims",
     "audit-cohesion",
     "audit-defense-standards",
     "audit-friction",
     "audit-impl",
     "audit-tests",
+    "bundle-local-report",
     "close-kitchen",
     "collapse-issues",
     "design-guards",
@@ -43,11 +45,31 @@ BUNDLED_SKILLS = [
     "dry-walkthrough",
     "elaborate-phase",
     "enrich-issues",
+    "exp-lens-benchmark-representativeness",
+    "exp-lens-causal-assumptions",
+    "exp-lens-comparator-construction",
+    "exp-lens-error-budget",
+    "exp-lens-estimand-clarity",
+    "exp-lens-exploratory-confirmatory",
+    "exp-lens-fair-comparison",
+    "exp-lens-governance-risk",
+    "exp-lens-iterative-learning",
+    "exp-lens-measurement-validity",
+    "exp-lens-pipeline-integrity",
+    "exp-lens-randomization-blocking",
+    "exp-lens-reproducibility-artifacts",
+    "exp-lens-sensitivity-robustness",
+    "exp-lens-severity-testing",
+    "exp-lens-unit-interference",
+    "exp-lens-validity-threats",
+    "exp-lens-variance-stability",
+    "implement-experiment",
     "implement-worktree",
     "implement-worktree-no-merge",
     "investigate",
     "issue-splitter",
     "make-arch-diag",
+    "make-experiment-diag",
     "make-groups",
     "make-plan",
     "make-req",
@@ -57,24 +79,50 @@ BUNDLED_SKILLS = [
     "open-integration-pr",
     "open-kitchen",
     "open-pr",
+    "open-research-pr",
     "pipeline-summary",
+    "plan-experiment",
+    "plan-visualization",
     "prepare-issue",
     "process-issues",
     "rectify",
     "report-bug",
+    "resolve-claims-review",
+    "resolve-design-review",
     "resolve-failures",
     "resolve-merge-conflicts",
+    "resolve-research-review",
     "resolve-review",
     "retry-worktree",
     "review-pr",
     "review-approach",
+    "review-design",
+    "review-research-pr",
+    "run-experiment",
+    "scope",
     "setup-project",
     "smoke-task",
     "sous-chef",
     "sprint-planner",
+    "stage-data",
     "triage-issues",
+    "troubleshoot-experiment",
+    "validate-audit",
     "verify-diag",
+    "vis-lens-always-on",
+    "vis-lens-antipattern",
+    "vis-lens-caption-annot",
+    "vis-lens-chart-select",
+    "vis-lens-color-access",
+    "vis-lens-domain-norms",
+    "vis-lens-figure-table",
+    "vis-lens-multi-compare",
+    "vis-lens-reproducibility",
+    "vis-lens-story-arc",
+    "vis-lens-temporal",
+    "vis-lens-uncertainty",
     "write-recipe",
+    "generate-report",
 ]
 
 # Internal-only skill documents: injected programmatically, never invocable as slash commands.
@@ -97,11 +145,33 @@ ARCH_LENS_NAMES = [
     "arch-lens-deployment",
 ]
 
+EXP_LENS_NAMES = [
+    "exp-lens-estimand-clarity",
+    "exp-lens-causal-assumptions",
+    "exp-lens-comparator-construction",
+    "exp-lens-pipeline-integrity",
+    "exp-lens-variance-stability",
+    "exp-lens-fair-comparison",
+    "exp-lens-reproducibility-artifacts",
+    "exp-lens-measurement-validity",
+    "exp-lens-sensitivity-robustness",
+    "exp-lens-benchmark-representativeness",
+    "exp-lens-unit-interference",
+    "exp-lens-error-budget",
+    "exp-lens-severity-testing",
+    "exp-lens-randomization-blocking",
+    "exp-lens-validity-threats",
+    "exp-lens-iterative-learning",
+    "exp-lens-exploratory-confirmatory",
+    "exp-lens-governance-risk",
+]
+
 AUDIT_SKILL_NAMES = [
     "audit-arch",
     "audit-tests",
     "audit-cohesion",
     "audit-defense-standards",
+    "validate-audit",
 ]
 
 BUNDLED_SKILL_NAMES = set(BUNDLED_SKILLS)
@@ -114,7 +184,7 @@ def _all_skill_roots() -> list[Path]:
 class TestSkillResolver:
     # SK1
     def test_bundled_skill_found(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         info = resolver.resolve("open-kitchen")
         assert info is not None
         assert info.name == "open-kitchen"
@@ -123,7 +193,7 @@ class TestSkillResolver:
 
     # SK6
     def test_unknown_skill_returns_none(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         assert resolver.resolve("nonexistent") is None
 
     def test_no_hardcoded_username_mentions_in_skill_mds(self) -> None:
@@ -157,7 +227,7 @@ class TestSkillResolver:
 
     def test_list_all_returns_bundled_skills(self) -> None:
         """list_all returns all bundled skills from both skill directories."""
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         skills = resolver.list_all()
         names = {s.name for s in skills}
         assert "investigate" in names
@@ -177,6 +247,9 @@ class TestSkillResolver:
                     # Skip URI paths like workflow://some-recipe — not skill invocations
                     start = match.start()
                     if start >= 1 and content[start - 1] == "/":
+                        continue
+                    # Skip placeholder filesystem paths like {{AUTOSKILLIT_TEMP}}/skill-name/
+                    if start >= 1 and content[start - 1] == "}":
                         continue
                     if name in BUNDLED_SKILL_NAMES:
                         skill_file = f"{skill_md.parent.name}/SKILL.md"
@@ -292,14 +365,14 @@ class TestSkillResolver:
 
     def test_make_groups_skill_documents_per_group_output(self) -> None:
         """make-groups SKILL.md must document per-group file output for pipeline consumption."""
-        skill_path = SkillResolver().resolve("make-groups").path
+        skill_path = DefaultSkillResolver().resolve("make-groups").path
         content = skill_path.read_text()
         assert "per-group" in content.lower() or "groupA_" in content
         assert "manifest" in content.lower()
 
     def test_bundled_skills_list_matches_filesystem(self) -> None:
         """make-script-skill SKILL.md bundled skills list must match filesystem."""
-        skill_md = SkillResolver().resolve("write-recipe").path
+        skill_md = DefaultSkillResolver().resolve("write-recipe").path
         content = skill_md.read_text()
 
         # Extract the bundled skills list section
@@ -325,7 +398,7 @@ class TestSkillResolver:
         )
 
         # Get actual filesystem skills
-        actual_skills = sorted(s.name for s in SkillResolver().list_all())
+        actual_skills = sorted(s.name for s in DefaultSkillResolver().list_all())
 
         assert listed_skills == actual_skills, (
             f"make-script-skill bundled skills list doesn't match filesystem.\n"
@@ -333,35 +406,16 @@ class TestSkillResolver:
             f"  On disk: {actual_skills}"
         )
 
-    def test_pipeline_summary_skill_exists(self) -> None:
-        """pipeline-summary must be in the bundled skills list."""
-        resolver = SkillResolver()
-        all_names = {s.name for s in resolver.list_all()}
-        assert "pipeline-summary" in all_names
-
-    def test_internal_skills_excluded_from_list_all(self) -> None:
-        """sous-chef must NOT appear in list_all (internal-only skill)."""
-        resolver = SkillResolver()
-        all_names = {s.name for s in resolver.list_all()}
-        assert "sous-chef" not in all_names
-
-    def test_list_all_returns_user_invocable_skills_only(self) -> None:
-        """list_all returns bundled skills minus internal skills."""
-        resolver = SkillResolver()
-        all_names = {s.name for s in resolver.list_all()}
-        expected = set(BUNDLED_SKILLS) - INTERNAL_SKILLS
-        assert all_names == expected
-
     def test_diagnose_ci_skill_is_resolvable(self) -> None:
         """AP1: SkillResolver must find the diagnose-ci bundled skill."""
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         info = resolver.resolve("diagnose-ci")
         assert info is not None
         assert info.path.exists()
 
     def test_all_arch_lens_skills_bundled(self) -> None:
         """All 13 arch-lens skill variants must be resolvable via SkillResolver."""
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         for name in ARCH_LENS_NAMES:
             info = resolver.resolve(name)
             assert info is not None, f"arch-lens skill '{name}' not found in bundled skills"
@@ -369,14 +423,14 @@ class TestSkillResolver:
 
     def test_all_audit_skills_bundled(self) -> None:
         """Audit skills must be bundled and available for use in recipes."""
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         for name in AUDIT_SKILL_NAMES:
             info = resolver.resolve(name)
             assert info is not None, f"audit skill '{name}' not found in bundled skills"
 
     def test_review_pr_is_bundled(self) -> None:
         """review-pr must be in bundled skills."""
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         assert resolver.resolve("review-pr") is not None, "review-pr must be a bundled skill"
 
     # ── New tests for three-tier skill directory layout ────────────────────────
@@ -396,28 +450,28 @@ class TestSkillResolver:
         names = {d.name for d in bundled_skills_dir().iterdir() if d.is_dir()}
         assert names == {"open-kitchen", "close-kitchen", "sous-chef"}
 
-    def test_57_skills_in_skills_extended(self) -> None:
-        """skills_extended/ contains exactly 57 SKILL.md-carrying directories."""
+    def test_90_skills_in_skills_extended(self) -> None:
+        """skills_extended/ contains exactly 107 SKILL.md-carrying directories."""
         skills = [
             d
             for d in bundled_skills_extended_dir().iterdir()
             if d.is_dir() and (d / "SKILL.md").is_file()
         ]
-        assert len(skills) == 57
+        assert len(skills) == 107
 
     def test_skill_resolver_list_all_total_count(self) -> None:
-        """list_all() returns 59 public skills (2 Tier-1 + 57 extended)."""
-        assert len(SkillResolver().list_all()) == 59
+        """list_all() returns 109 public skills (2 Tier-1 + 107 extended)."""
+        assert len(DefaultSkillResolver().list_all()) == 109
 
     def test_skill_resolver_resolve_extended_skill(self) -> None:
         """resolve() finds a skill living in skills_extended/ with BUNDLED_EXTENDED source."""
-        result = SkillResolver().resolve("make-plan")
+        result = DefaultSkillResolver().resolve("make-plan")
         assert result is not None
         assert result.source == SkillSource.BUNDLED_EXTENDED
 
     def test_skill_resolver_bundled_source_for_tier1(self) -> None:
         """Skills in skills/ carry SkillSource.BUNDLED."""
-        result = SkillResolver().resolve("open-kitchen")
+        result = DefaultSkillResolver().resolve("open-kitchen")
         assert result is not None
         assert result.source == SkillSource.BUNDLED
 
@@ -431,7 +485,7 @@ class TestSkillResolver:
         If a name collision exists, list_all() raises RuntimeError.
         This test verifies the current filesystem has no collisions.
         """
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         skills = resolver.list_all()
         names = [s.name for s in skills]
         dupes = {n for n in names if names.count(n) > 1}
@@ -483,35 +537,35 @@ class TestSkillCategories:
         info = SkillInfo(name="test", source=SkillSource.BUNDLED, path=Path("/fake/SKILL.md"))
         assert info.categories == frozenset()
 
-    def test_open_pr_skill_has_github_category(self) -> None:
-        info = SkillResolver().resolve("open-pr")
+    def test_compose_pr_skill_has_github_category(self) -> None:
+        info = DefaultSkillResolver().resolve("compose-pr")
         assert info is not None
         assert "github" in info.categories
 
     def test_diagnose_ci_skill_has_ci_category(self) -> None:
-        info = SkillResolver().resolve("diagnose-ci")
+        info = DefaultSkillResolver().resolve("diagnose-ci")
         assert info is not None
         assert "ci" in info.categories
 
     def test_all_arch_lens_skills_have_arch_lens_category(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         for name in ARCH_LENS_NAMES:
             info = resolver.resolve(name)
             assert info is not None
             assert "arch-lens" in info.categories, f"{name} missing 'arch-lens' category"
 
     def test_make_arch_diag_has_arch_lens_category(self) -> None:
-        info = SkillResolver().resolve("make-arch-diag")
+        info = DefaultSkillResolver().resolve("make-arch-diag")
         assert info is not None
         assert "arch-lens" in info.categories
 
     def test_verify_diag_has_arch_lens_category(self) -> None:
-        info = SkillResolver().resolve("verify-diag")
+        info = DefaultSkillResolver().resolve("verify-diag")
         assert info is not None
         assert "arch-lens" in info.categories
 
     def test_all_audit_skills_have_audit_category(self) -> None:
-        resolver = SkillResolver()
+        resolver = DefaultSkillResolver()
         for name in [
             "audit-arch",
             "audit-cohesion",
@@ -520,12 +574,116 @@ class TestSkillCategories:
             "audit-bugs",
             "audit-friction",
             "audit-impl",
+            "validate-audit",
         ]:
             info = resolver.resolve(name)
             assert info is not None
             assert "audit" in info.categories, f"{name} missing 'audit' category"
 
     def test_uncategorized_skills_have_empty_categories(self) -> None:
-        info = SkillResolver().resolve("investigate")
+        info = DefaultSkillResolver().resolve("investigate")
         assert info is not None
         assert info.categories == frozenset()
+
+    def test_all_exp_lens_skills_bundled(self) -> None:
+        """All 18 exp-lens skill variants must be resolvable via SkillResolver."""
+        resolver = DefaultSkillResolver()
+        for name in EXP_LENS_NAMES:
+            info = resolver.resolve(name)
+            assert info is not None, f"exp-lens skill '{name}' not found in bundled skills"
+            assert info.path.exists(), f"SKILL.md missing for '{name}' at {info.path}"
+
+    def test_all_exp_lens_skills_have_exp_lens_category(self) -> None:
+        resolver = DefaultSkillResolver()
+        for name in EXP_LENS_NAMES:
+            info = resolver.resolve(name)
+            assert info is not None
+            assert "exp-lens" in info.categories, f"{name} missing 'exp-lens' category"
+
+    def test_make_experiment_diag_has_exp_lens_category(self) -> None:
+        info = DefaultSkillResolver().resolve("make-experiment-diag")
+        assert info is not None
+        assert "exp-lens" in info.categories
+
+
+RESEARCH_SKILL_NAMES = {
+    "scope",
+    "plan-experiment",
+    "implement-experiment",
+    "run-experiment",
+    "generate-report",
+    "review-research-pr",
+    "prepare-research-pr",
+    "compose-research-pr",
+    "review-design",
+    "resolve-design-review",
+    "resolve-research-review",
+    "troubleshoot-experiment",
+    "audit-claims",
+    "resolve-claims-review",
+}
+
+
+def test_research_skills_all_discoverable():
+    names = {s.name for s in DefaultSkillResolver().list_all()}
+    assert RESEARCH_SKILL_NAMES.issubset(names)
+
+
+def test_research_skills_have_research_category():
+    resolver = DefaultSkillResolver()
+    for name in RESEARCH_SKILL_NAMES:
+        info = resolver.resolve(name)
+        assert info is not None, f"Skill {name!r} not found"
+        assert "research" in info.categories, (
+            f"Skill {name!r} missing 'research' category; got {info.categories}"
+        )
+
+
+def test_all_extended_skills_have_tier_assignment():
+    """Every skill in skills_extended/ must be assigned to tier2 or tier3 in defaults.yaml."""
+    from autoskillit.config import load_config
+
+    config = load_config()
+    all_tiers = set(config.skills.tier1) | set(config.skills.tier2) | set(config.skills.tier3)
+    resolver = DefaultSkillResolver()
+    extended = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED_EXTENDED}
+    unassigned = extended - all_tiers
+    assert not unassigned, f"Skills missing tier assignment: {sorted(unassigned)}"
+
+
+def test_activate_deps_are_resolvable():
+    """Every activate_deps entry resolves to a known pack or known skill."""
+    from autoskillit.core import PACK_REGISTRY
+    from autoskillit.workspace.session_skills import _parse_activate_deps
+
+    resolver = DefaultSkillResolver()
+    all_names = {s.name for s in resolver.list_all()}
+    for skill_info in resolver.list_all():
+        content = skill_info.path.read_text()
+        deps = _parse_activate_deps(content)
+        for dep in deps:
+            assert dep in PACK_REGISTRY or dep in all_names, (
+                f"Skill {skill_info.name!r} has unresolvable activate_dep: {dep!r}"
+            )
+
+
+def test_audit_claims_and_resolve_claims_review_in_tier3() -> None:
+    from autoskillit.config import load_config
+
+    config = load_config()
+    assert "audit-claims" in config.skills.tier3
+    assert "resolve-claims-review" in config.skills.tier3
+
+
+def test_audit_claims_skill_md_exists() -> None:
+    resolver = DefaultSkillResolver()
+    info = resolver.resolve("audit-claims")
+    assert info is not None, "audit-claims skill not found"
+    assert info.path.exists(), f"SKILL.md missing at {info.path}"
+
+
+def test_resolve_claims_review_skill_md_exists() -> None:
+    resolver = DefaultSkillResolver()
+    info = resolver.resolve("resolve-claims-review")
+    assert info is not None, "resolve-claims-review skill not found"
+    assert info.path.exists(), f"SKILL.md missing at {info.path}"

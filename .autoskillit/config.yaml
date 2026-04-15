@@ -28,3 +28,7 @@ ci:
 
 github:
   default_repo: "TalonT-Org/AutoSkillit"
+
+quota_guard:
+  enabled: false
+  short_window_threshold: 95.0

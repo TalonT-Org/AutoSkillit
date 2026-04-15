@@ -29,7 +29,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 
 ## Arguments
 
-`{plan_path}`   — Absolute path to the plan file to validate (optional: falls back to most recent .autoskillit/temp/ artifact if omitted)
+`{plan_path}`   — Absolute path to the plan file to validate (optional: falls back to most recent {{AUTOSKILLIT_TEMP}}/ artifact if omitted)
 
 ## Critical Constraints
 
@@ -56,6 +56,15 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Make sure the plan includes warning against using the codebase as a notepad with useless comments
 - Prefer the long term health of project over quick, easy, and minimal fixes
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, plan file edits may be partially applied.
+The recipe routes to `on_context_limit` (typically `register_clone_failure` or a
+restart step), abandoning the partial walkthrough.
+
+This skill modifies only the plan file (not source code), so partial edits have
+limited blast radius. The downstream step will restart the walkthrough on retry.
+
 ## Dry Walkthrough Workflow
 
 ### Step 1: Load the Plan
@@ -63,7 +72,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 Read the plan from:
 - Path provided by user
 - Plan content pasted directly
-- Most recent plan in .autoskillit/temp/ subdirectories
+- Most recent plan in {{AUTOSKILLIT_TEMP}}/ subdirectories
 
 ### Multi-Part Plan Detection
 
@@ -72,7 +81,7 @@ After resolving the plan path, check whether this is a part file of a multi-part
 1. **Detect the part suffix:** If the plan filename contains `_part_` (e.g., `_part_a`, `_part_b`, `_part_1`), this is one part of a multi-part plan. Extract the part identifier (A, B, C… or number) from the suffix.
 
 2. **⚠️ SCOPE BOUNDARY — CRITICAL:** If a part suffix is detected, immediately output to the terminal:
-   > "⚠️ MULTI-PART PLAN DETECTED: Validating PART {X} ONLY. This session MUST NOT read, open, reference, or validate any other part files. Sibling part files visible in .autoskillit/temp/ or any other directory are entirely out of scope and must be ignored."
+   > "⚠️ MULTI-PART PLAN DETECTED: Validating PART {X} ONLY. This session MUST NOT read, open, reference, or validate any other part files. Sibling part files visible in {{AUTOSKILLIT_TEMP}}/ or any other directory are entirely out of scope and must be ignored."
 
 3. **Verify the scope warning block:** Check that the plan file contains the mandatory scope warning block immediately after the title line. The block must match this form:
    ```
@@ -237,7 +246,7 @@ After updating the plan, output a summary to the terminal (your response text):
 
 ## Example
 
-**Input:** User says "dry walkthrough .autoskillit/temp/make-plan/api_retry_plan.md"
+**Input:** User says "dry walkthrough {{AUTOSKILLIT_TEMP}}/make-plan/api_retry_plan.md"
 
 **Process:**
 1. Read the plan
@@ -251,7 +260,7 @@ After updating the plan, output a summary to the terminal (your response text):
 ```
 ## Dry Walkthrough Complete
 
-**Plan:** .autoskillit/temp/make-plan/api_retry_plan.md
+**Plan:** {{AUTOSKILLIT_TEMP}}/make-plan/api_retry_plan.md
 **Status:** REVISED
 
 ### Changes Made

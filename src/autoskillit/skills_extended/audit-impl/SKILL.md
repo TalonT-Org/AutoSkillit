@@ -2,6 +2,13 @@
 name: audit-impl
 categories: [audit]
 description: Audit a completed implementation against its originating plan(s). Returns GO (merge approved) or NO GO (generates remediation file for retry). Final gate before merge in any implementation pipeline.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: audit-impl] Auditing implementation against plan...'"
+          once: true
 ---
 
 # Implementation Audit Skill
@@ -41,7 +48,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 **NEVER:**
 - Modify source files, plan files, or any other files — read-only audit only
 - Run tests — this skill audits, it does not fix
-- Create files outside `.autoskillit/temp/audit-impl/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/audit-impl/`
 - Emit a GO verdict when any `MISSING` or `CONFLICT` finding exists
 
 **ALWAYS:**
@@ -50,12 +57,11 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Resolve all plan files before starting (abort early if any are missing)
 - Write `Dry-walkthrough verified = TRUE` as the absolute first line of any remediation file
 - On a NO GO verdict, after writing the remediation file, emit the **absolute path** as a
-  structured output token immediately before `%%ORDER_UP%%`. Resolve the relative
+  structured output token as your final output. Resolve the relative
   `temp/audit-impl/...` save path to absolute by prepending the full CWD:
   ```
   verdict = NO GO
   remediation_path = /absolute/cwd/temp/audit-impl/{filename}.md
-  %%ORDER_UP%%
   ```
   On a GO verdict, emit only `verdict = GO` (no remediation_path token).
   The remediation_path token is MANDATORY on NO GO — the pipeline cannot proceed without it.
@@ -106,7 +112,7 @@ store as `conflict_report_path_list`. Proceed even if empty — the cross-refere
 Step 2.5 is skipped when the list is empty.
 
 **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
-exist (e.g., plan file arguments, `.autoskillit/temp/investigate/` reports, external file references), use
+exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, external file references), use
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
 
@@ -289,7 +295,7 @@ verdict = GO
 
 #### If NO GO
 
-Generate `.autoskillit/temp/audit-impl/remediation_{topic}_{YYYY-MM-DD_HHMMSS}.md`:
+Generate `{{AUTOSKILLIT_TEMP}}/audit-impl/remediation_{topic}_{YYYY-MM-DD_HHMMSS}.md`:
 
 ```markdown
 Dry-walkthrough verified = TRUE
@@ -369,7 +375,7 @@ NO GO; omit the `remediation_path=` line entirely on GO).
 ## Output Location
 
 ```
-.autoskillit/temp/audit-impl/
+{{AUTOSKILLIT_TEMP}}/audit-impl/
 └── remediation_{topic}_{YYYY-MM-DD_HHMMSS}.md    (written on NO GO only)
 ```
 

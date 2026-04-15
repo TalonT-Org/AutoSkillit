@@ -22,13 +22,26 @@ from autoskillit.execution.headless import _session_log_dir
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
 )
-from autoskillit.server.tools_execution import run_cmd, run_python, run_skill
+from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
 
 _SUCCESS_JSON = (
     '{"type": "result", "subtype": "success", "is_error": false,'
     ' "result": "done", "session_id": "s1"}'
 )
+
+# Deterministic UUID for tests that need to predict the per-invocation marker.
+_DETERMINISTIC_HEX = "a1b2c3d4e5f6a7b890123456"
+_DETERMINISTIC_MARKER = f"%%ORDER_UP::{_DETERMINISTIC_HEX[:8]}%%"
+
+
+class _FixedUUID:
+    hex = _DETERMINISTIC_HEX
+
+
+def _patch_uuid4(monkeypatch):
+    """Monkeypatch uuid4 to return a deterministic value for marker prediction."""
+    monkeypatch.setattr("uuid.uuid4", lambda: _FixedUUID())
 
 
 class TestRunSkillPluginDir:
@@ -59,14 +72,6 @@ class TestRunSkillPluginDir:
 
         actual_cwd = tool_ctx.runner.call_args_list[0][1]
         assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
-
-    @pytest.mark.anyio
-    async def test_run_skill_uses_two_hour_timeout(self, tool_ctx):
-        """run_skill uses 7200s timeout (merged from former run_skill_retry)."""
-        from autoskillit.config import AutomationConfig
-
-        cfg = AutomationConfig()
-        assert cfg.run_skill.timeout == 7200
 
 
 class TestCheckDryWalkthrough:
@@ -162,7 +167,8 @@ class TestRunSkillPrefix:
         )
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[5].startswith("Use /investigate error")
+        prompt_idx = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
+        assert cmd[prompt_idx].startswith("Use /investigate error")
         # cwd must propagate to the subprocess runner
         from pathlib import Path
 
@@ -217,7 +223,8 @@ class TestRunSkillPrefix:
         )
         await run_skill("/investigate error", "/tmp")
         cmd = tool_ctx.runner.call_args_list[0][0]
-        assert "%%ORDER_UP%%" in cmd[5]
+        prompt_idx = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
+        assert "%%ORDER_UP::" in cmd[prompt_idx]
         # cwd must propagate to the subprocess runner
         from pathlib import Path
 
@@ -323,10 +330,9 @@ class TestRunSkillInjectsCompletionDirective:
         await run_skill("/investigate foo", "/tmp")
 
         cmd = tool_ctx.runner.call_args_list[-1][0]
-        # The prompt argument is at index 5
-        # (shifted by 3 env tokens: env + AUTOSKILLIT_HEADLESS=1 + delay)
-        skill_arg = cmd[5]
-        assert "%%ORDER_UP%%" in skill_arg
+        prompt_idx = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
+        skill_arg = cmd[prompt_idx]
+        assert "%%ORDER_UP::" in skill_arg
         assert "ORCHESTRATION DIRECTIVE" in skill_arg
 
     def test_inject_completion_directive_prohibits_standalone_marker(self):
@@ -345,17 +351,17 @@ class TestRunSkillInjectsCompletionDirective:
 
 
 class TestRunSkillEnvPrefix:
-    """run_skill always injects AUTOSKILLIT_HEADLESS=1 and optionally CLAUDE_CODE_EXIT_AFTER_STOP_DELAY."""  # noqa: E501
+    """run_skill always injects AUTOSKILLIT_HEADLESS=1 and optionally CLAUDE_CODE_EXIT_AFTER_STOP_DELAY via the env kwarg."""  # noqa: E501
 
     @pytest.mark.anyio
-    async def test_default_delay_prepends_env_to_cmd(self, tool_ctx):
+    async def test_default_delay_populates_env(self, tool_ctx):
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[0] == "env"
-        assert cmd[1] == "AUTOSKILLIT_HEADLESS=1"
-        assert cmd[2] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=120000"
-        assert "claude" in cmd
+        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        assert cmd[0] == "claude"
+        env = kwargs["env"]
+        assert env["AUTOSKILLIT_HEADLESS"] == "1"
+        assert env["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] == "2000"
 
     @pytest.mark.anyio
     async def test_zero_delay_omits_delay_env_var(self, tool_ctx):
@@ -365,33 +371,27 @@ class TestRunSkillEnvPrefix:
         tool_ctx.config = cfg
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd = tool_ctx.runner.call_args_list[0][0]
-        # AUTOSKILLIT_HEADLESS=1 is always injected; delay var is omitted when delay=0
-        assert cmd[0] == "env"
-        assert cmd[1] == "AUTOSKILLIT_HEADLESS=1"
-        assert cmd[2] == "claude"
-        assert not any("CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" in arg for arg in cmd)
+        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        assert cmd[0] == "claude"
+        env = kwargs["env"]
+        assert env["AUTOSKILLIT_HEADLESS"] == "1"
+        assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in env
 
     @pytest.mark.anyio
-    async def test_custom_delay_value_in_cmd(self, tool_ctx):
+    async def test_custom_delay_value_in_env(self, tool_ctx):
         cfg = AutomationConfig()
-        cfg.run_skill = RunSkillConfig(exit_after_stop_delay_ms=60000)
+        cfg.run_skill = RunSkillConfig(
+            exit_after_stop_delay_ms=60000, natural_exit_grace_seconds=61.0
+        )
         cfg.safety.require_dry_walkthrough = False
         tool_ctx.config = cfg
         tool_ctx.runner.push(_make_result(0, _SUCCESS_JSON, ""))
         await run_skill("/investigate something", "/tmp")
-        cmd = tool_ctx.runner.call_args_list[0][0]
-        assert cmd[0] == "env"
-        assert cmd[1] == "AUTOSKILLIT_HEADLESS=1"
-        assert cmd[2] == "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY=60000"
-
-    @pytest.mark.anyio
-    async def test_run_skill_retry_not_registered(self, tool_ctx):
-        """run_skill_retry is removed — merged into run_skill (same tool, unified timeout)."""
-
-        import autoskillit.server.tools_execution as mod
-
-        assert not hasattr(mod, "run_skill_retry")
+        cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        assert cmd[0] == "claude"
+        env = kwargs["env"]
+        assert env["AUTOSKILLIT_HEADLESS"] == "1"
+        assert env["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] == "60000"
 
 
 class TestRunSkillPassesSessionLogDir:
@@ -625,39 +625,6 @@ class TestGatedToolObservability:
         return ctx
 
     @pytest.mark.anyio
-    async def test_run_cmd_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
-        """run_cmd binds tool='run_cmd' contextvar and calls ctx.info on success."""
-        tool_ctx.runner.push(_make_result(0, "ok\n", ""))
-        with structlog.testing.capture_logs(
-            processors=[structlog.contextvars.merge_contextvars]
-        ) as logs:
-            await run_cmd(cmd="echo ok", cwd="/tmp", ctx=mock_ctx)
-        assert any(entry.get("tool") == "run_cmd" for entry in logs)
-
-    @pytest.mark.anyio
-    async def test_run_cmd_returns_failure_result_on_nonzero_exit(self, tool_ctx, mock_ctx):
-        """run_cmd reports failure (success=false) when subprocess exits non-zero."""
-        tool_ctx.runner.push(_make_result(1, "", "err"))
-        result = json.loads(await run_cmd(cmd="false", cwd="/tmp", ctx=mock_ctx))
-        assert result["success"] is False
-        assert result["exit_code"] == 1
-
-    @pytest.mark.anyio
-    async def test_run_python_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
-        """run_python binds tool='run_python' contextvar and calls ctx.info on success."""
-        with structlog.testing.capture_logs(
-            processors=[structlog.contextvars.merge_contextvars]
-        ) as logs:
-            await run_python(callable="json.dumps", args={"obj": 1}, ctx=mock_ctx)
-        assert any(entry.get("tool") == "run_python" for entry in logs)
-
-    @pytest.mark.anyio
-    async def test_run_python_returns_failure_result_on_bad_module(self, tool_ctx, mock_ctx):
-        """run_python reports failure (success=false) when callable import fails."""
-        result = json.loads(await run_python(callable="nonexistent.module.func", ctx=mock_ctx))
-        assert result["success"] is False
-
-    @pytest.mark.anyio
     async def test_run_skill_binds_tool_contextvar_and_calls_ctx_info(self, tool_ctx, mock_ctx):
         """run_skill binds tool='run_skill' contextvar and calls ctx.info on success."""
         tool_ctx.runner.push(
@@ -688,13 +655,6 @@ class TestGatedToolObservability:
         )
         result = json.loads(await run_skill("/autoskillit:investigate task", "/tmp", ctx=mock_ctx))
         assert result["success"] is False
-
-    @pytest.mark.anyio
-    async def test_run_skill_retry_not_registered(self, tool_ctx, mock_ctx):
-        """run_skill_retry is removed — only run_skill exists."""
-        import autoskillit.server.tools_execution as mod
-
-        assert not hasattr(mod, "run_skill_retry")
 
 
 class TestNotifyHelper:
@@ -769,7 +729,8 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_swallows_attribute_error_from_ctx(self):
-        """AttributeError from ctx.info (e.g. _CurrentContext sentinel) is swallowed."""
+        """Contract: must not raise even when ctx.info raises AttributeError
+        (e.g. _CurrentContext sentinel). Test completion is the assertion."""
         from autoskillit.server.helpers import _notify
 
         ctx = AsyncMock()
@@ -779,7 +740,8 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_swallows_runtime_error_from_ctx(self):
-        """RuntimeError from ctx.info (no active MCP session) is swallowed."""
+        """Contract: must not raise even when ctx.info raises RuntimeError
+        (no active MCP session). Test completion is the assertion."""
         from autoskillit.server.helpers import _notify
 
         ctx = AsyncMock()
@@ -788,7 +750,8 @@ class TestNotifyHelper:
 
     @pytest.mark.anyio
     async def test_notify_swallows_key_error_from_ctx(self):
-        """KeyError from FastMCP's stdlib logging path is swallowed."""
+        """Contract: must not raise even when ctx.info raises KeyError
+        (FastMCP stdlib logging path). Test completion is the assertion."""
         from autoskillit.server.helpers import _notify
 
         ctx = AsyncMock()
@@ -831,10 +794,14 @@ async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) ->
             model: str = "",
             step_name: str = "",
             add_dirs=(),
+            kitchen_id: str = "",
+            order_id: str = "",
             timeout: float | None = None,
             stale_threshold: float | None = None,
+            idle_output_timeout: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
             write_behavior=None,
+            completion_marker: str = "",
         ) -> SkillResult:
             calls.append((skill_command, cwd))
             return SkillResult(
@@ -875,10 +842,14 @@ async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> Non
             model: str = "",
             step_name: str = "",
             add_dirs=(),
+            kitchen_id: str = "",
+            order_id: str = "",
             timeout: float | None = None,
             stale_threshold: float | None = None,
+            idle_output_timeout: float | None = None,
             expected_output_patterns: tuple[str, ...] | list[str] = (),
             write_behavior=None,
+            completion_marker: str = "",
         ) -> SkillResult:
             captured["add_dirs"] = add_dirs
             captured["cwd"] = cwd
@@ -959,6 +930,114 @@ async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monk
     assert fake_validated in captured["add_dirs"]
 
 
+@pytest.mark.anyio
+async def test_run_skill_activates_deps_for_tier3_target(tool_ctx, monkeypatch) -> None:
+    """run_skill calls activate_skill_deps even when target is tier3 (not in tier2 list)."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import SkillResult, ValidatedAddDir
+
+    fake_validated = ValidatedAddDir(path="/fake/session/dir")
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    tool_ctx.session_skill_manager = mock_ssm
+
+    # Set up skill_resolver to produce a resolved name
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
+    tool_ctx.skill_resolver = mock_resolver
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    # Use a tier3 skill name
+    await run_skill("/open-pr", "/tmp")
+
+    # activate_skill_deps must have been called regardless of tier
+    mock_ssm.activate_skill_deps.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_run_skill_result_includes_order_id_when_passed(tool_ctx, monkeypatch) -> None:
+    """run_skill injects order_id into the result JSON when order_id is non-empty."""
+    import json as _json
+
+    from autoskillit.core import SkillResult
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="done",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    result_json = await run_skill("/test skill", "/tmp", order_id="issue-185")
+    data = _json.loads(result_json)
+    assert data.get("order_id") == "issue-185"
+
+
+@pytest.mark.anyio
+async def test_run_skill_result_no_order_id_field_when_empty(tool_ctx, monkeypatch) -> None:
+    """run_skill does NOT inject order_id into result JSON when order_id is empty."""
+    import json as _json
+
+    from autoskillit.core import SkillResult
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="done",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    result_json = await run_skill("/test skill", "/tmp")  # no order_id
+    data = _json.loads(result_json)
+    assert "order_id" not in data
+
+
 class TestHeadlessGateEnforcement:
     """T_HGE: run_skill, run_cmd, run_python each return headless_error
     when the session is running with AUTOSKILLIT_HEADLESS=1.
@@ -975,18 +1054,6 @@ class TestHeadlessGateEnforcement:
     async def test_run_skill_blocked_in_headless_session(self, tool_ctx):
         """run_skill returns headless_error when AUTOSKILLIT_HEADLESS=1."""
         result = json.loads(await run_skill("/autoskillit:investigate some-error", "/tmp"))
-        assert result["subtype"] == "headless_error"
-
-    @pytest.mark.anyio
-    async def test_run_cmd_blocked_in_headless_session(self, tool_ctx):
-        """run_cmd returns headless_error when AUTOSKILLIT_HEADLESS=1."""
-        result = json.loads(await run_cmd("echo hello", "/tmp"))
-        assert result["subtype"] == "headless_error"
-
-    @pytest.mark.anyio
-    async def test_run_python_blocked_in_headless_session(self, tool_ctx):
-        """run_python returns headless_error when AUTOSKILLIT_HEADLESS=1."""
-        result = json.loads(await run_python("os.getcwd"))
         assert result["subtype"] == "headless_error"
 
 
@@ -1024,24 +1091,6 @@ class TestResponseFieldsAreTypeSafe:
         tool_ctx.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
         assert result["retry_reason"] in {e.value for e in RetryReason}
-
-
-class TestRunCmdTiming:
-    """run_cmd accumulates wall-clock timing when step_name is provided."""
-
-    @pytest.mark.anyio
-    async def test_run_cmd_step_name_records_timing(self, tool_ctx):
-        await run_cmd(cmd="echo hi", cwd="/tmp", step_name="clone")
-        report = tool_ctx.timing_log.get_report()
-        assert len(report) == 1
-        assert report[0]["step_name"] == "clone"
-        assert report[0]["total_seconds"] >= 0.0
-        assert report[0]["invocation_count"] == 1
-
-    @pytest.mark.anyio
-    async def test_run_cmd_empty_step_name_skips_timing(self, tool_ctx):
-        await run_cmd(cmd="echo hi", cwd="/tmp")
-        assert tool_ctx.timing_log.get_report() == []
 
 
 class TestRunSkillTiming:
@@ -1117,6 +1166,38 @@ class TestRunHeadlessCoreFlushTelemetry:
         assert calls[0]["timing_seconds"] is not None
 
     @pytest.mark.anyio
+    async def test_flush_session_log_session_id_matches_returned_skill_result(
+        self, tool_ctx, monkeypatch
+    ):
+        """flush_session_log receives the same session_id as the returned SkillResult."""
+        import autoskillit.execution.session_log as sl_mod
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+
+        calls = []
+
+        def mock_flush(**kwargs):
+            calls.append(kwargs)
+
+        monkeypatch.setattr(sl_mod, "flush_session_log", mock_flush)
+        # Stale result with session_id resolved from Channel B
+        stale_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=12345,
+            session_id="test-uuid-coherence-check",
+        )
+        tool_ctx.runner.push(stale_result)
+        result_json = json.loads(
+            await run_skill("/investigate foo", "/tmp", step_name="implement")
+        )
+        assert len(calls) == 1
+        # flush and returned SkillResult must carry the same session_id
+        assert calls[0]["session_id"] == result_json["session_id"]
+        assert result_json["session_id"] != ""
+
+    @pytest.mark.anyio
     async def test_flushes_on_success_when_step_name_set(self, tool_ctx, monkeypatch):
         """Successful sessions without proc_snapshots still flush when step_name is provided."""
         import autoskillit.execution.session_log as sl_mod
@@ -1160,23 +1241,284 @@ class TestRunSkillCwdValidation:
         assert tool_ctx.runner.call_args_list == []
 
     @pytest.mark.anyio
-    async def test_run_skill_accepts_empty_cwd(self, tool_ctx):
+    async def test_run_skill_accepts_empty_cwd(self, tool_ctx, monkeypatch):
         """Empty cwd is accepted (some skills have no specific cwd requirement)."""
+        _patch_uuid4(monkeypatch)
+        marker = _DETERMINISTIC_MARKER
         success_json = (
             '{"type": "result", "subtype": "success", "is_error": false,'
-            ' "result": "done %%ORDER_UP%%", "session_id": "s1"}'
+            f' "result": "done {marker}", "session_id": "s1"}}'
         )
         tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
         result = json.loads(await run_skill("/investigate foo", cwd=""))
         assert result["success"] is True
 
     @pytest.mark.anyio
-    async def test_run_skill_accepts_absolute_cwd(self, tool_ctx):
+    async def test_run_skill_accepts_absolute_cwd(self, tool_ctx, monkeypatch):
         """Absolute cwd passes the boundary check and proceeds normally."""
+        _patch_uuid4(monkeypatch)
+        marker = _DETERMINISTIC_MARKER
         success_json = (
             '{"type": "result", "subtype": "success", "is_error": false,'
-            ' "result": "done %%ORDER_UP%%", "session_id": "s1"}'
+            f' "result": "done {marker}", "session_id": "s1"}}'
         )
         tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
         result = json.loads(await run_skill("/investigate foo", cwd="/tmp"))
         assert result["success"] is True
+
+
+class TestRunSkillPerInvocationMarker:
+    """Per-invocation completion markers are unique across run_skill calls."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_markers_are_unique_per_invocation(self, tool_ctx):
+        """Two run_skill calls must generate different completion_marker values."""
+        success_json = (
+            '{"type": "result", "subtype": "success", "is_error": false,'
+            ' "result": "done", "session_id": "s1"}'
+        )
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
+        tool_ctx.runner.push(_make_result(returncode=0, stdout=success_json))
+
+        await run_skill("/investigate a", cwd="/tmp")
+        await run_skill("/investigate b", cwd="/tmp")
+
+        calls = tool_ctx.runner.call_args_list
+        assert len(calls) >= 2
+        marker1 = calls[0][3]["completion_marker"]
+        marker2 = calls[1][3]["completion_marker"]
+        assert marker1 != marker2
+        assert "%%ORDER_UP::" in marker1
+        assert "%%ORDER_UP::" in marker2
+
+
+@pytest.mark.anyio
+async def test_run_skill_passes_allow_only_to_init_session(tool_ctx, monkeypatch) -> None:
+    """run_skill computes the closure for the resolved target and forwards it as allow_only."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import SkillResult, ValidatedAddDir
+
+    fake_validated = ValidatedAddDir(path="/fake/session/dir")
+    expected_closure = frozenset({"investigate", "mermaid"})
+
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    mock_ssm.compute_skill_closure.return_value = expected_closure
+    tool_ctx.session_skill_manager = mock_ssm
+
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
+    tool_ctx.skill_resolver = mock_resolver
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/autoskillit:investigate the bug", "/tmp")
+
+    mock_ssm.compute_skill_closure.assert_called_once_with("investigate")
+    mock_ssm.init_session.assert_called_once()
+    assert mock_ssm.init_session.call_args.kwargs.get("allow_only") == expected_closure
+
+
+@pytest.mark.anyio
+async def test_run_skill_no_target_skill_passes_none_allow_only(tool_ctx, monkeypatch) -> None:
+    """When skill_resolver is unset, target_name is None and allow_only stays None."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import SkillResult, ValidatedAddDir
+
+    fake_validated = ValidatedAddDir(path="/fake/session/dir")
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    tool_ctx.session_skill_manager = mock_ssm
+    tool_ctx.skill_resolver = None  # disables resolve_target_skill
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/test skill", "/tmp")
+
+    mock_ssm.init_session.assert_called_once()
+    assert mock_ssm.init_session.call_args.kwargs.get("allow_only") is None
+    mock_ssm.compute_skill_closure.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, monkeypatch) -> None:
+    """End-to-end: /make-plan resolves a closure containing the entire arch-lens pack."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import SkillResult, ValidatedAddDir
+    from autoskillit.workspace.session_skills import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+    )
+
+    real_provider = SkillsDirectoryProvider()
+    real_mgr = DefaultSessionSkillManager(provider=real_provider, ephemeral_root=tool_ctx.temp_dir)
+
+    captured: dict = {}
+
+    class _RecordingManager:
+        def __init__(self, real: DefaultSessionSkillManager) -> None:
+            self._real = real
+
+        def init_session(self, session_id, **kwargs):
+            captured["allow_only"] = kwargs.get("allow_only")
+            return ValidatedAddDir(path="/fake/session/dir")
+
+        def compute_skill_closure(self, target_name):
+            return self._real.compute_skill_closure(target_name)
+
+        def activate_skill_deps(self, session_id, skill_name):
+            return True
+
+        def cleanup_stale(self, max_age_seconds=86400):
+            return 0
+
+    tool_ctx.session_skill_manager = _RecordingManager(real_mgr)
+
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
+    tool_ctx.skill_resolver = mock_resolver
+
+    class MockExecutor:
+        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    tool_ctx.executor = MockExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/autoskillit:make-plan refactor", "/tmp")
+
+    closure = captured["allow_only"]
+    assert closure is not None
+    assert "make-plan" in closure
+    assert "mermaid" in closure
+    arch_members = {n for n in closure if n.startswith("arch-lens-")}
+    assert len(arch_members) >= 1
+
+
+def _make_capturing_executor():
+    """Return (executor, captured_dict) for testing idle_output_timeout propagation."""
+    from autoskillit.core import SkillResult
+
+    captured: dict = {}
+
+    class MockExecutor:
+        async def run(
+            self, skill_command, cwd, *, idle_output_timeout=None, **kwargs
+        ) -> SkillResult:
+            captured["idle_output_timeout"] = idle_output_timeout
+            return SkillResult(
+                success=True,
+                result="ok",
+                session_id="",
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
+    return MockExecutor(), captured
+
+
+@pytest.mark.anyio
+async def test_run_skill_passes_idle_output_timeout(tool_ctx, monkeypatch) -> None:
+    """run_skill passes idle_output_timeout (as float) to executor.run()."""
+    executor, captured = _make_capturing_executor()
+    tool_ctx.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/test skill", "/tmp", idle_output_timeout=120)
+    assert captured["idle_output_timeout"] == 120.0  # int→float conversion
+
+
+@pytest.mark.anyio
+async def test_run_skill_idle_output_timeout_defaults_to_none(tool_ctx, monkeypatch) -> None:
+    """run_skill passes None to executor.run() when idle_output_timeout is not set."""
+    executor, captured = _make_capturing_executor()
+    tool_ctx.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    await run_skill("/test skill", "/tmp")
+    assert captured["idle_output_timeout"] is None
+
+
+@pytest.mark.anyio
+async def test_run_skill_returns_structured_error_when_executor_raises(
+    tool_ctx, monkeypatch, tmp_path
+) -> None:
+    """run_skill returns SkillResult-shaped JSON even if executor.run() raises unexpectedly."""
+    from autoskillit.core import SkillResult
+
+    class ExplodingExecutor:
+        async def run(self, *args, **kwargs) -> SkillResult:
+            raise RuntimeError("unexpected executor failure")
+
+    tool_ctx.executor = ExplodingExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
+
+    from autoskillit.server.tools_execution import run_skill
+
+    result_json = await run_skill("/test cmd", str(tmp_path))
+    data = json.loads(result_json)
+    assert data["success"] is False
+    assert data["subtype"] == "crashed"
+    assert data["needs_retry"] is False
+    assert "unexpected executor failure" in data["result"]

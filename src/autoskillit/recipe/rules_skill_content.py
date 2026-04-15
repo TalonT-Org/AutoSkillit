@@ -9,8 +9,12 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from autoskillit.core import Severity
+
+if TYPE_CHECKING:
+    from autoskillit.core import SkillResolver
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_placeholder_parser import (
     extract_bash_blocks,
@@ -30,11 +34,17 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("implement-worktree", "test_command"),
         ("implement-worktree-no-merge", "test_command"),
         ("resolve-failures", "test_command"),
+        # ── research experiment skills: slug is the experiment directory name ─────────
+        # Derived at runtime from the `name:` field of the experiment's environment.yml.
+        # The prose in both skills explicitly describes how to derive it before the
+        # bash blocks that reference it.
+        ("implement-experiment", "slug"),
+        ("generate-report", "slug"),
     }
 )
 
 
-def _resolve_skill_md(skill_name: str) -> Path | None:
+def _resolve_skill_md(skill_name: str, *, resolver: SkillResolver | None = None) -> Path | None:
     """Resolve a skill name to its SKILL.md path.
 
     When SKILL_SEARCH_DIRS is set (e.g., in tests), searches those directories.
@@ -46,9 +56,11 @@ def _resolve_skill_md(skill_name: str) -> Path | None:
             if skill_md.is_file():
                 return skill_md
         return None
-    from autoskillit.workspace import SkillResolver  # noqa: PLC0415
+    if resolver is None:
+        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
-    skill_info = SkillResolver().resolve(skill_name)
+        resolver = DefaultSkillResolver()
+    skill_info = resolver.resolve(skill_name)
     if skill_info is None:
         return None
     return skill_info.path  # skill_info.path IS the SKILL.md file
@@ -182,6 +194,63 @@ def _check_hardcoded_origin_remote(ctx: ValidationContext) -> list[RuleFinding]:
                     ),
                 )
             )
+    return findings
+
+
+_AUTOSKILLIT_IMPORT_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"^\s*from\s+autoskillit[\s.]", re.MULTILINE),
+    re.compile(r"^\s*import\s+autoskillit[\s,.]", re.MULTILINE),
+    re.compile(r"['\"]autoskillit['\"]"),  # __import__ / importlib string form
+]
+
+
+@semantic_rule(
+    name="no-autoskillit-import-in-skill-python-block",
+    severity=Severity.ERROR,
+    description=(
+        "SKILL.md bash block imports from `autoskillit` package. "
+        "Bash blocks in SKILL.md execute inside headless sessions where "
+        "the active Python interpreter is not guaranteed to have `autoskillit` "
+        "installed. Only stdlib imports are permitted in SKILL.md python3 blocks."
+    ),
+)
+def _check_no_autoskillit_import(ctx: ValidationContext) -> list[RuleFinding]:
+    """Fire for any run_skill step whose SKILL.md bash blocks import the autoskillit package."""
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(skill_name)
+        if skill_md is None:
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        bash_blocks = extract_bash_blocks(content)
+        for block in bash_blocks:
+            for pattern in _AUTOSKILLIT_IMPORT_PATTERNS:
+                match = pattern.search(block)
+                if match:
+                    findings.append(
+                        RuleFinding(
+                            rule="no-autoskillit-import-in-skill-python-block",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Skill '{skill_name}' bash block contains `autoskillit` import "
+                                f"(matched: {match.group()!r}). "
+                                "Use stdlib only in SKILL.md python3 blocks."
+                            ),
+                        )
+                    )
+                    break  # one finding per block, avoid duplicate pattern matches
     return findings
 
 

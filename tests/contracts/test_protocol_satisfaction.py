@@ -22,14 +22,14 @@ from autoskillit.execution.process import (
 
 def test_nine_protocols_importable_from_core():
     from autoskillit.core import (  # noqa: F401
-        AuditStore,
+        AuditLog,
         DatabaseReader,
-        GatePolicy,
+        GateState,
         HeadlessExecutor,
         MigrationService,
         RecipeRepository,
         TestRunner,
-        TokenStore,
+        TokenLog,
         WorkspaceManager,
     )
 
@@ -51,35 +51,26 @@ def test_truncate_text_importable_from_core():
     assert truncate_text("short", 100) == "short"
 
 
-# ── Backward compatibility ─────────────────────────────────────────────────────
-
-
-def test_truncate_private_alias_still_available():
-    from autoskillit.execution.session import _truncate
-
-    assert _truncate("x" * 20, 10).startswith("...[truncated")
-
-
 # ── Runtime-checkable ──────────────────────────────────────────────────────────
 
 
 def test_all_new_protocols_are_runtime_checkable():
     from autoskillit.core import (
-        AuditStore,
+        AuditLog,
         DatabaseReader,
-        GatePolicy,
+        GateState,
         HeadlessExecutor,
         MigrationService,
         RecipeRepository,
         TestRunner,
-        TokenStore,
+        TokenLog,
         WorkspaceManager,
     )
 
     for proto in [
-        GatePolicy,
-        AuditStore,
-        TokenStore,
+        GateState,
+        AuditLog,
+        TokenLog,
         TestRunner,
         HeadlessExecutor,
         RecipeRepository,
@@ -96,31 +87,68 @@ def test_all_new_protocols_are_runtime_checkable():
 
 
 def test_defaultgatestate_satisfies_gatepolicy():
-    from autoskillit.core import GatePolicy
+    from autoskillit.core import GateState
     from autoskillit.pipeline.gate import DefaultGateState
 
-    assert isinstance(DefaultGateState(), GatePolicy)
+    assert isinstance(DefaultGateState(), GateState)
 
 
 def test_defaultauditlog_satisfies_auditstore():
-    from autoskillit.core import AuditStore
+    from autoskillit.core import AuditLog
     from autoskillit.pipeline.audit import DefaultAuditLog
 
-    assert isinstance(DefaultAuditLog(), AuditStore)
+    assert isinstance(DefaultAuditLog(), AuditLog)
 
 
 def test_defaulttokenlog_satisfies_tokenstore():
-    from autoskillit.core import TokenStore
+    from autoskillit.core import TokenLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
 
-    assert isinstance(DefaultTokenLog(), TokenStore)
+    assert isinstance(DefaultTokenLog(), TokenLog)
 
 
 def test_default_timing_log_satisfies_timing_store_protocol():
-    from autoskillit.core import TimingStore
+    from autoskillit.core import TimingLog
     from autoskillit.pipeline.timings import DefaultTimingLog
 
-    assert isinstance(DefaultTimingLog(), TimingStore)
+    assert isinstance(DefaultTimingLog(), TimingLog)
+
+
+def test_default_token_log_satisfies_token_store_with_order_id():
+    """F-1: DefaultTokenLog satisfies updated TokenLog Protocol (includes order_id params)."""
+    from autoskillit.core import TokenLog
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+
+    log = DefaultTokenLog()
+    assert isinstance(log, TokenLog)
+    # Verify the order_id param is accepted by record/get_report/compute_total
+    log.record(
+        "plan",
+        {
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+        order_id="test-order",
+    )
+    assert log.get_report(order_id="test-order") != []
+    total = log.compute_total(order_id="test-order")
+    assert "input_tokens" in total
+
+
+def test_default_timing_log_satisfies_timing_store_with_order_id():
+    """F-2: DefaultTimingLog satisfies updated TimingLog Protocol (includes order_id params)."""
+    from autoskillit.core import TimingLog
+    from autoskillit.pipeline.timings import DefaultTimingLog
+
+    log = DefaultTimingLog()
+    assert isinstance(log, TimingLog)
+    # Verify the order_id param is accepted by record/get_report/compute_total
+    log.record("plan", 5.0, order_id="test-order")
+    assert log.get_report(order_id="test-order") != []
+    total = log.compute_total(order_id="test-order")
+    assert "total_seconds" in total
 
 
 # ── isinstance checks — Default* classes satisfy protocols ─────────────────────
@@ -164,6 +192,15 @@ def test_default_test_runner_satisfies_test_runner():
     mock_config.test_check.command = ["task", "test-all"]
     mock_config.test_check.timeout = 600
     assert isinstance(DefaultTestRunner(mock_config, MagicMock()), TestRunner)
+
+
+def test_test_runner_return_type_is_test_result() -> None:
+    from typing import get_type_hints
+
+    from autoskillit.core import TestResult, TestRunner
+
+    hints = get_type_hints(TestRunner.run)
+    assert hints["return"] is TestResult
 
 
 def test_default_headless_executor_satisfies_headless_executor():
@@ -211,9 +248,9 @@ def test_all_ten_protocols_in_core_all():
 
     expected_protocols = {
         "SubprocessRunner",
-        "GatePolicy",
-        "AuditStore",
-        "TokenStore",
+        "GateState",
+        "AuditLog",
+        "TokenLog",
         "TestRunner",
         "HeadlessExecutor",
         "RecipeRepository",
@@ -265,7 +302,10 @@ class TestGroupDApiContractPreservation:
             "stale_threshold",
             "session_record_types",
             "completion_drain_timeout",
+            "natural_exit_grace_seconds",
             "linux_tracing_config",
+            "idle_output_timeout",
+            "max_suppression_seconds",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -325,6 +365,8 @@ class TestGroupDApiContractPreservation:
             "completion_drain_timeout",
             "linux_tracing_config",
             "env",
+            "idle_output_timeout",
+            "max_suppression_seconds",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"
@@ -422,7 +464,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_005_subprocess_result_field_names(self):
-        """SubprocessResult must have exactly the 11 canonical fields."""
+        """SubprocessResult must have exactly the 14 canonical fields."""
         from autoskillit.core.types import SubprocessResult
 
         fields = {f.name for f in dataclasses.fields(SubprocessResult)}
@@ -435,9 +477,12 @@ class TestGroupDApiContractPreservation:
             "channel_confirmation",
             "proc_snapshots",
             "channel_b_session_id",
+            "session_id",
             "start_ts",
             "end_ts",
             "elapsed_seconds",
+            "kill_reason",
+            "tracked_comm",
         }
         assert fields == expected, (
             f"SubprocessResult fields changed.\n"
@@ -464,6 +509,7 @@ class TestGroupDApiContractPreservation:
             TerminationReason.NATURAL_EXIT,
             TerminationReason.COMPLETED,
             TerminationReason.STALE,
+            TerminationReason.IDLE_STALL,
             TerminationReason.TIMED_OUT,
         }
 
@@ -474,16 +520,18 @@ class TestGroupDApiContractPreservation:
         assert TerminationReason.NATURAL_EXIT == "natural_exit"
         assert TerminationReason.COMPLETED == "completed"
         assert TerminationReason.STALE == "stale"
+        assert TerminationReason.IDLE_STALL == "idle_stall"
         assert TerminationReason.TIMED_OUT == "timed_out"
 
     def test_req_api_006_channel_confirmation_members(self):
-        """ChannelConfirmation must have exactly the 3 canonical values."""
+        """ChannelConfirmation must have exactly the 4 canonical values."""
         from autoskillit.core.types import ChannelConfirmation
 
         assert set(ChannelConfirmation) == {
             ChannelConfirmation.CHANNEL_A,
             ChannelConfirmation.CHANNEL_B,
             ChannelConfirmation.UNMONITORED,
+            ChannelConfirmation.DIR_MISSING,
         }
 
     def test_req_api_006_channel_confirmation_string_values(self):

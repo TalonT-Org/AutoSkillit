@@ -1,5 +1,6 @@
 ---
 name: rectify
+activate_deps: [arch-lens]
 description: Deep investigation of test gaps and architectural weaknesses following an investigation, then devise a plan for architectural immunity rather than direct fixes. Use when user says "rectify", "rectify this", or wants to address root architectural causes after an investigation.
 hooks:
   PreToolUse:
@@ -36,7 +37,7 @@ Do not change any code.
 - Modify any source code files
 - Propose bandaid fixes, fallbacks, or direct-only fixes
 - Suggest backward compatibility shims
-- Create files outside `.autoskillit/temp/rectify/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/rectify/` directory
 
 **ALWAYS:**
 - Use subagents for parallel exploration
@@ -44,14 +45,13 @@ Do not change any code.
 - Focus on architectural immunity over direct fixes
 - Identify how tests missed the issue and similar/related bugs
 - Map the components and their connections thoroughly
-- Write the plan as markdown to `.autoskillit/temp/rectify/` directory (relative to the current working directory)
+- Write the plan as markdown to `{{AUTOSKILLIT_TEMP}}/rectify/` directory (relative to the current working directory)
 - After writing the plan file, emit the **absolute path** as a structured output token
-  immediately before `%%ORDER_UP%%`. The save path is relative (`.autoskillit/temp/rectify/...`) but
+  as your final output. The save path is relative (`{{AUTOSKILLIT_TEMP}}/rectify/...`) but
   the token **must** use the absolute path (prepend the full CWD):
   ```
-  plan_path = /absolute/cwd/.autoskillit/temp/rectify/{filename}.md
-  plan_parts = /absolute/cwd/.autoskillit/temp/rectify/{filename}.md
-  %%ORDER_UP%%
+  plan_path = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/rectify/{filename}.md
+  plan_parts = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/rectify/{filename}.md
   ```
   This token is MANDATORY — the pipeline cannot capture the output without it.
 - The solution must solve more than just the immediate issue
@@ -60,14 +60,14 @@ Do not change any code.
 
 ### Step 1: Identify the Investigation Context
 
-Locate the most recent investigation report in `.autoskillit/temp/investigate/` or from conversation context. Extract:
+Locate the most recent investigation report in `{{AUTOSKILLIT_TEMP}}/investigate/` or from conversation context. Extract:
 - The root cause identified
 - Affected components
 - Test gaps noted
 - Any recommendations made
 
 **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
-exist (e.g., plan file arguments, `.autoskillit/temp/investigate/` reports, external file references), use
+exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, external file references), use
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
 
@@ -152,7 +152,7 @@ After finalizing the plan, determine which architecture lens best illustrates th
 
 **4b. Write your lens selection rationale to a file using the Write tool:**
 
-- **Path:** `.autoskillit/temp/rectify/arch_lens_selection_{YYYY-MM-DD_HHMMSS}.md`
+- **Path:** `{{AUTOSKILLIT_TEMP}}/rectify/arch_lens_selection_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:** Which lens was selected and why (1-2 sentences of rationale).
 
 **4c. MANDATORY: LOAD the appropriate arch-lens skill using the Skill tool:**
@@ -172,6 +172,8 @@ After finalizing the plan, determine which architecture lens best illustrates th
 | Scenarios | `/autoskillit:arch-lens-scenarios` |
 | State Lifecycle | `/autoskillit:arch-lens-state-lifecycle` |
 | Deployment | `/autoskillit:arch-lens-deployment` |
+
+If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, skip the diagram step and proceed without the architectural diagram.
 
 **4d. Create the diagram following the loaded skill's instructions:**
 - Focus on the PROPOSED changes (use `newComponent` class for new elements)
@@ -204,7 +206,7 @@ If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b
 - The title of each part file MUST include `— PART A ONLY` (or B, C, etc.).
 - Each part file MUST open with: `> **PART {X} ONLY. Do not implement any other part. Other parts are separate tasks requiring explicit authorization.**`
 
-Save the plan to: `.autoskillit/temp/rectify/rectify_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Save the plan to: `{{AUTOSKILLIT_TEMP}}/rectify/rectify_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 **Structured output:** After saving the file(s), emit the following lines so pipeline orchestrators can capture both fields:
 

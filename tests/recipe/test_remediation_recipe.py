@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.validator import validate_recipe
 
@@ -10,13 +12,17 @@ RECIPE_PATH = (
 )
 
 
-def test_remediation_recipe_has_release_issue_success_step():
+@pytest.fixture(scope="module")
+def recipe():
+    return load_recipe(RECIPE_PATH)
+
+
+def test_remediation_recipe_has_release_issue_success_step(recipe):
     """remediation.yaml must have a release_issue step on the success path.
 
     Absence of this step means issues resolved via remediation never get the
     staged label applied.
     """
-    recipe = load_recipe(RECIPE_PATH)
     errors = validate_recipe(recipe)
     assert not errors, f"remediation.yaml failed schema validation: {errors}"
     step_names = list(recipe.steps.keys())

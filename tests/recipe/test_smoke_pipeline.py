@@ -1,195 +1,33 @@
 """Smoke-test pipeline: structural validation and end-to-end execution tests.
 
-Exercises the full orchestration path: script loading, step routing, tool
-dispatch, capture/context threading, retry logic, bugfix loop pattern, and merge.
+The smoke-test recipe is a lightweight end-to-end sanity check that clones the
+repository, creates an isolated branch, implements a trivial micro-task
+(smoke_canary), runs the full project test suite, pushes to remote, opens a
+GitHub PR, and immediately closes it without merging.
 
 **Running tests:**
 
 - Structural tests (no API): ``task test-all`` (included automatically)
-- Smoke execution test (requires API): ``task test-smoke``
-  - Requires ``ANTHROPIC_API_KEY`` in the environment
-  - Expected duration: ~60-90 seconds
+- Smoke execution test (requires API + GitHub auth): ``task test-smoke``
+  - Requires ``ANTHROPIC_API_KEY`` and authenticated ``gh`` CLI
+  - Expected duration: under 10 minutes
   - Excluded from ``task test-all`` to avoid API costs in routine development
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import re
-import subprocess
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
-import yaml
 
-from autoskillit import server
-from autoskillit.config import AutomationConfig, TestCheckConfig
 from autoskillit.recipe.io import builtin_recipes_dir
-from autoskillit.server.tools_execution import run_cmd, run_python, run_skill
-from autoskillit.server.tools_git import classify_fix, merge_worktree
-from autoskillit.server.tools_recipe import list_recipes, load_recipe, validate_recipe
-from autoskillit.server.tools_workspace import test_check
-
-test_check.__test__ = False  # type: ignore[attr-defined]
+from autoskillit.server.tools_recipe import list_recipes, validate_recipe
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-SMOKE_SCRIPT = builtin_recipes_dir() / "smoke-test.yaml"
-
-_TOOL_MAP = {
-    "run_cmd": run_cmd,
-    "run_skill": run_skill,
-    "test_check": test_check,
-    "merge_worktree": merge_worktree,
-    "classify_fix": classify_fix,
-}
-
-
-class SmokeExecutor:
-    """Minimal pipeline executor for smoke-test validation.
-
-    Parses YAML step definitions, interpolates context variables, dispatches
-    to server tools, captures results, and routes based on success/failure/on_result.
-    """
-
-    def __init__(self, steps: dict, inputs: dict) -> None:
-        self.steps = steps
-        self.inputs = inputs
-        self.context: dict[str, str] = {}
-        self.visited: list[str] = []
-
-    async def run(self, start: str = "setup", max_steps: int = 30) -> tuple[str | None, str]:
-        """Execute the pipeline from *start*, returning (terminal_step, message)."""
-        current: str | None = start
-        for _ in range(max_steps):
-            if current is None:
-                return None, "Routing returned None — pipeline stalled."
-            self.visited.append(current)
-            step_def = self.steps[current]
-
-            if step_def.get("action") == "stop":
-                return current, step_def.get("message", "")
-
-            if step_def.get("action") == "route":
-                current = step_def.get("on_success")
-                continue
-
-            if "python" in step_def:
-                result = await self._execute_python(step_def)
-                current = self._route(step_def, result)
-                continue
-
-            result = await self._execute(step_def)
-            self._capture(step_def, result)
-            current = self._route(step_def, result)
-        return None, "Max steps exceeded."
-
-    async def _execute(self, step_def: dict) -> dict:
-        """Dispatch to the appropriate tool, handling retries."""
-        tool_name = step_def["tool"]
-        raw_args = step_def.get("with", {})
-        args = self._interpolate(raw_args)
-
-        if "retry" in step_def:
-            return await self._run_with_retry(step_def, args)
-
-        tool_fn = _TOOL_MAP[tool_name]
-        raw_result = await tool_fn(**args)
-        return json.loads(raw_result)
-
-    async def _execute_python(self, step_def: dict) -> dict:
-        """Dispatch a python: step to the run_python MCP tool."""
-        raw_args = step_def.get("with", {})
-        args = self._interpolate(raw_args)
-        callable_path = step_def["python"]
-        raw_result = await run_python(callable=callable_path, args=args)
-        return json.loads(raw_result)
-
-    async def _run_with_retry(self, step_def: dict, args: dict) -> dict:
-        """Execute a tool with retry logic based on the retry block."""
-        retry = step_def["retry"]
-        max_attempts = retry.get("max_attempts", 3)
-        retry_field = retry["on"]
-        tool_fn = _TOOL_MAP[step_def["tool"]]
-
-        # Always execute at least once; max_attempts controls additional retries.
-        # max_attempts=0: run once, if retry_field fires → exhausted immediately.
-        # max_attempts=N: run once, then retry up to N-1 more times.
-        raw_result = await tool_fn(**args)
-        result = json.loads(raw_result)
-        if not result.get(retry_field, False):
-            return result  # succeeded on first try
-
-        for _ in range(max_attempts - 1):
-            raw_result = await tool_fn(**args)
-            result = json.loads(raw_result)
-            if not result.get(retry_field, False):
-                return result
-
-        return result  # exhausted — always defined
-
-    def _interpolate(self, with_args: dict) -> dict:
-        """Resolve ${{ inputs.X }} and ${{ context.X }} references."""
-        resolved = {}
-        for key, value in with_args.items():
-            if isinstance(value, str):
-                resolved[key] = re.sub(
-                    r"\$\{\{\s*(inputs|context)\.(\w+)\s*\}\}",
-                    lambda m: (self.inputs if m.group(1) == "inputs" else self.context)[
-                        m.group(2)
-                    ],
-                    value,
-                )
-            else:
-                resolved[key] = value
-        return resolved
-
-    def _capture(self, step_def: dict, result: dict) -> None:
-        """Extract key=value pairs from result text into context."""
-        capture = step_def.get("capture", {})
-        if not capture:
-            return
-        result_text = result.get("result", "")
-        if isinstance(result_text, str):
-            for ctx_key, pattern in capture.items():
-                match = re.search(r"\$\{\{\s*result\.(\w+)\s*\}\}", pattern)
-                if match:
-                    field = match.group(1)
-                    kv_match = re.search(rf"(?:^|\n)\s*{field}\s*[=:]\s*(.+)", result_text)
-                    if kv_match:
-                        self.context[ctx_key] = kv_match.group(1).strip()
-
-    def _route(self, step_def: dict, result: dict) -> str | None:
-        """Determine the next step based on result and routing rules."""
-        if "on_result" in step_def:
-            on_result = step_def["on_result"]
-            field = on_result["field"]
-            value = result.get(field)
-            routes = on_result.get("routes", {})
-            if value in routes:
-                return routes[value]
-            return step_def.get("on_failure")
-
-        # If a retry block declared on_exhausted and the retry condition still fires,
-        # route to on_exhausted rather than on_failure.
-        retry = step_def.get("retry")
-        if retry and retry.get("on_exhausted") and result.get(retry.get("on", ""), False):
-            return retry["on_exhausted"]
-
-        if self._is_success(step_def, result):
-            return step_def.get("on_success")
-        return step_def.get("on_failure")
-
-    def _is_success(self, step_def: dict, result: dict) -> bool:
-        """Tool-specific success predicate."""
-        tool = step_def["tool"]
-        if tool == "test_check":
-            return result.get("passed", False)
-        if tool in ("merge_worktree", "classify_fix"):
-            return "error" not in result
-        return result.get("success", True)
+SMOKE_SCRIPT = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +39,7 @@ class SmokeExecutor:
 def smoke_recipe():
     from autoskillit.recipe.io import load_recipe as _load_recipe
 
-    return _load_recipe(builtin_recipes_dir() / "smoke-test.yaml")
+    return _load_recipe(SMOKE_SCRIPT)
 
 
 @pytest.fixture()
@@ -211,36 +49,18 @@ def smoke_script_path() -> Path:
 
 @pytest.fixture()
 def smoke_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Create a temp project dir for smoke tests.
+    """Create a temp project dir with smoke-test as a project-local recipe.
 
-    Bundled recipes (including smoke-test) are discovered via recipe_parser,
-    so no recipe files need to be copied into the project dir.
+    smoke-test is a project-local recipe (not bundled), so it must be copied
+    into the temp dir's .autoskillit/recipes/ for discovery via list_recipes().
     """
+    import shutil
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    shutil.copy2(SMOKE_SCRIPT, recipes_dir / "smoke-test.yaml")
     monkeypatch.chdir(tmp_path)
     return tmp_path
-
-
-@pytest.fixture()
-def smoke_workspace(tmp_path: Path) -> Path:
-    ws = tmp_path / "smoke_ws"
-    ws.mkdir()
-    env = {
-        **os.environ,
-        "GIT_AUTHOR_NAME": "test",
-        "GIT_AUTHOR_EMAIL": "t@t",
-        "GIT_COMMITTER_NAME": "test",
-        "GIT_COMMITTER_EMAIL": "t@t",
-    }
-    subprocess.run(["git", "init", "-b", "main"], cwd=ws, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "--allow-empty", "-m", "initial"],
-        cwd=ws,
-        check=True,
-        capture_output=True,
-        env=env,
-    )
-    (ws / ".autoskillit-workspace").touch()
-    return ws
 
 
 # ---------------------------------------------------------------------------
@@ -249,7 +69,7 @@ def smoke_workspace(tmp_path: Path) -> Path:
 
 
 class TestSmokeScriptValidation:
-    """Validate the smoke-test pipeline YAML structure and executor logic."""
+    """Validate the smoke-test pipeline YAML structure."""
 
     @pytest.fixture(autouse=True)
     def _setup_ctx(self, tool_ctx):
@@ -270,174 +90,210 @@ class TestSmokeScriptValidation:
         names = [s["name"] for s in result["recipes"]]
         assert "smoke-test" in names
 
-    async def test_script_loads_with_expected_structure(self, smoke_project: Path) -> None:
-        result = json.loads(await load_recipe(name="smoke-test"))
-        assert "content" in result
-        assert "suggestions" in result
-        pipeline = yaml.safe_load(result["content"])
-        assert "steps" in pipeline
-        assert "ingredients" in pipeline
-        assert "kitchen_rules" in pipeline
-        expected_steps = {
-            "setup",
-            "setup_remote",
-            "seed_task",
-            "set_feature_branch",
-            "create_branch",
-            "commit_dirty",
-            "push_feature_branch",
-            "investigate",
-            "rectify",
-            "implement",
-            "set_worktree_path",
-            "test",
-            "assess",
-            "classify",
-            "merge",
-            "check_summary",
-            "create_summary",
-            "done",
-            "escalate",
-        }
-        assert set(pipeline["steps"].keys()) == expected_steps
-        assert pipeline["steps"]["setup"]["tool"] == "run_cmd"
-        assert pipeline["steps"]["investigate"]["tool"] == "run_skill"
-        assert pipeline["steps"]["implement"]["tool"] == "run_skill"
-        assert pipeline["steps"]["test"]["tool"] == "test_check"
-        assert pipeline["steps"]["merge"]["tool"] == "merge_worktree"
-        assert pipeline["steps"]["classify"]["tool"] == "classify_fix"
-        assert pipeline["steps"]["create_branch"]["tool"] == "run_cmd"
-        assert (
-            pipeline["steps"]["check_summary"]["python"]
-            == "autoskillit.smoke_utils.check_bug_report_non_empty"
-        )
-        assert pipeline["steps"]["create_summary"]["tool"] == "run_skill"
+    def test_smoke_test_not_in_bundled_dir(self) -> None:
+        """smoke-test.yaml must not exist in the bundled recipes directory."""
+        assert not (builtin_recipes_dir() / "smoke-test.yaml").exists()
 
-    def test_executor_interpolation(self) -> None:
-        executor = SmokeExecutor(steps={}, inputs={"workspace": "/tmp/ws"})
-        executor.context["plan_path"] = "/tmp/ws/plan.md"
-        result = executor._interpolate(
-            {"cwd": "${{ inputs.workspace }}", "path": "${{ context.plan_path }}"}
-        )
-        assert result == {"cwd": "/tmp/ws", "path": "/tmp/ws/plan.md"}
+    def test_smoke_test_exists_in_project_local(self) -> None:
+        """smoke-test.yaml must exist in the project-local recipes directory."""
+        assert SMOKE_SCRIPT.exists(), f"Expected smoke-test at {SMOKE_SCRIPT}"
 
-    def test_executor_routing_success_failure(self) -> None:
-        executor = SmokeExecutor(steps={}, inputs={})
-        step = {"tool": "run_cmd", "on_success": "next", "on_failure": "escalate"}
-        assert executor._route(step, {"success": True}) == "next"
-        assert executor._route(step, {"success": False}) == "escalate"
+    async def test_smoke_test_source_is_project(self, smoke_project: Path) -> None:
+        """smoke-test must be listed with source PROJECT, not BUILTIN."""
+        result = json.loads(await list_recipes())
+        smoke = next((r for r in result["recipes"] if r["name"] == "smoke-test"), None)
+        assert smoke is not None, "smoke-test not found in list_recipes output"
+        assert smoke["source"] == "project"
 
-    def test_executor_routing_on_result(self) -> None:
-        executor = SmokeExecutor(steps={}, inputs={})
-        step = {
-            "tool": "classify_fix",
-            "on_result": {
-                "field": "restart_scope",
-                "routes": {
-                    "full_restart": "investigate",
-                    "partial_restart": "implement",
-                },
-            },
-            "on_failure": "escalate",
-        }
-        assert executor._route(step, {"restart_scope": "full_restart"}) == "investigate"
-        assert executor._route(step, {"restart_scope": "partial_restart"}) == "implement"
+    async def test_smoke_test_invisible_from_external_project(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """smoke-test must NOT appear in list_recipes from a project without it."""
+        bare_dir = tmp_path / "external"
+        bare_dir.mkdir()
+        monkeypatch.chdir(bare_dir)
+        result = json.loads(await list_recipes())
+        names = [r["name"] for r in result["recipes"]]
+        assert "smoke-test" not in names
 
-    def test_executor_capture(self) -> None:
-        executor = SmokeExecutor(steps={}, inputs={})
-        step = {"capture": {"plan_path": "${{ result.plan_path }}"}}
-        result = {"success": True, "result": "Done.\nplan_path=/tmp/ws/plan.md\n"}
-        executor._capture(step, result)
-        assert executor.context["plan_path"] == "/tmp/ws/plan.md"
 
-    async def test_executor_retry_logic(self) -> None:
-        call_count = 0
+# ---------------------------------------------------------------------------
+# New structural tests for rewritten recipe (T_SP_NEW_1 through T_SP_NEW_12+)
+# ---------------------------------------------------------------------------
 
-        async def mock_run_skill(**kwargs: object) -> str:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return json.dumps(
-                    {"success": False, "needs_retry": True, "result": "context full"}
-                )
-            return json.dumps(
-                {"success": True, "needs_retry": False, "result": "worktree_path=/tmp/wt"}
-            )
 
-        step_def = {
-            "tool": "run_skill",
-            "with": {"skill_command": "test", "cwd": "/tmp"},
-            "retry": {"max_attempts": 3, "on": "needs_retry", "on_exhausted": "escalate"},
-        }
-        executor = SmokeExecutor(steps={}, inputs={})
-        with patch.dict(_TOOL_MAP, {"run_skill": mock_run_skill}):
-            result = await executor._execute(step_def)
-        assert call_count == 2
-        assert result["success"] is True
+# T_SP_NEW_1
+def test_required_lifecycle_steps_present(smoke_recipe) -> None:
+    """All new lifecycle steps must exist in the recipe."""
+    required = {
+        "clone",
+        "create_branch",
+        "setup",
+        "implement_task",
+        "run_tests",
+        "push_branch",
+        "create_pr",
+        "close_pr",
+        "delete_remote_branch",
+        "register_clone_success",
+        "fail_delete_remote_branch",
+        "register_clone_failure",
+        "done",
+        "escalate",
+    }
+    missing = required - set(smoke_recipe.steps)
+    assert not missing, f"Missing steps: {missing}"
 
-    async def test_executor_max_attempts_zero_routes_to_on_exhausted(self) -> None:
-        """With max_attempts=0, the first needs_retry result must route to on_exhausted."""
-        steps = {
-            "implement": {
-                "tool": "run_skill",
-                "with": {"skill_command": "/autoskillit:implement-worktree-no-merge plan.md"},
-                "retry": {"max_attempts": 0, "on": "needs_retry", "on_exhausted": "retry_wt"},
-                "capture": {"worktree_path": "${{ result.worktree_path }}"},
-                "on_success": "done",
-                "on_failure": "done",
-            },
-            "retry_wt": {"action": "stop", "message": "reached retry_wt"},
-            "done": {"action": "stop", "message": "reached done"},
-        }
-        call_log: list[dict] = []
 
-        async def mock_run_skill(**kwargs: object) -> str:
-            call_log.append(dict(kwargs))
-            return json.dumps(
-                {
-                    "success": False,
-                    "needs_retry": True,
-                    "result": "context limit",
-                    "retry_reason": "resume",
-                    "session_id": "",
-                    "subtype": "error_max_turns",
-                    "is_error": True,
-                    "exit_code": -1,
-                    "stderr": "",
-                    "token_usage": None,
-                }
-            )
-
-        with patch.dict(_TOOL_MAP, {"run_skill": mock_run_skill}):
-            executor = SmokeExecutor(steps, inputs={})
-            terminal_step, message = await executor.run(start="implement")
-
-        assert len(call_log) == 1, "Tool must be called exactly once with max_attempts=0"
-        assert terminal_step == "retry_wt", (
-            f"Expected on_exhausted route to 'retry_wt', got '{terminal_step}': {message}"
+# T_SP_NEW_2
+def test_no_merge_worktree_step(smoke_recipe) -> None:
+    """REQ-GUARD-001: No step may use the merge_worktree tool."""
+    for name, step in smoke_recipe.steps.items():
+        assert step.tool != "merge_worktree", (
+            f"Step '{name}' uses merge_worktree — REQ-GUARD-001 violation"
         )
 
-    async def test_script_has_collect_on_branch_input(self, smoke_project: Path) -> None:
-        result = json.loads(await load_recipe(name="smoke-test"))
-        pipeline = yaml.safe_load(result["content"])
-        inputs = pipeline["ingredients"]
-        assert "collect_on_branch" in inputs
-        assert inputs["collect_on_branch"]["default"] == "true"
-        assert "original_base_branch" in inputs
-        assert inputs["original_base_branch"]["default"] == "main"
 
-    async def test_assess_step_references_bug_report(self) -> None:
-        pipeline = yaml.safe_load(SMOKE_SCRIPT.read_text())
-        assess_cmd = pipeline["steps"]["assess"]["with"]["skill_command"]
-        assert "bug_report.json" in assess_cmd
+# T_SP_NEW_3
+def test_no_legacy_pipeline_steps(smoke_recipe) -> None:
+    """Old investigate/rectify/assess/classify/merge steps must be absent."""
+    legacy = {"investigate", "rectify", "assess", "classify", "merge"}
+    present = legacy & set(smoke_recipe.steps)
+    assert not present, f"Legacy steps still present: {present}"
 
 
-def test_smoke_commit_dirty_step_exists(smoke_recipe) -> None:
-    """commit_dirty step must exist and route back to merge."""
-    assert "commit_dirty" in smoke_recipe.steps
-    step = smoke_recipe.steps["commit_dirty"]
+# T_SP_NEW_4
+def test_implement_task_references_smoke_canary(smoke_recipe) -> None:
+    """REQ-TASK-001: implement_task skill_command must reference smoke_canary."""
+    step = smoke_recipe.steps["implement_task"]
+    cmd = step.with_args.get("skill_command", "")
+    assert "smoke_canary" in cmd, "implement_task must describe the smoke_canary micro-task"
+
+
+# T_SP_NEW_5
+def test_create_pr_step_uses_gh_pr_create(smoke_recipe) -> None:
+    """REQ-PIPE-003: create_pr step must invoke gh pr create."""
+    step = smoke_recipe.steps["create_pr"]
     assert step.tool == "run_cmd"
-    assert step.on_success == "merge"
+    assert "gh pr create" in step.with_args.get("cmd", "")
+
+
+# T_SP_NEW_6
+def test_close_pr_step_uses_gh_pr_close(smoke_recipe) -> None:
+    """REQ-PIPE-004: close_pr step must invoke gh pr close."""
+    step = smoke_recipe.steps["close_pr"]
+    assert step.tool == "run_cmd"
+    assert "gh pr close" in step.with_args.get("cmd", "")
+
+
+# T_SP_NEW_7
+def test_close_pr_routes_to_delete_remote_branch_on_both_outcomes(smoke_recipe) -> None:
+    """REQ-GUARD-002: cleanup must be reached regardless of close_pr result."""
+    step = smoke_recipe.steps["close_pr"]
+    assert step.on_success == "delete_remote_branch"
+    assert step.on_failure == "delete_remote_branch"
+
+
+# T_SP_NEW_8
+def test_delete_remote_branch_routes_to_register_clone_success(smoke_recipe) -> None:
+    """delete_remote_branch is non-critical — routes to register_clone_success."""
+    step = smoke_recipe.steps["delete_remote_branch"]
+    assert step.on_success == "register_clone_success"
+    assert step.on_failure == "register_clone_success"
+
+
+# T_SP_NEW_9
+def test_register_clone_failure_routes_to_escalate(smoke_recipe) -> None:
+    """register_clone_failure preserves failure semantics — must route to escalate."""
+    step = smoke_recipe.steps["register_clone_failure"]
+    assert step.on_success == "escalate"
+    assert step.on_failure == "escalate"
+
+
+# T_SP_NEW_10
+def test_test_step_routes_to_fail_delete_on_failure(smoke_recipe) -> None:
+    """REQ-GUARD-002: test failure must clean up before escalating."""
+    step = smoke_recipe.steps["run_tests"]
+    assert step.tool == "run_cmd"
+    assert "task test-check" in step.with_args.get("cmd", "")
+    assert step.on_failure == "fail_delete_remote_branch"
+
+
+# T_SP_NEW_11
+def test_recipe_has_no_collect_on_branch_ingredient(smoke_recipe) -> None:
+    """Old collect_on_branch complexity is gone — ingredient must be absent."""
+    assert "collect_on_branch" not in smoke_recipe.ingredients
+
+
+# T_SP_NEW_12
+def test_done_and_escalate_are_stop_actions(smoke_recipe) -> None:
+    """Both terminal steps must have action=stop."""
+    assert smoke_recipe.steps["done"].action == "stop"
+    assert smoke_recipe.steps["escalate"].action == "stop"
+
+
+# T_SP_NEW_13
+def test_clone_step_is_first_and_uses_clone_repo(smoke_recipe) -> None:
+    """The first step must be clone using clone_repo tool."""
+    first_step_name = next(iter(smoke_recipe.steps))
+    assert first_step_name == "clone"
+    step = smoke_recipe.steps["clone"]
+    assert step.tool == "clone_repo"
+    assert step.with_args["source_dir"] == "${{ inputs.source_dir }}"
+
+
+# T_SP_NEW_14
+def test_push_branch_uses_push_to_remote(smoke_recipe) -> None:
+    """push_branch must use push_to_remote tool (not run_cmd git push)."""
+    step = smoke_recipe.steps["push_branch"]
+    assert step.tool == "push_to_remote"
+    assert step.with_args["clone_path"] == "${{ context.work_dir }}"
+    assert step.with_args["branch"] == "${{ context.branch_name }}"
+    assert step.with_args["remote_url"] == "${{ context.remote_url }}"
+
+
+# T_SP_NEW_15
+def test_ingredient_renamed_to_source_dir(smoke_recipe) -> None:
+    """Ingredient must be source_dir, not workspace."""
+    assert "source_dir" in smoke_recipe.ingredients
+    assert "workspace" not in smoke_recipe.ingredients
+
+
+# T_SP_NEW_16
+def test_register_clone_success_routes_to_done(smoke_recipe) -> None:
+    """register_clone_success must route to done."""
+    step = smoke_recipe.steps["register_clone_success"]
+    assert step.tool == "register_clone_status"
+    assert step.on_success == "done"
+    assert step.on_failure == "done"
+
+
+# T_SP_NEW_17
+def test_no_step_uses_inputs_as_cwd_after_clone(smoke_recipe) -> None:
+    """No step after clone should use inputs.* as cwd."""
+    input_re = re.compile(r"\$\{\{\s*inputs\.\w+\s*\}\}")
+    seen_clone = False
+    for name, step in smoke_recipe.steps.items():
+        if step.tool == "clone_repo":
+            seen_clone = True
+            continue
+        if seen_clone and step.with_args:
+            cwd = step.with_args.get("cwd", "")
+            assert not input_re.search(cwd), (
+                f"Step '{name}' uses inputs.* as cwd after clone: {cwd}"
+            )
+
+
+# T_SP_NEW_18
+def test_smoke_recipe_passes_isolation_rules(smoke_recipe) -> None:
+    """Smoke recipe must pass all isolation semantic rules."""
+    from autoskillit.recipe.validator import run_semantic_rules
+
+    findings = run_semantic_rules(smoke_recipe)
+    isolation_findings = [
+        f for f in findings if f.rule in ("source-isolation-violation", "git-mutation-on-source")
+    ]
+    assert isolation_findings == []
 
 
 # ---------------------------------------------------------------------------
@@ -446,39 +302,11 @@ def test_smoke_commit_dirty_step_exists(smoke_recipe) -> None:
 
 
 class TestSmokePipelineExecution:
-    """Full end-to-end pipeline execution with real API calls.
+    """Full end-to-end smoke execution.
 
-    Skipped unless SMOKE_TEST=1 is set (``task test-smoke`` sets this).
+    Run via ``task test-smoke`` which sets SMOKE_TEST=1 and invokes the
+    recipe against the actual project repository. This class is a
+    documentation anchor — the execution itself uses `autoskillit cook`.
     """
 
     pytestmark = pytest.mark.skipif(not os.environ.get("SMOKE_TEST"), reason="SMOKE_TEST not set")
-
-    @pytest.fixture(autouse=True)
-    def _smoke_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        cfg = AutomationConfig(
-            test_check=TestCheckConfig(command=["python", "-c", "pass"], timeout=30),
-        )
-        monkeypatch.setattr(server, "_config", cfg)
-
-    async def _run_pipeline(self, workspace: Path, script_path: Path) -> tuple[str | None, str]:
-        raw = script_path.read_text()
-        pipeline = yaml.safe_load(raw)
-        executor = SmokeExecutor(
-            steps=pipeline["steps"],
-            inputs={
-                "workspace": str(workspace),
-                "base_branch": "main",
-                "collect_on_branch": "true",
-                "original_base_branch": "main",
-            },
-        )
-        terminal, message = await executor.run()
-        return terminal, message
-
-    @pytest.mark.smoke
-    async def test_happy_path(self, smoke_workspace: Path, smoke_script_path: Path) -> None:
-        terminal, _message = await asyncio.wait_for(
-            self._run_pipeline(smoke_workspace, smoke_script_path),
-            timeout=180,
-        )
-        assert terminal == "done"

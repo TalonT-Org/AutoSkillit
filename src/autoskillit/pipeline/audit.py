@@ -9,11 +9,12 @@ store with a defensive copy getter.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, get_type_hints
 
 from autoskillit.core import FailureRecord, RetryReason, get_logger
 
@@ -24,28 +25,72 @@ COMMAND_MAX_LEN = 200
 
 __all__ = ["FailureRecord", "DefaultAuditLog", "STDERR_MAX_LEN", "COMMAND_MAX_LEN"]
 
+_CONCRETE_TYPES = (str, int, bool, float)
+
+
+def _validate_failure_record_dict(record_dict: dict[str, Any]) -> bool:
+    """Return True if record_dict is structurally valid for FailureRecord construction.
+
+    Checks:
+    1. All dataclass fields are present as keys.
+    2. Values for concrete non-generic fields (str, int, bool, float) match their
+       declared type.
+
+    Uses typing.get_type_hints() to resolve string annotations produced by
+    ``from __future__ import annotations`` in core/_type_results.py.
+    Wrong-type or missing-field records are rejected (return False) so that
+    load_from_log_dir skips them rather than silently accepting mistyped data.
+    """
+    try:
+        hints = get_type_hints(FailureRecord)
+    except Exception:
+        logger.warning(
+            "get_type_hints(FailureRecord) failed; falling back to key-presence check",
+            exc_info=True,
+        )
+        return all(f.name in record_dict for f in dataclasses.fields(FailureRecord))
+
+    for f in dataclasses.fields(FailureRecord):
+        if f.name not in record_dict:
+            return False
+        resolved = hints.get(f.name)
+        if resolved in _CONCRETE_TYPES:
+            val = record_dict[f.name]
+            if resolved is int and isinstance(val, bool):
+                return False
+            if not isinstance(val, resolved):
+                return False
+    return True
+
 
 def _iter_session_log_entries(
     log_root: Path,
     since: str,
     filename: str,
     cwd_filter: str = "",
+    kitchen_id_filter: str = "",
 ) -> Iterator[Path]:
     """Yield per-session file paths from sessions.jsonl that pass the filters.
 
     Handles: JSONL parsing, since_dt filtering (ISO timestamp), cwd filtering,
-    dir_name extraction, and per-session file existence check. Each caller is
-    responsible only for reading and accumulating the yielded file's JSON content.
+    kitchen_id filtering, dir_name extraction, and per-session file existence
+    check. Each caller is responsible only for reading and accumulating the
+    yielded file's JSON content.
 
     Args:
-        log_root:   Root of the session log directory (contains sessions.jsonl).
-        since:      ISO timestamp string; sessions before this are skipped.
-                    Empty string disables time filtering.
-        filename:   Name of the per-session file to look for
-                    (e.g. "audit_log.json", "token_usage.json", "step_timing.json").
-        cwd_filter: If non-empty, only yield sessions whose ``cwd`` field matches
-                    this string exactly. Empty string disables cwd filtering and
-                    yields all sessions regardless of cwd (backward-compatible default).
+        log_root:           Root of the session log directory (contains sessions.jsonl).
+        since:              ISO timestamp string; sessions before this are skipped.
+                            Empty string disables time filtering.
+        filename:           Name of the per-session file to look for
+                            (e.g. "audit_log.json", "token_usage.json", "step_timing.json").
+        cwd_filter:         If non-empty, only yield sessions whose ``cwd`` field matches
+                            this string exactly. Empty string disables cwd filtering and
+                            yields all sessions regardless of cwd (backward-compatible default).
+        kitchen_id_filter:  If non-empty, only yield sessions whose ``kitchen_id`` field
+                            matches this string exactly. Falls back to ``pipeline_id`` for
+                            sessions written before the rename. Empty string disables
+                            kitchen_id filtering. When both cwd_filter and kitchen_id_filter
+                            are provided, both must match (AND logic).
 
     Yields:
         Path to each matching per-session file that exists.
@@ -84,6 +129,11 @@ def _iter_session_log_entries(
 
         if cwd_filter and idx.get("cwd") != cwd_filter:
             continue
+
+        if kitchen_id_filter:
+            entry_kitchen_id = idx.get("kitchen_id") or idx.get("pipeline_id", "")
+            if entry_kitchen_id != kitchen_id_filter:
+                continue
 
         dir_name = idx.get("dir_name", "")
         if not dir_name:
@@ -177,7 +227,14 @@ class DefaultAuditLog:
             )
         )
 
-    def load_from_log_dir(self, log_root: Path, *, since: str = "", cwd_filter: str = "") -> int:
+    def load_from_log_dir(
+        self,
+        log_root: Path,
+        *,
+        since: str = "",
+        cwd_filter: str = "",
+        kitchen_id_filter: str = "",
+    ) -> int:
         """Reconstruct failure records from persisted session logs.
 
         Reads the sessions.jsonl index at log_root, filters entries by since
@@ -185,11 +242,15 @@ class DefaultAuditLog:
         directory, and appends FailureRecord instances to self._records.
 
         cwd_filter: if non-empty, only sessions whose cwd matches are loaded.
+        kitchen_id_filter: if non-empty, only sessions whose kitchen_id matches are loaded.
+            Falls back to pipeline_id for sessions written before the rename.
 
         Returns the count of session directories successfully loaded.
         """
         count = 0
-        for al_path in _iter_session_log_entries(log_root, since, "audit_log.json", cwd_filter):
+        for al_path in _iter_session_log_entries(
+            log_root, since, "audit_log.json", cwd_filter, kitchen_id_filter
+        ):
             try:
                 data = json.loads(al_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
@@ -199,6 +260,10 @@ class DefaultAuditLog:
                 continue
 
             for record_dict in data:
+                if not isinstance(record_dict, dict):
+                    continue
+                if not _validate_failure_record_dict(record_dict):
+                    continue
                 try:
                     self._records.append(FailureRecord(**record_dict))
                     count += 1

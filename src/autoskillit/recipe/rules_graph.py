@@ -59,6 +59,65 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                     if s in recipe.steps
                 )
                 if has_retry_exit:
+                    # Check whether the success path of the retrying step stays inside
+                    # the cycle. If it does, the retry exit only bounds individual visits
+                    # but the outer loop can still iterate unboundedly.
+                    retrying_steps = [
+                        s
+                        for s in cycle_steps
+                        if s in recipe.steps
+                        and recipe.steps[s].retries > 0
+                        and recipe.steps[s].tool in SKILL_TOOLS
+                        and recipe.steps[s].on_exhausted not in cycle_set
+                    ]
+                    success_stays_in_cycle = any(
+                        recipe.steps[s].on_success in cycle_set
+                        for s in retrying_steps
+                        if recipe.steps[s].on_success is not None
+                    )
+                    if not success_stays_in_cycle:
+                        # Success path exits the cycle — but does it loop back?
+                        # BFS from exit targets to check if they can reach any
+                        # cycle member through the step graph.
+                        exit_targets: set[str] = set()
+                        for _rs in retrying_steps:
+                            _os = recipe.steps[_rs].on_success
+                            if _os is not None and _os not in cycle_set:
+                                exit_targets.add(_os)
+                        loops_back = False
+                        visited_exit: set[str] = set()
+                        frontier = exit_targets
+                        while frontier:
+                            if frontier & cycle_set:
+                                loops_back = True
+                                break
+                            visited_exit |= frontier
+                            nxt: set[str] = set()
+                            for f in frontier:
+                                nxt |= set(graph.get(f, set())) - visited_exit
+                            frontier = nxt
+                        if not loops_back:
+                            # Truly exits — cycle is bounded
+                            rec_stack.discard(node)
+                            return
+
+                    # Success path re-enters the cycle — retry exit only bounds
+                    # individual step visits, not the outer loop. Emit WARNING.
+                    findings.append(
+                        RuleFinding(
+                            rule="unbounded-cycle",
+                            severity=Severity.WARNING,
+                            step_name=node,
+                            message=(
+                                f"Routing cycle detected: {' → '.join(cycle_steps)} → {neighbor}. "
+                                f"Step(s) {', '.join(retrying_steps)} have retry exits, but their "
+                                f"success paths re-enter the cycle. The inner retry budget resets "
+                                f"on each loop iteration, so the outer loop is unbounded. "
+                                "Add a global iteration counter or route success outside the "
+                                "cycle."
+                            ),
+                        )
+                    )
                     rec_stack.discard(node)
                     return
 

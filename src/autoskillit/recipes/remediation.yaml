@@ -18,9 +18,9 @@ kitchen_rules:
     derived from inputs.run_name and context.issue_number (e.g. investigate/42) or
     a date suffix (e.g. investigate/20260304) when no issue is available. All worktree
     merges target the feature branch (context.merge_target), not base_branch
-    directly. The push step publishes the feature branch, then open_pr_step
+    directly. The push step publishes the feature branch, then prepare_pr → run_arch_lenses → compose_pr
     opens a PR to base_branch. When open_pr=false, merges target base_branch
-    directly and open_pr_step is skipped."
+    directly and prepare_pr is skipped."
   - "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly
     off-limits. Never run any command in source_dir — no git checkout, git
     fetch, git reset, git pull, run_cmd, run_skill, or any other operation.
@@ -44,7 +44,7 @@ ingredients:
     default: ""
   audit:
     description: Post-merge quality gate
-    default: "true"
+    default: "false"
   review_approach:
     description: Research approaches first
     default: "false"
@@ -66,26 +66,14 @@ ingredients:
   upfront_claimed:
     description: "Set to 'true' when process-issues has already claimed this issue upfront. Allows claim_issue defense step to pass through without aborting."
     default: "false"
+    hidden: true
   run_mode:
     description: >-
       Execution mode when processing multiple issues. Options: sequential (default,
       one issue at a time) or parallel (all issues simultaneously with wavefront
       step scheduling — fast steps for all pipelines before any slow step).
     default: "sequential"
-  defer_cleanup:
-    description: >-
-      When 'true', skip per-pipeline interactive cleanup and register this clone
-      in the shared registry for batch deletion after all parallel pipelines
-      complete. Set to 'true' on every parallel instance; leave 'false' for
-      sequential single-pipeline runs.
-    default: "false"
-  registry_path:
-    description: >-
-      Absolute path to the shared clone cleanup registry file. Required when
-      defer_cleanup=true. Must be identical across all parallel pipeline runs in
-      the same batch (use a fixed path like
-      /path/to/project/.autoskillit/temp/clone-cleanup-registry.json).
-    default: ""
+    hidden: true
 
 steps:
   sprint_entry:
@@ -149,7 +137,7 @@ steps:
       Runs when inputs.issue_url is non-empty. Skipped otherwise.
       Fetches only the issue title and slug (no body, no comments).
       issue_number is used for feature branch naming and threaded to
-      open_pr_step for "Closes #N" in the PR body.
+      prepare_pr for "Closes #N" in the PR body.
       issue_slug provides a descriptive branch prefix (e.g. fix-merge-conflict-triage).
 
   claim_issue:
@@ -289,6 +277,7 @@ steps:
 
   implement:
     tool: run_skill
+    stale_threshold: 2400
     with:
       skill_command: "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}"
       cwd: "${{ context.work_dir }}"
@@ -304,6 +293,7 @@ steps:
 
   retry_worktree:
     tool: run_skill
+    stale_threshold: 2400
     with:
       skill_command: "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}"
       cwd: "${{ context.worktree_path }}"
@@ -312,8 +302,12 @@ steps:
       implementation_ref: "${{ result.worktree_path }}"
       worktree_path: "${{ result.worktree_path }}"
       branch_name: "${{ result.branch_name }}"
+      phases_implemented: "${{ result.phases_implemented }}"
+    on_result:
+      - when: "${{ result.phases_implemented }} > 0"
+        route: test
+      - route: test
     on_exhausted: release_issue_failure
-    on_success: test
     on_failure: release_issue_failure
 
   test:
@@ -329,7 +323,18 @@ steps:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: "assess"
-    on_success: test
+    capture:
+      verdict: "${{ result.verdict }}"
+      fixes_applied: "${{ result.fixes_applied }}"
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: test
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: test
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: test
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: release_issue_failure
     on_context_limit: test
     on_failure: release_issue_failure
     on_exhausted: release_issue_failure
@@ -344,7 +349,7 @@ steps:
       remediation_path: "${{ result.remediation_path }}"
     on_result:
       - when: "${{ result.verdict }} == GO"
-        route: merge
+        route: commit_guard
       - when: "result.error"
         route: escalate_stop
       - route: remediate
@@ -352,7 +357,7 @@ steps:
     on_context_limit: escalate_stop
     optional: true
     skip_when_false: "inputs.audit"
-    note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to merge.
+    note: Only run if inputs.audit = true. If inputs.audit = false, skip directly to commit_guard.
 
   remediate:
     action: route
@@ -373,6 +378,19 @@ steps:
       plan_parts: "${{ result.plan_parts }}"
     on_success: dry_walkthrough
     on_failure: release_issue_failure
+
+  commit_guard:
+    tool: run_cmd
+    with:
+      cmd: "cd ${{ context.implementation_ref }} && if [ -n \"$(git status --porcelain)\" ]; then git add -A && git commit -m 'chore: commit pending session changes'; fi"
+      cwd: "${{ context.implementation_ref }}"
+      step_name: commit_guard
+    on_success: merge
+    on_failure: merge
+    note: >
+      Belt-and-suspenders guard: auto-commits any uncommitted changes before merge.
+      Catches dirty state from context-exhausted skills, cascading pre-commit auto-fixes,
+      or any other source. on_failure routes to merge (dirty-tree gate will catch real issues).
 
   merge:
     tool: merge_worktree
@@ -402,35 +420,81 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
-    on_success: open_pr_step
+    on_success: prepare_pr
     on_failure: release_issue_failure
     note: >
       Runs once at the end.
       Pushes merge_target branch from the clone to the upstream remote.
       By default (open_pr=true), this pushes the feature branch; when open_pr=false, pushes base_branch.
       Uses the pre-resolved remote_url captured at clone time, preserving clone isolation.
-      On success, routes to open_pr_step (which opens the PR by default; skipped when open_pr=false).
-      On failure, cleanup_failure still removes the clone.
+      On success, routes to prepare_pr (which opens the PR by default; skipped when open_pr=false).
+      On failure, release_issue_failure registers the clone and escalates.
 
-  open_pr_step:
+  prepare_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:open-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:prepare-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "open_pr"
+      step_name: "prepare_pr"
       issue_number: "${{ context.issue_number }}"
+    capture:
+      prep_path: "${{ result.prep_path }}"
+      selected_lenses: "${{ result.selected_lenses }}"
+      lens_context_paths: "${{ result.lens_context_paths }}"
+    on_success: run_arch_lenses
+    on_failure: release_issue_failure
+    on_context_limit: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Reads plan, runs git diff, classifies changed files, selects 1–3 arch-lens slugs,
+      writes one PR context file per lens, and writes a PR prep file. Does NOT invoke
+      arch-lens skills. If context.issue_number is a non-empty string, append it as the
+      4th positional argument so prepare-pr fetches requirements from the closing issue.
+
+  run_arch_lenses:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:arch-lens-{slug} {context_path}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "run_arch_lenses"
+    capture_list:
+      all_diagram_paths: "${{ result.diagram_path }}"
+    on_success: compose_pr
+    on_failure: compose_pr
+    on_context_limit: compose_pr
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      LENS ITERATION: context.selected_lenses contains comma-separated arch-lens slugs
+      (e.g. "module-dependency,process-flow"). context.lens_context_paths contains the
+      corresponding comma-separated context file paths (same order as slugs). For each
+      lens slug, run:
+        /autoskillit:arch-lens-{slug} {matching_context_path}
+      Run all selected lenses in parallel (all run_skill calls in a single message).
+      Accumulate each diagram_path value into context.all_diagram_paths via capture_list.
+      If a lens fails, continue with remaining lenses — compose_pr handles empty lists
+      gracefully by omitting the Architecture Impact section.
+
+  compose_pr:
+    tool: run_skill
+    with:
+      skill_command: "/autoskillit:compose-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.work_dir }} ${{ inputs.base_branch }}"
+      cwd: "${{ context.work_dir }}"
+      step_name: "compose_pr"
+      issue_number: "${{ context.issue_number }}"
+    capture:
+      pr_url: "${{ result.pr_url }}"
     on_success: extract_pr_number
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Runs by default (open_pr=true). Skipped when open_pr=false.
-      The feature branch is already published by the push step that precedes this step.
-      Invokes the open-pr skill which selects arch-lens diagrams, composes a PR body,
-      and runs gh pr create. The skill gracefully degrades if gh is unavailable.
-      If context.issue_number is a non-empty string, append it as a 4th positional
-      argument so the open-pr skill inserts "Closes #{issue_number}" into the PR body.
+      Reads the PR prep file, validates arch-lens diagrams (must contain ★ or ●),
+      composes the PR body, and runs gh pr create. Degrades gracefully if gh is
+      unavailable (emits pr_url=). If context.issue_number is set, append it as the
+      5th positional argument for Closes #N injection in the PR body.
 
   extract_pr_number:
     tool: run_cmd
@@ -440,18 +504,36 @@ steps:
       step_name: "extract_pr_number"
     capture:
       pr_number: "${{ result.stdout | trim }}"
-    on_success: review_pr
+    on_success: annotate_pr_diff
     on_failure: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Extracts the integer PR number from the feature branch opened by open_pr_step.
+      Extracts the integer PR number from the feature branch opened by compose_pr.
       pr_number is required by the queue finale steps (enable_auto_merge, wait_for_queue).
+
+  annotate_pr_diff:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.annotate_pr_diff"
+      pr_number: "${{ context.pr_number }}"
+      cwd: "${{ context.work_dir }}"
+      output_dir: "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/review-pr"
+    capture:
+      annotated_diff_path: "${{ result.annotated_diff_path }}"
+      hunk_ranges_path: "${{ result.hunk_ranges_path }}"
+    on_success: review_pr
+    on_failure: review_pr
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Pre-computes annotated diff with [LNNN] markers and hunk ranges JSON for
+      review-pr. On failure, falls through to review_pr which uses empty fallback.
 
   review_pr:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr"
     capture:
@@ -468,7 +550,7 @@ steps:
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Runs after open_pr_step creates the PR. Invokes the review-pr skill as a
+      Runs after compose_pr creates the PR. Invokes the review-pr skill as a
       headless session to leave inline review comments on the PR. The skill finds
       the open PR by feature branch name (context.merge_target). Captures verdict
       and routes via on_result: changes_requested → resolve_review,
@@ -481,16 +563,27 @@ steps:
       skill_command: "/autoskillit:resolve-review ${{ context.merge_target }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_review"
+    capture:
+      verdict: "${{ result.verdict }}"
     retries: 2
     on_exhausted: release_issue_failure
-    on_success: re_push_review
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: re_push_review
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: re_push_review
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: release_issue_failure
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: release_issue_failure
     on_failure: release_issue_failure
     note: >
       Runs when review_pr reports issues (verdict=changes_requested). The clone
       (context.work_dir) has the feature branch (context.merge_target) checked out.
       resolve-review fetches inline and summary review comments via the GitHub API,
       applies fixes for each actionable finding (critical + warning severity), and
-      commits each fix. Orchestrator re-pushes via re_push_review after success.
+      commits each fix. Routes via on_result: verdict dispatch — real_fix/already_green
+      both route to re_push_review; flake_suspected/ci_only_failure escalate.
       Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.
 
   re_push_review:
@@ -510,14 +603,13 @@ steps:
     tool: wait_for_ci
     with:
       branch: "${{ context.merge_target }}"
-      workflow: "tests.yml"
       timeout_seconds: 300
       cwd: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
     capture:
       ci_conclusion: "${{ result.conclusion }}"
       ci_failed_jobs: "${{ result.failed_jobs }}"
-    on_success: check_merge_queue
+    on_success: check_repo_merge_state
     on_failure: detect_ci_conflict
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -526,71 +618,44 @@ steps:
       using the wait_for_ci MCP tool (timeout: 300 s). Captures structured output
       (conclusion + failed job names) for downstream resolve_ci.
       Skipped when open_pr=false — no remote feature branch is opened in that mode.
-      On success, routes to check_merge_queue to determine if the PR should enter
+      On success, routes to check_repo_merge_state to determine if the PR should enter
       the merge queue. On failure, routes to detect_ci_conflict which checks whether
       the failure is caused by a stale base before falling through to diagnose_ci.
 
-  check_merge_queue:
-    tool: run_cmd
+  check_repo_merge_state:
+    tool: check_repo_merge_state
+    block: pre_queue_gate
     with:
-      cmd: >
-        REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||') &&
-        OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
-        BRANCH="${{ inputs.base_branch }}" &&
-        gh api graphql -f query="query {
-          repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
-            mergeQueue(branch:\"$BRANCH\") { id }
-          }
-        }" | jq -r 'if .data.repository.mergeQueue != null then "true" else "false" end'
+      branch: "${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "check_merge_queue"
+      remote_url: "${{ context.remote_url }}"
+      step_name: "check_repo_merge_state"
     capture:
-      queue_available: "${{ result.stdout | trim }}"
-    on_success: check_auto_merge
-    on_failure: release_issue_success
-    skip_when_false: "inputs.open_pr"
-    note: >
-      Detects whether the target branch has an active merge queue via GraphQL.
-      Captures "true" or "false" into context.queue_available.
-      On failure (gh error, parse error), degrades gracefully to release_issue_success
-      (success path). On success, routes to check_auto_merge for auto-merge
-      availability detection. Skipped when open_pr=false — no PR was opened.
-
-  check_auto_merge:
-    tool: run_cmd
-    with:
-      cmd: >
-        REPO=$( { git remote get-url upstream 2>/dev/null || git remote get-url origin; } | sed 's|.*github\.com[:/]||; s|\.git$||') &&
-        OWNER=${REPO%%/*} && REPO_NAME=${REPO##*/} &&
-        gh api graphql -f query="query {
-          repository(owner:\"$OWNER\", name:\"$REPO_NAME\") {
-            autoMergeAllowed
-          }
-        }" | jq -r '.data.repository.autoMergeAllowed // false'
-      cwd: "${{ context.work_dir }}"
-      step_name: "check_auto_merge"
-    capture:
-      auto_merge_available: "${{ result.stdout | trim }}"
+      queue_available: "${{ result.queue_available }}"
+      merge_group_trigger: "${{ result.merge_group_trigger }}"
+      auto_merge_available: "${{ result.auto_merge_available }}"
+      ci_event: "${{ result.ci_event }}"
     on_success: route_queue_mode
-    on_failure: route_queue_mode
+    on_failure: immediate_merge
     skip_when_false: "inputs.open_pr"
     note: >
-      Detects whether the target repository has autoMergeAllowed enabled via GraphQL.
-      Captures "true" or "false" into context.auto_merge_available.
-      On failure (gh error, network error), falls through to route_queue_mode with
-      auto_merge_available unset — route_queue_mode defaults to immediate_merge (safe
-      non-auto path). GraphQL-level errors (rate-limit, missing auth scope) also return
-      exit 0 with an errors array and no .data field; the jq // false fallback outputs
-      false safely, so auto_merge_available defaults to false on any error path.
+      Single GraphQL round-trip that captures queue_available, merge_group_trigger,
+      auto_merge_available, and ci_event for the target branch. Consolidates the former three
+      sequential run_cmd steps (check_merge_queue, check_merge_group_trigger,
+      check_auto_merge) into one MCP tool call. On failure (network error, auth failure),
+      falls through to immediate_merge (non-queue direct merge path).
       Skipped when open_pr=false — no PR was opened.
 
   route_queue_mode:
+    block: pre_queue_gate
     action: route
     on_result:
       - when: "${{ inputs.auto_merge }} != 'true'"
-        route: confirm_cleanup
-      - when: "${{ context.queue_available }} == true"
+        route: register_clone_success
+      - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true and ${{ context.auto_merge_available }} == true"
         route: enable_auto_merge
+      - when: "${{ context.queue_available }} == true and ${{ context.merge_group_trigger }} == true and ${{ context.auto_merge_available }} == false"
+        route: queue_enqueue_no_auto
       - when: "${{ context.auto_merge_available }} == true"
         route: direct_merge
       - route: immediate_merge
@@ -603,11 +668,29 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "enable_auto_merge"
     on_success: wait_for_queue
-    on_failure: confirm_cleanup
+    on_failure: register_clone_success
     skip_when_false: "inputs.open_pr"
     note: >
       Submits the PR to the merge queue. On failure (PR not mergeable, already merged),
-      degrades to confirm_cleanup.
+      degrades to register_clone_success.
+
+  queue_enqueue_no_auto:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash"
+      cwd: "${{ context.work_dir }}"
+      step_name: "queue_enqueue_no_auto"
+    on_success: wait_for_queue
+    on_failure: register_clone_success
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Submits the PR to the merge queue when the target branch has a configured
+      merge queue but the repository disallows auto-merge (autoMergeAllowed=false).
+      Uses plain `gh pr merge --squash` (no --auto, which would be rejected by
+      GitHub's API auto-merge gate). GitHub intercepts the call and enqueues
+      the PR because the branch has a queue. Routes to wait_for_queue (the
+      shared queue waiter) — never to wait_for_immediate_merge, whose 5-minute
+      poll is too short for queue serialization.
 
   wait_for_queue:
     tool: wait_for_merge_queue
@@ -622,21 +705,28 @@ steps:
     on_result:
       - when: "${{ result.pr_state }} == merged"
         route: release_issue_success
+      - when: "${{ result.pr_state }} == ejected_ci_failure"
+        route: diagnose_ci
+      - when: "${{ result.pr_state }} == dropped_healthy"
+        route: reenter_merge_queue_cheap
       - when: "${{ result.pr_state }} == ejected"
         route: queue_ejected_fix
       - when: "${{ result.pr_state }} == stalled"
         route: reenroll_stalled_pr
-      - route: confirm_cleanup
-    on_failure: confirm_cleanup
+      - when: "${{ result.pr_state }} == timeout"
+        route: release_issue_timeout
+      - route: release_issue_timeout
+    on_failure: release_issue_timeout
     skip_when_false: "inputs.open_pr"
     note: >
       Waits up to 15 minutes for the PR to merge through the queue.
-      merged → release_issue_success to apply staged label, then confirm_cleanup.
+      merged → release_issue_success to apply staged label, then register_clone_success.
       release_issue_success is optional with skip_when_false: inputs.issue_url — when
-      issue_url is absent the step is silently skipped and pipeline continues to confirm_cleanup.
+      issue_url is absent the step is silently skipped and pipeline continues to register_clone_success.
+      ejected_ci_failure → diagnose_ci (CI failure; conflict resolution cannot fix this).
       ejected → conflict fix cycle then re-enter.
       stalled → lightweight re-enrollment (disable then re-enable auto-merge).
-      timeout → confirm_cleanup (pipeline done; human monitors queue).
+      timeout → release_issue_timeout (release claim without staged label; merge unconfirmed).
 
   reenroll_stalled_pr:
     tool: toggle_auto_merge
@@ -649,11 +739,33 @@ steps:
     skip_when_false: "inputs.open_pr"
 
   queue_ejected_fix:
+    tool: run_cmd
+    with:
+      cmd: >
+        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+        then echo 'clean';
+        else git rebase --abort 2>/dev/null || true; echo 'conflicts';
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "queue_ejected_fix"
+    on_result:
+      - when: "${{ result.stdout | trim }} == clean"
+        route: re_push_queue_fix
+      - route: resolve_queue_merge_conflicts
+    on_failure: resolve_queue_merge_conflicts
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Attempts a cheap rebase before invoking the full conflict-resolution skill.
+      On a clean rebase (stdout "clean"), skips the skill and proceeds directly to
+      re_push_queue_fix. On conflict, aborts the rebase and routes to
+      resolve_queue_merge_conflicts for goal-aware resolution.
+
+  resolve_queue_merge_conflicts:
     tool: run_skill
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "queue_ejected_fix"
+      step_name: "resolve_queue_merge_conflicts"
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
@@ -667,8 +779,7 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Resolves rebase conflicts on the feature branch after queue ejection.
-      Uses the clone working directory (context.work_dir) with the feature branch
-      (context.merge_target) checked out. context.plan_path provides resolution guidance.
+      Only reached when the cheap rebase in queue_ejected_fix encountered conflicts.
       escalation_required=true → release_issue_failure for human review.
 
   re_push_queue_fix:
@@ -677,9 +788,29 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
-    on_success: reenter_merge_queue
+      force: "true"
+    on_success: ci_watch_post_queue_fix
     on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"
+
+  ci_watch_post_queue_fix:
+    tool: wait_for_ci
+    with:
+      branch: "${{ context.merge_target }}"
+      event: "${{ context.ci_event }}"
+      timeout_seconds: 300
+      cwd: "${{ context.work_dir }}"
+      remote_url: "${{ context.remote_url }}"
+    capture:
+      ci_conclusion: "${{ result.conclusion }}"
+      ci_failed_jobs: "${{ result.failed_jobs }}"
+    on_success: reenter_merge_queue
+    on_failure: detect_ci_conflict
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Validates CI on the rebased feature branch after queue ejection fix and re-push.
+      Mirrors ci_watch: routes to reenter_merge_queue on CI pass, to detect_ci_conflict
+      on CI failure. Prevents re-entering the merge queue with a broken manifest or code.
 
   reenter_merge_queue:
     tool: run_cmd
@@ -694,6 +825,20 @@ steps:
       Re-submits the PR after conflict resolution. Routes back to wait_for_queue.
       If re-entry fails, release_issue_failure preserves the clone for debugging.
 
+  reenter_merge_queue_cheap:
+    tool: run_cmd
+    with:
+      cmd: "gh pr merge '${{ context.pr_number }}' --squash --auto"
+      cwd: "${{ context.work_dir }}"
+      step_name: "reenter_merge_queue_cheap"
+    on_success: wait_for_queue
+    on_failure: release_issue_failure
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Re-submits a healthy PR into the merge queue after auto_merge was cleared
+      externally (DROPPED_HEALTHY state). No conflict-resolution CI wait needed.
+      Routes back to wait_for_queue on success.
+
   direct_merge:
     tool: run_cmd
     with:
@@ -701,12 +846,12 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "direct_merge"
     on_success: wait_for_direct_merge
-    on_failure: confirm_cleanup
+    on_failure: register_clone_success
     skip_when_false: "inputs.open_pr"
     note: >
       Enables GitHub native auto-merge for direct merge (no merge queue). GitHub
       merges automatically once all required checks pass. On failure (PR already
-      merged, not mergeable), degrades gracefully to confirm_cleanup.
+      merged, not mergeable), degrades gracefully to register_clone_success.
 
   wait_for_direct_merge:
     tool: run_cmd
@@ -726,7 +871,7 @@ steps:
       - when: "${{ result.stdout | trim }} == closed"
         route: direct_merge_conflict_fix
       - route: release_issue_timeout
-    on_failure: confirm_cleanup
+    on_failure: register_clone_success
     skip_when_false: "inputs.open_pr"
     note: >
       Polls GitHub PR state every 10 s for up to 15 minutes.
@@ -735,11 +880,32 @@ steps:
       timeout → release_issue_timeout (releases claim; merge unconfirmed).
 
   direct_merge_conflict_fix:
+    tool: run_cmd
+    with:
+      cmd: >
+        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+        then echo 'clean';
+        else git rebase --abort 2>/dev/null || true; echo 'conflicts';
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "direct_merge_conflict_fix"
+    on_result:
+      - when: "${{ result.stdout | trim }} == clean"
+        route: re_push_direct_fix
+      - route: resolve_direct_merge_conflicts
+    on_failure: resolve_direct_merge_conflicts
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Attempts a cheap rebase before invoking the full conflict-resolution skill.
+      On clean rebase, proceeds to re_push_direct_fix. On conflict, routes to
+      resolve_direct_merge_conflicts for goal-aware resolution.
+
+  resolve_direct_merge_conflicts:
     tool: run_skill
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "direct_merge_conflict_fix"
+      step_name: "resolve_direct_merge_conflicts"
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
@@ -752,7 +918,8 @@ steps:
     on_exhausted: release_issue_failure
     skip_when_false: "inputs.open_pr"
     note: >
-      Resolves rebase conflicts on the feature branch after direct-merge rejection.
+      Resolves rebase conflicts after direct-merge rejection.
+      Only reached when the cheap rebase in direct_merge_conflict_fix encountered conflicts.
       escalation_required=true → release_issue_failure for human review.
 
   re_push_direct_fix:
@@ -761,6 +928,7 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
+      force: "true"
     on_success: redirect_merge
     on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"
@@ -786,13 +954,13 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "immediate_merge"
     on_success: wait_for_immediate_merge
-    on_failure: confirm_cleanup
+    on_failure: register_clone_success
     skip_when_false: "inputs.open_pr"
     note: >
       Merges the PR immediately using plain --squash when autoMergeAllowed=false.
       Unlike direct_merge, no --auto flag is used — GitHub executes the merge
       synchronously rather than queueing it for when checks pass. On failure
-      (conflict or not-mergeable error from GitHub), degrades to confirm_cleanup.
+      (conflict or not-mergeable error from GitHub), degrades to register_clone_success.
 
   wait_for_immediate_merge:
     tool: run_cmd
@@ -823,11 +991,32 @@ steps:
       timeout → release_issue_timeout.
 
   immediate_merge_conflict_fix:
+    tool: run_cmd
+    with:
+      cmd: >
+        if git fetch origin ${{ inputs.base_branch }} && git rebase origin/${{ inputs.base_branch }};
+        then echo 'clean';
+        else git rebase --abort 2>/dev/null || true; echo 'conflicts';
+        fi
+      cwd: "${{ context.work_dir }}"
+      step_name: "immediate_merge_conflict_fix"
+    on_result:
+      - when: "${{ result.stdout | trim }} == clean"
+        route: re_push_immediate_fix
+      - route: resolve_immediate_merge_conflicts
+    on_failure: resolve_immediate_merge_conflicts
+    skip_when_false: "inputs.open_pr"
+    note: >
+      Attempts a cheap rebase before invoking the full conflict-resolution skill.
+      On clean rebase, proceeds to re_push_immediate_fix. On conflict, routes to
+      resolve_immediate_merge_conflicts for goal-aware resolution.
+
+  resolve_immediate_merge_conflicts:
     tool: run_skill
     with:
       skill_command: "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.work_dir }}"
-      step_name: "immediate_merge_conflict_fix"
+      step_name: "resolve_immediate_merge_conflicts"
     capture:
       conflict_escalation_required: "${{ result.escalation_required }}"
     on_result:
@@ -840,8 +1029,8 @@ steps:
     on_exhausted: release_issue_failure
     skip_when_false: "inputs.open_pr"
     note: >
-      Resolves rebase conflicts on the feature branch after immediate-merge rejection.
-      Analogous to direct_merge_conflict_fix.
+      Resolves rebase conflicts after immediate-merge rejection.
+      Only reached when the cheap rebase in immediate_merge_conflict_fix encountered conflicts.
       escalation_required=true → release_issue_failure for human review.
 
   re_push_immediate_fix:
@@ -850,6 +1039,7 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
+      force: "true"
     on_success: remerge_immediate
     on_failure: release_issue_failure
     skip_when_false: "inputs.open_pr"
@@ -871,7 +1061,7 @@ steps:
   diagnose_ci:
     tool: run_skill
     with:
-      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - tests.yml"
+      skill_command: "/autoskillit:diagnose-ci ${{ context.merge_target }} - - - ${{ context.ci_event }}"
       cwd: "${{ context.work_dir }}"
       step_name: "diagnose_ci"
       ci_failed_jobs: "${{ context.ci_failed_jobs }}"
@@ -884,7 +1074,7 @@ steps:
     skip_when_false: "inputs.open_pr"
     note: >
       Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes
-      a structured diagnosis to .autoskillit/temp/diagnose-ci/. Routes to resolve_ci on success
+      a structured diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/. Routes to resolve_ci on success
       OR failure (best-effort: resolve-failures proceeds even without a diagnosis).
       diagnosis_path is passed to resolve_ci for targeted remediation context.
 
@@ -894,17 +1084,42 @@ steps:
       skill_command: "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.ci_conclusion }} ${{ context.ci_failed_jobs }} ${{ context.diagnosis_path }}"
       cwd: "${{ context.work_dir }}"
       step_name: "resolve_ci"
+    capture:
+      verdict: "${{ result.verdict }}"
     retries: 2
     on_exhausted: release_issue_failure
-    on_success: re_push
+    on_context_limit: re_push
+    on_result:
+      - when: "${{ result.verdict }} == 'real_fix'"
+        route: re_push
+      - when: "${{ result.verdict }} == 'already_green'"
+        route: pre_resolve_rebase
+      - when: "${{ result.verdict }} == 'flake_suspected'"
+        route: release_issue_failure
+      - when: "${{ result.verdict }} == 'ci_only_failure'"
+        route: release_issue_failure
+      - route: release_issue_failure
     on_failure: release_issue_failure
     note: >
       Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci
-      structured output to avoid redundant CI failure re-investigation. The clone
-      (context.work_dir) has the feature branch (context.merge_target) checked out.
-      The skill commits fixes and exits without merging; the orchestrator re-pushes
-      via re_push. Retries up to 2 times (3 total attempts) before exhausting
-      to cleanup_failure.
+      structured output to avoid redundant CI failure re-investigation. Routes via
+      on_result: verdict dispatch — real_fix pushes, already_green rebases and re-diagnoses
+      (sibling fix may have landed), flake_suspected/ci_only_failure escalate to human.
+      Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.
+
+  pre_resolve_rebase:
+    tool: run_cmd
+    with:
+      cmd: "git -C ${{ context.work_dir }} fetch origin && git -C ${{ context.work_dir }} rebase origin/${{ inputs.base_branch }}"
+      step_name: "pre_resolve_rebase"
+    retries: 1
+    on_success: diagnose_ci
+    on_failure: release_issue_failure
+    note: >
+      Rebases the feature branch against integration head when resolve_ci emits
+      already_green — the worktree was already clean because a sibling pipeline's
+      fix already landed on integration. Pulling it in before re-running diagnose_ci
+      gives the pipeline a real chance at emitting real_fix and reaching re_push.
 
   re_push:
     tool: push_to_remote
@@ -912,12 +1127,13 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
+      force: "true"
     on_success: ci_watch
     on_failure: release_issue_failure
     note: >
       Pushes the CI-fixed feature branch back to the remote after resolve_ci succeeds.
       Routes back to ci_watch to verify the fix resolves CI. On push failure, escalates
-      via cleanup_failure.
+      via release_issue_failure.
 
   detect_ci_conflict:
     tool: run_cmd
@@ -967,13 +1183,13 @@ steps:
     skip_when_false: inputs.issue_url
     with:
       issue_url: ${{ inputs.issue_url }}
-    on_success: check_defer_cleanup
-    on_failure: check_defer_cleanup
+    on_success: register_clone_success
+    on_failure: register_clone_success
     note: >
       Called when wait_for_direct_merge times out. Releases the in-progress
       claim without passing target_branch, so the staged label is not applied. The
       merge is unconfirmed; a human must verify PR state independently.
-      Routes to confirm_cleanup so the pipeline completes cleanly.
+      Routes to register_clone_success so the pipeline completes cleanly.
 
   release_issue_success:
     description: "Transition issue from in-progress to staged after successful pipeline completion"
@@ -983,11 +1199,11 @@ steps:
     with:
       issue_url: ${{ inputs.issue_url }}
       target_branch: ${{ inputs.base_branch }}
-    on_success: check_defer_cleanup
-    on_failure: check_defer_cleanup
+    on_success: register_clone_success
+    on_failure: register_clone_success
     note: >
       Applies staged label after successful PR merge; skipped when no issue_url.
-      optional=true so cleanup proceeds even if this step errors.
+      optional=true so registration proceeds even if this step errors.
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"
@@ -996,90 +1212,28 @@ steps:
     skip_when_false: inputs.issue_url
     with:
       issue_url: ${{ inputs.issue_url }}
-    on_success: check_defer_on_failure
-    on_failure: check_defer_on_failure
+    on_success: register_clone_failure
+    on_failure: register_clone_failure
 
-  check_defer_cleanup:
-    description: "Route to deferred or immediate cleanup on success path"
-    tool: run_python
-    with:
-      callable: "autoskillit.smoke_utils.check_cleanup_mode"
-      defer_cleanup: "${{ inputs.defer_cleanup }}"
-    on_result:
-      - when: "result.deferred == 'true'"
-        route: register_success_deferred
-      - route: confirm_cleanup
-    on_failure: confirm_cleanup
-
-  register_success_deferred:
-    description: "Register clone as cleanup candidate (deferred batch cleanup mode)"
+  register_clone_success:
+    description: "Register clone as cleanup candidate for batch deletion"
     tool: register_clone_status
     with:
       clone_path: "${{ context.work_dir }}"
       status: "success"
-      registry_path: "${{ inputs.registry_path }}"
-      step_name: register_success_deferred
+      step_name: register_clone_success
     on_success: done
     on_failure: done
 
-  check_defer_on_failure:
-    description: "Route to deferred or immediate cleanup on failure path"
-    tool: run_python
-    with:
-      callable: "autoskillit.smoke_utils.check_cleanup_mode"
-      defer_cleanup: "${{ inputs.defer_cleanup }}"
-    on_result:
-      - when: "result.deferred == 'true'"
-        route: register_error_deferred
-      - route: cleanup_failure
-    on_failure: cleanup_failure
-
-  register_error_deferred:
-    description: "Register clone as preserved (error pipeline — deferred mode)"
+  register_clone_failure:
+    description: "Register clone as preserved (error pipeline)"
     tool: register_clone_status
     with:
       clone_path: "${{ context.work_dir }}"
       status: "error"
-      registry_path: "${{ inputs.registry_path }}"
-      step_name: register_error_deferred
+      step_name: register_clone_failure
     on_success: escalate_stop
     on_failure: escalate_stop
-
-  confirm_cleanup:
-    action: confirm
-    message: >-
-      Remediation pipeline succeeded! The clone at ${{ context.work_dir }} is preserved.
-      Delete it now? Keeping it lets you resume any session from this pipeline run.
-      Type yes to delete or no to keep.
-    on_success: delete_clone
-    on_failure: done
-    note: >-
-      User confirmation gate — preserves clone by default. On yes: delete_clone removes it.
-      On no: done is reached immediately, clone stays on disk.
-
-  delete_clone:
-    tool: remove_clone
-    with:
-      clone_path: "${{ context.work_dir }}"
-      keep: "false"
-      step_name: delete_clone
-    on_success: done
-    on_failure: done
-    note: >-
-      Reached only after user explicitly confirms cleanup. Sync-check hook gates deletion —
-      removal approved only when branch is pushed.
-
-  cleanup_failure:
-    tool: remove_clone
-    with:
-      clone_path: "${{ context.work_dir }}"
-      keep: "true"
-    on_success: escalate_stop
-    on_failure: escalate_stop
-    note: >
-      Clone preservation step — keep=true means the clone is never
-      auto-removed on failure. Remove manually: rm -rf {clone_path}.
-      Always routes to escalate_stop.
 
   done:
     action: stop
@@ -1089,24 +1243,3 @@ steps:
     action: stop
     message: "Human intervention needed. Review the latest output for details."
 
-  batch_confirm_cleanup:
-    action: confirm
-    message: >-
-      All parallel pipelines complete. Delete all registered successful clones?
-      Error pipeline clones will be preserved for investigation.
-      Type yes to delete or no to keep all.
-    note: >-
-      ORCHESTRATOR: Run this step ONCE after ALL parallel pipeline instances have
-      reached 'done' or 'escalate_stop'. Do NOT run per-pipeline instance.
-      Only applicable when run_mode=parallel and defer_cleanup=true.
-    on_success: batch_delete_clones
-    on_failure: done
-
-  batch_delete_clones:
-    description: "Delete all registered successful clones in one batch operation"
-    tool: batch_cleanup_clones
-    with:
-      registry_path: "${{ inputs.registry_path }}"
-      step_name: batch_delete_clones
-    on_success: done
-    on_failure: done

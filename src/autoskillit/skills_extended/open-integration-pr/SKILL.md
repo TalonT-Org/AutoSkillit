@@ -1,11 +1,19 @@
 ---
 name: open-integration-pr
 categories: [github]
+activate_deps: [arch-lens]
 description: >
   Create an integration PR for the merge-prs. Reads pr_order_file JSON, generates
   a rich PR body with per-PR details, arch-lens diagrams, and carried-forward Closes #N
   references. Closes all collapsed PRs with a comment after creation. Use inside the
   merge-prs after all PRs have been merged into the integration branch.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: open-integration-pr] Opening integration pull request...'"
+          once: true
 ---
 
 # Open Integration PR
@@ -20,7 +28,7 @@ PR, and output `pr_url=<url>`.
 ## Arguments
 
 ```
-/autoskillit:open-integration-pr {integration_branch} {base_branch} {pr_order_file} [audit_verdict] [conflict_report_paths]
+/autoskillit:open-integration-pr {integration_branch} {base_branch} {pr_order_file} [audit_verdict] [conflict_report_paths] [domain_partitions_path]
 ```
 
 - `integration_branch` — integration branch name (e.g. `pr-batch/pr-merge-20250228-143052`)
@@ -28,6 +36,7 @@ PR, and output `pr_url=<url>`.
 - `pr_order_file` — absolute path to JSON produced by `analyze-prs`
 - `audit_verdict` (optional) — `GO`, `NO GO`, or empty string when audit was skipped
 - `conflict_report_paths` (optional) — comma-separated list of absolute paths to conflict resolution report files, produced by `resolve-merge-conflicts`. When provided and non-empty, embed a "Conflict Resolution Decisions" section in the PR body.
+- `domain_partitions_path` (optional) — absolute path to a JSON file containing pre-computed domain partitions (produced by `compute_domain_partitions` run_python step). When provided and present, read from file instead of computing via python3.
 
 ## When to Use
 
@@ -37,7 +46,7 @@ PR, and output `pr_url=<url>`.
 ## Critical Constraints
 
 **NEVER:**
-- Create files outside `.autoskillit/temp/open-integration-pr/` (except the temp body file for `gh pr create --body-file`)
+- Create files outside `{{AUTOSKILLIT_TEMP}}/open-integration-pr/` (except the temp body file for `gh pr create --body-file`)
 - Modify any source code
 - Fail the pipeline if `gh` is unavailable or not authenticated — output `pr_url=` (empty) and exit successfully
 - Close original PRs before the integration PR is successfully created
@@ -56,6 +65,8 @@ Parse four positional args: `integration_branch`, `base_branch`, `pr_order_file`
 `audit_verdict` (last one may be absent or empty string). Parse the optional fifth
 positional argument `conflict_report_paths` (may be absent or empty string). Split on `,`
 to get a list of paths; filter out any empty strings. Store as `conflict_report_path_list`.
+Parse the optional named argument `domain_partitions_path` (may be absent or empty string);
+store as `domain_partitions_path`.
 
 ### Step 2: Read pr_order_file
 
@@ -99,18 +110,18 @@ This step is skipped gracefully if any path is missing — log a warning and exc
 
 ### Step 4c: Partition Files by Domain
 
+Read pre-computed domain partitions from disk when available:
+
 ```bash
-python3 -c "
-from autoskillit.execution.pr_analysis import partition_files_by_domain
-import json, sys
-files = json.loads(sys.argv[1])
-result = partition_files_by_domain(files)
-print(json.dumps(result))
-" '["path/to/file.py", ...]'
+DOMAIN_PARTITIONS="{}"
+if [ -n "${domain_partitions_path:-}" ] && [ -f "$domain_partitions_path" ]; then
+    DOMAIN_PARTITIONS="$(cat "$domain_partitions_path")"
+fi
 ```
 
-Pass `changed_files` as a JSON array argument. Store the parsed dict as `domain_partitions`.
-Skip entirely and set `domain_partitions = {}` if `changed_files` is empty.
+Store the parsed dict as `domain_partitions` (parse `DOMAIN_PARTITIONS` as JSON).
+Skip entirely and set `domain_partitions = {}` if `changed_files` is empty or
+`domain_partitions_path` is absent.
 
 ### Step 4d: Fetch Domain Diffs (parallel)
 
@@ -198,15 +209,9 @@ lens guard.
 
 For each selected lens, follow this exact sequence:
 
-**CRITICAL:** Do NOT output any prose status text between lens iterations.
-After completing all sub-steps for one lens (including mermaid extraction and
-validation), immediately begin sub-step 1 (Write the PR context file) for the
-next lens. Progress announcements like "Diagram generated. Now calling X:"
-create end_turn windows that cause stochastic session termination.
-
 **1. Write the PR context to a file using the Write tool:**
 
-- **Path:** `.autoskillit/temp/open-integration-pr/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
+- **Path:** `{{AUTOSKILLIT_TEMP}}/open-integration-pr/pr_arch_lens_context_{YYYY-MM-DD_HHMMSS}.md`
 - **Content:** The following PR context block, with placeholders filled in:
 
 ```markdown
@@ -231,9 +236,15 @@ This diagram is for a Pull Request. Focus the diagram on the areas of the codeba
 **2. Immediately call the Skill tool to load the arch-lens skill** (e.g., `/autoskillit:arch-lens-module-dependency`).
 The loaded skill will read the PR context file written in step 1 above.
 
-**3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
+**If the Skill tool returns an error containing "disable-model-invocation" or "cannot be used",
+do NOT write a diagram freehand. Discard this lens iteration silently. If ALL arch-lens
+invocations fail this way, set `validated_diagrams = []` (the Architecture Impact section is
+omitted per Step 7 behavior).**
 
-The arch-lens skills write their output to `.autoskillit/temp/arch-lens-{lens-name}/` (relative to the current working directory). After each skill
+**3. Follow the loaded skill's instructions** to explore the codebase and generate the diagram.
+Using ONLY classDef styles from the mermaid skill (no invented colors).
+
+The arch-lens skills write their output to `{{AUTOSKILLIT_TEMP}}/arch-lens-{lens-name}/` (relative to the current working directory). After each skill
 runs, read the generated markdown file and extract the mermaid code block(s).
 
 After extracting the mermaid block, inspect its content for `★` or `●` characters:
@@ -242,7 +253,7 @@ After extracting the mermaid block, inspect its content for `★` or `●` chara
 
 ### Step 7: Compose PR Body
 
-Write to `.autoskillit/temp/open-integration-pr/pr_body_{timestamp}.md`. (relative to the current working directory)
+Write to `{{AUTOSKILLIT_TEMP}}/open-integration-pr/pr_body_{timestamp}.md`. (relative to the current working directory)
 
 ```markdown
 ## Integration Summary
@@ -314,7 +325,7 @@ gh pr create \
   --base {base_branch} \
   --head {integration_branch} \
   --title "Integration: collapsed PRs #{numbers} into {base_branch}" \
-  --body-file .autoskillit/temp/open-integration-pr/pr_body_{timestamp}.md
+  --body-file {{AUTOSKILLIT_TEMP}}/open-integration-pr/pr_body_{timestamp}.md
 ```
 
 `{numbers}` = comma-separated PR numbers (e.g., `#42, #47, #51`).

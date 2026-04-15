@@ -315,18 +315,21 @@ class TestImplicitHandoffRule:
         assert ih == []
 
     def test_ih4_does_not_fire_for_skill_with_empty_outputs(self) -> None:
-        """T_IH4: implicit-handoff does NOT fire for a skill with outputs: []."""
+        """T_IH4: implicit-handoff does NOT fire for a skill with outputs: [].
+
+        dry-walkthrough has outputs: [] — no fields to capture, so no finding.
+        """
         steps = {
-            "assess": {
+            "walkthrough": {
                 "tool": "run_skill",
-                "with": {"skill_command": "/autoskillit:resolve-failures worktree plan main"},
+                "with": {"skill_command": "/autoskillit:dry-walkthrough plan"},
                 "on_success": "done",
             },
             "done": {"action": "stop", "message": "Done."},
         }
         recipe = _make_workflow(steps)
         findings = run_semantic_rules(recipe)
-        ih = [f for f in findings if f.rule == "implicit-handoff" and f.step_name == "assess"]
+        ih = [f for f in findings if f.rule == "implicit-handoff" and f.step_name == "walkthrough"]
         assert ih == []
 
     def test_ih5_does_not_fire_for_unknown_skill(self) -> None:
@@ -715,11 +718,8 @@ class TestPushBeforeAuditRule:
         """T_IP_PBA: bypass path via skip_when_false makes push-before-audit fire.
 
         Uses a synthetic recipe mirroring implementation topology:
-          start → audit_impl (optional, skip_when_false) → open_pr_step → push
+          start → audit_impl (optional, skip_when_false) → compose_pr → push
         The skip_when_false bypass allows push to be reached without audit.
-
-        The real recipe YAML will have skip_when_false added in Part B, at which
-        point the TestImplementationPipelineStructure fixture will also trigger this rule.
         """
         recipe = _make_workflow(
             {
@@ -732,15 +732,15 @@ class TestPushBeforeAuditRule:
                         "skill_command": "/autoskillit:audit-impl plan.md",
                         "cwd": "/tmp",
                     },
-                    "on_success": "open_pr_step",
+                    "on_success": "compose_pr",
                     "on_failure": "done",
                 },
-                "open_pr_step": {
+                "compose_pr": {
                     "tool": "run_skill",
                     "optional": True,
                     "skip_when_false": "inputs.open_pr",
                     "with": {
-                        "skill_command": "/autoskillit:open-pr",
+                        "skill_command": "/autoskillit:compose-pr",
                         "cwd": "/tmp",
                     },
                     "on_success": "push",

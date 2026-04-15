@@ -7,6 +7,7 @@ Never raises — all errors are captured and returned as {"success": False, "err
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -60,6 +61,23 @@ def _format_issue_markdown(
     return "\n".join(lines)
 
 
+def github_headers(token: str | None) -> dict[str, str]:
+    """Build the standard GitHub REST API headers dict.
+
+    Returns a fresh dict containing Accept, X-GitHub-Api-Version, and
+    User-Agent on every call. Injects Authorization when token is provided.
+    Single source of truth for all three execution-layer GitHub clients.
+    """
+    h: dict[str, str] = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "autoskillit",
+    }
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    return h
+
+
 def parse_merge_queue_response(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Parse a GitHub GraphQL merge queue response into a sorted entry list.
 
@@ -105,23 +123,29 @@ class DefaultGitHubFetcher:
     Never raises — errors are returned as {"success": False, "error": "..."}.
     """
 
-    def __init__(self, *, token: str | None = None) -> None:
-        self._token = token
+    _UNRESOLVED = object()
+
+    def __init__(self, *, token: str | None | Callable[[], str | None] = None) -> None:
+        self._token_factory: Callable[[], str | None] | None
+        if callable(token):
+            self._token_factory = token
+            self._token: str | None = self._UNRESOLVED  # type: ignore[assignment]
+        else:
+            self._token_factory = None
+            self._token = token
+
+    def _resolve_token(self) -> str | None:
+        if self._token is self._UNRESOLVED:
+            self._token = self._token_factory() if self._token_factory is not None else None
+        return self._token
 
     @property
     def has_token(self) -> bool:
-        """True if this fetcher was constructed with an authentication token."""
-        return bool(self._token)
+        """True if this fetcher has an authentication token (resolves lazily)."""
+        return bool(self._resolve_token())
 
     def _headers(self) -> dict[str, str]:
-        h = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "autoskillit",
-        }
-        if self._token:
-            h["Authorization"] = f"Bearer {self._token}"
-        return h
+        return github_headers(self._resolve_token())
 
     async def fetch_issue(
         self,
@@ -360,7 +384,7 @@ class DefaultGitHubFetcher:
                     hint = (
                         " Set github.token in .autoskillit/.secrets.yaml,"
                         " set GITHUB_TOKEN, or log in with gh auth login."
-                        if not self._token
+                        if not self.has_token
                         else ""
                     )
                     return {

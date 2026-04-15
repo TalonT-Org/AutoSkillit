@@ -14,7 +14,7 @@ from autoskillit.core import atomic_write, get_logger
 logger = get_logger(__name__)
 
 
-class BackgroundTaskSupervisor:
+class DefaultBackgroundSupervisor:
     """Single entry point for supervised background tasks.
 
     All tasks submitted here are wrapped in exception capture, audit
@@ -103,6 +103,19 @@ class BackgroundTaskSupervisor:
         """Await all pending tasks to completion (for shutdown and tests)."""
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
+
+
+def create_background_task(
+    coro: Coroutine[Any, Any, Any], *, label: str = ""
+) -> asyncio.Task[Any]:
+    """Create an asyncio.Task for a long-running background coroutine.
+
+    Unlike DefaultBackgroundSupervisor.submit(), this does NOT wrap the coroutine
+    in _supervise_task — the caller owns the task handle and is responsible for
+    cancellation. Used for kitchen-scoped lifecycle tasks (quota_refresh_loop) that
+    must be cancelled explicitly when the kitchen closes.
+    """
+    return asyncio.create_task(coro, name=label)
 
 
 def write_status(path: Path | None, status: str, *, error: str | None = None) -> None:

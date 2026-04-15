@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from autoskillit.core.paths import pkg_root
 
@@ -47,3 +48,60 @@ def test_open_kitchen_guard_allows_human_session() -> None:
     assert not result.stdout.strip(), (
         f"Hook must emit no output for non-headless sessions, got: {result.stdout!r}"
     )
+
+
+def test_open_kitchen_guard_writes_marker_on_permit(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    hook_input = {
+        "tool_name": "mcp__autoskillit__open_kitchen",
+        "tool_input": {"name": "my_recipe"},
+        "session_id": "session-abc",
+        "hook_event_name": "PreToolUse",
+    }
+    hook_path = pkg_root() / "hooks" / "open_kitchen_guard.py"
+    env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_HEADLESS"}
+    env["AUTOSKILLIT_STATE_DIR"] = str(tmp_path)
+    result = subprocess.run(
+        [sys.executable, str(hook_path)],
+        input=json.dumps(hook_input),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0
+    if result.stdout.strip():
+        payload = json.loads(result.stdout)
+        hook_out = payload.get("hookSpecificOutput", {})
+        assert hook_out.get("permissionDecision") != "deny"
+    marker_path = tmp_path / "kitchen_state" / "session-abc.json"
+    assert marker_path.exists(), f"Marker not written at {marker_path}"
+    data = json.loads(marker_path.read_text())
+    assert data["session_id"] == "session-abc"
+    assert data["recipe_name"] == "my_recipe"
+    assert data["marker_version"] == 1
+
+
+def test_open_kitchen_guard_no_marker_on_deny(tmp_path: Path, monkeypatch) -> None:
+    """When headless, the guard denies; no marker should be written."""
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    hook_path = pkg_root() / "hooks" / "open_kitchen_guard.py"
+    env = {**os.environ, "AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_STATE_DIR": str(tmp_path)}
+    result = subprocess.run(
+        [sys.executable, str(hook_path)],
+        input=json.dumps(
+            {
+                "tool_name": "mcp__autoskillit__open_kitchen",
+                "tool_input": {"name": "my_recipe"},
+                "session_id": "session-abc",
+                "hook_event_name": "PreToolUse",
+            }
+        ),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert not (tmp_path / "kitchen_state" / "session-abc.json").exists()

@@ -31,10 +31,13 @@ responsible for enforcing this regardless of what the plan says.
 
 When `run_skill` returns `needs_retry=true` for **any step**:
 
-- **If `retry_reason: resume` AND the step defines `on_context_limit`** → follow `on_context_limit`.
+- **If `retry_reason: resume` AND `subtype: stale`** → re-execute the same step (decrement the
+  retries counter). A stale session was killed by the hung-process watchdog — this is NOT a
+  context limit. Do NOT follow `on_context_limit`. If retries are exhausted, follow `on_exhausted`.
+- **If `retry_reason: resume` AND `subtype≠stale` AND the step defines `on_context_limit`** → follow `on_context_limit`.
   The worktree or partial state is on disk; route to the designated recovery step
   (typically `test` or `retry_worktree`) to check whether partial work was sufficient.
-- **If `retry_reason: resume` AND the step has no `on_context_limit`** → fall through to `on_failure`.
+- **If `retry_reason: resume` AND `subtype≠stale` AND the step has no `on_context_limit`** → fall through to `on_failure`.
 - **If `retry_reason: drain_race` AND the step defines `on_context_limit`** → follow `on_context_limit`.
   The channel signal confirmed session completion; stdout was not fully flushed before kill.
   Partial progress is confirmed — treat identically to `resume` for routing purposes.
@@ -45,6 +48,10 @@ When `run_skill` returns `needs_retry=true` for **any step**:
   files outside its working directory. This is a CWD boundary violation, not a context limit.
   Do NOT route to `on_context_limit` even if defined.
 - **If `retry_reason: early_stop` or `zero_writes`** → fall through to `on_failure`.
+- **If `retry_reason: stale`** → decrement the `retries` counter for this step.
+  Re-execute the same step if retries remain. If retries are exhausted, fall through
+  to `on_failure`. Do NOT route to `on_context_limit` — stale is a transient failure,
+  not a context limit. No partial progress is assumed.
 
 **For `implement-worktree-no-merge` specifically:**
 - `on_context_limit` routes to `retry_worktree` in standard recipes.
@@ -57,8 +64,12 @@ When a completed worktree implementation needs to be redone (e.g., after a plan 
 - Call `implement-worktree-no-merge` on the revised plan (creates a fresh worktree).
 - Clean up the old worktree explicitly if needed.
 
-Summary: `needs_retry=true` + `retry_reason=resume` or `drain_race` + step has `on_context_limit` → follow `on_context_limit`.
-         `needs_retry=true` + `retry_reason=resume` or `drain_race` + no `on_context_limit` → `on_failure`.
+Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-execute step (decrement retries; on_exhausted when budget gone).
+         `needs_retry=true` + `retry_reason=resume` + `subtype≠stale` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=resume` + `subtype≠stale` + no `on_context_limit` → `on_failure`.
+         `needs_retry=true` + `retry_reason=drain_race` + step has `on_context_limit` → follow `on_context_limit`.
+         `needs_retry=true` + `retry_reason=drain_race` + no `on_context_limit` → `on_failure`.
+         `needs_retry=true` + `retry_reason=stale` → decrement retries counter → `on_failure` when exhausted (no partial progress, not a context limit).
          `needs_retry=true` + any other `retry_reason` → `on_failure` (no partial progress).
 
 ---
@@ -230,28 +241,39 @@ Capture the result as `auto_merge_available`. If detection fails, default to `"f
 perform both detections automatically via `check_merge_queue` + `check_auto_merge` —
 **do not repeat them manually when following a recipe**.
 
-### 2. Route based on queue availability
+### 2. Route based on queue availability and auto-merge availability
 
-**When `queue_available == true`:**
-GitHub's merge queue serializes concurrent merges. Each pipeline's
-`enable_auto_merge → wait_for_queue` sequence is safe to proceed in parallel — the
-queue handles ordering. No additional sequencing is required from the orchestrator.
+The recipes route on the four-cell matrix `queue_available × auto_merge_available`:
 
-**When `queue_available == false` and `auto_merge_available == true`:**
-Use `gh pr merge --squash --auto` (direct_merge path). GitHub merges the PR once
-all required status checks pass. PRs must not be merged concurrently — never execute
-two `direct_merge` steps concurrently on a non-queue branch.
+| `queue_available` | `auto_merge_available` | Recipe path                                    |
+|-------------------|------------------------|------------------------------------------------|
+| `true`            | `true`                 | `enable_auto_merge` → `wait_for_queue`         |
+| `true`            | `false`                | `queue_enqueue_no_auto` → `wait_for_queue`     |
+| `false`           | `true`                 | `direct_merge` → `wait_for_direct_merge`       |
+| `false`           | `false`                | `immediate_merge` → `wait_for_immediate_merge` |
 
-**When `queue_available == false` and `auto_merge_available == false`:**
-Use `gh pr merge --squash` (immediate_merge path — no `--auto` flag). GitHub
-executes the merge synchronously without waiting for status checks (there are none
-to wait for when `autoMergeAllowed=false`). PRs MUST still be merged one at a time.
+**When `queue_available == true`:** GitHub's merge queue intercepts every merge
+request on the branch regardless of the `--auto` flag. Both queue cells route
+through `wait_for_queue` (the merge-queue-aware waiter). The
+`enable_auto_merge` cell uses `--auto` so the queue serializes via GitHub
+auto-merge; the `queue_enqueue_no_auto` cell (condition:
+`queue_available == true and auto_merge_available == false`) uses plain `--squash`
+because the repository's `autoMergeAllowed=false` setting causes `--auto` to be
+rejected by the API auto-merge gate **before** the queue interception.
 
-- If following a recipe: the recipe's `route_queue_mode` step routes to the correct
-  path automatically based on `context.auto_merge_available`.
-- **NEVER** use `gh pr merge --squash --auto` when `auto_merge_available == false` —
-  this command fails with "auto-merge is not allowed for this repository"; in recipe
-  context it silently routes to `confirm_cleanup`, leaving the PR unmerged.
+**When `queue_available == false`:** there is no queue, so behaviour matches
+the historical paths — `direct_merge` waits via auto-merge, `immediate_merge`
+executes synchronously.
+
+- If following a recipe: `route_queue_mode` selects the correct cell
+  automatically from `context.queue_available` and `context.auto_merge_available`.
+- **NEVER use** `gh pr merge --squash --auto` when `auto_merge_available == false`,
+  regardless of `queue_available`. The `--auto` flag is rejected by GitHub's API
+  auto-merge gate before the queue intercepts. Use plain `gh pr merge --squash`;
+  if a queue exists on the branch the queue still enqueues the call.
+- **NEVER** route a queue+no-auto enqueue call through `wait_for_immediate_merge`
+  — its 5-minute poll is too short for a busy queue and on timeout the recipe
+  reports `merge unconfirmed` even though the PR will eventually merge.
 
 For ad-hoc (off-recipe) merges:
 - If merging multiple PRs collected from parallel pipelines: route through the
@@ -261,7 +283,7 @@ For ad-hoc (off-recipe) merges:
 
 **NEVER use `run_cmd` with `gh pr merge` to merge a PR outside of a named recipe
 step.** All PR merges must flow through the recipe's `merge_pr`, `direct_merge`,
-`immediate_merge`, or `enable_auto_merge` steps. Bypassing these steps skips CI
+`immediate_merge`, `enable_auto_merge` or `queue_enqueue_no_auto` steps. Bypassing these steps skips CI
 enforcement, conflict detection, and conflict routing.
 
 ### 4. Merge conflict failure handling
@@ -276,3 +298,52 @@ closed due to a stale base):
   and `immediate_merge_conflict_fix` has full diagnostic access.
 - **NEVER abandon a pipeline** because merge failed — route through the conflict
   recovery cycle until the PR merges or escalation is required.
+
+---
+
+## QUOTA WAIT PROTOCOL — MANDATORY
+
+When quota-related events occur during pipeline execution:
+
+### PreToolUse Denial (run_skill blocked)
+
+When a `run_skill` call is DENIED by the quota guard hook:
+
+1. This is a **temporary** block — NOT a permanent error, NOT a pipeline failure.
+2. The deny message contains a `run_cmd` sleep command with the required duration.
+3. **MANDATORY**: Execute the sleep command via `run_cmd` immediately.
+4. After the sleep completes, retry the **exact same** `run_skill` call with
+   identical arguments (`skill_command`, `cwd`, `model`, `step_name`).
+5. Do NOT follow `on_failure`. Do NOT report to the user. Do NOT skip the step.
+6. Before executing, state aloud: "Quota denied. Sleeping N seconds, then retrying."
+
+### Post-Execution Warning (quota high after run_skill)
+
+When `run_skill` output contains `--- QUOTA WARNING ---`:
+
+1. The warning contains a `run_cmd` sleep command.
+2. **MANDATORY**: Execute the sleep command via `run_cmd` BEFORE calling the next
+   `run_skill` (whether it is the next pipeline step or a retry).
+3. After sleeping, proceed normally with the next step.
+4. Before executing, state aloud: "Quota warning. Sleeping N seconds before next step."
+
+### Key Rules
+
+- Quota denials are **always temporary**. The API enforces multiple rate-limit windows (e.g. one-minute, one-hour, five-hour, one-day). The guard waits for the most constrained window — the one that resets latest among all windows above the threshold — to reset before retrying.
+- A denied `run_skill` has **zero side effects** — no partial state, no worktree changes.
+  Retrying with the same arguments is always safe.
+- Multiple consecutive denials may occur if the sleep duration was underestimated.
+  Keep sleeping and retrying until the call succeeds.
+- NEVER use `AskUserQuestion` for quota events — they are fully automated.
+
+---
+
+## NARRATION SUPPRESSION — MANDATORY
+
+Do NOT output prose status text, phase announcements, or progress summaries between
+tool calls. Every non-final assistant turn MUST invoke at least one tool.
+
+The only permitted text-only turn is a final response containing structured output
+tokens (`plan_path = ...`, `worktree_path = ...`, etc.).
+
+This applies to all skills invoked interactively within a cook session.

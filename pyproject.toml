@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autoskillit"
-version = "0.6.1"
+version = "0.9.0"
 description = "MCP server for orchestrating automated skill-driven workflows with Claude Code"
 readme = "README.md"
 license = {text = "MIT"}
@@ -25,12 +25,15 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "anyio>=4.6.0",
-    "dynaconf>=3.2.12,<4.0",
-    "fastmcp>=3.1.1,<4.0",
+    "dynaconf>=3.2.13,<4.0",
+    "fastmcp>=3.2.0,<4.0",
     "httpx>=0.28,<0.29",
-    "igraph>=1.0",
+    "igraph>=1.0,<2.0",
+    "markdown-it-py>=3.0",
     "packaging>=23.0",
     "psutil>=7.2.0",
+    "pygments>=2.20.0",
+    "pyjwt>=2.12.0",
     "pyyaml>=6.0",
     "cyclopts>=4.0",
     "structlog>=25.0,<26.0",
@@ -46,6 +49,7 @@ dev = [
     "ruff>=0.15.0",
     "import-linter>=2.1",
     "packaging>=25.0",
+    "api-simulator",
 ]
 
 [project.urls]
@@ -85,6 +89,7 @@ timeout = 60
 timeout_method = "signal"
 markers = [
     "smoke: end-to-end smoke tests requiring Claude API access (deselect with: -m 'not smoke')",
+    "integration: integration tests that spawn real subprocesses (deselect with: -m 'not integration')",
 ]
 
 [tool.ruff]
@@ -94,8 +99,12 @@ line-length = 99
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "TID251"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/execution/test_session_classification_e2e.py" = ["E402"]
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging.getLogger" = {msg = "Use get_logger() from autoskillit._logging instead."}
+"signal.signal" = {msg = "Use anyio.open_signal_receiver instead of signal.signal — see _serve_with_signal_guard in cli/app.py."}
 
 [tool.importlinter]
 root_packages = ["autoskillit"]
@@ -148,6 +157,14 @@ forbidden_modules = [
 name = "L1 pipeline does not import L2 or L3"
 type = "forbidden"
 source_modules = ["autoskillit.pipeline"]
+# EXCEPTION: autoskillit.config is intentionally omitted from the
+# forbidden_modules list. pipeline.context.ToolContext owns
+# AutomationConfig as the DI wiring point — see the docstrings on
+# pipeline/context.py and pipeline/__init__.py. The coupling is safe
+# because config/ depends only on L0 (enforced by IL-002), so no
+# cycle is possible. This exception is asserted by
+# tests/arch/test_import_linter_contracts.py
+#     ::test_il003_pipeline_config_exception_documented.
 forbidden_modules = [
     "autoskillit.execution",
     "autoskillit.workspace",
@@ -223,3 +240,6 @@ forbidden_modules = [
     "autoskillit.server",
     "autoskillit.cli",
 ]
+
+[tool.uv.sources]
+api-simulator = { git = "https://github.com/TalonT-Org/api-simulator", rev = "8f711f958d4d93a8e53a3c3b51279fb420870f3a", subdirectory = "crates/api-simulator-py" }

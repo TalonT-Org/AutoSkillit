@@ -59,6 +59,8 @@ class DefaultRecipeRepository:
         suppressed: Sequence[str] | None = None,
         resolved_defaults: dict[str, str] | None = None,
         ingredient_overrides: dict[str, str] | None = None,
+        temp_dir: Path | None = None,
+        temp_dir_relpath: str | None = None,
     ) -> dict[str, Any]:
         recipe_info = self.find(name, project_dir)
         return cast(
@@ -70,11 +72,15 @@ class DefaultRecipeRepository:
                 recipe_info=recipe_info,
                 resolved_defaults=resolved_defaults,
                 ingredient_overrides=ingredient_overrides,
+                temp_dir=temp_dir,
+                temp_dir_relpath=temp_dir_relpath,
             ),
         )
 
-    def validate_from_path(self, script_path: Any) -> dict[str, Any]:
-        return _api.validate_from_path(script_path)
+    def validate_from_path(
+        self, script_path: Any, temp_dir_relpath: str = ".autoskillit/temp"
+    ) -> dict[str, Any]:
+        return _api.validate_from_path(script_path, temp_dir_relpath=temp_dir_relpath)
 
     def list_all(self, project_dir: Any | None = None) -> dict[str, Any]:
         return _api.list_all(project_dir=project_dir)

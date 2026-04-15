@@ -1,29 +1,29 @@
 ---
 name: promote-to-main
+categories: [github]
 description: >
-  Promote integration to main with comprehensive analysis and PR creation. Use when
+  Promote integration to main with comprehensive changelog and PR creation. Use when
   user says "promote to main", "open promotion PR", "integration to main", or
-  "create release PR to main". Runs pre-flight checks, multi-dimensional change
-  analysis, quality assessment, and creates a rich PR with release notes.
+  "create release PR to main". Runs pre-flight checks, change inventory, architecture
+  diagrams, and creates a rich PR with release notes and traceability.
 ---
 
 # Promote to Main
 
-Orchestrate the full integration-to-main promotion workflow. This skill discovers
-everything that changed on integration since it diverged from main, runs pre-flight
-quality checks, performs deep parallel analysis across multiple dimensions, generates
-structured release notes, and creates a comprehensive promotion PR suitable for
-final review before landing on main.
+Orchestrate the integration-to-main promotion workflow. This skill discovers everything
+that changed on integration since it diverged from main, runs pre-flight quality checks,
+performs change inventory, generates architecture diagrams, synthesizes release notes,
+and creates a comprehensive promotion PR.
 
 ## Arguments
 
 ```
-/promote-to-main [integration_branch] [base_branch] [--dry-run]
+/autoskillit:promote-to-main [integration_branch] [base_branch] [--dry-run]
 ```
 
 - `integration_branch` (optional) — source branch to promote. Defaults to `integration`.
 - `base_branch` (optional) — target branch. Defaults to `main`.
-- `--dry-run` — generate the full promotion report without creating a PR.
+- `--dry-run` — generate the full PR body without creating a PR.
 
 ## When to Use
 
@@ -40,6 +40,7 @@ final review before landing on main.
 - Push or merge anything — this skill only creates the PR
 - Skip pre-flight checks — a failing pre-flight must block PR creation
 - Use the Bash tool for file reads — use Read, Grep, Glob for all codebase inspection
+- Use `gh pr create --body` inline — always use `--body-file`
 
 **ALWAYS:**
 - Run ALL pre-flight checks before any analysis work
@@ -49,6 +50,7 @@ final review before landing on main.
 - Carry forward ALL `Closes #N`, `Fixes #N`, and `Resolves #N` references from merged PR bodies
 - Use `gh pr create --body-file` (never inline body via `--body`)
 - Grant every subagent explicit permission to spawn their own sub-subagents
+- `report_path` must be an absolute path (prepend CWD)
 
 ## Subagent Autonomy Grant
 
@@ -105,17 +107,23 @@ This aggregates token usage across all constituent PR sessions that ran in this 
 working directory.
 
 ```bash
-export PIPELINE_CWD="$(pwd)"
 mkdir -p .autoskillit/temp/promote-to-main
 python3 - <<'EOF' > .autoskillit/temp/promote-to-main/token_summary.md 2>/dev/null || true
-import sys, os
+import json, pathlib, sys
 from autoskillit.pipeline.tokens import DefaultTokenLog
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 from autoskillit.execution.session_log import resolve_log_dir
 
+cfg_path = pathlib.Path(".autoskillit") / "temp" / ".hook_config.json"
+kitchen_id = ""
+if cfg_path.exists():
+    _cfg = json.loads(cfg_path.read_text())
+    if isinstance(_cfg, dict):
+        kitchen_id = _cfg.get("kitchen_id") or _cfg.get("pipeline_id", "")
+
 log_root = resolve_log_dir("")
 tl = DefaultTokenLog()
-n = tl.load_from_log_dir(log_root, cwd_filter=os.environ.get("PIPELINE_CWD", ""))
+n = tl.load_from_log_dir(log_root, kitchen_id_filter=kitchen_id)
 if n == 0:
     sys.exit(0)
 steps = tl.get_report()
@@ -317,232 +325,9 @@ Return JSON:
 }
 ```
 
-### Phase 3: Domain Analysis (parallel subagents)
+### Phase 3: Architecture Diagrams
 
-#### Step 3.1: Partition Files by Domain
-
-```bash
-python3 -c "
-from autoskillit.execution.pr_analysis import partition_files_by_domain
-import json, sys
-files = json.loads(sys.argv[1])
-result = partition_files_by_domain(files)
-print(json.dumps(result))
-" '{changed_files_as_json_array}'
-```
-
-Store as `domain_partitions`. Skip if `changed_files` is empty.
-
-#### Step 3.2: Fetch Domain Diffs (parallel)
-
-For each domain `D` in `domain_partitions` with a non-empty file list, run in parallel:
-
-```bash
-git diff {base_branch}..{integration_branch} -- {space-separated files in domain D}
-```
-
-Truncate diffs exceeding 12,000 characters. Drop domains with empty diffs.
-
-#### Step 3.3: Fetch Domain Commits (parallel)
-
-For each domain in `domain_diffs`, run in parallel:
-
-```bash
-git log {base_branch}..{integration_branch} --oneline -- {space-separated files in domain D}
-```
-
-#### Step 3.4: Identify PRs per Domain
-
-For each domain, cross-reference the PR list from Subagent 2B. For each PR, fetch its
-files if not already available:
-
-```bash
-gh pr view {number} --json files -q '.files[].path' 2>/dev/null
-```
-
-Store as `domain_pr_numbers`.
-
-#### Step 3.5: Run Parallel Domain Analysis Subagents
-
-For each domain `D` in `domain_diffs`, spawn a Task subagent (model: sonnet) in a
-single parallel message. **Include the Subagent Autonomy Grant in each prompt.**
-
-Each subagent receives:
-- Domain name and file list
-- Diff content (truncated)
-- PR numbers and titles touching this domain
-- Commit one-liners for the domain
-- The commit categorization from Subagent 2A (to contextualize whether changes are
-  fixes, features, or infrastructure)
-
-Each subagent returns ONLY a JSON object:
-
-```json
-{
-  "domain": "Server/MCP Tools",
-  "summary": "3-5 sentence description of what changed and why it matters",
-  "key_changes": ["concise change 1", "concise change 2"],
-  "breaking_changes": ["description of breaking change, or empty array"],
-  "risk_score": "low|medium|high",
-  "risk_rationale": "Why this risk level — what could go wrong",
-  "review_guidance": "What a reviewer should focus on when reviewing this domain",
-  "pr_numbers": [491, 493],
-  "commit_count": 5
-}
-```
-
-#### Step 3.6: Cross-Domain Dependency Analysis (single subagent)
-
-Spawn one Task subagent (model: sonnet) with ALL domain summaries from Step 3.5.
-**Include the Subagent Autonomy Grant.**
-
-Analyze cross-domain dependencies:
-- Do recipe schema changes require corresponding server tool updates?
-- Do core type changes propagate correctly to all consumers?
-- Are test changes aligned with source changes in the same domain?
-- Do skill changes reflect new tools/features added in other domains?
-
-Return JSON:
-```json
-{
-  "cross_domain_risks": ["Recipe schema added field X but server tools don't validate it"],
-  "alignment_notes": ["Tests cover all new server tools"],
-  "integration_confidence": "high|medium|low"
-}
-```
-
-### Phase 4: Quality Assessment (parallel subagents)
-
-Spawn three parallel Task subagents (model: sonnet). **Include the Subagent Autonomy
-Grant in each prompt.**
-
-#### Subagent 4A: Test Coverage Delta
-
-Receive the full file lists from Subagent 2C and the domain partitions.
-
-Analyze:
-1. Count test files added, modified, and deleted
-2. For each new source file in `new_files`, check if a corresponding test file exists
-   in `new_files` or `modified_files` (using the project's `tests/` mirror convention)
-3. Identify source files with significant changes but no test coverage
-4. Compute a test-to-source ratio for new files
-
-Return JSON:
-```json
-{
-  "test_files_added": 5,
-  "test_files_modified": 12,
-  "test_files_deleted": 0,
-  "source_files_without_tests": ["src/autoskillit/new_module.py"],
-  "test_ratio": "17 test files for 23 source files",
-  "coverage_assessment": "Good — most new modules have corresponding tests"
-}
-```
-
-#### Subagent 4B: Breaking Change Audit
-
-Receive the full diff content for each domain and the PR list.
-
-Scan for:
-1. Removed public functions or classes (check `git diff --diff-filter=M` for deleted
-   `def ` and `class ` lines in non-test files)
-2. Changed function signatures (parameter additions/removals/renames)
-3. Modified Protocol or ABC definitions (interface contracts)
-4. Changed config keys in `defaults.yaml`
-5. Removed or renamed MCP tools
-6. Changed recipe schema fields
-7. Modified hook registrations
-
-For each finding, assess severity and affected downstream consumers.
-
-Return JSON:
-```json
-{
-  "breaking_changes": [
-    {
-      "description": "Removed function X from module Y",
-      "file": "src/autoskillit/core/types.py",
-      "severity": "high|medium|low",
-      "affected_domains": ["Server/MCP Tools", "Pipeline/Execution"],
-      "pr_number": 485
-    }
-  ],
-  "total": 2,
-  "assessment": "Two medium-severity signature changes, both internal"
-}
-```
-
-#### Subagent 4C: Regression Risk Assessment
-
-Receive the commit categorization from Subagent 2A and the domain summaries from Phase 3.
-
-Analyze:
-1. **Conflict hotspots** — files modified by multiple PRs (cross-reference PR file lists)
-2. **Rectify chains** — commits that fix issues introduced by earlier commits in this
-   same batch (pattern: PR #N introduces something, PR #M rectifies it)
-3. **High-risk domains** — domains scored "high" risk in Step 3.5
-4. **Churn indicators** — files with unusually high insertion+deletion counts relative
-   to their size
-
-Return JSON:
-```json
-{
-  "hotspot_files": [{"file": "src/autoskillit/server/tools_execution.py", "touched_by_prs": [491, 493, 495]}],
-  "rectify_chains": [{"original_pr": 465, "rectify_pr": 484, "description": "Structured output fix then hardening"}],
-  "high_risk_domains": ["Pipeline/Execution"],
-  "churn_indicators": [],
-  "overall_risk": "medium",
-  "risk_narrative": "Most risk concentrated in pipeline execution changes with multiple overlapping rectify commits"
-}
-```
-
-### Phase 5: Executive Summary and Release Notes (single subagent)
-
-Spawn one Task subagent (model: sonnet) with ALL results from Phases 2-4.
-**Include the Subagent Autonomy Grant.**
-
-Synthesize:
-
-1. **Executive Summary** — 3-5 sentence high-level narrative of what this promotion
-   brings to main. Written for a project maintainer. Focus on themes and impact.
-
-2. **Highlights** — Top 3-5 most significant changes.
-
-3. **Risk Areas** — Areas requiring careful review, synthesized from domain risk scores,
-   breaking change audit, and regression risk assessment.
-
-4. **Release Notes** — Structured changelog grouped by category:
-
-```markdown
-### New Features
-- Feature description (PR #N, closes #M)
-
-### Bug Fixes
-- Fix description (PR #N, closes #M)
-
-### Infrastructure
-- Change description (PR #N)
-
-### Breaking Changes
-- Change description — **Impact:** what breaks. **Migration:** what to do.
-
-### Attention Required
-- Item requiring manual review before or after merge
-```
-
-Return JSON:
-```json
-{
-  "executive_summary": "...",
-  "highlights": ["...", "..."],
-  "risk_areas": ["...", "..."],
-  "release_notes_md": "### New Features\n- ...\n### Bug Fixes\n- ..."
-}
-```
-
-### Phase 6: Architecture Diagrams
-
-#### Step 6.1: Select Arch-Lens Lenses
+#### Step 3.1: Select Arch-Lens Lenses
 
 Spawn a Task subagent (model: sonnet) with the `changed_files` list and this lens menu:
 
@@ -563,7 +348,7 @@ For a promotion PR, prefer lenses that show the broadest architectural impact:
 - `process-flow` if workflow routing or state transitions changed
 - `c4-container` if new services, tools, or integrations were added
 
-#### Step 6.2: Generate Arch-Lens Diagrams
+#### Step 3.2: Generate Arch-Lens Diagrams
 
 For each selected lens, follow this exact sequence:
 
@@ -609,273 +394,59 @@ Read the output from `.autoskillit/temp/arch-lens-{lens-name}/` and extract the 
 Validate: if the block contains at least one star marker or bullet marker for
 new/modified nodes, add to `validated_diagrams`. Otherwise discard.
 
-### Phase 7: Compose Promotion Report
+### Phase 4: Compose PR + Create PR
 
-Write to `.autoskillit/temp/promote-to-main/promotion_report_{timestamp}.md`.
+#### Step 4.1: Release Notes Synthesis
 
-This is the comprehensive analysis report, always generated regardless of `dry_run`.
+Spawn one Task subagent (model: sonnet) with results from Phase 2 ONLY (no domain
+analysis or quality assessment data).
 
-```markdown
-# Promotion Report: {integration_branch} to {base_branch}
+**Include the Subagent Autonomy Grant.**
 
-## Executive Summary
+The subagent receives:
+- Commit categorization from Subagent 2A
+- PR and issue data from Subagent 2B
+- File lifecycle from Subagent 2C
+- Migration/schema detection from Subagent 2D
 
-{executive_summary}
-
-**Stats:** {diff_stat_summary} across {commit_count} commits from {len(prs)} PRs
-
-## Pre-flight Status
-
-| Check | Status | Details |
-|-------|--------|---------|
-| CI | PASS/WARN/FAIL | {ci_details} |
-| Version | PASS/FAIL | {pyproject_version} (pyproject) = {plugin_version} (plugin) |
-| Reviews | PASS/WARN | {count} PRs with outstanding reviews |
-| Lock file | PASS/FAIL | uv lock consistent/inconsistent |
-
-## Highlights
-
-{For each item in highlights:}
-- {item}
-
-{If risk_areas is non-empty:}
-## Areas Requiring Review
-
-{For each item in risk_areas:}
-- {item}
-
-## Release Notes
-
-{release_notes_md from Phase 5}
-
-## Change Breakdown
-
-| Category | Count | PRs |
-|----------|-------|-----|
-| Features | {N} | {comma-separated PR links} |
-| Bug Fixes | {N} | {comma-separated PR links} |
-| Infrastructure | {N} | {comma-separated PR links} |
-| Tests | {N} | {comma-separated PR links} |
-| Docs | {N} | {comma-separated PR links} |
-
-## Merged PRs
-
-| PR | Title | Author | Labels | Category |
-|----|-------|--------|--------|----------|
-{For each pr in prs:}
-| [#{pr.number}]({pr.url}) | {pr.title} | @{pr.author.login} | {labels or "—"} | {category} |
-
-## Linked Issues
-
-{If linked_issue_numbers is non-empty:}
-| Issue | Title | Status | Action | Route | Implementing PR |
-|-------|-------|--------|--------|-------|-----------------|
-{For each issue in issue_details:}
-| [#{issue.number}]({issue.url}) | {issue.title} | {issue.state} | {"Will close on merge" if OPEN else "Already closed"} | {recipe_route from traceability or "—"} | {pr_numbers from traceability or "—"} |
-
-{If linked_issue_numbers is empty:}
-No linked issues found in PR descriptions.
-
-{If domain_summaries is non-empty:}
-## Domain Analysis
-
-{For each entry in domain_summaries (ordered by risk_score desc, then domain name):}
-### {entry.domain} (Risk: {entry.risk_score})
-
-**Review focus:** {entry.review_guidance}
-
-{entry.summary}
-
-**Key changes:**
-{For each item in entry.key_changes:}
-- {item}
-
-{If entry.breaking_changes is non-empty:}
-**Breaking changes:**
-{For each item in entry.breaking_changes:}
-- {item}
-
-**Contributing PRs:** {comma-separated [#{N}](url) for each N in entry.pr_numbers, or "—"}
-**Commits:** {entry.commit_count} commit(s)
-
-{If cross_domain_risks is non-empty:}
-### Cross-Domain Dependencies
-
-{For each risk in cross_domain_risks:}
-- {risk}
-
-**Integration confidence:** {integration_confidence}
-
-## Quality Assessment
-
-### Test Coverage
-{test coverage assessment from Subagent 4A}
-
-{If source_files_without_tests is non-empty:}
-**Source files without test coverage:**
-{For each file in source_files_without_tests:}
-- {file}
-
-### Breaking Changes
-{If breaking_changes total > 0:}
-| Description | File | Severity | Affected Domains | PR |
-|-------------|------|----------|------------------|----|
-{For each change in breaking_changes:}
-| {description} | {file} | {severity} | {affected_domains} | #{pr_number} |
-
-{If total == 0:}
-No breaking changes detected.
-
-### Regression Risk
-
-**Overall risk:** {overall_risk}
-
-{risk_narrative}
-
-{If hotspot_files is non-empty:}
-**Conflict hotspots:**
-{For each hotspot in hotspot_files:}
-- `{file}` — touched by PRs {pr_numbers}
-
-{If rectify_chains is non-empty:}
-**Rectify chains (fix-then-fix-again patterns):**
-{For each chain in rectify_chains:}
-- PR #{original_pr} then #{rectify_pr}: {description}
-
-{If attention_required from Subagent 2D:}
-## Attention Required
-
-{attention_summary}
-
-{For each category in migration/schema/dependency/config/hook/ci changes:}
-{If category is non-empty:}
-**{Category Name}:**
-{For each item:}
-- {item}
-
-## Traceability Matrix
-
-| Issue | Implementing PR | Domain | Category |
-|-------|-----------------|--------|----------|
-{For each entry in traceability:}
-| #{issue_number} {issue_title} | {comma-separated PR links} | {primary domain} | {commit category} |
-
-{If validated_diagrams is non-empty:}
-## Architecture Impact
-
-{For each validated diagram:}
-### {Lens Name} Diagram
-
-{mermaid block}
-
-{For each item in closing_refs:}
-{item}
-
-{If TOKEN_SUMMARY_CONTENT is non-empty:}
-## Token Usage Summary
-
-{TOKEN_SUMMARY_CONTENT}
-
----
-
-<sub>Generated with Claude Code via AutoSkillit</sub>
+Return JSON:
+```json
+{
+  "executive_summary": "3-5 sentence narrative of what this promotion brings, focused on change themes",
+  "highlights": ["top 3-5 most significant changes"],
+  "release_notes_md": "### New Features\n- ...\n### Bug Fixes\n- ...\n### Infrastructure\n...\n### Breaking Changes\n...\n### Attention Required\n..."
+}
 ```
 
-### Phase 8: Version Bump Decision
+#### Step 4.2: Write PR Body
 
-After Phase 2 discovers the PR count, determine whether this promotion warrants a minor
-version bump. Since each PR is squash-merged onto integration, PR count is the meaningful
-measure of work volume — not raw commit count.
+Write to `.autoskillit/temp/promote-to-main/pr_body_{YYYY-MM-DD_HHMMSS}.md`
+(relative to the current working directory).
 
-#### Step 8.1: Evaluate PR Threshold
+Sections in order:
+1. `## Promotion: {integration_branch} to {base_branch}` — executive summary + stats (`diff_stat_summary`, `commit_count`, PR count)
+2. `### Highlights` — from synthesis
+3. `## Release Notes` — from synthesis
+4. `## Merged PRs` — table (PR, Title, Author, Labels) from Subagent 2B
+5. `## Linked Issues` — table (Issue, Title, Status, Action) from Subagent 2B
+6. `## Attention Required` — from Subagent 2D (only if `attention_required=true`)
+7. `## Architecture Impact` — validated mermaid diagrams from Phase 3
+8. Closing references (`Closes #N` lines from Subagent 2B, one per line)
+9. `## Token Usage Summary` — if TOKEN_SUMMARY_CONTENT non-empty
+10. Footer: `<sub>Generated with Claude Code via AutoSkillit</sub>`
 
-**Threshold:** If `len(prs) >= 15`, perform a minor version bump. Below 15 PRs, the
-CI workflow's automatic patch bump on merge (`version-bump.yml`) is sufficient.
+#### Step 4.3: Create PR
 
-If the threshold is met:
+If `dry_run` is true: skip to Output section.
 
-1. Read the current version:
-```bash
-python3 -c "
-import tomllib, pathlib
-print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])
-"
-```
-
-2. Compute the new version — increment MINOR, reset PATCH to 0:
-```bash
-IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
-```
-
-3. Apply the bump using project conventions:
-```bash
-# Update pyproject.toml version
-python3 -c "
-import pathlib
-p = pathlib.Path('pyproject.toml')
-p.write_text(p.read_text().replace('version = \"$CURRENT_VERSION\"', 'version = \"$NEW_VERSION\"', 1))
-"
-
-# Sync plugin.json and regenerate lockfile
-task sync-plugin-version && uv lock
-```
-
-4. Search tests for hardcoded version strings (e.g., `AUTOSKILLIT_INSTALLED_VERSION`
-   monkeypatches) and update them to match `NEW_VERSION`.
-
-5. Commit the bump on the integration branch:
-```bash
-git add pyproject.toml src/autoskillit/.claude-plugin/plugin.json uv.lock
-git commit -m "chore: bump minor version to $NEW_VERSION for promotion ($PR_COUNT PRs)"
-```
-
-6. Store `version_bumped = true` and `new_version = $NEW_VERSION` for inclusion in the
-   PR body. If the threshold is not met, store `version_bumped = false`.
-
-If `dry_run` is true and a version bump would be triggered, report it in the promotion
-report but do NOT commit it. Note: "Minor version bump to X.Y.0 would be applied
-(N PRs >= 15 threshold)".
-
-### Phase 9: PR Creation
-
-If `dry_run` is true:
-- Output `report_path = {absolute path to promotion_report}` and skip to Output.
-
-#### Step 9.1: Check GitHub Availability
-
+Check GitHub availability:
 ```bash
 gh auth status 2>/dev/null
 ```
-
 If exit code non-zero: output `pr_url = ` and exit successfully.
 
-#### Step 9.2: Compose PR Body
-
-Write the PR body to `.autoskillit/temp/promote-to-main/pr_body_{timestamp}.md`.
-
-The PR body is a condensed version of the promotion report, optimized for GitHub rendering.
-Include these sections (in order):
-
-1. `## Promotion: {integration_branch} to {base_branch}` with executive summary and stats
-2. `### Highlights` from Phase 5
-3. `### Areas Requiring Review` (if non-empty) from Phase 5
-4. `## Release Notes` from Phase 5
-5. `## Merged PRs` table (PR, Title, Author, Labels)
-6. `## Linked Issues` table (Issue, Title, Status, Action)
-7. `## Domain Analysis` per-domain sections with risk scores and review guidance
-8. `## Architecture Impact` with validated mermaid diagrams
-9. Closing references (`Closes #N` lines, one per line)
-10. `## Token Usage Summary` (if available)
-11. Footer
-
-#### Step 9.3: Create Promotion PR
-
-Construct the PR title using actual branch names from arguments:
-
+Construct PR title using actual branch names:
 `Promote {integration_branch} to {base_branch} ({len(prs)} PRs, {len(linked_issue_numbers)} issues, {category_summary})`
-
-where `category_summary` is from Subagent 2A (e.g., "14 fixes, 13 features").
 
 ```bash
 gh pr create \
@@ -887,23 +458,18 @@ gh pr create \
 
 Capture the PR URL as `pr_url`.
 
-#### Step 9.4: Add Labels (optional)
-
+Add label (optional, continue if fails):
 ```bash
-gh pr edit {pr_url} --add-label "promotion" 2>/dev/null
+gh pr edit {pr_url} --add-label "promotion" 2>/dev/null || true
 ```
-
-Continue if this fails.
 
 ### Output
 
 Always emit these structured output tokens as the final lines:
 
 ```
-report_path = {absolute path to .autoskillit/temp/promote-to-main/promotion_report_{timestamp}.md}
+report_path = {absolute path to .autoskillit/temp/promote-to-main/pr_body_{timestamp}.md}
 pr_url = {pr_url, empty if dry-run or gh unavailable}
 verdict = {created|dry_run|preflight_failed}
 category_summary = {e.g., "14 fixes, 13 features, 3 infra"}
-version_bumped = {true|false}
-new_version = {X.Y.0, only if version_bumped is true}
 ```

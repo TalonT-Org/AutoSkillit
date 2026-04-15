@@ -10,6 +10,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     SubprocessRunner,
     TerminationReason,
+    TestResult,
 )
 from tests._helpers import _flush_structlog_proxy_caches
 
@@ -18,18 +19,19 @@ class StatefulMockTester:
     """Test double for TestRunner returning pre-configured results on successive calls.
 
     Enables the scenario: pre-rebase tests pass, post-rebase tests fail.
-    Falls back to (True, "") for any call beyond the configured list.
+    Falls back to TestResult(passed=True, stdout="", stderr="") for any call beyond the
+    configured list.
     """
 
-    def __init__(self, results: list[tuple[bool, str]]) -> None:
+    def __init__(self, results: list[TestResult]) -> None:
         self._results = list(results)
         self._index = 0
 
-    async def run(self, cwd: _Path) -> tuple[bool, str]:
+    async def run(self, cwd: _Path) -> TestResult:
         if self._index < len(self._results):
             result = self._results[self._index]
         else:
-            result = (True, "")
+            result = TestResult(passed=True, stdout="", stderr="")
         self._index += 1
         return result
 
@@ -124,6 +126,8 @@ def _make_result(
     stderr: str = "",
     termination_reason: TerminationReason = TerminationReason.NATURAL_EXIT,
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
+    session_id: str = "",
+    channel_b_session_id: str = "",
 ) -> SubprocessResult:
     """Create a SubprocessResult for mocking run_managed_async."""
     return SubprocessResult(
@@ -133,6 +137,8 @@ def _make_result(
         termination=termination_reason,
         pid=12345,
         channel_confirmation=channel_confirmation,
+        session_id=session_id,
+        channel_b_session_id=channel_b_session_id,
     )
 
 
@@ -218,6 +224,11 @@ def _clear_headless_env(monkeypatch):
         mcp.disable(tags={"kitchen"})
 
 
+@pytest.fixture(autouse=True)
+def _clear_skip_stale_check_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+
+
 @pytest.fixture(scope="function")
 def anyio_backend():
     """Lock all @pytest.mark.anyio tests to the asyncio backend."""
@@ -244,5 +255,11 @@ def tool_ctx(monkeypatch, tmp_path):
     ctx = make_context(AutomationConfig(), runner=mock_runner, plugin_dir=str(tmp_path))
     ctx.gate = DefaultGateState(enabled=True)
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
+    ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
+    # Anchor temp_dir to tmp_path so server tools that read from ctx.temp_dir
+    # (e.g. _apply_triage_gate's staleness cache) write under the per-test
+    # tmp directory rather than the cwd captured at fixture-init time.
+    ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
     monkeypatch.setattr(_state, "_ctx", ctx)
+    monkeypatch.setattr(_state, "_startup_ready", None)
     return ctx

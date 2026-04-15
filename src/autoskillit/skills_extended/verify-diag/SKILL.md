@@ -2,6 +2,13 @@
 name: verify-diag
 categories: [arch-lens]
 description: Verify an architecture diagram against the actual codebase. Checks component existence, connection accuracy, and read/write directionality. Use when user says "verify diagram", "verify diag", "check diagram", or wants to validate diagram accuracy.
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: "echo '[SKILL: verify-diag] Verifying architecture diagram...'"
+          once: true
 ---
 
 # Verify Diagram Skill
@@ -64,6 +71,7 @@ For each ```` ```mermaid ```` block, validate:
 **6. Class definition syntax:**
 - `classDef` lines must end with semicolons only if using shorthand
 - `class A,B,C className;` — verify referenced node IDs exist in the diagram
+- Using ONLY classDef styles from the mermaid skill (no invented colors) — flag any non-canonical class names
 
 **7. Node ID rules:**
 - Node IDs must not start with numbers

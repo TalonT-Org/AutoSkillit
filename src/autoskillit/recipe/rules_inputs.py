@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from packaging.version import Version
 
 from autoskillit.core import (
@@ -139,6 +141,50 @@ def _check_unsatisfied_skill_input(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="missing-recommended-input",
+    description="Skill steps should provide recommended inputs for full-quality output.",
+    severity=Severity.WARNING,
+)
+def _check_missing_recommended_input(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step, _available_context in iter_steps_with_context(wf):
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = step.with_args.get("skill_command", "") if step.with_args else ""
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if not skill_name:
+            continue
+        contract = get_skill_contract(skill_name, manifest)
+        if not contract:
+            continue
+
+        for inp in contract.inputs:
+            if not inp.recommended or inp.required:
+                continue
+            if not re.search(rf"(?:^|\s){re.escape(inp.name)}=", skill_cmd):
+                findings.append(
+                    RuleFinding(
+                        rule="missing-recommended-input",
+                        severity=Severity.WARNING,
+                        step_name=step_name,
+                        message=(
+                            f"Step '{step_name}' invokes {skill_name} which recommends "
+                            f"'{inp.name}' for full-quality output, but the step does not "
+                            f"pass it. Add '{inp.name}=${{{{ context.{inp.name} }}}}' to "
+                            f"the skill_command or add a pre-computation step."
+                        ),
+                    )
+                )
+
+    return findings
+
+
+@semantic_rule(
     name="shadowed-required-input",
     description=(
         "A skill step uses inline positional text for an argument that the skill's contract "
@@ -242,3 +288,107 @@ def _check_unreachable_steps(ctx: ValidationContext) -> list[RuleFinding]:
                 )
             )
     return findings
+
+
+_PIPELINE_INTERNAL_PATTERN = re.compile(
+    r"(?i)^(Set to |Set by |Set when |Used by |Passed by )|"
+    r"\b(upstream orchestrat|already claimed|batch orchestrat)\b"
+)
+
+
+@semantic_rule(
+    name="pipeline-internal-not-hidden",
+    severity=Severity.WARNING,
+    description=(
+        "Ingredient description suggests pipeline-internal use (set by automation, "
+        "not by users) but hidden: true is not set. Add hidden: true to suppress "
+        "this ingredient from the agent's ingredients table."
+    ),
+)
+def _check_pipeline_internal_not_hidden(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for name, ing in (ctx.recipe.ingredients or {}).items():
+        if getattr(ing, "hidden", False):
+            continue
+        desc = getattr(ing, "description", "") or ""
+        if _PIPELINE_INTERNAL_PATTERN.search(desc):
+            findings.append(
+                RuleFinding(
+                    rule="pipeline-internal-not-hidden",
+                    severity=Severity.WARNING,
+                    step_name=name,
+                    message=(
+                        f"Ingredient '{name}' description suggests it is set by pipeline "
+                        f"automation, not by users. Add `hidden: true` to suppress it from "
+                        f"the agent's ingredients table."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="required-ingredient-no-default",
+    severity=Severity.WARNING,
+    description=(
+        "Ingredient with required=True and no default may cause the orchestrator "
+        "to call AskUserQuestion before open_kitchen."
+    ),
+)
+def _check_required_without_default(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for name, ing in (ctx.recipe.ingredients or {}).items():
+        if getattr(ing, "hidden", False):
+            continue
+        if getattr(ing, "required", False) and getattr(ing, "default", None) is None:
+            findings.append(
+                RuleFinding(
+                    rule="required-ingredient-no-default",
+                    severity=Severity.WARNING,
+                    step_name=f"ingredient:{name}",
+                    message=(
+                        f"Ingredient '{name}' is required but has no default value. "
+                        "This may cause the orchestrator to call AskUserQuestion "
+                        "before open_kitchen. Consider adding a default value or "
+                        "marking as hidden."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="research-output-mode-enum",
+    severity=Severity.ERROR,
+    description=(
+        "The research recipe's output_mode ingredient default must be 'pr' or 'local'. "
+        "Any other value is rejected at validation time."
+    ),
+)
+def _check_research_output_mode_enum(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    wf = ctx.recipe
+    if wf.name != "research":
+        return []
+    ing = (wf.ingredients or {}).get("output_mode")
+    if ing is None:
+        return []
+    default = getattr(ing, "default", None)
+    if default not in {"pr", "local"}:
+        return [
+            RuleFinding(
+                rule="research-output-mode-enum",
+                severity=Severity.ERROR,
+                step_name="output_mode",
+                message=(
+                    f"output_mode.default must be 'pr' or 'local', got {default!r}. "
+                    "Only two modes are supported (issue body overrides gist §1)."
+                ),
+            )
+        ]
+    return []

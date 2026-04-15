@@ -50,19 +50,18 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Modify any source code files
 - Suggest backward compatibility solutions
 - Suggest fallbacks that hide errors
-- Create files outside `.autoskillit/temp/investigate/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/investigate/` directory
 - Choose or accept approaches, solutions, and/or fixes that are chosen simply because they are easier
 
 **ALWAYS:**
 - Use subagents for parallel exploration
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
-- Write findings as a markdown report with unique name to `.autoskillit/temp/investigate/` directory (relative to the current working directory)
+- Write findings as a markdown report with unique name to `{{AUTOSKILLIT_TEMP}}/investigate/` directory (relative to the current working directory)
 - After writing the investigation report, emit the **absolute path** as a structured output
-  token immediately before `%%ORDER_UP%%`. Resolve the relative `.autoskillit/temp/investigate/...`
+  token as your final output. Resolve the relative `{{AUTOSKILLIT_TEMP}}/investigate/...`
   save path to absolute by prepending the full CWD:
   ```
-  investigation_path = /absolute/cwd/.autoskillit/temp/investigate/{filename}.md
-  %%ORDER_UP%%
+  investigation_path = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/investigate/{filename}.md
   ```
   This token is MANDATORY — the pipeline cannot proceed without it.
 - Identify how tests missed the issue (if applicable)
@@ -72,7 +71,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 ## Investigation Workflow
 
 **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
-exist (e.g., plan file arguments, `.autoskillit/temp/investigate/` reports, external file references), use
+exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, external file references), use
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
 
@@ -158,12 +157,71 @@ After subagents complete, consolidate into structured findings:
 4. **Data Flow**: How data moves through the system
 5. **Test Gap Analysis**: Why tests didn't catch this
 6. **Similar Patterns**: How similar issues are handled elsewhere
-7. **External Research**: Relevant findings from web search (if applicable)
-8. **Recommendations**: Suggested approaches (NOT implementations)
+7. **Historical Context**: Whether this root cause has been investigated or fixed before (populated by Step 3.5)
+8. **External Research**: Relevant findings from web search (if applicable)
+9. **Recommendations**: Suggested approaches (NOT implementations)
+
+### Step 3.5 — Historical Recurrence Check
+
+Before writing the report, check whether the root cause identified in Step 3 has been investigated or fixed before. This catches recurring bugs where a prior fix was incomplete, symptom-only, or applied at the wrong layer. Zero overhead for first-occurrence bugs: if nothing matches, skip the analysis subagent and record a single-line result.
+
+#### Part A: Mine Past Investigation Logs
+
+Derive the Claude project log directory from the current working directory:
+
+```bash
+PROJECT_PATH=$(pwd)
+LOG_DIR="$HOME/.claude/projects/-${PROJECT_PATH//\//-}"
+LOG_DIR="${LOG_DIR//--/-}"
+```
+
+Search for `.jsonl` files containing prior `/autoskillit:investigate` invocations, **excluding subagent log subdirectories** (`*/subagents/*`) so prior subagent conversations are not double-counted:
+
+```bash
+find "$LOG_DIR" -name "*.jsonl" -not -path "*/subagents/*" -print0 | \
+  xargs -0 grep -l '/autoskillit:investigate' 2>/dev/null
+```
+
+For each matching log file, extract the investigation topic, root cause conclusion, and affected components by scanning for keywords `"root cause"`, `"Root Cause"`, `"fix"`, and `"summary"` in assistant messages. Compare against the current investigation's root cause and affected components — overlapping components or error patterns indicate a recurrence.
+
+#### Part B: Check Git History for Prior Fix Commits
+
+Using the affected components from Step 3, extract the primary source file paths. Then search bounded recent history (last 100 commits) for commits whose messages signal a prior fix or revert on those files:
+
+> `{AFFECTED_FILES}` expands to a space-separated list of file paths relative to the repo root (e.g. `src/autoskillit/execution/headless.py tests/execution/test_headless.py`). Pass each path as a separate argument — do not wrap the list in quotes as a single string.
+
+```bash
+git log --oneline -100 --format="%H %s" \
+  --grep="fix\|revert\|remove\|replace" -- {AFFECTED_FILES}
+```
+
+For each matching commit, read the diff to check for symbol-level overlap with the current root cause:
+
+```bash
+git show {HASH} -- {AFFECTED_FILES}
+```
+
+Cross-reference: if a commit message references the same error type, component name, or function that the current investigation identified as the root cause, treat it as a prior fix for the same or a closely related issue.
+
+#### Part C: Conditional Analysis (only if history found)
+
+If Part A or Part B found matches, spawn a single subagent (using `model: "sonnet"` via the Task tool) to:
+
+- Read the prior fix diffs via `git show {commit_hash}`
+- Read any prior investigation report files discovered during log scanning
+- Compare the prior fix approach against the current root cause
+- Identify what the prior fix missed (incomplete coverage, wrong layer, symptom-only fix, missing regression test)
+- Determine whether this represents a recurring pattern that needs architectural remediation
+
+If neither Part A nor Part B produced matches, skip the subagent entirely and record: **"No prior investigations or fixes found for this root cause."** This guarantees zero overhead for first-occurrence bugs.
+
+#### Rectify Flag
+
+When prior fixes are found and the analysis shows the root cause is recurring, explicitly flag: *"This is a recurring pattern — consider running `/autoskillit:rectify` for architectural immunity after resolving the immediate issue."*
 
 ### Step 4: Write Report
 
-Write findings to: `.autoskillit/temp/investigate/investigation_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Write findings to: `{{AUTOSKILLIT_TEMP}}/investigate/investigation_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 Report structure:
 ```markdown
@@ -190,6 +248,15 @@ Report structure:
 
 ## Similar Patterns
 {How similar scenarios are handled elsewhere}
+
+## Historical Context
+{If prior fixes found:}
+- Prior investigation dates and report paths
+- Prior fix commits/PRs with hashes and summaries
+- Analysis of why prior fixes were insufficient
+- Whether this represents a recurring pattern (flag for /autoskillit:rectify)
+{If no prior history:}
+No prior investigations or fixes found for this root cause.
 
 ## External Research
 {Relevant findings from web search - library bugs, known issues, documentation insights}

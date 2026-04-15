@@ -4,34 +4,23 @@ from __future__ import annotations
 
 import sys
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import anyio
+import psutil
 import pytest
 
-from autoskillit.core.types import TerminationReason
+from autoskillit.core.types import ChannelBStatus, TerminationReason
 from autoskillit.execution.process import (
     RaceAccumulator,
     _has_active_api_connection,
+    _has_active_child_processes,
     _heartbeat,
     _session_log_monitor,
     _watch_session_log,
     run_managed_async,
 )
-
-# ---------------------------------------------------------------------------
-# Helper scripts — small Python programs that reproduce specific scenarios
-# ---------------------------------------------------------------------------
-
-# Script that writes a JSON result line then hangs (simulates Claude CLI completed-but-hung)
-WRITE_RESULT_THEN_HANG_SCRIPT = (
-    "import sys, time, json\n"
-    'result = {"type": "result", "subtype": "success", "is_error": False,\n'
-    '          "result": "done", "session_id": "s1"}\n'
-    'sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")\n'
-    "sys.stdout.flush()\n"
-    "time.sleep(3600)\n"
-)
+from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
 # Script that writes non-matching output then hangs
 PARTIAL_OUTPUT_THEN_HANG_SCRIPT = (
@@ -596,6 +585,121 @@ class TestHasActiveApiConnection:
             assert _has_active_api_connection(12345) is True
 
 
+class TestHasActiveChildProcesses:
+    """Unit tests for _has_active_child_processes.
+
+    The function caches psutil.Process objects so cpu_percent(interval=0)
+    returns meaningful deltas on the second call.  First call primes the
+    baseline (always returns False); second call with the same child PIDs
+    uses the cached objects.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self, monkeypatch):
+        """Reset the module-level Process cache between tests."""
+        from autoskillit.execution import _process_monitor
+
+        monkeypatch.setattr(_process_monitor, "_child_process_cache", {})
+
+    def _make_child(self, cpu: float | type[Exception], *, pid: int = 999) -> MagicMock:
+        """Build a mock psutil child process."""
+        child = MagicMock()
+        child.pid = pid
+        if isinstance(cpu, type) and issubclass(cpu, Exception):
+            child.cpu_percent.side_effect = cpu(pid=pid)
+        else:
+            child.cpu_percent.return_value = cpu
+        return child
+
+    def _patch_children(self, children, monkeypatch, parent_raises=None):
+        mock_proc = MagicMock()
+        if parent_raises:
+            monkeypatch.setattr(
+                "autoskillit.execution._process_monitor.psutil.Process",
+                MagicMock(side_effect=parent_raises(pid=1234)),
+            )
+            return
+        mock_proc.children.return_value = children
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor.psutil.Process",
+            MagicMock(return_value=mock_proc),
+        )
+
+    def test_returns_true_when_child_exceeds_threshold(self, monkeypatch):
+        child = self._make_child(15.0, pid=100)
+        self._patch_children([child], monkeypatch)
+        # First call primes baseline; second call returns meaningful delta.
+        _has_active_child_processes(1234)
+        # Cache now holds the child object; second call uses cached.cpu_percent.
+        from autoskillit.execution._process_monitor import _child_process_cache
+
+        _child_process_cache[100] = child
+        assert _has_active_child_processes(1234) is True
+
+    def test_returns_false_when_all_children_below_threshold(self, monkeypatch):
+        children = [
+            self._make_child(0.0, pid=100),
+            self._make_child(5.0, pid=101),
+            self._make_child(9.9, pid=102),
+        ]
+        self._patch_children(children, monkeypatch)
+        # Prime baseline
+        _has_active_child_processes(1234)
+        from autoskillit.execution._process_monitor import _child_process_cache
+
+        for c in children:
+            _child_process_cache[c.pid] = c
+        assert _has_active_child_processes(1234) is False
+
+    def test_returns_false_when_no_children(self, monkeypatch):
+        self._patch_children([], monkeypatch)
+        assert _has_active_child_processes(1234) is False
+
+    def test_returns_false_on_parent_nosuchprocess(self, monkeypatch):
+        self._patch_children([], monkeypatch, parent_raises=psutil.NoSuchProcess)
+        assert _has_active_child_processes(1234) is False
+
+    def test_skips_dead_child_gracefully(self, monkeypatch):
+        children = [
+            self._make_child(psutil.NoSuchProcess, pid=100),
+            self._make_child(5.0, pid=101),
+        ]
+        self._patch_children(children, monkeypatch)
+        _has_active_child_processes(1234)
+        from autoskillit.execution._process_monitor import _child_process_cache
+
+        for c in children:
+            if c.pid in _child_process_cache:
+                pass  # Already cached by prime call
+            _child_process_cache[c.pid] = c
+        assert _has_active_child_processes(1234) is False
+
+    def test_skips_zombie_child_then_finds_active(self, monkeypatch):
+        children = [
+            self._make_child(psutil.ZombieProcess, pid=100),
+            self._make_child(20.0, pid=101),
+        ]
+        self._patch_children(children, monkeypatch)
+        # Prime baseline
+        _has_active_child_processes(1234)
+        from autoskillit.execution._process_monitor import _child_process_cache
+
+        for c in children:
+            _child_process_cache[c.pid] = c
+        assert _has_active_child_processes(1234) is True
+
+    def test_skips_access_denied_gracefully(self, monkeypatch):
+        self._patch_children(
+            [self._make_child(psutil.AccessDenied, pid=100)],
+            monkeypatch,
+        )
+        _has_active_child_processes(1234)
+        from autoskillit.execution._process_monitor import _child_process_cache
+
+        _child_process_cache[100] = self._make_child(psutil.AccessDenied, pid=100)
+        assert _has_active_child_processes(1234) is False
+
+
 class TestSessionLogMonitorStaleSuppressionGate:
     """_session_log_monitor suppresses stale when process has an active port-443 connection."""
 
@@ -716,6 +820,144 @@ class TestSessionLogMonitorStaleSuppressionGate:
         assert warning_in_logs or warning_in_stdout, (
             "Suppression warning must appear in structlog capture or stdout"
         )
+
+    @pytest.mark.anyio
+    async def test_suppresses_stale_when_child_cpu_active_no_api_connection(
+        self, tmp_path, monkeypatch
+    ):
+        """Child CPU activity suppresses stale kill even when no port-443 connection."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10  # wall time — compared against st_ctime in phase 1
+        call_count: dict[str, int] = {"cpu": 0}
+
+        def fake_api_conn(pid):
+            return False  # No port-443 connection
+
+        def fake_child_cpu(pid):
+            call_count["cpu"] += 1
+            return call_count["cpu"] == 1  # True first, False second
+
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor._has_active_api_connection",
+            fake_api_conn,
+        )
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor._has_active_child_processes",
+            fake_child_cpu,
+        )
+        result = await _session_log_monitor(
+            tmp_path,
+            "DONE",
+            stale_threshold=0.05,
+            spawn_time=spawn_time,
+            pid=9999,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+        )
+        assert result.status == ChannelBStatus.STALE
+        assert call_count["cpu"] == 2  # suppressed once, then fired
+
+
+class TestStaleSuppressionBounded:
+    """Bounded suppression: max_suppression_seconds caps stale deferral."""
+
+    @pytest.mark.anyio
+    async def test_stale_suppression_bounded_by_max_duration(self, tmp_path, monkeypatch):
+        """Stale fires after max_suppression_seconds despite ESTABLISHED connection."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor._has_active_api_connection",
+            lambda pid: True,
+        )
+
+        with anyio.fail_after(8.0):
+            result = await _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.05,
+                spawn_time=spawn_time,
+                pid=9999,
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+                max_suppression_seconds=1.0,
+            )
+        assert result.status == ChannelBStatus.STALE
+
+    @pytest.mark.anyio
+    async def test_stale_suppression_resets_on_genuine_activity(self, tmp_path, monkeypatch):
+        """Suppression counter resets when JSONL file grows."""
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor._has_active_api_connection",
+            lambda pid: True,
+        )
+
+        async def write_activity() -> None:
+            import json as _json
+
+            for i in range(6):
+                await anyio.sleep(0.5)
+                with session_file.open("a") as f:
+                    record = {"type": "assistant", "message": {"content": f"msg-{i}"}}
+                    f.write(_json.dumps(record) + "\n")
+
+        with anyio.fail_after(10.0):
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(write_activity)
+                result = await _session_log_monitor(
+                    tmp_path,
+                    "DONE",
+                    stale_threshold=0.05,
+                    spawn_time=spawn_time,
+                    pid=9999,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                    max_suppression_seconds=2.0,
+                )
+                tg.cancel_scope.cancel()
+
+        assert result.status == ChannelBStatus.STALE
+
+    @pytest.mark.anyio
+    async def test_stale_suppression_logs_warning_on_bounded_kill(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """Warning log emitted when bounded suppression fires."""
+        import structlog.testing
+
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+
+        monkeypatch.setattr(
+            "autoskillit.execution._process_monitor._has_active_api_connection",
+            lambda pid: True,
+        )
+
+        with anyio.fail_after(8.0):
+            with structlog.testing.capture_logs() as logs:
+                result = await _session_log_monitor(
+                    tmp_path,
+                    "DONE",
+                    stale_threshold=0.05,
+                    spawn_time=spawn_time,
+                    pid=9999,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                    max_suppression_seconds=1.0,
+                )
+        assert result.status == ChannelBStatus.STALE
+        captured = capsys.readouterr().out + capsys.readouterr().err
+        bounded_in_logs = any("Suppression bounded" in str(log.get("event", "")) for log in logs)
+        bounded_in_stdout = "Suppression bounded" in captured
+        assert bounded_in_logs or bounded_in_stdout
 
 
 class TestHeartbeatMarkerAwareness:
@@ -1005,3 +1247,26 @@ class TestSessionIdBasedSelection:
         )
         assert result.status == "completion"
         assert result.session_id == session_b
+
+
+class TestSessionLogMonitorDirMissing:
+    """DIR_MISSING: _session_log_monitor returns immediately when dir is absent."""
+
+    @pytest.mark.anyio
+    async def test_session_log_monitor_returns_dir_missing_when_dir_absent(self, tmp_path):
+        """When session_log_dir does not exist, monitor returns DIR_MISSING immediately
+        instead of burning phase1_timeout absorbing OSError."""
+        nonexistent = tmp_path / "does_not_exist"  # NOT created
+        t0 = time.monotonic()
+        result = await _session_log_monitor(
+            nonexistent,
+            "MARKER",
+            stale_threshold=10.0,
+            spawn_time=time.time() - 1,
+            _phase1_timeout=5.0,
+            _phase1_poll=0.01,  # fast poll so DIR_MISSING returns within one cycle
+        )
+        elapsed = time.monotonic() - t0
+        assert result.status == ChannelBStatus.DIR_MISSING
+        assert elapsed < 0.1  # FileNotFoundError is immediate after the poll sleep
+        assert result.session_id == ""

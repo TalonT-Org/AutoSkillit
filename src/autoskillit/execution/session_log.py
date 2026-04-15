@@ -17,8 +17,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import psutil
+
 from autoskillit.core import atomic_write, claude_code_log_path, get_logger
-from autoskillit.execution.anomaly_detection import detect_anomalies
+from autoskillit.execution.anomaly_detection import detect_anomalies, detect_identity_drift
+from autoskillit.execution.linux_tracing import (
+    read_boot_id,
+    read_enrollment,
+    read_starttime_ticks,
+)
 
 logger = get_logger(__name__)
 
@@ -67,6 +74,8 @@ def flush_session_log(
     *,
     log_dir: str,
     cwd: str,
+    kitchen_id: str = "",
+    order_id: str = "",
     session_id: str,
     pid: int,
     skill_command: str,
@@ -78,6 +87,7 @@ def flush_session_log(
     end_ts: str = "",
     elapsed_seconds: float | None = None,
     termination_reason: str = "",
+    kill_reason: str = "",
     snapshot_interval_seconds: float = 0.0,
     step_name: str = "",
     token_usage: dict[str, Any] | None = None,
@@ -86,6 +96,9 @@ def flush_session_log(
     cli_subtype: str = "",
     write_path_warnings: list[str] | None = None,
     write_call_count: int = 0,
+    clone_contamination_reverted: bool = False,
+    tracked_comm: str | None = None,
+    exception_text: str = "",
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -117,6 +130,8 @@ def flush_session_log(
     peak_oom_score = 0
     peak_fd_ratio = 0.0
     anomalies: list[dict[str, object]] = []
+    _effective_tracked_comm: str | None = tracked_comm
+    _tracked_comm_drift: bool = False
 
     # Write proc_trace.jsonl
     if proc_snapshots:
@@ -147,8 +162,29 @@ def flush_session_log(
                     if ratio > peak_fd_ratio:
                         peak_fd_ratio = ratio
 
-        # Anomaly detection
+        # Compute effective tracked_comm from snapshots if not provided by caller
+        if _effective_tracked_comm is None:
+            # Use modal comm value across all snapshots
+            comm_counts: dict[str, int] = {}
+            for snap in proc_snapshots:
+                c = snap.get("comm", "")
+                if c and isinstance(c, str):
+                    comm_counts[c] = comm_counts.get(c, 0) + 1
+            if comm_counts:
+                _effective_tracked_comm = max(comm_counts, key=lambda k: comm_counts[k])
+
+        # Detect identity drift: if snapshots have mixed comm values, flag it
+        if _effective_tracked_comm:
+            comms_seen = {snap.get("comm", "") for snap in proc_snapshots if snap.get("comm", "")}
+            if len(comms_seen) > 1:
+                _tracked_comm_drift = True
+
+        # Anomaly detection (standard)
         anomalies = detect_anomalies(proc_snapshots, pid)
+        # Identity drift anomaly (post-fix immunity check)
+        if _effective_tracked_comm:
+            drift_anomalies = detect_identity_drift(proc_snapshots, _effective_tracked_comm)
+            anomalies.extend(drift_anomalies)
 
     # Write anomalies.jsonl (only if anomalies exist)
     if anomalies:
@@ -195,11 +231,20 @@ def flush_session_log(
         "peak_oom_score": peak_oom_score,
         "peak_fd_ratio": round(peak_fd_ratio, 3),
         "termination_reason": termination_reason,
+        "kill_reason": kill_reason,
         "write_path_warnings": effective_write_path_warnings,
         "write_call_count": write_call_count,
+        "clone_contamination_reverted": clone_contamination_reverted,
+        # Tracer target resolution fields (issue #806)
+        "tracked_comm": _effective_tracked_comm,
+        "tracked_comm_drift": _tracked_comm_drift,
+        "tracer_target_resolution_version": 2,
     }
     summary_path = session_dir / "summary.json"
     atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
+
+    if exception_text:
+        atomic_write(session_dir / "crash_exception.txt", exception_text)
 
     # Write per-session telemetry files when step_name is provided
     if step_name and token_usage is not None:
@@ -210,13 +255,20 @@ def flush_session_log(
             "cache_creation_input_tokens": token_usage.get("cache_creation_input_tokens", 0),
             "cache_read_input_tokens": token_usage.get("cache_read_input_tokens", 0),
             "timing_seconds": timing_seconds if timing_seconds is not None else 0.0,
+            "order_id": order_id,
         }
         atomic_write(session_dir / "token_usage.json", json.dumps(tu_data))
 
     if step_name and timing_seconds is not None:
         atomic_write(
             session_dir / "step_timing.json",
-            json.dumps({"step_name": step_name, "total_seconds": max(0.0, timing_seconds)}),
+            json.dumps(
+                {
+                    "step_name": step_name,
+                    "total_seconds": max(0.0, timing_seconds),
+                    "order_id": order_id,
+                }
+            ),
         )
 
     if step_name and audit_record is not None:
@@ -228,6 +280,8 @@ def flush_session_log(
         "dir_name": dir_name,
         "timestamp": start_ts,
         "cwd": cwd,
+        "kitchen_id": kitchen_id,
+        "order_id": order_id,
         "claude_code_log": cc_log_str,
         "skill_command": skill_command[:100],
         "success": success,
@@ -242,6 +296,8 @@ def flush_session_log(
         "input_tokens": token_usage.get("input_tokens", 0) if token_usage else 0,
         "output_tokens": token_usage.get("output_tokens", 0) if token_usage else 0,
         "write_call_count": write_call_count,
+        "tracked_comm": _effective_tracked_comm,
+        "tracked_comm_drift": _tracked_comm_drift,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:
@@ -302,6 +358,7 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
         return 0
 
     count = 0
+    current_boot_id = read_boot_id()
     for trace_file in sorted(tmpfs.glob("autoskillit_trace_*.jsonl")):
         # Skip files modified within the last 30 seconds — may be active
         try:
@@ -311,7 +368,35 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
         if age_seconds < 30:
             continue
 
-        # Read snapshots
+        # Extract PID from filename: autoskillit_trace_{pid}.jsonl
+        try:
+            pid = int(trace_file.stem.split("_")[-1])
+        except (ValueError, IndexError):
+            pid = -1
+
+        # Gate 1: Enrollment sidecar must exist — no sidecar means alien/test file
+        enrollment_path = tmpfs / f"autoskillit_enrollment_{pid}.json"
+        enrollment = read_enrollment(enrollment_path)
+        if enrollment is None:
+            logger.debug("Skipping %s: no enrollment sidecar", trace_file.name)
+            continue
+
+        # Gate 2: Boot ID must match current boot — mismatch means pre-reboot stale file
+        if current_boot_id and enrollment.boot_id and enrollment.boot_id != current_boot_id:
+            logger.debug("Skipping %s: boot_id mismatch", trace_file.name)
+            trace_file.unlink(missing_ok=True)
+            enrollment_path.unlink(missing_ok=True)
+            continue
+
+        # Gate 3: PID liveness + starttime_ticks identity
+        if psutil.pid_exists(pid):
+            current_ticks = read_starttime_ticks(pid)
+            if current_ticks is not None and current_ticks == enrollment.starttime_ticks:
+                logger.debug("Skipping %s: PID %d still alive", trace_file.name, pid)
+                continue
+            # PID recycled — original process is gone, treat as crash
+
+        # All gates passed — read snapshots and emit crashed row
         snapshots: list[dict[str, object]] = []
         try:
             for line in trace_file.read_text().splitlines():
@@ -322,11 +407,27 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
         except OSError:
             continue
 
-        # Extract PID from filename: autoskillit_trace_{pid}.jsonl
-        try:
-            pid = int(trace_file.stem.split("_")[-1])
-        except (ValueError, IndexError):
-            pid = 0
+        # Gate 4: comm-based alien file rejection (issue #806 immunity)
+        # Use enrollment.comm as the expected comm (schema_version=2 records carry the
+        # enrolled binary name). Pre-fix schema_version=1 records have comm="" — skip
+        # the check for those to preserve recovery of legitimate crash data.
+        _is_alien = False
+        expected_comm = enrollment.comm
+        if snapshots and expected_comm:
+            first_comm = snapshots[0].get("comm", "")
+            if first_comm and isinstance(first_comm, str) and first_comm != expected_comm:
+                logger.debug(
+                    "Skipping %s: alien comm '%s' (expected '%s')",
+                    trace_file.name,
+                    first_comm,
+                    expected_comm,
+                )
+                _is_alien = True
+        if _is_alien:
+            # Delete the alien trace — don't leave it to confuse future recovery runs
+            trace_file.unlink(missing_ok=True)
+            enrollment_path.unlink(missing_ok=True)
+            continue
 
         # Compute start_ts from file mtime
         try:
@@ -352,10 +453,8 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
             logger.debug("recover_crashed_sessions: failed to finalize %s", trace_file)
             continue
 
-        try:
-            trace_file.unlink()
-        except OSError:
-            pass
+        trace_file.unlink(missing_ok=True)
+        enrollment_path.unlink(missing_ok=True)
 
         count += 1
 

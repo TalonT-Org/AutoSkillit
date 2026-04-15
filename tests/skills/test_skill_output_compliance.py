@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from autoskillit.core import pkg_root
-from autoskillit.workspace.skills import SkillResolver
+from autoskillit.workspace.skills import DefaultSkillResolver
 
 # Skills whose output files are intentionally fixed-name (no timestamp needed).
 # These are idempotent by design — the filename IS the identity.
@@ -41,8 +41,11 @@ DATE_ONLY_PATTERN = re.compile(
 )
 
 # Lines that contain output file path instructions (write/save directives).
+# Matches both legacy literal ``.autoskillit/temp/`` and the placeholder
+# ``{{AUTOSKILLIT_TEMP}}/`` form used by SKILL.md files post-substitution.
 OUTPUT_PATH_LINE = re.compile(
-    r"(?:write|save|output)\s+.*?(?:to|path|file)\s*[:=]?\s*`?(?:\.autoskillit/)?temp/",
+    r"(?:write|save|output)\s+.*?(?:to|path|file)\s*[:=]?\s*"
+    r"`?(?:\.autoskillit/temp/|\{\{AUTOSKILLIT_TEMP\}\}/)",
     re.IGNORECASE,
 )
 
@@ -72,7 +75,7 @@ UNSPACED_OUTPUT_TOKEN = re.compile(
 
 def _get_file_producing_skills() -> list[str]:
     """Return skill names whose SKILL.md contains temp/ output path instructions."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     producing = []
     for info in resolver.list_all():
         if info.name not in FIXED_NAME_SKILLS:
@@ -84,7 +87,7 @@ def _get_file_producing_skills() -> list[str]:
 
 def _get_skills_with_output_tokens() -> list[str]:
     """Return skill names whose SKILL.md contains structured output tokens."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     token_skills = []
     # Simple check for key = value or key=value pattern in unlabeled code blocks
     token_pattern = re.compile(
@@ -111,7 +114,7 @@ def _get_skills_with_output_tokens() -> list[str]:
 @pytest.mark.parametrize("skill_name", _get_file_producing_skills())
 def test_skill_output_uses_hhmmss_timestamp(skill_name: str) -> None:
     """Every file-producing skill must use {YYYY-MM-DD_HHMMSS} in output paths."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     info = resolver.resolve(skill_name)
     assert info is not None
     content = info.path.read_text()
@@ -120,7 +123,7 @@ def test_skill_output_uses_hhmmss_timestamp(skill_name: str) -> None:
     output_lines = [
         line
         for line in content.splitlines()
-        if re.search(r"(?:\.autoskillit/)?temp/.*\{.*\}", line)
+        if re.search(r"(?:\.autoskillit/temp/|\{\{AUTOSKILLIT_TEMP\}\}/).*\{.*\}", line)
         and not line.strip().startswith("#")
     ]
 
@@ -135,7 +138,7 @@ def test_skill_output_uses_hhmmss_timestamp(skill_name: str) -> None:
 @pytest.mark.parametrize("skill_name", _get_skills_with_output_tokens())
 def test_structured_output_tokens_have_spaces(skill_name: str) -> None:
     """Structured output tokens must use 'key = value' format (spaces around =)."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     info = resolver.resolve(skill_name)
     assert info is not None
     content = info.path.read_text()
@@ -151,7 +154,7 @@ def test_structured_output_tokens_have_spaces(skill_name: str) -> None:
 @pytest.mark.parametrize("skill_name", _get_file_producing_skills())
 def test_no_shared_scratch_files(skill_name: str) -> None:
     """Skills must not write to shared fixed-name scratch files."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     info = resolver.resolve(skill_name)
     assert info is not None
     content = info.path.read_text()
@@ -166,7 +169,7 @@ def test_no_shared_scratch_files(skill_name: str) -> None:
 @pytest.mark.parametrize("skill_name", _get_file_producing_skills())
 def test_no_namespace_prefix_in_output_paths(skill_name: str) -> None:
     """Output paths must not include the autoskillit: namespace prefix."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     info = resolver.resolve(skill_name)
     assert info is not None
     content = info.path.read_text()
@@ -184,7 +187,7 @@ def test_no_namespace_prefix_in_output_paths(skill_name: str) -> None:
 @pytest.mark.parametrize("skill_name", _get_file_producing_skills())
 def test_file_producing_skills_have_cwd_anchor(skill_name: str) -> None:
     """Every file-producing skill must anchor temp/ writes to the current working directory."""
-    resolver = SkillResolver()
+    resolver = DefaultSkillResolver()
     info = resolver.resolve(skill_name)
     assert info is not None
     content = info.path.read_text()
@@ -221,6 +224,23 @@ def test_output_path_tokens_synchronized() -> None:
             "analysis_file",
             "conflict_report_path",
             "recipe_path",
+            # Research recipe skills (added in #504)
+            "scope_report",
+            "experiment_plan",
+            "results_path",
+            "report_path",
+            # review-design skill outputs (added in #593)
+            "evaluation_dashboard",
+            "revision_guidance",
+            # prepare-research-pr output (decomposed research-PR flow)
+            "prep_path",
+            # plan-visualization outputs (groupF Part A)
+            "visualization_plan_path",
+            "report_plan_path",
+            # bundle-local-report output (groupG)
+            "html_path",
+            # stage-data skill output (resource feasibility report path)
+            "resource_report",
         }
     )
 
@@ -276,6 +296,19 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "arch-lens-scenarios": ["diagram_path"],
     "arch-lens-state-lifecycle": ["diagram_path"],
     "arch-lens-deployment": ["diagram_path"],
+    "vis-lens-always-on": ["diagram_path"],
+    "vis-lens-antipattern": ["diagram_path"],
+    "vis-lens-caption-annot": ["diagram_path"],
+    "vis-lens-chart-select": ["diagram_path"],
+    "vis-lens-color-access": ["diagram_path"],
+    "vis-lens-domain-norms": ["diagram_path"],
+    "vis-lens-figure-table": ["diagram_path"],
+    "vis-lens-multi-compare": ["diagram_path"],
+    "vis-lens-reproducibility": ["diagram_path"],
+    "vis-lens-story-arc": ["diagram_path"],
+    "vis-lens-temporal": ["diagram_path"],
+    "vis-lens-uncertainty": ["diagram_path"],
+    "review-design": ["evaluation_dashboard", "revision_guidance"],
 }
 
 ABSOLUTE_PATH_KEYWORDS = ("absolute", "/abs", "$(pwd)", "$(cd")

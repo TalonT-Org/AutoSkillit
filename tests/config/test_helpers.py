@@ -1,4 +1,4 @@
-"""Tests for server/helpers.py utility functions."""
+"""Tests for autoskillit.config resolve_ingredient_defaults."""
 
 from __future__ import annotations
 

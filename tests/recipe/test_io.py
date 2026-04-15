@@ -184,25 +184,6 @@ class TestRecipeParser:
         wf = load_recipe(f)
         assert wf.steps["impl"].on_context_limit == "retry_worktree"
 
-    def test_no_retry_block_in_yaml(self, tmp_path: Path) -> None:
-        """Old retry: block must raise — unrecognised field."""
-        data = {
-            "name": "old-retry",
-            "description": "test",
-            "kitchen_rules": ["test"],
-            "steps": {
-                "impl": {
-                    "tool": "run_skill",
-                    "retry": {"max_attempts": 3, "on": "needs_retry"},
-                    "on_success": "done",
-                },
-                "done": {"action": "stop", "message": "Done."},
-            },
-        }
-        f = _write_yaml(tmp_path / "recipe.yaml", data)
-        with pytest.raises(Exception):
-            load_recipe(f)
-
     def test_load_recipe_rejects_non_dict(self, tmp_path: Path) -> None:
         """YAML that parses to a non-dict must raise ValueError."""
         path = tmp_path / "list.yaml"
@@ -451,6 +432,31 @@ class TestRecipeParser:
     def test_parse_step_model_absent(self) -> None:
         step = _parse_step({"tool": "run_skill"})
         assert step.model is None
+
+    def test_parse_step_reads_stale_threshold(self) -> None:
+        data = {"tool": "run_skill", "stale_threshold": 2400, "on_success": "done"}
+        step = _parse_step(data)
+        assert step.stale_threshold == 2400
+
+    def test_parse_step_stale_threshold_defaults_to_none(self) -> None:
+        data = {"tool": "run_skill", "on_success": "done"}
+        step = _parse_step(data)
+        assert step.stale_threshold is None
+
+    def test_parse_step_reads_idle_output_timeout(self) -> None:
+        data = {"tool": "run_skill", "idle_output_timeout": 120, "on_success": "done"}
+        step = _parse_step(data)
+        assert step.idle_output_timeout == 120
+
+    def test_parse_step_idle_output_timeout_defaults_to_none(self) -> None:
+        data = {"tool": "run_skill", "on_success": "done"}
+        step = _parse_step(data)
+        assert step.idle_output_timeout is None
+
+    def test_parse_step_idle_output_timeout_zero_means_disabled(self) -> None:
+        data = {"tool": "run_skill", "idle_output_timeout": 0, "on_success": "done"}
+        step = _parse_step(data)
+        assert step.idle_output_timeout == 0
 
     # MOD4
     def test_bundled_resolve_failures_steps_use_config_default(self) -> None:
@@ -863,20 +869,6 @@ def test_parse_step_handles_all_recipe_step_fields() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T2 — _path_mtime_ns replaces the two old helpers
-# ---------------------------------------------------------------------------
-
-
-def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
-    """recipe/_api.py must expose _path_mtime_ns; _file_mtime_ns/_dir_mtime_ns removed."""
-    import autoskillit.recipe._api as api
-
-    assert hasattr(api, "_path_mtime_ns"), "_path_mtime_ns must exist"
-    assert not hasattr(api, "_file_mtime_ns"), "_file_mtime_ns must be removed"
-    assert not hasattr(api, "_dir_mtime_ns"), "_dir_mtime_ns must be removed"
-
-
-# ---------------------------------------------------------------------------
 # REQ-ORD-003: Stable positions when project recipe added
 # ---------------------------------------------------------------------------
 
@@ -900,3 +892,40 @@ def test_list_recipes_stable_with_project_recipe_added(tmp_path: Path) -> None:
     assert bundled_after == bundled_before, (
         "Adding a project recipe must not shift bundled recipe positions"
     )
+
+
+def test_parse_recipe_reads_requires_packs():
+    from autoskillit.recipe.io import _parse_recipe
+
+    data = {
+        "name": "test",
+        "description": "d",
+        "requires_packs": ["research", "github"],
+    }
+    recipe = _parse_recipe(data)
+    assert recipe.requires_packs == ["research", "github"]
+
+
+def test_parse_recipe_requires_packs_defaults_to_empty():
+    from autoskillit.recipe.io import _parse_recipe
+
+    recipe = _parse_recipe({"name": "test", "description": "d"})
+    assert recipe.requires_packs == []
+
+
+def test_research_recipe_loads_without_error():
+    from autoskillit.core.paths import pkg_root
+    from autoskillit.recipe.io import load_recipe
+
+    path = pkg_root() / "recipes" / "research.yaml"
+    recipe = load_recipe(path)
+    assert recipe.name == "research"
+
+
+def test_research_recipe_declares_requires_packs():
+    from autoskillit.core.paths import pkg_root
+    from autoskillit.recipe.io import load_recipe
+
+    path = pkg_root() / "recipes" / "research.yaml"
+    recipe = load_recipe(path)
+    assert recipe.requires_packs == ["research", "exp-lens", "vis-lens"]

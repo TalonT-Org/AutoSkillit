@@ -6,6 +6,10 @@ that form the symbolic registry of architecture enforcement rules.
 
 from __future__ import annotations
 
+import ast
+import importlib
+import inspect
+import re
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
@@ -81,7 +85,16 @@ def test_rule_registry_completeness() -> None:
     # (c) exact set of IDs must match the visitor's rule set
     # Add a RuleDescriptor for every new visitor rule and update this set.
     expected_ids = frozenset(
-        {"ARCH-001", "ARCH-002", "ARCH-003", "ARCH-004", "ARCH-005", "ARCH-006", "ARCH-007"}
+        {
+            "ARCH-001",
+            "ARCH-002",
+            "ARCH-003",
+            "ARCH-004",
+            "ARCH-005",
+            "ARCH-006",
+            "ARCH-007",
+            "ARCH-008",
+        }
     )
     actual_ids = frozenset(rule_ids)
     assert actual_ids == expected_ids, (
@@ -274,3 +287,82 @@ def test_req_arch_rules_have_descriptors() -> None:
     assert "REQ-ARCH-002" in isolation_ids
     assert "REQ-LAYER-001" in layer_ids
     assert "REQ-LAYER-002" in layer_ids
+
+
+def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
+    """Every monkeypatch.setattr path must target the namespace production code resolves.
+
+    When autoskillit.X re-exports 'name' from autoskillit.X.submodule via __init__.py,
+    patching autoskillit.X.submodule.name does NOT affect autoskillit.X.name.
+    All patches of the form autoskillit.X.submodule.name, where X is a sub-package
+    that re-exports 'name' FROM that exact submodule, are wrong and must be corrected.
+
+    Note: patching autoskillit.X.B.name where X imports 'name' from a DIFFERENT submodule
+    (not B) is correct -- it targets the local binding in B, which is the namespace that
+    module B's own functions resolve.
+    """
+    # Match string literals in monkeypatch.setattr("autoskillit.A.B.C", ...)
+    # where A is a sub-package, B is a submodule, C is the name.
+    pattern = re.compile(
+        r'monkeypatch\.setattr\s*\(\s*["\']'
+        r"(autoskillit\.\w+\.\w+\.\w+)"
+        r'["\']'
+    )
+
+    violations: list[str] = []
+    tests_dir = Path(__file__).parent.parent
+
+    for test_file in sorted(tests_dir.glob("**/test_*.py")):
+        source = test_file.read_text()
+        for match in pattern.finditer(source):
+            full_path = match.group(1)
+            # Split: autoskillit . pkg . submodule . name
+            parts = full_path.split(".")
+            if len(parts) != 4:
+                continue
+            _, pkg, submod, name = parts
+            parent_pkg = f"autoskillit.{pkg}"
+            try:
+                parent_mod = importlib.import_module(parent_pkg)
+            except ImportError:
+                continue
+            if not hasattr(parent_mod, name):
+                continue
+            # Refine: only flag if the parent pkg actually imports 'name' FROM this
+            # exact submodule. If it imports 'name' from a different module (e.g.
+            # autoskillit.migration imports applicable_migrations from .loader, not
+            # .engine), then the patch targets a local binding in 'submod' -- which
+            # is the correct mock target for module-level imports in that submodule.
+            try:
+                parent_source = inspect.getsource(parent_mod)
+                tree = ast.parse(parent_source)
+            except (OSError, TypeError, SyntaxError):
+                # Can't inspect source -- conservatively flag as violation.
+                imports_from_this_submod = True
+            else:
+                imports_from_this_submod = False
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.ImportFrom):
+                        continue
+                    is_relative_from_submod = node.level == 1 and node.module == submod
+                    is_absolute_from_submod = (
+                        node.level == 0 and node.module == f"autoskillit.{pkg}.{submod}"
+                    )
+                    if is_relative_from_submod or is_absolute_from_submod:
+                        for alias in node.names:
+                            if (alias.asname or alias.name) == name:
+                                imports_from_this_submod = True
+                                break
+                    if imports_from_this_submod:
+                        break
+            if imports_from_this_submod:
+                line_no = source[: match.start()].count("\n") + 1
+                violations.append(
+                    f"{test_file.name}:{line_no}: patches {full_path!r} "
+                    f"but '{name}' is re-exported at '{parent_pkg}.{name}'. "
+                    f"Patch '{parent_pkg}.{name}' instead."
+                )
+
+    assert not violations, "Monkeypatch paths bypass package re-exports:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )

@@ -1123,12 +1123,19 @@ def _autoskillit_top_package(module: str) -> str | None:
 
 def _collect_layer_test_params() -> list[tuple[str, str, frozenset[str]]]:
     """Return (rel_path, layer_dir, allowed) for every test_*.py in layered dirs."""
+    missing = [
+        layer_dir
+        for layer_dir in _TEST_LAYER_ALLOWED
+        if not (_TESTS_ROOT / layer_dir.split("/", 1)[1]).exists()
+    ]
+    if missing:
+        raise AssertionError(
+            f"Configured layer directories not found (renamed or deleted?): {missing}"
+        )
     params: list[tuple[str, str, frozenset[str]]] = []
     for layer_dir, allowed in _TEST_LAYER_ALLOWED.items():
         subdir = layer_dir.split("/", 1)[1]  # strip leading "tests/"
         layer_path = _TESTS_ROOT / subdir
-        if not layer_path.exists():
-            continue
         for py_file in sorted(layer_path.glob("test_*.py")):
             rel = f"{layer_dir}/{py_file.name}"
             params.append((rel, layer_dir, allowed))

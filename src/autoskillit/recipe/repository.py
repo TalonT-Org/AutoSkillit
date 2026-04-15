@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
 import autoskillit.recipe._api as _api
+from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest
 from autoskillit.recipe.io import builtin_recipes_dir, list_recipes
+from autoskillit.recipe.staleness_cache import (
+    StalenessEntry,
+    compute_recipe_hash,
+    read_staleness_cache,
+    write_staleness_cache,
+)
 
 
 def _dir_mtime(path: Path) -> float:
@@ -84,3 +93,84 @@ class DefaultRecipeRepository:
 
     def list_all(self, project_dir: Any | None = None) -> dict[str, Any]:
         return _api.list_all(project_dir=project_dir)
+
+    async def apply_triage_gate(
+        self,
+        result: dict[str, Any],
+        recipe_name: str,
+        recipe_info: Any,
+        temp_dir: Path,
+        logger: Any,
+        triage_fn: Any = None,
+    ) -> dict[str, Any]:
+        """Apply LLM triage to stale-contract suggestions, suppressing cosmetic ones."""
+        stale_suggs = [
+            s for s in result.get("suggestions", []) if s.get("rule") == "stale-contract"
+        ]
+        if not stale_suggs:
+            return result
+
+        if recipe_info is None:
+            recipe_info = self.find(recipe_name, Path.cwd())
+        if recipe_info is None:
+            return result
+
+        cache_path = temp_dir / "recipe_staleness_cache.json"
+        t0 = time.perf_counter()
+        cached = read_staleness_cache(cache_path, recipe_name)
+        logger.debug(
+            "triage_gate_cache_read",
+            recipe=recipe_name,
+            elapsed_ms=round((time.perf_counter() - t0) * 1000, 1),
+        )
+
+        if cached is not None and cached.triage_result == "cosmetic":
+            result["suggestions"] = [
+                s for s in result["suggestions"] if s.get("rule") != "stale-contract"
+            ]
+            return result
+
+        if cached is None or cached.triage_result is None:
+            hash_items = [
+                StaleItem(
+                    skill=s["skill"],
+                    reason=s["reason"],
+                    stored_value=s.get("stored_value", ""),
+                    current_value=s.get("current_value", ""),
+                )
+                for s in stale_suggs
+                if s.get("reason") == "hash_mismatch"
+            ]
+            if hash_items and triage_fn is not None:
+                t_llm = time.perf_counter()
+                triage = await triage_fn(hash_items)
+                logger.debug(
+                    "triage_gate_llm_triage",
+                    recipe=recipe_name,
+                    elapsed_ms=round((time.perf_counter() - t_llm) * 1000, 1),
+                )
+                if not triage:
+                    return result
+                all_cosmetic = all(not r.get("meaningful", True) for r in triage)
+                triage_str = "cosmetic" if all_cosmetic else "meaningful"
+                current_hash = compute_recipe_hash(recipe_info.path)
+                current_ver = load_bundled_manifest().get("version", "")
+                write_staleness_cache(
+                    cache_path,
+                    recipe_name,
+                    StalenessEntry(
+                        recipe_hash=current_hash,
+                        manifest_version=current_ver,
+                        is_stale=True,
+                        triage_result=triage_str,
+                        checked_at=datetime.now(UTC).isoformat(),
+                    ),
+                )
+                if all_cosmetic and not any(
+                    s.get("reason") == "version_mismatch" for s in stale_suggs
+                ):
+                    result["suggestions"] = [
+                        s for s in result["suggestions"] if s.get("rule") != "stale-contract"
+                    ]
+
+        return result

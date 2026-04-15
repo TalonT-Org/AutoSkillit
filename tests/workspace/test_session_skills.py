@@ -83,12 +83,12 @@ def test_session_skill_manager_creates_ephemeral_dir(tmp_path: Path) -> None:
 
 def test_session_manager_injects_disable_for_tier2(tmp_path: Path) -> None:
     """Non-cook init_session injects disable-model-invocation for tier2 skills."""
-    from autoskillit.config.settings import AutomationConfig, SkillsConfig
+    from tests._helpers import make_skills_config, make_test_config
 
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    config = AutomationConfig(
-        skills=SkillsConfig(
+    config = make_test_config(
+        skills=make_skills_config(
             tier1=["open-kitchen", "close-kitchen"],
             tier2=["mermaid"],
             tier3=[],
@@ -106,12 +106,12 @@ def test_session_manager_injects_disable_for_tier2(tmp_path: Path) -> None:
 
 def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
     """Cook session does not inject disable-model-invocation even for tier2 skills."""
-    from autoskillit.config.settings import AutomationConfig, SkillsConfig
+    from tests._helpers import make_skills_config, make_test_config
 
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    config = AutomationConfig(
-        skills=SkillsConfig(
+    config = make_test_config(
+        skills=make_skills_config(
             tier1=["open-kitchen", "close-kitchen"],
             tier2=["mermaid"],
             tier3=[],
@@ -127,12 +127,12 @@ def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
 
 
 def test_activate_skill_deps_removes_flag(tmp_path: Path) -> None:
-    from autoskillit.config.settings import AutomationConfig, SkillsConfig
+    from tests._helpers import make_skills_config, make_test_config
 
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    config = AutomationConfig(
-        skills=SkillsConfig(
+    config = make_test_config(
+        skills=make_skills_config(
             tier1=["open-kitchen", "close-kitchen"],
             tier2=["mermaid"],
             tier3=[],
@@ -174,10 +174,10 @@ def test_init_session_unknown_skill_logs_warning(tmp_path: Path) -> None:
     """Unknown skill name in config.skills.tier2 logs a warning (REQ-TIER-010)."""
     import structlog.testing
 
-    from autoskillit.config.settings import AutomationConfig, SkillsConfig
+    from tests._helpers import make_skills_config, make_test_config
 
-    config = AutomationConfig(
-        skills=SkillsConfig(
+    config = make_test_config(
+        skills=make_skills_config(
             tier1=["open-kitchen", "close-kitchen"],
             tier2=["this-skill-does-not-exist-anywhere"],
             tier3=[],
@@ -198,9 +198,9 @@ def test_init_session_skips_disabled_builtin_category(tmp_path: Path) -> None:
     """Skills whose SKILL.md categories overlap disabled built-in tags are excluded."""
     from unittest.mock import MagicMock
 
-    from autoskillit.config.settings import AutomationConfig, SubsetsConfig
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
     from autoskillit.workspace.skills import SkillInfo, SkillSource
+    from tests._helpers import make_subsetsconfig, make_test_config
 
     skill_dir = tmp_path / "skills" / "fake-github-skill"
     skill_dir.mkdir(parents=True)
@@ -216,7 +216,7 @@ def test_init_session_skips_disabled_builtin_category(tmp_path: Path) -> None:
         )
     ]
 
-    config = AutomationConfig(subsets=SubsetsConfig(disabled=["github"]))
+    config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
     root = tmp_path / "sessions"
     root.mkdir()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
@@ -232,9 +232,9 @@ def test_init_session_skips_disabled_custom_tag(tmp_path: Path) -> None:
     """Skills listed under a custom_tag that is disabled are excluded."""
     from unittest.mock import MagicMock
 
-    from autoskillit.config.settings import AutomationConfig, SubsetsConfig
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
     from autoskillit.workspace.skills import SkillInfo, SkillSource
+    from tests._helpers import make_subsetsconfig, make_test_config
 
     skill_dir = tmp_path / "skills" / "my-custom-skill"
     skill_dir.mkdir(parents=True)
@@ -251,8 +251,8 @@ def test_init_session_skips_disabled_custom_tag(tmp_path: Path) -> None:
     ]
     provider.get_skill_content.return_value = "---\ncategories: []\n---\n# My Custom Skill\n"
 
-    config = AutomationConfig(
-        subsets=SubsetsConfig(
+    config = make_test_config(
+        subsets=make_subsetsconfig(
             disabled=["data-infra"],
             custom_tags={"data-infra": ["my-custom-skill"]},
         )
@@ -272,9 +272,9 @@ def test_init_session_includes_non_disabled_skills(tmp_path: Path) -> None:
     """Skills not in any disabled category are still copied to ephemeral dir."""
     from unittest.mock import MagicMock
 
-    from autoskillit.config.settings import AutomationConfig, SubsetsConfig
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
     from autoskillit.workspace.skills import SkillInfo, SkillSource
+    from tests._helpers import make_subsetsconfig, make_test_config
 
     skill_dir = tmp_path / "skills" / "safe-skill"
     skill_dir.mkdir(parents=True)
@@ -291,7 +291,7 @@ def test_init_session_includes_non_disabled_skills(tmp_path: Path) -> None:
     ]
     provider.get_skill_content.return_value = "---\ncategories:\n  - audit\n---\n# Safe Skill\n"
 
-    config = AutomationConfig(subsets=SubsetsConfig(disabled=["github"]))
+    config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
     root = tmp_path / "sessions"
     root.mkdir()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
@@ -374,8 +374,8 @@ def test_cook_session_skips_default_disabled_packs(tmp_path: Path) -> None:
     """Cook session excludes default-disabled pack skills when packs.enabled=[]."""
     from unittest.mock import MagicMock
 
-    from autoskillit.config.settings import AutomationConfig
     from autoskillit.workspace.skills import SkillInfo, SkillSource
+    from tests._helpers import make_test_config
 
     skill_dir = tmp_path / "skills" / "research-skill"
     skill_dir.mkdir(parents=True)
@@ -396,7 +396,7 @@ def test_cook_session_skips_default_disabled_packs(tmp_path: Path) -> None:
 
     root = tmp_path / "sessions"
     root.mkdir()
-    config = AutomationConfig()  # packs.enabled=[] by default
+    config = make_test_config()  # packs.enabled=[] by default
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
     session_path = mgr.init_session("cook-research", cook_session=True, config=config)
 
@@ -410,8 +410,8 @@ def test_headless_session_excludes_default_disabled_pack_skills(tmp_path: Path) 
     """Skills in 'exp-lens' pack are excluded from headless session when packs.enabled=[]."""
     from unittest.mock import MagicMock
 
-    from autoskillit.config.settings import AutomationConfig
     from autoskillit.workspace.skills import SkillInfo, SkillSource
+    from tests._helpers import make_test_config
 
     skill_dir = tmp_path / "skills" / "exp-skill"
     skill_dir.mkdir(parents=True)
@@ -431,7 +431,7 @@ def test_headless_session_excludes_default_disabled_pack_skills(tmp_path: Path) 
 
     root = tmp_path / "sessions"
     root.mkdir()
-    config = AutomationConfig()  # packs.enabled=[] by default
+    config = make_test_config()  # packs.enabled=[] by default
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
     session_path = mgr.init_session("headless-exp", cook_session=False, config=config)
 
@@ -444,8 +444,8 @@ def test_init_session_recipe_packs_enables_default_disabled(tmp_path: Path) -> N
     """recipe_packs param enables default-disabled pack skills for this session."""
     from unittest.mock import MagicMock
 
-    from autoskillit.config.settings import AutomationConfig
     from autoskillit.workspace.skills import SkillInfo, SkillSource
+    from tests._helpers import make_test_config
 
     skill_dir = tmp_path / "skills" / "research-skill"
     skill_dir.mkdir(parents=True)
@@ -466,7 +466,7 @@ def test_init_session_recipe_packs_enables_default_disabled(tmp_path: Path) -> N
 
     root = tmp_path / "sessions"
     root.mkdir()
-    config = AutomationConfig()  # packs.enabled=[] by default
+    config = make_test_config()  # packs.enabled=[] by default
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
     session_path = mgr.init_session(
         "headless-recipe-research",
@@ -904,7 +904,7 @@ class TestInitSessionAllowOnly:
         assert names == {"alpha", "beta", "gamma"}
 
     def test_allow_only_intersects_effective_disabled_disabled_wins(self, tmp_path: Path) -> None:
-        from autoskillit.config.settings import AutomationConfig, SubsetsConfig
+        from tests._helpers import make_subsetsconfig, make_test_config
 
         provider = _make_synthetic_provider(
             tmp_path / "skills",
@@ -913,7 +913,7 @@ class TestInitSessionAllowOnly:
         root = tmp_path / "sessions"
         root.mkdir()
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
-        config = AutomationConfig(subsets=SubsetsConfig(disabled=["github"]))
+        config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
         session_path = mgr.init_session(
             "s4", config=config, allow_only=frozenset({"alpha", "beta"})
         )

@@ -133,11 +133,11 @@ def test_init_session_includes_non_overridden_skills(tmp_path):
 
 def test_init_session_subset_and_override_compose(tmp_path):
     """T-OVR-010: Subset disable and override compose independently."""
-    from autoskillit.config import AutomationConfig, SubsetsConfig
     from autoskillit.workspace.session_skills import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
     )
+    from tests._helpers import make_subsetsconfig, make_test_config
 
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -146,7 +146,7 @@ def test_init_session_subset_and_override_compose(tmp_path):
     override.mkdir(parents=True)
     (override / "SKILL.md").write_text("# custom")
     # Config disables "github" subset (which covers open-pr)
-    config = AutomationConfig(subsets=SubsetsConfig(disabled=["github"]))
+    config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-004", config=config, project_dir=project_dir)
     # "open-pr" absent due to subset; "review-pr" absent due to override
@@ -202,13 +202,13 @@ def test_init_session_cook_session_excludes_project_local_overrides(tmp_path):
 
 def test_init_session_cook_session_ignores_disabled_subsets(tmp_path):
     """T-OVR-013: cook_session=True includes subset-disabled skills."""
-    from autoskillit.config import AutomationConfig, SubsetsConfig
     from autoskillit.workspace.session_skills import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
     )
+    from tests._helpers import make_subsetsconfig, make_test_config
 
-    config = AutomationConfig(subsets=SubsetsConfig(disabled=["github"]))
+    config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-cook2", cook_session=True, config=config)
     assert (skills_dir / ".claude" / "skills" / "compose-pr" / "SKILL.md").exists(), (
@@ -224,13 +224,13 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
     The cook bypasses explicit subset-disable filtering but NOT channel deduplication
     and NOT default pack gating.
     """
-    from autoskillit.config import AutomationConfig, SubsetsConfig
     from autoskillit.core.types import SkillSource
     from autoskillit.workspace.session_skills import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
     )
     from autoskillit.workspace.skills import DefaultSkillResolver
+    from tests._helpers import make_subsetsconfig, make_test_config
 
     # Override exactly one extended skill to test override exclusion
     project_dir = tmp_path / "project"
@@ -240,8 +240,8 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
     (override / "SKILL.md").write_text("# override")
 
     # Config disables all known categories — cook should bypass this
-    config = AutomationConfig(
-        subsets=SubsetsConfig(disabled=["github", "audit", "arch-lens", "ci"])
+    config = make_test_config(
+        subsets=make_subsetsconfig(disabled=["github", "audit", "arch-lens", "ci"])
     )
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session(

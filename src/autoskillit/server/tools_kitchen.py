@@ -22,7 +22,6 @@ from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _apply_triage_gate,
     _build_hook_diagnostic_warning,
-    _find_recipe,
     _hook_config_path,
     _prime_quota_cache,
     _quota_refresh_loop,
@@ -218,7 +217,10 @@ def _close_kitchen_handler() -> None:
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
-    match = _find_recipe(name, Path.cwd())
+    from autoskillit.server._state import _get_ctx_or_none
+
+    ctx = _get_ctx_or_none()
+    match = ctx.recipes.find(name, Path.cwd()) if ctx and ctx.recipes else None
     if match is None:
         return json.dumps({"error": f"No recipe named '{name}'."})
     return match.path.read_text()

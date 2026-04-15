@@ -224,6 +224,7 @@ class RecipeRepository(Protocol):
         recipe_info: Any,
         temp_dir: Path,
         logger: Any,
+        triage_fn: Any = None,
     ) -> dict[str, Any]: ...
 
 

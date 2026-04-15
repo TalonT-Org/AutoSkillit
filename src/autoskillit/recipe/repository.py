@@ -101,6 +101,7 @@ class DefaultRecipeRepository:
         recipe_info: Any,
         temp_dir: Path,
         logger: Any,
+        triage_fn: Any = None,
     ) -> dict[str, Any]:
         """Apply LLM triage to stale-contract suggestions, suppressing cosmetic ones."""
         stale_suggs = [
@@ -140,11 +141,9 @@ class DefaultRecipeRepository:
                 for s in stale_suggs
                 if s.get("reason") == "hash_mismatch"
             ]
-            if hash_items:
-                from autoskillit._llm_triage import triage_staleness
-
+            if hash_items and triage_fn is not None:
                 t_llm = time.perf_counter()
-                triage = await triage_staleness(hash_items)
+                triage = await triage_fn(hash_items)
                 logger.debug(
                     "triage_gate_llm_triage",
                     recipe=recipe_name,

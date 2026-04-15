@@ -245,7 +245,11 @@ async def _apply_triage_gate(
     if _ctx is None or _ctx.recipes is None:
         return result
 
-    return await _ctx.recipes.apply_triage_gate(result, name, recipe_info, _ctx.temp_dir, logger)
+    from autoskillit._llm_triage import triage_staleness
+
+    return await _ctx.recipes.apply_triage_gate(
+        result, name, recipe_info, _ctx.temp_dir, logger, triage_fn=triage_staleness
+    )
 
 
 def _process_runner_result(

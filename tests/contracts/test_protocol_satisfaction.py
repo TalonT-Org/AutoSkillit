@@ -185,7 +185,15 @@ def test_recipe_repository_has_apply_triage_gate():
     assert method is not None, "RecipeRepository must define apply_triage_gate"
     assert inspect.iscoroutinefunction(method), "apply_triage_gate must be async"
     sig = inspect.signature(method)
-    expected_params = ["self", "result", "recipe_name", "recipe_info", "temp_dir", "logger"]
+    expected_params = [
+        "self",
+        "result",
+        "recipe_name",
+        "recipe_info",
+        "temp_dir",
+        "logger",
+        "triage_fn",
+    ]
     assert list(sig.parameters.keys()) == expected_params
 
 

@@ -5,8 +5,7 @@ import inspect as _inspect
 
 import pytest
 
-from autoskillit.core import Severity
-from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS
+from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS, Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
 

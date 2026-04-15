@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pathspec
 
-from autoskillit.core.io import load_yaml
+from autoskillit.core import load_yaml
 
 
 def load_manifest(path: Path) -> dict[str, list[str]]:

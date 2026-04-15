@@ -1,5 +1,6 @@
 """Shared test fixtures for autoskillit."""
 
+import sys
 from pathlib import Path as _Path
 
 import pytest
@@ -212,9 +213,15 @@ def _clear_headless_env(monkeypatch):
     """Ensure AUTOSKILLIT_HEADLESS is unset at the start of every test.
 
     Tools check this env var to block calls from headless sessions.
-    MCP tag resets are handled by tests/server/conftest.py for server tests.
+    Also resets mcp kitchen visibility transforms when the server module is
+    already imported.
     """
+
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    if "autoskillit.server" in sys.modules:
+        from autoskillit.server import mcp
+
+        mcp.disable(tags={"kitchen"})
 
 
 @pytest.fixture(autouse=True)

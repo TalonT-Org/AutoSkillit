@@ -22,20 +22,6 @@ def _reset_server_state(monkeypatch):
         monkeypatch.setattr(_state, "_ctx", _state._ctx)
 
 
-@pytest.fixture(autouse=True)
-def _reset_mcp_tags():
-    """Reset MCP tag visibility to default (kitchen + headless disabled) before each test.
-
-    The mcp singleton is process-global. Tests that call mcp.enable(tags={"kitchen"})
-    or mcp.enable(tags={"headless"}) mutate shared state. This fixture ensures every
-    server test starts with both tags disabled — the same state as a fresh server import.
-    """
-    from autoskillit.server import mcp
-
-    mcp.disable(tags={"kitchen"})
-    mcp.disable(tags={"headless"})
-
-
 @pytest.fixture()
 def kitchen_enabled():
     """Enable the kitchen tag on the MCP server for the duration of the test."""

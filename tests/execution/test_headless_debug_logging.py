@@ -6,6 +6,7 @@ import json
 
 import structlog.testing
 
+from autoskillit.config import AutomationConfig, ModelConfig
 from autoskillit.core.types import SubprocessResult, TerminationReason
 
 
@@ -84,10 +85,8 @@ class TestResolveModelLogging:
     """Verify _resolve_model logs which priority tier resolved the model."""
 
     def _make_config(self, *, override=None, default=None):
-        from tests._helpers import make_model_config, make_test_config
-
-        cfg = make_test_config()
-        cfg.model = make_model_config(default=default, override=override)
+        cfg = AutomationConfig()
+        cfg.model = ModelConfig(default=default, override=override)
         return cfg
 
     def test_logs_override_tier(self):

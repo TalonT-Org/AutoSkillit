@@ -19,11 +19,11 @@ pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
 @pytest.mark.anyio
 async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
     """End-to-end: snapshot accumulation + flush produces unique ts per record."""
+    from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
     from autoskillit.execution.session_log import flush_session_log
-    from tests._helpers import make_tracing_config
 
-    config = make_tracing_config(proc_interval=0.05, tmpfs_path=str(tmp_path))
+    config = LinuxTracingConfig(proc_interval=0.05, tmpfs_path=str(tmp_path))
     start_ts = datetime.now(UTC).isoformat()
     start_mono = time.monotonic()
     async with anyio.create_task_group() as tg:
@@ -155,11 +155,11 @@ async def test_peak_rss_kb_above_sanity_floor(tmp_path):
     Test 1.6: a deliberate lower bound that script(1) (~2 MB) cannot satisfy.
     If this ever fails, the test name points directly at the PTY wrapper tracer bug class.
     """
+    from autoskillit.config import LinuxTracingConfig
     from autoskillit.execution.process import run_managed_async
     from autoskillit.execution.session_log import flush_session_log
-    from tests._helpers import make_tracing_config
 
-    cfg = make_tracing_config(proc_interval=0.1, tmpfs_path=str(tmp_path / "shm"))
+    cfg = LinuxTracingConfig(proc_interval=0.1, tmpfs_path=str(tmp_path / "shm"))
     (tmp_path / "shm").mkdir(parents=True)
 
     helper = tmp_path / "alloc.py"

@@ -444,6 +444,11 @@ def test_build_replay_runner_stores_player_on_runner(tmp_path, monkeypatch):
     monkeypatch.setattr(
         _api_sim_claude, "make_scenario_player", Mock(return_value=mock_player), raising=False
     )
+    import weakref
+
+    # weakref.finalize registers _exitfunc with atexit on first use in a process.
+    # Pre-set the class flag so that registration doesn't happen under the mock.
+    monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)
     mock_atexit = Mock()
     monkeypatch.setattr("atexit.register", mock_atexit)
 

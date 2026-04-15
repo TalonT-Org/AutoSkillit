@@ -200,8 +200,8 @@ class TestWriteCache:
 class TestCheckAndSleepIfNeeded:
     @pytest.mark.anyio
     async def test_disabled_returns_immediately_no_io(self, monkeypatch):
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import check_and_sleep_if_needed
+        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(enabled=False)
         fetch_called = []
@@ -217,13 +217,13 @@ class TestCheckAndSleepIfNeeded:
 
     @pytest.mark.anyio
     async def test_below_threshold_returns_should_sleep_false(self, monkeypatch, tmp_path):
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
+        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = make_quota_guard_config(
@@ -249,13 +249,13 @@ class TestCheckAndSleepIfNeeded:
     async def test_above_threshold_returns_should_sleep_true(self, monkeypatch, tmp_path):
         from unittest.mock import AsyncMock
 
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
+        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = make_quota_guard_config(
@@ -286,7 +286,6 @@ class TestCheckAndSleepIfNeeded:
 
     @pytest.mark.anyio
     async def test_uses_fresh_cache_skips_fetch(self, monkeypatch, tmp_path):
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
@@ -294,6 +293,7 @@ class TestCheckAndSleepIfNeeded:
             _write_cache,
             check_and_sleep_if_needed,
         )
+        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=1)
         cache_path = tmp_path / "cache.json"
@@ -326,8 +326,8 @@ class TestCheckAndSleepIfNeeded:
 
     @pytest.mark.anyio
     async def test_credentials_failure_returns_error_dict(self, tmp_path):
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import check_and_sleep_if_needed
+        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(
             enabled=True,
@@ -340,8 +340,8 @@ class TestCheckAndSleepIfNeeded:
 
     @pytest.mark.anyio
     async def test_network_error_returns_error_dict(self, monkeypatch, tmp_path):
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import check_and_sleep_if_needed
+        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(
             enabled=True,
@@ -371,13 +371,13 @@ class TestCheckAndSleepIfNeeded:
 
         import structlog.testing
 
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
+        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(
             enabled=True,
@@ -428,13 +428,13 @@ class TestCheckAndSleepIfNeeded:
 class TestCheckAndSleepResetAtNoneBlocks:
     @pytest.mark.anyio
     async def test_above_threshold_resets_at_none_first_fetch_blocks(self, monkeypatch, tmp_path):
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
+        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(
             enabled=True,
@@ -464,13 +464,13 @@ class TestCheckAndSleepResetAtNoneBlocks:
     async def test_above_threshold_resets_at_none_second_fetch_blocks(self, monkeypatch, tmp_path):
         from unittest.mock import AsyncMock
 
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
+        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         config = make_quota_guard_config(
@@ -508,7 +508,6 @@ class TestCheckAndSleepResetAtNoneBlocks:
 
     @pytest.mark.anyio
     async def test_cache_hit_resets_at_none_above_threshold_blocks(self, monkeypatch, tmp_path):
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
@@ -516,6 +515,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
             _write_cache,
             check_and_sleep_if_needed,
         )
+        from tests._helpers import make_quota_guard_config
 
         cache_path = tmp_path / "cache.json"
         # Write a cache entry with resets_at=None and above-threshold utilization
@@ -552,13 +552,13 @@ class TestCheckAndSleepResetAtNoneBlocks:
 
     @pytest.mark.anyio
     async def test_fallback_sleep_uses_at_least_buffer_seconds(self, monkeypatch, tmp_path):
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
+        from tests._helpers import make_quota_guard_config
 
         config = make_quota_guard_config(
             enabled=True,
@@ -588,13 +588,13 @@ class TestCheckAndSleepResetAtNoneBlocks:
     async def test_above_threshold_with_buffer_seconds_default(self, monkeypatch, tmp_path):
         from unittest.mock import AsyncMock
 
-        from tests._helpers import make_quota_guard_config
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaStatus,
             QuotaWindowEntry,
             check_and_sleep_if_needed,
         )
+        from tests._helpers import make_quota_guard_config
 
         resets_at = datetime.now(UTC) + timedelta(hours=2)
         # Do NOT override buffer_seconds — exercises the real default (60)

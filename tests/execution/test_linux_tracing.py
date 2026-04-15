@@ -84,8 +84,8 @@ async def test_tracing_handle_accumulates_snapshots(tmp_path):
 
     import anyio
 
-    from tests._helpers import make_tracing_config as LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config as LinuxTracingConfig
 
     proc = subprocess.Popen(["sleep", "2"])
     cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
@@ -110,8 +110,8 @@ async def test_tracing_handle_stop_returns_snapshots(tmp_path):
 
     import anyio
 
-    from tests._helpers import make_tracing_config as LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config as LinuxTracingConfig
 
     cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
 
@@ -144,8 +144,8 @@ def test_noop_on_non_linux(monkeypatch, tmp_path):
     """start_linux_tracing is a no-op when LINUX_TRACING_AVAILABLE is False."""
     import os
 
-    from tests._helpers import make_tracing_config as LinuxTracingConfig
     from autoskillit.execution import linux_tracing
+    from tests._helpers import make_tracing_config as LinuxTracingConfig
 
     monkeypatch.setattr(linux_tracing, "LINUX_TRACING_AVAILABLE", False)
     cfg = LinuxTracingConfig(enabled=True, proc_interval=1.0, tmpfs_path=str(tmp_path))
@@ -191,8 +191,8 @@ async def test_proc_monitor_stamps_unique_captured_at():
 @pytest.mark.anyio
 async def test_start_linux_tracing_creates_trace_file(tmp_path):
     """When tmpfs_path is configured, start_linux_tracing opens a trace file."""
-    from tests._helpers import make_tracing_config as LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config as LinuxTracingConfig
 
     config = LinuxTracingConfig(enabled=True, proc_interval=0.01, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
@@ -211,8 +211,8 @@ async def test_streaming_writes_each_snapshot_as_jsonl(tmp_path):
     """Each yielded snapshot appears as a JSONL line in the trace file."""
     import subprocess
 
-    from tests._helpers import make_tracing_config as LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config as LinuxTracingConfig
 
     proc = subprocess.Popen(["sleep", "2"])
     config = LinuxTracingConfig(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
@@ -271,8 +271,8 @@ def test_stop_idempotent(tmp_path):
 @pytest.mark.anyio
 async def test_streaming_graceful_when_tmpfs_missing(tmp_path):
     """If tmpfs_path does not exist, tracing still works in-memory."""
-    from tests._helpers import make_tracing_config as LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config as LinuxTracingConfig
 
     config = LinuxTracingConfig(
         enabled=True,
@@ -314,8 +314,8 @@ async def test_proc_monitor_snapshots_have_distinct_timestamps(tmp_path):
 
     import anyio
 
-    from tests._helpers import make_tracing_config as LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config as LinuxTracingConfig
 
     config = LinuxTracingConfig(proc_interval=0.05, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
@@ -364,8 +364,8 @@ async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
     """start_linux_tracing must write autoskillit_enrollment_{pid}.json immediately."""
     import anyio
 
-    from tests._helpers import make_tracing_config as LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config as LinuxTracingConfig
 
     cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:
@@ -486,8 +486,8 @@ async def test_stop_unlinks_trace_and_enrollment(tmp_path):
     """stop() must delete both trace JSONL and enrollment sidecar on clean exit."""
     import anyio
 
-    from tests._helpers import make_tracing_config as LinuxTracingConfig
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from tests._helpers import make_tracing_config as LinuxTracingConfig
 
     cfg = LinuxTracingConfig(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
     async with anyio.create_task_group() as tg:

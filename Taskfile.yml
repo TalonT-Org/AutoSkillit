@@ -109,7 +109,7 @@ tasks:
 
         set -o pipefail
         set +e
-        $PYTEST_CMD tests/recipe/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        $PYTEST_CMD tests/server/test_smoke_pipeline.py -m smoke -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         PYTEST_EXIT=$?
         set +o pipefail
         set -e

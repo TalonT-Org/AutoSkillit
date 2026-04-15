@@ -11,7 +11,6 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
-from tests._helpers import make_test_config
 from autoskillit.execution.testing import (
     DefaultTestRunner,
     build_sanitized_env,
@@ -19,6 +18,7 @@ from autoskillit.execution.testing import (
 from autoskillit.execution.testing import (
     parse_pytest_summary as _parse_pytest_summary,
 )
+from tests._helpers import make_test_config
 
 
 def test_build_sanitized_env_strips_private_env_vars(monkeypatch):

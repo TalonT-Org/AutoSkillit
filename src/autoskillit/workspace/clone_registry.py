@@ -56,8 +56,13 @@ class CloneRegistry:
 
     def __enter__(self) -> CloneRegistry:
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock_file = open(self._lock_path, "w")
-        fcntl.flock(self._lock_file, fcntl.LOCK_EX)
+        fh = open(self._lock_path, "w")
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+        except BaseException:
+            fh.close()
+            raise
+        self._lock_file = fh
         if self._path.exists():
             try:
                 self._entries = json.loads(self._path.read_text()).get("clones", [])

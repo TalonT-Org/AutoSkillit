@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re as _re
 
-from autoskillit.core import Severity, pkg_root
+from autoskillit.core import Severity, get_logger, pkg_root
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     get_skill_contract,
@@ -12,6 +12,8 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+
+logger = get_logger(__name__)
 
 
 @semantic_rule(
@@ -296,6 +298,10 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
                 try:
                     content = skill_md.read_text(encoding="utf-8").lower()
                 except (OSError, UnicodeDecodeError):
+                    logger.warning(
+                        "could not read %s; skipping always-has-no-write-exit check",
+                        skill_md,
+                    )
                     break
                 for phrase in _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES:
                     if _re.search(phrase, content):

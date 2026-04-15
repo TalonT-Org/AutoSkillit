@@ -393,7 +393,9 @@ def _api_sha(rev: str, home: Path, *, network: bool = True) -> str | None:
     any TTL check and makes no outbound HTTP request.  Returns ``None`` if the
     cache has no entry for the URL.
     """
-    url = f"https://api.github.com/repos/TalonT-Org/AutoSkillit/git/refs/heads/{rev}"
+    # Try refs/heads first; fall back to refs/tags for tag revisions.
+    ref_prefix = "refs/tags" if rev.startswith("v") else "refs/heads"
+    url = f"https://api.github.com/repos/TalonT-Org/AutoSkillit/git/{ref_prefix}/{rev}"
 
     if network:
         data: Any = _fetch_with_cache(url, home=home)

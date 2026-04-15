@@ -17,7 +17,7 @@ import os
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from autoskillit.core import (
     CATEGORY_TAGS,
@@ -100,7 +100,7 @@ class RunSkillConfig:
     # Safety margin (ms) above exit_after_stop_delay_ms that
     # natural_exit_grace_seconds must cover so the drain window can absorb
     # the CLI self-exit delay without a race.
-    _EXIT_GRACE_BUFFER_MS = 500
+    _EXIT_GRACE_BUFFER_MS: ClassVar[int] = 500
 
     def __post_init__(self) -> None:
         required_ms = self.exit_after_stop_delay_ms + self._EXIT_GRACE_BUFFER_MS

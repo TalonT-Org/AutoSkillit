@@ -179,6 +179,7 @@ async def _open_kitchen_handler() -> str | None:
             label="quota_refresh_loop",
         )
     except Exception as exc:
+        ctx.gate.disable()
         logger.warning("open_kitchen_failure", stage="start_quota_refresh", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
 

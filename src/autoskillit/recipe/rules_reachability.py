@@ -54,21 +54,14 @@ def _find_context_refs_in_step(step_name: str, ctx: ValidationContext) -> list[s
     return refs
 
 
-def _find_capture_producer(ctx: ValidationContext, var: str) -> str | None:
-    """Return the step name whose ``capture`` dict contains ``var``, or None."""
-    for step in ctx.recipe.steps.values():
-        if var in (step.capture or {}):
-            return step.name
-    return None
+def _find_capture_producers(ctx: ValidationContext, var: str) -> list[str]:
+    """Return all step names whose ``capture`` dict contains ``var``."""
+    return [step.name for step in ctx.recipe.steps.values() if var in (step.capture or {})]
 
 
 def _ancestors(ctx: ValidationContext, step_name: str) -> set[str]:
     """Return all steps reachable via backward BFS from step_name (i.e. ancestors)."""
-    reversed_graph: dict[str, set[str]] = {}
-    for src, targets in ctx.step_graph.items():
-        for tgt in targets:
-            reversed_graph.setdefault(tgt, set()).add(src)
-    return _bfs_reachable(reversed_graph, step_name)
+    return _bfs_reachable(ctx.predecessors, step_name)
 
 
 @semantic_rule(
@@ -132,8 +125,8 @@ def _check_capture_inversion(ctx: ValidationContext) -> list[RuleFinding]:
             if var in known_vars:
                 continue  # fact is known on every path to this step — OK
 
-            producer = _find_capture_producer(ctx, var)
-            if producer is None:
+            producers = _find_capture_producers(ctx, var)
+            if not producers:
                 continue  # no producer anywhere — not an inversion, different bug
 
             findings.append(
@@ -143,7 +136,7 @@ def _check_capture_inversion(ctx: ValidationContext) -> list[RuleFinding]:
                     step_name=step_name,
                     message=(
                         f"Step {step_name!r} reads context.{var} but the producer "
-                        f"{producer!r} does not establish {var!r} on every path. "
+                        f"{producers[0]!r} does not establish {var!r} on every path. "
                         f"Move producer upstream or gate the reader on producer's capture."
                     ),
                 )
@@ -183,17 +176,17 @@ def _check_event_scope_requires_upstream_capture(ctx: ValidationContext) -> list
         if isinstance(event, str) and event.startswith("${{"):
             continue  # dynamic reference — correct pattern
 
-        # Literal event value: check whether a merge_group_trigger producer is
-        # upstream of this step on every path (i.e. it's an ancestor in the graph).
-        mg_producer = _find_capture_producer(ctx, "merge_group_trigger")
+        # Literal event value: check whether at least one merge_group_trigger
+        # producer is upstream of this step (i.e. it's an ancestor in the graph).
+        mg_producers = _find_capture_producers(ctx, "merge_group_trigger")
         ancestor_set = _ancestors(ctx, step_name)
 
-        if mg_producer is not None and mg_producer in ancestor_set:
-            continue  # producer is upstream — context is known
+        if any(p in ancestor_set for p in mg_producers):
+            continue  # at least one producer is upstream — context is known
 
         producer_desc = (
-            f"producer step {mg_producer!r}"
-            if mg_producer
+            f"producer steps {mg_producers!r}"
+            if mg_producers
             else "no producer for merge_group_trigger"
         )
         findings.append(

@@ -32,8 +32,10 @@ class ClaudeCodeCompatMiddleware(Middleware):
         call_next: CallNext[mt.ListToolsRequest, Sequence[Tool]],
     ) -> Sequence[Tool]:
         tools = await call_next(context)
+        cleaned: list[Tool] = []
         for tool in tools:
-            tool.output_schema = None
-            tool.annotations = None
-            tool.title = None
-        return tools
+            patched = tool.model_copy(
+                update={"output_schema": None, "annotations": None, "title": None}
+            )
+            cleaned.append(patched)
+        return cleaned

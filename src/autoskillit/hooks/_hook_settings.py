@@ -31,6 +31,7 @@ DEFAULT_BUFFER_SECONDS = 60
 ENV_CACHE_PATH = "AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH"
 ENV_CACHE_MAX_AGE = "AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE"
 ENV_BUFFER_SECONDS = "AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS"
+ENV_DISABLED = "AUTOSKILLIT_QUOTA_GUARD__DISABLED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +102,13 @@ def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHo
         DEFAULT_BUFFER_SECONDS,
     )
 
-    disabled = bool(hook_config.get("disabled", False))
+    env_disabled = os.environ.get(ENV_DISABLED, "").strip().lower()
+    if env_disabled in ("1", "true", "yes"):
+        disabled = True
+    elif env_disabled in ("0", "false", "no"):
+        disabled = False
+    else:
+        disabled = bool(hook_config.get("disabled", False))
 
     return QuotaHookSettings(
         cache_path=cache_path,

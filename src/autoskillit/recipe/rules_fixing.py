@@ -14,6 +14,7 @@ Modelled on the rebase-then-push-requires-force rule in rules_tools.py.
 from __future__ import annotations
 
 import re
+from collections import deque
 
 from autoskillit.core import SKILL_TOOLS, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
@@ -73,9 +74,9 @@ def _push_reachable(
     Returns (False, None) if no push_to_remote step is reachable.
     """
     visited: set[str] = set()
-    queue: list[tuple[str, int]] = [(start, 0)]
+    queue: deque[tuple[str, int]] = deque([(start, 0)])
     while queue:
-        name, hops = queue.pop(0)
+        name, hops = queue.popleft()
         if name in visited:
             continue
         if hops > max_hops:

@@ -315,7 +315,12 @@ def _count_gh_api(step: RecipeStep) -> int:
     return cmd.count("gh api")
 
 
-def extract_blocks(recipe: Recipe, step_graph: dict[str, set[str]]) -> tuple[RecipeBlock, ...]:
+def extract_blocks(
+    recipe: Recipe,
+    step_graph: dict[str, set[str]],
+    *,
+    predecessors: dict[str, set[str]] | None = None,
+) -> tuple[RecipeBlock, ...]:
     """Extract named block regions from a recipe's routing graph.
 
     Groups steps that share the same ``step.block`` value, then computes the
@@ -326,11 +331,12 @@ def extract_blocks(recipe: Recipe, step_graph: dict[str, set[str]]) -> tuple[Rec
     Steps without a ``block`` annotation are ignored.  Recipes with no block
     annotations return an empty tuple.
     """
-    # Build predecessor map by inverting the forward step_graph edges.
-    predecessors: dict[str, set[str]] = {}
-    for src, successors in step_graph.items():
-        for dst in successors:
-            predecessors.setdefault(dst, set()).add(src)
+    if predecessors is None:
+        # Build predecessor map by inverting the forward step_graph edges.
+        predecessors = {}
+        for src, successors in step_graph.items():
+            for dst in successors:
+                predecessors.setdefault(dst, set()).add(src)
 
     by_name: dict[str, list[RecipeStep]] = {}
     for step in recipe.steps.values():
@@ -348,11 +354,31 @@ def extract_blocks(recipe: Recipe, step_graph: dict[str, set[str]]) -> tuple[Rec
         exit_candidates = [
             s for s in members if not (step_graph.get(s.name, set()) & member_names)
         ]
+        entry_name: str
+        if entry_candidates:
+            entry_name = entry_candidates[0].name
+        else:
+            logger.warning(
+                "block %r has no graph-reachable entry step; falling back to first member",
+                name,
+            )
+            entry_name = members[0].name
+
+        exit_name: str
+        if exit_candidates:
+            exit_name = exit_candidates[0].name
+        else:
+            logger.warning(
+                "block %r has no graph-reachable exit step; falling back to last member",
+                name,
+            )
+            exit_name = members[-1].name
+
         blocks.append(
             RecipeBlock(
                 name=name,
-                entry=entry_candidates[0].name if entry_candidates else members[0].name,
-                exit=exit_candidates[0].name if exit_candidates else members[-1].name,
+                entry=entry_name,
+                exit=exit_name,
                 members=tuple(members),
                 tool_counts=_count_by_tool(members),
                 gh_api_occurrences=sum(_count_gh_api(s) for s in members),
@@ -789,6 +815,8 @@ def make_validation_context(
     """
     step_graph = _build_step_graph(recipe)
     dataflow = analyze_dataflow(recipe, step_graph=step_graph)
+    # Build predecessor map once; also passed to extract_blocks to avoid
+    # recomputing the same inversion inside that function.
     predecessors: dict[str, set[str]] = {}
     for src, successors in step_graph.items():
         for dst in successors:
@@ -802,6 +830,6 @@ def make_validation_context(
         available_sub_recipes=available_sub_recipes,
         project_dir=project_dir,
         disabled_subsets=disabled_subsets,
-        blocks=extract_blocks(recipe, step_graph),
+        blocks=extract_blocks(recipe, step_graph, predecessors=predecessors),
         predecessors=predecessors,
     )

@@ -89,6 +89,11 @@ def _has_active_api_connection(pid: int) -> bool:
 
 _CPU_ACTIVE_THRESHOLD: float = 10.0  # percent; evidence of actual computational work
 
+# Cached Process objects keyed by PID so cpu_percent(interval=0) returns
+# delta since the previous call on the *same* object rather than always 0.0
+# on a freshly constructed psutil.Process.
+_child_process_cache: dict[int, psutil.Process] = {}
+
 
 def _has_active_child_processes(pid: int) -> bool:
     """Return True if any child process in the tree exceeds the CPU activity threshold.
@@ -96,20 +101,41 @@ def _has_active_child_processes(pid: int) -> bool:
     Used by _session_log_monitor to suppress stale-kill when background Bash tasks
     (launched via run_in_background: true) are actively running despite LLM/API being idle.
 
-    cpu_percent(interval=0) returns usage since the last call per-process; on repeated
-    stale-check cycles this reflects actual sustained activity, not momentary bursts.
+    cpu_percent(interval=0) returns usage since the last call per-process.  We
+    cache psutil.Process objects across invocations so the second and subsequent
+    calls on a given child produce meaningful CPU deltas (the first call on any
+    new Process object always returns 0.0).
     """
     try:
         parent = psutil.Process(pid)
-        for child in parent.children(recursive=True):
-            try:
-                if child.cpu_percent(interval=0) > _CPU_ACTIVE_THRESHOLD:
-                    return True
-            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
-                continue
+        current_children = parent.children(recursive=True)
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-        pass
-    return False
+        return False
+
+    live_pids: set[int] = set()
+    active = False
+    for child in current_children:
+        live_pids.add(child.pid)
+        cached = _child_process_cache.get(child.pid)
+        if cached is None:
+            # First sighting: prime cpu_percent baseline (returns 0.0).
+            _child_process_cache[child.pid] = child
+            try:
+                child.cpu_percent(interval=0)
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+                pass
+            continue
+        try:
+            if cached.cpu_percent(interval=0) > _CPU_ACTIVE_THRESHOLD:
+                active = True
+        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+            continue
+
+    # Evict stale entries for children that no longer exist.
+    for stale_pid in list(_child_process_cache.keys() - live_pids):
+        _child_process_cache.pop(stale_pid, None)
+
+    return active
 
 
 async def _session_log_monitor(

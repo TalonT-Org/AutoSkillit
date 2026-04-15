@@ -190,16 +190,20 @@ def make_context(
             else:
                 try:
                     from api_simulator.claude import make_scenario_recorder
-                except ImportError as exc:
-                    raise RuntimeError(
-                        "RECORD_SCENARIO is set but 'api_simulator' is not installed. "
-                        "Install it to enable scenario recording."
-                    ) from exc
+                except ImportError:
+                    logger.warning(
+                        "RECORD_SCENARIO is set but 'api_simulator' is not installed "
+                        "— skipping recording"
+                    )
+                    make_scenario_recorder = None  # type: ignore[assignment]
 
-                from autoskillit.execution import RecordingSubprocessRunner
+                if make_scenario_recorder is not None:
+                    from autoskillit.execution import RecordingSubprocessRunner
 
-                recorder = make_scenario_recorder(output_dir=scenario_dir, recipe_name=recipe_name)
-                runner = RecordingSubprocessRunner(recorder=recorder, inner=runner)
+                    recorder = make_scenario_recorder(
+                        output_dir=scenario_dir, recipe_name=recipe_name
+                    )
+                    runner = RecordingSubprocessRunner(recorder=recorder, inner=runner)
 
     # Lazy token resolution: config → GITHUB_TOKEN env var → gh CLI → None.
     # The _gh_cli_token() subprocess (up to 5s) is deferred until the first

@@ -1,0 +1,407 @@
+"""Tests for tests/_test_filter.py — standalone test-path filtering logic."""
+from __future__ import annotations
+
+import ast
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from tests._test_filter import (
+    ALWAYS_RUN_AGGRESSIVE,
+    ALWAYS_RUN_CONSERVATIVE,
+    ASTImportWalker,
+    FilterMode,
+    ImportContext,
+    LAYER_CASCADE_AGGRESSIVE,
+    LAYER_CASCADE_CONSERVATIVE,
+    _expand_reexport_closure,
+    apply_manifest,
+    build_test_scope,
+    check_bucket_a,
+    git_changed_files,
+)
+
+
+# ---------------------------------------------------------------------------
+# Walker Tests (W1–W8)
+# ---------------------------------------------------------------------------
+
+
+class TestASTImportWalker:
+    def test_walker_top_level_import(self) -> None:
+        tree = ast.parse("import os")
+        walker = ASTImportWalker()
+        walker.visit(tree)
+        assert ("os", ImportContext.TOP_LEVEL) in walker.imports
+
+    def test_walker_top_level_from_import(self) -> None:
+        tree = ast.parse("from pathlib import Path")
+        walker = ASTImportWalker()
+        walker.visit(tree)
+        assert ("pathlib", ImportContext.TOP_LEVEL) in walker.imports
+
+    def test_walker_relative_from_import(self) -> None:
+        tree = ast.parse("from .sub import X")
+        walker = ASTImportWalker()
+        walker.visit(tree)
+        assert (".sub", ImportContext.TOP_LEVEL) in walker.imports
+
+    def test_walker_conditional_import(self) -> None:
+        source = "import sys\nif sys.platform == 'linux':\n    import foo"
+        tree = ast.parse(source)
+        walker = ASTImportWalker()
+        walker.visit(tree)
+        assert ("foo", ImportContext.CONDITIONAL) in walker.imports
+
+    def test_walker_type_checking_guard(self) -> None:
+        source = "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from foo import Bar"
+        tree = ast.parse(source)
+        walker = ASTImportWalker()
+        walker.visit(tree)
+        assert ("foo", ImportContext.TYPE_CHECKING) in walker.imports
+
+    def test_walker_type_checking_attribute(self) -> None:
+        source = "import typing\nif typing.TYPE_CHECKING:\n    from bar import Baz"
+        tree = ast.parse(source)
+        walker = ASTImportWalker()
+        walker.visit(tree)
+        assert ("bar", ImportContext.TYPE_CHECKING) in walker.imports
+
+    def test_walker_deferred_import(self) -> None:
+        source = "def f():\n    import foo"
+        tree = ast.parse(source)
+        walker = ASTImportWalker()
+        walker.visit(tree)
+        assert ("foo", ImportContext.DEFERRED) in walker.imports
+
+    def test_walker_importlib_literal(self) -> None:
+        source = 'import importlib\nimportlib.import_module("foo")'
+        tree = ast.parse(source)
+        walker = ASTImportWalker()
+        walker.visit(tree)
+        assert ("foo", ImportContext.IMPORTLIB) in walker.imports
+
+
+# ---------------------------------------------------------------------------
+# Bucket A Tests (B1–B9)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckBucketA:
+    def test_bucket_a_conftest(self) -> None:
+        assert check_bucket_a({"tests/conftest.py"}) is True
+
+    def test_bucket_a_helpers(self) -> None:
+        assert check_bucket_a({"tests/_helpers.py"}) is True
+
+    def test_bucket_a_arch_helpers(self) -> None:
+        assert check_bucket_a({"tests/arch/_helpers.py"}) is True
+        assert check_bucket_a({"tests/arch/_rules.py"}) is True
+
+    def test_bucket_a_pyproject(self) -> None:
+        assert check_bucket_a({"pyproject.toml"}) is True
+
+    def test_bucket_a_uv_lock(self) -> None:
+        assert check_bucket_a({"uv.lock"}) is True
+
+    def test_bucket_a_precommit(self) -> None:
+        assert check_bucket_a({".pre-commit-config.yaml"}) is True
+
+    def test_bucket_a_factory(self) -> None:
+        assert check_bucket_a({"src/autoskillit/server/_factory.py"}) is True
+
+    def test_bucket_a_subdir_conftest(self) -> None:
+        assert check_bucket_a({"tests/execution/conftest.py"}) is True
+
+    def test_bucket_a_negative(self) -> None:
+        assert check_bucket_a({"src/autoskillit/core/io.py"}) is False
+
+
+# ---------------------------------------------------------------------------
+# build_test_scope Tests (S1–S10)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildTestScope:
+    def test_scope_none_changed_returns_none(self, tmp_path: Path) -> None:
+        result = build_test_scope(
+            changed_files=None,
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tmp_path / "tests",
+        )
+        assert result is None
+
+    def test_scope_large_changeset_returns_none(self, tmp_path: Path) -> None:
+        files = {f"src/autoskillit/core/f{i}.py" for i in range(31)}
+        result = build_test_scope(
+            changed_files=files,
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tmp_path / "tests",
+        )
+        assert result is None
+
+    def test_scope_bucket_a_returns_none(self, tmp_path: Path) -> None:
+        result = build_test_scope(
+            changed_files={"pyproject.toml"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tmp_path / "tests",
+        )
+        assert result is None
+
+    def test_scope_l0_core_conservative(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for d in [
+            "core", "config", "execution", "pipeline", "workspace",
+            "recipe", "migration", "server", "cli",
+            "hooks", "skills", "arch", "contracts", "infra", "docs",
+        ]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for expected in ["core", "config", "execution", "pipeline", "workspace",
+                         "recipe", "migration", "server", "cli", "hooks", "skills"]:
+            assert expected in dir_names, f"{expected} missing from cascade"
+        for always in ["arch", "contracts", "infra", "docs"]:
+            assert always in dir_names, f"always-run {always} missing"
+
+    def test_scope_l1_execution_conservative(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for d in [
+            "execution", "core", "workspace", "migration",
+            "server", "cli", "infra", "skills",
+            "arch", "contracts", "docs",
+        ]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/execution/headless.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for expected in ["execution", "core", "workspace", "migration",
+                         "server", "cli", "infra", "skills"]:
+            assert expected in dir_names, f"{expected} missing from cascade"
+
+    def test_scope_l2_recipe_conservative(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for d in [
+            "recipe", "execution", "server", "cli", "infra", "skills",
+            "arch", "contracts", "docs",
+        ]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/recipe/schema.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for expected in ["recipe", "execution", "server", "cli", "infra", "skills"]:
+            assert expected in dir_names, f"{expected} missing from cascade"
+
+    def test_scope_l3_server_conservative(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for d in ["server", "cli", "infra", "arch", "contracts", "docs"]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/server/helpers.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        assert "server" in dir_names
+        assert "cli" in dir_names
+        assert "infra" in dir_names
+
+    def test_scope_test_file_included_directly(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for d in ["arch", "contracts", "infra", "docs"]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files={"tests/core/test_io.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        assert Path("tests/core/test_io.py") in result
+
+    def test_scope_nonpython_no_manifest_only_alwaysrun(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for d in ["arch", "contracts", "infra", "docs"]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files={"README.md"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        assert dir_names == {"arch", "contracts", "infra", "docs"}
+
+    def test_scope_empty_changeset(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for d in ["arch", "contracts", "infra", "docs"]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files=set(),
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        assert dir_names == {"arch", "contracts", "infra", "docs"}
+
+
+# ---------------------------------------------------------------------------
+# Conservative vs Aggressive Tests (M1–M4)
+# ---------------------------------------------------------------------------
+
+
+class TestFilterModes:
+    def test_conservative_always_run_includes_infra(self) -> None:
+        assert "arch" in ALWAYS_RUN_CONSERVATIVE
+        assert "contracts" in ALWAYS_RUN_CONSERVATIVE
+        assert "infra" in ALWAYS_RUN_CONSERVATIVE
+        assert "docs" in ALWAYS_RUN_CONSERVATIVE
+
+    def test_aggressive_always_run_excludes_infra(self) -> None:
+        assert "arch" in ALWAYS_RUN_AGGRESSIVE
+        assert "contracts" in ALWAYS_RUN_AGGRESSIVE
+        assert "infra" not in ALWAYS_RUN_AGGRESSIVE
+        assert "docs" not in ALWAYS_RUN_AGGRESSIVE
+
+    def test_aggressive_ast_refinement(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        (tests_root / "core").mkdir(parents=True)
+        (tests_root / "arch").mkdir()
+        (tests_root / "contracts").mkdir()
+
+        result_aggressive = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+        )
+        assert result_aggressive is not None
+        dir_names = {p.name for p in result_aggressive}
+        assert "core" in dir_names
+        assert "arch" in dir_names
+        assert "contracts" in dir_names
+
+    def test_conservative_wider_cascade(self) -> None:
+        for pkg in LAYER_CASCADE_CONSERVATIVE:
+            if pkg in LAYER_CASCADE_AGGRESSIVE:
+                assert LAYER_CASCADE_AGGRESSIVE[pkg] <= LAYER_CASCADE_CONSERVATIVE[pkg], (
+                    f"Aggressive cascade for {pkg} is not a subset of conservative"
+                )
+
+
+# ---------------------------------------------------------------------------
+# Git Diff Edge Cases (G1–G5)
+# ---------------------------------------------------------------------------
+
+
+class TestGitChangedFiles:
+    def test_git_changed_files_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake_result = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout="src/autoskillit/core/io.py\ntests/core/test_io.py\n",
+        )
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: fake_result)
+        result = git_changed_files("/fake", base_ref="main")
+        assert result == {"src/autoskillit/core/io.py", "tests/core/test_io.py"}
+
+    def test_git_changed_files_failure_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def _raise(*a: object, **kw: object) -> None:
+            raise subprocess.CalledProcessError(1, "git")
+
+        monkeypatch.setattr(subprocess, "run", _raise)
+        result = git_changed_files("/fake", base_ref="main")
+        assert result is None
+
+    def test_git_changed_files_timeout_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def _raise(*a: object, **kw: object) -> None:
+            raise subprocess.TimeoutExpired("git", 10)
+
+        monkeypatch.setattr(subprocess, "run", _raise)
+        result = git_changed_files("/fake", base_ref="main")
+        assert result is None
+
+    def test_git_changed_files_env_override(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_TEST_BASE_REF", "feature-branch")
+        monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+
+        captured_args: list[list[str]] = []
+
+        def _capture(*a: object, **kw: object) -> subprocess.CompletedProcess[str]:
+            captured_args.append(list(a[0]))
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="")
+
+        monkeypatch.setattr(subprocess, "run", _capture)
+        git_changed_files("/fake")
+        assert captured_args
+        assert "feature-branch...HEAD" in captured_args[0]
+
+    def test_git_changed_files_github_base_ref(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_TEST_BASE_REF", raising=False)
+        monkeypatch.setenv("GITHUB_BASE_REF", "main")
+
+        captured_args: list[list[str]] = []
+
+        def _capture(*a: object, **kw: object) -> subprocess.CompletedProcess[str]:
+            captured_args.append(list(a[0]))
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="")
+
+        monkeypatch.setattr(subprocess, "run", _capture)
+        git_changed_files("/fake")
+        assert captured_args
+        assert "main...HEAD" in captured_args[0]
+
+
+# ---------------------------------------------------------------------------
+# Re-export Closure Tests (R1–R2)
+# ---------------------------------------------------------------------------
+
+
+class TestReexportClosure:
+    def test_reexport_closure_direct_init(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "pkg"
+        pkg.mkdir()
+        (pkg / "sub.py").write_text("x = 1\n")
+        (pkg / "__init__.py").write_text("from .sub import x\n")
+
+        result = _expand_reexport_closure({"pkg/sub.py"}, tmp_path)
+        assert "pkg/__init__.py" in result
+        assert "pkg/sub.py" in result
+
+    def test_reexport_closure_no_match(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "pkg"
+        pkg.mkdir()
+        (pkg / "other.py").write_text("y = 2\n")
+        (pkg / "__init__.py").write_text("from .sub import x\n")
+
+        result = _expand_reexport_closure({"pkg/other.py"}, tmp_path)
+        assert "pkg/__init__.py" not in result
+        assert "pkg/other.py" in result

@@ -7,6 +7,7 @@ REQ-IMP-003: server/tools_*.py imports from at most autoskillit.core and autoski
 REQ-IMP-004: cli/app.py imports from at most autoskillit.core, .config, .pipeline, and .execution.
 REQ-IMP-005: server/git.py only imports autoskillit.core at runtime (TYPE_CHECKING excluded).
 REQ-IMP-006: server/tools_kitchen.py has no direct import of DefaultGateState or pipeline.gate.
+REQ-IMP-010: cli/_init_helpers.py must not import autoskillit.recipe at module level.
 """
 
 import ast
@@ -352,3 +353,27 @@ def test_helpers_no_recipe_imports() -> None:
         if node.module and node.module.startswith("autoskillit.recipe")
     ]
     assert recipe_imports == [], f"Forbidden recipe imports in helpers.py: {recipe_imports}"
+
+
+def test_req_imp_010_init_helpers_no_toplevel_recipe_imports() -> None:
+    """cli/_init_helpers.py must not import autoskillit.recipe at module level.
+
+    list_recipes is an L2 dependency; deferring it to the function body
+    (_prompt_recipe_choice) keeps _init_helpers.py importable without
+    pulling in the recipe subpackage at startup (issue #930).
+    """
+    path = SRC / "cli" / "_init_helpers.py"
+    tree = ast.parse(path.read_text(), filename=str(path))
+    violations: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if node.module.startswith("autoskillit.recipe"):
+                violations.append(f"line {node.lineno}: from {node.module} import ...")
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith("autoskillit.recipe"):
+                    violations.append(f"line {node.lineno}: import {alias.name}")
+    assert not violations, (
+        "cli/_init_helpers.py has top-level recipe imports "
+        "(must be deferred to function body):\n" + "\n".join(violations)
+    )

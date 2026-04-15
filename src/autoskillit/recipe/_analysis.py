@@ -606,6 +606,51 @@ def _detect_ref_invalidations(recipe: Recipe, graph: dict[str, set[str]]) -> lis
     return warnings
 
 
+# Observability captures: variables captured for human-readable logs, hook
+# consumption, or note-driven orchestration rather than downstream recipe
+# threading.  Each entry is (cap_key, skill_command_fragment).  A capture is
+# exempt when cap_key matches AND skill_command_fragment appears in the
+# step's skill_command (or tool/step_name for non-skill steps).
+_OBSERVABILITY_CAPTURES: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("diagnosis_path", "diagnose-ci"),
+        ("summary_path", "pipeline-summary"),
+        ("report_path", "generate-report"),
+        ("selected_lenses", "prepare-research-pr"),
+        ("selected_lenses", "prepare-pr"),
+        ("lens_context_paths", "prepare-research-pr"),
+        ("lens_context_paths", "prepare-pr"),
+        ("pr_url", "compose-pr"),
+        ("html_path", "bundle-local-report"),
+        ("resource_report", "stage-data"),
+    }
+)
+
+
+def _is_observability_capture(cap_key: str, step_name: str, step: RecipeStep) -> bool:
+    """Return True if *cap_key* is a known observability-only capture."""
+    skill_cmd = step.with_args.get("skill_command", "") if step.with_args else ""
+
+    # Skill-command-based exemptions (the common case).
+    for obs_key, fragment in _OBSERVABILITY_CAPTURES:
+        if cap_key == obs_key and fragment in skill_cmd:
+            return True
+
+    # merge_worktree cleanup_succeeded: matched by tool name + capture value,
+    # not skill_command (merge_worktree is a direct tool, not a skill).
+    if step.tool == "merge_worktree" and "result.cleanup_succeeded" in str(
+        step.capture.get(cap_key, "")
+    ):
+        return True
+
+    # export_local_bundle local_bundle_path: matched by step name (terminal
+    # step in the local-mode path that ends at a stop action).
+    if cap_key == "local_bundle_path" and step_name == "export_local_bundle":
+        return True
+
+    return False
+
+
 def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[DataFlowWarning]:
     """Detect captured variables that are never consumed downstream."""
     warnings: list[DataFlowWarning] = []
@@ -645,77 +690,7 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         # Flag captured vars not consumed on any path
         for cap_key in step.capture:
             if cap_key not in consumed:
-                # Exempt merge_worktree diagnostic captures: cleanup_succeeded is captured
-                # for observability (to surface orphaned worktrees), not for data-passing.
-                # The merge-cleanup-uncaptured rule requires this capture; exempting it
-                # from dead-output prevents the two rules from conflicting.
-                cap_val = step.capture.get(cap_key, "")
-                if step.tool == "merge_worktree" and "result.cleanup_succeeded" in str(cap_val):
-                    continue
-                # Exempt diagnose-ci diagnosis_path captures: in recipes without a resolve_ci
-                # step (e.g. merge-prs), diagnosis_path is captured for observability
-                # only — no downstream automated remediation consumes it.
-                if cap_key == "diagnosis_path" and "diagnose-ci" in step.with_args.get(
-                    "skill_command", ""
-                ):
-                    continue
-                # Exempt pipeline-summary summary_path captures: pipeline-summary is a
-                # terminal reporting skill that writes to disk for human use; summary_path
-                # is captured for observability only — no downstream step consumes it.
-                if cap_key == "summary_path" and "pipeline-summary" in step.with_args.get(
-                    "skill_command", ""
-                ):
-                    continue
-                # Exempt generate-report report_path captures in terminal re-validation steps:
-                # when report_path is captured from generate-report but no downstream step
-                # references it (e.g. re_generate_report in a post-review re-validation loop
-                # that routes directly to test then push), the capture satisfies the
-                # implicit-handoff contract for observability — not downstream threading.
-                if cap_key == "report_path" and "generate-report" in step.with_args.get(
-                    "skill_command", ""
-                ):
-                    continue
-                # Exempt note-driven lens iteration captures from prepare-research-pr and
-                # prepare-pr: selected_lenses and lens_context_paths are consumed by
-                # run_experiment_lenses / run_arch_lenses via the step's note field.
-                # The note instructs the orchestrator to iterate over selected_lenses
-                # values and match them with lens_context_paths paths.
-                # Static dataflow analysis cannot detect note-driven consumption.
-                if cap_key in (
-                    "selected_lenses",
-                    "lens_context_paths",
-                ) and any(
-                    s in step.with_args.get("skill_command", "")
-                    for s in ("prepare-research-pr", "prepare-pr")
-                ):
-                    continue
-                # Exempt compose-pr pr_url observability capture: pr_url is the terminal
-                # output of the PR creation flow, captured for pipeline reporting and
-                # post-tool hooks (e.g. token_summary_appender). No downstream recipe
-                # step consumes it — consumption happens outside the recipe pipeline.
-                if cap_key == "pr_url" and "compose-pr" in step.with_args.get("skill_command", ""):
-                    continue
-                # Exempt bundle-local-report html_path captures: html_path is captured for
-                # observability and future groupH local-mode export (route_archive_or_export
-                # step). No current downstream recipe step consumes it — static analysis
-                # cannot yet verify the future consumption point.
-                if cap_key == "html_path" and "bundle-local-report" in step.with_args.get(
-                    "skill_command", ""
-                ):
-                    continue
-                # Exempt export_local_bundle local_bundle_path captures: local_bundle_path
-                # is captured for orchestrator observability. The route_archive_or_export
-                # local-mode path ends at research_complete (a stop action), so no
-                # downstream recipe step can consume it via template syntax.
-                if cap_key == "local_bundle_path" and step_name == "export_local_bundle":
-                    continue
-                # Exempt stage-data resource_report captures: resource_report is the
-                # path to the resource feasibility report in {{AUTOSKILLIT_TEMP}}/stage-data/.
-                # It is captured for human-readable observability only — no downstream
-                # recipe step consumes it via template syntax.
-                if cap_key == "resource_report" and "stage-data" in step.with_args.get(
-                    "skill_command", ""
-                ):
+                if _is_observability_capture(cap_key, step_name, step):
                     continue
                 warnings.append(
                     DataFlowWarning(

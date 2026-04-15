@@ -28,6 +28,7 @@ async def test_run_headless_core_injects_scenario_step_name(tool_ctx, tmp_path):
 
     await run_headless_core("/investigate foo", str(tmp_path), tool_ctx, step_name="investigate")
 
+    assert tool_ctx.runner.call_args_list, "runner was never called"
     cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
     assert cmd[0] != "env"
     env = kwargs.get("env")

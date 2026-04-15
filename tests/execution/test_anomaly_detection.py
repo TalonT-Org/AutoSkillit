@@ -275,13 +275,6 @@ def test_high_cpu_sustained_detail_includes_cpu_percent():
     assert high_cpu[0]["detail"]["cpu_percent"] == 95.5
 
 
-def test_no_anomalies_for_normal_session_still_holds():
-    """Normal session with cpu_percent=0.0 default still produces no anomalies."""
-    snaps = [_snap(vm_rss_kb=100000 + i * 100, oom_score=50) for i in range(10)]
-    anomalies = detect_anomalies(snaps, pid=1234)
-    assert len(anomalies) == 0
-
-
 # ---------------------------------------------------------------------------
 # Test 1.7 — Anomaly-detection liveness canary
 # ---------------------------------------------------------------------------

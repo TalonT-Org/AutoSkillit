@@ -534,6 +534,7 @@ async def release_issue(
             return json.dumps(
                 {
                     "success": False,
+                    "error": result.get("error", "remove_label failed"),
                     "issue_number": issue_number,
                     "label": effective_label,
                     "staged": False,

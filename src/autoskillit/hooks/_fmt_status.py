@@ -15,14 +15,7 @@ from _fmt_primitives import (  # type: ignore[import-not-found]
 
 
 def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
-    """Format get_token_summary compact Markdown-KV output.
-
-    This formatter receives only the JSON dict payload (format="json").
-    When format="table" is used, the tool returns a pre-formatted markdown
-    string. _resolve_payload() detects this as a _PlainTextPayload and routes
-    it through _PLAIN_TEXT_FORMATTERS (pass-through), so this function is
-    never called for the table format.
-    """
+    """Format get_token_summary compact Markdown-KV output (JSON payload only)."""
     lines = ["## token_summary", ""]
     steps = data.get("steps", [])
     for step in steps:
@@ -56,13 +49,7 @@ def _fmt_get_token_summary(data: dict, _pipeline: bool) -> str:
 
 
 def _fmt_get_timing_summary(data: dict, _pipeline: bool) -> str:
-    """Format get_timing_summary compact Markdown-KV output.
-
-    This formatter receives only the JSON dict payload (format="json").
-    When format="table" is used, the tool returns a pre-formatted markdown
-    string. _resolve_payload() detects this as a _PlainTextPayload and routes
-    it through _PLAIN_TEXT_FORMATTERS (pass-through), so this function is
-    never called for the table format.
+    """Format get_timing_summary compact Markdown-KV output (JSON payload only).
 
     Each step becomes: name xN [dur:Xs]
     """

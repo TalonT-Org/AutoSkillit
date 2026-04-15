@@ -61,7 +61,7 @@ class CloneRegistry:
         if self._path.exists():
             try:
                 self._entries = json.loads(self._path.read_text()).get("clones", [])
-            except (json.JSONDecodeError, OSError) as exc:
+            except (json.JSONDecodeError, OSError, AttributeError) as exc:
                 _log.warning("clone_registry: could not read %s: %s", self._path, exc)
                 self._entries = []
         return self

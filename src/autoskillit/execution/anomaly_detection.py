@@ -142,7 +142,7 @@ def detect_anomalies(
                         pid,
                     )
                 )
-            if consecutive_zombie >= 3:
+            if consecutive_zombie == 3:
                 anomalies.append(
                     _anomaly(
                         AnomalyKind.ZOMBIE_PERSISTENT,

@@ -74,7 +74,7 @@ def _finalize_recorder() -> None:
 
 
 async def _run_drift_check_async() -> None:
-    """Run run_startup_drift_check in a thread executor."""
+    """Offload blocking drift check (file hashing + atomic_write) to a thread."""
     loop = _asyncio.get_running_loop()
     await loop.run_in_executor(None, run_startup_drift_check)
 

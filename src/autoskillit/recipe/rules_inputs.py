@@ -349,7 +349,7 @@ def _check_required_without_default(
                 RuleFinding(
                     rule="required-ingredient-no-default",
                     severity=Severity.WARNING,
-                    step_name=name,
+                    step_name=f"ingredient:{name}",
                     message=(
                         f"Ingredient '{name}' is required but has no default value. "
                         "This may cause the orchestrator to call AskUserQuestion "

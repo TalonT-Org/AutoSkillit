@@ -347,6 +347,16 @@ async def create_unique_branch(
                         branch_name = candidate
                         break
                     suffix += 1
+                else:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "error": (
+                                f"All branch name candidates up to "
+                                f"{base_name}-{_MAX_SUFFIX} are taken."
+                            ),
+                        }
+                    )
 
             rc_head, head_out, _ = await _run_subprocess(
                 ["git", "branch", "--show-current"],

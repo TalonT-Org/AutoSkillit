@@ -271,11 +271,15 @@ def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
     _tmp_replay_dir = tempfile.TemporaryDirectory(prefix="autoskillit-replay-")
     tmp_replay = _tmp_replay_dir.name
 
-    player = make_scenario_player(
-        scenario_dir=replay_dir,
-        output_dir=tmp_replay,
-        binary_path=str(Path(tmp_replay) / "claude"),
-    )
+    try:
+        player = make_scenario_player(
+            scenario_dir=replay_dir,
+            output_dir=tmp_replay,
+            binary_path=str(Path(tmp_replay) / "claude"),
+        )
+    except Exception:
+        _tmp_replay_dir.cleanup()
+        raise
 
     try:
         scenario = player.scenario()

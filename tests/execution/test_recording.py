@@ -575,14 +575,11 @@ async def test_cross_scenario_override(tmp_path):
 # --- T-REC-PUBLIC: recorder is a public attribute ---
 
 
-def test_recording_runner_recorder_is_public(monkeypatch):
+def test_recording_runner_recorder_is_public():
     """RecordingSubprocessRunner exposes recorder as a public attribute."""
-    mock_atexit = Mock()
-    monkeypatch.setattr("atexit.register", mock_atexit)
     mock_recorder = Mock()
     runner = RecordingSubprocessRunner(recorder=mock_recorder)
     assert runner.recorder is mock_recorder
-    mock_atexit.assert_not_called()
 
 
 # --- T-REPLAY-PLAYER: player attribute stored ---

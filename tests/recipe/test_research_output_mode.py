@@ -197,7 +197,7 @@ def test_research_bundles_documented_in_kitchen_rules(recipe):
 
 
 def test_research_output_mode_enum_rule_fires_for_invalid_value():
-    """research_output_mode_enum rule must fire ERROR when output_mode.default is invalid."""
+    """research-output-mode-enum rule must fire ERROR when output_mode.default is invalid."""
     import yaml
 
     from autoskillit.core import Severity
@@ -211,17 +211,17 @@ def test_research_output_mode_enum_rule_fires_for_invalid_value():
     bad_recipe = _parse_recipe(data)
     ctx = make_validation_context(bad_recipe)
     findings = run_semantic_rules(ctx)
-    rule_findings = [f for f in findings if f.rule == "research_output_mode_enum"]
+    rule_findings = [f for f in findings if f.rule == "research-output-mode-enum"]
     assert rule_findings, (
-        "research_output_mode_enum rule must fire for invalid output_mode default"
+        "research-output-mode-enum rule must fire for invalid output_mode default"
     )
     assert any(f.severity == Severity.ERROR for f in rule_findings), (
-        "research_output_mode_enum finding must be ERROR severity"
+        "research-output-mode-enum finding must be ERROR severity"
     )
 
 
 def test_research_output_mode_enum_rule_clean_for_valid_values():
-    """research_output_mode_enum rule must NOT fire for 'local' or 'pr'."""
+    """research-output-mode-enum rule must NOT fire for 'local' or 'pr'."""
     import yaml
 
     from autoskillit.recipe._analysis import make_validation_context
@@ -235,9 +235,9 @@ def test_research_output_mode_enum_rule_clean_for_valid_values():
         recipe = _parse_recipe(data)
         ctx = make_validation_context(recipe)
         findings = run_semantic_rules(ctx)
-        rule_findings = [f for f in findings if f.rule == "research_output_mode_enum"]
+        rule_findings = [f for f in findings if f.rule == "research-output-mode-enum"]
         assert not rule_findings, (
-            f"research_output_mode_enum must not fire for valid value {valid!r}"
+            f"research-output-mode-enum must not fire for valid value {valid!r}"
         )
 
 

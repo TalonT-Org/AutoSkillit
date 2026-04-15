@@ -110,11 +110,11 @@ async def _autoskillit_lifespan(server: Any) -> Any:
     ``scenario.json``. Any teardown exception is logged and suppressed so the
     process exits cleanly.
     """
+    bg_tasks: list[_asyncio.Task[None]] = []
     try:
         from autoskillit.pipeline import create_background_task  # noqa: PLC0415
         from autoskillit.server import _state  # noqa: PLC0415
 
-        bg_tasks: list[_asyncio.Task[None]] = []
         event = _asyncio.Event()
         _state._startup_ready = event
         write_readiness_sentinel()

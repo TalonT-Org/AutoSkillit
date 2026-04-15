@@ -97,13 +97,19 @@ class RunSkillConfig:
     idle_output_timeout: int = 600
     max_suppression_seconds: int = 1800
 
+    # Safety margin (ms) above exit_after_stop_delay_ms that
+    # natural_exit_grace_seconds must cover so the drain window can absorb
+    # the CLI self-exit delay without a race.
+    _EXIT_GRACE_BUFFER_MS = 500
+
     def __post_init__(self) -> None:
-        required_ms = self.exit_after_stop_delay_ms + 500
+        required_ms = self.exit_after_stop_delay_ms + self._EXIT_GRACE_BUFFER_MS
+        # Convert seconds → ms for the comparison
         if self.natural_exit_grace_seconds * 1000 < required_ms:
             raise ValueError(
                 f"natural_exit_grace_seconds={self.natural_exit_grace_seconds} is too small: "
                 f"{self.natural_exit_grace_seconds * 1000:.0f}ms < "
-                f"{required_ms}ms (exit_after_stop_delay_ms + 500). "
+                f"{required_ms}ms (exit_after_stop_delay_ms + {self._EXIT_GRACE_BUFFER_MS}). "
                 "Increase natural_exit_grace_seconds so the drain window can absorb the "
                 "CLI self-exit delay."
             )

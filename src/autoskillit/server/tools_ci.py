@@ -85,6 +85,8 @@ async def wait_for_ci(
         tool_ctx = _get_ctx()
         _timing_ctx = tool_ctx
         if tool_ctx.ci_watcher is None:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
             return json.dumps(
                 {
                     "run_id": None,
@@ -455,6 +457,8 @@ async def wait_for_merge_queue(
         tool_ctx = _get_ctx()
 
         if tool_ctx.merge_queue_watcher is None:
+            if step_name:
+                tool_ctx.timing_log.record(step_name, 0.0)
             return json.dumps(
                 {
                     "success": False,

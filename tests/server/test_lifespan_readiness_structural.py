@@ -80,26 +80,22 @@ class TestLifespanReadinessStructural:
         self.tree = ast.parse(source)
         self.func = _find_lifespan_func(self.tree)
 
-    def test_first_statement_is_try(self):
-        """Assertion A: first real statement of _autoskillit_lifespan must be try:."""
+    def test_body_contains_try(self):
+        """Assertion A: _autoskillit_lifespan body must contain a try: block."""
         body = self.func.body
         assert body, "_autoskillit_lifespan has an empty body"
-        first_stmt = _first_real_stmt(body)
-        assert first_stmt is not None, "_autoskillit_lifespan has no non-docstring statements"
-        assert isinstance(first_stmt, (ast.Try, ast.TryStar)), (
-            f"Expected the first statement of _autoskillit_lifespan to be a try: block, "
-            f"got {type(first_stmt).__name__}. "
+        try_nodes = [s for s in body if isinstance(s, (ast.Try, ast.TryStar))]
+        assert try_nodes, (
+            "Expected _autoskillit_lifespan to contain a try: block. "
             "Readiness sentinel must be written inside try: to ensure cleanup runs in finally:."
         )
 
     def test_try_body_contains_sentinel_call(self):
         """Assertion B: try: body must call a sentinel/readiness write helper."""
         body = self.func.body
-        first_stmt = _first_real_stmt(body)
-        assert first_stmt is not None and isinstance(first_stmt, (ast.Try, ast.TryStar)), (
-            "Pre-condition failed: first real stmt is not try: (see test_first_statement_is_try)"
-        )
-        try_node = first_stmt
+        try_nodes = [s for s in body if isinstance(s, (ast.Try, ast.TryStar))]
+        assert try_nodes, "Pre-condition failed: no try: block found (see test_body_contains_try)"
+        try_node = try_nodes[0]
         sentinel_calls = []
         for node in ast.walk(try_node):
             if isinstance(node, ast.Call):

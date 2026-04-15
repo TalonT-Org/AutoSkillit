@@ -166,7 +166,7 @@ def _check_missing_recommended_input(ctx: ValidationContext) -> list[RuleFinding
         for inp in contract.inputs:
             if not inp.recommended or inp.required:
                 continue
-            if f"{inp.name}=" not in skill_cmd:
+            if not re.search(rf"(?:^|\s){re.escape(inp.name)}=", skill_cmd):
                 findings.append(
                     RuleFinding(
                         rule="missing-recommended-input",
@@ -362,7 +362,7 @@ def _check_required_without_default(
 
 
 @semantic_rule(
-    name="research_output_mode_enum",
+    name="research-output-mode-enum",
     severity=Severity.ERROR,
     description=(
         "The research recipe's output_mode ingredient default must be 'pr' or 'local'. "
@@ -382,7 +382,7 @@ def _check_research_output_mode_enum(
     if default not in {"pr", "local"}:
         return [
             RuleFinding(
-                rule="research_output_mode_enum",
+                rule="research-output-mode-enum",
                 severity=Severity.ERROR,
                 step_name="output_mode",
                 message=(

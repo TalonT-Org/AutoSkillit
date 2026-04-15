@@ -261,7 +261,8 @@ class DefaultMergeQueueWatcher:
     """
 
     def __init__(
-        self, token: str | None | Callable[[], str | None], max_inconclusive_retries: int = 5
+        self,
+        token: str | None | Callable[[], str | None],
     ) -> None:
         self._token_factory: Callable[[], str | None] | None
         if callable(token):
@@ -274,7 +275,6 @@ class DefaultMergeQueueWatcher:
                 limits=httpx.Limits(keepalive_expiry=60),
                 timeout=30.0,
             )
-        self._max_inconclusive_retries = max_inconclusive_retries
 
     def _ensure_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -595,8 +595,10 @@ def _text_has_push_trigger(text: str) -> bool:
     - ``on: push``         (scalar form)
     - ``push:``            (mapping form under ``on:``)
 
-    Note: does not trigger on ``git push`` in comments or step bodies
-    because those forms do not start with ``on:`` or appear as bare YAML keys.
+    Note: the first two patterns (``on: [push``, ``on: push``) are reliably
+    scoped to YAML trigger syntax. The third (``push:``) may match inside
+    comments or run-step values — acceptable for the positive-signal-only
+    classification heuristic but not precise.
     """
     return any(pat in text for pat in ("on: [push", "on: push", "push:"))
 

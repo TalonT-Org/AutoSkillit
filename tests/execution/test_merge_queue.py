@@ -801,7 +801,7 @@ class TestInconclusiveBudget:
         Six PENDING cycles with budget=3 must NOT trigger budget ceiling.
         timeout_seconds=99999 ensures outer deadline is not the cause.
         """
-        watcher = DefaultMergeQueueWatcher(token=None, max_inconclusive_retries=3)
+        watcher = DefaultMergeQueueWatcher(token=None)
         call_count = 0
 
         async def _fetch(*_a, **_kw):
@@ -835,7 +835,7 @@ class TestInconclusiveBudget:
         """CIStillRunning (EXPECTED) must not consume inconclusive_count.
         Six EXPECTED cycles with budget=3 must NOT trigger budget ceiling.
         """
-        watcher = DefaultMergeQueueWatcher(token=None, max_inconclusive_retries=3)
+        watcher = DefaultMergeQueueWatcher(token=None)
         call_count = 0
 
         async def _fetch(*_a, **_kw):
@@ -870,7 +870,7 @@ class TestInconclusiveBudget:
         Unknown state with no positive classifier match × (window + N) cycles
         → pr_state='timeout'. Reason must contain 'Inconclusive after'.
         """
-        watcher = DefaultMergeQueueWatcher(token=None, max_inconclusive_retries=3)
+        watcher = DefaultMergeQueueWatcher(token=None)
         watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
             return_value=_queue_state(
                 merged=False,
@@ -901,7 +901,7 @@ class TestInconclusiveBudget:
         Budget=3. Without reset: second phase exhausts budget immediately.
         With reset: both phases are tolerated independently.
         """
-        watcher = DefaultMergeQueueWatcher(token=None, max_inconclusive_retries=3)
+        watcher = DefaultMergeQueueWatcher(token=None)
         call_count = 0
 
         async def _fetch(*_a, **_kw):
@@ -946,7 +946,7 @@ class TestInconclusiveBudget:
         confirmation_cycles=4, budget=3: all 7 PENDING cycles complete without budget exhaustion
         because PENDING raises CIStillRunning (exempt from budget). Merged on call 8.
         """
-        watcher = DefaultMergeQueueWatcher(token=None, max_inconclusive_retries=3)
+        watcher = DefaultMergeQueueWatcher(token=None)
         call_count = 0
 
         async def _fetch(*_a, **_kw):

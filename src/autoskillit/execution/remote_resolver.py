@@ -58,6 +58,7 @@ async def resolve_remote_repo(
                 io_task.cancel()
                 proc.kill()
                 await proc.wait()
+                await asyncio.gather(io_task, return_exceptions=True)
                 _log.warning("Timed out getting URL for remote %r in %r", remote, cwd)
                 continue
             stdout, _ = await io_task

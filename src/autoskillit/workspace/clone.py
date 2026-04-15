@@ -318,13 +318,17 @@ def _probe_clone_source_url(source: Path) -> CloneSourceResolution:
     them to point at the clone directory itself — a stale local reference.
     Local bare paths (no scheme) and real network URLs are both accepted.
     """
+    last_result: CloneSourceResolution | None = None
     for remote_name in ("upstream", "origin"):
         result = _probe_single_remote(source, remote_name)
+        last_result = result
         if result.reason == "ok" and _is_not_file_url(result.url):
             return result
 
-    # No non-file:// URL found — return origin's result (may be no_origin, error,
-    # or a local path). The caller raises RuntimeError for non-ok reasons.
+    # No non-file:// URL found — return the last probed result (origin) rather
+    # than re-invoking _probe_single_remote, which would be a redundant subprocess.
+    if last_result is not None:
+        return last_result
     return _probe_single_remote(source, "origin")
 
 

@@ -65,8 +65,10 @@ class TestServerToolSurfaceContract:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, minimal_ctx, monkeypatch):
         from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import _state
 
         monkeypatch.setattr(minimal_ctx, "gate", DefaultGateState(enabled=False))
+        monkeypatch.setattr(_state, "_ctx", minimal_ctx)
 
     @pytest.mark.anyio
     async def test_open_kitchen_prompt_names_all_forbidden_tools(self):

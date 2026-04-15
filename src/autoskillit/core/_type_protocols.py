@@ -6,7 +6,7 @@ for dependency injection and structural typing.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -191,6 +191,12 @@ class HeadlessExecutor(Protocol):
     ) -> SkillResult: ...
 
 
+class SupportsDebug(Protocol):
+    """Structural logger protocol — only the debug() method is required."""
+
+    def debug(self, event: str, **kwargs: Any) -> None: ...
+
+
 @runtime_checkable
 class RecipeRepository(Protocol):
     """Protocol for recipe discovery and loading."""
@@ -216,6 +222,16 @@ class RecipeRepository(Protocol):
     ) -> dict[str, Any]: ...
 
     def list_all(self, project_dir: Any | None = None) -> dict[str, Any]: ...
+
+    async def apply_triage_gate(
+        self,
+        result: dict[str, Any],
+        recipe_name: str,
+        recipe_info: Any,
+        temp_dir: Path,
+        logger: SupportsDebug,
+        triage_fn: Callable[..., Awaitable[Sequence[dict[str, Any]]]] | None = None,
+    ) -> dict[str, Any]: ...
 
 
 @runtime_checkable

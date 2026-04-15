@@ -1,4 +1,5 @@
 """Tests for tests/_test_filter.py — standalone test-path filtering logic."""
+
 from __future__ import annotations
 
 import ast
@@ -10,18 +11,16 @@ import pytest
 from tests._test_filter import (
     ALWAYS_RUN_AGGRESSIVE,
     ALWAYS_RUN_CONSERVATIVE,
+    LAYER_CASCADE_AGGRESSIVE,
+    LAYER_CASCADE_CONSERVATIVE,
     ASTImportWalker,
     FilterMode,
     ImportContext,
-    LAYER_CASCADE_AGGRESSIVE,
-    LAYER_CASCADE_CONSERVATIVE,
     _expand_reexport_closure,
-    apply_manifest,
     build_test_scope,
     check_bucket_a,
     git_changed_files,
 )
-
 
 # ---------------------------------------------------------------------------
 # Walker Tests (W1–W8)
@@ -152,9 +151,21 @@ class TestBuildTestScope:
     def test_scope_l0_core_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
         for d in [
-            "core", "config", "execution", "pipeline", "workspace",
-            "recipe", "migration", "server", "cli",
-            "hooks", "skills", "arch", "contracts", "infra", "docs",
+            "core",
+            "config",
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "server",
+            "cli",
+            "hooks",
+            "skills",
+            "arch",
+            "contracts",
+            "infra",
+            "docs",
         ]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
 
@@ -165,8 +176,19 @@ class TestBuildTestScope:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for expected in ["core", "config", "execution", "pipeline", "workspace",
-                         "recipe", "migration", "server", "cli", "hooks", "skills"]:
+        for expected in [
+            "core",
+            "config",
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "server",
+            "cli",
+            "hooks",
+            "skills",
+        ]:
             assert expected in dir_names, f"{expected} missing from cascade"
         for always in ["arch", "contracts", "infra", "docs"]:
             assert always in dir_names, f"always-run {always} missing"
@@ -174,9 +196,17 @@ class TestBuildTestScope:
     def test_scope_l1_execution_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
         for d in [
-            "execution", "core", "workspace", "migration",
-            "server", "cli", "infra", "skills",
-            "arch", "contracts", "docs",
+            "execution",
+            "core",
+            "workspace",
+            "migration",
+            "server",
+            "cli",
+            "infra",
+            "skills",
+            "arch",
+            "contracts",
+            "docs",
         ]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
 
@@ -187,15 +217,30 @@ class TestBuildTestScope:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for expected in ["execution", "core", "workspace", "migration",
-                         "server", "cli", "infra", "skills"]:
+        for expected in [
+            "execution",
+            "core",
+            "workspace",
+            "migration",
+            "server",
+            "cli",
+            "infra",
+            "skills",
+        ]:
             assert expected in dir_names, f"{expected} missing from cascade"
 
     def test_scope_l2_recipe_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
         for d in [
-            "recipe", "execution", "server", "cli", "infra", "skills",
-            "arch", "contracts", "docs",
+            "recipe",
+            "execution",
+            "server",
+            "cli",
+            "infra",
+            "skills",
+            "arch",
+            "contracts",
+            "docs",
         ]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
 
@@ -318,7 +363,8 @@ class TestFilterModes:
 class TestGitChangedFiles:
     def test_git_changed_files_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_result = subprocess.CompletedProcess(
-            args=[], returncode=0,
+            args=[],
+            returncode=0,
             stdout="src/autoskillit/core/io.py\ntests/core/test_io.py\n",
         )
         monkeypatch.setattr(subprocess, "run", lambda *a, **kw: fake_result)
@@ -326,7 +372,8 @@ class TestGitChangedFiles:
         assert result == {"src/autoskillit/core/io.py", "tests/core/test_io.py"}
 
     def test_git_changed_files_failure_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         def _raise(*a: object, **kw: object) -> None:
             raise subprocess.CalledProcessError(1, "git")
@@ -336,7 +383,8 @@ class TestGitChangedFiles:
         assert result is None
 
     def test_git_changed_files_timeout_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         def _raise(*a: object, **kw: object) -> None:
             raise subprocess.TimeoutExpired("git", 10)
@@ -346,7 +394,8 @@ class TestGitChangedFiles:
         assert result is None
 
     def test_git_changed_files_env_override(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("AUTOSKILLIT_TEST_BASE_REF", "feature-branch")
         monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
@@ -363,7 +412,8 @@ class TestGitChangedFiles:
         assert "feature-branch...HEAD" in captured_args[0]
 
     def test_git_changed_files_github_base_ref(
-        self, monkeypatch: pytest.MonkeyPatch,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.delenv("AUTOSKILLIT_TEST_BASE_REF", raising=False)
         monkeypatch.setenv("GITHUB_BASE_REF", "main")

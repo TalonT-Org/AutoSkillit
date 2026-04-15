@@ -1,4 +1,5 @@
 """Standalone test-path filtering logic. No pytest dependencies."""
+
 from __future__ import annotations
 
 import ast
@@ -26,26 +27,36 @@ class ImportContext(enum.StrEnum):
     IMPORTLIB = "importlib"
 
 
-BUCKET_A_PATTERNS: frozenset[str] = frozenset({
-    "tests/conftest.py",
-    "tests/_helpers.py",
-    "tests/arch/_helpers.py",
-    "tests/arch/_rules.py",
-    "pyproject.toml",
-    "uv.lock",
-    ".pre-commit-config.yaml",
-    "src/autoskillit/server/_factory.py",
-})
+BUCKET_A_PATTERNS: frozenset[str] = frozenset(
+    {
+        "tests/conftest.py",
+        "tests/_helpers.py",
+        "tests/arch/_helpers.py",
+        "tests/arch/_rules.py",
+        "pyproject.toml",
+        "uv.lock",
+        ".pre-commit-config.yaml",
+        "src/autoskillit/server/_factory.py",
+    }
+)
 
 BUCKET_A_GLOBS: tuple[str, ...] = ("tests/*/conftest.py",)
 
-ALWAYS_RUN_CONSERVATIVE: frozenset[str] = frozenset({
-    "arch", "contracts", "infra", "docs",
-})
+ALWAYS_RUN_CONSERVATIVE: frozenset[str] = frozenset(
+    {
+        "arch",
+        "contracts",
+        "infra",
+        "docs",
+    }
+)
 
-ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset({
-    "arch", "contracts",
-})
+ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset(
+    {
+        "arch",
+        "contracts",
+    }
+)
 
 _LARGE_CHANGESET_THRESHOLD: int = 30
 
@@ -55,46 +66,107 @@ _LARGE_CHANGESET_THRESHOLD: int = 30
 
 LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     # L0 — imported by everything
-    "core": frozenset({
-        "core", "config", "execution", "pipeline", "workspace",
-        "recipe", "migration", "server", "cli",
-        "hooks", "skills",
-    }),
+    "core": frozenset(
+        {
+            "core",
+            "config",
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "server",
+            "cli",
+            "hooks",
+            "skills",
+        }
+    ),
     # L1
-    "config": frozenset({
-        "config", "pipeline", "workspace", "server", "cli",
-    }),
-    "execution": frozenset({
-        "execution", "core", "workspace", "migration",
-        "server", "cli", "infra", "skills",
-    }),
-    "pipeline": frozenset({
-        "pipeline", "execution", "server", "infra",
-    }),
-    "workspace": frozenset({
-        "workspace", "recipe", "server", "cli", "skills",
-    }),
+    "config": frozenset(
+        {
+            "config",
+            "pipeline",
+            "workspace",
+            "server",
+            "cli",
+        }
+    ),
+    "execution": frozenset(
+        {
+            "execution",
+            "core",
+            "workspace",
+            "migration",
+            "server",
+            "cli",
+            "infra",
+            "skills",
+        }
+    ),
+    "pipeline": frozenset(
+        {
+            "pipeline",
+            "execution",
+            "server",
+            "infra",
+        }
+    ),
+    "workspace": frozenset(
+        {
+            "workspace",
+            "recipe",
+            "server",
+            "cli",
+            "skills",
+        }
+    ),
     # L2
-    "recipe": frozenset({
-        "recipe", "execution", "server", "cli", "infra", "skills",
-    }),
-    "migration": frozenset({
-        "migration", "server",
-    }),
+    "recipe": frozenset(
+        {
+            "recipe",
+            "execution",
+            "server",
+            "cli",
+            "infra",
+            "skills",
+        }
+    ),
+    "migration": frozenset(
+        {
+            "migration",
+            "server",
+        }
+    ),
     # L3
-    "server": frozenset({
-        "server", "cli", "infra",
-    }),
-    "cli": frozenset({
-        "cli",
-    }),
+    "server": frozenset(
+        {
+            "server",
+            "cli",
+            "infra",
+        }
+    ),
+    "cli": frozenset(
+        {
+            "cli",
+        }
+    ),
     # Infra (non-layered)
-    "hooks": frozenset({
-        "hooks", "infra", "cli",
-    }),
-    "hook_registry": frozenset({
-        "server", "infra", "cli", "docs",
-    }),
+    "hooks": frozenset(
+        {
+            "hooks",
+            "infra",
+            "cli",
+        }
+    ),
+    "hook_registry": frozenset(
+        {
+            "hooks",
+            "server",
+            "infra",
+            "cli",
+            "docs",
+        }
+    ),
 }
 
 LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
@@ -374,14 +446,10 @@ def build_test_scope(
     tests_root = Path(tests_root)
 
     cascade_map = (
-        LAYER_CASCADE_CONSERVATIVE
-        if mode == FilterMode.CONSERVATIVE
-        else LAYER_CASCADE_AGGRESSIVE
+        LAYER_CASCADE_CONSERVATIVE if mode == FilterMode.CONSERVATIVE else LAYER_CASCADE_AGGRESSIVE
     )
     always_run = (
-        ALWAYS_RUN_CONSERVATIVE
-        if mode == FilterMode.CONSERVATIVE
-        else ALWAYS_RUN_AGGRESSIVE
+        ALWAYS_RUN_CONSERVATIVE if mode == FilterMode.CONSERVATIVE else ALWAYS_RUN_AGGRESSIVE
     )
 
     test_dirs: set[str] = set()

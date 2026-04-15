@@ -249,7 +249,7 @@ def test_format_test_check_pass():
     """test_check pass must show tool name, checkmark, PASS, passed: True."""
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__test_check",
-        "tool_response": json.dumps({"passed": True, "output": "...245 passed..."}),
+        "tool_response": json.dumps({"passed": True, "stdout": "...245 passed..."}),
     }
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
@@ -273,7 +273,7 @@ def test_format_test_check_fail_shows_failure_lines():
     )
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__test_check",
-        "tool_response": json.dumps({"passed": False, "output": pytest_output}),
+        "tool_response": json.dumps({"passed": False, "stdout": pytest_output}),
     }
     out, _ = _run_hook(event=event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]

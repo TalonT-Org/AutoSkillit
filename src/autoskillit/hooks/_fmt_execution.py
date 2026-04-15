@@ -164,10 +164,13 @@ def _fmt_test_check(data: dict, _pipeline: bool) -> str:
     mark = _CHECK_MARK if passed else _CROSS_MARK
     status = "PASS" if passed else "FAIL"
     lines = [f"## test_check {mark} {status}", "", f"passed: {passed}"]
-    raw_output = data.get("output", "")
-    if raw_output:
-        filtered = _filter_pytest_output(raw_output)
-        lines.extend(["", "### Output", filtered])
+    stdout = data.get("stdout", "")
+    if stdout:
+        filtered = _filter_pytest_output(stdout)
+        lines.extend(["", "### stdout", filtered])
+    stderr = data.get("stderr", "")
+    if stderr:
+        lines.extend(["", "### stderr", stderr])
     error = data.get("error", "")
     if error:
         lines.extend(["", f"error: {error}"])

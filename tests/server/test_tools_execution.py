@@ -808,105 +808,41 @@ class TestNotifyHelper:
 @pytest.mark.anyio
 async def test_tools_execution_routes_through_executor(tool_ctx, monkeypatch) -> None:
     """run_skill routes through ctx.executor.run(), not run_headless_core directly."""
-    from autoskillit.core import SkillResult
+    from tests.fakes import InMemoryHeadlessExecutor
 
-    calls = []
-
-    class MockExecutor:
-        async def run(
-            self,
-            skill_command: str,
-            cwd: str,
-            *,
-            model: str = "",
-            step_name: str = "",
-            add_dirs=(),
-            kitchen_id: str = "",
-            order_id: str = "",
-            timeout: float | None = None,
-            stale_threshold: float | None = None,
-            idle_output_timeout: float | None = None,
-            expected_output_patterns: tuple[str, ...] | list[str] = (),
-            write_behavior=None,
-            completion_marker: str = "",
-        ) -> SkillResult:
-            calls.append((skill_command, cwd))
-            return SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason="none",
-                stderr="",
-                token_usage=None,
-            )
-
-    tool_ctx.executor = MockExecutor()
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
 
     await run_skill("/test skill", "/tmp")
-    assert calls == [("/test skill", "/tmp")]
+    assert len(executor.calls) == 1
+    assert executor.calls[0].skill_command == "/test skill"
+    assert executor.calls[0].cwd == "/tmp"
 
 
 @pytest.mark.anyio
 async def test_run_skill_passes_validated_add_dirs(tool_ctx, monkeypatch) -> None:
     """run_skill passes ValidatedAddDir instances (not raw strings) as add_dirs."""
-    from autoskillit.core import SkillResult, ValidatedAddDir
+    from autoskillit.core import ValidatedAddDir
+    from tests.fakes import InMemoryHeadlessExecutor
 
-    captured: dict = {}
-
-    class MockExecutor:
-        async def run(
-            self,
-            skill_command: str,
-            cwd: str,
-            *,
-            model: str = "",
-            step_name: str = "",
-            add_dirs=(),
-            kitchen_id: str = "",
-            order_id: str = "",
-            timeout: float | None = None,
-            stale_threshold: float | None = None,
-            idle_output_timeout: float | None = None,
-            expected_output_patterns: tuple[str, ...] | list[str] = (),
-            write_behavior=None,
-            completion_marker: str = "",
-        ) -> SkillResult:
-            captured["add_dirs"] = add_dirs
-            captured["cwd"] = cwd
-            return SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason="none",
-                stderr="",
-                token_usage=None,
-            )
-
-    tool_ctx.executor = MockExecutor()
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
 
     await run_skill("/test skill", "/tmp")
     # All add_dirs must be ValidatedAddDir instances
-    assert len(captured["add_dirs"]) >= 1
-    assert all(isinstance(d, ValidatedAddDir) for d in captured["add_dirs"])
+    assert len(executor.calls[0].add_dirs) >= 1
+    assert all(isinstance(d, ValidatedAddDir) for d in executor.calls[0].add_dirs)
     # Must not include raw skills_extended/ path
     from autoskillit.workspace.skills import bundled_skills_extended_dir
 
     skills_ext = str(bundled_skills_extended_dir())
-    add_dir_paths = [d.path for d in captured["add_dirs"]]
+    add_dir_paths = [d.path for d in executor.calls[0].add_dirs]
     assert skills_ext not in add_dir_paths
 
 
@@ -915,7 +851,7 @@ async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monk
     """run_skill routes through session_skill_manager.init_session() for add_dirs."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import SkillResult, ValidatedAddDir
+    from autoskillit.core import ValidatedAddDir
 
     # Create a spy on init_session
     fake_validated = ValidatedAddDir(path="/fake/session/dir")
@@ -923,25 +859,10 @@ async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monk
     mock_ssm.init_session.return_value = fake_validated
     tool_ctx.session_skill_manager = mock_ssm
 
-    captured: dict = {}
+    from tests.fakes import InMemoryHeadlessExecutor
 
-    class MockExecutor:
-        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
-            captured["add_dirs"] = add_dirs
-            return SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason="none",
-                stderr="",
-                token_usage=None,
-            )
-
-    tool_ctx.executor = MockExecutor()
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
@@ -954,7 +875,7 @@ async def test_run_skill_calls_session_skill_manager_init_session(tool_ctx, monk
     assert call_kwargs.kwargs.get("cook_session") is False
 
     # The returned ValidatedAddDir is in add_dirs
-    assert fake_validated in captured["add_dirs"]
+    assert fake_validated in executor.calls[0].add_dirs
 
 
 @pytest.mark.anyio
@@ -962,7 +883,7 @@ async def test_run_skill_activates_deps_for_tier3_target(tool_ctx, monkeypatch) 
     """run_skill calls activate_skill_deps even when target is tier3 (not in tier2 list)."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import SkillResult, ValidatedAddDir
+    from autoskillit.core import ValidatedAddDir
 
     fake_validated = ValidatedAddDir(path="/fake/session/dir")
     mock_ssm = MagicMock()
@@ -974,22 +895,9 @@ async def test_run_skill_activates_deps_for_tier3_target(tool_ctx, monkeypatch) 
     mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
     tool_ctx.skill_resolver = mock_resolver
 
-    class MockExecutor:
-        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
-            return SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason="none",
-                stderr="",
-                token_usage=None,
-            )
+    from tests.fakes import InMemoryHeadlessExecutor
 
-    tool_ctx.executor = MockExecutor()
+    tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
@@ -1006,24 +914,9 @@ async def test_run_skill_result_includes_order_id_when_passed(tool_ctx, monkeypa
     """run_skill injects order_id into the result JSON when order_id is non-empty."""
     import json as _json
 
-    from autoskillit.core import SkillResult
+    from tests.fakes import InMemoryHeadlessExecutor
 
-    class MockExecutor:
-        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
-            return SkillResult(
-                success=True,
-                result="done",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason="none",
-                stderr="",
-                token_usage=None,
-            )
-
-    tool_ctx.executor = MockExecutor()
+    tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
@@ -1038,24 +931,9 @@ async def test_run_skill_result_no_order_id_field_when_empty(tool_ctx, monkeypat
     """run_skill does NOT inject order_id into result JSON when order_id is empty."""
     import json as _json
 
-    from autoskillit.core import SkillResult
+    from tests.fakes import InMemoryHeadlessExecutor
 
-    class MockExecutor:
-        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
-            return SkillResult(
-                success=True,
-                result="done",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason="none",
-                stderr="",
-                token_usage=None,
-            )
-
-    tool_ctx.executor = MockExecutor()
+    tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
@@ -1324,7 +1202,8 @@ async def test_run_skill_passes_allow_only_to_init_session(tool_ctx, monkeypatch
     """run_skill computes the closure for the resolved target and forwards it as allow_only."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import SkillResult, ValidatedAddDir
+    from autoskillit.core import ValidatedAddDir
+    from tests.fakes import InMemoryHeadlessExecutor
 
     fake_validated = ValidatedAddDir(path="/fake/session/dir")
     expected_closure = frozenset({"investigate", "mermaid"})
@@ -1338,22 +1217,7 @@ async def test_run_skill_passes_allow_only_to_init_session(tool_ctx, monkeypatch
     mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
     tool_ctx.skill_resolver = mock_resolver
 
-    class MockExecutor:
-        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
-            return SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason="none",
-                stderr="",
-                token_usage=None,
-            )
-
-    tool_ctx.executor = MockExecutor()
+    tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
@@ -1370,7 +1234,8 @@ async def test_run_skill_no_target_skill_passes_none_allow_only(tool_ctx, monkey
     """When skill_resolver is unset, target_name is None and allow_only stays None."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import SkillResult, ValidatedAddDir
+    from autoskillit.core import ValidatedAddDir
+    from tests.fakes import InMemoryHeadlessExecutor
 
     fake_validated = ValidatedAddDir(path="/fake/session/dir")
     mock_ssm = MagicMock()
@@ -1378,22 +1243,7 @@ async def test_run_skill_no_target_skill_passes_none_allow_only(tool_ctx, monkey
     tool_ctx.session_skill_manager = mock_ssm
     tool_ctx.skill_resolver = None  # disables resolve_target_skill
 
-    class MockExecutor:
-        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
-            return SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason="none",
-                stderr="",
-                token_usage=None,
-            )
-
-    tool_ctx.executor = MockExecutor()
+    tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
@@ -1410,11 +1260,12 @@ async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, mon
     """End-to-end: /make-plan resolves a closure containing the entire arch-lens pack."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import SkillResult, ValidatedAddDir
+    from autoskillit.core import ValidatedAddDir
     from autoskillit.workspace.session_skills import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
     )
+    from tests.fakes import InMemoryHeadlessExecutor
 
     real_provider = SkillsDirectoryProvider()
     real_mgr = DefaultSessionSkillManager(provider=real_provider, ephemeral_root=tool_ctx.temp_dir)
@@ -1444,22 +1295,7 @@ async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, mon
     mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
     tool_ctx.skill_resolver = mock_resolver
 
-    class MockExecutor:
-        async def run(self, skill_command, cwd, *, add_dirs=(), **kwargs) -> SkillResult:
-            return SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason="none",
-                stderr="",
-                token_usage=None,
-            )
-
-    tool_ctx.executor = MockExecutor()
+    tool_ctx.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
@@ -1474,57 +1310,34 @@ async def test_run_skill_make_plan_closure_includes_arch_lens_pack(tool_ctx, mon
     assert len(arch_members) >= 1
 
 
-def _make_capturing_executor():
-    """Return (executor, captured_dict) for testing idle_output_timeout propagation."""
-    from autoskillit.core import SkillResult
-
-    captured: dict = {}
-
-    class MockExecutor:
-        async def run(
-            self, skill_command, cwd, *, idle_output_timeout=None, **kwargs
-        ) -> SkillResult:
-            captured["idle_output_timeout"] = idle_output_timeout
-            return SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason="none",
-                stderr="",
-                token_usage=None,
-            )
-
-    return MockExecutor(), captured
-
-
 @pytest.mark.anyio
 async def test_run_skill_passes_idle_output_timeout(tool_ctx, monkeypatch) -> None:
     """run_skill passes idle_output_timeout (as float) to executor.run()."""
-    executor, captured = _make_capturing_executor()
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
     tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
 
     await run_skill("/test skill", "/tmp", idle_output_timeout=120)
-    assert captured["idle_output_timeout"] == 120.0  # int→float conversion
+    assert executor.calls[0].idle_output_timeout == 120.0  # int→float conversion
 
 
 @pytest.mark.anyio
 async def test_run_skill_idle_output_timeout_defaults_to_none(tool_ctx, monkeypatch) -> None:
     """run_skill passes None to executor.run() when idle_output_timeout is not set."""
-    executor, captured = _make_capturing_executor()
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
     tool_ctx.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx)
 
     from autoskillit.server.tools_execution import run_skill
 
     await run_skill("/test skill", "/tmp")
-    assert captured["idle_output_timeout"] is None
+    assert executor.calls[0].idle_output_timeout is None
 
 
 @pytest.mark.anyio

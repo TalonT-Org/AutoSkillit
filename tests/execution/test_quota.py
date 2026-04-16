@@ -822,11 +822,40 @@ class TestMultiWindowSelection:
         assert status.utilization == pytest.approx(91.0)
         assert status.window_name == "one_hour"
 
+    def test_compute_binding_blocks_seven_day_above_long_threshold(self):
+        """Full _compute_binding path: seven_day at 99% must block at long threshold."""
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
+
+        cfg = QuotaGuardConfig()
+        now = datetime.now(UTC)
+        windows = {
+            "seven_day": QuotaWindowEntry(
+                utilization=99.0,
+                resets_at=now + timedelta(days=3),
+            ),
+            "five_hour": QuotaWindowEntry(
+                utilization=10.0,
+                resets_at=now + timedelta(hours=3),
+            ),
+        }
+        result = _compute_binding(
+            windows,
+            short_threshold=cfg.short_window_threshold,
+            long_threshold=cfg.long_window_threshold,
+            long_patterns=cfg.long_window_patterns,
+            short_enabled=cfg.short_window_enabled,
+            long_enabled=cfg.long_window_enabled,
+        )
+        assert result.should_block is True
+        assert result.window_name == "seven_day"
+        assert result.effective_threshold == 98.0
+
 
 class TestPerWindowThresholds:
     """Per-window threshold classification: short windows block at 85%, long at 98%."""
 
-    _LONG_PATTERNS = ["weekly", "sonnet", "opus"]
+    _LONG_PATTERNS = ["seven_day", "sonnet", "opus"]
 
     def test_threshold_for_window_short_default(self):
         from autoskillit.execution.quota import _threshold_for_window
@@ -1098,6 +1127,35 @@ class TestPerWindowThresholds:
         assert result["should_sleep"] is True
         assert result["window_name"] == "weekly"
         assert result["sleep_seconds"] > 0
+
+    def test_seven_day_window_classified_as_long_with_default_patterns(self):
+        """seven_day is the actual Anthropic API key for the weekly budget.
+        It must be classified as a long window by the default long_window_patterns."""
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import _is_long_window
+
+        defaults = QuotaGuardConfig().long_window_patterns
+        assert _is_long_window("seven_day", defaults), (
+            f"seven_day not classified as long by default patterns {defaults!r}. "
+            "Update long_window_patterns to include a pattern that matches 'seven_day'."
+        )
+
+    def test_threshold_for_window_seven_day_returns_long_threshold(self):
+        """seven_day must yield the long threshold (98.0) with default config."""
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import _threshold_for_window
+
+        cfg = QuotaGuardConfig()
+        result = _threshold_for_window(
+            "seven_day",
+            short_threshold=cfg.short_window_threshold,
+            long_threshold=cfg.long_window_threshold,
+            long_patterns=cfg.long_window_patterns,
+        )
+        assert result == 98.0, (
+            f"seven_day returned threshold {result}, expected 98.0. "
+            "The Anthropic API uses 'seven_day' for the 7-day rate-limit window."
+        )
 
 
 class TestRefreshQuotaCache:
@@ -1396,7 +1454,7 @@ class TestCacheSchemaVersion:
 class TestPerWindowToggles:
     """Per-window enable/disable toggles for _compute_binding."""
 
-    _LONG_PATTERNS = ["weekly", "sonnet", "opus"]
+    _LONG_PATTERNS = ["seven_day", "sonnet", "opus"]
 
     def _windows(self, five_hour_util: float, weekly_util: float) -> dict:
         from autoskillit.execution.quota import QuotaWindowEntry
@@ -1725,3 +1783,59 @@ class TestPerWindowToggles:
         await _refresh_quota_cache(config)
         assert captured_kwargs["short_enabled"] is False
         assert captured_kwargs["long_enabled"] is True
+
+
+class TestAPIWindowVocabularyContract:
+    """Contract tests: LONG_WINDOW_NAMES × default long_window_patterns → correct classification.
+
+    These tests bind the vocabulary constants in quota.py to the config defaults in settings.py.
+    Any change to either that breaks this invariant will fail here immediately.
+    """
+
+    def test_long_window_names_all_match_default_patterns(self):
+        """Every name in LONG_WINDOW_NAMES must be classified as long by the default patterns."""
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import LONG_WINDOW_NAMES, _is_long_window
+
+        defaults = QuotaGuardConfig().long_window_patterns
+        for name in sorted(LONG_WINDOW_NAMES):
+            assert _is_long_window(name, defaults), (
+                f"Known long window {name!r} not matched by default patterns {defaults!r}. "
+                "Either add a matching pattern to long_window_patterns defaults, "
+                "or remove the name from LONG_WINDOW_NAMES if it is no longer a long window."
+            )
+
+    def test_known_short_windows_not_classified_as_long_by_default(self):
+        """Windows not in LONG_WINDOW_NAMES must not match long patterns."""
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import (
+            KNOWN_QUOTA_WINDOW_NAMES,
+            LONG_WINDOW_NAMES,
+            _is_long_window,
+        )
+
+        defaults = QuotaGuardConfig().long_window_patterns
+        pure_short = KNOWN_QUOTA_WINDOW_NAMES - LONG_WINDOW_NAMES
+        for name in sorted(pure_short):
+            assert not _is_long_window(name, defaults), (
+                f"Known short window {name!r} is being classified as long "
+                f"by patterns {defaults!r}. "
+                "This would apply the long threshold to a short window."
+            )
+
+    def test_long_window_names_constant_exists_and_is_nonempty(self):
+        """LONG_WINDOW_NAMES must be a non-empty frozenset exported from quota.py."""
+        from autoskillit.execution import quota
+
+        assert hasattr(quota, "LONG_WINDOW_NAMES")
+        assert isinstance(quota.LONG_WINDOW_NAMES, frozenset)
+        assert len(quota.LONG_WINDOW_NAMES) > 0
+
+    def test_known_quota_window_names_constant_exists_and_contains_long_names(self):
+        """KNOWN_QUOTA_WINDOW_NAMES must include all entries from LONG_WINDOW_NAMES."""
+        from autoskillit.execution.quota import KNOWN_QUOTA_WINDOW_NAMES, LONG_WINDOW_NAMES
+
+        assert LONG_WINDOW_NAMES.issubset(KNOWN_QUOTA_WINDOW_NAMES), (
+            f"LONG_WINDOW_NAMES contains names not in KNOWN_QUOTA_WINDOW_NAMES: "
+            f"{LONG_WINDOW_NAMES - KNOWN_QUOTA_WINDOW_NAMES}"
+        )

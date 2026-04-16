@@ -382,8 +382,14 @@ class TestQuotaGuardConfig:
 
     def test_long_window_patterns_default(self):
         from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import LONG_WINDOW_NAMES, _is_long_window
 
-        assert QuotaGuardConfig().long_window_patterns == ["weekly", "sonnet", "opus"]
+        defaults = QuotaGuardConfig().long_window_patterns
+        for name in LONG_WINDOW_NAMES:
+            assert _is_long_window(name, defaults), (
+                f"Default long_window_patterns {defaults!r} "
+                f"does not match known long window {name!r}"
+            )
 
     def test_threshold_field_removed(self):
         import dataclasses

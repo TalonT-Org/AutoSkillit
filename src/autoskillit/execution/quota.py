@@ -24,6 +24,27 @@ _DEFAULT_BASE_URL: str = "https://api.anthropic.com"
 QUOTA_CACHE_SCHEMA_VERSION: int = 3
 _SCHEMA_DRIFT_LOGGED: set[str] = set()
 
+# Canonical Anthropic quota API window names, as returned by GET /api/oauth/usage.
+# Update these when Anthropic adds or renames windows — the contract tests will
+# catch any mismatch between these constants and the configured long_window_patterns.
+KNOWN_QUOTA_WINDOW_NAMES: frozenset[str] = frozenset(
+    {
+        "five_hour",
+        "one_hour",
+        "one_day",
+        "seven_day",
+    }
+)
+
+# Subset of KNOWN_QUOTA_WINDOW_NAMES that represent long (multi-day) rate-limit windows.
+# These names must be matched by at least one pattern in long_window_patterns.
+# When Anthropic adds a new long window, add it here and update long_window_patterns defaults.
+LONG_WINDOW_NAMES: frozenset[str] = frozenset(
+    {
+        "seven_day",
+    }
+)
+
 
 def _reset_schema_drift_logged_for_tests() -> None:
     """Test-only helper: clear the once-per-process drift-log set."""

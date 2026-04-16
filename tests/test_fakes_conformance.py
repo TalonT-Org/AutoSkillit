@@ -148,9 +148,14 @@ async def test_runner_fallback_after_exhaustion():
     assert r.passed is True
 
 
-def test_runner_tracks_call_count():
+@pytest.mark.anyio
+async def test_runner_tracks_call_count():
     runner = InMemoryTestRunner(results=[])
     assert runner.call_count == 0
+    await runner.run(Path("/a"))
+    assert runner.call_count == 1
+    await runner.run(Path("/b"))
+    assert runner.call_count == 2
 
 
 # ---------------------------------------------------------------------------

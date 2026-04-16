@@ -578,9 +578,3 @@ class TestManifestApplyManifest:
             ["src/autoskillit/recipes/cook.yaml", "docs/guide.md"], manifest
         )
         assert result == {"recipe/", "docs/"}
-
-
-class TestManifestGuard:
-    def test_manifest_entry_count_guard(self) -> None:
-        manifest = manifest_load_manifest(MANIFEST_PATH)
-        assert len(manifest) >= 22

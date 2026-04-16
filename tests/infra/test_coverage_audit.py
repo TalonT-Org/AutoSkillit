@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import sys
 from pathlib import Path
 
 import pytest
@@ -26,7 +25,7 @@ def cov_ast():
 
 
 def test_extract_functions_finds_all_definitions(cov_ast, tmp_path: Path):
-    """extract_functions() returns FuncInfo for every def/async def with correct lineno/end_lineno."""
+    """extract_functions() returns FuncInfo for every def/async def."""
     src = tmp_path / "sample.py"
     src.write_text(
         """\

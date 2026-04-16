@@ -134,9 +134,7 @@ def query_coverage_db(db_path: Path) -> dict[str, set[int]]:
     return result
 
 
-def compare(
-    ast_map: dict[str, list[FuncInfo]], coverage_map: dict[str, set[int]]
-) -> Report:
+def compare(ast_map: dict[str, list[FuncInfo]], coverage_map: dict[str, set[int]]) -> Report:
     """Compare AST function ranges against coverage data."""
     report = Report()
     for filepath, funcs in sorted(ast_map.items()):
@@ -190,8 +188,7 @@ def _print_report(report: Report) -> None:
     print(f"Uncovered:           {report.uncovered} ({pct_u}%)")
 
     uncovered_entries = {
-        fp: [fc for fc in fcs if fc.status == "uncovered"]
-        for fp, fcs in report.details.items()
+        fp: [fc for fc in fcs if fc.status == "uncovered"] for fp, fcs in report.details.items()
     }
     uncovered_entries = {fp: fcs for fp, fcs in uncovered_entries.items() if fcs}
 
@@ -212,9 +209,7 @@ def _write_json(report: Report, output_path: Path) -> None:
         "covered": report.covered,
         "partial": report.partial,
         "uncovered": report.uncovered,
-        "details": {
-            fp: [asdict(fc) for fc in fcs] for fp, fcs in report.details.items()
-        },
+        "details": {fp: [asdict(fc) for fc in fcs] for fp, fcs in report.details.items()},
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

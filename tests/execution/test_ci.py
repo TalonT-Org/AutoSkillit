@@ -422,6 +422,7 @@ class TestCIVocabularyContract:
 
         assert hasattr(ci, "FAILED_CONCLUSIONS")
         assert isinstance(ci.FAILED_CONCLUSIONS, frozenset)
+        assert "failure" in ci.FAILED_CONCLUSIONS
 
     def test_known_ci_conclusions_constant_exists(self):
         """KNOWN_CI_CONCLUSIONS must be exported and cover all values ci.py tests for."""
@@ -429,6 +430,7 @@ class TestCIVocabularyContract:
 
         assert hasattr(ci, "KNOWN_CI_CONCLUSIONS")
         assert isinstance(ci.KNOWN_CI_CONCLUSIONS, frozenset)
+        assert "success" in ci.KNOWN_CI_CONCLUSIONS
 
     def test_failed_conclusions_subset_of_known(self):
         """FAILED_CONCLUSIONS must be a subset of KNOWN_CI_CONCLUSIONS."""

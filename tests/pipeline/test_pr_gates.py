@@ -237,3 +237,5 @@ class TestPRGatesVocabularyContract:
         from autoskillit.pipeline import pr_gates
 
         assert hasattr(pr_gates, "_CI_PASSING_CONCLUSIONS")
+        assert isinstance(pr_gates._CI_PASSING_CONCLUSIONS, frozenset)
+        assert "success" in pr_gates._CI_PASSING_CONCLUSIONS

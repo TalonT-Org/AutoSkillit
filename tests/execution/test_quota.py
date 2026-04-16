@@ -1038,12 +1038,12 @@ class TestPerWindowThresholds:
         now = datetime.now(UTC)
         weekly_resets = now + timedelta(days=4)
         windows = {
-            "weekly": QuotaWindowEntry(utilization=99.0, resets_at=weekly_resets),
+            "seven_day": QuotaWindowEntry(utilization=99.0, resets_at=weekly_resets),
         }
         binding = QuotaStatus(
             utilization=99.0,
             resets_at=weekly_resets,
-            window_name="weekly",
+            window_name="seven_day",
             should_block=True,
             effective_threshold=98.0,
         )
@@ -1053,7 +1053,7 @@ class TestPerWindowThresholds:
         assert status is not None
         assert status.should_block is True
         assert status.effective_threshold == pytest.approx(98.0)
-        assert status.window_name == "weekly"
+        assert status.window_name == "seven_day"
 
     @pytest.mark.anyio
     async def test_check_and_sleep_returns_false_for_seven_day_at_86_percent(
@@ -1092,7 +1092,7 @@ class TestPerWindowThresholds:
         assert result["window_name"] == "seven_day"
 
     @pytest.mark.anyio
-    async def test_check_and_sleep_returns_true_for_weekly_at_99_percent(
+    async def test_check_and_sleep_returns_true_for_seven_day_at_99_percent(
         self, monkeypatch, tmp_path
     ):
         from autoskillit.execution.quota import (
@@ -1105,7 +1105,7 @@ class TestPerWindowThresholds:
         now = datetime.now(UTC)
         weekly_resets = now + timedelta(days=4)
         windows = {
-            "weekly": QuotaWindowEntry(utilization=99.0, resets_at=weekly_resets),
+            "seven_day": QuotaWindowEntry(utilization=99.0, resets_at=weekly_resets),
             "five_hour": QuotaWindowEntry(utilization=2.0, resets_at=now + timedelta(hours=1)),
         }
         binding = _compute_binding(
@@ -1125,7 +1125,7 @@ class TestPerWindowThresholds:
         )
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
-        assert result["window_name"] == "weekly"
+        assert result["window_name"] == "seven_day"
         assert result["sleep_seconds"] > 0
 
     def test_seven_day_window_classified_as_long_with_default_patterns(self):
@@ -1792,20 +1792,9 @@ class TestFetchQuotaNovelWindowWarning:
     KNOWN_QUOTA_WINDOW_NAMES. This surfaces Anthropic API vocabulary drift in
     operator logs without disrupting the pipeline."""
 
-    @pytest.mark.anyio
-    async def test_novel_window_name_logs_warning(self, monkeypatch):
-        """An unknown window name in the API response must produce a warning log entry."""
-        import structlog.testing
-
-        from autoskillit.config.settings import QuotaGuardConfig
-        from autoskillit.execution.quota import _fetch_quota
-
-        resets_at = (datetime.now(UTC) + timedelta(hours=3)).isoformat()
-        api_response = {
-            "five_hour": {"utilization": 10.0, "resets_at": resets_at},
-            "fortnight": {"utilization": 50.0, "resets_at": resets_at},  # unknown
-        }
-        cfg = QuotaGuardConfig()
+    @staticmethod
+    def _make_fake_httpx_client(api_response: dict):
+        """Return a fake httpx.AsyncClient instance that serves api_response for GET requests."""
 
         class FakeResponse:
             status_code = 200
@@ -1826,7 +1815,26 @@ class TestFetchQuotaNovelWindowWarning:
             async def get(self, *a, **kw):
                 return FakeResponse()
 
-        monkeypatch.setattr("httpx.AsyncClient", lambda **kw: FakeClient())
+        return FakeClient()
+
+    @pytest.mark.anyio
+    async def test_novel_window_name_logs_warning(self, monkeypatch):
+        """An unknown window name in the API response must produce a warning log entry."""
+        import structlog.testing
+
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import _fetch_quota
+
+        resets_at = (datetime.now(UTC) + timedelta(hours=3)).isoformat()
+        api_response = {
+            "five_hour": {"utilization": 10.0, "resets_at": resets_at},
+            "fortnight": {"utilization": 50.0, "resets_at": resets_at},  # unknown
+        }
+        cfg = QuotaGuardConfig()
+
+        monkeypatch.setattr(
+            "httpx.AsyncClient", lambda **kw: self._make_fake_httpx_client(api_response)
+        )
         monkeypatch.setattr(
             "autoskillit.execution.quota._read_credentials",
             lambda path: "fake-token",
@@ -1867,26 +1875,9 @@ class TestFetchQuotaNovelWindowWarning:
         }
         cfg = QuotaGuardConfig()
 
-        class FakeResponse:
-            status_code = 200
-
-            def json(self):
-                return api_response
-
-            def raise_for_status(self):
-                pass
-
-        class FakeClient:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *a):
-                pass
-
-            async def get(self, *a, **kw):
-                return FakeResponse()
-
-        monkeypatch.setattr("httpx.AsyncClient", lambda **kw: FakeClient())
+        monkeypatch.setattr(
+            "httpx.AsyncClient", lambda **kw: self._make_fake_httpx_client(api_response)
+        )
         monkeypatch.setattr(
             "autoskillit.execution.quota._read_credentials",
             lambda path: "fake-token",

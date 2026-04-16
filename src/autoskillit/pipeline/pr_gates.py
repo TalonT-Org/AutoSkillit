@@ -94,7 +94,7 @@ def partition_prs(
         reviews = reviews_by_number.get(number, [])
         if not is_review_passing(reviews):
             count = sum(1 for r in reviews if r.get("state") == _BLOCKING_REVIEW_STATE)
-            reason = f"{count} unresolved CHANGES_REQUESTED review(s)"
+            reason = f"{count} unresolved {_BLOCKING_REVIEW_STATE} review(s)"
             review_blocked.append({"number": number, "title": title, "reason": reason})
             continue
 

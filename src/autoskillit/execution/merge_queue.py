@@ -21,6 +21,21 @@ from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
 
+# All GitHub merge_state_status values known to be returned by the GraphQL API.
+# https://docs.github.com/en/graphql/reference/enums#mergestatestatus
+KNOWN_MQ_MERGE_STATE_STATUSES: frozenset[str] = frozenset(
+    {
+        "BEHIND",
+        "BLOCKED",
+        "CLEAN",
+        "DIRTY",
+        "HAS_HOOKS",
+        "UNKNOWN",
+        "UNSTABLE",
+    }
+)
+assert "CLEAN" in KNOWN_MQ_MERGE_STATE_STATUSES  # Import-time drift guard
+
 
 class PRFetchState(TypedDict):
     """Typed contract for _fetch_pr_and_queue_state return value."""
@@ -189,8 +204,6 @@ class NoPositiveSignal(ClassifierInconclusive):
 def _is_positive_stall(state: PRFetchState) -> bool:
     """True when auto-merge is enabled and merge_state_status indicates the PR is
     stuck in a state where it should be in queue but is not."""
-    # TODO(vocab-guard): extract KNOWN_MQ_MERGE_STATE_STATUSES frozenset
-    # (CLEAN, HAS_HOOKS, BLOCKED, DIRTY, UNKNOWN, UNSTABLE) and add contract test.
     return state["auto_merge_enabled_at"] is not None and state["merge_state_status"] in {
         "CLEAN",
         "HAS_HOOKS",

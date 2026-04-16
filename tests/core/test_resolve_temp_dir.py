@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.core.io import resolve_temp_dir
 
-pytestmark = [pytest.mark.layer("core")]
+pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
 
 
 def test_resolve_temp_dir_default_returns_project_relative() -> None:

@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core import parse_github_repo
 
-pytestmark = [pytest.mark.layer("core")]
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 @pytest.mark.parametrize(

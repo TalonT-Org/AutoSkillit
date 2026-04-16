@@ -20,7 +20,11 @@ from typing import Any
 import psutil
 
 from autoskillit.core import atomic_write, claude_code_log_path, get_logger
-from autoskillit.execution.anomaly_detection import detect_anomalies, detect_identity_drift
+from autoskillit.execution.anomaly_detection import (
+    detect_anomalies,
+    detect_identity_drift,
+    detect_outcome_anomalies,
+)
 from autoskillit.execution.linux_tracing import (
     read_boot_id,
     read_enrollment,
@@ -125,6 +129,15 @@ def flush_session_log(
     if cc_log and not cc_log.exists():
         logger.warning("claude_code_log_not_found", path=cc_log_str, session_id=session_id)
 
+    silent_gap_seconds: float | None = None
+    if cc_log and cc_log.exists() and end_ts:
+        try:
+            cc_log_mtime = cc_log.stat().st_mtime
+            end_dt = datetime.fromisoformat(end_ts)
+            silent_gap_seconds = max(0.0, end_dt.timestamp() - cc_log_mtime)
+        except (OSError, ValueError):
+            pass
+
     _cb_request_ids: list[str] = []
     _cb_turn_timestamps: list[str] = []
     if cc_log and cc_log.exists():
@@ -170,9 +183,9 @@ def flush_session_log(
                 record = {
                     "ts": snap.get("captured_at") or start_ts,
                     "seq": seq,
-                    "event": "snapshot",
                     "pid": pid,
                     **snap,
+                    "event": snap.get("event", "snapshot"),
                 }
                 f.write(json.dumps(record, sort_keys=True) + "\n")
 
@@ -214,6 +227,11 @@ def flush_session_log(
             drift_anomalies = detect_identity_drift(proc_snapshots, _effective_tracked_comm)
             anomalies.extend(drift_anomalies)
 
+    # Outcome anomaly detection (correlates session result with token usage)
+    if token_usage:
+        outcome_anomalies = detect_outcome_anomalies(token_usage, subtype)
+        anomalies.extend(outcome_anomalies)
+
     # Write anomalies.jsonl (only if anomalies exist)
     if anomalies:
         anomalies_path = session_dir / "anomalies.jsonl"
@@ -252,6 +270,7 @@ def flush_session_log(
         "start_ts": start_ts,
         "end_ts": end_ts,
         "duration_seconds": duration_seconds,
+        "silent_gap_seconds": silent_gap_seconds,
         "snapshot_interval_seconds": snapshot_interval_seconds,
         "snapshot_count": snapshot_count,
         "anomaly_count": anomaly_count,

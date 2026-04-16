@@ -38,6 +38,7 @@ class RaceSignals:
     idle_stall: bool = False
     channel_b_orphaned_tool_result: bool = False
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
+    exit_snapshot: dict[str, object] | None = None
 
 
 @dataclass
@@ -63,6 +64,7 @@ class RaceAccumulator:
     idle_stall: bool = False
     channel_b_orphaned_tool_result: bool = False
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
+    exit_snapshot: dict[str, object] | None = None
 
     def to_race_signals(self) -> RaceSignals:
         return RaceSignals(
@@ -75,6 +77,7 @@ class RaceAccumulator:
             idle_stall=self.idle_stall,
             channel_b_orphaned_tool_result=self.channel_b_orphaned_tool_result,
             process_exited_event=self.process_exited_event,
+            exit_snapshot=self.exit_snapshot,
         )
 
 
@@ -91,6 +94,20 @@ async def _watch_process(
     """
     await proc.wait()
     logger.debug("process_exited", pid=proc.pid, returncode=proc.returncode)
+    # Exit snapshot: best-effort capture at exact exit time.
+    # waitpid() reaps the process atomically, so /proc/[pid] is already gone for
+    # normally-exiting processes — acc.exit_snapshot will be None in most cases.
+    try:
+        # Deferred import: linux_tracing depends on psutil and reads /proc, which is
+        # Linux-only. Importing at module level would fail on non-Linux platforms where
+        # LINUX_TRACING_AVAILABLE is False. The bare except below degrades gracefully.
+        from autoskillit.execution.linux_tracing import read_proc_snapshot
+
+        snap = read_proc_snapshot(proc.pid)
+        if snap is not None:
+            acc.exit_snapshot = {**snap.__dict__, "event": "exit_snapshot"}
+    except Exception:
+        logger.debug("exit_snapshot_failed", pid=proc.pid, exc_info=True)
     acc.process_exited = True
     acc.process_returncode = proc.returncode
     acc.process_exited_event.set()

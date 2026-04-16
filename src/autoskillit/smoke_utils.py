@@ -87,6 +87,175 @@ def annotate_pr_diff(pr_number: str, cwd: str, output_dir: str) -> dict[str, str
     }
 
 
+def check_review_loop(
+    pr_number: str,
+    cwd: str,
+    current_iteration: str = "",
+    max_iterations: str = "3",
+) -> dict[str, str]:
+    """Check GitHub review threads and determine if the review-resolve loop should continue.
+
+    Called by run_python from the check_review_loop step in recipe pipelines.
+    Fetches all review threads via GraphQL, counts unresolved threads with [critical]
+    or [warning] severity markers, and returns routing data for the recipe loop gate.
+
+    On any subprocess failure or GraphQL error, degrades gracefully: returns
+    has_blocking=false so the pipeline is never blocked by an API failure.
+    """
+    import subprocess  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+
+    _DEGRADED = {
+        "has_blocking": "false",
+        "next_iteration": "",
+        "max_exceeded": "false",
+        "blocking_count": "0",
+    }
+
+    iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
+    next_iteration = iteration + 1
+    max_iter = int(max_iterations.strip()) if max_iterations.strip() else 3
+
+    # Compute next_iteration string for degraded path before any subprocess calls
+    degraded: dict[str, str] = {
+        "has_blocking": "false",
+        "next_iteration": str(next_iteration),
+        "max_exceeded": "false",
+        "blocking_count": "0",
+    }
+
+    # Derive owner/repo
+    try:
+        repo_result = subprocess.run(
+            ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=cwd,
+            timeout=60,
+        )
+    except Exception as exc:
+        print(f"check_review_loop: failed to get repo info: {exc}", file=sys.stderr)
+        return degraded
+
+    name_with_owner = repo_result.stdout.strip()
+    if "/" not in name_with_owner:
+        print(
+            f"check_review_loop: unexpected nameWithOwner format: {name_with_owner!r}",
+            file=sys.stderr,
+        )
+        return degraded
+    owner, repo = name_with_owner.split("/", 1)
+
+    # GraphQL query with pagination
+    graphql_query = """
+query($owner:String!, $repo:String!, $number:Int!, $after:String) {
+  repository(owner:$owner, name:$repo) {
+    pullRequest(number:$number) {
+      reviewThreads(first:100, after:$after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          isResolved
+          line
+          originalLine
+          comments(first:1) {
+            nodes { body }
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+    all_threads: list[dict] = []
+    cursor: str | None = None
+
+    while True:
+        variables: dict[str, object] = {
+            "owner": owner,
+            "repo": repo,
+            "number": int(pr_number),
+        }
+        if cursor is not None:
+            variables["after"] = cursor
+
+        try:
+            gql_result = subprocess.run(
+                [
+                    "gh",
+                    "api",
+                    "graphql",
+                    "-f",
+                    f"query={graphql_query}",
+                    "-F",
+                    f"owner={owner}",
+                    "-F",
+                    f"repo={repo}",
+                    "-F",
+                    f"number={int(pr_number)}",
+                    *((["-F", f"after={cursor}"]) if cursor is not None else []),
+                ],
+                capture_output=True,
+                text=True,
+                cwd=cwd,
+                timeout=60,
+            )
+        except Exception as exc:
+            print(f"check_review_loop: GraphQL subprocess error: {exc}", file=sys.stderr)
+            return degraded
+
+        if gql_result.returncode != 0:
+            print(
+                f"check_review_loop: gh api graphql failed: {gql_result.stderr}", file=sys.stderr
+            )
+            return degraded
+
+        try:
+            data = json.loads(gql_result.stdout)
+        except (json.JSONDecodeError, ValueError) as exc:
+            print(f"check_review_loop: JSON parse error: {exc}", file=sys.stderr)
+            return degraded
+
+        if "errors" in data:
+            print(f"GraphQL errors: {data['errors']}", file=sys.stderr)
+            return degraded
+
+        try:
+            pr_data = data["data"]["repository"]["pullRequest"]
+            threads_page = pr_data["reviewThreads"]
+            nodes = threads_page["nodes"]
+            page_info = threads_page["pageInfo"]
+        except (KeyError, TypeError) as exc:
+            print(f"check_review_loop: unexpected GraphQL response shape: {exc}", file=sys.stderr)
+            return degraded
+
+        all_threads.extend(nodes)
+
+        if page_info.get("hasNextPage"):
+            cursor = page_info.get("endCursor")
+        else:
+            break
+
+    # Classify threads
+    blocking_count = 0
+    for thread in all_threads:
+        if thread.get("isResolved"):
+            continue
+        comments_nodes = thread.get("comments", {}).get("nodes", [])
+        body = comments_nodes[0].get("body", "") if comments_nodes else ""
+        body_lower = body.lower()
+        if "[critical]" in body_lower or "[warning]" in body_lower:
+            blocking_count += 1
+
+    return {
+        "has_blocking": "true" if blocking_count > 0 else "false",
+        "next_iteration": str(next_iteration),
+        "max_exceeded": "true" if next_iteration >= max_iter else "false",
+        "blocking_count": str(blocking_count),
+    }
+
+
 def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[str, str]:
     """Fetch and parse GitHub merge queue data server-side for analyze-prs.
 

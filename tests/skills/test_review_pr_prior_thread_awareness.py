@@ -49,7 +49,8 @@ def test_step_1_5_references_graphql_review_threads() -> None:
 
 # T_RPA3
 def test_step_1_5_distinguishes_resolved_from_unresolved() -> None:
-    """Step 1.5 must distinguish isResolved=true (prior_resolved) from isResolved=false (prior_unresolved)."""
+    """Step 1.5 must distinguish isResolved=true (prior_resolved) from isResolved=false
+    (prior_unresolved)."""
     text = _skill_text()
     assert "prior_resolved_findings" in text, (
         "review-pr/SKILL.md Step 1.5 must build a 'prior_resolved_findings' list for "
@@ -100,7 +101,8 @@ def test_step_4_mentions_filtering_suppressing_resolved_findings() -> None:
 
 # T_RPA7
 def test_prior_resolved_matched_by_file_and_line_proximity() -> None:
-    """prior_resolved_findings must be matched by (file, line) proximity (±N lines), not exact equality."""
+    """prior_resolved_findings must be matched by (file, line) proximity (±N lines),
+    not exact equality."""
     text = _skill_text()
     has_proximity = "±" in text or "+/-" in text or "within" in text.lower()
     assert has_proximity, (

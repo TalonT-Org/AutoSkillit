@@ -149,9 +149,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _update_checks.py — fetch cache
     ("src/autoskillit/cli/_update_checks.py", 129),
     # smoke_utils.py — domain partitions dict, hunk ranges list, merge queue list
-    ("src/autoskillit/smoke_utils.py", 53),
-    ("src/autoskillit/smoke_utils.py", 83),
-    ("src/autoskillit/smoke_utils.py", 138),
+    ("src/autoskillit/smoke_utils.py", 57),
+    ("src/autoskillit/smoke_utils.py", 87),
+    ("src/autoskillit/smoke_utils.py", 309),
 }
 
 
@@ -214,8 +214,8 @@ class TestSchemaVersionConvention:
         list_sites = [
             ("src/autoskillit/execution/session_log.py", 260),
             ("src/autoskillit/execution/session_log.py", 263),
-            ("src/autoskillit/smoke_utils.py", 83),
-            ("src/autoskillit/smoke_utils.py", 138),
+            ("src/autoskillit/smoke_utils.py", 87),
+            ("src/autoskillit/smoke_utils.py", 309),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

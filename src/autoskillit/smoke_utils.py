@@ -8,6 +8,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from autoskillit.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def check_bug_report_non_empty(workspace: str) -> dict[str, str]:
     """Return {"non_empty": "true"} if bug_report.json exists and is non-empty.
@@ -103,7 +107,6 @@ def check_review_loop(
     has_blocking=false so the pipeline is never blocked by an API failure.
     """
     import subprocess  # noqa: PLC0415
-    import sys  # noqa: PLC0415
 
     _DEGRADED = {
         "has_blocking": "false",
@@ -134,16 +137,13 @@ def check_review_loop(
             cwd=cwd,
             timeout=60,
         )
-    except Exception as exc:
-        print(f"check_review_loop: failed to get repo info: {exc}", file=sys.stderr)
+    except Exception:
+        logger.warning("check_review_loop: failed to get repo info", exc_info=True)
         return degraded
 
     name_with_owner = repo_result.stdout.strip()
     if "/" not in name_with_owner:
-        print(
-            f"check_review_loop: unexpected nameWithOwner format: {name_with_owner!r}",
-            file=sys.stderr,
-        )
+        logger.warning("check_review_loop: unexpected nameWithOwner format: %r", name_with_owner)
         return degraded
     owner, repo = name_with_owner.split("/", 1)
 
@@ -201,24 +201,22 @@ query($owner:String!, $repo:String!, $number:Int!, $after:String) {
                 cwd=cwd,
                 timeout=60,
             )
-        except Exception as exc:
-            print(f"check_review_loop: GraphQL subprocess error: {exc}", file=sys.stderr)
+        except Exception:
+            logger.warning("check_review_loop: GraphQL subprocess error", exc_info=True)
             return degraded
 
         if gql_result.returncode != 0:
-            print(
-                f"check_review_loop: gh api graphql failed: {gql_result.stderr}", file=sys.stderr
-            )
+            logger.warning("check_review_loop: gh api graphql failed: %s", gql_result.stderr)
             return degraded
 
         try:
             data = json.loads(gql_result.stdout)
-        except (json.JSONDecodeError, ValueError) as exc:
-            print(f"check_review_loop: JSON parse error: {exc}", file=sys.stderr)
+        except (json.JSONDecodeError, ValueError):
+            logger.warning("check_review_loop: JSON parse error", exc_info=True)
             return degraded
 
         if "errors" in data:
-            print(f"GraphQL errors: {data['errors']}", file=sys.stderr)
+            logger.warning("GraphQL errors: %s", data["errors"])
             return degraded
 
         try:
@@ -226,8 +224,8 @@ query($owner:String!, $repo:String!, $number:Int!, $after:String) {
             threads_page = pr_data["reviewThreads"]
             nodes = threads_page["nodes"]
             page_info = threads_page["pageInfo"]
-        except (KeyError, TypeError) as exc:
-            print(f"check_review_loop: unexpected GraphQL response shape: {exc}", file=sys.stderr)
+        except (KeyError, TypeError):
+            logger.warning("check_review_loop: unexpected GraphQL response shape", exc_info=True)
             return degraded
 
         all_threads.extend(nodes)

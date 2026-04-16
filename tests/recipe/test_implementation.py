@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import validate_recipe
 
 RECIPE_PATH = builtin_recipes_dir() / "implementation.yaml"
 
@@ -38,11 +37,13 @@ def test_check_review_loop_has_skip_when_false_open_pr(recipe) -> None:
 
 # T_IP_LOOP4
 def test_check_review_loop_on_result_routes_to_review_pr_when_blocking(recipe) -> None:
-    """check_review_loop on_result routes to review_pr when has_blocking=true AND max_exceeded=false."""
+    """check_review_loop on_result routes to review_pr when has_blocking=true AND
+    max_exceeded=false."""
     step = recipe.steps["check_review_loop"]
     assert step.on_result is not None
     blocking_conditions = [
-        c for c in step.on_result.conditions
+        c
+        for c in step.on_result.conditions
         if c.when is not None and "has_blocking" in c.when and "max_exceeded" in c.when
     ]
     assert blocking_conditions, "No condition for has_blocking + max_exceeded found"

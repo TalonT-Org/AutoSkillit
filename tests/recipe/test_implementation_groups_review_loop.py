@@ -1,4 +1,5 @@
-"""Tests for review-resolve retry loop steps in implementation-groups.yaml (T_IG_LOOP1–T_IG_LOOP3)."""
+"""Tests for review-resolve retry loop steps in implementation-groups.yaml
+(T_IG_LOOP1–T_IG_LOOP3)."""
 
 from __future__ import annotations
 
@@ -22,7 +23,8 @@ def test_check_review_loop_step_exists(recipe) -> None:
 
 # T_IG_LOOP2
 def test_re_push_review_routes_to_check_review_loop(recipe) -> None:
-    """re_push_review on_success must route to check_review_loop in implementation-groups recipe."""
+    """re_push_review on_success must route to check_review_loop in implementation-groups
+    recipe."""
     step = recipe.steps["re_push_review"]
     assert step.on_success == "check_review_loop"
 

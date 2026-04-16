@@ -629,10 +629,10 @@ def pytest_collection_modifyitems(items, config):
         if deselected:
             config.hook.pytest_deselected(items=deselected)
             items[:] = selected
-        warnings.warn(
-            f"Test filter: {len(selected)} selected, {len(deselected)} deselected",
-            stacklevel=1,
-        )
+            warnings.warn(
+                f"Test filter: {len(selected)} selected, {len(deselected)} deselected",
+                stacklevel=1,
+            )
     except Exception as exc:
         warnings.warn(f"Test filter deselection failed: {exc}", stacklevel=1)
 

@@ -419,12 +419,11 @@ def pytest_collection_modifyitems(
         if deselected:
             config.hook.pytest_deselected(items=deselected)
             items[:] = selected
-
-        warnings.warn(
-            f"Test filter: {len(selected)} selected, {len(deselected)} deselected "
-            f"({len(scope)} scope paths)",
-            stacklevel=1,
-        )
+            warnings.warn(
+                f"Test filter: {len(selected)} selected, {len(deselected)} deselected "
+                f"({len(scope)} scope paths)",
+                stacklevel=1,
+            )
 
     except Exception as exc:
         warnings.warn(

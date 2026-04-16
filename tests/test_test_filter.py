@@ -550,9 +550,7 @@ class TestManifestLoadManifest:
 class TestManifestApplyManifest:
     def test_apply_manifest_single_star_glob(self) -> None:
         manifest = {"src/autoskillit/recipes/*.yaml": ["recipe/"]}
-        result = manifest_apply_manifest(
-            ["src/autoskillit/recipes/implementation.yaml"], manifest
-        )
+        result = manifest_apply_manifest(["src/autoskillit/recipes/implementation.yaml"], manifest)
         assert result == {"recipe/"}
 
     def test_apply_manifest_doublestar_glob(self) -> None:

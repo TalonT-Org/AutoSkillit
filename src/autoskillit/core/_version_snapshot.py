@@ -13,6 +13,7 @@ import functools
 import importlib.metadata
 import json
 import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -84,8 +85,6 @@ def _claude_code_version() -> str:
     launched the server is queried rather than whatever `claude` resolves to in
     the current PATH.
     """
-    import os
-
     exec_path = os.environ.get("CLAUDE_CODE_EXECPATH") or "claude"
     try:
         result = subprocess.run(

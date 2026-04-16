@@ -19,7 +19,10 @@ _VALID_SIZE_MARKERS = {"small", "medium", "large"}
 
 def _extract_size_markers(path: Path) -> list[str]:
     """Parse a test file's AST and return all size marker names found."""
-    tree = ast.parse(path.read_text())
+    try:
+        tree = ast.parse(path.read_text())
+    except (SyntaxError, OSError) as exc:
+        raise type(exc)(f"{path}: {exc}") from exc
     found: list[str] = []
     for node in ast.iter_child_nodes(tree):
         if not isinstance(node, ast.Assign):
@@ -44,6 +47,8 @@ def _marker_name(node: ast.expr) -> str | None:
         isinstance(node, ast.Attribute)
         and isinstance(node.value, ast.Attribute)
         and node.value.attr == "mark"
+        and isinstance(node.value.value, ast.Name)
+        and node.value.value.id == "pytest"
     ):
         return node.attr
     if isinstance(node, ast.Call):
@@ -107,6 +112,5 @@ def test_size_marker_directories_match_conftest() -> None:
     from tests.conftest import _SIZE_DIRS
 
     assert set(SIZE_DIRECTORIES.keys()) == _SIZE_DIRS, (
-        f"SIZE_DIRECTORIES keys {set(SIZE_DIRECTORIES.keys())} != "
-        f"conftest _SIZE_DIRS {_SIZE_DIRS}"
+        f"SIZE_DIRECTORIES keys {set(SIZE_DIRECTORIES.keys())} != conftest _SIZE_DIRS {_SIZE_DIRS}"
     )

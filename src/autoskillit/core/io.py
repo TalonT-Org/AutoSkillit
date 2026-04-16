@@ -118,7 +118,13 @@ def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: in
     atomic_write(path, json.dumps(enriched))
 
 
-_AUTOSKILLIT_GITIGNORE_ENTRIES = ["temp/", ".secrets.yaml", ".onboarded", "sync_manifest.json"]
+_AUTOSKILLIT_GITIGNORE_ENTRIES = [
+    "temp/",
+    ".secrets.yaml",
+    ".onboarded",
+    "sync_manifest.json",
+    "test-filter-manifest.yaml",
+]
 
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(
     {

@@ -91,6 +91,7 @@ generic_automation_mcp/
 ├── _llm_triage.py           # Contract staleness triage (Haiku subprocess)
 ├── smoke_utils.py           # Callables for smoke-test pipeline run_python steps
 ├── hook_registry.py         # HookDef, HOOK_REGISTRY, generate_hooks_json
+├── _test_filter.py          # Test filter manifest: glob-to-test-directory mapping
 ├── version.py               # Version health utilities (L0)
 ├── .claude-plugin/          # plugin.json
 ├── .mcp.json

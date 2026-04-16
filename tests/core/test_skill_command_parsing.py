@@ -56,5 +56,5 @@ class TestPathPrefixesConstant:
     def test_contains_slash(self):
         assert "/" in _PATH_PREFIXES
 
-    def test_contains_autoskillit_temp(self):
+    def test_contains_dotautoskillit(self):
         assert ".autoskillit/" in _PATH_PREFIXES

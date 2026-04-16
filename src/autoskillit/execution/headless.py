@@ -1189,8 +1189,8 @@ async def run_headless_core(
                 flush_session_log,
             )
 
-            _model_id = _primary_model_identifier(skill_result.token_usage)
             try:
+                _model_id = _primary_model_identifier(skill_result.token_usage)
                 flush_session_log(
                     log_dir=ctx.config.linux_tracing.log_dir,
                     cwd=cwd,

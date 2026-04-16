@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -121,7 +121,14 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> dict[str, object]:
+class QuotaGuardHookPayload(TypedDict):
+    cache_max_age: int
+    cache_path: str
+    buffer_seconds: int
+    disabled: bool
+
+
+def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
     """Return the quota_guard section of .hook_config.json for a given config.
 
     This is the single authoritative definition of which QuotaGuardConfig fields

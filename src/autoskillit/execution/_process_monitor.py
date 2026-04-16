@@ -10,7 +10,11 @@ import anyio
 import psutil
 
 from autoskillit.core import ChannelBStatus, get_logger
-from autoskillit.execution._process_jsonl import _jsonl_contains_marker, _jsonl_has_record_type
+from autoskillit.execution._process_jsonl import (
+    _jsonl_contains_marker,
+    _jsonl_has_record_type,
+    _jsonl_last_record_type,
+)
 
 logger = get_logger(__name__)
 
@@ -20,6 +24,7 @@ class SessionMonitorResult(NamedTuple):
 
     status: ChannelBStatus
     session_id: str  # Claude Code session ID from JSONL filename stem, or ""
+    orphaned_tool_result: bool = False
 
 
 async def _heartbeat(
@@ -245,6 +250,7 @@ async def _session_log_monitor(
     os_error_count = 0
     suppression_start_api: float | None = None
     suppression_start_child: float | None = None
+    _last_record_type: str | None = None
 
     while True:
         await anyio.sleep(_phase2_poll)
@@ -278,6 +284,9 @@ async def _session_log_monitor(
                         scan_pos=scan_pos,
                     )
                     return SessionMonitorResult(ChannelBStatus.COMPLETION, _session_id)
+                last_type_in_chunk = _jsonl_last_record_type(new_content)
+                if last_type_in_chunk is not None:
+                    _last_record_type = last_type_in_chunk
             except OSError:
                 pass
         else:
@@ -325,4 +334,8 @@ async def _session_log_monitor(
                         pid,
                     )
                 else:
-                    return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
+                    return SessionMonitorResult(
+                        ChannelBStatus.STALE,
+                        _session_id,
+                        orphaned_tool_result=(_last_record_type == "user"),
+                    )

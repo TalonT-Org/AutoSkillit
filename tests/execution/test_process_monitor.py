@@ -1270,3 +1270,99 @@ class TestSessionLogMonitorDirMissing:
         assert result.status == ChannelBStatus.DIR_MISSING
         assert elapsed < 0.1  # FileNotFoundError is immediate after the poll sleep
         assert result.session_id == ""
+
+
+class TestOrphanedToolResultDetection:
+    """Channel B detects orphaned tool results when last JSONL record is type=user."""
+
+    @pytest.mark.anyio
+    async def test_orphaned_tool_result_detected_when_last_record_is_user_type(self, tmp_path):
+        """STALE result has orphaned_tool_result=True when last JSONL record is type=user."""
+        import json
+
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        spawn_time = time.time() - 1
+
+        session_file = log_dir / "sess_orphaned.jsonl"
+        session_file.write_text(
+            json.dumps({"type": "assistant", "message": {"content": "working..."}})
+            + "\n"
+            + json.dumps({"type": "user", "message": {"content": [{"type": "tool_result"}]}})
+            + "\n"
+        )
+
+        result = await _session_log_monitor(
+            log_dir,
+            "%%AUTOSKILLIT_COMPLETE%%",
+            stale_threshold=0.15,
+            spawn_time=spawn_time,
+            _phase1_poll=0.01,
+            _phase2_poll=0.04,
+        )
+
+        assert result.status == ChannelBStatus.STALE
+        assert result.orphaned_tool_result is True
+
+    @pytest.mark.anyio
+    async def test_no_false_positive_when_last_record_is_assistant(self, tmp_path):
+        """STALE result has orphaned_tool_result=False when last JSONL record is type=assistant."""
+        import json
+
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        spawn_time = time.time() - 1
+
+        session_file = log_dir / "sess_assistant.jsonl"
+        session_file.write_text(
+            json.dumps({"type": "user", "message": {"content": "do something"}})
+            + "\n"
+            + json.dumps({"type": "assistant", "message": {"content": "thinking..."}})
+            + "\n"
+        )
+
+        result = await _session_log_monitor(
+            log_dir,
+            "%%AUTOSKILLIT_COMPLETE%%",
+            stale_threshold=0.15,
+            spawn_time=spawn_time,
+            _phase1_poll=0.01,
+            _phase2_poll=0.04,
+        )
+
+        assert result.status == ChannelBStatus.STALE
+        assert result.orphaned_tool_result is False
+
+    @pytest.mark.anyio
+    async def test_orphaned_false_on_completion(self, tmp_path):
+        """COMPLETION result always has orphaned_tool_result=False."""
+        import json
+
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        spawn_time = time.time() - 1
+
+        session_file = log_dir / "sess_complete.jsonl"
+        session_file.write_text(
+            json.dumps({"type": "user", "message": {"content": "do something"}})
+            + "\n"
+            + json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": "done\n%%AUTOSKILLIT_COMPLETE%%"},
+                }
+            )
+            + "\n"
+        )
+
+        result = await _session_log_monitor(
+            log_dir,
+            "%%AUTOSKILLIT_COMPLETE%%",
+            stale_threshold=5.0,
+            spawn_time=spawn_time,
+            _phase1_poll=0.01,
+            _phase2_poll=0.04,
+        )
+
+        assert result.status == ChannelBStatus.COMPLETION
+        assert result.orphaned_tool_result is False

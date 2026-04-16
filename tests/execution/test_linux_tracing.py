@@ -359,6 +359,67 @@ async def test_proc_monitor_persists_psutil_process_for_cpu_percent():
         proc.wait()
 
 
+def test_parse_net_tcp_established_port_443():
+    """_parse_net_tcp counts ESTABLISHED connections to port 443."""
+    from autoskillit.execution.linux_tracing import _parse_net_tcp
+
+    fixture = (
+        "  sl  local_address rem_address   st tx_queue rx_queue tr...\n"
+        "   0: 0100007F:0035 0101A8C0:01BB 01 00000000:00000000 ...\n"  # ESTABLISHED to :443
+        "   1: 0100007F:0035 0101A8C0:0050 01 00000000:00000000 ...\n"  # :80 excluded
+    )
+    result = _parse_net_tcp(fixture)
+    assert result.get("ESTABLISHED") == 1
+
+
+def test_parse_net_tcp_empty_returns_empty_dict():
+    from autoskillit.execution.linux_tracing import _parse_net_tcp
+
+    assert _parse_net_tcp("") == {}
+    assert _parse_net_tcp("  sl  local_address rem_address   st\n") == {}
+
+
+def test_parse_proc_io_extracts_bytes():
+    from autoskillit.execution.linux_tracing import _parse_proc_io
+
+    fixture = "rchar: 1000\nwchar: 2000\nread_bytes: 4096\nwrite_bytes: 8192\n"
+    read_b, write_b = _parse_proc_io(fixture)
+    assert read_b == 4096
+    assert write_b == 8192
+
+
+def test_read_proc_snapshot_has_network_fields():
+    """read_proc_snapshot includes api_connection_established on Linux."""
+    from autoskillit.execution.linux_tracing import read_proc_snapshot
+
+    snap = read_proc_snapshot(os.getpid())
+    assert snap is not None
+    # Field exists and is either None (no port-443 connections from test process) or int >= 0
+    assert snap.api_connection_established is None or isinstance(
+        snap.api_connection_established, int
+    )
+
+
+def test_read_proc_snapshot_network_graceful_on_missing_proc_net(monkeypatch):
+    """Fields are None, no exception, when /proc/{pid}/net/tcp is unavailable."""
+    from pathlib import Path
+
+    from autoskillit.execution.linux_tracing import read_proc_snapshot
+
+    original_read_text = Path.read_text
+
+    def patched_read_text(self, *args, **kwargs):
+        if "net/tcp" in str(self):
+            raise FileNotFoundError("mocked")
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", patched_read_text)
+    snap = read_proc_snapshot(os.getpid())
+    assert snap is not None
+    assert snap.api_connection_established is None
+    assert snap.api_connection_states is None
+
+
 @pytest.mark.anyio
 async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
     """start_linux_tracing must write autoskillit_enrollment_{pid}.json immediately."""

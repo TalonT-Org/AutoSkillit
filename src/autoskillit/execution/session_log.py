@@ -99,6 +99,7 @@ def flush_session_log(
     clone_contamination_reverted: bool = False,
     tracked_comm: str | None = None,
     exception_text: str = "",
+    orphaned_tool_result: bool = False,
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -239,6 +240,7 @@ def flush_session_log(
         "tracked_comm": _effective_tracked_comm,
         "tracked_comm_drift": _tracked_comm_drift,
         "tracer_target_resolution_version": 2,
+        "orphaned_tool_result": orphaned_tool_result,
     }
     summary_path = session_dir / "summary.json"
     atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")

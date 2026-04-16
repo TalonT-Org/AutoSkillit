@@ -36,6 +36,7 @@ class RaceSignals:
     channel_b_session_id: str = ""  # Claude Code session ID from JSONL filename stem, or ""
     stdout_session_id: str | None = None  # Session ID extracted from stdout type=system record
     idle_stall: bool = False
+    channel_b_orphaned_tool_result: bool = False
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
 
 
@@ -60,6 +61,7 @@ class RaceAccumulator:
     channel_b_session_id: str = ""
     stdout_session_id: str | None = None
     idle_stall: bool = False
+    channel_b_orphaned_tool_result: bool = False
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
 
     def to_race_signals(self) -> RaceSignals:
@@ -71,6 +73,7 @@ class RaceAccumulator:
             channel_b_session_id=self.channel_b_session_id,
             stdout_session_id=self.stdout_session_id,
             idle_stall=self.idle_stall,
+            channel_b_orphaned_tool_result=self.channel_b_orphaned_tool_result,
             process_exited_event=self.process_exited_event,
         )
 
@@ -263,6 +266,7 @@ async def _watch_session_log(
     # there is no await between them and the function return.
     acc.channel_b_status = monitor_result.status
     acc.channel_b_session_id = monitor_result.session_id
+    acc.channel_b_orphaned_tool_result = monitor_result.orphaned_tool_result
     channel_b_ready.set()
     trigger.set()
 

@@ -1206,6 +1206,7 @@ async def run_headless_core(
                     write_call_count=skill_result.write_call_count,
                     clone_contamination_reverted=_clone_reverted,
                     tracked_comm=result.tracked_comm,
+                    orphaned_tool_result=result.orphaned_tool_result,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)

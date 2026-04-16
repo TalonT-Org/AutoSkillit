@@ -38,7 +38,7 @@ tasks:
 
         set -o pipefail
         set +e
-        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke and not canary" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         PYTEST_EXIT=$?
         set +o pipefail
         set -e
@@ -67,7 +67,7 @@ tasks:
 
         set -o pipefail
         set +e
-        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        $PYTEST_CMD tests/ -q --tb=short -n 4 -m "not smoke and not canary" --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         PYTEST_EXIT=$?
         set +o pipefail
         set -e

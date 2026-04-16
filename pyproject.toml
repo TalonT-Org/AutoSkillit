@@ -91,6 +91,7 @@ timeout_method = "signal"
 markers = [
     "smoke: end-to-end smoke tests requiring Claude API access (deselect with: -m 'not smoke')",
     "integration: integration tests that spawn real subprocesses (deselect with: -m 'not integration')",
+    "canary: development-time filter verification tests (deselect with: -m 'not canary')",
 ]
 
 [tool.ruff]

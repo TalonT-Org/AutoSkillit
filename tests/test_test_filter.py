@@ -765,3 +765,109 @@ class TestConftestFilterPlugin:
         pytester.makepyfile(test_drop="def test_drop(): pass")
         result = pytester.runpytest("-v", "-W", "always")
         result.stdout.fnmatch_lines(["*Test filter:*selected*deselected*"])
+
+
+# ---------------------------------------------------------------------------
+# Canary Test Pattern (development-time technique)
+# ---------------------------------------------------------------------------
+#
+# Canary tests verify the filter itself by being intentionally placed to
+# trigger specific filter behavior. They are gated behind a pytest marker:
+#
+#     @pytest.mark.canary
+#     def test_canary_core_change(self):
+#         """Touch a core/ file and verify conservative cascade includes all layers."""
+#         ...
+#
+# Canary tests are excluded from default runs via ``-m 'not canary'`` in the
+# Taskfile. They only run when explicitly invoked during filter development:
+#
+#     .venv/bin/pytest tests/test_test_filter.py -m canary
+#
+# This is a development-time technique, not a permanent test pattern.
+# Canary tests should be removed once filter validation is complete.
+# The ``canary`` marker must be registered in pyproject.toml [tool.pytest.ini_options].
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Shadow-diff verification tests (SD1)
+# ---------------------------------------------------------------------------
+
+
+class TestShadowDiff:
+    """Shadow-diff verification tests (SD1)."""
+
+    def test_shadow_diff_detects_missed_tests(self, tmp_path: Path) -> None:
+        """Validate comm -23 logic: IDs in full but not in filtered are 'missed'."""
+        full_ids = [
+            "tests/core/test_core.py::test_a",
+            "tests/core/test_core.py::test_b",
+            "tests/execution/test_headless.py::test_c",
+            "tests/pipeline/test_gate.py::test_d",
+            "tests/server/test_init.py::test_e",
+        ]
+        filtered_ids = [
+            "tests/core/test_core.py::test_a",
+            "tests/core/test_core.py::test_b",
+            "tests/server/test_init.py::test_e",
+        ]
+
+        full_file = tmp_path / "full_selected.txt"
+        filtered_file = tmp_path / "filter_selected.txt"
+        missed_file = tmp_path / "missed_tests.txt"
+
+        full_file.write_text("\n".join(full_ids) + "\n")
+        filtered_file.write_text("\n".join(filtered_ids) + "\n")
+
+        result = subprocess.run(
+            ["comm", "-23", str(full_file), str(filtered_file)],
+            capture_output=True,
+            text=True,
+        )
+        missed_file.write_text(result.stdout)
+
+        missed = [line for line in result.stdout.strip().splitlines() if line]
+        assert missed == [
+            "tests/execution/test_headless.py::test_c",
+            "tests/pipeline/test_gate.py::test_d",
+        ]
+
+    def test_shadow_diff_no_missed_tests(self, tmp_path: Path) -> None:
+        """When filtered is a superset of full, no missed tests."""
+        ids = [
+            "tests/core/test_core.py::test_a",
+            "tests/core/test_core.py::test_b",
+        ]
+
+        full_file = tmp_path / "full_selected.txt"
+        filtered_file = tmp_path / "filter_selected.txt"
+
+        full_file.write_text("\n".join(ids) + "\n")
+        filtered_file.write_text("\n".join(ids) + "\n")
+
+        result = subprocess.run(
+            ["comm", "-23", str(full_file), str(filtered_file)],
+            capture_output=True,
+            text=True,
+        )
+        missed = [line for line in result.stdout.strip().splitlines() if line]
+        assert missed == []
+
+    def test_shadow_diff_empty_filtered(self, tmp_path: Path) -> None:
+        """When filter selects nothing, all full IDs are missed."""
+        full_ids = ["tests/core/test_core.py::test_a", "tests/core/test_core.py::test_b"]
+
+        full_file = tmp_path / "full_selected.txt"
+        filtered_file = tmp_path / "filter_selected.txt"
+
+        full_file.write_text("\n".join(full_ids) + "\n")
+        filtered_file.write_text("\n")
+
+        result = subprocess.run(
+            ["comm", "-23", str(full_file), str(filtered_file)],
+            capture_output=True,
+            text=True,
+        )
+        missed = [line for line in result.stdout.strip().splitlines() if line]
+        assert missed == full_ids

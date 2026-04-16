@@ -30,6 +30,13 @@ class AnomalySeverity(StrEnum):
     CRITICAL = "critical"
 
 
+# Sentinel values for outcome anomalies (e.g. EMPTY_RESULT_WITH_TOKENS) that are not
+# derived from a live ProcSnapshot.  Downstream consumers must treat these as "no
+# snapshot" indicators rather than real pid/seq values.
+OUTCOME_ANOMALY_PID_SENTINEL: int = 0
+OUTCOME_ANOMALY_SEQ_SENTINEL: int = -1
+
+
 # Kernel wait-channel values that are normal for a healthy process in
 # uninterruptible sleep.  D-state snapshots whose wchan matches any of these
 # are NOT counted toward the D_STATE_SUSTAINED threshold.
@@ -323,11 +330,11 @@ def detect_outcome_anomalies(
         anomalies.append(
             {
                 "ts": datetime.now(UTC).isoformat(),
-                "seq": -1,
+                "seq": OUTCOME_ANOMALY_SEQ_SENTINEL,
                 "event": "anomaly",
                 "kind": str(AnomalyKind.EMPTY_RESULT_WITH_TOKENS),
                 "severity": str(AnomalySeverity.WARNING),
-                "pid": 0,
+                "pid": OUTCOME_ANOMALY_PID_SENTINEL,
                 "detail": {"output_tokens": output_tokens, "subtype": subtype},
                 "snapshot": {},
             }

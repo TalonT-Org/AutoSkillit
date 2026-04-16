@@ -25,6 +25,8 @@ from autoskillit.execution.session import (
     parse_session_result,
 )
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 def _make_success_session(result: str = "done") -> ClaudeSessionResult:
     return ClaudeSessionResult(
@@ -1671,8 +1673,6 @@ class TestDeadEndGuardContentState:
 # ---------------------------------------------------------------------------
 
 import json  # noqa: E402 — imported here to keep T1 tests self-contained
-
-pytestmark = [pytest.mark.layer("execution")]
 
 
 @pytest.fixture

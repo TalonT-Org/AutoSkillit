@@ -10,7 +10,12 @@ from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import RESERVED_LOG_RECORD_KEYS, TerminationReason, get_logger
+from autoskillit.core import (
+    RESERVED_LOG_RECORD_KEYS,
+    TerminationReason,
+    extract_path_arg,
+    get_logger,
+)
 from autoskillit.execution import (
     SCENARIO_STEP_NAME_ENV,  # noqa: F401 — re-exported for tools_execution.py
     _refresh_quota_cache,  # noqa: F401 — re-exported for tools_execution.py; patched by tests
@@ -289,16 +294,14 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
 
     Returns an error JSON string if validation fails, None if OK.
     """
-    parts = skill_command.strip().split(None, 1)
-    if not parts or parts[0] not in _get_config().implement_gate.skill_names:
+    tokens = skill_command.strip().split()
+    if not tokens or tokens[0] not in _get_config().implement_gate.skill_names:
         return None
-
-    skill_name = parts[0]
-
-    if len(parts) < 2:
+    skill_name = tokens[0]
+    plan_path_str = extract_path_arg(skill_command)
+    if plan_path_str is None:
         return gate_error_result(f"Missing plan path argument for {skill_name}")
-
-    plan_path = Path(cwd) / parts[1].strip().strip('"').strip("'")
+    plan_path = Path(cwd) / plan_path_str
     if not plan_path.is_file():
         return gate_error_result(f"Plan file not found: {plan_path}")
 

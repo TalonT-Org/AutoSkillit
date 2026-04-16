@@ -257,6 +257,17 @@ ACTION: CONFIRM STEP SEMANTICS:
   route to the step's on_success target.
 - If the user declines (answers no, skip, keep, cancel, or similar negative),
   route to the step's on_failure target.
+
+SKILL_COMMAND FORMATTING — MANDATORY:
+- The `skill_command` value in each step's `with:` block is a LITERAL template.
+  Substitute ${{{{ context.var_name }}}} and ${{{{ inputs.var_name }}}} placeholders with
+  their resolved values and pass the resulting string VERBATIM to run_skill.
+- Do NOT add markdown headers, labels, notes, or any prose to skill_command.
+  Do NOT restructure it as a labeled document or section list.
+- skill_command arguments are POSITIONAL SPACE-SEPARATED TOKENS. A path argument
+  is always a single path token — never a labeled section.
+- If a step note says to pass an extra argument, append it as one space-separated
+  token: `/autoskillit:skill /path/arg1 arg2`, NOT `/autoskillit:skill\n## Path\n/path`.
 {sous_chef_content}
 """
 

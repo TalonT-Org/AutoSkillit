@@ -134,7 +134,7 @@ def flush_session_log(
         try:
             cc_log_mtime = cc_log.stat().st_mtime
             end_dt = datetime.fromisoformat(end_ts)
-            silent_gap_seconds = end_dt.timestamp() - cc_log_mtime
+            silent_gap_seconds = max(0.0, end_dt.timestamp() - cc_log_mtime)
         except (OSError, ValueError):
             pass
 

@@ -389,14 +389,14 @@ def test_parse_proc_io_extracts_bytes():
 
 
 def test_read_proc_snapshot_has_network_fields():
-    """read_proc_snapshot includes api_connections_established on Linux."""
+    """read_proc_snapshot includes api_connection_established on Linux."""
     from autoskillit.execution.linux_tracing import read_proc_snapshot
 
     snap = read_proc_snapshot(os.getpid())
     assert snap is not None
     # Field exists and is either None (no port-443 connections from test process) or int >= 0
-    assert snap.api_connections_established is None or isinstance(
-        snap.api_connections_established, int
+    assert snap.api_connection_established is None or isinstance(
+        snap.api_connection_established, int
     )
 
 
@@ -416,7 +416,7 @@ def test_read_proc_snapshot_network_graceful_on_missing_proc_net(monkeypatch):
     monkeypatch.setattr(Path, "read_text", patched_read_text)
     snap = read_proc_snapshot(os.getpid())
     assert snap is not None
-    assert snap.api_connections_established is None
+    assert snap.api_connection_established is None
     assert snap.api_connection_states is None
 
 

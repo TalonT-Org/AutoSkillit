@@ -306,7 +306,7 @@ class ProcSnapshot:
     # CPU utilisation (0.0 when process arg is not supplied to read_proc_snapshot)
     cpu_percent: float
     # Best-effort /proc/{pid}/net/tcp fields (Linux only; None when unavailable)
-    api_connections_established: int | None = None
+    api_connection_established: int | None = None
     api_connection_states: dict[str, int] | None = None
     # Best-effort /proc/{pid}/io fields (Linux only; None when unavailable)
     io_read_bytes: int | None = None
@@ -487,7 +487,7 @@ def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> Pr
         oom_score=oom,
         wchan=wchan,
         cpu_percent=cpu_pct,
-        api_connections_established=_api_conns_established,
+        api_connection_established=_api_conns_established,
         api_connection_states=_api_conn_states,
         io_read_bytes=_io_read,
         io_write_bytes=_io_write,

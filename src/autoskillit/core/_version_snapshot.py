@@ -93,6 +93,8 @@ def _claude_code_version() -> str:
             text=True,
             timeout=5,
         )
+        if result.returncode != 0:
+            _logger.warning("claude --version exited with code %d", result.returncode)
         return result.stdout.strip() or result.stderr.strip()
     except subprocess.TimeoutExpired:
         return ""

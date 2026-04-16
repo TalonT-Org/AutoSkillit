@@ -460,6 +460,42 @@ class TestPathArgSkillsContract:
         )
 
 
+class TestSkillCommandParsingContract:
+    """skill_cmd_guard._PATH_PREFIXES must match core._type_helpers._PATH_PREFIXES."""
+
+    def _load_hook_module(self):
+        import importlib.util
+        import pathlib
+
+        hook_path = (
+            pathlib.Path(__file__).parents[2]
+            / "src"
+            / "autoskillit"
+            / "hooks"
+            / "skill_cmd_guard.py"
+        )
+        spec = importlib.util.spec_from_file_location("skill_cmd_guard", hook_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_hook_path_prefixes_match_core(self):
+        from autoskillit.core._type_helpers import _PATH_PREFIXES as core_prefixes
+
+        mod = self._load_hook_module()
+        assert set(mod._PATH_PREFIXES) == set(core_prefixes), (
+            f"skill_cmd_guard._PATH_PREFIXES {set(mod._PATH_PREFIXES)!r} "
+            f"diverges from core._type_helpers._PATH_PREFIXES {set(core_prefixes)!r}."
+        )
+
+    def test_hook_path_arg_skills_matches_contract_list(self):
+        mod = self._load_hook_module()
+        assert set(mod.PATH_ARG_SKILLS) == set(TestPathArgSkillsContract.PATH_ARG_SKILLS), (
+            "TestPathArgSkillsContract.PATH_ARG_SKILLS is out of sync with "
+            "skill_cmd_guard.PATH_ARG_SKILLS. Update the hardcoded list."
+        )
+
+
 class TestResolveFailuresDirtyTreeContract:
     """resolve-failures SKILL.md must document dirty tree pre-check."""
 

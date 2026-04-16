@@ -117,6 +117,11 @@ class SubprocessResult:
     that downstream telemetry (sessions.jsonl, summary.json, GitHub issue bodies) can
     self-identify which process was actually observed. (Issue #806)
     """
+    orphaned_tool_result: bool = False
+    """True when Channel B fired STALE and the last JSONL record was type=user.
+    Diagnostic only — does not affect termination behavior.
+    Always False for non-STALE outcomes.
+    """
 
 
 @runtime_checkable

@@ -369,13 +369,10 @@ async def run_managed_async(
 
             snapshots_data: list[dict[str, object]] | None = None
             if tracing_handle is not None:
-                from autoskillit.execution.linux_tracing import read_proc_snapshot
-
                 accumulated = tracing_handle.stop()
-                final_snap = read_proc_snapshot(_observed_pid)
-                if final_snap:
-                    accumulated.append(final_snap)
                 snapshots_data = [s.__dict__ for s in accumulated]
+                if signals.exit_snapshot is not None:
+                    snapshots_data.append(signals.exit_snapshot)
 
             if timeout_scope is not None and timeout_scope.cancelled_caught:
                 termination = TerminationReason.TIMED_OUT

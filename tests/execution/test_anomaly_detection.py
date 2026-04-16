@@ -331,3 +331,51 @@ def test_identity_drift_kind_exists():
         "AnomalyKind must have IDENTITY_DRIFT member for PTY wrapper drift detection"
     )
     assert AnomalyKind.IDENTITY_DRIFT == "identity_drift"
+
+
+# ---------------------------------------------------------------------------
+# Outcome anomaly detection tests
+# ---------------------------------------------------------------------------
+
+
+def test_empty_result_with_tokens_kind_exists():
+    """AnomalyKind.EMPTY_RESULT_WITH_TOKENS is defined with the correct string value."""
+    assert AnomalyKind.EMPTY_RESULT_WITH_TOKENS == "empty_result_with_tokens"
+
+
+def test_detect_outcome_anomalies_fires_for_empty_result_with_tokens():
+    """output_tokens > 0 and subtype == 'empty_result' → EMPTY_RESULT_WITH_TOKENS anomaly."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies({"output_tokens": 945}, "empty_result")
+    kinds = [a["kind"] for a in anomalies]
+    assert "empty_result_with_tokens" in kinds
+
+
+def test_detect_outcome_anomalies_no_fire_when_zero_tokens():
+    """output_tokens == 0 must NOT fire even when subtype matches."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    assert detect_outcome_anomalies({"output_tokens": 0}, "empty_result") == []
+
+
+def test_detect_outcome_anomalies_no_fire_when_wrong_subtype():
+    """output_tokens > 0 but subtype != 'empty_result' must NOT fire."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    assert detect_outcome_anomalies({"output_tokens": 100}, "completed") == []
+
+
+def test_detect_outcome_anomalies_record_structure():
+    """Each outcome anomaly record has the required fields."""
+    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+
+    anomalies = detect_outcome_anomalies({"output_tokens": 100}, "empty_result")
+    assert len(anomalies) == 1
+    a = anomalies[0]
+    assert a["event"] == "anomaly"
+    assert "ts" in a
+    assert "kind" in a
+    assert "severity" in a
+    assert "detail" in a
+    assert a["detail"]["output_tokens"] == 100

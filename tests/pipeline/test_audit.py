@@ -13,7 +13,7 @@ from autoskillit.pipeline.audit import (
     _validate_failure_record_dict,
 )
 
-pytestmark = [pytest.mark.layer("pipeline")]
+pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
 def _make_record(**overrides: object) -> FailureRecord:

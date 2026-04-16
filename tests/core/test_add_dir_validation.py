@@ -10,7 +10,7 @@ import pytest
 from autoskillit.core import ValidatedAddDir
 from autoskillit.core.claude_conventions import LayoutError, validate_add_dir
 
-pytestmark = [pytest.mark.layer("core")]
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 class TestValidatedAddDir:

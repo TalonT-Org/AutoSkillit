@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.core.io import ensure_project_temp
 
-pytestmark = [pytest.mark.layer("core")]
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 def test_ensure_project_temp_default_writes_self_gitignore(tmp_path: Path) -> None:

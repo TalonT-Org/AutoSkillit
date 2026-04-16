@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog, McpResponseEntry
 
-pytestmark = [pytest.mark.layer("pipeline")]
+pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
 class TestMcpResponseEntry:

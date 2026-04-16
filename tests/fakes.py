@@ -6,6 +6,7 @@ defined in ``core/_type_protocols.py``. Imports only from L0 (``autoskillit.core
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
@@ -27,6 +28,28 @@ from autoskillit.core.types import (
     TestRunner,
     WriteBehaviorSpec,
 )
+
+# ---------------------------------------------------------------------------
+# Shared side-effect resolution helper
+# ---------------------------------------------------------------------------
+
+
+def _resolve_side_effect(effect: Any) -> Any:
+    """Resolve a side-effect value: raise exceptions, call callables, or return as-is.
+
+    Handles async callables by running them on the current event loop.
+    """
+    if isinstance(effect, BaseException):
+        raise effect
+    if isinstance(effect, type) and issubclass(effect, BaseException):
+        raise effect()
+    if callable(effect):
+        result = effect()
+        if asyncio.iscoroutine(result):
+            return asyncio.get_event_loop().run_until_complete(result)
+        return result
+    return effect
+
 
 # ---------------------------------------------------------------------------
 # HeadlessExecutor fake
@@ -267,7 +290,7 @@ class InMemoryCIWatcher(CIWatcher):
             }
         )
         if self.wait_side_effect is not None:
-            return self._resolve_side_effect(self.wait_side_effect)
+            return _resolve_side_effect(self.wait_side_effect)
         return self._wait_result
 
     async def status(
@@ -289,18 +312,8 @@ class InMemoryCIWatcher(CIWatcher):
             }
         )
         if self.status_side_effect is not None:
-            return self._resolve_side_effect(self.status_side_effect)
+            return _resolve_side_effect(self.status_side_effect)
         return self._status_result
-
-    @staticmethod
-    def _resolve_side_effect(effect: Any) -> Any:
-        if isinstance(effect, BaseException):
-            raise effect
-        if isinstance(effect, type) and issubclass(effect, BaseException):
-            raise effect()
-        if callable(effect):
-            return effect()
-        return effect
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +364,7 @@ class InMemoryMergeQueueWatcher(MergeQueueWatcher):
             }
         )
         if self.wait_side_effect is not None:
-            return InMemoryCIWatcher._resolve_side_effect(self.wait_side_effect)
+            return _resolve_side_effect(self.wait_side_effect)
         return self._wait_result
 
     async def toggle(
@@ -370,7 +383,7 @@ class InMemoryMergeQueueWatcher(MergeQueueWatcher):
             }
         )
         if self.toggle_side_effect is not None:
-            return InMemoryCIWatcher._resolve_side_effect(self.toggle_side_effect)
+            return _resolve_side_effect(self.toggle_side_effect)
         return self._toggle_result
 
 
@@ -409,7 +422,7 @@ class InMemoryDatabaseReader(DatabaseReader):
             }
         )
         if self.side_effect is not None:
-            return InMemoryCIWatcher._resolve_side_effect(self.side_effect)
+            return _resolve_side_effect(self.side_effect)
         return self._query_result
 
 

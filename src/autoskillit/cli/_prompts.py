@@ -6,8 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, pkg_root
-from autoskillit.hooks.quota_guard import QUOTA_GUARD_DENY_TRIGGER
-from autoskillit.hooks.quota_post_hook import QUOTA_POST_WARNING_TRIGGER
+from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
 logger = get_logger(__name__)
 
@@ -116,9 +115,8 @@ You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step
 
 {_ing_section}FIRST ACTION — before prompting for any inputs:
 0. Call ToolSearch(query='select:{mcp_prefix}open_kitchen') to ensure its schema is loaded.
-   ToolSearch is safe on a tool whose schema is already loaded (it is a no-op in that case)
-   and required when the tool appears in Claude Code's deferred-tool list. Always call it —
-   no conditional check needed.
+   ToolSearch is a no-op if the schema is already loaded, but required if the tool appears
+   in Claude Code's deferred-tool list. Always call it — no conditional check needed.
 1. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to activate pipeline tools and open
    the kitchen gate. open_kitchen is REQUIRED to enable all gated AutoSkillit tools —
    the ingredients table above (when present) is provided for reference only.

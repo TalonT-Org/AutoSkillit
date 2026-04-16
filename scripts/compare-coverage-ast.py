@@ -76,8 +76,10 @@ class _FuncVisitor(ast.NodeVisitor):
             )
         )
         self._name_stack.append(node.name)
-        self.generic_visit(node)
-        self._name_stack.pop()
+        try:
+            self.generic_visit(node)
+        finally:
+            self._name_stack.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self._visit_func(node)
@@ -87,18 +89,26 @@ class _FuncVisitor(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self._name_stack.append(node.name)
-        self.generic_visit(node)
-        self._name_stack.pop()
+        try:
+            self.generic_visit(node)
+        finally:
+            self._name_stack.pop()
 
 
-def extract_functions(source_path: Path) -> list[FuncInfo]:
-    """Parse a Python file and return FuncInfo for every function/method."""
+def extract_functions(source_path: Path, filepath: str = "") -> list[FuncInfo]:
+    """Parse a Python file and return FuncInfo for every function/method.
+
+    Args:
+        source_path: Absolute path to the Python file on disk.
+        filepath: Value to store in FuncInfo.filepath (e.g. a relative path).
+                  Defaults to str(source_path) when empty.
+    """
     try:
         tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
     except SyntaxError:
         print(f"WARNING: Skipping {source_path} (SyntaxError)", file=sys.stderr)
         return []
-    visitor = _FuncVisitor(str(source_path))
+    visitor = _FuncVisitor(filepath or str(source_path))
     visitor.visit(tree)
     return visitor.functions
 
@@ -108,42 +118,76 @@ def build_ast_map(src_root: Path) -> dict[str, list[FuncInfo]]:
     result: dict[str, list[FuncInfo]] = {}
     for py_file in sorted(src_root.rglob("*.py")):
         rel = str(py_file.relative_to(PROJECT_ROOT))
-        funcs = extract_functions(py_file)
+        funcs = extract_functions(py_file, filepath=rel)
         if funcs:
-            for f in funcs:
-                f.filepath = rel
             result[rel] = funcs
     return result
 
 
-def query_coverage_db(db_path: Path) -> dict[str, set[int]]:
-    """Query .coverage database and return {relative_path: {covered_lines}}."""
-    from coverage import CoverageData
+def query_coverage_db(
+    db_path: Path,
+) -> tuple[dict[str, set[int]], dict[str, set[int]]]:
+    """Query .coverage database and return (covered_map, executable_map).
 
-    data = CoverageData(str(db_path))
-    data.read()
-    result: dict[str, set[int]] = {}
-    for measured_file in data.measured_files():
-        lines = data.lines(measured_file)
-        if lines:
-            try:
-                rel = str(Path(measured_file).relative_to(PROJECT_ROOT))
-            except ValueError:
-                continue
-            result[rel] = set(lines)
-    return result
+    covered_map:    {relative_path: {covered_line_numbers}}
+    executable_map: {relative_path: {all_executable_line_numbers}}
+
+    Uses coverage.Coverage.analysis2() to obtain the full set of executable
+    lines (statements) per file, not just the executed subset.
+    """
+    import coverage
+
+    try:
+        cov = coverage.Coverage(data_file=str(db_path))
+        cov.load()
+    except Exception as exc:
+        print(
+            f"ERROR: Failed to read coverage database {db_path}: {exc}",
+            file=sys.stderr,
+        )
+        return {}, {}
+    covered_result: dict[str, set[int]] = {}
+    executable_result: dict[str, set[int]] = {}
+    for measured_file in cov.get_data().measured_files():
+        try:
+            rel = str(Path(measured_file).relative_to(PROJECT_ROOT))
+        except ValueError:
+            continue
+        try:
+            analysis = cov.analysis2(measured_file)
+        except Exception:
+            continue
+        statements = set(analysis[1])
+        missing = set(analysis[3])
+        covered = statements - missing
+        if covered:
+            covered_result[rel] = covered
+        if statements:
+            executable_result[rel] = statements
+    return covered_result, executable_result
 
 
-def compare(ast_map: dict[str, list[FuncInfo]], coverage_map: dict[str, set[int]]) -> Report:
+def compare(
+    ast_map: dict[str, list[FuncInfo]],
+    coverage_map: dict[str, set[int]],
+    executable_map: dict[str, set[int]] | None = None,
+) -> Report:
     """Compare AST function ranges against coverage data."""
     report = Report()
     for filepath, funcs in sorted(ast_map.items()):
         covered_lines = coverage_map.get(filepath, set())
+        executable_lines = executable_map.get(filepath, set()) if executable_map else set()
         file_details: list[FuncCoverage] = []
         for func in funcs:
             func_lines = set(range(func.lineno, func.end_lineno + 1))
-            intersection = func_lines & covered_lines
-            total = len(func_lines)
+            # Use executable lines within the function range when available,
+            # otherwise fall back to the full AST line range.
+            if executable_lines:
+                func_executable = func_lines & executable_lines
+            else:
+                func_executable = func_lines
+            intersection = func_executable & covered_lines
+            total = len(func_executable) if func_executable else len(func_lines)
             covered_count = len(intersection)
 
             if covered_count == 0:
@@ -179,9 +223,9 @@ def _print_report(report: Report) -> None:
         print("No functions found.")
         return
 
-    pct_c = report.covered * 100 // report.total
-    pct_p = report.partial * 100 // report.total
-    pct_u = report.uncovered * 100 // report.total
+    pct_c = round(report.covered * 100 / report.total)
+    pct_p = round(report.partial * 100 / report.total)
+    pct_u = round(report.uncovered * 100 / report.total)
     print(f"Total functions:     {report.total}")
     print(f"Fully covered:       {report.covered} ({pct_c}%)")
     print(f"Partially covered:   {report.partial} ({pct_p}%)")
@@ -248,11 +292,15 @@ def main() -> int:
     if not args.coverage_db.exists():
         print(f"WARNING: Coverage database not found: {args.coverage_db}", file=sys.stderr)
         print("Run pytest with --cov first to generate coverage data.", file=sys.stderr)
-        _print_report(Report(total=sum(len(v) for v in ast_map.values())))
+        total_funcs = sum(len(v) for v in ast_map.values())
+        print(
+            f"\nNo coverage data available ({total_funcs} functions discovered, "
+            "coverage status unknown)."
+        )
         return 0
 
-    coverage_map = query_coverage_db(args.coverage_db)
-    report = compare(ast_map, coverage_map)
+    coverage_map, executable_map = query_coverage_db(args.coverage_db)
+    report = compare(ast_map, coverage_map, executable_map)
     _print_report(report)
 
     if args.output:

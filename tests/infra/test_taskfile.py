@@ -99,6 +99,11 @@ class TestTaskfile:
             "test-filtered must default AUTOSKILLIT_TEST_FILTER to conservative"
         )
 
+    def test_coverage_audit_task_exists(self):
+        """TF-11 — coverage-audit task exists in Taskfile.yml."""
+        data = self._load()
+        assert "coverage-audit" in data["tasks"], "coverage-audit task missing from Taskfile.yml"
+
 
 def test_taskfile_pytest_paths_exist() -> None:
     """All pytest file paths in Taskfile.yml must exist."""

@@ -93,6 +93,46 @@ tasks:
         export AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}"
         task test-check
 
+  coverage-audit:
+    desc: "Run pytest with coverage collection and compare against AST-derived function map"
+    deps: [install-worktree, _tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+    cmds:
+      - |
+        mkdir -p temp
+
+        if [[ -d ".venv" ]]; then
+          PYTEST_CMD=".venv/bin/python -m pytest"
+          PYTHON=".venv/bin/python"
+        else
+          PYTEST_CMD="pytest"
+          PYTHON="python"
+        fi
+
+        set +e
+        $PYTEST_CMD tests/ -q --tb=short \
+          -n 4 \
+          -m "not smoke and not canary" \
+          --disable-warnings \
+          -o "addopts=" \
+          --basetemp="{{.PYTEST_TMPDIR}}" \
+          -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          --cov=src/autoskillit \
+          --cov-context=test \
+          --cov-branch \
+          --cov-report=term-missing:skip-covered \
+          --cov-report=
+        set -e
+
+        echo ""
+        echo "--- Coverage AST Comparison ---"
+        $PYTHON scripts/compare-coverage-ast.py \
+          --coverage-db .coverage \
+          --output "temp/coverage-audit-$(date +%Y%m%d-%H%M%S).json"
+
   test-smoke:
     desc: Run smoke tests (requires ANTHROPIC_API_KEY)
     deps: [_tmpdir-setup]

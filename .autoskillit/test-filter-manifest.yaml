@@ -87,5 +87,8 @@ README.md:
 src/autoskillit/assets/**/*:
   - assets/
 
+scripts/compare-coverage-ast.py:
+  - infra/
+
 tests/recipe/fixtures/*:
   - recipe/

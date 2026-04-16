@@ -39,3 +39,10 @@ def test_pytest_timeout_no_upper_bound(dev_deps: list[str]):
 def test_ruff_lower_bound(dev_deps: list[str]):
     dep = next(d for d in dev_deps if d.startswith("ruff"))
     assert ">=0.15.0" in dep, f"Expected ruff>=0.15.0, got: {dep!r}"
+
+
+def test_pytest_cov_in_dev_deps(dev_deps: list[str]):
+    """pytest-cov is present in dev dependencies."""
+    assert any(d.startswith("pytest-cov") for d in dev_deps), (
+        "pytest-cov must be in dev dependencies"
+    )

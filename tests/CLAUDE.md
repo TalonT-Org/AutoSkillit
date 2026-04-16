@@ -75,6 +75,27 @@ changed files. Controlled by env var + CLI flags:
 | `aggressive` | Narrow (each package -> itself) | arch, contracts | Local dev |
 | `none` | N/A | N/A | Full run (default) |
 
+## Coverage Audit
+
+A quarterly coverage audit validates that the test suite covers all production functions
+and that the test filter cascade maps are not hiding blind spots.
+
+**Schedule:** Run `task coverage-audit` quarterly (January, April, July, October) or
+after significant architectural changes (new subpackages, major refactors).
+
+**Workflow:**
+1. `task coverage-audit` runs the full test suite with `--cov-context=test --cov-branch`
+2. `scripts/compare-coverage-ast.py` queries the `.coverage` SQLite database
+3. AST-derived function map is compared against actual coverage
+4. Report identifies uncovered and partially covered functions
+5. Results saved to `temp/coverage-audit-{timestamp}.json`
+
+**Interpreting results:**
+- **Uncovered functions**: Production code with zero test coverage — potential blind spots
+  in the test filter cascade maps
+- **Partially covered functions**: Functions where some branches are untested
+- Exit code is always 0 (audit tool, not a gate)
+
 ```
 tests/
 ├── CLAUDE.md                            # xdist compatibility guidelines
@@ -215,6 +236,7 @@ tests/
 │   ├── test_branch_protection_guard.py
 │   ├── test_ci_dev_config.py
 │   ├── test_claude_md_critical_rules.py
+│   ├── test_coverage_audit.py
 │   ├── test_docstring_labels.py
 │   ├── test_generated_files.py
 │   ├── test_guard_coverage.py

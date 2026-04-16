@@ -6,6 +6,7 @@ import ast
 import enum
 import fnmatch
 import subprocess
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -228,8 +229,10 @@ class ASTImportWalker(ast.NodeVisitor):
             for child in node.body:
                 self.visit(child)
             self._context_stack.pop()
+            self._context_stack.append(ImportContext.CONDITIONAL)
             for child in node.orelse:
                 self.visit(child)
+            self._context_stack.pop()
         else:
             self._context_stack.append(ImportContext.CONDITIONAL)
             self.generic_visit(node)
@@ -292,7 +295,14 @@ def git_changed_files(
             timeout=10,
             check=True,
         )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+    except subprocess.CalledProcessError as exc:
+        warnings.warn(f"git diff failed (exit {exc.returncode}): {exc.stderr or ''}", stacklevel=2)
+        return None
+    except subprocess.TimeoutExpired:
+        warnings.warn("git diff timed out after 10s", stacklevel=2)
+        return None
+    except FileNotFoundError:
+        warnings.warn("git binary not found on PATH", stacklevel=2)
         return None
 
     lines = result.stdout.strip().splitlines()
@@ -317,8 +327,15 @@ def load_manifest(path: str | Path) -> dict[str, Any] | None:
     manifest_path = Path(path) / ".autoskillit" / "test-filter-manifest.yaml"
     if not manifest_path.exists():
         return None
-    with manifest_path.open() as f:
-        return yaml.safe_load(f)
+    try:
+        with manifest_path.open() as f:
+            return yaml.safe_load(f)
+    except OSError as exc:
+        warnings.warn(f"Cannot read manifest {manifest_path}: {exc}", stacklevel=2)
+        return None
+    except yaml.YAMLError as exc:
+        warnings.warn(f"Malformed YAML in {manifest_path}: {exc}", stacklevel=2)
+        return None
 
 
 def apply_manifest(
@@ -374,13 +391,16 @@ def _expand_reexport_closure(
                     walker = ASTImportWalker()
                     walker.visit(tree)
                     for mod, _ctx in walker.imports:
-                        bare = mod.lstrip(".")
-                        if bare == module_name or bare.endswith(f".{module_name}"):
+                        bare = mod.split(".")[-1] if "." in mod else mod.lstrip(".")
+                        if bare == module_name:
                             rel_init = str(init_path.relative_to(src_root))
                             expanded.add(rel_init)
                             break
-                except SyntaxError:
-                    pass
+                except SyntaxError as exc:
+                    warnings.warn(
+                        f"Failed to parse {init_path}: {exc}",
+                        stacklevel=2,
+                    )
             parent = parent.parent
 
     return expanded
@@ -417,7 +437,6 @@ def build_test_scope(
     mode: FilterMode,
     manifest: dict[str, Any] | None = None,
     tests_root: str | Path = "tests",
-    src_root: str | Path = "src/autoskillit",
 ) -> set[Path] | None:
     """Compute the set of test paths to run, or None for a full run.
 

@@ -841,6 +841,7 @@ class TestBuildSkillResultCrossValidation:
         "is_error",
         "exit_code",
         "kill_reason",
+        "last_stop_reason",
         "needs_retry",
         "retry_reason",
         "stderr",
@@ -4154,3 +4155,33 @@ class TestContractNudge:
         )
         assert result.retry_reason == RetryReason.CONTRACT_RECOVERY
         assert result.needs_retry is True
+
+
+# ---------------------------------------------------------------------------
+# last_stop_reason threading test
+# ---------------------------------------------------------------------------
+
+
+def test_build_skill_result_surfaces_last_stop_reason():
+    ndjson = "\n".join(
+        [
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"stop_reason": "end_turn", "content": [], "usage": {}},
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "done",
+                    "session_id": "s1",
+                }
+            ),
+        ]
+    )
+    result = _make_result(returncode=0, stdout=ndjson)
+    sr = _build_skill_result(result)
+    assert sr.last_stop_reason == "end_turn"

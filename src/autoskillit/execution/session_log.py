@@ -100,6 +100,8 @@ def flush_session_log(
     tracked_comm: str | None = None,
     exception_text: str = "",
     orphaned_tool_result: bool = False,
+    raw_stdout: str = "",
+    last_stop_reason: str = "",
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -122,6 +124,31 @@ def flush_session_log(
 
     if cc_log and not cc_log.exists():
         logger.warning("claude_code_log_not_found", path=cc_log_str, session_id=session_id)
+
+    _cb_request_ids: list[str] = []
+    _cb_turn_timestamps: list[str] = []
+    if cc_log and cc_log.exists():
+        seen_request_ids: set[str] = set()
+        try:
+            for raw_line in cc_log.read_text(encoding="utf-8", errors="replace").splitlines():
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                try:
+                    rec = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(rec, dict) or rec.get("type") != "assistant":
+                    continue
+                rid = rec.get("requestId", "")
+                ts = rec.get("timestamp", "")
+                if rid and rid not in seen_request_ids:
+                    seen_request_ids.add(rid)
+                    _cb_request_ids.append(str(rid))
+                    if ts:
+                        _cb_turn_timestamps.append(str(ts))
+        except OSError:
+            logger.debug("channel_b_log_read_error", path=cc_log_str, exc_info=True)
 
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -241,9 +268,15 @@ def flush_session_log(
         "tracked_comm_drift": _tracked_comm_drift,
         "tracer_target_resolution_version": 2,
         "orphaned_tool_result": orphaned_tool_result,
+        "last_stop_reason": last_stop_reason,
+        "request_ids": _cb_request_ids,
+        "turn_timestamps": _cb_turn_timestamps,
     }
     summary_path = session_dir / "summary.json"
     atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
+
+    if not success and raw_stdout:
+        atomic_write(session_dir / "raw_stdout.jsonl", raw_stdout)
 
     if exception_text:
         atomic_write(session_dir / "crash_exception.txt", exception_text)

@@ -80,6 +80,7 @@ class ClaudeSessionResult:
     assistant_messages: list[str] = field(default_factory=list)
     tool_uses: list[dict[str, Any]] = field(default_factory=list)
     jsonl_context_exhausted: bool = False
+    stop_reasons: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
@@ -182,6 +183,11 @@ class ClaudeSessionResult:
         Recovery operations and CHANNEL_B bypass may only run on complete sessions.
         """
         return not self.is_error and self.subtype not in FAILURE_SUBTYPES
+
+    @property
+    def last_stop_reason(self) -> str:
+        """The stop_reason from the final assistant turn, or empty string."""
+        return self.stop_reasons[-1] if self.stop_reasons else ""
 
 
 def extract_token_usage(stdout: str) -> dict[str, Any] | None:
@@ -318,6 +324,7 @@ class _ParseAccumulator:
     tool_uses: list[dict[str, Any]] = field(default_factory=list)
     assistant_messages: list[str] = field(default_factory=list)
     jsonl_context_exhausted: bool = False
+    stop_reasons: list[str] = field(default_factory=list)
 
 
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
@@ -378,6 +385,9 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                         text = str(content).strip()
                     if text:
                         acc.assistant_messages.append(text)
+                    _stop = msg.get("stop_reason", "")
+                    if _stop:
+                        acc.stop_reasons.append(str(_stop))
                 elif "message" not in obj:
                     # Flat assistant record (no "message" wrapper) — detect
                     # context exhaustion inline instead of a separate scan pass.
@@ -437,6 +447,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         assistant_messages=acc.assistant_messages,
         tool_uses=acc.tool_uses,
         jsonl_context_exhausted=acc.jsonl_context_exhausted,
+        stop_reasons=acc.stop_reasons,
     )
 
 

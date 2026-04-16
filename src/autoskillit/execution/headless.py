@@ -27,6 +27,7 @@ from autoskillit.core import (
     ChannelConfirmation,
     CliSubtype,
     FailureRecord,
+    KillReason,
     RetryReason,
     SessionOutcome,
     SkillResult,
@@ -599,6 +600,7 @@ def _build_skill_result(
                     retry_reason=RetryReason.NONE,
                     stderr=result.stderr if result.stderr else "",
                     token_usage=stale_session.token_usage,
+                    last_stop_reason=stale_session.last_stop_reason,
                 )
         # No valid result in stdout — fall through to original stale response
         _capture_failure(
@@ -868,6 +870,7 @@ def _build_skill_result(
             cli_subtype=session.subtype,
             write_path_warnings=write_path_warnings,
             write_call_count=write_call_count,
+            last_stop_reason=session.last_stop_reason,
         )
     else:
         sr = SkillResult(
@@ -886,6 +889,7 @@ def _build_skill_result(
             write_path_warnings=write_path_warnings,
             write_call_count=write_call_count,
             kill_reason=result.kill_reason,
+            last_stop_reason=session.last_stop_reason,
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
@@ -1207,6 +1211,13 @@ async def run_headless_core(
                     clone_contamination_reverted=_clone_reverted,
                     tracked_comm=result.tracked_comm,
                     orphaned_tool_result=result.orphaned_tool_result,
+                    raw_stdout=result.stdout
+                    if (
+                        not skill_result.success
+                        or skill_result.kill_reason != KillReason.NATURAL_EXIT
+                    )
+                    else "",
+                    last_stop_reason=skill_result.last_stop_reason,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)

@@ -327,6 +327,27 @@ def pytest_collection_modifyitems(
     """
     import warnings
 
+    # Layer marker mismatch validation (controller-only under xdist)
+    if not hasattr(config, "workerinput"):
+        tests_root = config.rootpath / "tests"
+        for item in items:
+            try:
+                rel = item.path.relative_to(tests_root)
+            except (ValueError, TypeError):
+                continue
+            parts = rel.parts
+            if not parts or parts[0] not in _LAYER_DIRS:
+                continue
+            expected_dir = parts[0]
+
+            for mark in item.iter_markers("layer"):
+                if mark.args and mark.args[0] != expected_dir:
+                    warnings.warn(
+                        f"Layer marker mismatch: {item.nodeid} has layer('{mark.args[0]}') "
+                        f"but lives in tests/{expected_dir}/",
+                        stacklevel=1,
+                    )
+
     scope: set[_Path] | None = config.stash.get(_scope_key, None)
     if scope is None:
         return
@@ -374,26 +395,3 @@ def pytest_collection_modifyitems(
             f"Test filter deselection failed, running all tests: {exc}",
             stacklevel=1,
         )
-
-    # Layer marker mismatch validation (controller-only under xdist)
-    if hasattr(config, "workerinput"):
-        return
-
-    tests_root = config.rootpath / "tests"
-    for item in items:
-        try:
-            rel = item.path.relative_to(tests_root)
-        except (ValueError, TypeError):
-            continue
-        parts = rel.parts
-        if not parts or parts[0] not in _LAYER_DIRS:
-            continue
-        expected_dir = parts[0]
-
-        for mark in item.iter_markers("layer"):
-            if mark.args and mark.args[0] != expected_dir:
-                warnings.warn(
-                    f"Layer marker mismatch: {item.nodeid} has layer('{mark.args[0]}') "
-                    f"but lives in tests/{expected_dir}/",
-                    stacklevel=1,
-                )

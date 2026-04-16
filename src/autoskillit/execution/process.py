@@ -373,6 +373,8 @@ async def run_managed_async(
                 snapshots_data = [s.__dict__ for s in accumulated]
                 if signals.exit_snapshot is not None:
                     snapshots_data.append(signals.exit_snapshot)
+            elif signals.exit_snapshot is not None:
+                snapshots_data = [signals.exit_snapshot]
 
             if timeout_scope is not None and timeout_scope.cancelled_caught:
                 termination = TerminationReason.TIMED_OUT

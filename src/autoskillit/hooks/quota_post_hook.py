@@ -28,6 +28,9 @@ from _hook_settings import resolve_quota_settings  # type: ignore[import-not-fou
 
 _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
 
+# Emitted in post-tool output; referenced by orchestrator prompt and sous-chef SKILL.md.
+QUOTA_POST_WARNING_TRIGGER: str = "--- QUOTA WARNING ---"
+
 
 def _read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
     """Read quota cache file. Returns parsed data or None if missing/stale/corrupt."""
@@ -165,7 +168,7 @@ def main(*, cache_path_override: str | None = None) -> None:
 
     warning_text = (
         f"{result_summary}\n\n"
-        f"--- QUOTA WARNING ---\n"
+        f"{QUOTA_POST_WARNING_TRIGGER}\n"
         f"Post-execution utilization: {utilization:.0f}% on window '{window_name}' "
         f"(threshold: {effective_threshold:.0f}%)\n"
         f"MANDATORY ACTION before next run_skill: Call run_cmd with: "

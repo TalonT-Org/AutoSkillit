@@ -113,6 +113,17 @@ class TestCLIOrder:
         )
         monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
 
+    @pytest.fixture(autouse=True)
+    def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub _get_ingredients_table in app.py to prevent subprocess.run git calls."""
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
+
     # --- workspace init ---
 
     def test_prep_station_init_creates_dir_with_marker(
@@ -1096,6 +1107,17 @@ class TestOrderSubsetGate:
         )
         monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
 
+    @pytest.fixture(autouse=True)
+    def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub _get_ingredients_table in app.py to prevent subprocess.run git calls."""
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
+
     def _make_config_mock(self, disabled: list[str]) -> MagicMock:
         mock_cfg = MagicMock()
         mock_cfg.subsets.disabled = disabled
@@ -1284,6 +1306,17 @@ class TestOrderMcpPrefixSelection:
             "autoskillit.cli.app"
         )
         monkeypatch.setattr(_app_mod, "_is_plugin_installed", lambda: False)
+
+    @pytest.fixture(autouse=True)
+    def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub _get_ingredients_table in app.py to prevent subprocess.run git calls."""
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
     @patch("autoskillit.cli.subprocess.run")
     def test_order_prompt_uses_direct_prefix_when_no_marketplace_install(

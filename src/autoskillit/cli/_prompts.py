@@ -37,6 +37,24 @@ def _resolve_recipe_input(raw: str, available: list[RecipeInfo]) -> RecipeInfo |
     return next((r for r in available if r.name == raw), None)
 
 
+def _get_ingredients_table(
+    recipe_name: str, recipe_info: RecipeInfo | None, cwd: Path
+) -> str | None:
+    """Pre-render the ingredients table for system prompt injection.
+
+    Uses load_and_validate (not load_recipe) so sub-recipe composition is included.
+    """
+    from autoskillit.config import resolve_ingredient_defaults
+    from autoskillit.recipe import load_and_validate
+
+    return load_and_validate(
+        recipe_name,
+        project_dir=cwd,
+        recipe_info=recipe_info,
+        resolved_defaults=resolve_ingredient_defaults(cwd),
+    ).get("ingredients_table")
+
+
 _COOK_GREETINGS: list[str] = [
     (
         "Welcome to Good Burger, home of the Good Burger, "

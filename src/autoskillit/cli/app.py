@@ -32,6 +32,7 @@ from autoskillit.cli._init_helpers import (
     _prompt_test_command,
     _register_all,
 )
+from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
 from autoskillit.cli._terminal import terminal_guard
 from autoskillit.core import ClaudeFlags, RecipeSource, atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
@@ -561,7 +562,6 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
         When True, attempt to restore a previous session.
     """
     from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
     from autoskillit.recipe import (
         find_recipe_by_name,
         list_recipes,
@@ -715,21 +715,7 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
 
     from autoskillit.cli._prompts import _COOK_GREETINGS, show_cook_preview
 
-    # Pre-render ingredients table for system prompt injection (ING: issue #972)
-    # Uses load_and_validate() — not load_recipe() — to capture sub-recipe
-    # composition (e.g., sprint_mode=true merges sprint-prefix sub-recipe ingredients).
-    from autoskillit.config import resolve_ingredient_defaults as _resolve_defaults
-    from autoskillit.recipe import load_and_validate as _load_and_validate
-
-    _resolved_defaults = _resolve_defaults(Path.cwd())
-    _lav_result = _load_and_validate(
-        recipe,
-        project_dir=Path.cwd(),
-        recipe_info=_match,
-        resolved_defaults=_resolved_defaults,
-    )
-    _ingredients_table: str | None = _lav_result.get("ingredients_table")
-
+    _itable = _get_ingredients_table(recipe, _match, Path.cwd())
     show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
 
     from autoskillit.cli._ansi import permissions_warning
@@ -743,11 +729,7 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
 
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
     _launch_cook_session(
-        _build_orchestrator_prompt(
-            recipe,
-            mcp_prefix=mcp_prefix,
-            ingredients_table=_ingredients_table,
-        ),
+        _build_orchestrator_prompt(recipe, mcp_prefix=mcp_prefix, ingredients_table=_itable),
         initial_message=greeting,
         extra_env=_extra_env if _extra_env else None,
         resume_session_id=resume_session_id,

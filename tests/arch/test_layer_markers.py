@@ -90,6 +90,16 @@ def test_all_test_files_have_correct_layer_marker(directory: str) -> None:
     assert not errors, "\n".join(errors)
 
 
+def test_layer_directories_matches_conftest() -> None:
+    """LAYER_DIRECTORIES keys must match _LAYER_DIRS in conftest.py."""
+    from tests.conftest import _LAYER_DIRS
+
+    assert set(LAYER_DIRECTORIES.keys()) == _LAYER_DIRS, (
+        f"LAYER_DIRECTORIES keys {set(LAYER_DIRECTORIES.keys())} != "
+        f"conftest _LAYER_DIRS {_LAYER_DIRS}"
+    )
+
+
 def test_layer_marker_registered_in_pyproject() -> None:
     """The 'layer' marker is registered in pyproject.toml to avoid warnings."""
     import tomllib

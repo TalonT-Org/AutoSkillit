@@ -17,9 +17,11 @@ from tests._test_filter import (
     FilterMode,
     ImportContext,
     _expand_reexport_closure,
+    apply_manifest,
     build_test_scope,
     check_bucket_a,
     git_changed_files,
+    load_manifest,
 )
 
 # ---------------------------------------------------------------------------
@@ -297,6 +299,14 @@ class TestBuildTestScope:
         dir_names = {p.name for p in result}
         assert dir_names == {"arch", "contracts", "infra", "docs"}
 
+    def test_scope_none_mode_returns_none(self, tmp_path: Path) -> None:
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.NONE,
+            tests_root=tmp_path / "tests",
+        )
+        assert result is None
+
     def test_scope_empty_changeset(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"
         for d in ["arch", "contracts", "infra", "docs"]:
@@ -455,3 +465,58 @@ class TestReexportClosure:
         result = _expand_reexport_closure({"pkg/other.py"}, tmp_path)
         assert "pkg/__init__.py" not in result
         assert "pkg/other.py" in result
+
+
+# ---------------------------------------------------------------------------
+# Manifest Tests (MA1–MA4)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadManifest:
+    def test_load_manifest_absent(self, tmp_path: Path) -> None:
+        result = load_manifest(tmp_path)
+        assert result is None
+
+    def test_load_manifest_valid(self, tmp_path: Path) -> None:
+        manifest_dir = tmp_path / ".autoskillit"
+        manifest_dir.mkdir()
+        (manifest_dir / "test-filter-manifest.yaml").write_text(
+            "patterns:\n  'docs/*.md':\n    - docs\n"
+        )
+        result = load_manifest(tmp_path)
+        assert result is not None
+        assert "patterns" in result
+        assert "docs/*.md" in result["patterns"]
+
+    def test_load_manifest_malformed_yaml(self, tmp_path: Path) -> None:
+        manifest_dir = tmp_path / ".autoskillit"
+        manifest_dir.mkdir()
+        (manifest_dir / "test-filter-manifest.yaml").write_text(":\n  - :\n  bad: [")
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = load_manifest(tmp_path)
+        assert result is None
+        assert any("Malformed YAML" in str(warning.message) for warning in w)
+
+
+class TestApplyManifest:
+    def test_apply_manifest_none(self) -> None:
+        result = apply_manifest({"README.md"}, None)
+        assert result == set()
+
+    def test_apply_manifest_match(self) -> None:
+        manifest = {"patterns": {"docs/*.md": ["docs"]}}
+        result = apply_manifest({"docs/README.md"}, manifest)
+        assert result == {"docs"}
+
+    def test_apply_manifest_no_match(self) -> None:
+        manifest = {"patterns": {"docs/*.md": ["docs"]}}
+        result = apply_manifest({"src/foo.py"}, manifest)
+        assert result == set()
+
+    def test_apply_manifest_list_dirs(self) -> None:
+        manifest = {"patterns": {"*.yaml": ["config", "infra"]}}
+        result = apply_manifest({"defaults.yaml"}, manifest)
+        assert result == {"config", "infra"}

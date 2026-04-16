@@ -108,13 +108,6 @@ def check_review_loop(
     """
     import subprocess  # noqa: PLC0415
 
-    _DEGRADED = {
-        "has_blocking": "false",
-        "next_iteration": "",
-        "max_exceeded": "false",
-        "blocking_count": "0",
-    }
-
     iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
     next_iteration = iteration + 1
     max_iter = int(max_iterations.strip()) if max_iterations.strip() else 3
@@ -172,14 +165,6 @@ query($owner:String!, $repo:String!, $number:Int!, $after:String) {
     cursor: str | None = None
 
     while True:
-        variables: dict[str, object] = {
-            "owner": owner,
-            "repo": repo,
-            "number": int(pr_number),
-        }
-        if cursor is not None:
-            variables["after"] = cursor
-
         try:
             gql_result = subprocess.run(
                 [

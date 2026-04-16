@@ -355,8 +355,7 @@ def pytest_configure(config: pytest.Config) -> None:
         cli_base_ref = config.getoption("--filter-base-ref", default=None)
         changed = git_changed_files(config.rootpath, base_ref=cli_base_ref)
 
-        raw_manifest = load_manifest(config.rootpath)
-        manifest = {"patterns": raw_manifest} if raw_manifest is not None else None
+        manifest = load_manifest(config.rootpath)
 
         scope = build_test_scope(
             changed_files=changed,

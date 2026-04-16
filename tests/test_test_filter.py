@@ -514,17 +514,17 @@ class TestApplyManifest:
         assert result == set()
 
     def test_apply_manifest_match(self) -> None:
-        manifest = {"patterns": {"docs/*.md": ["docs"]}}
+        manifest = {"docs/*.md": ["docs"]}
         result = apply_manifest({"docs/README.md"}, manifest)
         assert result == {"docs"}
 
     def test_apply_manifest_no_match(self) -> None:
-        manifest = {"patterns": {"docs/*.md": ["docs"]}}
+        manifest = {"docs/*.md": ["docs"]}
         result = apply_manifest({"src/foo.py"}, manifest)
         assert result == set()
 
     def test_apply_manifest_list_dirs(self) -> None:
-        manifest = {"patterns": {"*.yaml": ["config", "infra"]}}
+        manifest = {"*.yaml": ["config", "infra"]}
         result = apply_manifest({"defaults.yaml"}, manifest)
         assert result == {"config", "infra"}
 

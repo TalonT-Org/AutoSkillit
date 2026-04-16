@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, get_logger, pkg_root
+from autoskillit.hooks import QUOTA_GUARD_DENY_TRIGGER, QUOTA_POST_WARNING_TRIGGER
 
 logger = get_logger(__name__)
 
@@ -112,35 +113,22 @@ def _build_orchestrator_prompt(
     return f"""\
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
-DEFERRED-TOOL RECOVERY — If the session's deferred-tool list (the system-reminder \
-that says "schemas NOT loaded — calling directly will fail with InputValidationError") \
-includes {mcp_prefix}open_kitchen:
-  1. Call ToolSearch with query='select:{mcp_prefix}open_kitchen' to load its schema.
-  2. Only then call {mcp_prefix}open_kitchen(name='{recipe_name}').
-  Do NOT call AskUserQuestion — the tool is not unavailable; it only needs its \
-schema loaded on demand via ToolSearch.
-
-SERVER-STARTUP RECOVERY — If Claude Code reports "No such tool available" for \
-an AutoSkillit tool, the MCP server was still starting when the tool was called. \
-Wait a few seconds and retry the same tool call. Deferred startup I/O (audit \
-recovery, drift checks) runs in the background after the transport opens; tools \
-become available once the server finishes initializing.
-
 {_ing_section}FIRST ACTION — before prompting for any inputs:
-0. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to activate pipeline tools and open
+0. Call ToolSearch(query='select:{mcp_prefix}open_kitchen') to ensure its schema is loaded.
+   ToolSearch is a no-op if the schema is already loaded, but required if the tool appears
+   in Claude Code's deferred-tool list. Always call it — no conditional check needed.
+1. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to activate pipeline tools and open
    the kitchen gate. open_kitchen is REQUIRED to enable all gated AutoSkillit tools —
    the ingredients table above (when present) is provided for reference only.
    DO NOT call AskUserQuestion or any other tool before open_kitchen.
-   If the call returns "No such tool available", the MCP server is still
-   initializing. Wait 3 seconds and retry — this is normal on session start.
-1. The response contains a pre-formatted ingredients table
+2. The response contains a pre-formatted ingredients table
    between --- INGREDIENTS TABLE --- and --- END TABLE --- markers.
    Display it verbatim in your response — do not reformat or re-render it.
    Then ask for the required fields (marked with *). If the recipe has both
    a task and an issue_url ingredient, mention that a GitHub issue URL can
    be provided as the task. Keep it to one or two short sentences.
-2. Collect ingredient values conversationally from the user's response.
-3. Execute the pipeline steps.
+3. Collect ingredient values conversationally from the user's response.
+4. Execute the pipeline steps.
 
 During pipeline execution, only use AutoSkillit MCP tools:
 - Read, Grep, Glob (code investigation) — not used here because investigation
@@ -210,14 +198,14 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
   - These are not context limit conditions. Fall through to on_failure.
 
 QUOTA DENIAL ROUTING — run_skill only (check BEFORE on_failure):
-- When a PreToolUse hook DENIES run_skill with "QUOTA WAIT REQUIRED":
+- When a PreToolUse hook DENIES run_skill with "{QUOTA_GUARD_DENY_TRIGGER}":
   - This is a TEMPORARY block. The API quota resets on a rolling window.
   - The deny message contains a run_cmd sleep command. Execute it immediately.
   - After the sleep completes, retry the EXACT same run_skill call (same arguments).
   - NEVER treat a quota denial as a permanent failure or pipeline-stopping error.
   - NEVER report quota denials to the user — handle them silently and automatically.
   - Before executing the sleep, state aloud: "Quota denied. Sleeping N seconds, then retrying."
-- When run_skill output contains "--- QUOTA WARNING ---":
+- When run_skill output contains "{QUOTA_POST_WARNING_TRIGGER}":
   - A post-execution quota check detected high utilization.
   - The warning contains a run_cmd sleep command. Execute it BEFORE the next run_skill call.
   - After sleeping, proceed normally with the next pipeline step.
@@ -281,16 +269,10 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
-        f"DEFERRED-TOOL RECOVERY — If the session's deferred-tool list includes "
-        f"{mcp_prefix}open_kitchen:\n"
-        f"  1. Call ToolSearch with query='select:{mcp_prefix}open_kitchen' to load its schema.\n"
-        f"  2. Only then call {mcp_prefix}open_kitchen.\n"
-        "  Do NOT call AskUserQuestion — the tool is not unavailable; it only needs "
-        "its schema loaded on demand via ToolSearch.\n\n"
-        'If the call returns "No such tool available", the MCP server is still '
-        "initializing. Wait 3 seconds and retry — this is normal on session start.\n\n"
-        f"Call the {mcp_prefix}open_kitchen tool to open the AutoSkillit kitchen "
-        "and gain access to all automation tools.\n\n"
+        f"Call ToolSearch(query='select:{mcp_prefix}open_kitchen') first, then call "
+        f"{mcp_prefix}open_kitchen to open the AutoSkillit kitchen.\n"
+        "ToolSearch ensures the schema is loaded (no-op if already loaded, required if "
+        "deferred).\n\n"
         "IMPORTANT — Orchestrator Discipline:\n"
         f"NEVER use native Claude Code tools ({_forbidden_list}) "
         "in this session. All code reading, searching, editing, and "

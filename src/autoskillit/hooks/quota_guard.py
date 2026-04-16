@@ -31,6 +31,10 @@ from _hook_settings import resolve_quota_settings  # type: ignore[import-not-fou
 
 _AUTOSKILLIT_LOG_DIR_ENV = "AUTOSKILLIT_LOG_DIR"
 
+# Emitted in deny messages; also referenced by orchestrator prompt QUOTA DENIAL ROUTING.
+# Changing this value requires updating _prompts.py and sous-chef/SKILL.md in the same commit.
+QUOTA_GUARD_DENY_TRIGGER: str = "QUOTA WAIT REQUIRED"
+
 
 def _read_quota_cache(cache_path_str: str, max_age: int) -> dict | None:
     """Read quota cache file. Returns parsed data or None if missing/stale/corrupt."""
@@ -172,7 +176,7 @@ def main(*, cache_path_override: str | None = None) -> None:
                         "hookEventName": "PreToolUse",
                         "permissionDecision": "deny",
                         "permissionDecisionReason": (
-                            f"QUOTA WAIT REQUIRED (temporary — NOT a permanent error). "
+                            f"{QUOTA_GUARD_DENY_TRIGGER} (temporary — NOT a permanent error). "
                             f"Utilization: {utilization:.0f}% on window '{window_name}' "
                             f"(threshold: {effective_threshold:.0f}%). "
                             f"MANDATORY ACTION: Call run_cmd with: "

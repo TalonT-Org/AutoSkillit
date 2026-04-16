@@ -406,36 +406,98 @@ def test_orchestrator_prompt_contains_quota_routing():
     assert "QUOTA DENIAL ROUTING" in prompt
 
 
-def test_orchestrator_prompt_instructs_toolsearch_when_deferred():
-    """PR #750 added DO-NOT-ask; this test pins the recovery path instead."""
+def test_orchestrator_prompt_calls_toolsearch_unconditionally():
+    """Step 0 of FIRST ACTION must call ToolSearch unconditionally."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
     assert "ToolSearch" in prompt
-    assert "deferred" in prompt.lower()
     assert "select:" in prompt
     assert "open_kitchen" in prompt
 
 
-def test_open_kitchen_prompt_instructs_toolsearch_when_deferred():
+def test_open_kitchen_prompt_calls_toolsearch_unconditionally():
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_open_kitchen_prompt
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
     assert "ToolSearch" in prompt
-    assert "deferred" in prompt.lower()
     assert "open_kitchen" in prompt
 
 
-def test_prompt_builder_includes_startup_retry():
-    """Prompt must include retry instruction for 'No such tool available'."""
+def test_orchestrator_prompt_has_no_server_startup_recovery_block():
+    """SERVER-STARTUP RECOVERY block must be removed — it misdiagnoses schema deferral
+    as server startup latency."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_open_kitchen_prompt, _build_orchestrator_prompt
+
+    for fn, name in [
+        (_build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX), "orchestrator"),
+        (_build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX), "open_kitchen"),
+    ]:
+        assert "SERVER-STARTUP RECOVERY" not in fn, (
+            f"{name} prompt must not contain SERVER-STARTUP RECOVERY"
+        )
+        assert "Wait 3 seconds" not in fn, f"{name} prompt must not contain 'Wait 3 seconds'"
+
+
+def test_orchestrator_prompt_has_no_deferred_tool_recovery_conditional():
+    """The conditional DEFERRED-TOOL RECOVERY block must be removed — it is subsumed
+    by the unconditional ToolSearch step 0."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
     prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
-    assert "SERVER-STARTUP RECOVERY" in prompt
-    assert "No such tool available" in prompt
+    assert "schemas NOT loaded — calling directly will fail" not in prompt
+
+
+def test_first_action_step0_calls_toolsearch_unconditionally():
+    """Step 0 of FIRST ACTION must call ToolSearch unconditionally — no 'if' guard."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
+
+    start = prompt.index("FIRST ACTION")
+    end = prompt.index("During pipeline execution", start)
+    first_action = prompt[start:end]
+
+    assert "ToolSearch" in first_action
+
+    step0_end = first_action.index("\n1.")
+    step0_text = first_action[:step0_end]
+    lower = step0_text.lower()
+    assert "if the session" not in lower, "Step 0 ToolSearch must be unconditional"
+    assert "if deferred" not in lower, "Step 0 ToolSearch must be unconditional"
+    assert "when the" not in lower, "Step 0 ToolSearch must be unconditional"
+
+
+def test_first_action_toolsearch_index_precedes_open_kitchen():
+    """Within FIRST ACTION step 0, ToolSearch must appear before open_kitchen."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
+
+    start = prompt.index("FIRST ACTION")
+    end = prompt.index("During pipeline execution", start)
+    first_action = prompt[start:end]
+
+    ts_idx = first_action.index("ToolSearch")
+    ok_idx = first_action.index("open_kitchen")
+    assert ts_idx < ok_idx, "ToolSearch must appear before open_kitchen in FIRST ACTION"
+
+
+def test_open_kitchen_prompt_step0_unconditional_toolsearch():
+    """_build_open_kitchen_prompt must also call ToolSearch unconditionally."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
+    prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
+    assert "ToolSearch" in prompt
+    lower = prompt.lower()
+    assert "if the session's deferred-tool list" not in lower
 
 
 def test_orchestrator_prompt_contains_anti_skip_rule():

@@ -93,15 +93,22 @@ class TestFirstActionAskUserQuestionProhibition:
 
 
 class TestFirstActionTimingResilience:
-    """FIRST ACTION must acknowledge MCP initialization timing."""
+    """FIRST ACTION step 0 must call ToolSearch unconditionally before open_kitchen."""
 
-    def test_first_action_is_timing_resilient(self):
-        """FIRST ACTION must not unconditionally command 'MUST be first'
-        without acknowledging MCP initialization timing."""
+    def test_first_action_step0_calls_toolsearch_not_open_kitchen_directly(self):
+        """Step 0 in FIRST ACTION must be ToolSearch — not a direct open_kitchen call.
+        ToolSearch is a no-op on loaded schemas; it ensures schema availability without
+        requiring any conditional phrase-matching."""
         prompt = _get_prompt()
         first_action_start = prompt.index("FIRST ACTION")
         first_action_end = prompt.index("During pipeline execution", first_action_start)
         first_action_section = prompt[first_action_start:first_action_end]
-        assert (
-            "retry" in first_action_section.lower() or "available" in first_action_section.lower()
-        ), "FIRST ACTION must acknowledge MCP init timing with retry/availability guidance"
+
+        # Step 0 must reference ToolSearch
+        assert "ToolSearch" in first_action_section
+
+        # Step 0 text must not be conditional on a deferred-tool check
+        step0_end = first_action_section.index("\n1.")
+        step0 = first_action_section[:step0_end].lower()
+        assert "if the session" not in step0
+        assert "if deferred" not in step0

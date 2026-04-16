@@ -841,6 +841,7 @@ class TestBuildSkillResultCrossValidation:
         "is_error",
         "exit_code",
         "kill_reason",
+        "last_stop_reason",
         "needs_retry",
         "retry_reason",
         "stderr",

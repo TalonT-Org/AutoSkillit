@@ -7,6 +7,7 @@ _logging.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 from pathlib import Path
@@ -30,6 +31,81 @@ def build_sanitized_env() -> dict[str, str]:
     subprocess runner get full env inheritance minus the internal vars.
     """
     return {k: v for k, v in os.environ.items() if k not in AUTOSKILLIT_PRIVATE_ENV_VARS}
+
+
+def _read_sidecar_base_branch(cwd: Path) -> str | None:
+    """Read base-branch from worktree sidecar if cwd is a linked worktree.
+
+    Worktree sidecars are written by implement-worktree skills at
+    ``<project_root>/.autoskillit/temp/worktrees/<wt_name>/base-branch``.
+    Returns None if cwd is not a worktree or no sidecar exists.
+    """
+    git_path = cwd / ".git"
+    if not git_path.is_file():
+        return None
+    try:
+        content = git_path.read_text().strip()
+        if not content.startswith("gitdir:"):
+            return None
+        gitdir = Path(content.split(":", 1)[1].strip())
+        if not gitdir.is_absolute():
+            gitdir = (cwd / gitdir).resolve()
+        main_git = gitdir.parent.parent
+        project_root = main_git.parent
+        wt_name = cwd.name
+        sidecar = project_root / ".autoskillit" / "temp" / "worktrees" / wt_name / "base-branch"
+        if sidecar.is_file():
+            return sidecar.read_text().strip() or None
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+async def _resolve_base_ref(config_base_ref: str | None, cwd: Path) -> str | None:
+    """Resolve the base ref for test filtering.
+
+    Resolution chain (first non-None wins):
+    1. Config override (explicit base_ref in TestCheckConfig)
+    2. Worktree sidecar (base-branch file written by implement-worktree skills)
+    3. Git upstream tracking ref (``@{upstream}`` of current branch)
+    4. None (no base ref available)
+    """
+    if config_base_ref:
+        return config_base_ref
+
+    sidecar_ref = _read_sidecar_base_branch(cwd)
+    if sidecar_ref:
+        return sidecar_ref
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git",
+            "rev-parse",
+            "--abbrev-ref",
+            "@{upstream}",
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=15.0)
+        except TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except OSError:
+                pass
+            return None
+        if proc.returncode == 0:
+            assert proc.stdout is not None
+            raw = await proc.stdout.read()
+            ref = raw.decode().strip()
+            if ref:
+                return ref
+    except OSError:
+        pass
+
+    return None
 
 
 _OUTCOME_PATTERN = re.compile(
@@ -116,6 +192,15 @@ class DefaultTestRunner:
         command = self._config.test_check.command
         timeout = float(self._config.test_check.timeout)
         env = build_sanitized_env()
+
+        filter_mode = self._config.test_check.filter_mode
+        if filter_mode:
+            env["AUTOSKILLIT_TEST_FILTER"] = filter_mode
+
+        base_ref = await _resolve_base_ref(self._config.test_check.base_ref, cwd)
+        if base_ref:
+            env["AUTOSKILLIT_TEST_BASE_REF"] = base_ref
+
         result = await self._runner(command, cwd=cwd, timeout=timeout, env=env)
         passed = check_test_passed(result.returncode, result.stdout, result.stderr)
         return TestResult(passed=passed, stdout=result.stdout, stderr=result.stderr)

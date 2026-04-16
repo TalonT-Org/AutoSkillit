@@ -46,6 +46,8 @@ _METADATA_KEYS: frozenset[str] = frozenset({"version"})
 class TestCheckConfig:
     command: list[str] = field(default_factory=lambda: ["task", "test-check"])
     timeout: int = 600
+    filter_mode: str | None = None
+    base_ref: str | None = None
 
 
 @dataclass
@@ -383,6 +385,8 @@ class AutomationConfig:
             test_check=TestCheckConfig(
                 command=list(val(tc, "command", _tc["command"])),
                 timeout=int(val(tc, "timeout", _tc["timeout"])),
+                filter_mode=val(tc, "filter_mode", _tc["filter_mode"]) or None,
+                base_ref=val(tc, "base_ref", _tc["base_ref"]) or None,
             ),
             classify_fix=ClassifyFixConfig(
                 path_prefixes=list(val(cf, "path_prefixes", _cf["path_prefixes"])),

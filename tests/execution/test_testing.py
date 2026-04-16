@@ -13,12 +13,14 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.testing import (
     DefaultTestRunner,
+    _read_sidecar_base_branch,
+    _resolve_base_ref,
     build_sanitized_env,
 )
 from autoskillit.execution.testing import (
     parse_pytest_summary as _parse_pytest_summary,
 )
-from tests._helpers import make_test_config
+from tests._helpers import make_test_check_config, make_test_config
 
 
 def test_build_sanitized_env_strips_private_env_vars(monkeypatch):
@@ -326,3 +328,180 @@ def test_test_result_dataclass_fields() -> None:
     assert r.passed is True
     assert r.stdout == "out"
     assert r.stderr == "err"
+
+
+# ---------- TestCheckConfig filter_mode / base_ref ----------
+
+
+def test_test_check_config_has_filter_mode_and_base_ref_fields():
+    cfg = make_test_check_config()
+    assert cfg.filter_mode is None
+    assert cfg.base_ref is None
+
+
+def test_from_dynaconf_reads_filter_mode_and_base_ref(monkeypatch):
+    from tests._helpers import make_dynaconf_and_automation_config
+
+    _make_dynaconf, AutomationConfig = make_dynaconf_and_automation_config()
+    monkeypatch.setenv("AUTOSKILLIT_TEST_CHECK__FILTER_MODE", "conservative")
+    monkeypatch.setenv("AUTOSKILLIT_TEST_CHECK__BASE_REF", "origin/main")
+    d = _make_dynaconf()
+    cfg = AutomationConfig.from_dynaconf(d)
+    assert cfg.test_check.filter_mode == "conservative"
+    assert cfg.test_check.base_ref == "origin/main"
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_injects_filter_mode_env_var(monkeypatch, tmp_path):
+    captured_kwargs: dict = {}
+
+    async def capturing_runner(cmd, *, cwd, timeout, **kwargs):
+        captured_kwargs.update(kwargs)
+        return SubprocessResult(
+            returncode=0,
+            stdout="1 passed",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+
+    config = make_test_config(test_check=make_test_check_config(filter_mode="conservative"))
+    runner = DefaultTestRunner(config=config, runner=capturing_runner)
+    await runner.run(cwd=tmp_path)
+    assert captured_kwargs["env"]["AUTOSKILLIT_TEST_FILTER"] == "conservative"
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_omits_filter_env_when_none(monkeypatch, tmp_path):
+    captured_kwargs: dict = {}
+
+    async def capturing_runner(cmd, *, cwd, timeout, **kwargs):
+        captured_kwargs.update(kwargs)
+        return SubprocessResult(
+            returncode=0,
+            stdout="1 passed",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+
+    config = make_test_config(test_check=make_test_check_config())
+    runner = DefaultTestRunner(config=config, runner=capturing_runner)
+    await runner.run(cwd=tmp_path)
+    assert "AUTOSKILLIT_TEST_FILTER" not in captured_kwargs["env"]
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_injects_base_ref_from_config(monkeypatch, tmp_path):
+    captured_kwargs: dict = {}
+
+    async def capturing_runner(cmd, *, cwd, timeout, **kwargs):
+        captured_kwargs.update(kwargs)
+        return SubprocessResult(
+            returncode=0,
+            stdout="1 passed",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+
+    config = make_test_config(test_check=make_test_check_config(base_ref="origin/main"))
+    runner = DefaultTestRunner(config=config, runner=capturing_runner)
+    await runner.run(cwd=tmp_path)
+    assert captured_kwargs["env"]["AUTOSKILLIT_TEST_BASE_REF"] == "origin/main"
+
+
+# ---------- _resolve_base_ref ----------
+
+
+@pytest.mark.anyio
+async def test_resolve_base_ref_config_override_wins(tmp_path):
+    result = await _resolve_base_ref("origin/main", tmp_path)
+    assert result == "origin/main"
+
+
+@pytest.mark.anyio
+async def test_resolve_base_ref_returns_none_when_no_source(tmp_path):
+    result = await _resolve_base_ref(None, tmp_path)
+    assert result is None
+
+
+@pytest.mark.anyio
+async def test_resolve_base_ref_git_upstream_fallback(tmp_path):
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "test"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "branch", "upstream-branch"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "branch", "--set-upstream-to=upstream-branch"],
+        check=True,
+        capture_output=True,
+    )
+    result = await _resolve_base_ref(None, repo)
+    assert result == "upstream-branch"
+
+
+# ---------- _read_sidecar_base_branch ----------
+
+
+def test_read_sidecar_base_branch_returns_branch(tmp_path):
+    wt_dir = tmp_path / "my-worktree"
+    wt_dir.mkdir()
+    main_git = tmp_path / "main-repo" / ".git"
+    main_git.mkdir(parents=True)
+    worktrees_gitdir = main_git / "worktrees" / "my-worktree"
+    worktrees_gitdir.mkdir(parents=True)
+    (wt_dir / ".git").write_text(f"gitdir: {worktrees_gitdir}\n")
+    sidecar = tmp_path / "main-repo" / ".autoskillit" / "temp" / "worktrees" / "my-worktree"
+    sidecar.mkdir(parents=True)
+    (sidecar / "base-branch").write_text("impl-934\n")
+    assert _read_sidecar_base_branch(wt_dir) == "impl-934"
+
+
+def test_read_sidecar_base_branch_returns_none_for_regular_dir(tmp_path):
+    assert _read_sidecar_base_branch(tmp_path) is None
+
+
+def test_read_sidecar_base_branch_returns_none_for_main_checkout(tmp_path):
+    (tmp_path / ".git").mkdir()
+    assert _read_sidecar_base_branch(tmp_path) is None
+
+
+# ---------- env var passthrough ----------
+
+
+def test_filter_env_vars_not_in_private_set():
+    assert "AUTOSKILLIT_TEST_FILTER" not in AUTOSKILLIT_PRIVATE_ENV_VARS
+    assert "AUTOSKILLIT_TEST_BASE_REF" not in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
+def test_defaults_yaml_has_filter_mode_and_base_ref():
+    from autoskillit.core import load_yaml, pkg_root
+
+    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+    tc = defaults["test_check"]
+    assert "filter_mode" in tc
+    assert "base_ref" in tc
+    assert tc["filter_mode"] is None
+    assert tc["base_ref"] is None

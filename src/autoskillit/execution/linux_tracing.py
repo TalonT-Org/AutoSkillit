@@ -305,6 +305,12 @@ class ProcSnapshot:
     wchan: str
     # CPU utilisation (0.0 when process arg is not supplied to read_proc_snapshot)
     cpu_percent: float
+    # Best-effort /proc/{pid}/net/tcp fields (Linux only; None when unavailable)
+    api_connections_established: int | None = None
+    api_connection_states: dict[str, int] | None = None
+    # Best-effort /proc/{pid}/io fields (Linux only; None when unavailable)
+    io_read_bytes: int | None = None
+    io_write_bytes: int | None = None
 
 
 def _parse_proc_status(content: str) -> dict[str, str]:
@@ -326,6 +332,68 @@ def _parse_proc_status(content: str) -> dict[str, str]:
         elif key == "SigCgt":
             fields["sig_cgt"] = value
     return fields
+
+
+_TCP_STATE_NAMES: dict[str, str] = {
+    "01": "ESTABLISHED",
+    "02": "SYN_SENT",
+    "03": "SYN_RECV",
+    "04": "FIN_WAIT1",
+    "05": "FIN_WAIT2",
+    "06": "TIME_WAIT",
+    "07": "CLOSE",
+    "08": "CLOSE_WAIT",
+    "09": "LAST_ACK",
+    "0A": "LISTEN",
+    "0B": "CLOSING",
+}
+_API_PORT_HEX: str = "01BB"  # port 443 in big-endian hex (Linux /proc/net/tcp format)
+
+
+def _parse_net_tcp(content: str) -> dict[str, int]:
+    """Parse /proc/{pid}/net/tcp content for connections to port 443.
+
+    Returns a dict mapping TCP state name to connection count.
+    Returns {} on empty or header-only content.
+    Lines with fewer than 4 fields are skipped silently.
+    """
+    counts: dict[str, int] = {}
+    for line in content.splitlines()[1:]:  # skip header
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        rem_addr = parts[2]
+        state_hex = parts[3].upper()
+        if ":" not in rem_addr:
+            continue
+        rem_port = rem_addr.split(":")[1].upper()
+        if rem_port != _API_PORT_HEX:
+            continue
+        state_name = _TCP_STATE_NAMES.get(state_hex, state_hex)
+        counts[state_name] = counts.get(state_name, 0) + 1
+    return counts
+
+
+def _parse_proc_io(content: str) -> tuple[int | None, int | None]:
+    """Parse /proc/{pid}/io content for read_bytes and write_bytes.
+
+    Returns (read_bytes, write_bytes). Either may be None if the field
+    is absent or unparseable.
+    """
+    read_b: int | None = None
+    write_b: int | None = None
+    for line in content.splitlines():
+        if line.startswith("read_bytes:"):
+            try:
+                read_b = int(line.split(":", 1)[1].strip())
+            except (ValueError, IndexError):
+                pass
+        elif line.startswith("write_bytes:"):
+            try:
+                write_b = int(line.split(":", 1)[1].strip())
+            except (ValueError, IndexError):
+                pass
+    return read_b, write_b
 
 
 def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> ProcSnapshot | None:
@@ -375,6 +443,34 @@ def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> Pr
     except (FileNotFoundError, PermissionError):
         wchan = ""
 
+    # Best-effort: /proc/{pid}/net/tcp and tcp6 (Linux network namespace for this PID)
+    _api_conn_states: dict[str, int] | None = None
+    try:
+        _tcp_content = Path(f"/proc/{pid}/net/tcp").read_text()
+        _states = _parse_net_tcp(_tcp_content)
+        try:
+            _tcp6_content = Path(f"/proc/{pid}/net/tcp6").read_text()
+            for k, v in _parse_net_tcp(_tcp6_content).items():
+                _states[k] = _states.get(k, 0) + v
+        except (FileNotFoundError, PermissionError, OSError):
+            pass
+        _api_conn_states = _states if _states else {}
+    except (FileNotFoundError, PermissionError, OSError, ValueError):
+        pass
+
+    _api_conns_established: int | None = None
+    if _api_conn_states is not None:
+        _api_conns_established = _api_conn_states.get("ESTABLISHED", 0)
+
+    # Best-effort: /proc/{pid}/io
+    _io_read: int | None = None
+    _io_write: int | None = None
+    try:
+        _io_content = Path(f"/proc/{pid}/io").read_text()
+        _io_read, _io_write = _parse_proc_io(_io_content)
+    except (FileNotFoundError, PermissionError, OSError):
+        pass
+
     return ProcSnapshot(
         captured_at=captured_at,
         comm=comm,
@@ -391,6 +487,10 @@ def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> Pr
         oom_score=oom,
         wchan=wchan,
         cpu_percent=cpu_pct,
+        api_connections_established=_api_conns_established,
+        api_connection_states=_api_conn_states,
+        io_read_bytes=_io_read,
+        io_write_bytes=_io_write,
     )
 
 

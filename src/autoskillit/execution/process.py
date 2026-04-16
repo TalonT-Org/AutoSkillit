@@ -32,6 +32,7 @@ from autoskillit.execution._process_io import create_temp_io, read_temp_output
 from autoskillit.execution._process_jsonl import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,
+    _jsonl_last_record_type,
     _marker_is_standalone,
 )
 from autoskillit.execution._process_kill import (
@@ -80,6 +81,7 @@ __all__ = [
     "_heartbeat",
     "_jsonl_contains_marker",
     "_jsonl_has_record_type",
+    "_jsonl_last_record_type",
     "_marker_is_standalone",
     "_session_log_monitor",
     "_wait_process_dead",
@@ -419,6 +421,7 @@ async def run_managed_async(
                 ),
                 kill_reason=kill_reason,
                 tracked_comm=_tracked_comm,
+                orphaned_tool_result=signals.channel_b_orphaned_tool_result,
             )
             proc_log.debug(
                 "run_managed_async_result",

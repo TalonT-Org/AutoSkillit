@@ -104,3 +104,23 @@ def _jsonl_has_record_type(
                 continue  # marker configured but absent — do not confirm
         return True
     return False
+
+
+def _jsonl_last_record_type(content: str) -> str | None:
+    """Return the type field of the last parseable JSONL record in content, or None."""
+    import json as _json
+
+    last_type: str | None = None
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = _json.loads(line)
+        except (ValueError, _json.JSONDecodeError):
+            continue
+        if isinstance(obj, dict):
+            t = obj.get("type")
+            if isinstance(t, str):
+                last_type = t
+    return last_type

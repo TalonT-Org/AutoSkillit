@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from autoskillit.config.settings import QuotaGuardConfig
 from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
 
@@ -174,10 +175,9 @@ async def test_open_kitchen_bridges_enabled_flag_as_disabled(
     """
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
-    mock_ctx.config.quota_guard.enabled = enabled
-    mock_ctx.config.quota_guard.cache_max_age = 300
-    mock_ctx.config.quota_guard.cache_path = "/p/q.json"
-    mock_ctx.config.quota_guard.buffer_seconds = 60
+    mock_ctx.config.quota_guard = QuotaGuardConfig(
+        enabled=enabled, cache_max_age=300, cache_path="/p/q.json", buffer_seconds=60
+    )
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):

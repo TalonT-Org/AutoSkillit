@@ -373,3 +373,6 @@ async def run_skill(
             skill_command=skill_command,
             order_id=order_id,
         ).to_json()
+    except BaseException:
+        logger.warning("run_skill cancelled", exc_info=True)
+        raise

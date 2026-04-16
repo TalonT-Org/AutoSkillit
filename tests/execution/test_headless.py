@@ -2200,6 +2200,83 @@ class TestCrashSessionLog:
             assert result.success is False
 
 
+class TestCancelledSessionLog:
+    """flush_session_log is called with success=False when runner raises CancelledError."""
+
+    @pytest.mark.anyio
+    async def test_run_headless_core_cancellation_still_flushes_session_log(
+        self, monkeypatch, tool_ctx, tmp_path
+    ):
+        """flush_session_log is called with CANCELLED termination_reason on cancellation."""
+        import anyio
+
+        from autoskillit.execution.headless import run_headless_core
+
+        flushed: list[dict] = []
+
+        def fake_flush(**kwargs: object) -> None:
+            flushed.append(dict(kwargs))
+
+        monkeypatch.setattr("autoskillit.execution.flush_session_log", fake_flush)
+
+        async def cancelled_runner(*args: object, **kwargs: object) -> None:
+            raise anyio.get_cancelled_exc_class()()
+
+        tool_ctx.runner = cancelled_runner  # type: ignore[assignment]
+
+        with pytest.raises(anyio.get_cancelled_exc_class()):
+            await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
+
+        cancel_calls = [f for f in flushed if f.get("termination_reason") == "CANCELLED"]
+        assert len(cancel_calls) == 1
+        assert cancel_calls[0]["success"] is False
+        assert cancel_calls[0]["subtype"] == "cancelled"
+        assert cancel_calls[0]["exit_code"] == -1
+        assert cancel_calls[0]["session_id"] == ""
+        assert cancel_calls[0]["pid"] == 0
+
+    @pytest.mark.anyio
+    async def test_run_headless_core_cancelled_error_propagates_after_flush(
+        self, monkeypatch, tool_ctx, tmp_path
+    ):
+        """CancelledError re-raises after flush — never swallowed."""
+        import anyio
+
+        from autoskillit.execution.headless import run_headless_core
+
+        monkeypatch.setattr("autoskillit.execution.flush_session_log", lambda **kw: None)
+
+        async def cancelled_runner(*args: object, **kwargs: object) -> None:
+            raise anyio.get_cancelled_exc_class()()
+
+        tool_ctx.runner = cancelled_runner  # type: ignore[assignment]
+
+        with pytest.raises(anyio.get_cancelled_exc_class()):
+            await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
+
+    @pytest.mark.anyio
+    async def test_run_headless_core_flush_failure_does_not_suppress_cancellation(
+        self, monkeypatch, tool_ctx, tmp_path
+    ):
+        """Even if flush_session_log raises, cancellation still propagates."""
+        import anyio
+
+        from autoskillit.execution.headless import run_headless_core
+
+        def exploding_flush(**kwargs: object) -> None:
+            raise OSError("log disk full")
+
+        monkeypatch.setattr("autoskillit.execution.flush_session_log", exploding_flush)
+
+        async def cancelled_runner(*args: object, **kwargs: object) -> None:
+            raise anyio.get_cancelled_exc_class()()
+
+        tool_ctx.runner = cancelled_runner  # type: ignore[assignment]
+
+        with pytest.raises(anyio.get_cancelled_exc_class()):
+            await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
+
+
 class TestRetryBudgetEnforcement:
     """_build_skill_result enforces max_consecutive_retries budget."""
 

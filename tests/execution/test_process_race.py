@@ -277,14 +277,14 @@ class TestExitSnapshot:
 
         acc = RaceAccumulator()
         trigger = anyio.Event()
-        proc = await anyio.open_process(
+        async with await anyio.open_process(
             [sys.executable, "-c", "import time; time.sleep(0.2)"],
             start_new_session=True,
-        )
-        async with anyio.create_task_group() as tg:
-            tg.start_soon(_watch_process, proc, acc, trigger)
-            await trigger.wait()
-            tg.cancel_scope.cancel()
+        ) as proc:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(_watch_process, proc, acc, trigger)
+                await trigger.wait()
+                tg.cancel_scope.cancel()
 
         # exit_snapshot may be None if read_proc_snapshot failed (race — process gone)
         # but the attribute must exist (not missing)
@@ -301,17 +301,16 @@ class TestExitSnapshot:
 
         acc = RaceAccumulator()
         trigger = anyio.Event()
-        proc = await anyio.open_process(
+        async with await anyio.open_process(
             [sys.executable, "-c", "pass"],  # instant exit — maximises snapshot chance
             start_new_session=True,
-        )
-        async with anyio.create_task_group() as tg:
-            tg.start_soon(_watch_process, proc, acc, trigger)
-            await trigger.wait()
-            tg.cancel_scope.cancel()
+        ) as proc:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(_watch_process, proc, acc, trigger)
+                await trigger.wait()
+                tg.cancel_scope.cancel()
 
-        if acc.exit_snapshot is not None:
-            assert acc.exit_snapshot.get("event") == "exit_snapshot"
+        assert acc.exit_snapshot is None or acc.exit_snapshot.get("event") == "exit_snapshot"
 
 
 class TestProcessExitedEvent:

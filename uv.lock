@@ -94,7 +94,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
-    { name = "api-simulator" },
+    { name = "api-simulator", marker = "sys_platform == 'linux'" },
     { name = "import-linter" },
     { name = "packaging" },
     { name = "pytest" },
@@ -109,7 +109,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.6.0" },
-    { name = "api-simulator", marker = "extra == 'dev'", git = "https://github.com/TalonT-Org/api-simulator?subdirectory=crates%2Fapi-simulator-py&rev=8f711f958d4d93a8e53a3c3b51279fb420870f3a" },
+    { name = "api-simulator", marker = "sys_platform == 'linux' and extra == 'dev'", git = "https://github.com/TalonT-Org/api-simulator?subdirectory=crates%2Fapi-simulator-py&rev=8f711f958d4d93a8e53a3c3b51279fb420870f3a" },
     { name = "cyclopts", specifier = ">=4.0" },
     { name = "dynaconf", specifier = ">=3.2.13,<4.0" },
     { name = "fastmcp", specifier = ">=3.2.0,<4.0" },

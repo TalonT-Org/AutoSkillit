@@ -44,3 +44,13 @@ def test_markdown_it_py_in_dependencies() -> None:
     assert any("markdown-it-py" in d for d in deps), (
         "markdown-it-py not found in [project].dependencies in pyproject.toml"
     )
+
+
+def test_api_simulator_dev_dep_is_linux_only() -> None:
+    """api-simulator must carry sys_platform == 'linux' so it is not installed on macOS/Windows."""
+    deps: list[str] = _project()["project"]["optional-dependencies"]["dev"]
+    api_sim = next((d for d in deps if d.startswith("api-simulator")), None)
+    assert api_sim is not None, "api-simulator not found in dev dependencies"
+    assert "sys_platform" in api_sim and "linux" in api_sim, (
+        f"api-simulator dev dep missing sys_platform == 'linux' marker: {api_sim!r}"
+    )

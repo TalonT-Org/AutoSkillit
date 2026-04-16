@@ -7,17 +7,21 @@ They complement the unit tests in test_quota.py which mock at the function level
 from __future__ import annotations
 
 import json
+import sys
 import time
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
-from api_simulator.http import MockResponseSpec as PyResponseSpec
 
-from autoskillit.execution.quota import check_and_sleep_if_needed
+_api_sim_http = pytest.importorskip("api_simulator.http")
+PyResponseSpec = _api_sim_http.MockResponseSpec
+
+from autoskillit.execution.quota import check_and_sleep_if_needed  # noqa: E402
 
 pytestmark = [
     pytest.mark.layer("execution"),
+    pytest.mark.skipif(sys.platform != "linux", reason="api-simulator is Linux-only"),
     pytest.mark.anyio,
 ]
 

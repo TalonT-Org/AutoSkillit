@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from autoskillit.pipeline.pr_gates import (
     is_ci_passing,
     is_review_passing,
     partition_prs,
 )
+
+pytestmark = [pytest.mark.layer("pipeline")]
 
 # ---------------------------------------------------------------------------
 # CI Gate

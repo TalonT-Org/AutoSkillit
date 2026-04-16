@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from autoskillit.recipe.experiment_type_registry import (
     ExperimentTypeSpec,
     load_all_experiment_types,
 )
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 EXPECTED_TYPES = {
     "benchmark",

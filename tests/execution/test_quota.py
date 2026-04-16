@@ -11,6 +11,8 @@ import pytest
 
 from tests._helpers import make_quota_guard_config
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 class TestReadCredentials:
     def test_reads_access_token(self, tmp_path):

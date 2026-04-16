@@ -20,6 +20,8 @@ from autoskillit.recipe.schema import (
     StepResultRoute,
 )
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 _QUEUE_CAPABLE = ("implementation.yaml", "remediation.yaml", "implementation-groups.yaml")
 
 

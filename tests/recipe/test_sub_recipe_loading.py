@@ -5,8 +5,12 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from autoskillit.recipe._api import _build_active_recipe
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 
 def _make_parent_recipe(

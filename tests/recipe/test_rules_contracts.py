@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 import autoskillit.recipe.rules_contracts as _rc
 from autoskillit.core.paths import pkg_root
 from autoskillit.core.types import Severity
@@ -11,6 +13,8 @@ from autoskillit.recipe.contracts import SkillContract
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 
 def test_rule_flags_skills_with_empty_output_patterns() -> None:

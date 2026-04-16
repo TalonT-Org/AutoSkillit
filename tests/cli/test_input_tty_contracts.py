@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("cli")]
+
 # Files that are *allowed* to contain raw input() calls.
 # _timed_input.py is the sole module that wraps input() with timeout/TTY/ANSI.
 _RAW_INPUT_EXEMPT_FILES: frozenset[str] = frozenset(

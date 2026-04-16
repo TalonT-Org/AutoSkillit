@@ -22,6 +22,8 @@ from autoskillit.execution.process import (
 )
 from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
+pytestmark = [pytest.mark.layer("execution")]
+
 # Script that writes non-matching output then hangs
 PARTIAL_OUTPUT_THEN_HANG_SCRIPT = (
     "import sys, time\n"

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("core")]
+
 
 def test_enums_importable_from_sub_module():
     from autoskillit.core._type_enums import (

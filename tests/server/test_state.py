@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 def _make_mock_ctx(tmp_path: Path) -> MagicMock:
     """Return a minimal mock ToolContext for _initialize tests."""

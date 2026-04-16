@@ -1,7 +1,11 @@
 """Tests for GitHubConfig.allowed_labels field and check_label_allowed validation."""
 
+import pytest
+
 from autoskillit.config import AutomationConfig
 from autoskillit.config.settings import GitHubConfig, _make_dynaconf
+
+pytestmark = [pytest.mark.layer("config")]
 
 
 class TestGitHubConfigAllowedLabelsField:

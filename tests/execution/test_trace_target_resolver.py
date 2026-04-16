@@ -13,10 +13,13 @@ import sys
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "linux",
-    reason="Linux only — tests /proc descendant walking",
-)
+pytestmark = [
+    pytest.mark.layer("execution"),
+    pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="Linux only — tests /proc descendant walking",
+    ),
+]
 
 
 @pytest.mark.skipif(shutil.which("script") is None, reason="script(1) not available")

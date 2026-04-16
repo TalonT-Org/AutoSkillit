@@ -7,11 +7,15 @@ If the claude CLI renames a flag, update the constant value here — one change,
 one place, and all tests catch the ripple.
 """
 
+import pytest
+
 from autoskillit.core import ClaudeFlags
 from autoskillit.execution.commands import (
     build_headless_cmd,
     build_interactive_cmd,
 )
+
+pytestmark = [pytest.mark.layer("execution")]
 
 # ---------------------------------------------------------------------------
 # Part 1: Constant value contracts — each assertion is the ground truth.

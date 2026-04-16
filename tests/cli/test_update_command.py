@@ -8,6 +8,8 @@ import pytest
 
 from autoskillit.cli._install_info import InstallInfo, InstallType
 
+pytestmark = [pytest.mark.layer("cli")]
+
 
 def _make_info(
     install_type: InstallType,

@@ -24,6 +24,8 @@ from autoskillit.execution.process import (
     run_managed_async,
 )
 
+pytestmark = [pytest.mark.layer("execution")]
+
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
 # ---------------------------------------------------------------------------

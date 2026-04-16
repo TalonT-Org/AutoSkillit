@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+pytestmark = [pytest.mark.layer("pipeline")]
 
 # ---------------------------------------------------------------------------
 # Shared test data

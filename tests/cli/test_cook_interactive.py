@@ -11,6 +11,8 @@ import pytest
 from autoskillit import cli
 from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 
+pytestmark = [pytest.mark.layer("cli")]
+
 
 class TestCookInteractive:
     @pytest.fixture(autouse=True)

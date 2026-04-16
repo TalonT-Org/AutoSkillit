@@ -1,8 +1,12 @@
 """Tests for the pipeline-internal-not-hidden semantic rule."""
 
+import pytest
+
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import _RULE_REGISTRY, run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeIngredient
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 
 def _make_recipe_with_ingredients(ingredients: dict) -> Recipe:

@@ -9,9 +9,13 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from autoskillit.core import RetryReason, WriteBehaviorSpec, extract_skill_name
 from autoskillit.execution.headless import _build_skill_result
 from tests.conftest import _make_result
+
+pytestmark = [pytest.mark.layer("execution")]
 
 
 def _ndjson_with_tool_uses(tool_names: list[str]) -> str:

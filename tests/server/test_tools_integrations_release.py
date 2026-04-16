@@ -9,6 +9,8 @@ import pytest
 
 from autoskillit.server.tools_issue_lifecycle import release_issue
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 class TestReleaseIssueStagedLifecycle:
     @pytest.mark.anyio

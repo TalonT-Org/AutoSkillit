@@ -5,10 +5,14 @@ Covers source-isolation-violation and git-mutation-on-source rules.
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import _RULE_REGISTRY, run_semantic_rules
 from tests.recipe.conftest import _make_workflow
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 # ---------------------------------------------------------------------------
 # Test 1a: Rule registration

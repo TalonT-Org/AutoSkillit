@@ -8,6 +8,8 @@ import pytest
 
 from autoskillit.recipe.io import load_recipe
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 _RECIPE_TEMPLATE = """\
 name: temp_subst_demo
 description: demo recipe for temp dir substitution

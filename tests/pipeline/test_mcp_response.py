@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog, McpResponseEntry
+
+pytestmark = [pytest.mark.layer("pipeline")]
 
 
 class TestMcpResponseEntry:

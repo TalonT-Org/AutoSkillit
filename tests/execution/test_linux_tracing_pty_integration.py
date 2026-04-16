@@ -19,10 +19,13 @@ import pytest
 
 from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "linux",
-    reason="Linux only — tests PTY wrapping + /proc tracing",
-)
+pytestmark = [
+    pytest.mark.layer("execution"),
+    pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="Linux only — tests PTY wrapping + /proc tracing",
+    ),
+]
 
 # Skip the entire module when script(1) is absent; no stub needed.
 pytestmark_script = pytest.mark.skipif(

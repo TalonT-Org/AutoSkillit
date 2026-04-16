@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 @pytest.mark.anyio
 async def test_infer_repo_from_remote_returns_empty_for_file_url(tmp_path: Path) -> None:

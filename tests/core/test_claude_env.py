@@ -13,6 +13,8 @@ from autoskillit.core._claude_env import (
     IDE_ENV_PREFIX_DENYLIST,
 )
 
+pytestmark = [pytest.mark.layer("core")]
+
 
 def test_build_claude_env_strips_sse_port() -> None:
     base = {"CLAUDE_CODE_SSE_PORT": "23270", "HOME": "/tmp", "PATH": "/usr/bin"}

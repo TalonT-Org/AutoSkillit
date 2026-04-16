@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 
+import pytest
 import structlog.testing
 
 from autoskillit.core.types import SubprocessResult, TerminationReason
+
+pytestmark = [pytest.mark.layer("execution")]
 
 
 def _sr(returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT):

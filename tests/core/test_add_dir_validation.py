@@ -10,6 +10,8 @@ import pytest
 from autoskillit.core import ValidatedAddDir
 from autoskillit.core.claude_conventions import LayoutError, validate_add_dir
 
+pytestmark = [pytest.mark.layer("core")]
+
 
 class TestValidatedAddDir:
     """ValidatedAddDir is an opaque wrapper with str/fspath support."""

@@ -12,6 +12,8 @@ import pytest
 from autoskillit.config.settings import QuotaGuardConfig
 from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 def _make_mock_ctx():
     """Return a minimal mock ToolContext with a gate."""

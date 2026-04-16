@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("recipe")]
+
 
 def test_project_local_override_rule_emits_warning(tmp_path):
     """T-OVR-015: /autoskillit:review-pr with project-local override → WARNING finding."""

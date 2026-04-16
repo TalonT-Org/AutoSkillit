@@ -24,6 +24,8 @@ import sys
 
 import pytest
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 @pytest.mark.integration
 def test_sigterm_during_startup_no_hang(tmp_path):

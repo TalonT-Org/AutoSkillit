@@ -5,11 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from autoskillit.pipeline.audit import (
     DefaultAuditLog,
     FailureRecord,
     _validate_failure_record_dict,
 )
+
+pytestmark = [pytest.mark.layer("pipeline")]
 
 
 def _make_record(**overrides: object) -> FailureRecord:

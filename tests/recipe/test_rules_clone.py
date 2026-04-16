@@ -11,6 +11,8 @@ from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 _BUNDLED_RECIPE_YAMLS = list(builtin_recipes_dir().rglob("*.yaml"))
 assert _BUNDLED_RECIPE_YAMLS, (
     "builtin_recipes_dir() returned no YAMLs — parametrize would silently vacuous-pass"

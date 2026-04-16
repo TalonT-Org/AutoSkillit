@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import (
     _parse_recipe,
@@ -16,6 +18,8 @@ from autoskillit.recipe.validator import (
     run_semantic_rules,
 )
 from tests.recipe.conftest import _make_workflow
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 # ---------------------------------------------------------------------------
 # retry-worktree-cwd tests

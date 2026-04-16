@@ -11,6 +11,8 @@ import structlog
 
 from tests._helpers import _flush_structlog_proxy_caches as _flush_logger_proxy_caches
 
+pytestmark = [pytest.mark.layer("core")]
+
 
 class TestGetLogger:
     def test_returns_bound_logger(self):

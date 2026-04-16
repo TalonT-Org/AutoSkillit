@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.execution.pr_analysis import (
     DOMAIN_PATHS,
     extract_linked_issues,
     is_valid_fidelity_finding,
     partition_files_by_domain,
 )
+
+pytestmark = [pytest.mark.layer("execution")]
 
 # ---------------------------------------------------------------------------
 # extract_linked_issues

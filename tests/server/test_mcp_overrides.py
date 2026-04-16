@@ -6,6 +6,10 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+pytestmark = [pytest.mark.layer("server")]
+
 
 def _make_mock_recipes(load_result: dict) -> MagicMock:
     """Create a mock recipe repository that returns the given load result."""

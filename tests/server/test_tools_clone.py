@@ -17,6 +17,8 @@ from autoskillit.server.tools_clone import (
 )
 from autoskillit.workspace import clone_registry
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 class TestCloneRepoTool:
     @pytest.mark.anyio

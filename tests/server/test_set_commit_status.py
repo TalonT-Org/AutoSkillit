@@ -10,6 +10,8 @@ from autoskillit.pipeline.gate import GATED_TOOLS, DefaultGateState
 from autoskillit.server.tools_ci import set_commit_status
 from tests.conftest import _make_result
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 async def _async_return(value: object) -> object:
     """Minimal async helper returning a fixed value — for monkeypatching async callables."""

@@ -24,6 +24,8 @@ from autoskillit.server.tools_issue_lifecycle import (
     release_issue,
 )
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 def _make_skill_result(
     success: bool = True,

@@ -17,6 +17,8 @@ from autoskillit.execution.commands import (
     build_interactive_cmd,
 )
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 class TestBuildInteractiveCmd:
     def test_returns_correct_type(self) -> None:

@@ -13,6 +13,8 @@ import pytest
 
 from tests.conftest import _make_result
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 @pytest.mark.anyio
 async def test_run_headless_core_env_excludes_ide_vars(

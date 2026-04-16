@@ -4,6 +4,8 @@ import pytest
 
 from autoskillit.core.branch_guard import is_protected_branch
 
+pytestmark = [pytest.mark.layer("core")]
+
 _DEFAULTS = ["main", "integration", "stable"]
 
 # ---------- standard protected list ----------

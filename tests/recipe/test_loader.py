@@ -11,6 +11,8 @@ from autoskillit.recipe.loader import (
     parse_recipe_metadata,
 )
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 
 class TestParseRecipeMetadata:
     def test_single_document(self, tmp_path: Path) -> None:

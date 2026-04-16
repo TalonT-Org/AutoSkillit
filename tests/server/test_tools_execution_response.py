@@ -14,6 +14,8 @@ from autoskillit.core.types import (
 )
 from autoskillit.server.tools_execution import run_skill
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 def _make_session_result(
     returncode: int = 0,

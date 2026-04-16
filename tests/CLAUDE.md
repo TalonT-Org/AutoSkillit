@@ -29,6 +29,29 @@ All tests run under `-n 4 --dist worksteal`. Every test must be safe for paralle
 - Never use bare assignment or `try/finally` to restore server state — use `monkeypatch` or
   rely on the fixture's teardown.
 
+## Layer Markers
+
+Every `test_*.py` file in a source-layer-mirroring directory carries a module-level
+`pytestmark` with a `layer` marker matching the directory name:
+
+```python
+pytestmark = [pytest.mark.layer("execution")]
+```
+
+**In-scope directories:** core, config, pipeline, execution, workspace, recipe,
+migration, server, cli.
+
+**Out of scope:** arch/, contracts/, infra/, docs/, skills/, hooks/, skills_extended/.
+
+When a file already defines `pytestmark` for other markers (e.g., `skipif`, `anyio`),
+use list form and place the `layer` marker first.
+
+The `layer` marker is registered in `pyproject.toml`. Conftest validates at collection
+time that marker values match directories (warnings on mismatch).
+`tests/arch/test_layer_markers.py` enforces completeness and correctness via AST scan.
+
+**Usage:** `pytest -m 'layer("core")'` runs only L0 core tests.
+
 ## Placement Convention: tests/skills/ vs tests/contracts/
 
 - `tests/skills/` — tests that exercise the skill loader, skill discovery, or skill

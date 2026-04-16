@@ -7,6 +7,8 @@ may silently fall through a catch-all condition.
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import (
@@ -16,6 +18,8 @@ from autoskillit.recipe.schema import (
     StepResultRoute,
 )
 from autoskillit.recipe.validator import run_semantic_rules
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:

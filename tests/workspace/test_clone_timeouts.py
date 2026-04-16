@@ -5,6 +5,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("workspace")]
+
 _GIT_NETWORK_SUBCOMMANDS = {"push", "clone", "fetch", "pull", "ls-remote"}
 
 

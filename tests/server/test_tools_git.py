@@ -20,6 +20,8 @@ from autoskillit.server.tools_git import (
 )
 from tests.conftest import _make_result
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 class TestClassifyFix:
     """T4, T5: classify_fix returns correct restart scope based on changed files."""

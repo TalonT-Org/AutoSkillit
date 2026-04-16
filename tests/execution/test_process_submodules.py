@@ -6,6 +6,10 @@ process.py remains a re-export facade for all public symbols.
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("execution")]
+
 
 def test_process_kill_exports():
     """_process_kill.py exports kill/async_kill functions."""

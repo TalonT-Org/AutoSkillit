@@ -9,6 +9,8 @@ import pytest
 
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 class TestTrackResponseSize:
     @pytest.mark.anyio

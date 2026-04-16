@@ -15,6 +15,8 @@ from autoskillit.cli._onboarding import (
     run_onboarding_menu,
 )
 
+pytestmark = [pytest.mark.layer("cli")]
+
 
 def _make_initialized_project(base: Path) -> Path:
     """Create a minimal initialized project dir (config.yaml present)."""

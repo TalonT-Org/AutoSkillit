@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from autoskillit.execution.process import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,
     _jsonl_last_record_type,
     _marker_is_standalone,
 )
+
+pytestmark = [pytest.mark.layer("execution")]
 
 
 class TestJsonlContainsMarker:

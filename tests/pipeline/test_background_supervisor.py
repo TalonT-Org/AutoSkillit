@@ -6,6 +6,8 @@ import pytest
 
 from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 
+pytestmark = [pytest.mark.layer("pipeline")]
+
 
 @pytest.mark.anyio
 async def test_supervisor_captures_exception():

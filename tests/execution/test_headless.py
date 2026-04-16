@@ -23,6 +23,8 @@ from autoskillit.execution.headless import (
 )
 from tests.conftest import _make_result, _make_timeout_result
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 def test_inject_completion_directive_appends_marker():
     from autoskillit.execution.commands import _inject_completion_directive

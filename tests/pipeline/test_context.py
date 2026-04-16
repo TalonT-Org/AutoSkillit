@@ -15,6 +15,8 @@ from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.pipeline.timings import DefaultTimingLog
 from autoskillit.pipeline.tokens import DefaultTokenLog
 
+pytestmark = [pytest.mark.layer("pipeline")]
+
 
 def test_tool_context_fields_accessible(tmp_path):
     """ToolContext exposes all expected fields."""

@@ -11,6 +11,8 @@ from autoskillit.workspace.worktree import (
     remove_worktree_sidecar,
 )
 
+pytestmark = [pytest.mark.layer("workspace")]
+
 
 class TestListGitWorktrees:
     """list_git_worktrees(project_root) returns paths of linked worktrees under root."""

@@ -17,6 +17,8 @@ import pytest
 from autoskillit.execution import resolve_remote_repo
 from autoskillit.workspace import clone_repo
 
+pytestmark = [pytest.mark.layer("workspace")]
+
 # ---------------------------------------------------------------------------
 # Primary cross-boundary integration test
 # ---------------------------------------------------------------------------

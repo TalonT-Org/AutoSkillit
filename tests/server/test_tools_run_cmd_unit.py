@@ -12,6 +12,8 @@ import structlog.testing
 from autoskillit.server.tools_execution import run_cmd
 from tests.conftest import _make_result
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 class TestRunCmdObservability:
     """run_cmd binds structlog contextvars and calls ctx.info/ctx.error."""

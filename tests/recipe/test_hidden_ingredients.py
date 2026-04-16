@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.recipe._api import format_ingredients_table
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 
 def _make_recipe(**ingredients: RecipeIngredient) -> Recipe:

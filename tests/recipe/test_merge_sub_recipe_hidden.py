@@ -1,7 +1,11 @@
 """Test that _merge_sub_recipe skips hidden sub-recipe ingredients."""
 
+import pytest
+
 from autoskillit.recipe._api import _merge_sub_recipe
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 
 def _recipe(

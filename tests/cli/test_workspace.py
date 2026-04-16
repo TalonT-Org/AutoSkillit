@@ -11,6 +11,8 @@ import pytest
 from autoskillit.cli._workspace import _format_age, run_workspace_clean
 from autoskillit.workspace import CleanupResult
 
+pytestmark = [pytest.mark.layer("cli")]
+
 
 class TestFormatAge:
     def test_format_age_under_one_hour_returns_minutes(self) -> None:

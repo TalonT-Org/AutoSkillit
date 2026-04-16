@@ -1,8 +1,12 @@
 """Tests for the unknown-required-pack semantic rule."""
 
+import pytest
+
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 
 def _make_recipe(requires_packs: list[str]) -> Recipe:

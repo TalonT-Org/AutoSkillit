@@ -8,6 +8,8 @@ import pytest
 
 from autoskillit.execution.recording import RecordingSubprocessRunner
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 @pytest.mark.asyncio
 async def test_lifespan_calls_finalize_on_recording_runner():

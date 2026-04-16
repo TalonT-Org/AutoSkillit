@@ -8,6 +8,8 @@ import pytest
 
 from autoskillit.config import WorkspaceConfig, load_config
 
+pytestmark = [pytest.mark.layer("config")]
+
 
 def test_workspace_config_has_temp_dir_field() -> None:
     assert WorkspaceConfig().temp_dir is None

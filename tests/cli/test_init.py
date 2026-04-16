@@ -12,6 +12,8 @@ import yaml
 from autoskillit import cli
 from autoskillit.cli import _generate_config_yaml
 
+pytestmark = [pytest.mark.layer("cli")]
+
 
 class TestCLIInit:
     @pytest.fixture(autouse=True)

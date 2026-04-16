@@ -11,6 +11,8 @@ import pytest
 from autoskillit.config import AutomationConfig
 from autoskillit.config.settings import RunSkillConfig
 
+pytestmark = [pytest.mark.layer("config")]
+
 
 class TestGraceWindowCoherence:
     """natural_exit_grace_seconds must cover exit_after_stop_delay_ms + margin."""

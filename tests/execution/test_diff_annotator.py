@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.execution.diff_annotator import (
     annotate_diff,
     filter_findings,
     parse_hunk_ranges,
 )
+
+pytestmark = [pytest.mark.layer("execution")]
 
 # --- parse_hunk_ranges ---
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 import structlog.testing
 
 from autoskillit.core.types import ChannelConfirmation, TerminationReason
@@ -12,6 +13,8 @@ from autoskillit.execution.session import (
     _compute_retry,
     _compute_success,
 )
+
+pytestmark = [pytest.mark.layer("execution")]
 
 
 class TestCheckSessionContentLogging:

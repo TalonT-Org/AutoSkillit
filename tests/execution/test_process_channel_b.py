@@ -11,6 +11,8 @@ from autoskillit.core.types import ChannelConfirmation, SubprocessResult, Termin
 from autoskillit.execution.process import run_managed_async
 from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
+pytestmark = [pytest.mark.layer("execution")]
+
 # Script that:
 #   (1) writes %%ORDER_UP%% to a JSONL session file (Channel B fires)
 #   (2) writes type=result to stdout after a delay (Channel A confirms within drain window)

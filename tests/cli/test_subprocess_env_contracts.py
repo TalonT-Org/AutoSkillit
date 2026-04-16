@@ -27,6 +27,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("cli")]
+
 CLI_ROOT = Path(__file__).parents[2] / "src" / "autoskillit" / "cli"
 SRC_ROOT = Path(__file__).parents[2] / "src" / "autoskillit"
 REQUIRED_GUARD = "AUTOSKILLIT_SKIP_STALE_CHECK"

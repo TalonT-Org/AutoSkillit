@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = [pytest.mark.layer("core")]
+
 
 class TestLoadYamlExtended:
     def test_accepts_path(self, tmp_path):

@@ -6,6 +6,8 @@ import pytest
 
 from autoskillit.core import ValidatedAddDir
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 @pytest.mark.anyio
 async def test_raw_skills_extended_excluded_from_run_skill_add_dirs(tool_ctx):

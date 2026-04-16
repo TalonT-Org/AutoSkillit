@@ -16,7 +16,10 @@ from api_simulator.http import MockResponseSpec as PyResponseSpec
 
 from autoskillit.execution.quota import check_and_sleep_if_needed
 
-pytestmark = pytest.mark.anyio
+pytestmark = [
+    pytest.mark.layer("execution"),
+    pytest.mark.anyio,
+]
 
 QUOTA_ENDPOINT = "/api/oauth/usage"
 

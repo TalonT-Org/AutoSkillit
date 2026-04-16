@@ -16,6 +16,8 @@ from autoskillit.server.tools_pr_ops import (
     get_pr_reviews,
 )
 
+pytestmark = [pytest.mark.layer("server")]
+
 # ---------------------------------------------------------------------------
 # Pure helper functions
 # ---------------------------------------------------------------------------

@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultRoute
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:

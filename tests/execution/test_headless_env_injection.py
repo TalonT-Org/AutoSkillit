@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.types import SubprocessResult, TerminationReason
-from tests.conftest import MockSubprocessRunner
+from tests.fakes import MockSubprocessRunner
 
 
 @pytest.mark.anyio

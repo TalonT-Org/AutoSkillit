@@ -22,7 +22,7 @@ from autoskillit.execution.clone_guard import (
 )
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.pipeline.audit import DefaultAuditLog
-from tests.conftest import MockSubprocessRunner
+from tests.fakes import MockSubprocessRunner
 
 
 def _git_result(stdout: str = "", returncode: int = 0) -> SubprocessResult:

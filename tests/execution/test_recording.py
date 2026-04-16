@@ -17,7 +17,8 @@ from autoskillit.execution.recording import (
     ScenarioReplayError,
     _extract_model,
 )
-from tests.conftest import MockSubprocessRunner, _make_result
+from tests.conftest import _make_result
+from tests.fakes import MockSubprocessRunner
 
 
 @dataclass

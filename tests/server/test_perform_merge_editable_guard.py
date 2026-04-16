@@ -12,7 +12,7 @@ from autoskillit.core.types import (
     TerminationReason,
     TestResult,
 )
-from tests.conftest import MockSubprocessRunner, StatefulMockTester
+from tests.fakes import InMemoryTestRunner, MockSubprocessRunner
 
 
 def _make_result(returncode: int = 0, stdout: str = "", stderr: str = "") -> SubprocessResult:
@@ -46,7 +46,7 @@ async def test_perform_merge_aborts_before_cleanup_on_poisoned_install(
     )
 
     runner = MockSubprocessRunner()
-    tester = StatefulMockTester(
+    tester = InMemoryTestRunner(
         results=[TestResult(True, "= 10 passed =", ""), TestResult(True, "= 10 passed =", "")]
     )
     # Queue git calls in step order through merge (step 8); cleanup is never reached.
@@ -104,7 +104,7 @@ async def test_perform_merge_proceeds_normally_when_guard_returns_empty(
     )
 
     runner = MockSubprocessRunner()
-    tester = StatefulMockTester(
+    tester = InMemoryTestRunner(
         results=[TestResult(True, "= 10 passed =", ""), TestResult(True, "= 10 passed =", "")]
     )
     runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt"))  # rev-parse (step 2)

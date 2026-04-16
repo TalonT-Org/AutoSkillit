@@ -80,7 +80,8 @@ tests/
 ├── CLAUDE.md                            # xdist compatibility guidelines
 ├── __init__.py
 ├── _helpers.py
-├── conftest.py                          # Shared fixtures: minimal_ctx, tool_ctx, MockSubprocessRunner, _make_result, _make_timeout_result
+├── conftest.py                          # Shared fixtures: minimal_ctx, tool_ctx, _make_result, _make_timeout_result
+├── fakes.py                             # Protocol-based test fakes: InMemory*, MockSubprocessRunner
 ├── test_conftest.py                     # Tests for conftest fixtures
 ├── test_phase2_skills.py
 ├── test_skill_preambles.py

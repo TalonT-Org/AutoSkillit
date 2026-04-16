@@ -1,7 +1,6 @@
 """Unit tests for extract_path_arg in core._type_helpers."""
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from autoskillit.core._type_helpers import _PATH_PREFIXES, extract_path_arg
 

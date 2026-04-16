@@ -39,19 +39,41 @@ def _docs_containing(pattern: str) -> list[Path]:
 # ----- canonical source-of-truth getters --------------------------------------
 
 
+def _extract_tool_decorators(text: str) -> list[str]:
+    """Extract full @mcp.tool(...) decorator text, handling multi-line decorators."""
+    decorators: list[str] = []
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if stripped.startswith("@mcp.tool"):
+            # Collect the full decorator (may span multiple lines)
+            parts = [stripped]
+            if ")" not in stripped:
+                i += 1
+                while i < len(lines):
+                    part = lines[i].strip()
+                    parts.append(part)
+                    if ")" in part:
+                        break
+                    i += 1
+            decorators.append(" ".join(parts))
+        i += 1
+    return decorators
+
+
 def _count_mcp_tools() -> int:
     total = 0
     for f in (SRC_DIR / "server").glob("tools_*.py"):
-        total += sum(1 for line in _read(f).splitlines() if line.strip().startswith("@mcp.tool"))
+        total += len(_extract_tool_decorators(_read(f)))
     return total
 
 
 def _count_kitchen_tools() -> int:
     total = 0
     for f in (SRC_DIR / "server").glob("tools_*.py"):
-        text = _read(f)
-        for line in text.splitlines():
-            if line.strip().startswith("@mcp.tool") and '"kitchen"' in line:
+        for dec in _extract_tool_decorators(_read(f)):
+            if '"kitchen"' in dec:
                 total += 1
     return total
 
@@ -59,9 +81,8 @@ def _count_kitchen_tools() -> int:
 def _count_free_range_tools() -> int:
     total = 0
     for f in (SRC_DIR / "server").glob("tools_*.py"):
-        for line in _read(f).splitlines():
-            stripped = line.strip()
-            if stripped.startswith("@mcp.tool") and '"kitchen"' not in stripped:
+        for dec in _extract_tool_decorators(_read(f)):
+            if '"kitchen"' not in dec:
                 total += 1
     return total
 
@@ -69,8 +90,8 @@ def _count_free_range_tools() -> int:
 def _count_headless_tools() -> int:
     total = 0
     for f in (SRC_DIR / "server").glob("tools_*.py"):
-        for line in _read(f).splitlines():
-            if line.strip().startswith("@mcp.tool") and '"headless"' in line:
+        for dec in _extract_tool_decorators(_read(f)):
+            if '"headless"' in dec:
                 total += 1
     return total
 

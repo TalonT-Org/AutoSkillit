@@ -1843,15 +1843,13 @@ class TestFetchQuotaNovelWindowWarning:
             )
 
         novel_warning_records = [
-            rec
-            for rec in cap
-            if rec.get("log_level") == "warning" and "novel" in rec.get("event", "").lower()
+            rec for rec in cap if rec.get("log_level") == "warning" and "novel_windows" in rec
         ]
         assert any(
             "fortnight" in str(rec.get("novel_windows", [])) for rec in novel_warning_records
         ), (
             f"Expected a warning with 'fortnight' in novel_windows for unknown window name. "
-            f"Got warning records: {novel_warning_records}"
+            f"Got all captured records: {cap}"
         )
 
     @pytest.mark.anyio
@@ -1905,9 +1903,7 @@ class TestFetchQuotaNovelWindowWarning:
             )
 
         novel_warnings = [
-            rec
-            for rec in cap
-            if rec.get("log_level") == "warning" and "novel" in rec.get("event", "").lower()
+            rec for rec in cap if rec.get("log_level") == "warning" and "novel_windows" in rec
         ]
         assert not novel_warnings, (
             f"Unexpected novel-window warnings for known windows: {novel_warnings}"

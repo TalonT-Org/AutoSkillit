@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.config.settings import TestCheckConfig
 from autoskillit.core.types import (
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     SubprocessResult,
@@ -21,7 +20,7 @@ from autoskillit.execution.testing import (
 from autoskillit.execution.testing import (
     parse_pytest_summary as _parse_pytest_summary,
 )
-from tests._helpers import make_test_config
+from tests._helpers import make_test_check_config, make_test_config
 
 
 def test_build_sanitized_env_strips_private_env_vars(monkeypatch):
@@ -335,14 +334,15 @@ def test_test_result_dataclass_fields() -> None:
 
 
 def test_test_check_config_has_filter_mode_and_base_ref_fields():
-    cfg = TestCheckConfig()
+    cfg = make_test_check_config()
     assert cfg.filter_mode is None
     assert cfg.base_ref is None
 
 
 def test_from_dynaconf_reads_filter_mode_and_base_ref(monkeypatch):
-    from autoskillit.config.settings import AutomationConfig, _make_dynaconf
+    from tests._helpers import make_dynaconf_and_automation_config
 
+    _make_dynaconf, AutomationConfig = make_dynaconf_and_automation_config()
     monkeypatch.setenv("AUTOSKILLIT_TEST_CHECK__FILTER_MODE", "conservative")
     monkeypatch.setenv("AUTOSKILLIT_TEST_CHECK__BASE_REF", "origin/main")
     d = _make_dynaconf()
@@ -365,7 +365,7 @@ async def test_default_test_runner_injects_filter_mode_env_var(monkeypatch, tmp_
             pid=12345,
         )
 
-    config = make_test_config(test_check=TestCheckConfig(filter_mode="conservative"))
+    config = make_test_config(test_check=make_test_check_config(filter_mode="conservative"))
     runner = DefaultTestRunner(config=config, runner=capturing_runner)
     await runner.run(cwd=tmp_path)
     assert captured_kwargs["env"]["AUTOSKILLIT_TEST_FILTER"] == "conservative"
@@ -385,7 +385,7 @@ async def test_default_test_runner_omits_filter_env_when_none(monkeypatch, tmp_p
             pid=12345,
         )
 
-    config = make_test_config(test_check=TestCheckConfig())
+    config = make_test_config(test_check=make_test_check_config())
     runner = DefaultTestRunner(config=config, runner=capturing_runner)
     await runner.run(cwd=tmp_path)
     assert "AUTOSKILLIT_TEST_FILTER" not in captured_kwargs["env"]
@@ -405,7 +405,7 @@ async def test_default_test_runner_injects_base_ref_from_config(monkeypatch, tmp
             pid=12345,
         )
 
-    config = make_test_config(test_check=TestCheckConfig(base_ref="origin/main"))
+    config = make_test_config(test_check=make_test_check_config(base_ref="origin/main"))
     runner = DefaultTestRunner(config=config, runner=capturing_runner)
     await runner.run(cwd=tmp_path)
     assert captured_kwargs["env"]["AUTOSKILLIT_TEST_BASE_REF"] == "origin/main"

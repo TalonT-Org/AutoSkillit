@@ -20,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
 
+import anyio
 import structlog
 
 from autoskillit.core import (
@@ -1087,6 +1088,33 @@ async def run_headless_core(
                 skill_command=original_skill_command,
                 order_id=order_id,
             )
+        except BaseException:
+            logger.warning("run_headless_core cancelled", exc_info=True)
+            _exc_text = traceback.format_exc()
+            _log_dir = ctx.config.linux_tracing.log_dir
+            try:
+                from autoskillit.execution import flush_session_log
+
+                with anyio.CancelScope(shield=True):
+                    flush_session_log(
+                        log_dir=_log_dir,
+                        cwd=str(cwd),
+                        kitchen_id=kitchen_id,
+                        order_id=order_id,
+                        session_id="",
+                        pid=0,
+                        skill_command=original_skill_command,
+                        success=False,
+                        subtype="cancelled",
+                        exit_code=-1,
+                        start_ts=_start_ts,
+                        proc_snapshots=None,
+                        termination_reason="CANCELLED",
+                        exception_text=_exc_text,
+                    )
+            except Exception:
+                logger.debug("flush_session_log during cancel failed", exc_info=True)
+            raise
         if _result is None:
             return SkillResult.crashed(
                 exception=RuntimeError("runner() did not return a result"),

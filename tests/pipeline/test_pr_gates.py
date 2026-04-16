@@ -210,3 +210,32 @@ def test_ci_gate_fires_before_review_gate():
 
     assert len(result["ci_blocked_prs"]) == 1
     assert result["review_blocked_prs"] == []
+
+
+# ---------------------------------------------------------------------------
+# Vocabulary contract
+# ---------------------------------------------------------------------------
+
+
+class TestPRGatesVocabularyContract:
+    """CHANGES_REQUESTED and _CI_PASSING_CONCLUSIONS must be declared as named
+    constants, and those constants must be consistent with KNOWN_REVIEW_STATES."""
+
+    def test_known_review_states_constant_exists(self):
+        from autoskillit.pipeline import pr_gates
+
+        assert hasattr(pr_gates, "KNOWN_REVIEW_STATES")
+        assert isinstance(pr_gates.KNOWN_REVIEW_STATES, frozenset)
+        assert "CHANGES_REQUESTED" in pr_gates.KNOWN_REVIEW_STATES
+
+    def test_changes_requested_in_known_review_states(self):
+        from autoskillit.pipeline.pr_gates import KNOWN_REVIEW_STATES
+
+        assert "CHANGES_REQUESTED" in KNOWN_REVIEW_STATES
+
+    def test_ci_passing_conclusions_constant_exists(self):
+        from autoskillit.pipeline import pr_gates
+
+        assert hasattr(pr_gates, "_CI_PASSING_CONCLUSIONS")
+        assert isinstance(pr_gates._CI_PASSING_CONCLUSIONS, frozenset)
+        assert "success" in pr_gates._CI_PASSING_CONCLUSIONS

@@ -21,6 +21,21 @@ from autoskillit.execution.github import github_headers
 
 _log = get_logger(__name__)
 
+# All GitHub merge_state_status values known to be returned by the GraphQL API.
+# https://docs.github.com/en/graphql/reference/enums#mergestatestatus
+KNOWN_MQ_MERGE_STATE_STATUSES: frozenset[str] = frozenset(
+    {
+        "BEHIND",
+        "BLOCKED",
+        "CLEAN",
+        "DIRTY",
+        "HAS_HOOKS",
+        "UNKNOWN",
+        "UNSTABLE",
+    }
+)
+assert "CLEAN" in KNOWN_MQ_MERGE_STATE_STATUSES  # Import-time drift guard
+
 
 class PRFetchState(TypedDict):
     """Typed contract for _fetch_pr_and_queue_state return value."""

@@ -1508,3 +1508,25 @@ class TestFetchRepoMergeStateRetry:
             await fetch_repo_merge_state(owner="o", repo="r", branch="main", token=None)
         assert exc_info.value.response.status_code == 429
         assert len(httpx_mock.get_requests()) == _mq._RATE_LIMIT_MAX_ATTEMPTS
+
+
+class TestMergeQueueVocabularyContract:
+    """KNOWN_MQ_MERGE_STATE_STATUSES must be declared as a named frozenset constant."""
+
+    def test_known_mq_merge_state_statuses_constant_exists(self):
+        """KNOWN_MQ_MERGE_STATE_STATUSES must be exported as a module-level frozenset."""
+        from autoskillit.execution import merge_queue
+
+        assert hasattr(merge_queue, "KNOWN_MQ_MERGE_STATE_STATUSES")
+        assert isinstance(merge_queue.KNOWN_MQ_MERGE_STATE_STATUSES, frozenset)
+        assert "CLEAN" in merge_queue.KNOWN_MQ_MERGE_STATE_STATUSES
+
+    def test_positive_stall_statuses_subset_of_known(self):
+        """The positive-stall statuses used in _is_positive_stall must be known."""
+        from autoskillit.execution.merge_queue import KNOWN_MQ_MERGE_STATE_STATUSES
+
+        positive_stall_statuses = frozenset({"CLEAN", "HAS_HOOKS"})
+        assert positive_stall_statuses.issubset(KNOWN_MQ_MERGE_STATE_STATUSES), (
+            f"Positive stall statuses not in KNOWN_MQ_MERGE_STATE_STATUSES: "
+            f"{positive_stall_statuses - KNOWN_MQ_MERGE_STATE_STATUSES}"
+        )

@@ -9,24 +9,24 @@ to cross the stdlib-only boundary.
 """
 
 from autoskillit.config.settings import QuotaGuardConfig
-from autoskillit.hooks._hook_settings import QUOTA_GUARD_HOOK_CONSUMER_KEYS
+from autoskillit.hooks._hook_settings import QUOTA_GUARD_HOOK_PAYLOAD_KEYS
 from autoskillit.server.tools_kitchen import _quota_guard_hook_payload
 
 
-def test_quota_guard_hook_payload_keys_match_consumer_keys() -> None:
+def test_quota_guard_hook_payload_keys_match_payload_keys() -> None:
     """_quota_guard_hook_payload() must produce exactly the keys that
     resolve_quota_settings() reads from hook_config['quota_guard'].
 
     If this test fails after adding a field to QuotaGuardConfig or
     QuotaHookSettings, update _quota_guard_hook_payload() and
-    QUOTA_GUARD_HOOK_CONSUMER_KEYS together.
+    QUOTA_GUARD_HOOK_PAYLOAD_KEYS together.
     """
     cfg = QuotaGuardConfig()
     payload = _quota_guard_hook_payload(cfg)
-    assert set(payload.keys()) == QUOTA_GUARD_HOOK_CONSUMER_KEYS, (
+    assert set(payload.keys()) == QUOTA_GUARD_HOOK_PAYLOAD_KEYS, (
         f"Bridge payload keys {set(payload.keys())} do not match "
-        f"consumer keys {QUOTA_GUARD_HOOK_CONSUMER_KEYS}. "
-        f"Update _quota_guard_hook_payload() and QUOTA_GUARD_HOOK_CONSUMER_KEYS together."
+        f"payload keys {QUOTA_GUARD_HOOK_PAYLOAD_KEYS}. "
+        f"Update _quota_guard_hook_payload() and QUOTA_GUARD_HOOK_PAYLOAD_KEYS together."
     )
 
 

@@ -127,7 +127,7 @@ def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> dict[str, object]:
     This is the single authoritative definition of which QuotaGuardConfig fields
     cross the stdlib-only boundary into hook subprocesses. When adding a field to
     QuotaHookSettings, add the corresponding source field here AND update
-    QUOTA_GUARD_HOOK_CONSUMER_KEYS in _hook_settings.py. The contract test
+    QUOTA_GUARD_HOOK_PAYLOAD_KEYS in _hook_settings.py. The contract test
     test_hook_bridge_coverage.py enforces that both stay in sync.
     """
     return {

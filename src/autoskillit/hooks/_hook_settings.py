@@ -36,7 +36,7 @@ ENV_DISABLED = "AUTOSKILLIT_QUOTA_GUARD__DISABLED"
 # The exact keys this module reads from hook_config["quota_guard"].
 # The bridge contract test asserts equality between this set and the
 # serializer's payload keys — update both together.
-QUOTA_GUARD_HOOK_CONSUMER_KEYS: frozenset[str] = frozenset(
+QUOTA_GUARD_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
     {"cache_path", "cache_max_age", "buffer_seconds", "disabled"}
 )
 

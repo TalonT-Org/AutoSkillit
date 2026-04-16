@@ -511,3 +511,15 @@ def test_build_orchestrator_prompt_ingredients_section_before_first_action():
     assert ing_idx < first_action_idx, (
         "RECIPE INGREDIENTS section must appear before FIRST ACTION in the prompt"
     )
+
+
+def test_orchestrator_prompt_contains_skill_command_format_guidance():
+    """Orchestrator prompt must instruct the LLM that skill_command is a literal template."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
+    assert "SKILL_COMMAND FORMATTING" in prompt, (
+        "Orchestrator prompt must contain a SKILL_COMMAND FORMATTING section. "
+        "This prevents the LLM from adding markdown headers to skill_command values."
+    )

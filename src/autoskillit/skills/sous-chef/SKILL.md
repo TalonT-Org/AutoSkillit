@@ -27,6 +27,26 @@ responsible for enforcing this regardless of what the plan says.
 
 ---
 
+## SKILL_COMMAND FORMATTING — MANDATORY
+
+When calling `run_skill`, the `skill_command` argument MUST be a space-separated token
+string — never a structured document or markdown section list.
+
+- Substitute `${{ context.* }}` and `${{ inputs.* }}` placeholders with their resolved
+  values and pass the result **VERBATIM** to `run_skill`.
+- **Do NOT** add markdown headers (`##`), labels, notes, or explanatory prose to
+  `skill_command`. It is not a document — it is a command string.
+- Path arguments are single tokens: `/path/to/file.md` — not a labeled section.
+- Extra arguments from a step `note:` are appended as space-separated tokens.
+
+**Wrong:** `/autoskillit:implement-worktree-no-merge\n\n## Plan Path\n/path/plan.md\n\n## Branch\nimpl-926`
+**Right:** `/autoskillit:implement-worktree-no-merge /path/plan.md impl-926`
+
+This applies to ALL skills, including bare-placeholder steps where you supply values
+at runtime (`/autoskillit:arch-lens-{slug} {context_path}` → substitute, then pass verbatim).
+
+---
+
 ## CONTEXT LIMIT ROUTING — MANDATORY
 
 When `run_skill` returns `needs_retry=true` for **any step**:

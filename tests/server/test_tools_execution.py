@@ -21,6 +21,7 @@ from autoskillit.execution.commands import _inject_completion_directive
 from autoskillit.execution.headless import _session_log_dir
 from autoskillit.server.helpers import (
     _check_dry_walkthrough,
+    _get_config,
 )
 from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
@@ -150,6 +151,32 @@ class TestCheckDryWalkthrough:
         assert result_a is None
         assert result_b is not None
         assert json.loads(result_b)["subtype"] == "gate_error"
+
+    def test_gate_with_trailing_markdown_header_finds_plan(self, tmp_path, tool_ctx):
+        """Trailing markdown headers must not corrupt the plan path."""
+        plan = tmp_path / "plan.md"
+        plan.write_text(_get_config().implement_gate.marker + "\n\nrest")
+        cmd = f"/autoskillit:implement-worktree-no-merge {plan}\n\n## Base Branch\nimpl-926"
+        assert _check_dry_walkthrough(cmd, str(tmp_path)) is None
+
+    def test_gate_with_extra_token_after_path(self, tmp_path, tool_ctx):
+        """Space-separated token after path must not corrupt the plan path."""
+        plan = tmp_path / "plan.md"
+        plan.write_text(_get_config().implement_gate.marker + "\n\nrest")
+        cmd = f"/autoskillit:implement-worktree-no-merge {plan} impl-926"
+        assert _check_dry_walkthrough(cmd, str(tmp_path)) is None
+
+    def test_gate_multiline_no_marker_reports_dry_walk_error(self, tmp_path, tool_ctx):
+        """With trailing headers and plan missing marker: dry-walk error, not file-not-found."""
+        plan = tmp_path / "plan.md"
+        plan.write_text("# Plan title\n\nNo marker here")
+        cmd = f"/autoskillit:implement-worktree-no-merge {plan}\n\n## Base Branch\nimpl-926"
+        result = _check_dry_walkthrough(cmd, str(tmp_path))
+        assert result is not None
+        data = json.loads(result)
+        message = data.get("result", "").lower()
+        assert "not found" not in message, "Should fail on marker absence, not path lookup"
+        assert "dry-walk" in message or "dry-walked" in message
 
 
 class TestRunSkillPrefix:

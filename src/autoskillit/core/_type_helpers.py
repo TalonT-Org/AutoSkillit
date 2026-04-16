@@ -1,7 +1,7 @@
 """Core skill name resolution and text-processing helpers.
 
 Zero autoskillit imports outside this sub-package. Provides extract_skill_name,
-resolve_target_skill, and truncate_text.
+extract_path_arg, resolve_target_skill, and truncate_text.
 """
 
 from __future__ import annotations
@@ -13,12 +13,38 @@ from ._type_enums import SkillSource
 from ._type_protocols import SkillResolver
 
 __all__ = [
+    "extract_path_arg",
     "extract_skill_name",
     "resolve_target_skill",
     "truncate_text",
 ]
 
 _SKILL_CMD_RE = re.compile(r"^/(?:autoskillit:)?([\w-]+)")
+
+_PATH_PREFIXES: tuple[str, ...] = ("/", "./", ".autoskillit/")
+
+
+def _looks_like_path(token: str) -> bool:
+    return any(token.startswith(p) for p in _PATH_PREFIXES)
+
+
+def extract_path_arg(skill_command: str) -> str | None:
+    """Extract the first path-like positional argument from a skill_command string.
+
+    Tolerates trailing text (markdown headers, extra tokens, embedded newlines)
+    after the path. Returns None if no path-like token is found.
+    Strips enclosing quotes from the returned path token.
+    """
+    stripped = skill_command.strip()
+    m = _SKILL_CMD_RE.match(stripped)
+    if m is None:
+        return None
+    tokens = stripped[m.end() :].split()
+    for token in tokens:
+        cleaned = token.strip('"').strip("'")
+        if _looks_like_path(cleaned):
+            return cleaned
+    return None
 
 
 def extract_skill_name(skill_command: str) -> str | None:

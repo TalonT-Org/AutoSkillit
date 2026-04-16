@@ -460,3 +460,54 @@ def test_orchestrator_prompt_closes_optional_semantics():
     idx = prompt.index("OPTIONAL STEP SEMANTICS")
     section = prompt[idx : idx + 500]
     assert "ONLY" in section
+
+
+# ING-1
+def test_build_orchestrator_prompt_injects_ingredients_table_when_provided():
+    """When ingredients_table is supplied, it appears verbatim in the prompt."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    table = "| Name | Description | Default |\n|------|-------------|---------|"
+    prompt = _build_orchestrator_prompt(
+        "my-recipe", mcp_prefix=DIRECT_PREFIX, ingredients_table=table
+    )
+    assert table in prompt, "ingredients_table content must appear verbatim in the prompt"
+
+
+# ING-2
+def test_build_orchestrator_prompt_omits_ingredients_section_when_none():
+    """When ingredients_table is None (default), no RECIPE INGREDIENTS section is injected."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
+    assert "RECIPE INGREDIENTS" not in prompt, (
+        "No RECIPE INGREDIENTS section when ingredients_table is None"
+    )
+
+
+# ING-3
+def test_build_orchestrator_prompt_first_action_mentions_tool_activation():
+    """FIRST ACTION section must clarify open_kitchen is required for tool activation."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
+    first_action_start = prompt.index("FIRST ACTION")
+    first_action_end = prompt.index("During pipeline execution", first_action_start)
+    section = prompt[first_action_start:first_action_end]
+    assert "tool" in section.lower() and (
+        "activat" in section.lower() or "enable" in section.lower()
+    ), "FIRST ACTION must clarify open_kitchen is required for tool activation/enabling"
+
+
+# ING-4
+def test_build_orchestrator_prompt_ingredients_section_before_first_action():
+    """RECIPE INGREDIENTS section must appear before FIRST ACTION so LLM sees names first."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    table = "| task * | What to do | (required) |"
+    prompt = _build_orchestrator_prompt("impl", mcp_prefix=DIRECT_PREFIX, ingredients_table=table)
+    ing_idx = prompt.index("RECIPE INGREDIENTS")
+    first_action_idx = prompt.index("FIRST ACTION")
+    assert ing_idx < first_action_idx, (
+        "RECIPE INGREDIENTS section must appear before FIRST ACTION in the prompt"
+    )

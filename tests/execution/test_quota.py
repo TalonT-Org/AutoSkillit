@@ -870,12 +870,12 @@ class TestPerWindowThresholds:
             == 85.0
         )
 
-    def test_threshold_for_window_long_weekly(self):
+    def test_threshold_for_window_long_seven_day(self):
         from autoskillit.execution.quota import _threshold_for_window
 
         assert (
             _threshold_for_window(
-                "weekly",
+                "seven_day",
                 short_threshold=85.0,
                 long_threshold=98.0,
                 long_patterns=self._LONG_PATTERNS,
@@ -901,7 +901,7 @@ class TestPerWindowThresholds:
 
         assert (
             _threshold_for_window(
-                "Weekly",
+                "Seven_Day",
                 short_threshold=85.0,
                 long_threshold=98.0,
                 long_patterns=self._LONG_PATTERNS,
@@ -940,18 +940,18 @@ class TestPerWindowThresholds:
         assert binding.should_block is True
         assert binding.effective_threshold == pytest.approx(85.0)
 
-    def test_compute_binding_does_not_block_weekly_below_long_threshold(self):
-        """Regression test for issue #721: weekly at 86% must not block.
+    def test_compute_binding_does_not_block_seven_day_below_long_threshold(self):
+        """Regression test for issue #721: seven_day at 86% must not block.
 
-        Long-window quotas (weekly, sonnet, opus) reset across multi-day windows,
+        Long-window quotas (seven_day, sonnet, opus) reset across multi-day windows,
         so 14% remaining headroom is comfortable, not exhausted. The pre-fix
-        behaviour blocked the pipeline for ~4 days at 86% weekly.
+        behaviour blocked the pipeline for ~4 days at 86% seven_day.
         """
         from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
 
         now = datetime.now(UTC)
         windows = {
-            "weekly": QuotaWindowEntry(utilization=86.0, resets_at=now + timedelta(days=4)),
+            "seven_day": QuotaWindowEntry(utilization=86.0, resets_at=now + timedelta(days=4)),
             "five_hour": QuotaWindowEntry(utilization=50.0, resets_at=now + timedelta(hours=1)),
         }
         binding = _compute_binding(
@@ -963,12 +963,12 @@ class TestPerWindowThresholds:
         assert binding.should_block is False
         assert binding.effective_threshold == pytest.approx(98.0)
 
-    def test_compute_binding_blocks_weekly_at_99_percent(self):
+    def test_compute_binding_blocks_seven_day_at_99_percent(self):
         from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
 
         now = datetime.now(UTC)
         windows = {
-            "weekly": QuotaWindowEntry(utilization=99.0, resets_at=now + timedelta(days=4)),
+            "seven_day": QuotaWindowEntry(utilization=99.0, resets_at=now + timedelta(days=4)),
         }
         binding = _compute_binding(
             windows,
@@ -1056,10 +1056,10 @@ class TestPerWindowThresholds:
         assert status.window_name == "weekly"
 
     @pytest.mark.anyio
-    async def test_check_and_sleep_returns_false_for_weekly_at_86_percent(
+    async def test_check_and_sleep_returns_false_for_seven_day_at_86_percent(
         self, monkeypatch, tmp_path
     ):
-        """End-to-end regression test for #721 — weekly at 86% must not sleep."""
+        """End-to-end regression test for #721 — seven_day at 86% must not sleep."""
         from autoskillit.execution.quota import (
             QuotaFetchResult,
             QuotaWindowEntry,
@@ -1069,7 +1069,7 @@ class TestPerWindowThresholds:
 
         now = datetime.now(UTC)
         windows = {
-            "weekly": QuotaWindowEntry(utilization=86.0, resets_at=now + timedelta(days=4)),
+            "seven_day": QuotaWindowEntry(utilization=86.0, resets_at=now + timedelta(days=4)),
             "five_hour": QuotaWindowEntry(utilization=2.0, resets_at=now + timedelta(hours=1)),
         }
         binding = _compute_binding(
@@ -1089,7 +1089,7 @@ class TestPerWindowThresholds:
         )
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
-        assert result["window_name"] == "weekly"
+        assert result["window_name"] == "seven_day"
 
     @pytest.mark.anyio
     async def test_check_and_sleep_returns_true_for_weekly_at_99_percent(
@@ -1456,7 +1456,7 @@ class TestPerWindowToggles:
 
     _LONG_PATTERNS = ["seven_day", "sonnet", "opus"]
 
-    def _windows(self, five_hour_util: float, weekly_util: float) -> dict:
+    def _windows(self, five_hour_util: float, seven_day_util: float) -> dict:
         from autoskillit.execution.quota import QuotaWindowEntry
 
         now = datetime.now(UTC)
@@ -1464,7 +1464,9 @@ class TestPerWindowToggles:
             "five_hour": QuotaWindowEntry(
                 utilization=five_hour_util, resets_at=now + timedelta(hours=3)
             ),
-            "weekly": QuotaWindowEntry(utilization=weekly_util, resets_at=now + timedelta(days=4)),
+            "seven_day": QuotaWindowEntry(
+                utilization=seven_day_util, resets_at=now + timedelta(days=4)
+            ),
         }
 
     def test_compute_binding_defaults_both_enabled_preserves_behavior(self):
@@ -1482,7 +1484,7 @@ class TestPerWindowToggles:
         assert binding.effective_threshold == pytest.approx(85.0)
 
     def test_compute_binding_short_disabled_drops_five_hour(self):
-        """Test 2: short_enabled=False — five_hour is dropped, weekly survives."""
+        """Test 2: short_enabled=False — five_hour is dropped, seven_day survives."""
         from autoskillit.execution.quota import _compute_binding
 
         binding = _compute_binding(
@@ -1493,7 +1495,7 @@ class TestPerWindowToggles:
             short_enabled=False,
             long_enabled=True,
         )
-        assert binding.window_name == "weekly"
+        assert binding.window_name == "seven_day"
         assert binding.should_block is False
         assert binding.effective_threshold == pytest.approx(98.0)
 

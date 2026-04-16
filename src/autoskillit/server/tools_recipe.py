@@ -59,7 +59,11 @@ async def list_recipes() -> str:
         return json.dumps([])
 
 
-@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(
+    tags={"autoskillit", "kitchen"},
+    annotations={"readOnlyHint": True},
+    meta={"anthropic/maxResultSizeChars": 100_000},
+)
 @track_response_size("load_recipe")
 async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str:
     """Load a recipe by name and return its raw YAML content.

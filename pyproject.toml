@@ -46,6 +46,7 @@ dev = [
     "pytest-asyncio>=1.0.0",  # asyncio_default_fixture_loop_scope requires >=1.0.0
     "pytest-httpx>=0.36",
     "pytest-xdist>=3.5.0",
+    "pytest-cov>=7.0",
     "pytest-timeout>=2.3",
     "ruff>=0.15.0",
     "import-linter>=2.1",
@@ -93,6 +94,10 @@ markers = [
     "integration: integration tests that spawn real subprocesses (deselect with: -m 'not integration')",
     "canary: development-time filter verification tests (deselect with: -m 'not canary')",
 ]
+
+[tool.coverage.run]
+parallel = true
+source = ["src/autoskillit"]
 
 [tool.ruff]
 target-version = "py311"

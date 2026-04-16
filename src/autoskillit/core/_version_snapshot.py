@@ -124,7 +124,8 @@ def _plugins() -> list[dict[str, Any]]:
         for ref, installs in plugins.items():
             if not isinstance(installs, list) or not installs:
                 continue
-            info = installs[0] if isinstance(installs[0], dict) else {}
+            first = installs[0]
+            info = first if isinstance(first, dict) else {}
             entry: dict[str, Any] = {"ref": ref}
             if "version" in info:
                 entry["version"] = info["version"]

@@ -1054,3 +1054,81 @@ def test_flush_writes_crash_exception_file(tmp_path):
     crash_file = session_dir / "crash_exception.txt"
     assert crash_file.exists()
     assert "RuntimeError: boom" in crash_file.read_text()
+
+
+# ---------------------------------------------------------------------------
+# raw_stdout and per-turn field tests
+# ---------------------------------------------------------------------------
+
+
+def test_flush_session_log_writes_raw_stdout_on_failure(tmp_path):
+    raw = '{"type": "assistant"}\n{"type": "result"}\n'
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="test-session",
+        pid=1,
+        skill_command="test",
+        success=False,
+        subtype="empty_output",
+        exit_code=-1,
+        start_ts="2026-04-15T07:00:00Z",
+        proc_snapshots=None,
+        raw_stdout=raw,
+    )
+    raw_file = tmp_path / "sessions" / "test-session" / "raw_stdout.jsonl"
+    assert raw_file.exists()
+    assert raw_file.read_text() == raw
+
+
+def test_flush_session_log_no_raw_stdout_on_success(tmp_path):
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="ok-session",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="success",
+        exit_code=0,
+        start_ts="2026-04-15T07:00:00Z",
+        proc_snapshots=None,
+        raw_stdout='{"type": "result"}',
+    )
+    raw_file = tmp_path / "sessions" / "ok-session" / "raw_stdout.jsonl"
+    assert not raw_file.exists()
+
+
+def test_flush_session_log_summary_contains_per_turn_fields(tmp_path, monkeypatch):
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text(
+        json.dumps(
+            {"type": "assistant", "requestId": "req-001", "timestamp": "2026-04-15T07:00:00Z"}
+        )
+        + "\n"
+        + json.dumps(
+            {"type": "assistant", "requestId": "req-002", "timestamp": "2026-04-15T07:00:05Z"}
+        )
+        + "\n"
+    )
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="s",
+        pid=1,
+        skill_command="test",
+        success=False,
+        subtype="empty_output",
+        exit_code=-1,
+        start_ts="2026-04-15T07:00:00Z",
+        proc_snapshots=None,
+        last_stop_reason="end_turn",
+    )
+    summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
+    assert summary["last_stop_reason"] == "end_turn"
+    assert summary["request_ids"] == ["req-001", "req-002"]
+    assert summary["turn_timestamps"] == ["2026-04-15T07:00:00Z", "2026-04-15T07:00:05Z"]

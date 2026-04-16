@@ -155,6 +155,7 @@ class SkillResult:
     Surfaces from SubprocessResult so the formatter can annotate exit_code
     with the kill cause, resolving the "success=True + exit_code=-9" contradiction.
     """
+    last_stop_reason: str = ""
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -172,6 +173,7 @@ class SkillResult:
             "token_usage": self.token_usage,
             "write_path_warnings": self.write_path_warnings,
             "write_call_count": self.write_call_count,
+            "last_stop_reason": self.last_stop_reason,
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path

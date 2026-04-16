@@ -111,9 +111,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # core/io.py — write_versioned_json itself (the blessed helper) uses atomic_write+json.dumps
     ("src/autoskillit/core/io.py", 118),
     # session_log.py — summary dict, token_usage list, audit_log list
-    ("src/autoskillit/execution/session_log.py", 246),
-    ("src/autoskillit/execution/session_log.py", 262),
-    ("src/autoskillit/execution/session_log.py", 265),
+    ("src/autoskillit/execution/session_log.py", 276),
+    ("src/autoskillit/execution/session_log.py", 295),
+    ("src/autoskillit/execution/session_log.py", 298),
     # migration/store.py — failure store dicts
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),
@@ -212,8 +212,8 @@ class TestSchemaVersionConvention:
         """List-payload sites are included since the AST scanner can't distinguish return types."""
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
-            ("src/autoskillit/execution/session_log.py", 262),
-            ("src/autoskillit/execution/session_log.py", 265),
+            ("src/autoskillit/execution/session_log.py", 295),
+            ("src/autoskillit/execution/session_log.py", 298),
             ("src/autoskillit/smoke_utils.py", 87),
             ("src/autoskillit/smoke_utils.py", 290),
         ]

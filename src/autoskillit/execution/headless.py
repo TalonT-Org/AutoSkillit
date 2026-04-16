@@ -35,6 +35,7 @@ from autoskillit.core import (
     ValidatedAddDir,
     WriteBehaviorSpec,
     claude_code_project_dir,
+    collect_version_snapshot,
     get_logger,
     is_git_worktree,
     load_yaml,
@@ -1039,6 +1040,7 @@ async def run_headless_core(
         linux_tracing_cfg = ctx.config.linux_tracing
         _start_ts = datetime.now(UTC).isoformat()
         _start_mono = time.monotonic()
+        _versions = collect_version_snapshot()
 
         _clone_snapshot = None
         if is_worktree_skill(original_skill_command) and not is_git_worktree(Path(cwd)):
@@ -1084,6 +1086,7 @@ async def run_headless_core(
                     proc_snapshots=None,
                     termination_reason="CRASHED",
                     exception_text=_exc_text,
+                    versions=_versions,
                 )
             except Exception:
                 logger.debug("flush_session_log during crash failed", exc_info=True)
@@ -1115,6 +1118,7 @@ async def run_headless_core(
                         proc_snapshots=None,
                         termination_reason="CANCELLED",
                         exception_text=_exc_text,
+                        versions=_versions,
                     )
             except Exception:
                 logger.debug("flush_session_log during cancel failed", exc_info=True)
@@ -1180,8 +1184,12 @@ async def run_headless_core(
         audit_record = new_audit_records[0] if new_audit_records else None
 
         if result.proc_snapshots is not None or not skill_result.success or bool(step_name):
-            from autoskillit.execution.session_log import flush_session_log
+            from autoskillit.execution.session_log import (
+                _primary_model_identifier,
+                flush_session_log,
+            )
 
+            _model_id = _primary_model_identifier(skill_result.token_usage)
             try:
                 flush_session_log(
                     log_dir=ctx.config.linux_tracing.log_dir,
@@ -1218,6 +1226,8 @@ async def run_headless_core(
                     )
                     else "",
                     last_stop_reason=skill_result.last_stop_reason,
+                    versions=_versions,
+                    model_identifier=_model_id,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)

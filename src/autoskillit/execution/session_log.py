@@ -34,6 +34,21 @@ from autoskillit.execution.linux_tracing import (
 logger = get_logger(__name__)
 
 _MAX_SESSIONS = 500
+
+
+def _primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
+    """Return the model name with the most total tokens from model_breakdown.
+
+    Returns "" when token_usage is absent or model_breakdown is empty.
+    """
+    if not token_usage:
+        return ""
+    mb = token_usage.get("model_breakdown", {})
+    if not isinstance(mb, dict) or not mb:
+        return ""
+    return max(mb, key=lambda m: sum(mb[m].values()) if isinstance(mb[m], dict) else 0)
+
+
 _CLEAR_MARKER_FILENAME = ".telemetry_cleared_at"
 
 
@@ -106,6 +121,8 @@ def flush_session_log(
     orphaned_tool_result: bool = False,
     raw_stdout: str = "",
     last_stop_reason: str = "",
+    versions: dict[str, Any] | None = None,
+    model_identifier: str = "",
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -291,6 +308,11 @@ def flush_session_log(
         "request_ids": _cb_request_ids,
         "turn_timestamps": _cb_turn_timestamps,
     }
+    if versions is not None:
+        summary["versions"] = {
+            **versions,
+            "model_identifier": model_identifier,
+        }
     summary_path = session_dir / "summary.json"
     atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
 
@@ -352,6 +374,8 @@ def flush_session_log(
         "write_call_count": write_call_count,
         "tracked_comm": _effective_tracked_comm,
         "tracked_comm_drift": _tracked_comm_drift,
+        "autoskillit_version": versions.get("autoskillit_version", "") if versions else "",
+        "claude_code_version": versions.get("claude_code_version", "") if versions else "",
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

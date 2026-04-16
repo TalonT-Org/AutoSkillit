@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("pipeline")]
+pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
 class TestTimingEntry:

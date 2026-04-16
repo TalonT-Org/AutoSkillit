@@ -2,7 +2,7 @@
 
 import pytest
 
-pytestmark = [pytest.mark.layer("pipeline")]
+pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
 def test_gated_tools_contains_expected_names():

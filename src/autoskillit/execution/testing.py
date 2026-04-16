@@ -90,8 +90,11 @@ async def _resolve_base_ref(config_base_ref: str | None, cwd: Path) -> str | Non
         try:
             await asyncio.wait_for(proc.wait(), timeout=15.0)
         except TimeoutError:
-            proc.kill()
-            await proc.wait()
+            try:
+                proc.kill()
+                await proc.wait()
+            except OSError:
+                pass
             return None
         if proc.returncode == 0:
             assert proc.stdout is not None

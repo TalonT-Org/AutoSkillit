@@ -434,6 +434,16 @@ async def test_resolve_base_ref_git_upstream_fallback(tmp_path):
     repo.mkdir()
     subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
     subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "test"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
         ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
         check=True,
         capture_output=True,

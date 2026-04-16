@@ -1793,9 +1793,9 @@ class TestFetchQuotaNovelWindowWarning:
     operator logs without disrupting the pipeline."""
 
     @pytest.mark.anyio
-    async def test_novel_window_name_logs_warning(self, monkeypatch, caplog):
+    async def test_novel_window_name_logs_warning(self, monkeypatch):
         """An unknown window name in the API response must produce a warning log entry."""
-        import logging
+        import structlog.testing
 
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import _fetch_quota
@@ -1832,7 +1832,7 @@ class TestFetchQuotaNovelWindowWarning:
             lambda path: "fake-token",
         )
 
-        with caplog.at_level(logging.WARNING, logger="autoskillit.execution.quota"):
+        with structlog.testing.capture_logs() as cap:
             await _fetch_quota(
                 cfg.credentials_path,
                 short_threshold=cfg.short_window_threshold,
@@ -1842,16 +1842,22 @@ class TestFetchQuotaNovelWindowWarning:
                 long_enabled=cfg.long_window_enabled,
             )
 
-        warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
-        assert any("fortnight" in m for m in warning_messages), (
-            f"Expected a warning containing 'fortnight' for unknown window name. "
-            f"Got: {warning_messages}"
+        novel_warning_records = [
+            rec
+            for rec in cap
+            if rec.get("log_level") == "warning" and "novel" in rec.get("event", "").lower()
+        ]
+        assert any(
+            "fortnight" in str(rec.get("novel_windows", [])) for rec in novel_warning_records
+        ), (
+            f"Expected a warning with 'fortnight' in novel_windows for unknown window name. "
+            f"Got warning records: {novel_warning_records}"
         )
 
     @pytest.mark.anyio
-    async def test_all_known_windows_do_not_log_warning(self, monkeypatch, caplog):
+    async def test_all_known_windows_do_not_log_warning(self, monkeypatch):
         """No warning must be logged when all API window names are in KNOWN_QUOTA_WINDOW_NAMES."""
-        import logging
+        import structlog.testing
 
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import KNOWN_QUOTA_WINDOW_NAMES, _fetch_quota
@@ -1888,7 +1894,7 @@ class TestFetchQuotaNovelWindowWarning:
             lambda path: "fake-token",
         )
 
-        with caplog.at_level(logging.WARNING, logger="autoskillit.execution.quota"):
+        with structlog.testing.capture_logs() as cap:
             await _fetch_quota(
                 cfg.credentials_path,
                 short_threshold=cfg.short_window_threshold,
@@ -1899,9 +1905,9 @@ class TestFetchQuotaNovelWindowWarning:
             )
 
         novel_warnings = [
-            r.message
-            for r in caplog.records
-            if r.levelno >= logging.WARNING and "novel" in r.message.lower()
+            rec
+            for rec in cap
+            if rec.get("log_level") == "warning" and "novel" in rec.get("event", "").lower()
         ]
         assert not novel_warnings, (
             f"Unexpected novel-window warnings for known windows: {novel_warnings}"

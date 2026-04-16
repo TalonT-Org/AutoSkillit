@@ -284,10 +284,10 @@ async def _fetch_quota(
     novel = {name for name in windows if name not in KNOWN_QUOTA_WINDOW_NAMES}
     if novel:
         _log.warning(
-            "Anthropic quota API returned unknown window name(s): %s. "
+            "Anthropic quota API returned unknown quota window names. "
             "If this is a new rate-limit window, add it to KNOWN_QUOTA_WINDOW_NAMES in quota.py "
             "and update LONG_WINDOW_NAMES and long_window_patterns if it is a long window.",
-            sorted(novel),
+            novel_windows=sorted(novel),
         )
     if not windows:
         return QuotaFetchResult(

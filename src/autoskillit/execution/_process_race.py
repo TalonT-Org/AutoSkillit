@@ -98,6 +98,9 @@ async def _watch_process(
     # waitpid() reaps the process atomically, so /proc/[pid] is already gone for
     # normally-exiting processes — acc.exit_snapshot will be None in most cases.
     try:
+        # Deferred import: linux_tracing depends on psutil and reads /proc, which is
+        # Linux-only. Importing at module level would fail on non-Linux platforms where
+        # LINUX_TRACING_AVAILABLE is False. The bare except below degrades gracefully.
         from autoskillit.execution.linux_tracing import read_proc_snapshot
 
         snap = read_proc_snapshot(proc.pid)

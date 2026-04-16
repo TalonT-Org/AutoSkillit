@@ -1222,3 +1222,67 @@ def test_proc_trace_preserves_exit_snapshot_event(tmp_path):
     assert rows[0]["event"] == "snapshot"
     assert rows[1]["event"] == "snapshot"
     assert rows[2]["event"] == "exit_snapshot"
+
+
+# --- Versions block tests ---
+
+_VERSIONS = {
+    "autoskillit_version": "1.2.3",
+    "install_type": "local-editable",
+    "commit_id": None,
+    "claude_code_version": "1.0.5",
+    "plugins": [],
+}
+
+
+def test_summary_json_includes_versions_block(tmp_path):
+    _flush(tmp_path, session_id="vs-001", versions=_VERSIONS)
+    summary = json.loads((tmp_path / "sessions" / "vs-001" / "summary.json").read_text())
+    assert "versions" in summary
+    assert summary["versions"]["autoskillit_version"] == "1.2.3"
+    assert summary["versions"]["claude_code_version"] == "1.0.5"
+
+
+def test_summary_json_versions_includes_model_identifier(tmp_path):
+    _flush(tmp_path, session_id="vs-002", versions=_VERSIONS, model_identifier="claude-opus-4")
+    summary = json.loads((tmp_path / "sessions" / "vs-002" / "summary.json").read_text())
+    assert summary["versions"]["model_identifier"] == "claude-opus-4"
+
+
+def test_summary_json_omits_versions_when_not_passed(tmp_path):
+    _flush(tmp_path, session_id="vs-003")
+    summary = json.loads((tmp_path / "sessions" / "vs-003" / "summary.json").read_text())
+    assert "versions" not in summary
+
+
+def test_sessions_jsonl_includes_autoskillit_version(tmp_path):
+    _flush(tmp_path, session_id="vs-004", versions=_VERSIONS)
+    entries = [
+        json.loads(line)
+        for line in (tmp_path / "sessions.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    entry = next(e for e in entries if e["session_id"] == "vs-004")
+    assert entry["autoskillit_version"] == "1.2.3"
+
+
+def test_sessions_jsonl_includes_claude_code_version(tmp_path):
+    _flush(tmp_path, session_id="vs-005", versions=_VERSIONS)
+    entries = [
+        json.loads(line)
+        for line in (tmp_path / "sessions.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    entry = next(e for e in entries if e["session_id"] == "vs-005")
+    assert entry["claude_code_version"] == "1.0.5"
+
+
+def test_sessions_jsonl_autoskillit_version_empty_when_no_versions(tmp_path):
+    _flush(tmp_path, session_id="vs-006")
+    entries = [
+        json.loads(line)
+        for line in (tmp_path / "sessions.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    entry = next(e for e in entries if e["session_id"] == "vs-006")
+    assert entry["autoskillit_version"] == ""

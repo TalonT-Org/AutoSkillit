@@ -9,6 +9,7 @@ from ._claude_env import build_claude_env
 from ._terminal_table import TerminalColumn as TerminalColumn
 from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
+from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
 from .branch_guard import is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions, LayoutError, validate_add_dir
 from .github_url import _parse_issue_ref as _parse_issue_ref
@@ -245,4 +246,6 @@ __all__ = [
     "TokenLog",
     "WorkspaceManager",
     "truncate_text",
+    # _version_snapshot
+    "collect_version_snapshot",
 ]

@@ -111,6 +111,7 @@ generic_automation_mcp/
 │   ├── _type_helpers.py
 │   ├── _claude_env.py       #   IDE-scrubbing canonical env builder for claude subprocesses
 │   ├── _terminal_table.py   #   L0 color-agnostic terminal table primitive
+│   ├── _version_snapshot.py #   Process-scoped version snapshot for session telemetry (lru_cache'd)
 │   ├── branch_guard.py
 │   ├── claude_conventions.py #  Skill discovery directory layout constants
 │   ├── github_url.py        #   parse_github_repo

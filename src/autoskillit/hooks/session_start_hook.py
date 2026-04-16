@@ -24,6 +24,8 @@ def main() -> None:
         sys.exit(0)  # fail-open on malformed input
 
     # Best-effort TTL sweep of stale kitchen markers. Fail-open — must not raise.
+    _best_recipe_name: str | None = None
+    _best_opened_at = None
     try:
         _state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
         if _state_override:
@@ -39,6 +41,14 @@ def main() -> None:
                     _age = datetime.now(UTC) - _opened_at
                     if _age.total_seconds() >= _ttl_hours * 3600:
                         _p.unlink()
+                    else:
+                        # Fresh — track most recent recipe name
+                        _this_recipe = _d.get("recipe_name")
+                        if _best_opened_at is None or _opened_at > _best_opened_at:
+                            _best_opened_at = _opened_at
+                            _best_recipe_name = (
+                                _this_recipe if isinstance(_this_recipe, str) else None
+                            )
                 except Exception:
                     try:
                         _p.unlink()
@@ -59,16 +69,22 @@ def main() -> None:
     if size == 0:
         sys.exit(0)  # fresh session — no reminder needed
 
-    payload = json.dumps(
-        {
-            "additionalContext": (
-                "RESUME REMINDER: You are resuming a previous AutoSkillit session. "
-                "MCP tool access (kitchen) is not automatically restored on resume. "
-                "Call /autoskillit:open-kitchen first to regain access to all "
-                "AutoSkillit MCP tools before continuing your work."
-            )
-        }
+    _base_msg = (
+        "RESUME REMINDER: You are resuming a previous AutoSkillit session. "
+        "MCP tool access (kitchen) is not automatically restored on resume. "
     )
+    if _best_recipe_name:
+        _detail = (
+            f"You were running recipe '{_best_recipe_name}' — "
+            f"call open_kitchen(name='{_best_recipe_name}') to regain access to all "
+            "AutoSkillit MCP tools before continuing your work."
+        )
+    else:
+        _detail = (
+            "Call /autoskillit:open-kitchen first to regain access to all "
+            "AutoSkillit MCP tools before continuing your work."
+        )
+    payload = json.dumps({"additionalContext": _base_msg + _detail})
     sys.stdout.write(payload + "\n")
     sys.exit(0)
 

@@ -1385,7 +1385,6 @@ class TestOrderMcpPrefixSelection:
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """cook() must pass the pre-rendered ingredients_table to _build_orchestrator_prompt."""
-        # Capture the kwargs passed to _build_orchestrator_prompt
         captured: list[dict] = []
 
         def _capturing_build(
@@ -1420,7 +1419,7 @@ class TestOrderMcpPrefixSelection:
         cli.order("test-script")
 
         assert captured, "_build_orchestrator_prompt was not called"
-        assert captured[0]["ingredients_table"] is not None, (
+        assert captured[0]["ingredients_table"] == "| col | val |", (
             "app.cook() must pass pre-rendered ingredients_table to _build_orchestrator_prompt"
         )
 

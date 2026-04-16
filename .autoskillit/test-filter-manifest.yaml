@@ -1,0 +1,91 @@
+# Test Filter Manifest
+#
+# Maps non-Python file glob patterns (repo-relative) to test directories
+# (relative to tests/). Used by _test_filter.py to select which tests
+# to run when non-Python files change.
+#
+# Files already handled by Bucket A (pyproject.toml, uv.lock, conftest.py)
+# are intentionally absent — Bucket A triggers a full run before the
+# manifest is consulted.
+
+src/autoskillit/recipes/*.yaml:
+  - recipe/
+  - contracts/
+
+src/autoskillit/recipes/sub-recipes/*.yaml:
+  - recipe/
+
+src/autoskillit/recipes/diagrams/*.md:
+  - recipe/
+
+src/autoskillit/recipes/contracts/*.yaml:
+  - recipe/
+  - contracts/
+
+src/autoskillit/recipes/experiment-types/*.yaml:
+  - recipe/
+
+src/autoskillit/recipe/skill_contracts.yaml:
+  - contracts/
+  - skills/
+  - recipe/
+  - execution/
+
+src/autoskillit/recipe/block_budgets.yaml:
+  - recipe/
+
+src/autoskillit/skills/*/SKILL.md:
+  - skills/
+  - contracts/
+
+src/autoskillit/skills_extended/*/SKILL.md:
+  - skills/
+  - contracts/
+  - recipe/
+
+src/autoskillit/config/defaults.yaml:
+  - config/
+  - infra/
+  - docs/
+  - workspace/
+
+src/autoskillit/hooks/registry.sha256:
+  - infra/
+
+src/autoskillit/.claude-plugin/plugin.json:
+  - contracts/
+  - server/
+  - cli/
+  - test_version.py
+
+src/autoskillit/migrations/*.yaml:
+  - migration/
+
+.github/workflows/*.yml:
+  - infra/
+
+CLAUDE.md:
+  - infra/
+  - contracts/
+  - docs/
+
+Taskfile.yml:
+  - infra/
+
+.gitattributes:
+  - infra/
+
+.gitleaks.toml:
+  - infra/
+
+docs/**/*.md:
+  - docs/
+
+README.md:
+  - docs/
+
+src/autoskillit/assets/**/*:
+  - assets/
+
+tests/recipe/fixtures/*:
+  - recipe/

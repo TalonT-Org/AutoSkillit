@@ -54,7 +54,11 @@ _OPEN_KITCHEN_GREETINGS: list[str] = [
 ]
 
 
-def _build_orchestrator_prompt(recipe_name: str, mcp_prefix: str) -> str:
+def _build_orchestrator_prompt(
+    recipe_name: str,
+    mcp_prefix: str,
+    ingredients_table: str | None = None,
+) -> str:
     """Build the --append-system-prompt content for a cook session.
 
     The prompt contains behavioral instructions (routing rules, failure
@@ -66,6 +70,17 @@ def _build_orchestrator_prompt(recipe_name: str, mcp_prefix: str) -> str:
     _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
     if _sous_chef_path.exists():
         sous_chef_content = "\n\n" + _sous_chef_path.read_text()
+
+    _ing_section = ""
+    if ingredients_table:
+        _ing_section = (
+            "RECIPE INGREDIENTS — USE THESE EXACT NAMES:\n"
+            f"{ingredients_table}\n\n"
+            "The ingredient names above are authoritative. Use them verbatim when:\n"
+            "- Collecting values from the user\n"
+            "- Evaluating skip_when_false conditions\n"
+            "- Passing ingredients to pipeline steps via `with:` arguments\n\n"
+        )
 
     return f"""\
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
@@ -84,8 +99,10 @@ Wait a few seconds and retry the same tool call. Deferred startup I/O (audit \
 recovery, drift checks) runs in the background after the transport opens; tools \
 become available once the server finishes initializing.
 
-FIRST ACTION — before prompting for any inputs:
-0. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to open the kitchen and load the recipe.
+{_ing_section}FIRST ACTION — before prompting for any inputs:
+0. Call {mcp_prefix}open_kitchen(name='{recipe_name}') to activate pipeline tools and open
+   the kitchen gate. open_kitchen is REQUIRED to enable all gated AutoSkillit tools —
+   the ingredients table above (when present) is provided for reference only.
    DO NOT call AskUserQuestion or any other tool before open_kitchen.
    If the call returns "No such tool available", the MCP server is still
    initializing. Wait 3 seconds and retry — this is normal on session start.

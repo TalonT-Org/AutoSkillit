@@ -1347,6 +1347,50 @@ class TestOrderMcpPrefixSelection:
         captured_prompt = cmd[prompt_idx + 1]
         assert f"{MARKETPLACE_PREFIX}open_kitchen" in captured_prompt
 
+    @patch("autoskillit.cli.subprocess.run")
+    def test_cook_passes_ingredients_table_to_orchestrator_prompt(
+        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cook() must pass the pre-rendered ingredients_table to _build_orchestrator_prompt."""
+        # Capture the kwargs passed to _build_orchestrator_prompt
+        captured: list[dict] = []
+
+        def _capturing_build(
+            recipe_name: str, mcp_prefix: str, ingredients_table: object = None
+        ) -> str:
+            captured.append({"ingredients_table": ingredients_table})
+            return "ROUTING RULES\nFIRST ACTION\nopenKitchen\nDuring pipeline execution"
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "test-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+        plugins_file = tmp_path / "plugins.json"
+        plugins_file.write_text('{"version": 2, "plugins": {}}')
+        monkeypatch.setattr(
+            "autoskillit.cli._mcp_names._installed_plugins_path", lambda: plugins_file
+        )
+        import importlib
+        import sys as _sys
+
+        _app_mod = _sys.modules.get("autoskillit.cli.app") or importlib.import_module(
+            "autoskillit.cli.app"
+        )
+        monkeypatch.setattr(_app_mod, "_build_orchestrator_prompt", _capturing_build)
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        cli.order("test-script")
+
+        assert captured, "_build_orchestrator_prompt was not called"
+        assert captured[0]["ingredients_table"] is not None, (
+            "app.cook() must pass pre-rendered ingredients_table to _build_orchestrator_prompt"
+        )
+
 
 # SC-B-4: mark_onboarded() must NOT be called when the cook subprocess exits non-zero
 def test_cook_mark_onboarded_not_called_on_failure(

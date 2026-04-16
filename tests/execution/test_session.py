@@ -1269,3 +1269,108 @@ class TestFullChainZeroWriteGate:
         session = parse_session_result(ndjson)
         write_call_count = sum(1 for t in session.tool_uses if t.get("name") in {"Write", "Edit"})
         assert write_call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# stop_reasons extraction tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_session_result_extracts_stop_reasons():
+    ndjson = "\n".join(
+        [
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"stop_reason": "tool_use", "content": [], "usage": {}},
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"stop_reason": "end_turn", "content": [], "usage": {}},
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "Done.",
+                    "session_id": "abc",
+                }
+            ),
+        ]
+    )
+    parsed = parse_session_result(ndjson)
+    assert parsed.stop_reasons == ["tool_use", "end_turn"]
+    assert parsed.last_stop_reason == "end_turn"
+
+
+def test_parse_session_result_empty_stop_reasons_when_absent():
+    ndjson = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "Done.",
+            "session_id": "abc",
+        }
+    )
+    parsed = parse_session_result(ndjson)
+    assert parsed.stop_reasons == []
+    assert parsed.last_stop_reason == ""
+
+
+def test_last_stop_reason_is_last_turn():
+    ndjson = "\n".join(
+        [
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "requestId": "r1",
+                    "timestamp": "t1",
+                    "message": {"stop_reason": "tool_use", "content": [], "usage": {}},
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "requestId": "r2",
+                    "timestamp": "t2",
+                    "message": {"stop_reason": "max_tokens", "content": [], "usage": {}},
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "x",
+                    "session_id": "s",
+                }
+            ),
+        ]
+    )
+    parsed = parse_session_result(ndjson)
+    assert parsed.last_stop_reason == "max_tokens"
+
+
+def test_parse_session_result_missing_stop_reason_skipped():
+    ndjson = "\n".join(
+        [
+            json.dumps({"type": "assistant", "message": {"content": [], "usage": {}}}),
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "ok",
+                    "session_id": "s",
+                }
+            ),
+        ]
+    )
+    parsed = parse_session_result(ndjson)
+    assert parsed.stop_reasons == []
+    assert parsed.last_stop_reason == ""

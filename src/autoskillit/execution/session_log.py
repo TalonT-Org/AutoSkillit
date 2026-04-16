@@ -309,9 +309,10 @@ def flush_session_log(
         "turn_timestamps": _cb_turn_timestamps,
     }
     if versions is not None:
+        effective_model_id = model_identifier or _primary_model_identifier(token_usage)
         summary["versions"] = {
             **versions,
-            "model_identifier": model_identifier,
+            "model_identifier": effective_model_id,
         }
     summary_path = session_dir / "summary.json"
     atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")

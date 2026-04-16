@@ -1184,13 +1184,9 @@ async def run_headless_core(
         audit_record = new_audit_records[0] if new_audit_records else None
 
         if result.proc_snapshots is not None or not skill_result.success or bool(step_name):
-            from autoskillit.execution.session_log import (
-                _primary_model_identifier,
-                flush_session_log,
-            )
+            from autoskillit.execution.session_log import flush_session_log
 
             try:
-                _model_id = _primary_model_identifier(skill_result.token_usage)
                 flush_session_log(
                     log_dir=ctx.config.linux_tracing.log_dir,
                     cwd=cwd,
@@ -1227,7 +1223,6 @@ async def run_headless_core(
                     else "",
                     last_stop_reason=skill_result.last_stop_reason,
                     versions=_versions,
-                    model_identifier=_model_id,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)

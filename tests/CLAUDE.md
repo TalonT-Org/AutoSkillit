@@ -52,6 +52,34 @@ time that marker values match directories (warnings on mismatch).
 
 **Usage:** `pytest -m 'layer("core")'` runs only L0 core tests.
 
+## Size Markers
+
+Test files in annotated directories carry a size marker indicating resource constraints:
+
+```python
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+```
+
+**Size definitions (Google-style):**
+
+| Marker | Constraints | Examples |
+|--------|------------|---------|
+| `small` | No persistent I/O, no network, no subprocess. RAM-backed tmpfs via `tmp_path` IS allowed. | Pure logic, string parsing, in-memory dataclass tests |
+| `medium` | Filesystem and subprocess allowed. No network, no external services. | Tests spawning child processes, real file system operations |
+| `large` | Everything allowed. Full integration. Default for unannotated tests. | End-to-end tests, network calls, Claude API access |
+
+**In-scope directories:** core, pipeline (initial rollout). Other directories follow incrementally.
+
+**Aggressive filter behavior:** When `AUTOSKILLIT_TEST_FILTER=aggressive`, only `small` and `medium` tests run. Unannotated tests default to `large` and are deselected.
+
+**Rules:**
+- Each file has exactly one size marker — no conflicts (enforced by `tests/arch/test_size_markers.py`)
+- Place size marker after the `layer` marker in the `pytestmark` list
+- When in doubt, use `medium` — it's safer to over-classify than under-classify
+- `tests/arch/test_size_markers.py` enforces completeness via AST scan
+
+**Usage:** `pytest -m small` runs only small tests. `pytest -m 'small or medium'` excludes large tests.
+
 ## Placement Convention: tests/skills/ vs tests/contracts/
 
 - `tests/skills/` — tests that exercise the skill loader, skill discovery, or skill

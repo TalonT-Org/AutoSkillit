@@ -60,6 +60,7 @@ The project uses pytest with pytest-asyncio. Tests run in parallel via pytest-xd
   * **Add tests for new features**
   * **Follow existing test patterns** in `tests/` — avoid test code redundancy
   * **Worktree setup**: Use `task install-worktree` in worktrees. Never hardcode `uv venv`/`pip install` in skills or plans.
+  * **Filtered tests**: `task test-filtered` runs path-filtered tests (defaults `AUTOSKILLIT_TEST_FILTER=conservative`). Set `AUTOSKILLIT_TEST_BASE_REF` to control the diff base. See `tests/CLAUDE.md` for filter modes and algorithm details.
 
 ## **5. Pre-commit Hooks**
 

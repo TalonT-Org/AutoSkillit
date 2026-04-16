@@ -149,12 +149,46 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     assert "short_window_threshold" not in data["quota_guard"]
     assert "long_window_threshold" not in data["quota_guard"]
     assert "long_window_patterns" not in data["quota_guard"]
+    # disabled is always written by _quota_guard_hook_payload
+    # MagicMock.enabled is truthy by default, so disabled must be False
+    assert data["quota_guard"]["disabled"] is False
     # Confirm kitchen_id rename: hook config must contain 'kitchen_id' (not 'pipeline_id')
     assert "kitchen_id" in data, (
         "hook config must contain 'kitchen_id' after rename from 'pipeline_id'"
     )
     assert isinstance(data["kitchen_id"], str) and data["kitchen_id"], (
         "kitchen_id must be a non-empty string (UUID set by _open_kitchen_handler)"
+    )
+
+
+@pytest.mark.parametrize("enabled,expected_disabled", [(True, False), (False, True)])
+@pytest.mark.anyio
+async def test_open_kitchen_bridges_enabled_flag_as_disabled(
+    tmp_path, monkeypatch, enabled, expected_disabled
+):
+    """_write_hook_config() must serialize cfg.enabled as disabled: not cfg.enabled.
+
+    Regression test for bridge completeness: QuotaGuardConfig.enabled must
+    translate to quota_guard.disabled in .hook_config.json so that the hook
+    subprocess can respect the profile-wide opt-out.
+    """
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.config.quota_guard.enabled = enabled
+    mock_ctx.config.quota_guard.cache_max_age = 300
+    mock_ctx.config.quota_guard.cache_path = "/p/q.json"
+    mock_ctx.config.quota_guard.buffer_seconds = 60
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                from autoskillit.server.tools_kitchen import _open_kitchen_handler
+
+                await _open_kitchen_handler()
+
+    data = json.loads(tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS).read_text())
+    assert data["quota_guard"]["disabled"] is expected_disabled, (
+        f"enabled={enabled} must produce disabled={expected_disabled} in hook config"
     )
 
 

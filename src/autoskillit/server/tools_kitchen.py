@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from autoskillit.config.settings import QuotaGuardConfig
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -117,6 +121,23 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> dict[str, object]:
+    """Return the quota_guard section of .hook_config.json for a given config.
+
+    This is the single authoritative definition of which QuotaGuardConfig fields
+    cross the stdlib-only boundary into hook subprocesses. When adding a field to
+    QuotaHookSettings, add the corresponding source field here AND update
+    QUOTA_GUARD_HOOK_CONSUMER_KEYS in _hook_settings.py. The contract test
+    test_hook_bridge_coverage.py enforces that both stay in sync.
+    """
+    return {
+        "cache_max_age": cfg.cache_max_age,
+        "cache_path": cfg.cache_path,
+        "buffer_seconds": cfg.buffer_seconds,
+        "disabled": not cfg.enabled,
+    }
+
+
 def _write_hook_config() -> None:
     """Write user-configured quota values to temp/.autoskillit_hook_config.json.
 
@@ -128,11 +149,7 @@ def _write_hook_config() -> None:
     ctx = _get_ctx()
     cfg = ctx.config.quota_guard
     payload = {
-        "quota_guard": {
-            "cache_max_age": cfg.cache_max_age,
-            "cache_path": cfg.cache_path,
-            "buffer_seconds": cfg.buffer_seconds,
-        },
+        "quota_guard": _quota_guard_hook_payload(cfg),
         "kitchen_id": ctx.kitchen_id,
     }
     hook_cfg_path = _hook_config_path(Path.cwd())

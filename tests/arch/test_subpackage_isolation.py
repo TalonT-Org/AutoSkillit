@@ -1172,6 +1172,7 @@ class TestGroupCMigration:
             "stdout_session_id",
             "idle_stall",
             "process_exited_event",
+            "channel_b_orphaned_tool_result",
         }  # REQ-SIG-008
 
     def test_race_signals_still_frozen(self):

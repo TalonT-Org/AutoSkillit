@@ -434,6 +434,15 @@ class TestSousChefMergePhaseContract:
             "sous-chef/SKILL.md must state that merge conflicts route to on_failure"
         )
 
+    def test_sous_chef_contains_skill_command_format_guidance(self):
+        """sous-chef/SKILL.md must contain skill_command format discipline."""
+        content = self._sous_chef_text()
+        assert "SKILL_COMMAND FORMATTING" in content, (
+            "sous-chef/SKILL.md must contain a SKILL_COMMAND FORMATTING section. "
+            "This is the persistent behavioral guard against LLM document-formatting "
+            "of skill_command."
+        )
+
 
 class TestPathArgSkillsContract:
     """Path-argument skills must document path-detection parsing in their SKILL.md."""

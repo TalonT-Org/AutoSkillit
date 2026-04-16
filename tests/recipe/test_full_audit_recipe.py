@@ -1,5 +1,9 @@
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("recipe")]
+
 RECIPE_PATH = Path(__file__).resolve().parents[2] / ".autoskillit" / "recipes" / "full-audit.yaml"
 
 

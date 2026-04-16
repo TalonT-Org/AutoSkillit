@@ -10,6 +10,8 @@ import pytest
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from tests.fakes import MockSubprocessRunner
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 @pytest.mark.anyio
 async def test_headless_command_includes_headless_env_var(minimal_ctx, tmp_path: Path) -> None:

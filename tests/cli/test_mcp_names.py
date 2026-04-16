@@ -13,6 +13,8 @@ from autoskillit.cli._mcp_names import (
     detect_autoskillit_mcp_prefix,
 )
 
+pytestmark = [pytest.mark.layer("cli")]
+
 _PLUGIN_KEY = "autoskillit@autoskillit-local"
 
 

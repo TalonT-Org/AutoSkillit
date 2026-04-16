@@ -93,6 +93,7 @@ markers = [
     "smoke: end-to-end smoke tests requiring Claude API access (deselect with: -m 'not smoke')",
     "integration: integration tests that spawn real subprocesses (deselect with: -m 'not integration')",
     "canary: development-time filter verification tests (deselect with: -m 'not canary')",
+    "layer(name): source-layer marker for test file classification (core, config, pipeline, execution, workspace, recipe, migration, server, cli)",
 ]
 
 [tool.coverage.run]

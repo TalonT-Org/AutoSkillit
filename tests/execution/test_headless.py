@@ -3510,6 +3510,8 @@ class TestSynthesizeFromWriteArtifacts:
 
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord  # noqa: E402
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 @pytest.fixture
 def make_build_skill_result_kwargs():

@@ -9,6 +9,8 @@ import pytest
 
 from autoskillit.core.io import resolve_temp_dir
 
+pytestmark = [pytest.mark.layer("core")]
+
 
 def test_resolve_temp_dir_default_returns_project_relative() -> None:
     assert resolve_temp_dir(Path("/proj"), None) == Path("/proj/.autoskillit/temp")

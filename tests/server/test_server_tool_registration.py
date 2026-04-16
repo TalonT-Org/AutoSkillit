@@ -17,6 +17,8 @@ from autoskillit.server.tools_status import (
     get_token_summary,
 )
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 class TestNoSkillsDirectoryProvider:
     """T3: SkillsDirectoryProvider is not used in the new plugin architecture."""

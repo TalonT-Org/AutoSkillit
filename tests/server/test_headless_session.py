@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 @pytest.mark.anyio
 async def test_mcp_enable_kitchen_reveals_gated_tools(kitchen_enabled) -> None:

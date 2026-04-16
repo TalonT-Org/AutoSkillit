@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 from pathlib import Path
 
+import pytest
 import yaml
 
 from autoskillit.recipe.io import (
@@ -24,6 +25,8 @@ from autoskillit.recipe.validator import (
     validate_recipe,
 )
 from tests.recipe.conftest import VALID_RECIPE, _make_workflow, _write_yaml
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 # ---------------------------------------------------------------------------
 # TestValidateRecipe — migrated from test_recipe_parser.py

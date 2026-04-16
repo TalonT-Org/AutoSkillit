@@ -10,9 +10,12 @@ from __future__ import annotations
 import time
 from unittest.mock import patch
 
+import pytest
 import structlog.testing
 
 from autoskillit.server import _state
+
+pytestmark = [pytest.mark.layer("cli")]
 
 
 def test_serve_calls_mcp_run_within_budget(monkeypatch, tmp_path):

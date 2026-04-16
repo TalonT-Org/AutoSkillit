@@ -10,6 +10,8 @@ import structlog.testing
 from autoskillit.core.types import TerminationReason
 from autoskillit.execution.process import RaceAccumulator, RaceSignals
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 @pytest.mark.anyio
 async def test_run_managed_async_logs_entry(tmp_path):

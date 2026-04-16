@@ -10,6 +10,8 @@ import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
 def test_check_repo_merge_state_on_failure_routes_to_immediate_merge_not_success(recipe_name):

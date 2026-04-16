@@ -25,6 +25,8 @@ from autoskillit.cli._update_checks import (
     run_update_checks,
 )
 
+pytestmark = [pytest.mark.layer("cli")]
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

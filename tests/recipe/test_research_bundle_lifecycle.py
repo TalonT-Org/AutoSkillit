@@ -2,6 +2,8 @@ import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 RESEARCH_RECIPE_PATH = builtin_recipes_dir() / "research.yaml"
 
 

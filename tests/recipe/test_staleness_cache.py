@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.recipe.staleness_cache import (
     StalenessEntry,
     compute_recipe_hash,
     read_staleness_cache,
     write_staleness_cache,
 )
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 
 def _make_entry(**kwargs) -> StalenessEntry:

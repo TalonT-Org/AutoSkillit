@@ -16,6 +16,8 @@ from autoskillit.core.types import (
     SkillResult,
 )
 
+pytestmark = [pytest.mark.layer("core")]
+
 
 def test_retry_reason_values():
     """RetryReason enum has exactly the expected members."""

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
     generate_recipe_card,
 )
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 
 def test_recipe_card_contains_block_fingerprint_for_every_declared_block():

@@ -10,10 +10,13 @@ from datetime import datetime
 import anyio
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "linux",
-    reason="Linux-only tracing tests",
-)
+pytestmark = [
+    pytest.mark.layer("execution"),
+    pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="Linux-only tracing tests",
+    ),
+]
 
 PROC_STATUS_FIXTURE = """\
 Name:\tclaude

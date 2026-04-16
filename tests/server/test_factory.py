@@ -25,6 +25,8 @@ from autoskillit.workspace import DefaultCloneManager, SkillResolver
 from autoskillit.workspace.cleanup import DefaultWorkspaceManager
 from tests.fakes import MockSubprocessRunner
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 def _runner() -> MockSubprocessRunner:
     r = MockSubprocessRunner()

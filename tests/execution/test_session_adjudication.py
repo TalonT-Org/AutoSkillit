@@ -1672,6 +1672,8 @@ class TestDeadEndGuardContentState:
 
 import json  # noqa: E402 — imported here to keep T1 tests self-contained
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 @pytest.fixture
 def make_ndjson():

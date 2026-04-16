@@ -11,6 +11,8 @@ import pytest
 from autoskillit.execution.github import github_headers
 from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher
 
+pytestmark = [pytest.mark.layer("execution")]
+
 # ---------------------------------------------------------------------------
 # github_headers — unit tests
 # ---------------------------------------------------------------------------

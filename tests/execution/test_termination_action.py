@@ -12,6 +12,8 @@ import pytest
 from autoskillit.core.types import TerminationAction, TerminationReason
 from autoskillit.execution.process import decide_termination_action
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 @pytest.mark.parametrize(
     "termination,timeout_fired,process_exited,expected",

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("core")]
+
 
 # REQ-PACK-001: PACK_REGISTRY defines all packs with default_enabled
 def test_pack_registry_contains_all_packs() -> None:

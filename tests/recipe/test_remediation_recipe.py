@@ -7,6 +7,8 @@ import pytest
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.validator import validate_recipe
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 RECIPE_PATH = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "remediation.yaml"
 )

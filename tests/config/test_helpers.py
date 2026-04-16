@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import subprocess
 
+import pytest
+
+pytestmark = [pytest.mark.layer("config")]
+
 
 def test_resolve_ingredient_defaults_uses_upstream_when_origin_is_file_url(tmp_path):
     """resolve_ingredient_defaults must return the upstream URL when origin is file://."""

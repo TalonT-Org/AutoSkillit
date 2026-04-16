@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("cli")]
+
 
 # HK9
 def test_claude_settings_path_user_scope():

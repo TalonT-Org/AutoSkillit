@@ -10,6 +10,8 @@ import pytest
 
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
 
+pytestmark = [pytest.mark.layer("pipeline")]
+
 
 def _make_usage(**overrides: int) -> dict[str, int]:
     defaults = {

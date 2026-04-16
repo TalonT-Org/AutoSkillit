@@ -17,6 +17,8 @@ from autoskillit.execution._process_race import (
     resolve_termination,
 )
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 class TestChannelBStatusExhaustiveCoverage:
     """Every ChannelBStatus member maps to a defined termination pair."""

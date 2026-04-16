@@ -5,6 +5,10 @@ from __future__ import annotations
 import importlib.resources as ir
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("core")]
+
 
 class TestWorktreeDetection:
     def test_detects_main_checkout_as_not_worktree(self, tmp_path: Path) -> None:

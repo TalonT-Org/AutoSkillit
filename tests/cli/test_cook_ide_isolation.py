@@ -19,6 +19,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = [pytest.mark.layer("cli")]
+
 
 def test_cook_session_ignores_ide_lock_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path

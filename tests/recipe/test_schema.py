@@ -8,6 +8,8 @@ import pathlib
 
 import pytest
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 
 def test_all_dataclasses_importable() -> None:
     """All dataclasses are importable from recipe.schema."""

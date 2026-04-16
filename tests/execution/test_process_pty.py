@@ -30,6 +30,8 @@ from autoskillit.execution.process import (
 )
 from autoskillit.execution.session import ClaudeSessionResult
 
+pytestmark = [pytest.mark.layer("execution")]
+
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
 # ---------------------------------------------------------------------------

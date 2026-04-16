@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("cli")]
+
 CLI_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "cli"
 
 # Files that contain no subprocess.run calls — skip for clarity

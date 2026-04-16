@@ -8,6 +8,8 @@ import yaml
 
 from autoskillit.config import AutomationConfig, ConfigSchemaError, RunSkillConfig, load_config
 
+pytestmark = [pytest.mark.layer("config")]
+
 
 class TestDefaultConfig:
     def test_default_config_matches_current_constants(self):

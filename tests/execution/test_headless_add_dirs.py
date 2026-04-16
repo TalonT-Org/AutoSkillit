@@ -6,6 +6,8 @@ import pytest
 
 from autoskillit.core import ValidatedAddDir
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 @pytest.mark.anyio
 async def test_run_headless_core_no_add_dir_when_empty(minimal_ctx, tmp_path):

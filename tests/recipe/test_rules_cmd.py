@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import _make_workflow
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 
 def _make_recipe(steps: dict) -> object:

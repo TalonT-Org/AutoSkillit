@@ -11,6 +11,8 @@ from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
 )
 
+pytestmark = [pytest.mark.layer("workspace")]
+
 
 class _StubInfo:
     def __init__(self, path: Path, name: str) -> None:

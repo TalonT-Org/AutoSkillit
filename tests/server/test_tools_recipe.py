@@ -9,6 +9,8 @@ import pytest
 
 from autoskillit.server.tools_recipe import validate_recipe
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 def _extract_docstring_sections(desc: str) -> dict[str, str]:
     """Split a tool description into named sections by detecting headers.

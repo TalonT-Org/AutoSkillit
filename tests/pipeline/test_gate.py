@@ -1,5 +1,9 @@
 # test_gate.py — unit tests for _gate.py constants and functions
 
+import pytest
+
+pytestmark = [pytest.mark.layer("pipeline")]
+
 
 def test_gated_tools_contains_expected_names():
     from autoskillit.pipeline.gate import GATED_TOOLS

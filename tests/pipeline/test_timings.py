@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("pipeline")]
+
 
 class TestTimingEntry:
     def test_fields_exist(self):

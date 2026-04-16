@@ -253,7 +253,7 @@ async def run_managed_async(
 
                 if pty_mode and LINUX_TRACING_AVAILABLE:
                     # PTY mode: proc.pid is the script(1) wrapper — resolve to workload
-                    _target = resolve_trace_target(
+                    _target = await resolve_trace_target(
                         root_pid=proc.pid,
                         expected_basename=_workload_basename,
                         timeout=2.0,
@@ -430,11 +430,16 @@ async def run_managed_async(
             )
             return sub_result
         except BaseException:
-            # Ensure cleanup on unexpected errors (including CancelledError)
-            if "tracing_handle" in locals() and tracing_handle is not None:
-                tracing_handle.stop()  # idempotent: flushes and closes trace file
-            if "proc" in locals() and proc.returncode is None:
-                kill_process_tree(proc.pid)
+            # Shielded cleanup: when a task is cancelled, the BaseException handler
+            # runs with cancellation active. Without shielding, the await in
+            # async_kill_process_tree would be immediately cancelled, leaking the
+            # subprocess tree. CancelScope(shield=True) suspends the outer cancel
+            # so cleanup completes before re-raising.
+            with anyio.CancelScope(shield=True):
+                if "tracing_handle" in locals() and tracing_handle is not None:
+                    tracing_handle.stop()
+                if "proc" in locals() and proc.returncode is None:
+                    await async_kill_process_tree(proc.pid)
             raise
         finally:
             if stdin_handle is not None:

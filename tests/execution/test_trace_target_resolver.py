@@ -20,7 +20,8 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.skipif(shutil.which("script") is None, reason="script(1) not available")
-def test_resolve_trace_target_walks_from_wrapper_to_workload():
+@pytest.mark.anyio
+async def test_resolve_trace_target_walks_from_wrapper_to_workload():
     """resolve_trace_target resolves from script(1) wrapper to the workload process.
 
     Test 1.3: lock in the descendant-walk + basename-match contract.
@@ -33,7 +34,9 @@ def test_resolve_trace_target_walks_from_wrapper_to_workload():
         stderr=subprocess.DEVNULL,
     )
     try:
-        target = resolve_trace_target(root_pid=proc.pid, expected_basename="python3", timeout=2.0)
+        target = await resolve_trace_target(
+            root_pid=proc.pid, expected_basename="python3", timeout=2.0
+        )
         assert target.pid != proc.pid, (
             "Resolved PID must not be the wrapper (script) PID — "
             "resolver must walk children to find the workload"
@@ -48,7 +51,8 @@ def test_resolve_trace_target_walks_from_wrapper_to_workload():
         proc.wait()
 
 
-def test_resolve_trace_target_raises_on_miss():
+@pytest.mark.anyio
+async def test_resolve_trace_target_raises_on_miss():
     """resolve_trace_target raises TraceTargetResolutionError when workload never appears.
 
     Test 1.4: failure must be loud, not a silent fall-back to wrapper PID.
@@ -61,7 +65,7 @@ def test_resolve_trace_target_raises_on_miss():
     proc = subprocess.Popen(["sleep", "5"])
     try:
         with pytest.raises(TraceTargetResolutionError) as exc_info:
-            resolve_trace_target(
+            await resolve_trace_target(
                 root_pid=proc.pid,
                 expected_basename="definitely_not_there",
                 timeout=0.5,

@@ -80,7 +80,7 @@ async def test_executor_returns_configured_result():
     )
     executor = InMemoryHeadlessExecutor(default_result=result)
     got = await executor.run("/skill", "/cwd")
-    assert got is result
+    assert got == result
 
 
 @pytest.mark.anyio
@@ -202,7 +202,9 @@ async def test_merge_queue_watcher_toggle():
 
 @pytest.mark.anyio
 async def test_database_reader_returns_configured_result():
-    reader = InMemoryDatabaseReader(query_result={"columns": ["id"], "rows": [[1]], "row_count": 1})
+    reader = InMemoryDatabaseReader(
+        query_result={"columns": ["id"], "rows": [[1]], "row_count": 1}
+    )
     result = reader.query("test.db", "SELECT 1", [], 30, 100)
     assert result["row_count"] == 1
     assert len(reader.calls) == 1

@@ -30,6 +30,22 @@ _log = get_logger(__name__)
 _BACKOFF_BASE = 5  # seconds
 _BACKOFF_CAP = 30  # seconds
 
+# All GitHub Actions check run conclusion values known to be returned by the REST API.
+# https://docs.github.com/en/rest/checks/runs
+KNOWN_CI_CONCLUSIONS: frozenset[str] = frozenset(
+    {
+        "success",
+        "failure",
+        "neutral",
+        "cancelled",
+        "skipped",
+        "timed_out",
+        "action_required",
+        "startup_failure",
+        "stale",
+    }
+)
+
 # GitHub run-level conclusions that indicate a job-level failure worth inspecting.
 # "action_required" is intentionally excluded — it signals a billing/permissions
 # gate, not a job execution failure, so failed_jobs is always [] for it.

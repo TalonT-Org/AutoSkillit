@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
-_LONG_PATTERNS = ("weekly", "sonnet", "opus")
+_LONG_PATTERNS = ("seven_day", "sonnet", "opus")
 
 
 def _classify_threshold(window_name: str) -> float:
@@ -447,18 +447,18 @@ def test_defaults_yaml_cache_max_age_is_300():
     assert defaults["quota_guard"]["cache_max_age"] == 300
 
 
-# T-HOOK-PWT-1: regression test for #721 — weekly at 86% must approve.
-def test_hook_approves_weekly_at_86_percent_should_block_false(tmp_path):
-    """Weekly window at 86% utilisation must NOT be blocked.
+# T-HOOK-PWT-1: regression test for #721 — seven_day at 86% must approve.
+def test_hook_approves_seven_day_at_86_percent_should_block_false(tmp_path):
+    """seven_day window at 86% utilisation must NOT be blocked.
 
-    Regression test for issue #721: long-window quotas (weekly/sonnet/opus)
+    Regression test for issue #721: long-window quotas (seven_day/sonnet/opus)
     use a higher threshold (98%), so 86% is comfortable headroom — not exhaustion.
     """
     cache = tmp_path / "quota_cache.json"
     _write_cache(
         cache,
         utilization=86.0,
-        window_name="weekly",
+        window_name="seven_day",
         should_block=False,
         effective_threshold=98.0,
     )
@@ -466,13 +466,13 @@ def test_hook_approves_weekly_at_86_percent_should_block_false(tmp_path):
     assert out.strip() == ""
 
 
-# T-HOOK-PWT-2: weekly above 98% must still deny.
-def test_hook_blocks_weekly_above_long_threshold(tmp_path):
+# T-HOOK-PWT-2: seven_day above 98% must still deny.
+def test_hook_blocks_seven_day_above_long_threshold(tmp_path):
     cache = tmp_path / "quota_cache.json"
     _write_cache(
         cache,
         utilization=99.0,
-        window_name="weekly",
+        window_name="seven_day",
         should_block=True,
         effective_threshold=98.0,
     )
@@ -480,7 +480,7 @@ def test_hook_blocks_weekly_above_long_threshold(tmp_path):
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
     reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "weekly" in reason
+    assert "seven_day" in reason
     assert "98" in reason
 
 

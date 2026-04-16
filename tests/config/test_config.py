@@ -383,7 +383,11 @@ class TestQuotaGuardConfig:
     def test_long_window_patterns_default(self):
         from autoskillit.config.settings import QuotaGuardConfig
 
-        assert QuotaGuardConfig().long_window_patterns == ["weekly", "sonnet", "opus"]
+        defaults = QuotaGuardConfig().long_window_patterns
+        assert "seven_day" in defaults, (
+            f"Default long_window_patterns {defaults!r} must include 'seven_day' "
+            "(the actual Anthropic API key for the 7-day budget)"
+        )
 
     def test_threshold_field_removed(self):
         import dataclasses

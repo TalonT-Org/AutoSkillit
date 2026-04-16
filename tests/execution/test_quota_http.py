@@ -50,7 +50,7 @@ def quota_config(credentials, tmp_path):
         cache_max_age=120,
         short_window_threshold=80.0,
         long_window_threshold=98.0,
-        long_window_patterns=["weekly", "sonnet", "opus"],
+        long_window_patterns=["seven_day", "sonnet", "opus"],
         buffer_seconds=60,
     )
 
@@ -254,3 +254,48 @@ async def test_unknown_window_keys_tolerated(mock_http_server, quota_config):
     result = await check_and_sleep_if_needed(quota_config, base_url=mock_http_server.url)
     assert result["should_sleep"] is False
     assert result["utilization"] == pytest.approx(50.0)
+
+
+async def test_seven_day_raw_api_response_blocks_at_long_threshold(mock_http_server, credentials):
+    """A realistic /api/oauth/usage response with seven_day at 99% must produce a block at 98%.
+
+    Exercises the full path: raw API JSON → _fetch_quota parsing loop →
+    _compute_binding classification → QuotaFetchResult. Unlike unit tests that mock
+    _fetch_quota itself, this test validates the HTTP parsing layer end-to-end.
+    """
+    from autoskillit.config.settings import QuotaGuardConfig
+    from autoskillit.execution.quota import _fetch_quota
+
+    resets_at = (datetime.now(UTC) + timedelta(days=3)).isoformat()
+    mock_http_server.register(
+        "GET",
+        QUOTA_ENDPOINT,
+        PyResponseSpec(
+            body={
+                "seven_day": {"utilization": 99.0, "resets_at": resets_at},
+                "five_hour": {
+                    "utilization": 10.0,
+                    "resets_at": (datetime.now(UTC) + timedelta(hours=3)).isoformat(),
+                },
+            }
+        ),
+    )
+    cfg = QuotaGuardConfig()
+
+    result = await _fetch_quota(
+        credentials,
+        short_threshold=cfg.short_window_threshold,
+        long_threshold=cfg.long_window_threshold,
+        long_patterns=cfg.long_window_patterns,
+        short_enabled=cfg.short_window_enabled,
+        long_enabled=cfg.long_window_enabled,
+        base_url=mock_http_server.url,
+    )
+
+    assert result.binding.should_block is True, (
+        f"Expected should_block=True for seven_day at 99% with long_threshold=98.0, "
+        f"got effective_threshold={result.binding.effective_threshold}, "
+        f"window_name={result.binding.window_name!r}"
+    )
+    assert result.binding.window_name == "seven_day"
+    assert result.binding.effective_threshold == 98.0

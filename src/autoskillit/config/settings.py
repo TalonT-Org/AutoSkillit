@@ -150,7 +150,9 @@ class QuotaGuardConfig:
     long_window_enabled: bool = True
     short_window_threshold: float = 85.0
     long_window_threshold: float = 98.0
-    long_window_patterns: list[str] = field(default_factory=lambda: ["weekly", "sonnet", "opus"])
+    long_window_patterns: list[str] = field(
+        default_factory=lambda: ["seven_day", "sonnet", "opus"]
+    )
     buffer_seconds: int = 60
     cache_max_age: int = 300
     cache_refresh_interval: int = 240

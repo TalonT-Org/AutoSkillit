@@ -442,7 +442,7 @@ class MockSubprocessRunner(SubprocessRunner):
     """
 
     def __init__(self) -> None:
-        self._queue: list[SubprocessResult] = []
+        self._queue: deque[SubprocessResult] = deque()
         self._default = SubprocessResult(
             returncode=0,
             stdout="",
@@ -470,5 +470,5 @@ class MockSubprocessRunner(SubprocessRunner):
     ) -> SubprocessResult:
         self.call_args_list.append((cmd, cwd, timeout, kwargs))
         if self._queue:
-            return self._queue.pop(0)
+            return self._queue.popleft()
         return self._default

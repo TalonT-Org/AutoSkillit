@@ -13,6 +13,8 @@ from autoskillit.core.types import (
 )
 from tests._helpers import _flush_structlog_proxy_caches
 
+_scope_key = pytest.StashKey[set[_Path] | None]()
+
 
 class StatefulMockTester:
     """Test double for TestRunner returning pre-configured results on successive calls.
@@ -292,3 +294,140 @@ def tool_ctx(monkeypatch, tmp_path):
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     return ctx
+
+
+# ---------------------------------------------------------------------------
+# Test filter hooks (opt-in via AUTOSKILLIT_TEST_FILTER env var)
+# ---------------------------------------------------------------------------
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--filter-mode",
+        default=None,
+        choices=("none", "conservative", "aggressive"),
+        help="Test filter mode (overrides AUTOSKILLIT_TEST_FILTER env var).",
+    )
+    parser.addoption(
+        "--filter-base-ref",
+        default=None,
+        help="Git base ref for changed-file detection (overrides AUTOSKILLIT_TEST_BASE_REF).",
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Compute test filter scope from env var + git diff + manifest.
+
+    Opt-in via AUTOSKILLIT_TEST_FILTER env var or --filter-mode CLI flag.
+    Fail-open: any error sets scope to None (full test run).
+    """
+    import os
+    import warnings
+
+    config.stash[_scope_key] = None
+
+    cli_mode = config.getoption("--filter-mode", default=None)
+    env_val = os.environ.get("AUTOSKILLIT_TEST_FILTER", "")
+
+    if not cli_mode and not env_val:
+        return
+    if not cli_mode and env_val.lower() in ("0", "false", "no"):
+        return
+
+    try:
+        from tests._test_filter import (
+            FilterMode,
+            build_test_scope,
+            git_changed_files,
+            load_manifest,
+        )
+
+        if cli_mode:
+            mode = FilterMode(cli_mode)
+        elif env_val.lower() in ("1", "true", "yes"):
+            mode = FilterMode.CONSERVATIVE
+        else:
+            mode = FilterMode(env_val)
+
+        if mode == FilterMode.NONE:
+            return
+
+        cli_base_ref = config.getoption("--filter-base-ref", default=None)
+        changed = git_changed_files(config.rootpath, base_ref=cli_base_ref)
+
+        raw_manifest = load_manifest(config.rootpath)
+        manifest = {"patterns": raw_manifest} if raw_manifest is not None else None
+
+        scope = build_test_scope(
+            changed_files=changed,
+            mode=mode,
+            manifest=manifest,
+            tests_root=config.rootpath / "tests",
+        )
+        config.stash[_scope_key] = scope
+
+    except Exception as exc:
+        warnings.warn(
+            f"Test filter setup failed, running all tests: {exc}",
+            stacklevel=1,
+        )
+
+
+def pytest_collection_modifyitems(
+    items: list[pytest.Item],
+    config: pytest.Config,
+) -> None:
+    """Deselect test items outside the computed filter scope.
+
+    Fail-open: any error leaves all items selected.
+    """
+    import warnings
+
+    scope: set[_Path] | None = config.stash.get(_scope_key, None)
+    if scope is None:
+        return
+
+    try:
+        root = config.rootpath
+        scope_abs: set[_Path] = set()
+        for p in scope:
+            scope_abs.add(p if p.is_absolute() else root / p)
+
+        selected: list[pytest.Item] = []
+        deselected: list[pytest.Item] = []
+
+        for item in items:
+            item_path = item.path
+            matched = False
+            for sp in scope_abs:
+                if sp.is_file():
+                    if item_path == sp:
+                        matched = True
+                        break
+                else:
+                    try:
+                        item_path.relative_to(sp)
+                        matched = True
+                        break
+                    except ValueError:
+                        continue
+            if matched:
+                selected.append(item)
+            else:
+                deselected.append(item)
+
+        if deselected:
+            config.hook.pytest_deselected(items=deselected)
+            items[:] = selected
+
+        warnings.warn(
+            f"Test filter: {len(selected)} selected, {len(deselected)} deselected "
+            f"({len(scope)} scope paths)",
+            stacklevel=1,
+        )
+
+    except Exception as exc:
+        warnings.warn(
+            f"Test filter deselection failed, running all tests: {exc}",
+            stacklevel=1,
+        )

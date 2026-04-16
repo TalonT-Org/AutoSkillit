@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("core")]
+
 
 def test_compute_col_widths_is_module_level() -> None:
     """_compute_col_widths must be importable as a module-level function.

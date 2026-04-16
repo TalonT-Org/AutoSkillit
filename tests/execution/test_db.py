@@ -15,6 +15,8 @@ from autoskillit.execution.db import (
     _validate_select_only,
 )
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 class TestValidateSelectOnly:
     """SQL validation: pure function _validate_select_only."""

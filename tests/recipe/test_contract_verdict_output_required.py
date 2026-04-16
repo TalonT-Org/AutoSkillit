@@ -15,6 +15,8 @@ import pytest
 
 from autoskillit.recipe.contracts import load_bundled_manifest
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 _AUTO_FIX_SKILLS = [
     "resolve-failures",
     "resolve-review",

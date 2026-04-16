@@ -23,6 +23,8 @@ from autoskillit.workspace.clone import (
     remove_clone,
 )
 
+pytestmark = [pytest.mark.layer("workspace")]
+
 
 @pytest.fixture
 def bare_remote(tmp_path: Path) -> Path:

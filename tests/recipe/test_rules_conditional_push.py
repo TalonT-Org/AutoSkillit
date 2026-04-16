@@ -7,6 +7,8 @@ dispatches on a declared verdict-like output.
 
 from __future__ import annotations
 
+import pytest
+
 import autoskillit.recipe.rules_fixing as _rf
 from autoskillit.core.types import Severity
 from autoskillit.recipe.schema import (
@@ -16,6 +18,8 @@ from autoskillit.recipe.schema import (
     StepResultRoute,
 )
 from autoskillit.recipe.validator import run_semantic_rules
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 _RULE = "conditional-skill-ungated-push"
 

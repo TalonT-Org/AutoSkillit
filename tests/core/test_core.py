@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("core")]
+
 
 def test_atomic_write_docstring_contains_atomic_keyword():
     import autoskillit.core.io as m

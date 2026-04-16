@@ -32,6 +32,8 @@ from autoskillit.server.tools_issue_lifecycle import (
 )
 from tests.server._helpers import _skill_fail, _skill_ok
 
+pytestmark = [pytest.mark.layer("server")]
+
 # ---------------------------------------------------------------------------
 # _parse_fingerprint unit tests
 # ---------------------------------------------------------------------------

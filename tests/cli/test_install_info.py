@@ -19,6 +19,8 @@ from autoskillit.cli._install_info import (
     upgrade_command,
 )
 
+pytestmark = [pytest.mark.layer("cli")]
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

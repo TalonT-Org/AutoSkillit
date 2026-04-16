@@ -15,6 +15,8 @@ import pytest
 
 from autoskillit.execution import _MAX_MCP_OUTPUT_TOKENS_VALUE
 
+pytestmark = [pytest.mark.layer("cli")]
+
 
 def test_launch_cook_session_env_excludes_ide_vars(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path

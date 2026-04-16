@@ -14,6 +14,8 @@ import pytest
 
 from autoskillit.cli._terminal import _RESET_SPEC
 
+pytestmark = [pytest.mark.layer("cli")]
+
 
 class TestTerminalGuardTTYRestore:
     """terminal_guard() saves and restores termios attrs in all exit paths."""

@@ -11,6 +11,8 @@ from autoskillit.execution.anomaly_detection import (
     detect_anomalies,
 )
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 def _snap(
     *,

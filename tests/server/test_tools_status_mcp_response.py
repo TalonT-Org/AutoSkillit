@@ -9,6 +9,8 @@ import pytest
 
 from autoskillit.server.tools_status import get_token_summary, write_telemetry_files
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 class TestGetTokenSummaryMcpResponses:
     @pytest.mark.anyio

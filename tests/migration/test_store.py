@@ -15,6 +15,8 @@ from autoskillit.migration.store import (
     record_from_skill,
 )
 
+pytestmark = [pytest.mark.layer("migration")]
+
 
 # ---------------------------------------------------------------------------
 # FS1: load() returns {} when failures.json absent

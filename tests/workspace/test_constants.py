@@ -1,6 +1,10 @@
 # tests/workspace/test_constants.py
 """Asserts that workspace directory name constants are exported from workspace/__init__."""
 
+import pytest
+
+pytestmark = [pytest.mark.layer("workspace")]
+
 
 def test_runs_dir_constant_is_exported():
     from autoskillit.workspace import RUNS_DIR

@@ -9,6 +9,8 @@ import pytest
 
 from autoskillit.config.settings import QuotaGuardConfig
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 @pytest.mark.anyio
 async def test_quota_refresh_loop_calls_refresh_at_each_interval(monkeypatch):

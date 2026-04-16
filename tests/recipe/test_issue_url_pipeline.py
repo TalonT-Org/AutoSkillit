@@ -2,11 +2,14 @@
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from autoskillit.recipe._api import validate_from_path
 from autoskillit.recipe.io import load_recipe
 from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 RECIPES_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
 

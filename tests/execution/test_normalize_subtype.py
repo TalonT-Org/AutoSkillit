@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.core.types import (
     SessionOutcome,
 )
 from autoskillit.execution.session import ClaudeSessionResult, _normalize_subtype
+
+pytestmark = [pytest.mark.layer("execution")]
 
 
 def _session(

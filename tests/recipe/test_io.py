@@ -22,6 +22,8 @@ from autoskillit.recipe.schema import (
 )
 from tests.recipe.conftest import VALID_RECIPE, _write_yaml
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 
 def test_load_recipe_smoke() -> None:
     """load_recipe(path) returns a Recipe with correct name."""

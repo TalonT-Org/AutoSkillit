@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from autoskillit.cli._installed_plugins import InstalledPluginsFile
+
+pytestmark = [pytest.mark.layer("cli")]
 
 REAL_STRUCTURE = {
     "version": 2,

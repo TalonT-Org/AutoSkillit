@@ -5,6 +5,10 @@ from __future__ import annotations
 import ast
 import pathlib
 
+import pytest
+
+pytestmark = [pytest.mark.layer("recipe")]
+
 
 def test_no_deferred_validator_imports_in_rule_modules() -> None:
     """T1: No rule sub-module should defer-import from validator.py inside a function body."""

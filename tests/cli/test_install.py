@@ -13,6 +13,8 @@ import pytest
 
 from autoskillit import cli
 
+pytestmark = [pytest.mark.layer("cli")]
+
 
 class TestCLIInstall:
     def test_install_validates_scope(self, capsys: pytest.CaptureFixture) -> None:

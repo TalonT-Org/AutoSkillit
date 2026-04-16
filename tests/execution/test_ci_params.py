@@ -15,6 +15,8 @@ import pytest
 from autoskillit.core import CIRunScope
 from autoskillit.execution.ci import DefaultCIWatcher, _validate_run_matches_scope
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()

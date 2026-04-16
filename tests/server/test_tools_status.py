@@ -28,6 +28,8 @@ from autoskillit.server.tools_status import (
 )
 from tests.conftest import _make_result
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 def _make_failure_record(**overrides: object) -> FailureRecord:
     defaults = dict(

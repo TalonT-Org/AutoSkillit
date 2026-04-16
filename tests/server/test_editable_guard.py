@@ -3,7 +3,11 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
+
+pytestmark = [pytest.mark.layer("server")]
 
 
 def _make_dist_info(site_packages: Path, pkg: str, version: str, direct_url: dict) -> None:

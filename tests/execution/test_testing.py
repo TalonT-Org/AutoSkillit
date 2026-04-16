@@ -22,6 +22,8 @@ from autoskillit.execution.testing import (
 )
 from tests._helpers import make_test_check_config, make_test_config
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 def test_build_sanitized_env_strips_private_env_vars(monkeypatch):
     """build_sanitized_env() must strip every var in AUTOSKILLIT_PRIVATE_ENV_VARS."""

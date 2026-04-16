@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 class TestPluginMetadataExists:
     """T1: Plugin metadata files are shipped in the package."""

@@ -13,7 +13,10 @@ import pytest
 
 from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT
 
-pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
+pytestmark = [
+    pytest.mark.layer("execution"),
+    pytest.mark.skipif(sys.platform != "linux", reason="Linux only"),
+]
 
 
 @pytest.mark.anyio

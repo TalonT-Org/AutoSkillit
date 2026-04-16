@@ -20,6 +20,8 @@ from autoskillit.server.tools_issue_lifecycle import (
 from autoskillit.server.tools_pr_ops import bulk_close_issues, get_pr_reviews
 from tests.conftest import _make_result
 
+pytestmark = [pytest.mark.layer("server")]
+
 # ---------------------------------------------------------------------------
 # claim_issue / release_issue / prepare_issue / enrich_issues — gated tools
 # ---------------------------------------------------------------------------

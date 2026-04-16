@@ -18,6 +18,8 @@ from autoskillit.recipe.contracts import (
 )
 from autoskillit.workspace import bundled_skills_extended_dir
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 # ---------------------------------------------------------------------------
 # Bundled manifest tests
 # ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 from autoskillit.core.types import SkillSource
@@ -13,6 +14,8 @@ from autoskillit.workspace.skills import (
     bundled_skills_dir,
     bundled_skills_extended_dir,
 )
+
+pytestmark = [pytest.mark.layer("workspace")]
 
 BUNDLED_SKILLS = [
     "analyze-prs",

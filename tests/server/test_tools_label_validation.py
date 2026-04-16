@@ -9,6 +9,8 @@ import pytest
 
 from autoskillit.server.tools_issue_lifecycle import claim_issue, prepare_issue, release_issue
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 class TestClaimIssueWhitelist:
     @pytest.mark.anyio

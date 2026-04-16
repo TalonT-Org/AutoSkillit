@@ -22,6 +22,8 @@ from autoskillit.execution.session import (
 )
 from tests._helpers import _flush_structlog_proxy_caches as _flush_logger_proxy_caches
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 def _make_session_result(
     returncode: int = 0,

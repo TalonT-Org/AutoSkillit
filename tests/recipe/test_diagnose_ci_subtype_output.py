@@ -10,8 +10,12 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from autoskillit.core import pkg_root
 from autoskillit.recipe.contracts import load_bundled_manifest
+
+pytestmark = [pytest.mark.layer("recipe")]
 
 _SKILL_MD = pkg_root() / "skills_extended" / "diagnose-ci" / "SKILL.md"
 

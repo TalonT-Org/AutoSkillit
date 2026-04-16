@@ -15,6 +15,10 @@ from __future__ import annotations
 import inspect
 from unittest.mock import MagicMock
 
+import pytest
+
+pytestmark = [pytest.mark.layer("cli")]
+
 
 def test_serve_uses_anyio_run_not_mcp_run(monkeypatch, tmp_path):
     """serve() routes through anyio.run(), not mcp.run() directly."""

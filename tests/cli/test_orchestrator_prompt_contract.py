@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
+pytestmark = [pytest.mark.layer("cli")]
+
 
 def _get_prompt() -> str:
     """Return the orchestrator prompt for a demo recipe."""

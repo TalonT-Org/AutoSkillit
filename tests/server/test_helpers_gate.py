@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+pytestmark = [pytest.mark.layer("server")]
+
 
 class TestGateDisabledSchema:
     """Gate-disabled response schema matches the expected skill result keys."""

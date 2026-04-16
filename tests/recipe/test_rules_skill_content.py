@@ -13,6 +13,8 @@ import autoskillit.recipe.rules_skill_content as _rsc
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 
+pytestmark = [pytest.mark.layer("recipe")]
+
 # Minimal recipe YAML that calls a synthetic bad skill with an undefined placeholder.
 # The YAML key for skill arguments is `with:` (maps to `with_args` via _parse_recipe).
 _SYNTHETIC_BAD_SKILL_MD = textwrap.dedent(

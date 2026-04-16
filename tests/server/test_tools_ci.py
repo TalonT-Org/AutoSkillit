@@ -18,6 +18,8 @@ from autoskillit.server.tools_ci import (
 )
 from tests.fakes import InMemoryCIWatcher, InMemoryMergeQueueWatcher
 
+pytestmark = [pytest.mark.layer("server")]
+
 # ---------------------------------------------------------------------------
 # Gate membership
 # ---------------------------------------------------------------------------

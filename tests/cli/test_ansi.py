@@ -8,6 +8,8 @@ import pytest
 
 from autoskillit.cli._ansi import ingredients_to_terminal, supports_color
 
+pytestmark = [pytest.mark.layer("cli")]
+
 
 def test_supports_color_respects_no_color(monkeypatch: pytest.MonkeyPatch) -> None:
     """NO_COLOR env var disables color."""

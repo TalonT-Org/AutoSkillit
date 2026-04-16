@@ -21,6 +21,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("execution")]
+
 _TESTS_ROOT = Path(__file__).parent.parent
 
 

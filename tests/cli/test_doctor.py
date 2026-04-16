@@ -11,6 +11,8 @@ import pytest
 
 from autoskillit import cli
 
+pytestmark = [pytest.mark.layer("cli")]
+
 _MINIMAL_SCRIPT_YAML = """\
 name: my-script
 description: A test script

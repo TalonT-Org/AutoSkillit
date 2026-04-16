@@ -12,6 +12,8 @@ from autoskillit.server.helpers import _run_subprocess
 from autoskillit.server.tools_execution import run_cmd, run_python
 from tests.conftest import _make_result, _make_timeout_result
 
+pytestmark = [pytest.mark.layer("server")]
+
 
 class TestRunCmd:
     """T1, T2: run_cmd executes commands and returns exit code semantics."""

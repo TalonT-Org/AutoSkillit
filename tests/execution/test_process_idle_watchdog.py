@@ -14,6 +14,8 @@ from autoskillit.execution._process_race import (
     _watch_stdout_idle,
 )
 
+pytestmark = [pytest.mark.layer("execution")]
+
 WRITE_BURST_THEN_STALL_SCRIPT = textwrap.dedent("""\
     import sys, time, json
     for i in range(3):

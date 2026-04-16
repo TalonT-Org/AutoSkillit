@@ -25,6 +25,8 @@ from autoskillit.execution.session import (
     parse_session_result,
 )
 
+pytestmark = [pytest.mark.layer("execution")]
+
 
 def _make_success_session(result: str = "done") -> ClaudeSessionResult:
     return ClaudeSessionResult(

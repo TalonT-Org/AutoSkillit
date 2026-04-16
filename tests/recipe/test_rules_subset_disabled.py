@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("recipe")]
+
 
 def _make_skill_recipe(skill_command: str):
     from autoskillit.recipe.schema import Recipe, RecipeStep

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from autoskillit.core.types import (
     ChannelConfirmation,
     OutputFormat,
@@ -25,6 +27,8 @@ from autoskillit.execution.session import (
     _compute_success,
     parse_session_result,
 )
+
+pytestmark = [pytest.mark.layer("execution")]
 
 
 class TestOutputFormatDataContract:

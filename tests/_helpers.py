@@ -75,3 +75,18 @@ def make_skills_config(**overrides):
     from autoskillit.config.settings import SkillsConfig
 
     return SkillsConfig(**overrides)
+
+
+def make_test_check_config(**overrides):
+    """Build TestCheckConfig for tests without direct config imports."""
+    from autoskillit.config.settings import TestCheckConfig
+
+    return TestCheckConfig(**overrides)
+
+
+def make_dynaconf_and_automation_config():
+    """Return (_make_dynaconf, AutomationConfig) for integration tests."""
+    from autoskillit.config import AutomationConfig
+    from autoskillit.config.settings import _make_dynaconf
+
+    return _make_dynaconf, AutomationConfig

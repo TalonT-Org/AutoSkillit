@@ -43,6 +43,10 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # without any autoskillit imports. Falls back to .autoskillit/temp/kitchen_state relative to
     # CWD when AUTOSKILLIT_STATE_DIR is not set.
     "core/kitchen_state.py": "stdlib-only kitchen state module; cannot use resolve_temp_dir()",
+    # Justification: sidecar path for worktree base branch detection; reads from
+    # <project_root>/.autoskillit/temp/worktrees/<wt_name>/base-branch which is
+    # written by implement-worktree skills and must match the canonical layout.
+    "execution/testing.py": "sidecar path for worktree base branch detection",
 }
 
 _LITERAL = ".autoskillit/temp"

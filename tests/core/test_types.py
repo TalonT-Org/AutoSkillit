@@ -16,7 +16,7 @@ from autoskillit.core.types import (
     SkillResult,
 )
 
-pytestmark = [pytest.mark.layer("core")]
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 def test_retry_reason_values():

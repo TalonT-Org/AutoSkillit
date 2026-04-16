@@ -17,7 +17,7 @@ from autoskillit.pipeline.pr_gates import (
     partition_prs,
 )
 
-pytestmark = [pytest.mark.layer("pipeline")]
+pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # CI Gate

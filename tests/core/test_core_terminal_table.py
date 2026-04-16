@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-pytestmark = [pytest.mark.layer("core")]
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 def test_compute_col_widths_is_module_level() -> None:

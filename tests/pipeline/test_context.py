@@ -15,7 +15,7 @@ from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.pipeline.timings import DefaultTimingLog
 from autoskillit.pipeline.tokens import DefaultTokenLog
 
-pytestmark = [pytest.mark.layer("pipeline")]
+pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
 def test_tool_context_fields_accessible(tmp_path):

@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core._type_helpers import _PATH_PREFIXES, extract_path_arg
 
-pytestmark = [pytest.mark.layer("core")]
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 class TestExtractPathArg:

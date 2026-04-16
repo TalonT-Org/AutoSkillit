@@ -26,7 +26,10 @@ _LAYER_DIRS: frozenset[str] = frozenset(
     }
 )
 
+_SIZE_DIRS: frozenset[str] = frozenset({"core", "pipeline"})
+
 _scope_key = pytest.StashKey[set[_Path] | None]()
+_filter_mode_key = pytest.StashKey[str | None]()
 
 
 @pytest.fixture(autouse=True)
@@ -270,6 +273,7 @@ def pytest_configure(config: pytest.Config) -> None:
     import warnings
 
     config.stash[_scope_key] = None
+    config.stash[_filter_mode_key] = None
 
     cli_mode = config.getoption("--filter-mode", default=None)
     env_val = os.environ.get("AUTOSKILLIT_TEST_FILTER", "")
@@ -309,6 +313,7 @@ def pytest_configure(config: pytest.Config) -> None:
             tests_root=config.rootpath / "tests",
         )
         config.stash[_scope_key] = scope
+        config.stash[_filter_mode_key] = mode.value
 
     except Exception as exc:
         warnings.warn(
@@ -395,3 +400,27 @@ def pytest_collection_modifyitems(
             f"Test filter deselection failed, running all tests: {exc}",
             stacklevel=1,
         )
+
+    # --- Size-based deselection (aggressive mode only) ---
+    filter_mode = config.stash.get(_filter_mode_key, None)
+    if filter_mode == "aggressive":
+        _SIZE_MARKERS = {"small", "medium", "large"}
+        size_selected: list[pytest.Item] = []
+        size_deselected: list[pytest.Item] = []
+
+        for item in items:
+            size_marks = [m.name for m in item.iter_markers() if m.name in _SIZE_MARKERS]
+            effective_size = size_marks[0] if size_marks else "large"
+            if effective_size in ("small", "medium"):
+                size_selected.append(item)
+            else:
+                size_deselected.append(item)
+
+        if size_deselected:
+            config.hook.pytest_deselected(items=size_deselected)
+            items[:] = size_selected
+            warnings.warn(
+                f"Size filter (aggressive): {len(size_selected)} selected, "
+                f"{len(size_deselected)} large/unannotated deselected",
+                stacklevel=1,
+            )

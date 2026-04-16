@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 
-pytestmark = [pytest.mark.layer("pipeline")]
+pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # Shared test data

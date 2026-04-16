@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 
-pytestmark = [pytest.mark.layer("pipeline")]
+pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
 @pytest.mark.anyio

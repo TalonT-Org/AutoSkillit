@@ -23,7 +23,7 @@ from autoskillit.recipe.repository import DefaultRecipeRepository
 from autoskillit.server._factory import TokenFactory, _gh_cli_token, make_context
 from autoskillit.workspace import DefaultCloneManager, SkillResolver
 from autoskillit.workspace.cleanup import DefaultWorkspaceManager
-from tests.conftest import MockSubprocessRunner
+from tests.fakes import MockSubprocessRunner
 
 
 def _runner() -> MockSubprocessRunner:

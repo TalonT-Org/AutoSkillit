@@ -8,7 +8,8 @@ from unittest.mock import Mock
 import pytest
 
 from autoskillit.execution.recording import RecordingSubprocessRunner, ReplayingSubprocessRunner
-from tests.conftest import MockSubprocessRunner, _make_result
+from tests.conftest import _make_result
+from tests.fakes import MockSubprocessRunner
 
 
 @dataclass

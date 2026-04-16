@@ -25,7 +25,7 @@ def test_tool_ctx_provides_isolated_token_log(tool_ctx):
 
 async def test_mock_subprocess_runner_push_and_pop(tmp_path: Path):
     """MockSubprocessRunner.push() queues results, __call__ pops in order."""
-    from tests.conftest import MockSubprocessRunner
+    from tests.fakes import MockSubprocessRunner
 
     runner = MockSubprocessRunner()
     r1 = SubprocessResult(0, "out1", "", TerminationReason.NATURAL_EXIT, 100)
@@ -41,7 +41,7 @@ async def test_mock_subprocess_runner_push_and_pop(tmp_path: Path):
 
 async def test_mock_subprocess_runner_default_when_empty(tmp_path: Path):
     """MockSubprocessRunner returns a zero-exit default when queue is empty."""
-    from tests.conftest import MockSubprocessRunner
+    from tests.fakes import MockSubprocessRunner
 
     runner = MockSubprocessRunner()
     result = await runner(["cmd"], cwd=tmp_path, timeout=30.0)

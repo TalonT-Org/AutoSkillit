@@ -106,8 +106,8 @@ class TestRunCmdRecording:
         from unittest.mock import Mock
 
         from autoskillit.execution.recording import RecordingSubprocessRunner
-        from tests.conftest import MockSubprocessRunner
         from tests.conftest import _make_result as _mr
+        from tests.fakes import MockSubprocessRunner
 
         mock_recorder = Mock()
         inner = MockSubprocessRunner()
@@ -129,8 +129,8 @@ class TestRunCmdRecording:
         from unittest.mock import Mock
 
         from autoskillit.execution.recording import RecordingSubprocessRunner
-        from tests.conftest import MockSubprocessRunner
         from tests.conftest import _make_result as _mr
+        from tests.fakes import MockSubprocessRunner
 
         mock_recorder = Mock()
         inner = MockSubprocessRunner()

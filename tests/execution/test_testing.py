@@ -309,7 +309,8 @@ def test_check_test_passed_parses_pytest_summary_in_stderr() -> None:
 async def test_default_test_runner_returns_test_result_with_stderr(tmp_path: Path) -> None:
     from autoskillit.core import TestResult
     from autoskillit.execution.testing import DefaultTestRunner
-    from tests.conftest import MockSubprocessRunner, _make_result
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
 
     runner = MockSubprocessRunner()
     runner.push(_make_result(0, "", stderr="PASSED [0.5s] all tests"))

@@ -7,81 +7,12 @@ import pytest
 from autoskillit.core.types import (
     ChannelConfirmation,
     SubprocessResult,
-    SubprocessRunner,
     TerminationReason,
-    TestResult,
 )
 from tests._helpers import _flush_structlog_proxy_caches
+from tests.fakes import MockSubprocessRunner
 
 _scope_key = pytest.StashKey[set[_Path] | None]()
-
-
-class StatefulMockTester:
-    """Test double for TestRunner returning pre-configured results on successive calls.
-
-    Enables the scenario: pre-rebase tests pass, post-rebase tests fail.
-    Falls back to TestResult(passed=True, stdout="", stderr="") for any call beyond the
-    configured list.
-    """
-
-    def __init__(self, results: list[TestResult]) -> None:
-        self._results = list(results)
-        self._index = 0
-
-    async def run(self, cwd: _Path) -> TestResult:
-        if self._index < len(self._results):
-            result = self._results[self._index]
-        else:
-            result = TestResult(passed=True, stdout="", stderr="")
-        self._index += 1
-        return result
-
-    @property
-    def call_count(self) -> int:
-        return self._index
-
-
-class MockSubprocessRunner(SubprocessRunner):
-    """Test double for SubprocessRunner. Queues predetermined results.
-
-    Inherits from SubprocessRunner (Protocol) so mypy verifies the __call__
-    signature matches the protocol at class definition, not just at call sites.
-
-    call_args_list stores (cmd, cwd, timeout, kwargs) tuples.
-    IMPORTANT: Assert [N][1] (cwd) when testing cwd propagation.
-    """
-
-    def __init__(self) -> None:
-        self._queue: list[SubprocessResult] = []
-        self._default = SubprocessResult(
-            returncode=0,
-            stdout="",
-            stderr="",
-            termination=TerminationReason.NATURAL_EXIT,
-            pid=99999,
-        )
-        self.call_args_list: list[tuple] = []
-
-    def push(self, result: SubprocessResult) -> None:
-        """Queue a result to be returned by the next __call__."""
-        self._queue.append(result)
-
-    def set_default(self, result: SubprocessResult) -> None:
-        """Set the result returned when the queue is empty."""
-        self._default = result
-
-    async def __call__(
-        self,
-        cmd: list[str],
-        *,
-        cwd: _Path,
-        timeout: float,
-        **kwargs: object,
-    ) -> SubprocessResult:
-        self.call_args_list.append((cmd, cwd, timeout, kwargs))
-        if self._queue:
-            return self._queue.pop(0)
-        return self._default
 
 
 @pytest.fixture(autouse=True)

@@ -33,6 +33,13 @@ ENV_CACHE_MAX_AGE = "AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE"
 ENV_BUFFER_SECONDS = "AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS"
 ENV_DISABLED = "AUTOSKILLIT_QUOTA_GUARD__DISABLED"
 
+# The exact keys this module reads from hook_config["quota_guard"].
+# The bridge contract test asserts equality between this set and the
+# serializer's payload keys — update both together.
+QUOTA_GUARD_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
+    {"cache_path", "cache_max_age", "buffer_seconds", "disabled"}
+)
+
 
 @dataclass(frozen=True, slots=True)
 class QuotaHookSettings:

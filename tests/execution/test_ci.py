@@ -405,3 +405,36 @@ async def test_wait_billing_error_surfaced_distinctly(httpx_mock):
     requests = httpx_mock.get_requests()
     assert len(requests) == 1
     assert "/jobs" not in str(requests[0].url)
+
+
+# ---------------------------------------------------------------------------
+# Vocabulary contract
+# ---------------------------------------------------------------------------
+
+
+class TestCIVocabularyContract:
+    """FAILED_CONCLUSIONS and related sets must be declared as named constants,
+    and those constants must be consistent with each other."""
+
+    def test_failed_conclusions_constant_exists(self):
+        """FAILED_CONCLUSIONS must be exported as a module-level constant."""
+        from autoskillit.execution import ci
+
+        assert hasattr(ci, "FAILED_CONCLUSIONS")
+        assert isinstance(ci.FAILED_CONCLUSIONS, frozenset)
+
+    def test_known_ci_conclusions_constant_exists(self):
+        """KNOWN_CI_CONCLUSIONS must be exported and cover all values ci.py tests for."""
+        from autoskillit.execution import ci
+
+        assert hasattr(ci, "KNOWN_CI_CONCLUSIONS")
+        assert isinstance(ci.KNOWN_CI_CONCLUSIONS, frozenset)
+
+    def test_failed_conclusions_subset_of_known(self):
+        """FAILED_CONCLUSIONS must be a subset of KNOWN_CI_CONCLUSIONS."""
+        from autoskillit.execution.ci import FAILED_CONCLUSIONS, KNOWN_CI_CONCLUSIONS
+
+        assert FAILED_CONCLUSIONS.issubset(KNOWN_CI_CONCLUSIONS), (
+            f"FAILED_CONCLUSIONS contains values not in KNOWN_CI_CONCLUSIONS: "
+            f"{FAILED_CONCLUSIONS - KNOWN_CI_CONCLUSIONS}"
+        )

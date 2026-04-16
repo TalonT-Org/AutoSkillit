@@ -8,6 +8,21 @@ from __future__ import annotations
 
 _CI_PASSING_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 
+# All GitHub pull request review state values known to be returned by the REST API.
+# https://docs.github.com/en/rest/pulls/reviews
+KNOWN_REVIEW_STATES: frozenset[str] = frozenset(
+    {
+        "APPROVED",
+        "CHANGES_REQUESTED",
+        "COMMENTED",
+        "DISMISSED",
+        "PENDING",
+    }
+)
+
+_BLOCKING_REVIEW_STATE = "CHANGES_REQUESTED"
+assert _BLOCKING_REVIEW_STATE in KNOWN_REVIEW_STATES  # Import-time drift guard
+
 
 def is_ci_passing(checks: list[dict]) -> bool:
     """Return True if all CI checks pass (success/skipped/neutral), False otherwise.
@@ -36,7 +51,7 @@ def is_review_passing(reviews: list[dict]) -> bool:
     blocked. This means unreviewed PRs pass the gate. Callers that require at
     least one approval must enforce that precondition before calling this function.
     """
-    return not any(r.get("state") == "CHANGES_REQUESTED" for r in reviews)
+    return not any(r.get("state") == _BLOCKING_REVIEW_STATE for r in reviews)
 
 
 def partition_prs(
@@ -78,7 +93,7 @@ def partition_prs(
 
         reviews = reviews_by_number.get(number, [])
         if not is_review_passing(reviews):
-            count = sum(1 for r in reviews if r.get("state") == "CHANGES_REQUESTED")
+            count = sum(1 for r in reviews if r.get("state") == _BLOCKING_REVIEW_STATE)
             reason = f"{count} unresolved CHANGES_REQUESTED review(s)"
             review_blocked.append({"number": number, "title": title, "reason": reason})
             continue

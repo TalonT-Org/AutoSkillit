@@ -189,6 +189,8 @@ class NoPositiveSignal(ClassifierInconclusive):
 def _is_positive_stall(state: PRFetchState) -> bool:
     """True when auto-merge is enabled and merge_state_status indicates the PR is
     stuck in a state where it should be in queue but is not."""
+    # TODO(vocab-guard): extract KNOWN_MQ_MERGE_STATE_STATUSES frozenset
+    # (CLEAN, HAS_HOOKS, BLOCKED, DIRTY, UNKNOWN, UNSTABLE) and add contract test.
     return state["auto_merge_enabled_at"] is not None and state["merge_state_status"] in {
         "CLEAN",
         "HAS_HOOKS",

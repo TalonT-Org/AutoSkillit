@@ -1787,6 +1787,127 @@ class TestPerWindowToggles:
         assert captured_kwargs["long_enabled"] is True
 
 
+class TestFetchQuotaNovelWindowWarning:
+    """_fetch_quota must log a warning when it encounters a window name not in
+    KNOWN_QUOTA_WINDOW_NAMES. This surfaces Anthropic API vocabulary drift in
+    operator logs without disrupting the pipeline."""
+
+    @pytest.mark.anyio
+    async def test_novel_window_name_logs_warning(self, monkeypatch, caplog):
+        """An unknown window name in the API response must produce a warning log entry."""
+        import logging
+
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import _fetch_quota
+
+        resets_at = (datetime.now(UTC) + timedelta(hours=3)).isoformat()
+        api_response = {
+            "five_hour": {"utilization": 10.0, "resets_at": resets_at},
+            "fortnight": {"utilization": 50.0, "resets_at": resets_at},  # unknown
+        }
+        cfg = QuotaGuardConfig()
+
+        class FakeResponse:
+            status_code = 200
+
+            def json(self):
+                return api_response
+
+            def raise_for_status(self):
+                pass
+
+        class FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                pass
+
+            async def get(self, *a, **kw):
+                return FakeResponse()
+
+        monkeypatch.setattr("httpx.AsyncClient", lambda **kw: FakeClient())
+        monkeypatch.setattr(
+            "autoskillit.execution.quota._read_credentials",
+            lambda path: "fake-token",
+        )
+
+        with caplog.at_level(logging.WARNING, logger="autoskillit.execution.quota"):
+            await _fetch_quota(
+                cfg.credentials_path,
+                short_threshold=cfg.short_window_threshold,
+                long_threshold=cfg.long_window_threshold,
+                long_patterns=cfg.long_window_patterns,
+                short_enabled=cfg.short_window_enabled,
+                long_enabled=cfg.long_window_enabled,
+            )
+
+        warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any("fortnight" in m for m in warning_messages), (
+            f"Expected a warning containing 'fortnight' for unknown window name. "
+            f"Got: {warning_messages}"
+        )
+
+    @pytest.mark.anyio
+    async def test_all_known_windows_do_not_log_warning(self, monkeypatch, caplog):
+        """No warning must be logged when all API window names are in KNOWN_QUOTA_WINDOW_NAMES."""
+        import logging
+
+        from autoskillit.config.settings import QuotaGuardConfig
+        from autoskillit.execution.quota import KNOWN_QUOTA_WINDOW_NAMES, _fetch_quota
+
+        resets_at = (datetime.now(UTC) + timedelta(hours=3)).isoformat()
+        api_response = {
+            name: {"utilization": 10.0, "resets_at": resets_at}
+            for name in KNOWN_QUOTA_WINDOW_NAMES
+        }
+        cfg = QuotaGuardConfig()
+
+        class FakeResponse:
+            status_code = 200
+
+            def json(self):
+                return api_response
+
+            def raise_for_status(self):
+                pass
+
+        class FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                pass
+
+            async def get(self, *a, **kw):
+                return FakeResponse()
+
+        monkeypatch.setattr("httpx.AsyncClient", lambda **kw: FakeClient())
+        monkeypatch.setattr(
+            "autoskillit.execution.quota._read_credentials",
+            lambda path: "fake-token",
+        )
+
+        with caplog.at_level(logging.WARNING, logger="autoskillit.execution.quota"):
+            await _fetch_quota(
+                cfg.credentials_path,
+                short_threshold=cfg.short_window_threshold,
+                long_threshold=cfg.long_window_threshold,
+                long_patterns=cfg.long_window_patterns,
+                short_enabled=cfg.short_window_enabled,
+                long_enabled=cfg.long_window_enabled,
+            )
+
+        novel_warnings = [
+            r.message
+            for r in caplog.records
+            if r.levelno >= logging.WARNING and "novel" in r.message.lower()
+        ]
+        assert not novel_warnings, (
+            f"Unexpected novel-window warnings for known windows: {novel_warnings}"
+        )
+
+
 class TestAPIWindowVocabularyContract:
     """Contract tests: LONG_WINDOW_NAMES × default long_window_patterns → correct classification.
 

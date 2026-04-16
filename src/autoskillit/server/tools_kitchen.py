@@ -234,7 +234,11 @@ def _build_tool_category_listing() -> str:
     return "\n".join(lines)
 
 
-@mcp.tool(tags={"autoskillit"}, annotations={"readOnlyHint": True})
+@mcp.tool(
+    tags={"autoskillit"},
+    annotations={"readOnlyHint": True},
+    meta={"anthropic/maxResultSizeChars": 100_000},
+)
 @track_response_size("open_kitchen")
 async def open_kitchen(
     name: str | None = None,

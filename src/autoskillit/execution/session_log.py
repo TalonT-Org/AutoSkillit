@@ -141,14 +141,14 @@ def flush_session_log(
                 if not isinstance(rec, dict) or rec.get("type") != "assistant":
                     continue
                 rid = rec.get("requestId", "")
+                ts = rec.get("timestamp", "")
                 if rid and rid not in seen_request_ids:
                     seen_request_ids.add(rid)
                     _cb_request_ids.append(str(rid))
-                ts = rec.get("timestamp", "")
-                if ts:
-                    _cb_turn_timestamps.append(str(ts))
+                    if ts:
+                        _cb_turn_timestamps.append(str(ts))
         except OSError:
-            pass
+            logger.debug("channel_b_log_read_error", path=cc_log_str, exc_info=True)
 
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)

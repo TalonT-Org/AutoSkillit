@@ -1272,9 +1272,9 @@ class TestReviewPrRecipeIntegration:
             "resolve_review on_result must route verdict=real_fix to re_push_review"
         )
 
-    def test_re_push_review_routes_to_ci_watch(self, recipe: object) -> None:
-        """T_RP8: re_push_review routes to ci_watch (one-shot review gate)."""
-        assert recipe.steps["re_push_review"].on_success == "ci_watch"  # type: ignore[attr-defined]
+    def test_re_push_review_routes_to_check_review_loop(self, recipe: object) -> None:
+        """T_RP8: re_push_review routes to check_review_loop (bounded retry gate)."""
+        assert recipe.steps["re_push_review"].on_success == "check_review_loop"  # type: ignore[attr-defined]
 
     def test_ci_watch_present(self, recipe: object) -> None:
         """T_RP9: ci_watch step present in all four recipes."""

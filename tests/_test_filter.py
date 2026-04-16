@@ -346,8 +346,7 @@ def apply_manifest(
     if manifest is None:
         return set()
     result: set[str] = set()
-    patterns = manifest.get("patterns", {})
-    for pattern, test_dirs in patterns.items():
+    for pattern, test_dirs in manifest.items():
         for f in changed_files:
             if fnmatch.fnmatch(f, pattern):
                 if isinstance(test_dirs, list):

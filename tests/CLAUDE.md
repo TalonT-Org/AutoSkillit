@@ -48,6 +48,33 @@ All tests run under `-n 4 --dist worksteal`. Every test must be safe for paralle
 - `test_tmp_path_is_ram_backed` in `tests/arch/test_ast_rules.py` enforces the `/dev/shm` prefix
   on Linux; on macOS it is a no-op (disk temp is acceptable there)
 
+## Path Filtering
+
+Tests support opt-in path-based filtering to run only the test directories affected by
+changed files. Controlled by env var + CLI flags:
+
+- **Opt-in**: Set `AUTOSKILLIT_TEST_FILTER=1` (or `=conservative` / `=aggressive`)
+- **CLI override**: `--filter-mode=conservative|aggressive|none`
+- **Base ref override**: `--filter-base-ref=<branch>` (default: reads `AUTOSKILLIT_TEST_BASE_REF` then `GITHUB_BASE_REF`)
+
+**Filter algorithm** (`tests/_test_filter.py`):
+
+1. **Fail-open gate**: If env var is unset/falsy, all tests run. On any error, all tests run.
+2. **Changed files**: `git diff --name-only base_ref...HEAD`
+3. **Bucket A**: If any "global impact" file changed (conftest.py, pyproject.toml, etc.) -> full run
+4. **Large changeset**: >30 files -> full run
+5. **Classification**: src Python -> layer cascade, test Python -> direct, non-Python -> manifest lookup
+6. **Always-run**: `arch/` + `contracts/` always included (+ `infra/` + `docs/` in conservative mode)
+7. **Deselection**: `pytest_collection_modifyitems` deselects items outside scope paths
+
+**Modes**:
+
+| Mode | Cascade | Always-run | Use case |
+|------|---------|-----------|----------|
+| `conservative` | Wide (L0 core -> all layers) | arch, contracts, infra, docs | CI, merge gates |
+| `aggressive` | Narrow (each package -> itself) | arch, contracts | Local dev |
+| `none` | N/A | N/A | Full run (default) |
+
 ```
 tests/
 ├── CLAUDE.md                            # xdist compatibility guidelines

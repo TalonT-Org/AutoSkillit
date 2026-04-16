@@ -86,6 +86,13 @@ tasks:
           exit 0
         fi
 
+  test-filtered:
+    desc: Run path-filtered tests (delegates to test-check with filter env passthrough)
+    cmds:
+      - |
+        export AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}"
+        task test-check
+
   test-smoke:
     desc: Run smoke tests (requires ANTHROPIC_API_KEY)
     deps: [_tmpdir-setup]

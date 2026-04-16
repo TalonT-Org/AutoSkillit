@@ -172,7 +172,10 @@ Run the project's code quality checks and test suite from the worktree.
 
 ```bash
 cd "${WORKTREE_PATH}" && pre-commit run --all-files
-cd "${WORKTREE_PATH}" && {test_command}
+cd "${WORKTREE_PATH}" && \
+  AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}" \
+  AUTOSKILLIT_TEST_BASE_REF=$(cat "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch") \
+  {test_command}
 ```
 
 If tests fail, fix the issue and re-run.

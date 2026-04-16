@@ -42,6 +42,17 @@ def test_implement_worktree_uses_config_driven_test_command() -> None:
     )
 
 
+def test_implement_worktree_sets_filter_env() -> None:
+    """implement-worktree/SKILL.md must set filter env vars in Step 5."""
+    content = (SKILLS_EXTENDED_DIR / "implement-worktree" / "SKILL.md").read_text()
+    assert "AUTOSKILLIT_TEST_FILTER" in content, (
+        "implement-worktree/SKILL.md must set AUTOSKILLIT_TEST_FILTER before test command"
+    )
+    assert "AUTOSKILLIT_TEST_BASE_REF" in content, (
+        "implement-worktree/SKILL.md must set AUTOSKILLIT_TEST_BASE_REF before test command"
+    )
+
+
 def test_merge_pr_uses_generic_ci_check_name() -> None:
     """merge-pr/SKILL.md must not name project-specific CI checks."""
     content = _skill_content("merge-pr")

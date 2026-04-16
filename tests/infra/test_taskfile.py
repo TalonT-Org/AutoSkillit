@@ -77,6 +77,28 @@ class TestTaskfile:
             "vendor-mermaid must write to src/autoskillit/assets/mermaid/mermaid.min.js"
         )
 
+    def test_test_filtered_task_exists(self):
+        """TF-8 — test-filtered task exists in Taskfile.yml."""
+        data = self._load()
+        assert "test-filtered" in data["tasks"], "test-filtered task missing from Taskfile.yml"
+
+    def test_test_filtered_delegates_to_test_check(self):
+        """TF-9 — test-filtered delegates to test-check."""
+        data = self._load()
+        cmds = " ".join(str(c) for c in data["tasks"]["test-filtered"].get("cmds", []))
+        assert "test-check" in cmds, "test-filtered must delegate to test-check"
+
+    def test_test_filtered_sets_filter_env_default(self):
+        """TF-10 — test-filtered defaults AUTOSKILLIT_TEST_FILTER to conservative."""
+        data = self._load()
+        cmds = " ".join(str(c) for c in data["tasks"]["test-filtered"].get("cmds", []))
+        assert "AUTOSKILLIT_TEST_FILTER" in cmds, (
+            "test-filtered must reference AUTOSKILLIT_TEST_FILTER"
+        )
+        assert "conservative" in cmds, (
+            "test-filtered must default AUTOSKILLIT_TEST_FILTER to conservative"
+        )
+
 
 def test_taskfile_pytest_paths_exist() -> None:
     """All pytest file paths in Taskfile.yml must exist."""

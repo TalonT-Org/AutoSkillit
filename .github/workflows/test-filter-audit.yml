@@ -7,7 +7,7 @@ on:
     branches: [main]
     paths:
       - "tests/**"
-      - "conftest.py"
+      - "tests/conftest.py"
       - "tests/_test_filter.py"
       - "src/autoskillit/_test_filter.py"
       - ".autoskillit/test-filter-manifest.yaml"

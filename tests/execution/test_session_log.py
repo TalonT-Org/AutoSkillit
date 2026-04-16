@@ -1134,3 +1134,91 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path, monkeypatc
     assert summary["last_stop_reason"] == "end_turn"
     assert summary["request_ids"] == ["req-001", "req-002"]
     assert summary["turn_timestamps"] == ["2026-04-15T07:00:00Z", "2026-04-15T07:00:05Z"]
+
+
+# ---------------------------------------------------------------------------
+# Silent gap, outcome anomaly, and exit snapshot tests
+# ---------------------------------------------------------------------------
+
+
+def test_summary_includes_silent_gap_seconds(tmp_path, monkeypatch):
+    """silent_gap_seconds computed from cc_log mtime vs end_ts — approx 5.0s."""
+    import autoskillit.execution.session_log as sl_mod
+
+    cb_log = tmp_path / "session.jsonl"
+    cb_log.write_text("")
+    end_ts = "2026-04-15T07:00:10+00:00"
+    end_dt = datetime.fromisoformat(end_ts)
+    os.utime(cb_log, (end_dt.timestamp() - 5.0,) * 2)
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    _flush(tmp_path, session_id="gap-test", end_ts=end_ts, proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "gap-test" / "summary.json").read_text())
+    assert "silent_gap_seconds" in summary
+    assert summary["silent_gap_seconds"] == pytest.approx(5.0, abs=0.5)
+
+
+def test_summary_silent_gap_seconds_null_when_no_end_ts(tmp_path, monkeypatch):
+    """silent_gap_seconds is null when end_ts is not provided."""
+    import autoskillit.execution.session_log as sl_mod
+
+    cb_log = tmp_path / "session.jsonl"
+    cb_log.write_text("")
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    _flush(tmp_path, session_id="no-end-ts", end_ts="", proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "no-end-ts" / "summary.json").read_text())
+    assert summary["silent_gap_seconds"] is None
+
+
+def test_summary_silent_gap_seconds_null_when_cc_log_missing(tmp_path):
+    """silent_gap_seconds is null when claude_code_log cannot be resolved."""
+    _flush(
+        tmp_path,
+        session_id="no-cc-log",
+        end_ts="2026-04-15T07:00:10+00:00",
+        proc_snapshots=None,
+        cwd="/nonexistent/path",
+    )
+    summary = json.loads((tmp_path / "sessions" / "no-cc-log" / "summary.json").read_text())
+    assert summary["silent_gap_seconds"] is None
+
+
+def test_flush_outcome_anomaly_included_in_anomaly_count(tmp_path, monkeypatch):
+    """empty_result + output_tokens > 0 increments anomaly_count in summary and index."""
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: None)
+    _flush(
+        tmp_path,
+        session_id="outcome-anomaly",
+        subtype="empty_result",
+        success=False,
+        token_usage={"output_tokens": 945, "input_tokens": 500},
+        proc_snapshots=None,
+    )
+    summary = json.loads((tmp_path / "sessions" / "outcome-anomaly" / "summary.json").read_text())
+    assert summary["anomaly_count"] >= 1
+    anomalies_path = tmp_path / "sessions" / "outcome-anomaly" / "anomalies.jsonl"
+    assert anomalies_path.exists()
+    kinds = [json.loads(line)["kind"] for line in anomalies_path.read_text().splitlines() if line]
+    assert "empty_result_with_tokens" in kinds
+    index_entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+    assert index_entry["anomaly_count"] >= 1
+
+
+def test_proc_trace_preserves_exit_snapshot_event(tmp_path):
+    """proc_trace.jsonl rows with event='exit_snapshot' preserve the marker."""
+    exit_snap = {**_snap(), "event": "exit_snapshot"}
+    _flush(
+        tmp_path,
+        session_id="exit-snap-test",
+        proc_snapshots=[_snap(), _snap(), exit_snap],
+    )
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "sessions" / "exit-snap-test" / "proc_trace.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    assert rows[0]["event"] == "snapshot"
+    assert rows[1]["event"] == "snapshot"
+    assert rows[2]["event"] == "exit_snapshot"

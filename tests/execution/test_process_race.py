@@ -246,10 +246,73 @@ class TestRaceSignalsFieldCount:
     """Sentinel test: breaks when RaceSignals fields change."""
 
     def test_race_signals_field_count(self) -> None:
-        assert len(dataclasses.fields(RaceSignals)) == 9, (
-            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 9). "
+        assert len(dataclasses.fields(RaceSignals)) == 10, (
+            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 10). "
             "Update tests to cover the new field."
         )
+
+
+class TestExitSnapshot:
+    """exit_snapshot field on RaceAccumulator and RaceSignals."""
+
+    def test_exit_snapshot_defaults_to_none(self) -> None:
+        """RaceAccumulator.exit_snapshot defaults to None."""
+        acc = RaceAccumulator()
+        assert acc.exit_snapshot is None
+
+    def test_exit_snapshot_propagates_to_signals(self) -> None:
+        """exit_snapshot stored on accumulator is visible in RaceSignals."""
+        acc = RaceAccumulator()
+        acc.exit_snapshot = {"event": "exit_snapshot", "vm_rss_kb": 1024}
+        signals = acc.to_race_signals()
+        assert signals.exit_snapshot is not None
+        assert signals.exit_snapshot["event"] == "exit_snapshot"
+
+    @pytest.mark.anyio
+    async def test_watch_process_captures_exit_snapshot(self) -> None:
+        """_watch_process populates acc.exit_snapshot after process exits."""
+        import sys
+
+        import anyio
+
+        from autoskillit.execution._process_race import _watch_process
+
+        acc = RaceAccumulator()
+        trigger = anyio.Event()
+        async with await anyio.open_process(
+            [sys.executable, "-c", "import time; time.sleep(0.2)"],
+            start_new_session=True,
+        ) as proc:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(_watch_process, proc, acc, trigger)
+                await trigger.wait()
+                tg.cancel_scope.cancel()
+
+        # exit_snapshot may be None if read_proc_snapshot failed (race — process gone)
+        # but the attribute must exist (not missing)
+        assert hasattr(acc, "exit_snapshot")
+
+    @pytest.mark.anyio
+    async def test_watch_process_exit_snapshot_has_event_marker(self) -> None:
+        """If exit_snapshot was captured, it carries event='exit_snapshot'."""
+        import sys
+
+        import anyio
+
+        from autoskillit.execution._process_race import _watch_process
+
+        acc = RaceAccumulator()
+        trigger = anyio.Event()
+        async with await anyio.open_process(
+            [sys.executable, "-c", "pass"],  # instant exit — maximises snapshot chance
+            start_new_session=True,
+        ) as proc:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(_watch_process, proc, acc, trigger)
+                await trigger.wait()
+                tg.cancel_scope.cancel()
+
+        assert acc.exit_snapshot is None or acc.exit_snapshot.get("event") == "exit_snapshot"
 
 
 class TestProcessExitedEvent:

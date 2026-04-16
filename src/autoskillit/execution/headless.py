@@ -27,6 +27,7 @@ from autoskillit.core import (
     ChannelConfirmation,
     CliSubtype,
     FailureRecord,
+    KillReason,
     RetryReason,
     SessionOutcome,
     SkillResult,
@@ -1210,7 +1211,12 @@ async def run_headless_core(
                     clone_contamination_reverted=_clone_reverted,
                     tracked_comm=result.tracked_comm,
                     orphaned_tool_result=result.orphaned_tool_result,
-                    raw_stdout=result.stdout if not skill_result.success else "",
+                    raw_stdout=result.stdout
+                    if (
+                        not skill_result.success
+                        or skill_result.kill_reason != KillReason.NATURAL_EXIT
+                    )
+                    else "",
                     last_stop_reason=skill_result.last_stop_reason,
                 )
             except Exception:

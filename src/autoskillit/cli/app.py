@@ -32,6 +32,7 @@ from autoskillit.cli._init_helpers import (
     _prompt_test_command,
     _register_all,
 )
+from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
 from autoskillit.cli._terminal import terminal_guard
 from autoskillit.core import ClaudeFlags, RecipeSource, atomic_write, pkg_root
 from autoskillit.execution import build_interactive_cmd
@@ -561,7 +562,6 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
         When True, attempt to restore a previous session.
     """
     from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
-    from autoskillit.cli._prompts import _build_orchestrator_prompt
     from autoskillit.recipe import (
         find_recipe_by_name,
         list_recipes,
@@ -715,6 +715,7 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
 
     from autoskillit.cli._prompts import _COOK_GREETINGS, show_cook_preview
 
+    _itable = _get_ingredients_table(recipe, _match, Path.cwd())
     show_cook_preview(recipe, parsed, _recipes_dir_for(_match), Path.cwd())
 
     from autoskillit.cli._ansi import permissions_warning
@@ -728,7 +729,7 @@ def order(recipe: str | None = None, session_id: str | None = None, *, resume: b
 
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
     _launch_cook_session(
-        _build_orchestrator_prompt(recipe, mcp_prefix=mcp_prefix),
+        _build_orchestrator_prompt(recipe, mcp_prefix=mcp_prefix, ingredients_table=_itable),
         initial_message=greeting,
         extra_env=_extra_env if _extra_env else None,
         resume_session_id=resume_session_id,

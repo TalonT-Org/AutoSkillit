@@ -95,6 +95,59 @@ If `gh` is unavailable or not authenticated, or no PR is found:
 - Output `verdict=approved`
 - Exit 0 (graceful degradation)
 
+### Step 1.5: Fetch Prior Review Thread Context
+
+This step is always executed when a PR is found. It builds prior-thread context for
+suppressing already-resolved findings on re-reviews and for focusing subagents on
+known-unresolved items.
+
+Fetch all review threads using cursor-based pagination (same GraphQL query as
+resolve-review Step 2, but also fetching `comments(first:2)` to see both the original
+finding and any reply):
+
+```graphql
+query($owner:String!, $repo:String!, $number:Int!, $after:String) {
+  repository(owner:$owner, name:$repo) {
+    pullRequest(number:$number) {
+      reviewThreads(first:100, after:$after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          isResolved
+          path
+          line
+          originalLine
+          comments(first:2) {
+            nodes { body author { login } }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Build two lists from the thread nodes. For each thread, resolve line via:
+`line = thread.get("line") or thread.get("originalLine")` — `line` is nullable for
+outdated threads where new commits have shifted the diff anchor; `originalLine` is
+the stable fallback.
+
+**`prior_resolved_findings`** — threads where `isResolved=true` AND the first comment body
+contains `[critical]` or `[warning]` (autoskillit-posted finding):
+```json
+[{"file": "src/foo.py", "line": 42, "body": "[critical] arch: ..."}]
+```
+
+**`prior_unresolved_findings`** — threads where `isResolved=false` AND first comment
+contains `[critical]` or `[warning]`:
+```json
+[{"file": "src/bar.py", "line": 17, "body": "[warning] tests: ..."}]
+```
+
+Save to: `{{AUTOSKILLIT_TEMP}}/review-pr/prior_threads_{pr_number}.json`
+
+If the GraphQL call fails (token scope, network): set both lists to `[]` and log a warning.
+Prior-thread context is best-effort — failure must not abort the review.
+
 ### Step 2: Get PR Diff and Metadata
 
 ```bash
@@ -253,6 +306,18 @@ Subagent prompt template (dimensions 1–6):
 > If no issues found, return an empty array [].
 > Annotated diff content (each line prefixed with [LNNN] markers):
 > {annotated_diff_content}
+>
+> Prior resolved findings (DO NOT RE-RAISE — these have been addressed by resolve-review):
+> {json_list_of_prior_resolved_findings or "[]"}
+>
+> Prior unresolved findings (FOCUS ON these persistent issues if they appear in the diff you are reviewing):
+> {json_list_of_prior_unresolved_findings or "[]"}
+>
+> When a finding matches a prior resolved entry by file and approximate line (within ±5 lines):
+> SKIP it entirely — do not include it in your findings array.
+
+Pass `prior_resolved_findings` and `prior_unresolved_findings` (both as JSON arrays) into each
+subagent prompt via template substitution, same as `annotated_diff_content`.
 
 Subagent prompt template (dimension 7 — deletion_regression, only when `deletion_context` is non-null):
 
@@ -285,16 +350,23 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
 ### Step 4: Aggregate and Deduplicate Findings
 
 1. Collect all subagent JSON responses
-2. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-3. Partition findings against `VALID_LINE_RANGES` (built in Step 2.7):
+2. Suppression pass — filter out prior_resolved_findings matches: after collecting raw
+   findings and before deduplication, remove any finding that matches a
+   `prior_resolved_findings` entry by same `file` path AND `line` within ±5 of the
+   resolved finding's `line`. This handles line drift caused by fix commits shifting
+   context. Log each suppressed finding:
+   `"Suppressing finding at {file}:{line} — matches prior resolved thread"`.
+   The remaining findings proceed through deduplication and verdict logic unchanged.
+3. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
+4. Partition findings against `VALID_LINE_RANGES` (built in Step 2.7):
    - `FILTERED_FINDINGS`: findings whose `(file, line)` falls within any hunk range for
      that file. These are in-hunk and safe to post as inline comments in Step 6.
    - `UNPOSTABLE_FINDINGS`: findings whose `line` is not in any hunk range for their file.
      Log a warning for each. These are included in the summary fallback body only.
    - If `VALID_LINE_RANGES` is empty, all findings are `FILTERED_FINDINGS`.
-4. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
+5. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
    combined), so unpostable findings still contribute to the `changes_requested` verdict.
-5. Bucket by actionability (applied to combined findings):
+6. Bucket by actionability (applied to combined findings):
    - `actionable_findings` — requires_decision=false AND severity in ("critical", "warning")
    - `decision_findings` — requires_decision=true (any severity)
    - `info_findings` — severity == "info" AND requires_decision=false

@@ -31,6 +31,9 @@ ingredients:
       Automatically merge the PR after required checks pass —
       via merge queue when available, direct merge otherwise
     default: "true"
+  review_max_retries:
+    description: Maximum number of review-resolve retry cycles before proceeding to CI
+    default: "3"
   issue_url:
     description: GitHub issue to close on merge
     required: false
@@ -573,6 +576,8 @@ steps:
     on_context_limit: ci_watch
     optional: true
     skip_when_false: "inputs.open_pr"
+    optional_context_refs:
+      - review_loop_count
     note: >
       Runs after compose_pr creates the PR. Invokes the review-pr skill as a
       headless session to leave inline review comments on the PR. The skill finds
@@ -616,12 +621,40 @@ steps:
       clone_path: "${{ context.work_dir }}"
       remote_url: "${{ context.remote_url }}"
       branch: "${{ context.merge_target }}"
-    on_success: ci_watch
+    on_success: check_review_loop
     on_failure: release_issue_failure
     note: >
       Pushes the review-fixed feature branch back to the remote after resolve_review
-      succeeds. Routes to ci_watch to validate via CI (one-shot review gate).
-      On push failure, escalates via release_issue_failure.
+      succeeds. Routes to check_review_loop to determine if another review-resolve
+      cycle is needed (bounded by review_max_retries). On push failure, escalates
+      via release_issue_failure.
+
+  check_review_loop:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.check_review_loop"
+      pr_number: "${{ context.pr_number }}"
+      cwd: "${{ context.work_dir }}"
+      current_iteration: "${{ context.review_loop_count }}"
+      max_iterations: "${{ inputs.review_max_retries }}"
+    capture:
+      review_loop_count: "${{ result.next_iteration }}"
+    on_result:
+      - when: "${{ result.has_blocking }} == true and ${{ result.max_exceeded }} == false"
+        route: review_pr
+      - route: ci_watch
+    on_failure: ci_watch
+    optional: true
+    skip_when_false: "inputs.open_pr"
+    optional_context_refs:
+      - review_loop_count
+    note: >
+      After resolve_review fixes are pushed, checks GitHub API for unresolved
+      critical/warning review threads. Routes back to review_pr for another
+      review-resolve cycle if blocking comments persist and the iteration guard
+      (inputs.review_max_retries, default 3) has not been exceeded. Captures
+      review_loop_count to track iterations across loop passes. On GitHub API
+      failure, degrades to ci_watch to avoid blocking the pipeline.
 
   ci_watch:
     tool: wait_for_ci

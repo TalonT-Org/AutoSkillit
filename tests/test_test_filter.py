@@ -798,20 +798,26 @@ class TestConftestFilterPlugin:
 class TestShadowDiff:
     """Shadow-diff verification tests (SD1)."""
 
+    _COMM_ENV = {"LC_ALL": "C"}
+
     def test_shadow_diff_detects_missed_tests(self, tmp_path: Path) -> None:
         """Validate comm -23 logic: IDs in full but not in filtered are 'missed'."""
-        full_ids = [
-            "tests/core/test_core.py::test_a",
-            "tests/core/test_core.py::test_b",
-            "tests/execution/test_headless.py::test_c",
-            "tests/pipeline/test_gate.py::test_d",
-            "tests/server/test_init.py::test_e",
-        ]
-        filtered_ids = [
-            "tests/core/test_core.py::test_a",
-            "tests/core/test_core.py::test_b",
-            "tests/server/test_init.py::test_e",
-        ]
+        full_ids = sorted(
+            [
+                "tests/core/test_core.py::test_a",
+                "tests/core/test_core.py::test_b",
+                "tests/execution/test_headless.py::test_c",
+                "tests/pipeline/test_gate.py::test_d",
+                "tests/server/test_init.py::test_e",
+            ]
+        )
+        filtered_ids = sorted(
+            [
+                "tests/core/test_core.py::test_a",
+                "tests/core/test_core.py::test_b",
+                "tests/server/test_init.py::test_e",
+            ]
+        )
 
         full_file = tmp_path / "full_selected.txt"
         filtered_file = tmp_path / "filter_selected.txt"
@@ -824,6 +830,7 @@ class TestShadowDiff:
             ["comm", "-23", str(full_file), str(filtered_file)],
             capture_output=True,
             text=True,
+            env=self._COMM_ENV,
         )
         missed_file.write_text(result.stdout)
 
@@ -835,10 +842,12 @@ class TestShadowDiff:
 
     def test_shadow_diff_no_missed_tests(self, tmp_path: Path) -> None:
         """When filtered is a superset of full, no missed tests."""
-        ids = [
-            "tests/core/test_core.py::test_a",
-            "tests/core/test_core.py::test_b",
-        ]
+        ids = sorted(
+            [
+                "tests/core/test_core.py::test_a",
+                "tests/core/test_core.py::test_b",
+            ]
+        )
 
         full_file = tmp_path / "full_selected.txt"
         filtered_file = tmp_path / "filter_selected.txt"
@@ -850,13 +859,14 @@ class TestShadowDiff:
             ["comm", "-23", str(full_file), str(filtered_file)],
             capture_output=True,
             text=True,
+            env=self._COMM_ENV,
         )
         missed = [line for line in result.stdout.strip().splitlines() if line]
         assert missed == []
 
     def test_shadow_diff_empty_filtered(self, tmp_path: Path) -> None:
         """When filter selects nothing, all full IDs are missed."""
-        full_ids = ["tests/core/test_core.py::test_a", "tests/core/test_core.py::test_b"]
+        full_ids = sorted(["tests/core/test_core.py::test_a", "tests/core/test_core.py::test_b"])
 
         full_file = tmp_path / "full_selected.txt"
         filtered_file = tmp_path / "filter_selected.txt"
@@ -868,6 +878,7 @@ class TestShadowDiff:
             ["comm", "-23", str(full_file), str(filtered_file)],
             capture_output=True,
             text=True,
+            env=self._COMM_ENV,
         )
         missed = [line for line in result.stdout.strip().splitlines() if line]
         assert missed == full_ids

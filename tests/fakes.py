@@ -140,7 +140,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
             )
         )
         if self._queue:
-            return self._queue.popleft()
+            return dataclasses.replace(self._queue.popleft())
         # Return a defensive copy so callers mutating fields (e.g. run_skill
         # setting order_id) don't pollute the shared default across tests.
         return dataclasses.replace(self._default)

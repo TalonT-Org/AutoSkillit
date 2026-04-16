@@ -117,7 +117,7 @@ class TraceTarget:
     resolved_at: datetime
 
 
-def resolve_trace_target(
+async def resolve_trace_target(
     root_pid: int,
     expected_basename: str,
     timeout: float = 2.0,
@@ -174,7 +174,7 @@ def resolve_trace_target(
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
                 continue
 
-        time.sleep(0.05)
+        await anyio.sleep(0.05)
 
     raise TraceTargetResolutionError(root_pid=root_pid, expected_basename=expected_basename)
 

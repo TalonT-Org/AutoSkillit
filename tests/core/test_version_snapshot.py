@@ -1,9 +1,9 @@
 """Tests for core/_version_snapshot.py."""
+
 from __future__ import annotations
 
 import json
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -90,9 +90,7 @@ def test_plugins_reads_version(monkeypatch, tmp_path):
             "ref": [{"version": "1.0", "extra": "ignored"}],
         },
     }
-    (plugins_dir / "installed_plugins.json").write_text(
-        json.dumps(plugin_data), encoding="utf-8"
-    )
+    (plugins_dir / "installed_plugins.json").write_text(json.dumps(plugin_data), encoding="utf-8")
     monkeypatch.setattr(mod.Path, "home", classmethod(lambda cls: tmp_path))
     result = collect_version_snapshot()
     assert len(result["plugins"]) == 1

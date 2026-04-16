@@ -246,4 +246,6 @@ __all__ = [
     "TokenLog",
     "WorkspaceManager",
     "truncate_text",
+    # _version_snapshot
+    "collect_version_snapshot",
 ]

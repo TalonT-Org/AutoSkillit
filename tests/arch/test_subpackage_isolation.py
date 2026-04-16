@@ -673,7 +673,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         _claude_env.py adds the canonical IDE-scrubbing env builder for all
         claude subprocess launches. kitchen_state.py adds the stdlib-only
         kitchen-open session marker reader for hook subprocesses.
-        Exempt at 17 files.
+        _version_snapshot.py adds the process-scoped version snapshot for session
+        telemetry (collect_version_snapshot, lru_cache'd).
+        Exempt at 19 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -696,7 +698,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 19,
         "recipe": 34,
         "execution": 26,
-        "core": 18,
+        "core": 19,
         "cli": 20,
         "hooks": 20,
     }

@@ -80,11 +80,11 @@ echo "Missed tests (in full but not in filtered): $MISSED"
 echo ""
 echo "--- Report ---"
 if [[ "$TOTAL" -gt 0 ]]; then
-    REDUCTION=$(( (TOTAL - FILTERED) * 100 / TOTAL ))
+    REDUCTION=$(awk "BEGIN {printf \"%.1f\", ($TOTAL - $FILTERED) * 100 / $TOTAL}")
     echo "Reduction: ${REDUCTION}% ($TOTAL → $FILTERED)"
 else
-    REDUCTION=0
-    echo "Reduction: 0% (no tests collected)"
+    REDUCTION="0.0"
+    echo "Reduction: 0.0% (no tests collected)"
 fi
 
 echo "Total tests:    $TOTAL"

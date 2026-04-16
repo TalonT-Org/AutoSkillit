@@ -43,16 +43,25 @@ def _get_ingredients_table(
     """Pre-render the ingredients table for system prompt injection.
 
     Uses load_and_validate (not load_recipe) so sub-recipe composition is included.
+    Returns None on any error so the orchestrator prompt is built without the
+    ingredients table rather than crashing.
     """
     from autoskillit.config import resolve_ingredient_defaults
     from autoskillit.recipe import load_and_validate
 
-    return load_and_validate(
-        recipe_name,
-        project_dir=cwd,
-        recipe_info=recipe_info,
-        resolved_defaults=resolve_ingredient_defaults(cwd),
-    ).get("ingredients_table")
+    try:
+        return load_and_validate(
+            recipe_name,
+            project_dir=cwd,
+            recipe_info=recipe_info,
+            resolved_defaults=resolve_ingredient_defaults(cwd),
+        ).get("ingredients_table")
+    except Exception:
+        logger.warning(
+            "Failed to pre-render ingredients table for %r — proceeding without it",
+            recipe_name,
+        )
+        return None
 
 
 _COOK_GREETINGS: list[str] = [

@@ -97,16 +97,20 @@ def _files_to_check() -> list[str]:
     return [f for f in _tracked_non_python_files() if _should_be_covered(f)]
 
 
-def _manifest_patterns() -> list[str]:
-    """All pattern keys from the manifest."""
-    return list(load_manifest(_MANIFEST_PATH).keys())
+# Manifest patterns loaded once at module level; shared by _MANIFEST_SPEC and
+# _PER_PATTERN_SPECS to avoid redundant YAML loads across the two parametrize sites.
+_MANIFEST_PATTERNS: list[str] = list(load_manifest(_MANIFEST_PATH).keys())
 
-
-# Module-level spec built from the manifest; precomputed once to avoid re-reading the
-# YAML file on every parametrized test-case invocation of test_file_covered_by_manifest.
+# Combined spec precomputed once; used by test_file_covered_by_manifest.
 _MANIFEST_SPEC: pathspec.PathSpec = pathspec.PathSpec.from_lines(
-    "gitwildmatch", _manifest_patterns()
+    "gitwildmatch", _MANIFEST_PATTERNS
 )
+
+# Per-pattern specs precomputed once; used by test_manifest_pattern_matches_real_file
+# to avoid O(N) PathSpec constructions across parametrized invocations.
+_PER_PATTERN_SPECS: dict[str, pathspec.PathSpec] = {
+    p: pathspec.PathSpec.from_lines("gitwildmatch", [p]) for p in _MANIFEST_PATTERNS
+}
 
 
 @pytest.mark.parametrize("file_path", _files_to_check())
@@ -125,7 +129,7 @@ def test_file_covered_by_manifest(file_path: str) -> None:
     )
 
 
-@pytest.mark.parametrize("pattern", _manifest_patterns())
+@pytest.mark.parametrize("pattern", _MANIFEST_PATTERNS)
 def test_manifest_pattern_matches_real_file(pattern: str) -> None:
     """Every manifest pattern must match at least one currently tracked non-Python file.
 
@@ -135,8 +139,7 @@ def test_manifest_pattern_matches_real_file(pattern: str) -> None:
     correct its path.
     """
     all_tracked = _tracked_non_python_files()
-    spec = pathspec.PathSpec.from_lines("gitwildmatch", [pattern])
-    matched_files = [f for f in all_tracked if spec.match_file(f)]
+    matched_files = [f for f in all_tracked if _PER_PATTERN_SPECS[pattern].match_file(f)]
     assert matched_files, (
         f"Manifest pattern {pattern!r} matches no tracked files — it may be stale "
         "or misspelled. Remove it from .autoskillit/test-filter-manifest.yaml."

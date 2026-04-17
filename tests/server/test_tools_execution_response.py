@@ -14,7 +14,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.server.tools_execution import run_skill
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _make_session_result(

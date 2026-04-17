@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # T5 — _drop_sub_recipe_step uses dataclasses.replace

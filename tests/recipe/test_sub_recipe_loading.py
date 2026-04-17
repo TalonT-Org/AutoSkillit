@@ -10,7 +10,7 @@ import pytest
 from autoskillit.recipe._api import _build_active_recipe
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_parent_recipe(

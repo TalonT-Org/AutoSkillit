@@ -11,7 +11,7 @@ from autoskillit.recipe.loader import (
     parse_recipe_metadata,
 )
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 class TestParseRecipeMetadata:

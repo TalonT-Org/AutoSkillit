@@ -11,7 +11,7 @@ from autoskillit.core.types import RetryReason, TerminationReason
 from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 # Deterministic UUID for tests that need to predict the per-invocation marker.
 _DETERMINISTIC_HEX = "a1b2c3d4e5f6a7b890123456"

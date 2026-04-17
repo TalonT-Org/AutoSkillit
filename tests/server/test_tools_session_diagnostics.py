@@ -16,7 +16,7 @@ from autoskillit.server.tools_github import (
     report_bug,
 )
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # _read_session_diagnostics unit tests

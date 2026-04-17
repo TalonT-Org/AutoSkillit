@@ -12,7 +12,7 @@ from autoskillit.recipe.experiment_type_registry import (
     load_all_experiment_types,
 )
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 EXPECTED_TYPES = {
     "benchmark",

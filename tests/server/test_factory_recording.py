@@ -11,7 +11,7 @@ from autoskillit.execution.recording import RecordingSubprocessRunner, Replaying
 from tests.conftest import _make_result
 from tests.fakes import MockSubprocessRunner
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @dataclass

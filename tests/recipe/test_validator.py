@@ -26,7 +26,7 @@ from autoskillit.recipe.validator import (
 )
 from tests.recipe.conftest import VALID_RECIPE, _make_workflow, _write_yaml
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 # ---------------------------------------------------------------------------
 # TestValidateRecipe — migrated from test_recipe_parser.py

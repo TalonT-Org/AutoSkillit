@@ -19,7 +19,7 @@ from autoskillit.recipe.schema import (
 )
 from autoskillit.recipe.validator import run_semantic_rules
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _RULE = "conditional-skill-ungated-push"
 

@@ -26,7 +26,7 @@ from autoskillit.server.helpers import (
 from autoskillit.server.tools_execution import run_skill
 from tests.conftest import _make_result
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 _SUCCESS_JSON = (
     '{"type": "result", "subtype": "success", "is_error": false,'

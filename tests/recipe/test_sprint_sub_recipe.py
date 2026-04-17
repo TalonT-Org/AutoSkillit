@@ -9,7 +9,7 @@ from autoskillit.recipe.io import builtin_sub_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.validator import validate_recipe
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 @pytest.fixture(scope="module")

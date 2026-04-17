@@ -8,7 +8,7 @@ import yaml
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.rules_blocks import _block_budgets  # re-use the cached loader
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _budget_for(block_name: str) -> dict:  # type: ignore[type-arg]

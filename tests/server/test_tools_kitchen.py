@@ -12,7 +12,7 @@ import pytest
 from autoskillit.config.settings import QuotaGuardConfig
 from autoskillit.hooks._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _make_mock_ctx():

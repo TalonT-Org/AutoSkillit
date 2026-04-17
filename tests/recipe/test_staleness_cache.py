@@ -11,7 +11,7 @@ from autoskillit.recipe.staleness_cache import (
     write_staleness_cache,
 )
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 def _make_entry(**kwargs) -> StalenessEntry:

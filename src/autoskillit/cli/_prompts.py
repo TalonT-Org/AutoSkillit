@@ -271,7 +271,7 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (
-        f"Call Bash(command=\"sleep 2\") first — this ensures MCP plugin tools are fully "
+        f'Call Bash(command="sleep 2") first — this ensures MCP plugin tools are fully '
         f"registered before proceeding. Bash is a built-in tool, always available.\n"
         f"Then call ToolSearch(query='select:{mcp_prefix}open_kitchen') to load the schema.\n"
         f"Then call {mcp_prefix}open_kitchen to open the AutoSkillit kitchen.\n\n"

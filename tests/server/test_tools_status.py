@@ -6,7 +6,6 @@ import asyncio
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import anyio
 import pytest
@@ -1215,16 +1214,17 @@ async def test_tools_status_routes_through_db_reader(tool_ctx, tmp_path) -> None
     """read_db routes through ctx.db_reader.query()."""
     import sqlite3 as _sqlite3
 
-    tool_ctx.db_reader = MagicMock()
-    tool_ctx.db_reader.query.return_value = {"rows": [], "count": 0}
+    from tests.fakes import InMemoryDatabaseReader
+
+    reader = InMemoryDatabaseReader(query_result={"rows": [], "count": 0})
+    tool_ctx.db_reader = reader
 
     db_path = str(tmp_path / "test.db")
     # Create an empty sqlite db so path-exists check passes
     _sqlite3.connect(db_path).close()
     await read_db(db_path, "SELECT 1")
-    tool_ctx.db_reader.query.assert_called_once()
-    call_kwargs = tool_ctx.db_reader.query.call_args
-    assert "SELECT 1" in str(call_kwargs)
+    assert len(reader.calls) == 1
+    assert "SELECT 1" in reader.calls[0]["sql"]
 
 
 # T3 — read_db error paths include success: False

@@ -499,6 +499,7 @@ def build_test_scope(
     mode: FilterMode,
     manifest: dict[str, Any] | None = None,
     tests_root: str | Path = "tests",
+    coverage_map_path: str | Path | None = None,
 ) -> set[Path] | None:
     """Compute the set of test paths to run, or None for a full run.
 
@@ -509,7 +510,7 @@ def build_test_scope(
     4. Classify: src Python -> cascade, test Python -> direct, non-Python -> manifest
     5. Compute always-run set for mode (includes arch/contracts for both modes)
     6. Union all sets
-    7. For aggressive mode -> AST-based file-level refinement (future)
+    7. For aggressive mode -> coverage oracle file-level refinement
     8. Resolve to concrete paths
     """
     if mode == FilterMode.NONE:
@@ -569,6 +570,31 @@ def build_test_scope(
             )  # fail-open: expansion errors do not affect the computed scope
 
     test_dirs.update(always_run)
+
+    # Step 7: Aggressive mode file-level refinement via coverage oracle.
+    # Only runs when mode is AGGRESSIVE and a coverage map path is provided.
+    # Falls back to directory-level entirely if oracle is stale or missing (cov_map is None).
+    if mode == FilterMode.AGGRESSIVE and coverage_map_path is not None:
+        cov_map = load_coverage_map(coverage_map_path)
+        if cov_map is not None:
+            # Group changed source files by the cascade directories they contribute.
+            # dir_to_src_files[d] = set of src files whose cascade includes dir d.
+            dir_to_src_files: dict[str, set[str]] = {}
+            for f in changed_src_py:
+                pkg = _file_to_package(f)
+                if pkg and pkg in cascade_map:
+                    for d in cascade_map[pkg]:
+                        dir_to_src_files.setdefault(d, set()).add(f)
+
+            # For each cascade dir: if ALL contributing source files are present in the
+            # coverage map (with non-empty test file sets), replace the directory with
+            # the union of their specific test files. If any file lacks coverage data or
+            # has an empty set, keep the directory entry (fail-open).
+            for d, src_files in dir_to_src_files.items():
+                if d in test_dirs and all(f in cov_map and cov_map[f] for f in src_files):
+                    test_dirs.discard(d)
+                    for f in src_files:
+                        direct_test_files.update(cov_map[f])
 
     result: set[Path] = set()
     for d in test_dirs:

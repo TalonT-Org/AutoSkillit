@@ -34,9 +34,11 @@ class TestApplyManifestSignatureContract:
         """Both apply_manifest implementations must return set[str] | None."""
         src_ann = _get_return_annotation(src_filter, "apply_manifest")
         conftest_ann = _get_return_annotation(conftest_filter, "apply_manifest")
-        assert "None" in src_ann, f"src apply_manifest missing None return: {src_ann!r}"
-        assert "None" in conftest_ann, (
-            f"conftest apply_manifest missing None return: {conftest_ann!r}\n"
+        assert src_ann in ("set[str] | None", "Optional[set[str]]"), (
+            f"src apply_manifest unexpected return annotation: {src_ann!r}"
+        )
+        assert conftest_ann in ("set[str] | None", "Optional[set[str]]"), (
+            f"conftest apply_manifest unexpected return annotation: {conftest_ann!r}\n"
             "The conftest module must return None (not empty set) to signal fail-open."
         )
 

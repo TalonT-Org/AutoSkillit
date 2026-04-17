@@ -13,7 +13,7 @@ from autoskillit.migration.loader import (
     list_migrations,
 )
 
-pytestmark = [pytest.mark.layer("migration")]
+pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # Helpers

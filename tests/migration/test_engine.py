@@ -24,7 +24,7 @@ from autoskillit.migration.engine import (
 )
 from autoskillit.migration.loader import MigrationChange, MigrationNote
 
-pytestmark = [pytest.mark.layer("migration")]
+pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 

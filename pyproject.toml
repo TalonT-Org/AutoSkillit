@@ -267,12 +267,12 @@ modules = [
     "autoskillit.execution",
     "autoskillit.workspace",
 ]
-# EXCEPTION: autoskillit.pipeline may import autoskillit.config.
+# EXCEPTION: autoskillit.pipeline.context may import autoskillit.config.
 # pipeline.context.ToolContext owns AutomationConfig as the DI wiring point.
 # config/ depends only on L0 (IL-002), so no cycle is introduced.
 # This exception mirrors the one already documented in IL-003.
 ignore_imports = [
-    "autoskillit.pipeline -> autoskillit.config",
+    "autoskillit.pipeline.context -> autoskillit.config",
 ]
 
 [tool.uv.sources]

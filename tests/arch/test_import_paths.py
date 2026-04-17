@@ -388,7 +388,7 @@ def test_il008_l1_independence() -> None:
     """IL-008: L1 sibling packages (config, pipeline, execution, workspace) must
     not import from each other at runtime.
 
-    Exception: autoskillit.pipeline may import autoskillit.config.
+    Exception: autoskillit.pipeline.context may import autoskillit.config.
     pipeline.context.ToolContext owns AutomationConfig as the DI wiring point
     (see pipeline/context.py and the IL-003 inline EXCEPTION comment).
     config/ depends only on L0 (IL-002), so no cycle is introduced.

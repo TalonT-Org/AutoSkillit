@@ -52,6 +52,12 @@ _IGNORE_PATTERNS: tuple[str, ...] = (
     "**/.gitkeep",
 )
 
+# Combined PathSpec built once from _IGNORE_PATTERNS to avoid O(files×patterns)
+# construction inside _should_be_covered().
+_IGNORE_SPEC: pathspec.PathSpec = pathspec.PathSpec.from_lines(
+    "gitwildmatch", list(_IGNORE_PATTERNS)
+)
+
 
 @functools.cache
 def _tracked_non_python_files() -> tuple[str, ...]:
@@ -77,9 +83,8 @@ def _should_be_covered(file_path: str) -> bool:
         return False
     if file_path in _IGNORE_FILES:
         return False
-    for pattern in _IGNORE_PATTERNS:
-        if pathspec.PathSpec.from_lines("gitwildmatch", [pattern]).match_file(file_path):
-            return False
+    if _IGNORE_SPEC.match_file(file_path):
+        return False
     return True
 
 

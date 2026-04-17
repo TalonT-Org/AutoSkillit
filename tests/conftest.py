@@ -317,12 +317,14 @@ def pytest_configure(config: pytest.Config) -> None:
         changed = git_changed_files(config.rootpath, base_ref=cli_base_ref)
 
         manifest = load_manifest(config.rootpath)
+        coverage_map_path = config.rootpath / ".autoskillit" / "test-source-map.json"
 
         scope = build_test_scope(
             changed_files=changed,
             mode=mode,
             manifest=manifest,
             tests_root=config.rootpath / "tests",
+            coverage_map_path=coverage_map_path,
         )
         config.stash[_scope_key] = scope
         config.stash[_filter_mode_key] = mode.value

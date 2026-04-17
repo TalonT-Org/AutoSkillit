@@ -188,6 +188,7 @@ class InMemoryRecipeRepository(RecipeRepository):
         self._validated: dict[str, dict[str, Any]] = {}
         self._path_validated: dict[str, dict[str, Any]] = {}
         self._all_recipes: dict[str, Any] = {}
+        self.calls: list[dict[str, Any]] = []
 
     # -- test setup helpers --
 
@@ -206,6 +207,7 @@ class InMemoryRecipeRepository(RecipeRepository):
     # -- protocol methods --
 
     def find(self, name: str, project_dir: Path) -> Any:
+        self.calls.append({"method": "find", "name": name, "project_dir": project_dir})
         return self._recipes.get(name)
 
     def list(self, project_dir: Path) -> Any:
@@ -222,6 +224,18 @@ class InMemoryRecipeRepository(RecipeRepository):
         temp_dir: Path | None = None,
         temp_dir_relpath: str | None = None,
     ) -> dict[str, Any]:
+        self.calls.append(
+            {
+                "method": "load_and_validate",
+                "name": name,
+                "project_dir": project_dir,
+                "suppressed": suppressed,
+                "resolved_defaults": resolved_defaults,
+                "ingredient_overrides": ingredient_overrides,
+                "temp_dir": temp_dir,
+                "temp_dir_relpath": temp_dir_relpath,
+            }
+        )
         return self._validated.get(name, {"valid": False, "error": "not configured"})
 
     def validate_from_path(
@@ -231,6 +245,7 @@ class InMemoryRecipeRepository(RecipeRepository):
         return self._path_validated.get(key, {"valid": False, "error": "not configured"})
 
     def list_all(self, project_dir: Any | None = None) -> dict[str, Any]:
+        self.calls.append({"method": "list_all", "project_dir": project_dir})
         return self._all_recipes
 
     async def apply_triage_gate(

@@ -603,6 +603,7 @@ def build_test_scope(
             result.add(dir_path)
 
     for f in direct_test_files:
-        result.add(Path(f))
+        p = Path(f)
+        result.add(p if p.is_absolute() else tests_root.parent / p)
 
     return result

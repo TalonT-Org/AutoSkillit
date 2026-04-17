@@ -301,6 +301,9 @@ def git_changed_files(
             check=True,
         )
         merge_base_sha = merge_base_result.stdout.strip()
+        if not merge_base_sha:
+            warnings.warn("git merge-base returned empty output", stacklevel=2)
+            return None
 
         diff_result = subprocess.run(
             ["git", "diff", "--name-only", merge_base_sha],

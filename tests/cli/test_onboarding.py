@@ -174,11 +174,7 @@ def test_run_onboarding_menu_option_c_returns_setup_project_prompt(
 def test_run_onboarding_menu_e_path_no_executor_import(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """_onboarding module must not import ThreadPoolExecutor after dead code removal.
-
-    The gather_intel background call was dead code (result unused). After removal,
-    ThreadPoolExecutor must not appear as an attribute of the module.
-    """
+    """_onboarding module must not import ThreadPoolExecutor after dead code removal."""
     import autoskillit.cli._onboarding as _onboarding_module
 
     assert not hasattr(_onboarding_module, "ThreadPoolExecutor"), (

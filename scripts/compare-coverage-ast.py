@@ -167,6 +167,73 @@ def query_coverage_db(
     return covered_result, executable_result
 
 
+def query_contexts_map(db_path: Path) -> dict[str, set[str]]:
+    """Query .coverage DB and return {source_file: {test_file_paths}}.
+
+    Uses CoverageData.contexts_by_lineno() to build the inversion.
+    Only includes source files under src/ and test contexts from tests/.
+    Context names from --cov-context=test are test node IDs like
+    'tests/recipe/test_rules_dataflow.py::TestClass::test_method|run'.
+    Only |run phase contexts are included to exclude fixture-inflation from
+    |setup and |teardown phases.
+    """
+    import coverage
+
+    try:
+        data = coverage.CoverageData(basename=str(db_path))
+        data.read()
+    except (OSError, coverage.CoverageException) as exc:
+        print(f"ERROR: Failed to read coverage database {db_path}: {exc}", file=sys.stderr)
+        return {}
+
+    result: dict[str, set[str]] = {}
+    for measured_file in data.measured_files():
+        try:
+            rel = str(Path(measured_file).relative_to(PROJECT_ROOT))
+        except ValueError:
+            continue
+        if not rel.startswith("src/"):
+            continue
+        contexts_by_line = data.contexts_by_lineno(measured_file)
+        test_files: set[str] = set()
+        for contexts in contexts_by_line.values():
+            for ctx in contexts:
+                if "::" in ctx and ctx.endswith("|run"):
+                    test_file = ctx.split("::")[0]
+                    if test_file.startswith("tests/") and test_file.endswith(".py"):
+                        test_files.add(test_file)
+        if test_files:
+            result[rel] = test_files
+    return result
+
+
+def build_test_source_map(
+    db_path: Path,
+    output_path: Path,
+) -> bool:
+    """Build and write {source_file: [test_files]} map from coverage DB.
+
+    Args:
+        db_path: Path to .coverage SQLite database.
+        output_path: Path where test-source-map.json will be written.
+
+    Returns:
+        True on success, False when the coverage DB is not found.
+    """
+    if not db_path.exists():
+        print(f"WARNING: Coverage database not found: {db_path}", file=sys.stderr)
+        print("Run 'task coverage-audit' first to generate coverage data.", file=sys.stderr)
+        return False
+
+    mapping = query_contexts_map(db_path)
+    # Convert sets to sorted lists for stable, human-readable JSON
+    serializable = {src: sorted(tests) for src, tests in sorted(mapping.items())}
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(serializable, indent=2) + "\n", encoding="utf-8")
+    print(f"Test-source map written to: {output_path} ({len(serializable)} source files)")
+    return True
+
+
 def compare(
     ast_map: dict[str, list[FuncInfo]],
     coverage_map: dict[str, set[int]],
@@ -265,6 +332,12 @@ def main() -> int:
         description="Compare AST function map against coverage database"
     )
     parser.add_argument(
+        "--mode",
+        choices=["audit", "build-test-source-map"],
+        default="audit",
+        help="Operation mode (default: audit)",
+    )
+    parser.add_argument(
         "--coverage-db",
         type=Path,
         default=PROJECT_ROOT / ".coverage",
@@ -280,9 +353,14 @@ def main() -> int:
         "--output",
         type=Path,
         default=None,
-        help="Path for JSON report output",
+        help="Path for JSON report output (audit mode) or map output (build-test-source-map mode)",
     )
     args = parser.parse_args()
+
+    if args.mode == "build-test-source-map":
+        output_path = args.output or (PROJECT_ROOT / ".autoskillit" / "test-source-map.json")
+        ok = build_test_source_map(args.coverage_db, output_path)
+        return 0 if ok else 1
 
     if not args.src_root.is_dir():
         print(f"ERROR: Source root not found: {args.src_root}", file=sys.stderr)

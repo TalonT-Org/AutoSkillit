@@ -223,6 +223,9 @@ class TestBuildTestSourceMap:
         assert output_path.exists()
         parsed = json.loads(output_path.read_text())
         assert isinstance(parsed, dict)
+        expected_key = "src/autoskillit/core/io.py"
+        assert expected_key in parsed
+        assert "tests/core/test_io.py" in parsed[expected_key]
 
     def test_main_routes_build_test_source_map_mode(self, cov_ast, tmp_path, monkeypatch):
         """main() with --mode build-test-source-map calls build_test_source_map()."""

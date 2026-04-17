@@ -6,6 +6,7 @@ list) must match at least one pattern in .autoskillit/test-filter-manifest.yaml.
 Orphan detection test: every manifest pattern must match at least one currently
 tracked non-Python file (no dead/stale patterns).
 """
+
 from __future__ import annotations
 
 import functools
@@ -38,6 +39,10 @@ _IGNORE_FILES: frozenset[str] = frozenset(
     {
         "LICENSE",
         "tests/CLAUDE.md",
+        # Generated/state files in .autoskillit/ that carry no test-routing signal.
+        ".autoskillit/.gitignore",
+        ".autoskillit/.onboarded",
+        ".autoskillit/sync_manifest.json",
     }
 )
 
@@ -48,7 +53,7 @@ _IGNORE_PATTERNS: tuple[str, ...] = (
 )
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _tracked_non_python_files() -> tuple[str, ...]:
     """Return all non-Python files currently tracked by git.
 

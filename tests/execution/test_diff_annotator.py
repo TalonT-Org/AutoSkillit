@@ -10,7 +10,7 @@ from autoskillit.execution.diff_annotator import (
     parse_hunk_ranges,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 # --- parse_hunk_ranges ---
 

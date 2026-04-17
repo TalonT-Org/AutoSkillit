@@ -18,7 +18,7 @@ from autoskillit.execution.process import (
     _marker_is_standalone,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestJsonlContainsMarker:

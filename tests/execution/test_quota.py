@@ -11,7 +11,7 @@ import pytest
 
 from tests._helpers import make_quota_guard_config
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 class TestReadCredentials:

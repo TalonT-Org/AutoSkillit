@@ -22,7 +22,7 @@ from autoskillit.execution.process import (
 )
 from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 # Script that writes non-matching output then hangs
 PARTIAL_OUTPUT_THEN_HANG_SCRIPT = (

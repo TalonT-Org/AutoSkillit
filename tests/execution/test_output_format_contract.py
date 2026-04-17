@@ -28,7 +28,7 @@ from autoskillit.execution.session import (
     parse_session_result,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestOutputFormatDataContract:

@@ -15,7 +15,7 @@ from autoskillit.execution.db import (
     _validate_select_only,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestValidateSelectOnly:

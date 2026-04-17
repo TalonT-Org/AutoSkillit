@@ -24,7 +24,7 @@ import sys
 
 import pytest
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 @pytest.mark.integration

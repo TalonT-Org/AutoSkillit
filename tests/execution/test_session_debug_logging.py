@@ -14,7 +14,7 @@ from autoskillit.execution.session import (
     _compute_success,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestCheckSessionContentLogging:

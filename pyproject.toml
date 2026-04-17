@@ -252,5 +252,28 @@ forbidden_modules = [
     "autoskillit.cli",
 ]
 
+# IL-008 | Lens: module-dependency | DS-001
+# Rationale: The four L1 peers (config, pipeline, execution, workspace) form an
+# independent service tier. Lateral imports between them create hidden coupling
+# that prevents each package from being tested and deployed in isolation. The
+# independence contract makes this boundary machine-verifiable and surfaces any
+# future regression immediately via lint-imports.
+[[tool.importlinter.contracts]]
+name = "L1 siblings are independent of each other"
+type = "independence"
+modules = [
+    "autoskillit.config",
+    "autoskillit.pipeline",
+    "autoskillit.execution",
+    "autoskillit.workspace",
+]
+# EXCEPTION: autoskillit.pipeline may import autoskillit.config.
+# pipeline.context.ToolContext owns AutomationConfig as the DI wiring point.
+# config/ depends only on L0 (IL-002), so no cycle is introduced.
+# This exception mirrors the one already documented in IL-003.
+ignore_imports = [
+    "autoskillit.pipeline -> autoskillit.config",
+]
+
 [tool.uv.sources]
 api-simulator = { git = "https://github.com/TalonT-Org/api-simulator", rev = "8f711f958d4d93a8e53a3c3b51279fb420870f3a", subdirectory = "crates/api-simulator-py" }

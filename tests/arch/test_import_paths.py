@@ -377,3 +377,42 @@ def test_req_imp_010_init_helpers_no_toplevel_recipe_imports() -> None:
         "cli/_init_helpers.py has top-level recipe imports "
         "(must be deferred to function body):\n" + "\n".join(violations)
     )
+
+
+# ---------------------------------------------------------------------------
+# IL-008: L1 sibling packages must not import from each other at runtime
+# ---------------------------------------------------------------------------
+
+
+def test_il008_l1_independence() -> None:
+    """IL-008: L1 sibling packages (config, pipeline, execution, workspace) must
+    not import from each other at runtime.
+
+    Exception: autoskillit.pipeline may import autoskillit.config.
+    pipeline.context.ToolContext owns AutomationConfig as the DI wiring point
+    (see pipeline/context.py and the IL-003 inline EXCEPTION comment).
+    config/ depends only on L0 (IL-002), so no cycle is introduced.
+
+    TYPE_CHECKING imports are excluded — pyproject.toml sets
+    exclude_type_checking_imports = true and _parse_imports() respects
+    the in_tc flag.
+    """
+    L1_PKGS = frozenset({"config", "pipeline", "execution", "workspace"})
+    # (importer_pkg, imported_pkg) tuples that are explicitly allowed
+    ALLOWED: frozenset[tuple[str, str]] = frozenset({("pipeline", "config")})
+
+    violations: list[str] = []
+    for path in _src_files():
+        pkg = _pkg_of(path)
+        if pkg not in L1_PKGS:
+            continue
+        for mod, in_tc in _parse_imports(path):
+            if in_tc:
+                continue  # TYPE_CHECKING imports are excluded from IL-008 scope
+            parts = mod.split(".")
+            if len(parts) >= 2 and parts[1] in L1_PKGS and parts[1] != pkg:
+                if (pkg, parts[1]) not in ALLOWED:
+                    violations.append(f"{path.relative_to(SRC)}: {mod}")
+    assert not violations, (
+        "IL-008 violations (unauthorized L1 sibling runtime imports):\n" + "\n".join(violations)
+    )

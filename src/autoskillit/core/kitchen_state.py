@@ -23,6 +23,8 @@ class KitchenMarker:
     opened_at: datetime
     recipe_name: str | None
     marker_version: int = 1
+    content_hash: str = ""
+    composite_hash: str = ""
 
 
 def get_state_dir() -> Path:
@@ -43,7 +45,13 @@ def marker_path(session_id: str) -> Path:
     return get_state_dir() / f"{session_id}.json"
 
 
-def write_marker(session_id: str, recipe_name: str | None) -> None:
+def write_marker(
+    session_id: str,
+    recipe_name: str | None,
+    *,
+    content_hash: str = "",
+    composite_hash: str = "",
+) -> None:
     """Atomically write a kitchen-open marker for session_id.
 
     Uses stdlib tempfile + os.replace for crash-safety.
@@ -57,6 +65,8 @@ def write_marker(session_id: str, recipe_name: str | None) -> None:
         "opened_at": datetime.now(UTC).isoformat(),
         "recipe_name": recipe_name,
         "marker_version": 1,
+        "content_hash": content_hash,
+        "composite_hash": composite_hash,
     }
     content = json.dumps(payload)
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
@@ -88,6 +98,8 @@ def read_marker(session_id: str) -> KitchenMarker | None:
             opened_at=datetime.fromisoformat(data["opened_at"]),
             recipe_name=data.get("recipe_name"),
             marker_version=data.get("marker_version", 1),
+            content_hash=data.get("content_hash", ""),
+            composite_hash=data.get("composite_hash", ""),
         )
     except (KeyError, ValueError, TypeError):
         return None

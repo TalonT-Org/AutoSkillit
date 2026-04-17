@@ -189,6 +189,10 @@ class HeadlessExecutor(Protocol):
         expected_output_patterns: Sequence[str] = (),
         write_behavior: WriteBehaviorSpec | None = None,
         completion_marker: str = "",
+        recipe_name: str = "",
+        recipe_content_hash: str = "",
+        recipe_composite_hash: str = "",
+        recipe_version: str | None = None,
     ) -> SkillResult: ...
 
 

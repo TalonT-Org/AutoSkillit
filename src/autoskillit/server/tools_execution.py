@@ -335,6 +335,10 @@ async def run_skill(
                 if idle_output_timeout is not None
                 else None,
                 completion_marker=invocation_marker,
+                recipe_name=tool_ctx.recipe_name,
+                recipe_content_hash=tool_ctx.recipe_content_hash,
+                recipe_composite_hash=tool_ctx.recipe_composite_hash,
+                recipe_version=tool_ctx.recipe_version,
             )
             if skill_result.success:
                 tool_ctx.audit.record_success(skill_command)

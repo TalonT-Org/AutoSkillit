@@ -9,6 +9,7 @@ from typing import Any
 from autoskillit.core import LoadReport, LoadResult, RecipeSource, get_logger, load_yaml, pkg_root
 from autoskillit.recipe.schema import (
     AUTOSKILLIT_VERSION_KEY,
+    RECIPE_VERSION_KEY,
     Recipe,
     RecipeInfo,
     RecipeIngredient,
@@ -54,6 +55,9 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
     if not isinstance(data, dict):
         raise ValueError(f"Recipe file must contain a YAML mapping: {path}")
     recipe = _parse_recipe(data)
+    from autoskillit.recipe.staleness_cache import compute_recipe_hash  # noqa: PLC0415
+
+    recipe.content_hash = compute_recipe_hash(path)
     # Deferred import breaks the circular dependency with _analysis.py.
     from autoskillit.recipe._analysis import _build_step_graph, extract_blocks  # noqa: PLC0415
 
@@ -205,6 +209,13 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
             f"'requires_packs' must be a list, got {type(requires_packs_raw).__name__!r}"
         )
 
+    _rv = data.get(RECIPE_VERSION_KEY)
+    if _rv is not None and not isinstance(_rv, str):
+        raise ValueError(
+            f"recipe_version must be a quoted string in YAML, got {type(_rv).__name__}: {_rv!r}. "
+            f"Use recipe_version: '{_rv}' (with quotes) in your recipe file."
+        )
+
     return Recipe(
         name=name,
         description=description,
@@ -213,6 +224,7 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         steps=steps,
         kitchen_rules=kitchen_rules,
         version=data.get(AUTOSKILLIT_VERSION_KEY),
+        recipe_version=_rv,
         experimental=bool(data.get("experimental", False)),
         requires_packs=requires_packs_raw,
     )
@@ -293,6 +305,10 @@ def _collect_recipes(
                 recipe = _parse_recipe(data)
                 if recipe.name and recipe.name not in seen:
                     seen.add(recipe.name)
+                    from autoskillit.recipe.staleness_cache import (  # noqa: PLC0415
+                        compute_recipe_hash as _crh,
+                    )
+
                     result.append(
                         RecipeInfo(
                             name=recipe.name,
@@ -301,6 +317,8 @@ def _collect_recipes(
                             path=f,
                             summary=recipe.summary,
                             version=recipe.version,
+                            recipe_version=recipe.recipe_version,
+                            content_hash=_crh(f),
                             content=raw,
                         )
                     )

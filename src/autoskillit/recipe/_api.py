@@ -165,6 +165,9 @@ class LoadRecipeResult(TypedDict, total=False):
     greeting: str
     ingredients_table: str
     orchestration_rules: str
+    content_hash: str
+    composite_hash: str
+    recipe_version: str | None
 
 
 class RecipeListItem(TypedDict):
@@ -622,6 +625,19 @@ def load_and_validate(
         if isinstance(data, dict) and "steps" in data:
             recipe = _parse_recipe(data)
 
+            from autoskillit.recipe.identity import compute_composite_hash  # noqa: PLC0415
+            from autoskillit.recipe.staleness_cache import (  # noqa: PLC0415
+                compute_recipe_hash,
+            )
+
+            recipe.content_hash = compute_recipe_hash(match.path)
+            recipe.composite_hash = compute_composite_hash(
+                match.path,
+                recipe,
+                skills_dir=pkg_root() / "skills",
+                project_dir=_pdir,
+            )
+
             # Stage: sub-recipe composition (lazy-loaded prefixes)
             active_recipe, combined_recipe = _build_active_recipe(
                 recipe, ingredient_overrides, _pdir, _temp_relpath
@@ -753,6 +769,9 @@ def load_and_validate(
     if ing_table:
         result["ingredients_table"] = ing_table
     result["orchestration_rules"] = _build_orchestration_rules()
+    result["content_hash"] = recipe.content_hash if recipe else ""
+    result["composite_hash"] = recipe.composite_hash if recipe else ""
+    result["recipe_version"] = recipe.recipe_version if recipe else None
 
     # Write to cache (only when recipe was found and fully processed)
     if match is not None:

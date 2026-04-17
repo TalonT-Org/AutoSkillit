@@ -10,10 +10,12 @@ import pytest
 TESTS_ROOT = Path(__file__).resolve().parent.parent
 
 SIZE_DIRECTORIES: dict[str, str] = {
+    "cli": "cli",
     "config": "config",
     "core": "core",
     "migration": "migration",
     "pipeline": "pipeline",
+    "workspace": "workspace",
 }
 
 _VALID_SIZE_MARKERS = {"small", "medium", "large"}

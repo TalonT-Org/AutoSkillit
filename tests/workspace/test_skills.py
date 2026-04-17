@@ -15,7 +15,7 @@ from autoskillit.workspace.skills import (
     bundled_skills_extended_dir,
 )
 
-pytestmark = [pytest.mark.layer("workspace")]
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 BUNDLED_SKILLS = [
     "analyze-prs",

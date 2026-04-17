@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("workspace")]
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 _GIT_NETWORK_SUBCOMMANDS = {"push", "clone", "fetch", "pull", "ls-remote"}
 

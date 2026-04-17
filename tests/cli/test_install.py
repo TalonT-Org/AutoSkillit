@@ -13,7 +13,7 @@ import pytest
 
 from autoskillit import cli
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
 class TestCLIInstall:

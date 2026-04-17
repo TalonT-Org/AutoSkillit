@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.cli._installed_plugins import InstalledPluginsFile
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 REAL_STRUCTURE = {
     "version": 2,

@@ -15,7 +15,7 @@ from autoskillit.cli._onboarding import (
     run_onboarding_menu,
 )
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 def _make_initialized_project(base: Path) -> Path:

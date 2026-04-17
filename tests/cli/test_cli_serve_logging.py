@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 import structlog.testing
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 class TestServeLoggingPhases:

@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 def test_serve_uses_anyio_run_not_mcp_run(monkeypatch, tmp_path):

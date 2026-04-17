@@ -11,7 +11,7 @@ from autoskillit.workspace.worktree import (
     remove_worktree_sidecar,
 )
 
-pytestmark = [pytest.mark.layer("workspace")]
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
 class TestListGitWorktrees:

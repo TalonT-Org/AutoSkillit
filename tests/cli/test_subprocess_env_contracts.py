@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 CLI_ROOT = Path(__file__).parents[2] / "src" / "autoskillit" / "cli"
 SRC_ROOT = Path(__file__).parents[2] / "src" / "autoskillit"

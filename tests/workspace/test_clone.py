@@ -23,7 +23,7 @@ from autoskillit.workspace.clone import (
     remove_clone,
 )
 
-pytestmark = [pytest.mark.layer("workspace")]
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
 
 
 @pytest.fixture

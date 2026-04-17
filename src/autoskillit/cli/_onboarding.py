@@ -2,24 +2,11 @@
 
 from __future__ import annotations
 
-import json
-import subprocess as _sp
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
-from autoskillit.cli._init_helpers import _KNOWN_SCANNERS
 from autoskillit.core import get_logger
 
 _log = get_logger(__name__)
-
-
-@dataclass
-class OnboardingIntel:
-    scanner_found: str | None = None
-    build_tools: list[str] = field(default_factory=list)
-    github_issues: list[str] = field(default_factory=list)
 
 
 def is_first_run(project_dir: Path) -> bool:
@@ -55,94 +42,9 @@ def mark_onboarded(project_dir: Path) -> None:
         atomic_write(marker, "")
 
 
-_KNOWN_BUILD_FILES: dict[str, str] = {
-    "Taskfile.yml": "Taskfile",
-    "Taskfile.yaml": "Taskfile",
-    "Makefile": "Makefile",
-    "package.json": "npm/yarn",
-    "pyproject.toml": "uv/pip",
-}
-
-
-def _detect_scanner(project_dir: Path) -> str | None:
-    """Return first known scanner hook-id found in .pre-commit-config.yaml, else None."""
-    pre_commit = project_dir / ".pre-commit-config.yaml"
-    try:
-        content = pre_commit.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
-    for scanner in _KNOWN_SCANNERS:
-        if scanner in content:
-            return scanner
-    return None
-
-
-def _detect_build_tools(project_dir: Path) -> list[str]:
-    """Return names of detected build tools present in project_dir."""
-    found: list[str] = []
-    seen: set[str] = set()
-    for filename, label in _KNOWN_BUILD_FILES.items():
-        if (project_dir / filename).exists() and label not in seen:
-            found.append(label)
-            seen.add(label)
-    return found
-
-
-def _fetch_good_first_issues(project_dir: Path) -> list[str]:  # noqa: ARG001
-    """Return up to 3 'good first issue' titles from the GitHub remote.
-
-    Returns [] on any failure (gh not installed, not authenticated, no remote).
-    """
-    try:
-        result = _sp.run(
-            [
-                "gh",
-                "issue",
-                "list",
-                "--label",
-                "good first issue",
-                "--limit",
-                "3",
-                "--json",
-                "number,title",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=8,
-        )
-        if result.returncode != 0:
-            return []
-        items: Any = json.loads(result.stdout or "[]")
-        return [f"#{i['number']}: {i['title']}" for i in items if "number" in i and "title" in i]
-    except Exception:
-        return []
-
-
-def gather_intel(project_dir: Path) -> OnboardingIntel:
-    """Concurrently gather project intelligence (scanner, build tools, issues)."""
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        sf = ex.submit(_detect_scanner, project_dir)
-        bf = ex.submit(_detect_build_tools, project_dir)
-        gf = ex.submit(_fetch_good_first_issues, project_dir)
-    try:
-        scanner = sf.result()
-    except Exception:
-        scanner = None
-    try:
-        tools = bf.result()
-    except Exception:
-        tools = []
-    try:
-        issues = gf.result()
-    except Exception:
-        issues = []
-    return OnboardingIntel(scanner_found=scanner, build_tools=tools, github_issues=issues)
-
-
 def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
     """Display the guided onboarding menu.
 
-    Starts background intel gathering before showing the menu.
     Returns an initial_prompt string for A/B/C/D paths (mark_onboarded called
     by the caller's finally block), or None for E/decline (mark_onboarded
     called internally).
@@ -162,10 +64,6 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
         mark_onboarded(project_dir)
         return None
 
-    # Start gathering intel concurrently while user reads the menu
-    executor = ThreadPoolExecutor(max_workers=3)
-    intel_future = executor.submit(gather_intel, project_dir)
-
     print(f"\n{_B}What would you like to do?{_R}")
     print(
         f"  {_Y}A{_R} — {_C}Analyze this repo{_R}          "
@@ -177,15 +75,6 @@ def run_onboarding_menu(project_dir: Path, *, color: bool = True) -> str | None:
     print(f"  {_Y}E{_R} — {_C}Skip{_R}                         (start a normal session)")
 
     choice = timed_prompt("\n[A/B/C/D/E]", default="E", timeout=120, label="onboarding").upper()
-
-    # Wait up to 5s for gather_intel to complete, then shut down cleanly
-    try:
-        intel = intel_future.result(timeout=5.0)
-        _log.debug("Onboarding intel gathered: %s", intel)
-    except Exception:
-        _log.debug("gather_intel did not complete in time", exc_info=True)
-    finally:
-        executor.shutdown(wait=True, cancel_futures=True)
 
     if choice == "A":
         return "/autoskillit:setup-project"

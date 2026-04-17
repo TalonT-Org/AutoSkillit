@@ -7,9 +7,6 @@ from pathlib import Path
 import pytest
 
 from autoskillit.cli._onboarding import (
-    OnboardingIntel,
-    _detect_build_tools,
-    gather_intel,
     is_first_run,
     mark_onboarded,
     run_onboarding_menu,
@@ -111,7 +108,6 @@ def test_run_onboarding_menu_skip_e_returns_none_and_marks(
     inputs = iter(["y", "E"])
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
-    monkeypatch.setattr("autoskillit.cli._onboarding.gather_intel", lambda _p: OnboardingIntel())
     result = run_onboarding_menu(tmp_path, color=False)
     assert result is None
     assert (tmp_path / ".autoskillit" / ".onboarded").exists()
@@ -126,7 +122,6 @@ def test_run_onboarding_menu_option_a_returns_setup_project(
     inputs = iter(["y", "A"])
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
-    monkeypatch.setattr("autoskillit.cli._onboarding.gather_intel", lambda _p: OnboardingIntel())
     result = run_onboarding_menu(tmp_path, color=False)
     assert result is not None
     assert "/autoskillit:setup-project" in result
@@ -142,7 +137,6 @@ def test_run_onboarding_menu_option_b_with_url_returns_prepare_issue(
     inputs = iter(["y", "B", "https://github.com/org/repo/issues/42"])
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
-    monkeypatch.setattr("autoskillit.cli._onboarding.gather_intel", lambda _p: OnboardingIntel())
     result = run_onboarding_menu(tmp_path, color=False)
     assert result is not None
     assert "/autoskillit:prepare-issue" in result
@@ -157,7 +151,6 @@ def test_run_onboarding_menu_option_d_returns_write_recipe(
     inputs = iter(["y", "D"])
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
-    monkeypatch.setattr("autoskillit.cli._onboarding.gather_intel", lambda _p: OnboardingIntel())
     result = run_onboarding_menu(tmp_path, color=False)
     assert result is not None
     assert "/autoskillit:write-recipe" in result
@@ -172,45 +165,31 @@ def test_run_onboarding_menu_option_c_returns_setup_project_prompt(
     inputs = iter(["y", "C"])
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
-    monkeypatch.setattr("autoskillit.cli._onboarding.gather_intel", lambda _p: OnboardingIntel())
     result = run_onboarding_menu(tmp_path, color=False)
     assert result is not None
     assert result.startswith("/autoskillit:setup-project")
 
 
-# ON-14
-def test_gather_intel_returns_onboarding_intel_dataclass(
+# ON-18
+def test_run_onboarding_menu_e_path_no_executor_import(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """gather_intel(project_dir) returns OnboardingIntel with correct fields."""
-    monkeypatch.setattr(
-        "autoskillit.cli._onboarding._fetch_good_first_issues",
-        lambda _p: ["#1: some issue"],
+    """_onboarding module must not import ThreadPoolExecutor after dead code removal.
+
+    The gather_intel background call was dead code (result unused). After removal,
+    ThreadPoolExecutor must not appear as an attribute of the module.
+    """
+    import autoskillit.cli._onboarding as _onboarding_module
+
+    assert not hasattr(_onboarding_module, "ThreadPoolExecutor"), (
+        "ThreadPoolExecutor is still imported in _onboarding — dead code not removed"
     )
-    intel = gather_intel(tmp_path)
-    assert isinstance(intel, OnboardingIntel)
-    assert isinstance(intel.scanner_found, (str, type(None)))
-    assert isinstance(intel.build_tools, list)
-    assert intel.github_issues == ["#1: some issue"]
 
+    _make_initialized_project(tmp_path)
+    inputs = iter(["y", "E"])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
 
-# ON-15
-def test_detect_build_tools_finds_taskfile(tmp_path: Path) -> None:
-    """Project dir has Taskfile.yml → 'Taskfile' in build_tools."""
-    (tmp_path / "Taskfile.yml").write_text("version: '3'\n")
-    tools = _detect_build_tools(tmp_path)
-    assert "Taskfile" in tools
-
-
-# ON-16
-def test_detect_build_tools_finds_makefile(tmp_path: Path) -> None:
-    """Project dir has Makefile → 'Makefile' in build_tools."""
-    (tmp_path / "Makefile").write_text("all:\n\techo hello\n")
-    tools = _detect_build_tools(tmp_path)
-    assert "Makefile" in tools
-
-
-# ON-17
-def test_onboarding_intel_importable_from_cli_onboarding() -> None:
-    """OnboardingIntel is importable from autoskillit.cli._onboarding."""
-    from autoskillit.cli._onboarding import OnboardingIntel  # noqa: F401
+    result = run_onboarding_menu(tmp_path, color=False)
+    assert result is None
+    assert (tmp_path / ".autoskillit" / ".onboarded").exists()

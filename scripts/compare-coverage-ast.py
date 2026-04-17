@@ -182,7 +182,7 @@ def query_contexts_map(db_path: Path) -> dict[str, set[str]]:
     try:
         data = coverage.CoverageData(basename=str(db_path))
         data.read()
-    except Exception as exc:
+    except (OSError, coverage.CoverageException) as exc:
         print(f"ERROR: Failed to read coverage database {db_path}: {exc}", file=sys.stderr)
         return {}
 

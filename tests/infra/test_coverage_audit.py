@@ -244,6 +244,7 @@ class TestBuildTestSourceMap:
         result = cov_ast.main()
         assert result == 0
         assert "output_path" in called_with
+        assert called_with["db_path"] == cov_ast.PROJECT_ROOT / ".coverage"
 
     def test_map_json_values_are_lists(self, cov_ast, tmp_path, monkeypatch):
         """The written JSON has list values (not sets), loadable as JSON."""

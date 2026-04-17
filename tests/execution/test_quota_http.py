@@ -288,7 +288,7 @@ async def test_seven_day_raw_api_response_blocks_at_long_threshold(mock_http_ser
             }
         ),
     )
-    cfg = QuotaGuardConfig()
+    cfg = QuotaGuardConfig(long_window_enabled=True)
 
     result = await _fetch_quota(
         credentials,

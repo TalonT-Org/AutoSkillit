@@ -440,13 +440,13 @@ class TestQuotaGuardConfig:
             "otherwise the loop arrives after the cache has already expired"
         )
 
-    def test_quota_guard_per_window_enabled_defaults_true(self):
-        """Test 14: QuotaGuardConfig() defaults both per-window flags to True."""
+    def test_quota_guard_per_window_enabled_defaults(self):
+        """Test 14: QuotaGuardConfig() defaults short=True, long=False."""
         from autoskillit.config.settings import QuotaGuardConfig
 
         config = QuotaGuardConfig()
         assert config.short_window_enabled is True
-        assert config.long_window_enabled is True
+        assert config.long_window_enabled is False
 
     def test_quota_guard_per_window_enabled_yaml_round_trip(self, tmp_path):
         """Test 15: per-window enabled flags survive a YAML round-trip."""
@@ -457,15 +457,15 @@ class TestQuotaGuardConfig:
         )
         config = load_config(tmp_path)
         assert config.quota_guard.short_window_enabled is False
-        assert config.quota_guard.long_window_enabled is True
+        assert config.quota_guard.long_window_enabled is False
 
     def test_defaults_yaml_has_per_window_enabled_keys(self):
-        """Test 16: defaults.yaml has both per-window enabled keys set to True."""
+        """Test 16: defaults.yaml has per-window enabled keys (short=True, long=False)."""
         from autoskillit.core.paths import pkg_root
 
         defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
         assert defaults["quota_guard"]["short_window_enabled"] is True
-        assert defaults["quota_guard"]["long_window_enabled"] is True
+        assert defaults["quota_guard"]["long_window_enabled"] is False
 
     def test_quota_guard_env_var_override_short_window_enabled(self, monkeypatch, tmp_path):
         """Test 17: AUTOSKILLIT_QUOTA_GUARD__SHORT_WINDOW_ENABLED=false is cast to bool False."""

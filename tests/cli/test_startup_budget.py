@@ -15,7 +15,7 @@ import structlog.testing
 
 from autoskillit.server import _state
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 def test_serve_calls_mcp_run_within_budget(monkeypatch, tmp_path):

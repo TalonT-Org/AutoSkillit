@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.workspace import CleanupResult, _delete_directory_contents
 
-pytestmark = [pytest.mark.layer("workspace")]
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
 class TestCleanupResult:

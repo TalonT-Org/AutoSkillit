@@ -12,7 +12,7 @@ import yaml
 from autoskillit import cli
 from autoskillit.cli import _generate_config_yaml
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 class TestCLIInit:

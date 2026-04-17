@@ -3,7 +3,7 @@
 
 import pytest
 
-pytestmark = [pytest.mark.layer("workspace")]
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
 def test_runs_dir_constant_is_exported():

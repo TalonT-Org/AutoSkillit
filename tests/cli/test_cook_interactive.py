@@ -11,7 +11,7 @@ import pytest
 from autoskillit import cli
 from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
 class TestCookInteractive:

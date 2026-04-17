@@ -16,7 +16,7 @@ from autoskillit.cli._prompts import _OPEN_KITCHEN_CHOICE, _resolve_recipe_input
 from autoskillit.cli._workspace import _format_age
 from autoskillit.core import ClaudeFlags
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 _SCRIPT_YAML = """\
 name: test-script

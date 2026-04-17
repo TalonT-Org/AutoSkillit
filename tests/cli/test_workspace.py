@@ -11,7 +11,7 @@ import pytest
 from autoskillit.cli._workspace import _format_age, run_workspace_clean
 from autoskillit.workspace import CleanupResult
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 class TestFormatAge:

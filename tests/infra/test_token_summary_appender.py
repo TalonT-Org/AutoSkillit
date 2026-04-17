@@ -889,6 +889,65 @@ def test_e4_kitchen_id_renamed_in_hook_config(tmp_path: Path) -> None:
     assert result == "legacy-pipeline-uuid"
 
 
+# ---------------------------------------------------------------------------
+# _unwrap_mcp_response unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestUnwrapMcpResponse:
+    """Unit tests for the shared double-unwrap helper."""
+
+    def _call(self, tool_name: str, raw: str):
+        from autoskillit.hooks.token_summary_hook import _unwrap_mcp_response
+
+        return _unwrap_mcp_response(tool_name, raw)
+
+    def test_invalid_json_returns_none(self):
+        assert self._call("mcp__x__y", "not json") is None
+
+    def test_json_array_returns_none(self):
+        import json
+
+        assert self._call("mcp__x__y", json.dumps([1, 2, 3])) is None
+
+    def test_non_mcp_tool_returns_outer_dict(self):
+        import json
+
+        payload = {"result": "some text", "success": True}
+        result = self._call("run_python", json.dumps(payload))
+        assert result == payload
+
+    def test_mcp_tool_double_wrapped_returns_inner(self):
+        import json
+
+        inner = {"result": "https://github.com/o/r/pull/1", "order_id": "abc"}
+        outer = {"result": json.dumps(inner)}
+        result = self._call("mcp__autoskillit__run_skill", json.dumps(outer))
+        assert result == inner
+
+    def test_mcp_tool_inner_parse_fails_returns_outer(self):
+        import json
+
+        outer = {"result": "not-json-inner"}
+        result = self._call("mcp__autoskillit__run_skill", json.dumps(outer))
+        assert result == outer
+
+    def test_mcp_tool_inner_not_dict_returns_outer(self):
+        import json
+
+        outer = {"result": json.dumps([1, 2, 3])}
+        result = self._call("mcp__autoskillit__run_skill", json.dumps(outer))
+        assert result == outer
+
+    def test_mcp_tool_extra_keys_skips_double_unwrap(self):
+        """Outer dict with more than just 'result' key → not a double-wrapped response."""
+        import json
+
+        outer = {"result": json.dumps({"foo": "bar"}), "extra": "key"}
+        result = self._call("mcp__autoskillit__run_skill", json.dumps(outer))
+        assert result == outer
+
+
 def test_hook_subprocess_calls_have_timeout() -> None:
     """All subprocess.run() calls in token_summary_hook.py must have timeout=."""
     import ast

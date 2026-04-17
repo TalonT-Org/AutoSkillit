@@ -453,7 +453,7 @@ def test_orchestrator_prompt_has_no_deferred_tool_recovery_conditional():
 
 
 def test_first_action_step0_calls_toolsearch_unconditionally():
-    """Step 0 of FIRST ACTION must call ToolSearch unconditionally — no 'if' guard."""
+    """Step 0 is Bash sleep; ToolSearch is still present in FIRST ACTION (step 1)."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_orchestrator_prompt
 
@@ -463,14 +463,14 @@ def test_first_action_step0_calls_toolsearch_unconditionally():
     end = prompt.index("During pipeline execution", start)
     first_action = prompt[start:end]
 
-    assert "ToolSearch" in first_action
-
+    # Step 0 is now Bash sleep, not ToolSearch
     step0_end = first_action.index("\n1.")
     step0_text = first_action[:step0_end]
-    lower = step0_text.lower()
-    assert "if the session" not in lower, "Step 0 ToolSearch must be unconditional"
-    assert "if deferred" not in lower, "Step 0 ToolSearch must be unconditional"
-    assert "when the" not in lower, "Step 0 ToolSearch must be unconditional"
+    assert "Bash" in step0_text, "Step 0 must be a Bash sleep gate"
+    assert "sleep" in step0_text.lower(), "Step 0 must contain a sleep command"
+
+    # ToolSearch is still present in the FIRST ACTION section
+    assert "ToolSearch" in first_action
 
 
 def test_first_action_toolsearch_index_precedes_open_kitchen():
@@ -489,12 +489,14 @@ def test_first_action_toolsearch_index_precedes_open_kitchen():
     assert ts_idx < ok_idx, "ToolSearch must appear before open_kitchen in FIRST ACTION"
 
 
-def test_open_kitchen_prompt_step0_unconditional_toolsearch():
-    """_build_open_kitchen_prompt must also call ToolSearch unconditionally."""
+def test_open_kitchen_prompt_has_bash_sleep_and_toolsearch():
+    """_build_open_kitchen_prompt must have Bash sleep and ToolSearch (no conditionals)."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_open_kitchen_prompt
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
+    assert "Bash" in prompt, "Open kitchen prompt must include Bash sleep gate"
+    assert "sleep" in prompt.lower()
     assert "ToolSearch" in prompt
     lower = prompt.lower()
     assert "if the session's deferred-tool list" not in lower
@@ -587,3 +589,64 @@ def test_orchestrator_prompt_contains_skill_command_format_guidance():
         "Orchestrator prompt must contain a SKILL_COMMAND FORMATTING section. "
         "This prevents the LLM from adding markdown headers to skill_command values."
     )
+
+
+def test_first_action_step0_is_bash_sleep():
+    """Step 0 of FIRST ACTION must be a Bash sleep gate, not ToolSearch."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
+    start = prompt.index("FIRST ACTION")
+    end = prompt.index("During pipeline execution", start)
+    first_action = prompt[start:end]
+
+    step0_end = first_action.index("\n1.")
+    step0_text = first_action[:step0_end]
+    assert "Bash" in step0_text, "Step 0 must be a Bash sleep gate"
+    assert "sleep" in step0_text.lower(), "Step 0 must contain a sleep command"
+
+
+def test_first_action_bash_sleep_precedes_toolsearch():
+    """Bash sleep gate must appear before ToolSearch in FIRST ACTION."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
+    start = prompt.index("FIRST ACTION")
+    end = prompt.index("During pipeline execution", start)
+    first_action = prompt[start:end]
+
+    bash_idx = first_action.index("Bash")
+    ts_idx = first_action.index("ToolSearch")
+    assert bash_idx < ts_idx, "Bash sleep must appear before ToolSearch"
+
+
+def test_first_action_bash_sleep_is_unconditional():
+    """Step 0 Bash sleep must not be gated by any conditional."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
+    start = prompt.index("FIRST ACTION")
+    end = prompt.index("During pipeline execution", start)
+    first_action = prompt[start:end]
+
+    step0_end = first_action.index("\n1.")
+    step0_text = first_action[:step0_end].lower()
+    assert "if " not in step0_text, "Step 0 Bash sleep must be unconditional"
+    assert "only if" not in step0_text
+    assert "when the" not in step0_text
+
+
+def test_open_kitchen_prompt_has_bash_sleep_before_toolsearch():
+    """_build_open_kitchen_prompt must have Bash sleep before ToolSearch."""
+    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
+    prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
+    assert "Bash" in prompt, "Open kitchen prompt must include Bash sleep gate"
+    assert "sleep" in prompt.lower()
+    bash_idx = prompt.index("Bash")
+    ts_idx = prompt.index("ToolSearch")
+    assert bash_idx < ts_idx, "Bash sleep must precede ToolSearch"

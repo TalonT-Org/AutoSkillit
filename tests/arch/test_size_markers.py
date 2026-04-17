@@ -10,7 +10,9 @@ import pytest
 TESTS_ROOT = Path(__file__).resolve().parent.parent
 
 SIZE_DIRECTORIES: dict[str, str] = {
+    "config": "config",
     "core": "core",
+    "migration": "migration",
     "pipeline": "pipeline",
 }
 

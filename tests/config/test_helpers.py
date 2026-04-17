@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-pytestmark = [pytest.mark.layer("config")]
+pytestmark = [pytest.mark.layer("config"), pytest.mark.medium]
 
 
 def test_resolve_ingredient_defaults_uses_upstream_when_origin_is_file_url(tmp_path):

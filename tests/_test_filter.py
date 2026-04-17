@@ -292,8 +292,18 @@ def git_changed_files(
         return None
 
     try:
-        result = subprocess.run(
-            ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+        merge_base_result = subprocess.run(
+            ["git", "merge-base", "HEAD", base_ref],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+        merge_base_sha = merge_base_result.stdout.strip()
+
+        diff_result = subprocess.run(
+            ["git", "diff", "--name-only", merge_base_sha],
             cwd=str(cwd),
             capture_output=True,
             text=True,
@@ -310,8 +320,25 @@ def git_changed_files(
         warnings.warn("git binary not found on PATH", stacklevel=2)
         return None
 
-    lines = result.stdout.strip().splitlines()
-    return {line.strip() for line in lines if line.strip()}
+    files: set[str] = set()
+    for line in diff_result.stdout.strip().splitlines():
+        if line.strip():
+            files.add(line.strip())
+
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if untracked.returncode == 0:
+        for line in untracked.stdout.strip().splitlines():
+            if line.strip():
+                files.add(line.strip())
+
+    return files
 
 
 def check_bucket_a(changed_files: set[str]) -> bool:

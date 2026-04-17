@@ -111,7 +111,7 @@ changed files. Controlled by env var + CLI flags:
 **Filter algorithm** (`tests/_test_filter.py`):
 
 1. **Fail-open gate**: If env var is unset/falsy, all tests run. On any error, all tests run.
-2. **Changed files**: `git diff --name-only base_ref...HEAD`
+2. **Changed files**: `git merge-base HEAD base_ref` → SHA, then `git diff --name-only <sha>` (working tree vs merge-base: committed + staged + unstaged tracked) + `git ls-files --others --exclude-standard` (new untracked files). Union of all three — a strict superset of the old three-dot form. **Known limitation**: `git rm --cached` (stage-only deletions) are not captured — the file still exists on disk so the working-tree diff misses the deletion. This is acceptable given the fail-open design.
 3. **Bucket A**: If any "global impact" file changed (conftest.py, pyproject.toml, etc.) -> full run
 4. **Large changeset**: >30 files -> full run
 5. **Classification**: src Python -> layer cascade, test Python -> direct, non-Python -> manifest lookup

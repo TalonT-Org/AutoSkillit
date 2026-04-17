@@ -283,3 +283,14 @@ def test_recipe_repository_calls_accumulate():
 def test_recipe_repository_calls_starts_empty():
     repo = InMemoryRecipeRepository()
     assert repo.calls == []
+
+
+def test_recipe_repository_validate_from_path_records_call():
+    repo = InMemoryRecipeRepository()
+    script_path = Path("/proj/recipe.yaml")
+    repo.validate_from_path(script_path, ".autoskillit/temp")
+    assert len(repo.calls) == 1
+    call = repo.calls[0]
+    assert call["method"] == "validate_from_path"
+    assert call["script_path"] == script_path
+    assert call["temp_dir_relpath"] == ".autoskillit/temp"

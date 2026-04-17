@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import time
 from pathlib import Path
 
 from tests._test_filter import (
@@ -34,10 +36,8 @@ class TestBuildTestScopeStep7:
             coverage_map_path=map_file,
         )
         assert result is not None
+        assert not any(p.is_dir() and p.name == "core" for p in result)
         paths = {str(p) for p in result}
-        assert not any(
-            p.endswith("core") and not p.endswith("test_io.py") for p in paths if Path(p).is_dir()
-        )
         assert any("test_io.py" in p for p in paths)
         assert any("arch" in p for p in paths)
         assert any("contracts" in p for p in paths)
@@ -84,9 +84,6 @@ class TestBuildTestScopeStep7:
 
     def test_step7_stale_oracle_falls_back_to_directory(self, tmp_path: Path) -> None:
         """When load_coverage_map returns None (stale file), dir-level is preserved."""
-        import os
-        import time
-
         tests_root = tmp_path / "tests"
         (tests_root / "core").mkdir(parents=True)
         (tests_root / "arch").mkdir()

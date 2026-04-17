@@ -594,7 +594,7 @@ def build_test_scope(
                 if d in test_dirs and all(f in cov_map and cov_map[f] for f in src_files):
                     test_dirs.discard(d)
                     for f in src_files:
-                        direct_test_files.update(cov_map[f])
+                        direct_test_files.update(str(tests_root.parent / fp) for fp in cov_map[f])
 
     result: set[Path] = set()
     for d in test_dirs:
@@ -603,7 +603,6 @@ def build_test_scope(
             result.add(dir_path)
 
     for f in direct_test_files:
-        p = Path(f)
-        result.add(p if p.is_absolute() else tests_root.parent / p)
+        result.add(Path(f))
 
     return result

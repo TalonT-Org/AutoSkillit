@@ -11,7 +11,7 @@ from autoskillit.recipe.contracts import (
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def test_recipe_card_contains_block_fingerprint_for_every_declared_block():

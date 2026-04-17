@@ -12,7 +12,7 @@ from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.validator import validate_recipe
 from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 @pytest.fixture(scope="module")

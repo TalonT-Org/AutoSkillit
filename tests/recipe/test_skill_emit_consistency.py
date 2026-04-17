@@ -9,7 +9,7 @@ import pytest
 from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.contracts import load_bundled_manifest
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 # Key pattern: if a contract output pattern requires an absolute path (contains
 # \s*=\s*/.+), verify that the SKILL.md does not assign the variable to a

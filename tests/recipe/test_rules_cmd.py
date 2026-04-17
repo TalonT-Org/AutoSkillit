@@ -7,7 +7,7 @@ import pytest
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import _make_workflow
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_recipe(steps: dict) -> object:

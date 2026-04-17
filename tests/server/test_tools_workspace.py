@@ -17,7 +17,7 @@ from autoskillit.server.tools_workspace import reset_test_dir, reset_workspace, 
 from autoskillit.workspace import CleanupResult
 from tests.conftest import _make_result
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 test_check.__test__ = False  # type: ignore[attr-defined]
 

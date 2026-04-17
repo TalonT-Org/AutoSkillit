@@ -12,7 +12,7 @@ from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import _RULE_REGISTRY, run_semantic_rules
 from tests.recipe.conftest import _make_workflow
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # Test 1a: Rule registration

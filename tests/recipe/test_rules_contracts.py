@@ -14,7 +14,7 @@ from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def test_rule_flags_skills_with_empty_output_patterns() -> None:

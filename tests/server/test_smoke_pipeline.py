@@ -26,7 +26,7 @@ import pytest
 from autoskillit.recipe.io import builtin_recipes_dir
 from autoskillit.server.tools_recipe import list_recipes, validate_recipe
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SMOKE_SCRIPT = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"

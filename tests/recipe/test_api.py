@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 # Minimal recipe YAML with kitchen_rules
 _RECIPE_WITH_RULES = """\

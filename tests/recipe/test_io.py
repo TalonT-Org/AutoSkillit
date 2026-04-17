@@ -22,7 +22,7 @@ from autoskillit.recipe.schema import (
 )
 from tests.recipe.conftest import VALID_RECIPE, _write_yaml
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 def test_load_recipe_smoke() -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 def test_project_local_override_rule_emits_warning(tmp_path):

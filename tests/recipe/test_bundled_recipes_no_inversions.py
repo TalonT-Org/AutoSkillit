@@ -10,7 +10,7 @@ import yaml
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _BUNDLED_RECIPE_PATHS: list[Path] = sorted(builtin_recipes_dir().glob("*.yaml"))
 

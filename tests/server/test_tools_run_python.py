@@ -11,7 +11,7 @@ import structlog.testing
 
 from autoskillit.server.tools_execution import run_python
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestRunPythonObservability:

@@ -22,7 +22,7 @@ from autoskillit.recipe.validator import (
 )
 from tests.recipe.conftest import _make_workflow
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # Fixtures

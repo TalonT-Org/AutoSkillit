@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, iter_steps_with_context, load_recipe
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 @pytest.fixture(scope="module")

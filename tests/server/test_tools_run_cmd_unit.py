@@ -12,7 +12,7 @@ import structlog.testing
 from autoskillit.server.tools_execution import run_cmd
 from tests.conftest import _make_result
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestRunCmdObservability:

@@ -8,7 +8,7 @@ from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultRoute
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:

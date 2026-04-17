@@ -7,7 +7,7 @@ import pathlib
 
 import pytest
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def test_no_deferred_validator_imports_in_rule_modules() -> None:

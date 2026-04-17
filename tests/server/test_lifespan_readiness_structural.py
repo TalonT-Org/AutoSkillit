@@ -19,7 +19,7 @@ import pytest
 
 from autoskillit.core._type_constants import RETIRED_READINESS_TOKENS
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 _LIFESPAN_PATH = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "server" / "_lifespan.py"

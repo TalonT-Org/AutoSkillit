@@ -115,6 +115,7 @@ _MAX_MCP_OUTPUT_TOKENS_VALUE: str = "50000"
 _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
     {
         "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
+        "MCP_CONNECTION_NONBLOCKING": "0",
     }
 )
 
@@ -277,6 +278,7 @@ def build_full_headless_cmd(
     extras: dict[str, str] = {
         "AUTOSKILLIT_HEADLESS": "1",
         "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
+        "MCP_CONNECTION_NONBLOCKING": "0",
     }
     if exit_after_stop_delay_ms > 0:
         extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)

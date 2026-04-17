@@ -93,22 +93,26 @@ class TestFirstActionAskUserQuestionProhibition:
 
 
 class TestFirstActionTimingResilience:
-    """FIRST ACTION step 0 must call ToolSearch unconditionally before open_kitchen."""
+    """FIRST ACTION step 0 must be a Bash sleep gate before ToolSearch and open_kitchen."""
 
-    def test_first_action_step0_calls_toolsearch_not_open_kitchen_directly(self):
-        """Step 0 in FIRST ACTION must be ToolSearch — not a direct open_kitchen call.
-        ToolSearch is a no-op on loaded schemas; it ensures schema availability without
-        requiring any conditional phrase-matching."""
+    def test_first_action_step0_is_bash_sleep_gate(self):
+        """Step 0 in FIRST ACTION must be a Bash sleep gate — not a direct open_kitchen
+        or ToolSearch call. The sleep ensures MCP plugin tools are registered."""
         prompt = _get_prompt()
         first_action_start = prompt.index("FIRST ACTION")
         first_action_end = prompt.index("During pipeline execution", first_action_start)
         first_action_section = prompt[first_action_start:first_action_end]
 
-        # Step 0 must reference ToolSearch
-        assert "ToolSearch" in first_action_section
-
-        # Step 0 text must not be conditional on a deferred-tool check
+        # Step 0 must be Bash sleep
         step0_end = first_action_section.index("\n1.")
-        step0 = first_action_section[:step0_end].lower()
-        assert "if the session" not in step0
-        assert "if deferred" not in step0
+        step0 = first_action_section[:step0_end]
+        assert "Bash" in step0, "Step 0 must be a Bash sleep gate"
+        assert "sleep" in step0.lower(), "Step 0 must contain a sleep command"
+
+        # Step 0 must not be conditional
+        step0_lower = step0.lower()
+        assert "if the session" not in step0_lower
+        assert "if deferred" not in step0_lower
+
+        # ToolSearch must still appear in FIRST ACTION (as step 1)
+        assert "ToolSearch" in first_action_section

@@ -408,3 +408,38 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
     spec = builder_call()
     assert "MAX_MCP_OUTPUT_TOKENS" in spec.env
     assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
+
+
+def test_session_baseline_env_contains_mcp_connection_nonblocking() -> None:
+    from autoskillit.execution.commands import _SESSION_BASELINE_ENV
+
+    assert "MCP_CONNECTION_NONBLOCKING" in _SESSION_BASELINE_ENV
+    assert _SESSION_BASELINE_ENV["MCP_CONNECTION_NONBLOCKING"] == "0"
+
+
+def test_interactive_cmd_env_has_mcp_connection_nonblocking() -> None:
+    spec = build_interactive_cmd()
+    assert spec.env.get("MCP_CONNECTION_NONBLOCKING") == "0"
+
+
+@pytest.mark.parametrize(
+    "builder_call",
+    [
+        lambda: build_interactive_cmd(),
+        lambda: build_full_headless_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_dir=None,
+            output_format_value="stream-json",
+        ),
+        lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
+    ],
+    ids=["interactive", "full_headless", "headless_resume"],
+)
+def test_all_session_builders_inject_mcp_connection_nonblocking(builder_call) -> None:
+    """Every session command builder must produce env with MCP_CONNECTION_NONBLOCKING=0."""
+    spec = builder_call()
+    assert "MCP_CONNECTION_NONBLOCKING" in spec.env
+    assert spec.env["MCP_CONNECTION_NONBLOCKING"] == "0"

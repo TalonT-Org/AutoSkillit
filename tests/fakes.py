@@ -211,6 +211,7 @@ class InMemoryRecipeRepository(RecipeRepository):
         return self._recipes.get(name)
 
     def list(self, project_dir: Path) -> Any:
+        self.calls.append({"method": "list", "project_dir": project_dir})
         return list(self._recipes.keys())
 
     def load_and_validate(
@@ -241,6 +242,13 @@ class InMemoryRecipeRepository(RecipeRepository):
     def validate_from_path(
         self, script_path: Any, temp_dir_relpath: str = ".autoskillit/temp"
     ) -> dict[str, Any]:
+        self.calls.append(
+            {
+                "method": "validate_from_path",
+                "script_path": script_path,
+                "temp_dir_relpath": temp_dir_relpath,
+            }
+        )
         key = str(script_path)
         return self._path_validated.get(key, {"valid": False, "error": "not configured"})
 

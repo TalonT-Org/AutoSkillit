@@ -5,7 +5,7 @@ import pytest
 from autoskillit.config import AutomationConfig
 from autoskillit.config.settings import GitHubConfig, _make_dynaconf
 
-pytestmark = [pytest.mark.layer("config")]
+pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
 
 class TestGitHubConfigAllowedLabelsField:

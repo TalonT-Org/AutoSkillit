@@ -10,7 +10,7 @@ import pytest
 from autoskillit.migration._api import check_and_migrate
 from autoskillit.migration.engine import MigrationResult
 
-pytestmark = [pytest.mark.layer("migration")]
+pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # T6 — migration/_api.py recipe imports are deferred

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import enum
 import fnmatch
+import logging
 import subprocess
 import warnings
 from pathlib import Path
@@ -499,6 +500,22 @@ def build_test_scope(
             if manifest_dirs is None:
                 return None
             test_dirs.update(manifest_dirs)
+
+    # Expand src Python files via re-export closure: add __init__.py files that
+    # directly re-export any of the changed modules, then cascade-classify them.
+    changed_src_py = {f for f in changed_files if f.startswith("src/") and f.endswith(".py")}
+    if changed_src_py:
+        try:
+            expanded = _expand_reexport_closure(changed_src_py, tests_root.parent)
+            for f in expanded - changed_src_py:
+                if f.startswith("src/") and f.endswith(".py"):
+                    pkg = _file_to_package(f)
+                    if pkg and pkg in cascade_map:
+                        test_dirs.update(cascade_map[pkg])
+        except Exception:
+            logging.getLogger(__name__).debug(  # noqa: TID251
+                "_expand_reexport_closure suppressed", exc_info=True
+            )  # fail-open: expansion errors do not affect the computed scope
 
     test_dirs.update(always_run)
 

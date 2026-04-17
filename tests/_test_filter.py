@@ -380,7 +380,16 @@ def load_coverage_map(
         warnings.warn(f"Coverage map {map_path} is not a JSON object", stacklevel=2)
         return None
 
-    return {src: set(tests) for src, tests in raw.items()}
+    result: dict[str, set[str]] = {}
+    for src, tests in raw.items():
+        if not isinstance(tests, list):
+            warnings.warn(
+                f"Coverage map {map_path}: value for {src!r} is not a list",
+                stacklevel=2,
+            )
+            return None
+        result[src] = set(tests)
+    return result
 
 
 def apply_manifest(

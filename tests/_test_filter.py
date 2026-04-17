@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import ast
+import datetime
 import enum
 import fnmatch
+import json
 import logging
 import subprocess
 import warnings
@@ -358,9 +360,6 @@ def load_coverage_map(
         - The file is older than max_age_days
         - The file cannot be read or parsed
     """
-    import datetime
-    import json
-
     map_path = Path(map_path)
     try:
         stat = map_path.stat()

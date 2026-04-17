@@ -11,13 +11,10 @@ _log = get_logger(__name__)
 
 def is_first_run(project_dir: Path) -> bool:
     """Return True when the project is initialized but has never been onboarded."""
-    # 1. autoskillit init must have run
     if not (project_dir / ".autoskillit" / "config.yaml").exists():
         return False
-    # 2. onboarding already completed
     if (project_dir / ".autoskillit" / ".onboarded").exists():
         return False
-    # 3. project already has local recipes (beyond the fresh state)
     recipes_dir = project_dir / ".autoskillit" / "recipes"
     if recipes_dir.exists():
         try:
@@ -25,7 +22,6 @@ def is_first_run(project_dir: Path) -> bool:
                 return False
         except OSError:
             _log.debug("Could not list recipes dir %s", recipes_dir, exc_info=True)
-    # 4. project already has skill overrides (already customized)
     from autoskillit.workspace import detect_project_local_overrides
 
     if detect_project_local_overrides(project_dir):

@@ -333,7 +333,7 @@ class TestBuildTestScope:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        assert "docs" in dir_names
+        assert dir_names == {"arch", "contracts", "infra", "docs"}
 
     def test_scope_none_mode_returns_none(self, tmp_path: Path) -> None:
         result = build_test_scope(

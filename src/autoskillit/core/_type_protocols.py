@@ -198,15 +198,13 @@ class SupportsDebug(Protocol):
     def debug(self, event: str, **kwargs: Any) -> None: ...
 
 
-class SupportsLogger(Protocol):
+class SupportsLogger(SupportsDebug, Protocol):
     """Structural logger protocol — debug() and error() methods required.
 
     Satisfied by structlog BoundLogger (the return type of get_logger()).
     Used to type the optional logger parameter in DefaultBackgroundSupervisor
     without importing structlog into the L0 core layer.
     """
-
-    def debug(self, event: str, **kwargs: Any) -> None: ...
 
     def error(self, event: str, **kwargs: Any) -> None: ...
 

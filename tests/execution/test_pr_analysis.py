@@ -11,7 +11,7 @@ from autoskillit.execution.pr_analysis import (
     partition_files_by_domain,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # extract_linked_issues

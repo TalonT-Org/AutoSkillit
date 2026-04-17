@@ -22,7 +22,7 @@ from autoskillit.execution.testing import (
 )
 from tests._helpers import make_test_check_config, make_test_config
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 def test_build_sanitized_env_strips_private_env_vars(monkeypatch):

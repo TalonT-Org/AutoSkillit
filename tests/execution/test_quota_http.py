@@ -21,6 +21,7 @@ from autoskillit.execution.quota import check_and_sleep_if_needed  # noqa: E402
 
 pytestmark = [
     pytest.mark.layer("execution"),
+    pytest.mark.medium,
     pytest.mark.skipif(sys.platform != "linux", reason="api-simulator is Linux-only"),
     pytest.mark.anyio,
 ]

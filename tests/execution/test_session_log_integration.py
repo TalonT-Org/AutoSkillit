@@ -15,6 +15,7 @@ from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT
 
 pytestmark = [
     pytest.mark.layer("execution"),
+    pytest.mark.medium,
     pytest.mark.skipif(sys.platform != "linux", reason="Linux only"),
 ]
 

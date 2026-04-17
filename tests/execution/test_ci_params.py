@@ -15,7 +15,7 @@ import pytest
 from autoskillit.core import CIRunScope
 from autoskillit.execution.ci import DefaultCIWatcher, _validate_run_matches_scope
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _now() -> str:

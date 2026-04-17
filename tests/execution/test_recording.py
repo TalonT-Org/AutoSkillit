@@ -20,7 +20,7 @@ from autoskillit.execution.recording import (
 from tests.conftest import _make_result
 from tests.fakes import MockSubprocessRunner
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 @dataclass

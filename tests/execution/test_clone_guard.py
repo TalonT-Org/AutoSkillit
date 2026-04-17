@@ -24,7 +24,7 @@ from autoskillit.execution.headless import _build_skill_result
 from autoskillit.pipeline.audit import DefaultAuditLog
 from tests.fakes import MockSubprocessRunner
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _git_result(stdout: str = "", returncode: int = 0) -> SubprocessResult:

@@ -13,7 +13,7 @@ from autoskillit.execution.ci import (
     _jittered_sleep,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # Helpers

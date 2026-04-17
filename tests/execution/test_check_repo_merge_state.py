@@ -11,7 +11,7 @@ import pytest
 
 from autoskillit.execution.merge_queue import fetch_repo_merge_state
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 # Reminder: fetch_repo_merge_state now returns ci_event in addition to the
 # three boolean fields. Tests below check for the ci_event field explicitly.

@@ -17,7 +17,7 @@ import pytest
 from autoskillit.core.types import KillReason, TerminationAction
 from autoskillit.execution.process import execute_termination_action
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 # ---------------------------------------------------------------------------
 # Helper scripts

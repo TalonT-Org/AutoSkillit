@@ -17,7 +17,7 @@ from autoskillit.execution.commands import (
     build_interactive_cmd,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestBuildInteractiveCmd:

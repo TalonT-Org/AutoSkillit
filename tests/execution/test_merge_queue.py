@@ -16,7 +16,7 @@ from autoskillit.execution.merge_queue import (
     PRFetchState,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _make_watcher() -> DefaultMergeQueueWatcher:

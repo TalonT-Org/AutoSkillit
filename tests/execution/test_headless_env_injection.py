@@ -10,7 +10,7 @@ import pytest
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from tests.fakes import MockSubprocessRunner
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 @pytest.mark.anyio

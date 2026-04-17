@@ -13,7 +13,7 @@ import pytest
 
 from tests.conftest import _make_result
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 @pytest.mark.anyio

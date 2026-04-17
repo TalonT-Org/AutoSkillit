@@ -12,7 +12,7 @@ from autoskillit.execution.github import (
     parse_merge_queue_response,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # _parse_issue_ref unit tests

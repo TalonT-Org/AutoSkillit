@@ -20,7 +20,7 @@ from autoskillit.execution.session_log import (
     write_telemetry_clear_marker,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 def _snap(

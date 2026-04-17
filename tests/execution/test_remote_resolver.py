@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.execution import resolve_remote_repo
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 # ---------------------------------------------------------------------------
 # Hint-path tests (no subprocess calls)

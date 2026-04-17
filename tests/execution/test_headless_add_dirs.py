@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core import ValidatedAddDir
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 @pytest.mark.anyio

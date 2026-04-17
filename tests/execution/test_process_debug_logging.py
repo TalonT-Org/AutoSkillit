@@ -10,7 +10,7 @@ import structlog.testing
 from autoskillit.core.types import TerminationReason
 from autoskillit.execution.process import RaceAccumulator, RaceSignals
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 @pytest.mark.anyio

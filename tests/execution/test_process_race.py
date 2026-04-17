@@ -17,7 +17,7 @@ from autoskillit.execution._process_race import (
     resolve_termination,
 )
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 class TestChannelBStatusExhaustiveCoverage:

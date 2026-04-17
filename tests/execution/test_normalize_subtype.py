@@ -9,7 +9,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.session import ClaudeSessionResult, _normalize_subtype
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _session(

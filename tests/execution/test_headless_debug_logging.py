@@ -9,7 +9,7 @@ import structlog.testing
 
 from autoskillit.core.types import SubprocessResult, TerminationReason
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _sr(returncode=0, stdout="", stderr="", termination=TerminationReason.NATURAL_EXIT):

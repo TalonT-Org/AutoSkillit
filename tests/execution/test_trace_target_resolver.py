@@ -15,6 +15,7 @@ import pytest
 
 pytestmark = [
     pytest.mark.layer("execution"),
+    pytest.mark.medium,
     pytest.mark.skipif(
         sys.platform != "linux",
         reason="Linux only — tests /proc descendant walking",

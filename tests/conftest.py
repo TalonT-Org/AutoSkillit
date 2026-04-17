@@ -27,7 +27,17 @@ _LAYER_DIRS: frozenset[str] = frozenset(
 )
 
 _SIZE_DIRS: frozenset[str] = frozenset(
-    {"cli", "config", "core", "migration", "pipeline", "recipe", "server", "workspace"}
+    {
+        "cli",
+        "config",
+        "core",
+        "execution",
+        "migration",
+        "pipeline",
+        "recipe",
+        "server",
+        "workspace",
+    }
 )
 
 _scope_key = pytest.StashKey[set[_Path] | None]()

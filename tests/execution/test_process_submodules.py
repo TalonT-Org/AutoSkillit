@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-pytestmark = [pytest.mark.layer("execution")]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def test_process_kill_exports():

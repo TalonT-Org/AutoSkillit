@@ -73,6 +73,10 @@ class ExecutorCall:
     expected_output_patterns: tuple[str, ...] = ()
     write_behavior: Any | None = None
     completion_marker: str = ""
+    recipe_name: str = ""
+    recipe_content_hash: str = ""
+    recipe_composite_hash: str = ""
+    recipe_version: str | None = None
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -121,6 +125,10 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         expected_output_patterns: Sequence[str] = (),
         write_behavior: WriteBehaviorSpec | None = None,
         completion_marker: str = "",
+        recipe_name: str = "",
+        recipe_content_hash: str = "",
+        recipe_composite_hash: str = "",
+        recipe_version: str | None = None,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -137,6 +145,10 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 expected_output_patterns=tuple(expected_output_patterns),
                 write_behavior=write_behavior,
                 completion_marker=completion_marker,
+                recipe_name=recipe_name,
+                recipe_content_hash=recipe_content_hash,
+                recipe_composite_hash=recipe_composite_hash,
+                recipe_version=recipe_version,
             )
         )
         if self._queue:

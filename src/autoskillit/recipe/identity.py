@@ -5,10 +5,13 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from autoskillit.core import get_logger
 from autoskillit.recipe.contracts import compute_skill_hash, resolve_skill_name
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.schema import Recipe
 from autoskillit.recipe.staleness_cache import compute_recipe_hash
+
+logger = get_logger(__name__)
 
 
 def compute_composite_hash(
@@ -68,11 +71,11 @@ def _load_sub_recipe_for_hash(path: Path) -> Recipe | None:
     from autoskillit.recipe.io import _parse_recipe  # noqa: PLC0415
 
     try:
-        from autoskillit.core.io import load_yaml  # noqa: PLC0415
+        from autoskillit.core import load_yaml  # noqa: PLC0415
 
         data = load_yaml(path.read_text(encoding="utf-8"))
         if isinstance(data, dict) and "steps" in data:
             return _parse_recipe(data)
     except Exception:
-        pass
+        logger.debug("sub_recipe_load_for_hash_failed", path=str(path))
     return None

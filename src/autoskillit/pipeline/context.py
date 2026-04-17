@@ -120,7 +120,7 @@ class ToolContext:
     recipe_name: str = field(default="")
     recipe_content_hash: str = field(default="")
     recipe_composite_hash: str = field(default="")
-    recipe_version: str | None = field(default=None)
+    recipe_version: str = field(default="")
     kitchen_id: str = field(default="")
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)

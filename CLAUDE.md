@@ -204,6 +204,7 @@ generic_automation_mcp/
 │   ├── rules_verdict.py
 │   ├── rules_worktree.py     #   Semantic validation rule modules
 │   ├── _skill_placeholder_parser.py
+│   ├── identity.py          #   Recipe identity hashing — content and composite fingerprints
 │   ├── schema.py            #   Recipe, RecipeStep, DataFlowWarning
 │   ├── staleness_cache.py
 │   └── validator.py         #   validate_recipe, analyze_dataflow

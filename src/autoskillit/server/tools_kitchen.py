@@ -233,7 +233,7 @@ def _close_kitchen_handler() -> None:
     ctx.recipe_name = ""
     ctx.recipe_content_hash = ""
     ctx.recipe_composite_hash = ""
-    ctx.recipe_version = None
+    ctx.recipe_version = ""
     logger.info("close_kitchen", gate_state="closed")
     hook_cfg_path = _hook_config_path(Path.cwd())
     try:
@@ -366,7 +366,7 @@ async def open_kitchen(
             tool_ctx.recipe_name = name
             tool_ctx.recipe_content_hash = result.get("content_hash", "")
             tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
-            tool_ctx.recipe_version = result.get("recipe_version")
+            tool_ctx.recipe_version = result.get("recipe_version") or ""
 
             try:
                 recipe_info = tool_ctx.recipes.find(name, Path.cwd())

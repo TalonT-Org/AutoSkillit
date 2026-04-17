@@ -10,6 +10,8 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pathspec
+
 if TYPE_CHECKING:
     from typing import Any
 
@@ -341,20 +343,29 @@ def load_manifest(path: str | Path) -> dict[str, Any] | None:
 def apply_manifest(
     changed_files: set[str],
     manifest: dict[str, Any] | None,
-) -> set[str]:
-    """Return test directories matched by manifest patterns for the changed files."""
+) -> set[str] | None:
+    """Return test directories matched by manifest patterns for the changed files.
+
+    Returns None when manifest is None (fail-open) or when any changed file matches
+    no manifest pattern (fail-open: caller should run the full suite).
+    """
     if manifest is None:
-        return set()
-    result: set[str] = set()
-    for pattern, test_dirs in manifest.items():
-        for f in changed_files:
-            if fnmatch.fnmatch(f, pattern):
+        return None
+    compiled = {pat: pathspec.PathSpec.from_lines("gitwildmatch", [pat]) for pat in manifest}
+    matched_dirs: set[str] = set()
+    for f in changed_files:
+        file_matched = False
+        for pattern, spec in compiled.items():
+            if spec.match_file(f):
+                test_dirs = manifest[pattern]
                 if isinstance(test_dirs, list):
-                    result.update(test_dirs)
+                    matched_dirs.update(test_dirs)
                 elif isinstance(test_dirs, str):
-                    result.add(test_dirs)
-                break
-    return result
+                    matched_dirs.add(test_dirs)
+                file_matched = True
+        if not file_matched:
+            return None
+    return matched_dirs
 
 
 # ---------------------------------------------------------------------------
@@ -485,8 +496,9 @@ def build_test_scope(
             return None
         else:
             manifest_dirs = apply_manifest({f}, manifest)
-            if manifest_dirs:
-                test_dirs.update(manifest_dirs)
+            if manifest_dirs is None:
+                return None
+            test_dirs.update(manifest_dirs)
 
     test_dirs.update(always_run)
 

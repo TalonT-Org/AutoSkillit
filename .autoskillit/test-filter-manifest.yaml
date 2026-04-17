@@ -87,8 +87,49 @@ README.md:
 src/autoskillit/assets/**/*:
   - assets/
 
-scripts/compare-coverage-ast.py:
+tests/recipe/fixtures/*:
+  - recipe/
+
+# Local .autoskillit/ config and state files
+.autoskillit/config.yaml:
   - infra/
 
-tests/recipe/fixtures/*:
+.autoskillit/test-filter-manifest.yaml:
+  - infra/
+
+.autoskillit/recipes/*.yaml:
+  - recipe/
+
+.autoskillit/recipes/contracts/*.yaml:
+  - recipe/
+  - contracts/
+
+.autoskillit/recipes/diagrams/*.md:
+  - recipe/
+
+# External skills installed under .claude/skills/
+.claude/skills/*/SKILL.md:
+  - skills/
+  - contracts/
+
+# Root config / tooling files
+.gitignore:
+  - infra/
+
+.python-version:
+  - infra/
+
+install.sh:
+  - infra/
+  - cli/
+
+scripts/verify-test-filter.sh:
+  - infra/
+
+# Source non-Python files
+src/autoskillit/.mcp.json:
+  - server/
+  - cli/
+
+src/autoskillit/recipes/sub-recipes/diagrams/*.md:
   - recipe/

@@ -11,7 +11,7 @@ import pytest
 
 from autoskillit import cli
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 _MINIMAL_SCRIPT_YAML = """\
 name: my-script

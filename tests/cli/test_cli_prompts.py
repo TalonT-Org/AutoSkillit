@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 # PR1

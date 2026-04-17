@@ -16,7 +16,7 @@ from autoskillit.workspace.session_skills import (
     resolve_ephemeral_root,
 )
 
-pytestmark = [pytest.mark.layer("workspace")]
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
 def test_resolve_ephemeral_root_returns_writable_dir(

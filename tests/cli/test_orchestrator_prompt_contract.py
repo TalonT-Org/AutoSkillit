@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 def _get_prompt() -> str:

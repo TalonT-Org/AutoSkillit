@@ -19,7 +19,7 @@ from autoskillit.cli._install_info import (
     upgrade_command,
 )
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # Helpers

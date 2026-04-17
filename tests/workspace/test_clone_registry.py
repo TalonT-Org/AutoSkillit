@@ -15,7 +15,7 @@ from autoskillit.workspace.clone_registry import (
     register_clone,
 )
 
-pytestmark = [pytest.mark.layer("workspace")]
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
 class TestRegisterClone:

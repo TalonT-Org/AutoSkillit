@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core.types import PACK_REGISTRY
 
-pytestmark = [pytest.mark.layer("workspace")]
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 # Tags for packs that are disabled by default (e.g. research, exp-lens).
 # Shared by T-OVR-014 and T-OVR-017 to avoid duplication.

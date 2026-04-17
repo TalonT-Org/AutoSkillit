@@ -14,7 +14,7 @@ import pytest
 
 from autoskillit.cli._terminal import _RESET_SPEC
 
-pytestmark = [pytest.mark.layer("cli")]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 class TestTerminalGuardTTYRestore:

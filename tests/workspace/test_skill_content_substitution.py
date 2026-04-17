@@ -11,7 +11,7 @@ from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
 )
 
-pytestmark = [pytest.mark.layer("workspace")]
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
 class _StubInfo:

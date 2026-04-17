@@ -10,7 +10,7 @@ from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.registry import _RULE_REGISTRY, run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_recipe_with_sub_recipe(sub_recipe_name: str) -> Recipe:

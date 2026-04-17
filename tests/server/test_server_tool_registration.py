@@ -17,7 +17,7 @@ from autoskillit.server.tools_status import (
     get_token_summary,
 )
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestNoSkillsDirectoryProvider:

@@ -20,7 +20,7 @@ from autoskillit.server.tools_git import (
 )
 from tests.conftest import _make_result
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestClassifyFix:

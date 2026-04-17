@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 @pytest.mark.anyio

@@ -17,7 +17,7 @@ from autoskillit.server.tools_clone import (
 )
 from autoskillit.workspace import clone_registry
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestCloneRepoTool:

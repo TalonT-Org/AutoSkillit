@@ -13,7 +13,7 @@ import pytest
 from autoskillit.core import pkg_root
 from autoskillit.recipe.io import load_recipe
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _RECIPES_DIR = pkg_root() / "recipes"
 _PIPELINE_RECIPES = [

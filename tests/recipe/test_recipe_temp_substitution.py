@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.recipe.io import load_recipe
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _RECIPE_TEMPLATE = """\
 name: temp_subst_demo

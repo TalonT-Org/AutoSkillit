@@ -14,7 +14,7 @@ import yaml
 
 import autoskillit
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestDefaultRecipeRepository:

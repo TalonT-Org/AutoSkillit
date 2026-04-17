@@ -8,7 +8,7 @@ import pathlib
 
 import pytest
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def test_all_dataclasses_importable() -> None:

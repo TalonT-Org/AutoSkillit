@@ -16,7 +16,7 @@ from autoskillit.core.types import (
 )
 from tests.fakes import InMemoryTestRunner, MockSubprocessRunner
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _make_result(

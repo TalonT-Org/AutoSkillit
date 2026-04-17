@@ -12,7 +12,7 @@ from autoskillit.core._type_results import LoadResult
 from autoskillit.recipe.repository import DefaultRecipeRepository
 from autoskillit.recipe.schema import RecipeInfo
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_recipe_info(name: str, path: Path) -> RecipeInfo:

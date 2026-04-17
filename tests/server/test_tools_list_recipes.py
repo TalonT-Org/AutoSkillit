@@ -11,7 +11,7 @@ import pytest
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools_recipe import list_recipes
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestListRecipeTools:

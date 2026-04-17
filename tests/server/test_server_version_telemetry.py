@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestPluginMetadataExists:

@@ -13,7 +13,7 @@ from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.helpers import _require_enabled
 from autoskillit.server.tools_kitchen import _close_kitchen_handler, _open_kitchen_handler
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 class TestKitchenVisibility:

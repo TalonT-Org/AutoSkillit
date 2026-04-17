@@ -14,7 +14,7 @@ from autoskillit.recipe.diagrams import (
 )
 from autoskillit.recipe.io import load_recipe
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 def _extract_graph_section(content: str) -> str:

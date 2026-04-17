@@ -10,7 +10,7 @@ from autoskillit.pipeline.gate import GATED_TOOLS, DefaultGateState
 from autoskillit.server.tools_ci import set_commit_status
 from tests.conftest import _make_result
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 async def _async_return(value: object) -> object:

@@ -7,7 +7,7 @@ import pytest
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _QUEUE_CAPABLE = ("implementation.yaml", "remediation.yaml", "implementation-groups.yaml")
 

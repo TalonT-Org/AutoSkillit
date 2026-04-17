@@ -6,7 +6,7 @@ from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 BUNDLED_RECIPE_NAMES = [
     "implementation",

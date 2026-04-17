@@ -9,7 +9,7 @@ from autoskillit.core import GATED_TOOLS, UNGATED_TOOLS, Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def _make_recipe(tool: str | None = None, action: str | None = None) -> Recipe:

@@ -23,7 +23,7 @@ from autoskillit.recipe.validator import (
 from tests.recipe.conftest import NO_AUTOSKILLIT_IMPORT as _NO_AUTOSKILLIT_IMPORT
 from tests.recipe.conftest import _make_workflow
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # Module-level semantic rule tests

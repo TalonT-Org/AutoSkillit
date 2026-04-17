@@ -17,7 +17,7 @@ from autoskillit.server.tools_recipe import (
     migrate_recipe,
 )
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
 # Minimal valid script YAML used across migration suggestion tests

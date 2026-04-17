@@ -10,7 +10,7 @@ import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])

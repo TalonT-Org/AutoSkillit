@@ -14,7 +14,7 @@ from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.rules_merge import _is_commit_guard
 from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SMOKE_RECIPE = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"

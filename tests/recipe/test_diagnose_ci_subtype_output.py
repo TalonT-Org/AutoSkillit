@@ -15,7 +15,7 @@ import pytest
 from autoskillit.core import pkg_root
 from autoskillit.recipe.contracts import load_bundled_manifest
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _SKILL_MD = pkg_root() / "skills_extended" / "diagnose-ci" / "SKILL.md"
 

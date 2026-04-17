@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestGateDisabledSchema:

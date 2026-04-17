@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.server.tools_recipe import validate_recipe
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _extract_docstring_sections(desc: str) -> dict[str, str]:

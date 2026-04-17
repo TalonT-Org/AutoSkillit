@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 def _make_skill_recipe(skill_command: str):

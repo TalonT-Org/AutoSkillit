@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.execution.recording import RecordingSubprocessRunner
 
-pytestmark = [pytest.mark.layer("server")]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.mark.asyncio

@@ -15,7 +15,7 @@ repos:
 
       - id: mypy
         name: mypy
-        entry: mypy src/ --ignore-missing-imports
+        entry: mypy src/ tests/_test_filter.py --ignore-missing-imports
         language: system
         pass_filenames: false
 

@@ -293,6 +293,7 @@ class TestBuildTestScope:
         assert Path("tests/core/test_io.py") in result
 
     def test_scope_nonpython_no_manifest_only_alwaysrun(self, tmp_path: Path) -> None:
+        """Non-Python file with manifest=None → fail-open → result is None."""
         tests_root = tmp_path / "tests"
         for d in ["arch", "contracts", "infra", "docs"]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
@@ -300,6 +301,34 @@ class TestBuildTestScope:
         result = build_test_scope(
             changed_files={"README.md"},
             mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is None
+
+    def test_scope_nonpython_unmatched_manifest_returns_none(self, tmp_path: Path) -> None:
+        """A non-Python changed file with no manifest match must return None (full run)."""
+        tests_root = tmp_path / "tests"
+        for d in ["arch", "contracts", "infra", "docs"]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        manifest = {"docs/**/*.md": ["docs"]}
+        result = build_test_scope(
+            changed_files={"some/unknown/file.txt"},
+            mode=FilterMode.CONSERVATIVE,
+            manifest=manifest,
+            tests_root=tests_root,
+        )
+        assert result is None
+
+    def test_scope_nonpython_matched_manifest_adds_dirs(self, tmp_path: Path) -> None:
+        """A non-Python file that DOES match a manifest pattern contributes its test dirs."""
+        tests_root = tmp_path / "tests"
+        for d in ["arch", "contracts", "infra", "docs"]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        manifest = {"docs/**/*.md": ["docs"]}
+        result = build_test_scope(
+            changed_files={"docs/README.md"},
+            mode=FilterMode.CONSERVATIVE,
+            manifest=manifest,
             tests_root=tests_root,
         )
         assert result is not None
@@ -511,7 +540,7 @@ class TestLoadManifest:
 class TestApplyManifest:
     def test_apply_manifest_none(self) -> None:
         result = apply_manifest({"README.md"}, None)
-        assert result == set()
+        assert result is None
 
     def test_apply_manifest_match(self) -> None:
         manifest = {"docs/*.md": ["docs"]}
@@ -519,14 +548,88 @@ class TestApplyManifest:
         assert result == {"docs"}
 
     def test_apply_manifest_no_match(self) -> None:
-        manifest = {"docs/*.md": ["docs"]}
+        manifest = {"tests/*.py": ["unit"]}
         result = apply_manifest({"src/foo.py"}, manifest)
-        assert result == set()
+        assert result is None
 
     def test_apply_manifest_list_dirs(self) -> None:
         manifest = {"*.yaml": ["config", "infra"]}
         result = apply_manifest({"defaults.yaml"}, manifest)
         assert result == {"config", "infra"}
+
+    def test_apply_manifest_doublestar_zero_segments(self) -> None:
+        """docs/**/*.md must match docs/README.md (zero intermediate path segments).
+
+        This pattern is in the production manifest. fnmatch fails this; pathspec passes it.
+        """
+        manifest = {"docs/**/*.md": ["docs"]}
+        result = apply_manifest({"docs/README.md"}, manifest)
+        assert result == {"docs"}
+
+    def test_apply_manifest_doublestar_nested(self) -> None:
+        """docs/**/*.md must match docs/developer/SETUP.md (non-zero intermediate segments)."""
+        manifest = {"docs/**/*.md": ["docs"]}
+        result = apply_manifest({"docs/developer/SETUP.md"}, manifest)
+        assert result == {"docs"}
+
+
+# ---------------------------------------------------------------------------
+# Behavioral equivalence cross-validation (EQ1–EQ2)
+# ---------------------------------------------------------------------------
+
+
+class TestApplyManifestEquivalence:
+    """Cross-validates conftest apply_manifest against production manifest_apply_manifest.
+
+    Both modules must agree on matched outputs. When a file matches patterns in one,
+    it must match the same patterns in the other. The two implementations are allowed
+    to differ only in how they handle the unmatched case (both must return None there too).
+    """
+
+    MANIFEST = {
+        "src/autoskillit/recipes/*.yaml": ["recipe", "contracts"],
+        "docs/**/*.md": ["docs"],
+        "Taskfile.yml": ["infra"],
+        "tests/recipe/fixtures/*": ["recipe"],
+        ".pre-commit-config.yaml": ["infra"],
+    }
+
+    @pytest.mark.parametrize(
+        "file_path,expected_dirs",
+        [
+            ("src/autoskillit/recipes/my.yaml", {"recipe", "contracts"}),
+            ("docs/README.md", {"docs"}),
+            ("docs/sub/dir/deep.md", {"docs"}),
+            ("Taskfile.yml", {"infra"}),
+            ("tests/recipe/fixtures/test.yaml", {"recipe"}),
+            (".pre-commit-config.yaml", {"infra"}),
+        ],
+    )
+    def test_matching_cases_agree(self, file_path: str, expected_dirs: set[str]) -> None:
+        """For files that match manifest patterns, both implementations return the same dirs."""
+        conftest_result = apply_manifest({file_path}, self.MANIFEST)
+        production_result = manifest_apply_manifest([file_path], self.MANIFEST)
+        assert conftest_result == production_result == expected_dirs, (
+            f"Implementations disagree for {file_path!r}: "
+            f"conftest={conftest_result!r}, production={production_result!r}"
+        )
+
+    @pytest.mark.parametrize(
+        "file_path",
+        [
+            "some/unknown/file.txt",
+            "README.md",
+            "pyproject.toml",
+        ],
+    )
+    def test_unmatched_cases_both_return_none(self, file_path: str) -> None:
+        """For files matching no manifest pattern, both implementations return None."""
+        conftest_result = apply_manifest({file_path}, self.MANIFEST)
+        production_result = manifest_apply_manifest([file_path], self.MANIFEST)
+        assert conftest_result is None, f"conftest returned {conftest_result!r} for {file_path!r}"
+        assert production_result is None, (
+            f"production returned {production_result!r} for {file_path!r}"
+        )
 
 
 # ---------------------------------------------------------------------------

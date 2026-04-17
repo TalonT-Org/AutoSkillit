@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import subprocess
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -408,17 +409,21 @@ class TestFilterModes:
 
 class TestGitChangedFiles:
     def test_git_changed_files_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        merge_base_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n")
-        diff_result = subprocess.CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout="src/autoskillit/core/io.py\ntests/core/test_io.py\n",
+        mock_run = Mock(
+            side_effect=[
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n"),
+                subprocess.CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout="src/autoskillit/core/io.py\ntests/core/test_io.py\n",
+                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=""),
+            ]
         )
-        ls_files_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="")
-        results = iter([merge_base_result, diff_result, ls_files_result])
-        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: next(results))
+        monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
         assert result == {"src/autoskillit/core/io.py", "tests/core/test_io.py"}
+        assert mock_run.call_count == 3
 
     def test_git_changed_files_failure_returns_none(
         self,
@@ -449,21 +454,19 @@ class TestGitChangedFiles:
         monkeypatch.setenv("AUTOSKILLIT_TEST_BASE_REF", "feature-branch")
         monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
 
-        captured_args: list[list[str]] = []
-        call_count = 0
-
-        def _capture(*a: object, **kw: object) -> subprocess.CompletedProcess[str]:
-            nonlocal call_count
-            captured_args.append(list(a[0]))
-            call_count += 1
-            stdout = "abc123\n" if call_count == 1 else ""
-            return subprocess.CompletedProcess(args=[], returncode=0, stdout=stdout)
-
-        monkeypatch.setattr(subprocess, "run", _capture)
+        mock_run = Mock(
+            side_effect=[
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n"),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=""),
+            ]
+        )
+        monkeypatch.setattr(subprocess, "run", mock_run)
         git_changed_files("/fake")
-        assert captured_args
-        assert captured_args[0][:3] == ["git", "merge-base", "HEAD"]
-        assert captured_args[0][3] == "feature-branch"
+        assert mock_run.call_count == 3
+        first_call_args = list(mock_run.call_args_list[0][0][0])
+        assert first_call_args[:3] == ["git", "merge-base", "HEAD"]
+        assert first_call_args[3] == "feature-branch"
 
     def test_git_changed_files_github_base_ref(
         self,
@@ -472,27 +475,25 @@ class TestGitChangedFiles:
         monkeypatch.delenv("AUTOSKILLIT_TEST_BASE_REF", raising=False)
         monkeypatch.setenv("GITHUB_BASE_REF", "main")
 
-        captured_args: list[list[str]] = []
-        call_count = 0
-
-        def _capture(*a: object, **kw: object) -> subprocess.CompletedProcess[str]:
-            nonlocal call_count
-            captured_args.append(list(a[0]))
-            call_count += 1
-            stdout = "abc123\n" if call_count == 1 else ""
-            return subprocess.CompletedProcess(args=[], returncode=0, stdout=stdout)
-
-        monkeypatch.setattr(subprocess, "run", _capture)
+        mock_run = Mock(
+            side_effect=[
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n"),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=""),
+            ]
+        )
+        monkeypatch.setattr(subprocess, "run", mock_run)
         git_changed_files("/fake")
-        assert captured_args
-        assert captured_args[0][:3] == ["git", "merge-base", "HEAD"]
-        assert captured_args[0][3] == "main"
+        assert mock_run.call_count == 3
+        first_call_args = list(mock_run.call_args_list[0][0][0])
+        assert first_call_args[:3] == ["git", "merge-base", "HEAD"]
+        assert first_call_args[3] == "main"
 
     def test_git_changed_files_includes_unstaged_tracked(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        results = iter(
-            [
+        mock_run = Mock(
+            side_effect=[
                 subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n"),
                 subprocess.CompletedProcess(
                     args=[], returncode=0, stdout="src/autoskillit/core/io.py\n"
@@ -500,29 +501,31 @@ class TestGitChangedFiles:
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=""),
             ]
         )
-        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: next(results))
+        monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
         assert result == {"src/autoskillit/core/io.py"}
+        assert mock_run.call_count == 3
 
     def test_git_changed_files_includes_untracked_files(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        results = iter(
-            [
+        mock_run = Mock(
+            side_effect=[
                 subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n"),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout="new_script.py\n"),
             ]
         )
-        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: next(results))
+        monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
         assert result == {"new_script.py"}
+        assert mock_run.call_count == 3
 
     def test_git_changed_files_ls_files_failure_is_nonfatal(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        results = iter(
-            [
+        mock_run = Mock(
+            side_effect=[
                 subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n"),
                 subprocess.CompletedProcess(
                     args=[], returncode=0, stdout="src/autoskillit/core/io.py\n"
@@ -530,9 +533,10 @@ class TestGitChangedFiles:
                 subprocess.CompletedProcess(args=[], returncode=1, stdout=""),
             ]
         )
-        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: next(results))
+        monkeypatch.setattr(subprocess, "run", mock_run)
         result = git_changed_files("/fake", base_ref="main")
         assert result == {"src/autoskillit/core/io.py"}
+        assert mock_run.call_count == 3
 
 
 # ---------------------------------------------------------------------------

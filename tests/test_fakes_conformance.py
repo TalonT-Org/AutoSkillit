@@ -213,3 +213,104 @@ async def test_database_reader_returns_configured_result():
     result = reader.query("test.db", "SELECT 1", [], 30, 100)
     assert result["row_count"] == 1
     assert len(reader.calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# T5: InMemoryRecipeRepository call recording
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_repository_find_records_call():
+    repo = InMemoryRecipeRepository()
+    repo.find("my-recipe", Path("/proj"))
+    assert len(repo.calls) == 1
+    call = repo.calls[0]
+    assert call["method"] == "find"
+    assert call["name"] == "my-recipe"
+    assert call["project_dir"] == Path("/proj")
+
+
+def test_recipe_repository_list_records_call():
+    repo = InMemoryRecipeRepository()
+    repo.list(Path("/proj"))
+    assert len(repo.calls) == 1
+    call = repo.calls[0]
+    assert call["method"] == "list"
+    assert call["project_dir"] == Path("/proj")
+
+
+def test_recipe_repository_load_and_validate_records_call():
+    repo = InMemoryRecipeRepository()
+    repo.load_and_validate(
+        "my-recipe",
+        Path("/proj"),
+        suppressed=["rule-a"],
+        resolved_defaults={"k": "v"},
+        ingredient_overrides={"x": "y"},
+        temp_dir=Path("/tmp"),
+        temp_dir_relpath=".autoskillit/temp",
+    )
+    assert len(repo.calls) == 1
+    call = repo.calls[0]
+    assert call["method"] == "load_and_validate"
+    assert call["name"] == "my-recipe"
+    assert call["project_dir"] == Path("/proj")
+    assert call["suppressed"] == ["rule-a"]
+    assert call["resolved_defaults"] == {"k": "v"}
+    assert call["ingredient_overrides"] == {"x": "y"}
+    assert call["temp_dir"] == Path("/tmp")
+    assert call["temp_dir_relpath"] == ".autoskillit/temp"
+
+
+def test_recipe_repository_list_all_records_call():
+    repo = InMemoryRecipeRepository()
+    repo.list_all(project_dir=Path("/proj"))
+    assert len(repo.calls) == 1
+    call = repo.calls[0]
+    assert call["method"] == "list_all"
+    assert call["project_dir"] == Path("/proj")
+
+
+def test_recipe_repository_list_all_records_call_with_none_project_dir():
+    repo = InMemoryRecipeRepository()
+    repo.list_all()
+    assert len(repo.calls) == 1
+    assert repo.calls[0]["project_dir"] is None
+
+
+def test_recipe_repository_calls_accumulate():
+    repo = InMemoryRecipeRepository()
+    repo.find("r1", Path("/a"))
+    repo.list_all()
+    repo.load_and_validate("r1", Path("/a"))
+    assert len(repo.calls) == 3
+    assert repo.calls[0]["method"] == "find"
+    assert repo.calls[1]["method"] == "list_all"
+    assert repo.calls[2]["method"] == "load_and_validate"
+
+
+def test_recipe_repository_calls_starts_empty():
+    repo = InMemoryRecipeRepository()
+    assert repo.calls == []
+
+
+def test_recipe_repository_validate_from_path_records_call():
+    repo = InMemoryRecipeRepository()
+    script_path = Path("/proj/recipe.yaml")
+    repo.validate_from_path(script_path, ".autoskillit/temp")
+    assert len(repo.calls) == 1
+    call = repo.calls[0]
+    assert call["method"] == "validate_from_path"
+    assert call["script_path"] == script_path
+    assert call["temp_dir_relpath"] == ".autoskillit/temp"
+
+
+def test_recipe_repository_validate_from_path_records_call_default_relpath():
+    repo = InMemoryRecipeRepository()
+    script_path = Path("/proj/recipe.yaml")
+    repo.validate_from_path(script_path)
+    assert len(repo.calls) == 1
+    call = repo.calls[0]
+    assert call["method"] == "validate_from_path"
+    assert call["script_path"] == script_path
+    assert call["temp_dir_relpath"] == ".autoskillit/temp"

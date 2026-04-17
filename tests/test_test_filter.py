@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import tests._test_filter as tf_mod
 from autoskillit._test_filter import apply_manifest as manifest_apply_manifest
 from autoskillit._test_filter import load_manifest as manifest_load_manifest
 from tests._test_filter import (
@@ -501,6 +502,116 @@ class TestReexportClosure:
         result = _expand_reexport_closure({"pkg/other.py"}, tmp_path)
         assert "pkg/__init__.py" not in result
         assert "pkg/other.py" in result
+
+
+# ---------------------------------------------------------------------------
+# Re-export Closure Integration Tests (build_test_scope wiring)
+# ---------------------------------------------------------------------------
+
+
+class TestReexportClosureIntegration:
+    def test_build_test_scope_calls_expand_reexport_closure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: list[set[str]] = []
+        original = tf_mod._expand_reexport_closure
+
+        def spy(changed_src_files: set[str], src_root: object) -> set[str]:
+            captured.append(set(changed_src_files))
+            return original(changed_src_files, src_root)
+
+        monkeypatch.setattr(tf_mod, "_expand_reexport_closure", spy)
+
+        tests_root = tmp_path / "tests"
+        for d in list(LAYER_CASCADE_AGGRESSIVE["core"]) + list(ALWAYS_RUN_AGGRESSIVE):
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+        )
+
+        assert captured, "_expand_reexport_closure was not called from build_test_scope"
+        assert "src/autoskillit/core/io.py" in captured[0]
+
+    def test_core_io_change_expands_to_core_init(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Integration: changing core/io.py expands to include core/__init__.py."""
+        core_src = tmp_path / "src" / "autoskillit" / "core"
+        core_src.mkdir(parents=True)
+        (core_src / "io.py").write_text("# io\n")
+        (core_src / "__init__.py").write_text("from .io import atomic_write\n")
+
+        captured_expanded: list[set[str]] = []
+        original = tf_mod._expand_reexport_closure
+
+        def spy(changed_src_files: set[str], src_root: object) -> set[str]:
+            result = original(changed_src_files, src_root)
+            captured_expanded.append(set(result))
+            return result
+
+        monkeypatch.setattr(tf_mod, "_expand_reexport_closure", spy)
+
+        tests_root = tmp_path / "tests"
+        for d in list(LAYER_CASCADE_CONSERVATIVE["core"]) + list(ALWAYS_RUN_CONSERVATIVE):
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+
+        assert result is not None
+        assert captured_expanded, "_expand_reexport_closure was not called"
+        assert "src/autoskillit/core/__init__.py" in captured_expanded[0], (
+            "core/__init__.py was not found in expansion of core/io.py"
+        )
+
+    def test_expansion_error_is_fail_open(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def explode(changed_src_files: set[str], src_root: object) -> set[str]:
+            raise RuntimeError("simulated expansion failure")
+
+        monkeypatch.setattr(tf_mod, "_expand_reexport_closure", explode)
+
+        tests_root = tmp_path / "tests"
+        for d in list(LAYER_CASCADE_AGGRESSIVE["core"]) + list(ALWAYS_RUN_AGGRESSIVE):
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+        )
+        # Expansion error must NOT propagate; scope still computed from original classification
+        assert result is not None
+
+    def test_unclassifiable_init_does_not_cause_full_run(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An __init__.py added by expansion that maps to no cascade entry is silently skipped."""
+
+        # Expansion returns an __init__.py outside any known package
+        def always_expand(changed_src_files: set[str], src_root: object) -> set[str]:
+            return set(changed_src_files) | {"src/autoskillit/__init__.py"}
+
+        monkeypatch.setattr(tf_mod, "_expand_reexport_closure", always_expand)
+
+        tests_root = tmp_path / "tests"
+        for d in list(LAYER_CASCADE_AGGRESSIVE["core"]) + list(ALWAYS_RUN_AGGRESSIVE):
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+        )
+        # Must NOT return None — unclassifiable init.py is skipped, not a fail-open trigger
+        assert result is not None
 
 
 # ---------------------------------------------------------------------------

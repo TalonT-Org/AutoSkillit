@@ -67,13 +67,17 @@ def _tracked_non_python_files() -> tuple[str, ...]:
     both _files_to_check() (collection time) and test_manifest_pattern_matches_real_file
     (test execution) call this function.
     """
-    result = subprocess.run(
-        ["git", "ls-files", "--cached"],
-        capture_output=True,
-        text=True,
-        cwd=_REPO_ROOT,
-        check=True,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--cached"],
+            capture_output=True,
+            text=True,
+            cwd=_REPO_ROOT,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        msg = f"git ls-files failed in {_REPO_ROOT}: {e.stderr.strip()}"
+        raise RuntimeError(msg) from e
     return tuple(f for f in result.stdout.splitlines() if not f.endswith(".py"))
 
 

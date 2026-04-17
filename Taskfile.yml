@@ -133,6 +133,13 @@ tasks:
           --coverage-db .coverage \
           --output "temp/coverage-audit-$(date +%Y%m%d-%H%M%S).json"
 
+        echo ""
+        echo "--- Building test-source map ---"
+        $PYTHON scripts/compare-coverage-ast.py \
+          --mode build-test-source-map \
+          --coverage-db .coverage \
+          --output ".autoskillit/test-source-map.json"
+
   test-smoke:
     desc: Run smoke tests (requires ANTHROPIC_API_KEY)
     deps: [_tmpdir-setup]

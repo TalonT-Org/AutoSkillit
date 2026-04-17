@@ -341,6 +341,49 @@ def load_manifest(path: str | Path) -> dict[str, Any] | None:
         return None
 
 
+def load_coverage_map(
+    map_path: str | Path,
+    max_age_days: int = 30,
+) -> dict[str, set[str]] | None:
+    """Load .autoskillit/test-source-map.json with staleness guard.
+
+    Args:
+        map_path: Path to the test-source-map.json file.
+        max_age_days: Maximum age in days before the map is considered stale.
+                      Defaults to 30 days.
+
+    Returns:
+        dict mapping source file paths to sets of test file paths, or None when:
+        - The file does not exist
+        - The file is older than max_age_days
+        - The file cannot be read or parsed
+    """
+    import datetime
+    import json
+
+    map_path = Path(map_path)
+    try:
+        stat = map_path.stat()
+    except OSError:
+        return None
+
+    age = datetime.datetime.now().timestamp() - stat.st_mtime
+    if age > max_age_days * 24 * 3600:
+        return None
+
+    try:
+        raw = json.loads(map_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        warnings.warn(f"Cannot read coverage map {map_path}: {exc}", stacklevel=2)
+        return None
+
+    if not isinstance(raw, dict):
+        warnings.warn(f"Coverage map {map_path} is not a JSON object", stacklevel=2)
+        return None
+
+    return {src: set(tests) for src, tests in raw.items()}
+
+
 def apply_manifest(
     changed_files: set[str],
     manifest: dict[str, Any] | None,

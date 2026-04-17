@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import enum
 import fnmatch
+import logging
 import subprocess
 import warnings
 from pathlib import Path
@@ -512,7 +513,9 @@ def build_test_scope(
                     if pkg and pkg in cascade_map:
                         test_dirs.update(cascade_map[pkg])
         except Exception:
-            pass  # fail-open: expansion errors do not affect the computed scope
+            logging.getLogger(__name__).debug(  # noqa: TID251
+                "_expand_reexport_closure suppressed", exc_info=True
+            )  # fail-open: expansion errors do not affect the computed scope
 
     test_dirs.update(always_run)
 

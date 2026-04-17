@@ -145,3 +145,135 @@ def test_compare_detects_partial_coverage(cov_ast):
     assert report.partial == 1
     assert report.covered == 0
     assert report.uncovered == 0
+
+
+# ── TestBuildTestSourceMap ──
+
+
+class TestBuildTestSourceMap:
+    def test_query_contexts_map_inverts_correctly(self, cov_ast, tmp_path, monkeypatch):
+        """query_contexts_map inverts {line: {ctx}} to {src_file: {test_file}}.
+
+        Uses MagicMock to simulate CoverageData.
+        Context names use |run suffix.
+        """
+        from unittest.mock import MagicMock
+
+        import coverage as coverage_mod
+
+        src_file = str(cov_ast.PROJECT_ROOT / "src" / "autoskillit" / "core" / "io.py")
+
+        mock_data = MagicMock()
+        mock_data.measured_files.return_value = [src_file]
+        mock_data.contexts_by_lineno.return_value = {
+            1: ["tests/core/test_io.py::TestIO::test_write|run"],
+            2: ["tests/core/test_io.py::TestIO::test_write|run"],
+        }
+        monkeypatch.setattr(coverage_mod, "CoverageData", MagicMock(return_value=mock_data))
+
+        result = cov_ast.query_contexts_map(tmp_path / ".coverage")
+        assert "src/autoskillit/core/io.py" in result
+        assert "tests/core/test_io.py" in result["src/autoskillit/core/io.py"]
+
+    def test_setup_and_teardown_contexts_excluded(self, cov_ast, tmp_path, monkeypatch):
+        """query_contexts_map excludes |setup and |teardown contexts.
+
+        Only |run phase entries map source files to tests. A source file touched
+        only during |setup or |teardown must NOT appear in the result.
+        """
+        from unittest.mock import MagicMock
+
+        import coverage as coverage_mod
+
+        src_file = str(cov_ast.PROJECT_ROOT / "src" / "autoskillit" / "core" / "io.py")
+
+        mock_data = MagicMock()
+        mock_data.measured_files.return_value = [src_file]
+        mock_data.contexts_by_lineno.return_value = {
+            1: [
+                "tests/core/test_io.py::TestIO::test_write|setup",
+                "tests/core/test_io.py::TestIO::test_write|teardown",
+            ],
+        }
+        monkeypatch.setattr(coverage_mod, "CoverageData", MagicMock(return_value=mock_data))
+
+        result = cov_ast.query_contexts_map(tmp_path / ".coverage")
+        assert "src/autoskillit/core/io.py" not in result
+
+    def test_build_test_source_map_writes_json(self, cov_ast, tmp_path, monkeypatch):
+        """build_test_source_map() writes a valid JSON file to the output path."""
+        import json
+        from unittest.mock import MagicMock
+
+        import coverage as coverage_mod
+
+        src_file = str(cov_ast.PROJECT_ROOT / "src" / "autoskillit" / "core" / "io.py")
+        mock_data = MagicMock()
+        mock_data.measured_files.return_value = [src_file]
+        mock_data.contexts_by_lineno.return_value = {
+            1: ["tests/core/test_io.py::TestIO::test_write|run"],
+        }
+        monkeypatch.setattr(coverage_mod, "CoverageData", MagicMock(return_value=mock_data))
+
+        db_path = tmp_path / ".coverage"
+        db_path.touch()
+        output_path = tmp_path / "test-source-map.json"
+        cov_ast.build_test_source_map(db_path, output_path)
+
+        assert output_path.exists()
+        parsed = json.loads(output_path.read_text())
+        assert isinstance(parsed, dict)
+        expected_key = "src/autoskillit/core/io.py"
+        assert expected_key in parsed
+        assert "tests/core/test_io.py" in parsed[expected_key]
+
+    def test_main_routes_build_test_source_map_mode(self, cov_ast, tmp_path, monkeypatch):
+        """main() with --mode build-test-source-map calls build_test_source_map()."""
+
+        called_with: dict = {}
+
+        def fake_build(db_path, output_path):
+            called_with["db_path"] = db_path
+            called_with["output_path"] = output_path
+            return True
+
+        monkeypatch.setattr(cov_ast, "build_test_source_map", fake_build)
+        monkeypatch.setattr(
+            "sys.argv",
+            ["compare-coverage-ast.py", "--mode", "build-test-source-map"],
+        )
+        result = cov_ast.main()
+        assert result == 0
+        assert "output_path" in called_with
+        assert called_with["db_path"] == cov_ast.PROJECT_ROOT / ".coverage"
+
+    def test_map_json_values_are_lists(self, cov_ast, tmp_path, monkeypatch):
+        """The written JSON has list values (not sets), loadable as JSON."""
+        import json
+        from unittest.mock import MagicMock
+
+        import coverage as coverage_mod
+
+        src_file = str(cov_ast.PROJECT_ROOT / "src" / "autoskillit" / "core" / "io.py")
+        mock_data = MagicMock()
+        mock_data.measured_files.return_value = [src_file]
+        mock_data.contexts_by_lineno.return_value = {
+            1: ["tests/core/test_io.py::TestIO::test_a|run"],
+            2: ["tests/core/test_io.py::TestIO::test_b|run"],
+        }
+        monkeypatch.setattr(coverage_mod, "CoverageData", MagicMock(return_value=mock_data))
+
+        db_path = tmp_path / ".coverage"
+        db_path.touch()
+        output_path = tmp_path / "test-source-map.json"
+        cov_ast.build_test_source_map(db_path, output_path)
+
+        parsed = json.loads(output_path.read_text())
+        for v in parsed.values():
+            assert isinstance(v, list)
+
+    def test_taskfile_coverage_audit_invokes_map_mode(self):
+        """Taskfile.yml coverage-audit task includes --mode build-test-source-map."""
+        taskfile = Path(__file__).parent.parent.parent / "Taskfile.yml"
+        content = taskfile.read_text()
+        assert "build-test-source-map" in content

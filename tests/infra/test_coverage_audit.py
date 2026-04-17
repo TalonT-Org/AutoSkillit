@@ -235,6 +235,7 @@ class TestBuildTestSourceMap:
         def fake_build(db_path, output_path):
             called_with["db_path"] = db_path
             called_with["output_path"] = output_path
+            return True
 
         monkeypatch.setattr(cov_ast, "build_test_source_map", fake_build)
         monkeypatch.setattr(

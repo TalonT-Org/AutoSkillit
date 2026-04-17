@@ -210,17 +210,20 @@ def query_contexts_map(db_path: Path) -> dict[str, set[str]]:
 def build_test_source_map(
     db_path: Path,
     output_path: Path,
-) -> None:
+) -> bool:
     """Build and write {source_file: [test_files]} map from coverage DB.
 
     Args:
         db_path: Path to .coverage SQLite database.
         output_path: Path where test-source-map.json will be written.
+
+    Returns:
+        True on success, False when the coverage DB is not found.
     """
     if not db_path.exists():
         print(f"WARNING: Coverage database not found: {db_path}", file=sys.stderr)
         print("Run 'task coverage-audit' first to generate coverage data.", file=sys.stderr)
-        return
+        return False
 
     mapping = query_contexts_map(db_path)
     # Convert sets to sorted lists for stable, human-readable JSON
@@ -228,6 +231,7 @@ def build_test_source_map(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(serializable, indent=2) + "\n", encoding="utf-8")
     print(f"Test-source map written to: {output_path} ({len(serializable)} source files)")
+    return True
 
 
 def compare(
@@ -355,10 +359,9 @@ def main() -> int:
 
     if args.mode == "build-test-source-map":
         output_path = args.output or (PROJECT_ROOT / ".autoskillit" / "test-source-map.json")
-        build_test_source_map(args.coverage_db, output_path)
-        return 0
+        ok = build_test_source_map(args.coverage_db, output_path)
+        return 0 if ok else 1
 
-    # --- audit mode (existing logic) ---
     if not args.src_root.is_dir():
         print(f"ERROR: Source root not found: {args.src_root}", file=sys.stderr)
         return 0

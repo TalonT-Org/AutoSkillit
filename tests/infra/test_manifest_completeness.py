@@ -98,6 +98,13 @@ def _manifest_patterns() -> list[str]:
     return list(load_manifest(_MANIFEST_PATH).keys())
 
 
+# Module-level spec built from the manifest; precomputed once to avoid re-reading the
+# YAML file on every parametrized test-case invocation of test_file_covered_by_manifest.
+_MANIFEST_SPEC: pathspec.PathSpec = pathspec.PathSpec.from_lines(
+    "gitwildmatch", _manifest_patterns()
+)
+
+
 @pytest.mark.parametrize("file_path", _files_to_check())
 def test_file_covered_by_manifest(file_path: str) -> None:
     """Every non-Python tracked file (outside Bucket A + ignore list) must match
@@ -107,9 +114,7 @@ def test_file_covered_by_manifest(file_path: str) -> None:
     Fix: add a glob pattern to .autoskillit/test-filter-manifest.yaml, or add
     the file to _IGNORE_FILES / _IGNORE_PATTERNS if no test mapping is needed.
     """
-    manifest = load_manifest(_MANIFEST_PATH)
-    spec = pathspec.PathSpec.from_lines("gitwildmatch", list(manifest.keys()))
-    assert spec.match_file(file_path), (
+    assert _MANIFEST_SPEC.match_file(file_path), (
         f"File {file_path!r} is not covered by any manifest pattern. "
         "Add an entry to .autoskillit/test-filter-manifest.yaml "
         "or add to _IGNORE_FILES / _IGNORE_PATTERNS in this test file."

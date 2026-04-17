@@ -230,6 +230,15 @@ def test_recipe_repository_find_records_call():
     assert call["project_dir"] == Path("/proj")
 
 
+def test_recipe_repository_list_records_call():
+    repo = InMemoryRecipeRepository()
+    repo.list(Path("/proj"))
+    assert len(repo.calls) == 1
+    call = repo.calls[0]
+    assert call["method"] == "list"
+    assert call["project_dir"] == Path("/proj")
+
+
 def test_recipe_repository_load_and_validate_records_call():
     repo = InMemoryRecipeRepository()
     repo.load_and_validate(
@@ -289,6 +298,17 @@ def test_recipe_repository_validate_from_path_records_call():
     repo = InMemoryRecipeRepository()
     script_path = Path("/proj/recipe.yaml")
     repo.validate_from_path(script_path, ".autoskillit/temp")
+    assert len(repo.calls) == 1
+    call = repo.calls[0]
+    assert call["method"] == "validate_from_path"
+    assert call["script_path"] == script_path
+    assert call["temp_dir_relpath"] == ".autoskillit/temp"
+
+
+def test_recipe_repository_validate_from_path_records_call_default_relpath():
+    repo = InMemoryRecipeRepository()
+    script_path = Path("/proj/recipe.yaml")
+    repo.validate_from_path(script_path)
     assert len(repo.calls) == 1
     call = repo.calls[0]
     assert call["method"] == "validate_from_path"

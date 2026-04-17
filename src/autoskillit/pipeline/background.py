@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import AuditLog, SupportsLogger, atomic_write, get_logger
 
 logger = get_logger(__name__)
 
@@ -24,8 +24,8 @@ class DefaultBackgroundSupervisor:
 
     def __init__(
         self,
-        audit: Any | None = None,
-        log: Any | None = None,
+        audit: AuditLog | None = None,
+        log: SupportsLogger | None = None,
     ) -> None:
         self._tasks: set[asyncio.Task[Any]] = set()
         self._audit = audit

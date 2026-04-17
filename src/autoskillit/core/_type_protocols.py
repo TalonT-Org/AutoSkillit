@@ -45,6 +45,7 @@ __all__ = [
     "BackgroundSupervisor",
     "QuotaRefreshTask",
     "TokenFactory",
+    "SupportsLogger",
 ]
 
 
@@ -195,6 +196,12 @@ class SupportsDebug(Protocol):
     """Structural logger protocol — only the debug() method is required."""
 
     def debug(self, event: str, **kwargs: Any) -> None: ...
+
+
+class SupportsLogger(SupportsDebug, Protocol):
+    """Structural logger protocol — debug() and error() methods required."""
+
+    def error(self, event: str, **kwargs: Any) -> None: ...
 
 
 @runtime_checkable

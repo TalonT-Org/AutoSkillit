@@ -524,7 +524,7 @@ class TestReexportClosureIntegration:
         for d in list(LAYER_CASCADE_AGGRESSIVE["core"]) + list(ALWAYS_RUN_AGGRESSIVE):
             (tests_root / d).mkdir(parents=True, exist_ok=True)
 
-        build_test_scope(
+        result = build_test_scope(
             changed_files={"src/autoskillit/core/io.py"},
             mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
@@ -532,6 +532,8 @@ class TestReexportClosureIntegration:
 
         assert captured, "_expand_reexport_closure was not called from build_test_scope"
         assert "src/autoskillit/core/io.py" in captured[0]
+        assert result is not None
+        assert tests_root / "core" in result
 
     def test_core_io_change_expands_to_core_init(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -587,21 +589,28 @@ class TestReexportClosureIntegration:
         )
         # Expansion error must NOT propagate; scope still computed from original classification
         assert result is not None
+        assert tests_root / "core" in result
 
     def test_unclassifiable_init_does_not_cause_full_run(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """An __init__.py added by expansion that maps to no cascade entry is silently skipped."""
 
+        tests_root = tmp_path / "tests"
+        for d in list(LAYER_CASCADE_AGGRESSIVE["core"]) + list(ALWAYS_RUN_AGGRESSIVE):
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        baseline = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+        )
+
         # Expansion returns an __init__.py outside any known package
         def always_expand(changed_src_files: set[str], src_root: object) -> set[str]:
             return set(changed_src_files) | {"src/autoskillit/__init__.py"}
 
         monkeypatch.setattr(tf_mod, "_expand_reexport_closure", always_expand)
-
-        tests_root = tmp_path / "tests"
-        for d in list(LAYER_CASCADE_AGGRESSIVE["core"]) + list(ALWAYS_RUN_AGGRESSIVE):
-            (tests_root / d).mkdir(parents=True, exist_ok=True)
 
         result = build_test_scope(
             changed_files={"src/autoskillit/core/io.py"},
@@ -610,6 +619,8 @@ class TestReexportClosureIntegration:
         )
         # Must NOT return None — unclassifiable init.py is skipped, not a fail-open trigger
         assert result is not None
+        # The unclassifiable init.py must not expand the scope beyond the base classification
+        assert result == baseline
 
 
 # ---------------------------------------------------------------------------

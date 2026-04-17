@@ -829,7 +829,7 @@ class TestMultiWindowSelection:
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
 
-        cfg = QuotaGuardConfig()
+        cfg = QuotaGuardConfig(long_window_enabled=True)
         now = datetime.now(UTC)
         windows = {
             "seven_day": QuotaWindowEntry(
@@ -1782,6 +1782,7 @@ class TestPerWindowToggles:
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
         config = make_quota_guard_config(
             short_window_enabled=False,
+            long_window_enabled=True,
             cache_path=str(tmp_path / "cache.json"),
         )
         await _refresh_quota_cache(config)

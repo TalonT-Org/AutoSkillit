@@ -575,3 +575,9 @@ class TestGroupDApiContractPreservation:
         assert ChannelConfirmation.CHANNEL_A == "channel_a"
         assert ChannelConfirmation.CHANNEL_B == "channel_b"
         assert ChannelConfirmation.UNMONITORED == "unmonitored"
+
+
+# PROTO-1
+def test_supports_logger_importable_from_core():
+    """SupportsLogger protocol is exported from the autoskillit.core gateway."""
+    from autoskillit.core import SupportsLogger  # noqa: F401

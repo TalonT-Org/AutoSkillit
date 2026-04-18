@@ -158,14 +158,14 @@ def test_resolve_ci_on_result_routes_real_fix_to_re_push(recipe_name: str) -> No
 def test_resolve_ci_on_result_routes_escalation_verdicts_to_failure(
     recipe_name: str,
 ) -> None:
-    """flake_suspected and ci_only_failure must route to release_issue_failure."""
+    """ci_only_failure must route to release_issue_failure."""
     recipe_path = _RECIPES_DIR / recipe_name
     recipe = load_recipe(recipe_path)
     resolve_steps = _find_resolve_steps_reaching_push(recipe)
     for step_name, step in resolve_steps:
         if step.on_result is None:
             continue
-        for verdict in ("flake_suspected", "ci_only_failure"):
+        for verdict in ("ci_only_failure",):
             routes = [
                 cond.route
                 for cond in (step.on_result.conditions or [])

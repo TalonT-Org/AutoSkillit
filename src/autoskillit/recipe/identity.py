@@ -78,7 +78,7 @@ def compute_composite_hash(
 
 
 def _load_sub_recipe_for_hash(path: Path) -> Recipe | None:
-    """Lightweight recipe load for hash computation — no validation, no blocks."""
+    """Load a sub-recipe YAML and return a Recipe, or None on any parse failure."""
     from autoskillit.recipe.io import _parse_recipe  # noqa: PLC0415
 
     try:

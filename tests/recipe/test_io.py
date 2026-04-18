@@ -931,3 +931,67 @@ def test_research_recipe_declares_requires_packs():
     path = pkg_root() / "recipes" / "research.yaml"
     recipe = load_recipe(path)
     assert recipe.requires_packs == ["research", "exp-lens", "vis-lens"]
+
+
+class TestRecipeVersionField:
+    def test_parse_recipe_reads_recipe_version(self, tmp_path):
+        yaml_content = (
+            "name: test\ndescription: d\nrecipe_version: '1.2.0'\n"
+            "kitchen_rules:\n  - rule\nsteps:\n  s1:\n    tool: run_skill\n"
+            "    message: hi\n    on_success: done\n"
+            "  done:\n    action: stop\n    message: Done\n"
+        )
+        p = tmp_path / "r.yaml"
+        p.write_text(yaml_content)
+        recipe = load_recipe(p)
+        assert recipe.recipe_version == "1.2.0"
+
+    def test_parse_recipe_no_recipe_version(self, tmp_path):
+        yaml_content = (
+            "name: test\ndescription: d\nkitchen_rules:\n  - rule\n"
+            "steps:\n  s1:\n    tool: run_skill\n    message: hi\n"
+            "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
+        )
+        p = tmp_path / "r.yaml"
+        p.write_text(yaml_content)
+        recipe = load_recipe(p)
+        assert recipe.recipe_version is None
+
+    def test_parse_recipe_rejects_float_recipe_version(self, tmp_path):
+        yaml_content = (
+            "name: test\ndescription: d\nrecipe_version: 1.0\n"
+            "kitchen_rules:\n  - rule\nsteps:\n  s1:\n    tool: run_skill\n"
+            "    message: hi\n    on_success: done\n"
+            "  done:\n    action: stop\n    message: Done\n"
+        )
+        p = tmp_path / "r.yaml"
+        p.write_text(yaml_content)
+        with pytest.raises(ValueError, match="recipe_version must be a quoted string"):
+            load_recipe(p)
+
+
+class TestContentHash:
+    def test_load_recipe_sets_content_hash(self, tmp_path):
+        import hashlib
+
+        yaml_content = (
+            "name: test\ndescription: d\nkitchen_rules:\n  - rule\n"
+            "steps:\n  s1:\n    tool: run_skill\n    message: hi\n"
+            "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
+        )
+        p = tmp_path / "r.yaml"
+        p.write_text(yaml_content)
+        recipe = load_recipe(p)
+        expected = "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
+        assert recipe.content_hash == expected
+
+    def test_list_recipes_populates_content_hash(self, tmp_path):
+        recipe_dir = tmp_path / ".autoskillit" / "recipes"
+        recipe_dir.mkdir(parents=True)
+        (recipe_dir / "test.yaml").write_text(
+            "name: test\ndescription: d\nkitchen_rules:\n  - rule\n"
+            "steps:\n  s1:\n    tool: run_skill\n    message: hi\n"
+            "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
+        )
+        result = list_recipes(tmp_path)
+        assert result.items[0].content_hash.startswith("sha256:")

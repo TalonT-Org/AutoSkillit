@@ -281,3 +281,11 @@ def test_tool_context_has_token_factory_field():
     assert TokenFactory in args, (
         f"token_factory type hint {hints['token_factory']} does not include TokenFactory Protocol"
     )
+
+
+def test_tool_context_recipe_identity_defaults(tmp_path):
+    ctx = _make_ctx(tmp_path)
+    assert ctx.recipe_name == ""
+    assert ctx.recipe_content_hash == ""
+    assert ctx.recipe_composite_hash == ""
+    assert ctx.recipe_version == ""

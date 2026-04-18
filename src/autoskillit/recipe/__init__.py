@@ -57,6 +57,10 @@ from autoskillit.recipe.experiment_type_registry import (  # noqa: E402
     ExperimentTypeSpec,
     load_all_experiment_types,
 )
+from autoskillit.recipe.identity import (  # noqa: E402
+    check_rerun_detection,
+    find_prior_runs,
+)
 from autoskillit.recipe.io import (  # noqa: E402
     builtin_sub_recipes_dir,
     find_recipe_by_name,
@@ -141,4 +145,6 @@ __all__ = [
     "find_sub_recipe_by_name",
     "ExperimentTypeSpec",
     "load_all_experiment_types",
+    "check_rerun_detection",
+    "find_prior_runs",
 ]

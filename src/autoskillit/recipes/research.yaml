@@ -1,5 +1,6 @@
 name: research
 autoskillit_version: "0.8.0"
+recipe_version: "1.0.0"
 requires_packs: [research, exp-lens, vis-lens]
 description: >
   Single-phase technical research recipe. Scopes a research question, plans an

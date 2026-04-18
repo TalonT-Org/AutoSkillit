@@ -34,6 +34,8 @@ def _write_kitchen_marker(session_id: str, recipe_name: str | None) -> None:
             "opened_at": datetime.now(UTC).isoformat(),
             "recipe_name": recipe_name,
             "marker_version": 1,
+            "content_hash": "",
+            "composite_hash": "",
         }
     )
     fd, tmp = tempfile.mkstemp(dir=state_dir, suffix=".tmp")

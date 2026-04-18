@@ -37,6 +37,9 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
         "diagram",  # user sees it in terminal preview; agent doesn't need it
         "kitchen_rules",  # already in the YAML content
         "requires_packs",  # internal field; used for skill gating, not display
+        "content_hash",  # internal identity metadata
+        "composite_hash",  # internal identity metadata
+        "recipe_version",  # internal identity metadata
     }
 )
 

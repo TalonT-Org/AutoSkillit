@@ -982,6 +982,10 @@ async def run_headless_core(
     expected_output_patterns: Sequence[str] = (),
     write_behavior: WriteBehaviorSpec | None = None,
     completion_marker: str = "",
+    recipe_name: str = "",
+    recipe_content_hash: str = "",
+    recipe_composite_hash: str = "",
+    recipe_version: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -1087,6 +1091,10 @@ async def run_headless_core(
                     termination_reason="CRASHED",
                     exception_text=_exc_text,
                     versions=_versions,
+                    recipe_name=recipe_name,
+                    recipe_content_hash=recipe_content_hash,
+                    recipe_composite_hash=recipe_composite_hash,
+                    recipe_version=recipe_version,
                 )
             except Exception:
                 logger.debug("flush_session_log during crash failed", exc_info=True)
@@ -1119,6 +1127,10 @@ async def run_headless_core(
                         termination_reason="CANCELLED",
                         exception_text=_exc_text,
                         versions=_versions,
+                        recipe_name=recipe_name,
+                        recipe_content_hash=recipe_content_hash,
+                        recipe_composite_hash=recipe_composite_hash,
+                        recipe_version=recipe_version,
                     )
             except Exception:
                 logger.debug("flush_session_log during cancel failed", exc_info=True)
@@ -1223,6 +1235,10 @@ async def run_headless_core(
                     else "",
                     last_stop_reason=skill_result.last_stop_reason,
                     versions=_versions,
+                    recipe_name=recipe_name,
+                    recipe_content_hash=recipe_content_hash,
+                    recipe_composite_hash=recipe_composite_hash,
+                    recipe_version=recipe_version,
                 )
             except Exception:
                 logger.debug("session_log_flush_failed", exc_info=True)
@@ -1272,6 +1288,10 @@ class DefaultHeadlessExecutor:
         expected_output_patterns: Sequence[str] = (),
         write_behavior: WriteBehaviorSpec | None = None,
         completion_marker: str = "",
+        recipe_name: str = "",
+        recipe_content_hash: str = "",
+        recipe_composite_hash: str = "",
+        recipe_version: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -1291,4 +1311,8 @@ class DefaultHeadlessExecutor:
             expected_output_patterns=expected_output_patterns,
             write_behavior=write_behavior,
             completion_marker=completion_marker,
+            recipe_name=recipe_name,
+            recipe_content_hash=recipe_content_hash,
+            recipe_composite_hash=recipe_composite_hash,
+            recipe_version=recipe_version,
         )

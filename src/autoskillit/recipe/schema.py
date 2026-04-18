@@ -11,6 +11,7 @@ from typing import Final
 from autoskillit.core import RecipeSource
 
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
+RECIPE_VERSION_KEY: Final = "recipe_version"
 
 
 @dataclass
@@ -122,6 +123,9 @@ class Recipe:
     steps: dict[str, RecipeStep] = field(default_factory=dict)
     kitchen_rules: list[str] = field(default_factory=list)
     version: str | None = None
+    recipe_version: str | None = None
+    content_hash: str = ""
+    composite_hash: str = ""
     experimental: bool = False
     requires_packs: list[str] = field(default_factory=list)
     # Populated by extract_blocks() during load; empty tuple for recipes with no block: anchors.
@@ -142,6 +146,8 @@ class RecipeInfo:
     path: Path
     summary: str = ""
     version: str | None = None
+    recipe_version: str | None = None
+    content_hash: str = ""
     content: str | None = None  # raw YAML text; None when set via parse_recipe_metadata
 
 

@@ -123,6 +123,10 @@ def flush_session_log(
     last_stop_reason: str = "",
     versions: dict[str, Any] | None = None,
     model_identifier: str = "",
+    recipe_name: str = "",
+    recipe_content_hash: str = "",
+    recipe_composite_hash: str = "",
+    recipe_version: str = "",
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -314,6 +318,14 @@ def flush_session_log(
             **versions,
             "model_identifier": effective_model_id,
         }
+    if recipe_name or recipe_content_hash:
+        summary["recipe_provenance"] = {
+            "schema_version": 1,
+            "recipe_name": recipe_name,
+            "recipe_version": recipe_version,
+            "content_hash": recipe_content_hash,
+            "composite_hash": recipe_composite_hash,
+        }
     summary_path = session_dir / "summary.json"
     atomic_write(summary_path, json.dumps(summary, sort_keys=True, indent=2) + "\n")
 
@@ -377,6 +389,10 @@ def flush_session_log(
         "tracked_comm_drift": _tracked_comm_drift,
         "autoskillit_version": versions.get("autoskillit_version", "") if versions else "",
         "claude_code_version": versions.get("claude_code_version", "") if versions else "",
+        "recipe_name": recipe_name,
+        "recipe_content_hash": recipe_content_hash,
+        "recipe_composite_hash": recipe_composite_hash,
+        "recipe_version": recipe_version,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

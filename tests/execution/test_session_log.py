@@ -1344,6 +1344,8 @@ def test_session_log_empty_recipe_identity(tmp_path):
     ]
     entry = next(e for e in entries if e["session_id"] == "rp-004")
     assert entry["recipe_name"] == ""
+    assert entry["recipe_content_hash"] == ""
+    assert entry["recipe_composite_hash"] == ""
 
 
 def test_summary_no_recipe_provenance_when_empty(tmp_path):

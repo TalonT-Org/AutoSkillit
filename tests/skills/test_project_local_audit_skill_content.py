@@ -246,3 +246,125 @@ def test_validate_audit_uses_autoskillit_temp_placeholder() -> None:
     assert "{{AUTOSKILLIT_TEMP}}" in content, (
         "validate-audit/SKILL.md does not contain '{{AUTOSKILLIT_TEMP}}' placeholder"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 12: C11 heading exists in project-local SKILL.md
+# ---------------------------------------------------------------------------
+
+
+def test_audit_tests_has_category_11_filter_integrity() -> None:
+    content = _read_skill("audit-tests")
+    assert "Category 11" in content, (
+        "audit-tests/SKILL.md missing 'Category 11' heading"
+    )
+    assert "Test Path Filter Integrity" in content, (
+        "audit-tests/SKILL.md Category 11 missing 'Test Path Filter Integrity' name"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 13: C11 has all six required subsections
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("subsection", [
+    "Cascade alignment",
+    "Manifest coverage",
+    "Size marker correctness",
+    "Bucket A discipline",
+    "Test file naming",
+    "Filter infrastructure staleness",
+])
+def test_audit_tests_c11_subsections_present(subsection: str) -> None:
+    content = _read_skill("audit-tests")
+    assert subsection in content, (
+        f"audit-tests/SKILL.md Category 11 missing subsection '{subsection}'"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 14: C11 mentions specific filter system artifacts
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("artifact", [
+    "LAYER_CASCADE_CONSERVATIVE",
+    "LAYER_CASCADE_AGGRESSIVE",
+    "test-filter-manifest.yaml",
+    "BUCKET_A_PATTERNS",
+    "_SIZE_DIRS",
+    "ALWAYS_RUN",
+])
+def test_audit_tests_c11_references_filter_artifacts(artifact: str) -> None:
+    content = _read_skill("audit-tests")
+    assert artifact in content, (
+        f"audit-tests/SKILL.md Category 11 missing reference to '{artifact}'"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 15: C8 enhanced with cross-layer import rule
+# ---------------------------------------------------------------------------
+
+
+def test_audit_tests_c8_has_cross_layer_import_rule() -> None:
+    content = _read_skill("audit-tests")
+    assert "cross-layer" in content.lower() or "outside their directory's cascade" in content, (
+        "audit-tests/SKILL.md Category 8 missing cross-layer import rule"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 16: C6 enhanced with filter staleness checks
+# ---------------------------------------------------------------------------
+
+
+def test_audit_tests_c6_has_filter_staleness_checks() -> None:
+    content = _read_skill("audit-tests")
+    assert "subpackages" in content.lower() and "cascade" in content.lower(), (
+        "audit-tests/SKILL.md C6 missing cascade key staleness check"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 17: Exclusions mention filter infrastructure test files
+# ---------------------------------------------------------------------------
+
+
+def test_audit_tests_exclusions_mention_filter_infra_files() -> None:
+    content = _read_skill("audit-tests")
+    assert "test_test_filter" in content, (
+        "audit-tests/SKILL.md Exclusions missing filter infrastructure test file exemption"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 18: Group 6 mentions filter-specific audit steps
+# ---------------------------------------------------------------------------
+
+
+def test_audit_tests_group6_has_filter_audit_steps() -> None:
+    content = _read_skill("audit-tests")
+    assert "cascade maps" in content.lower() or "filter cascade" in content.lower(), (
+        "audit-tests/SKILL.md Group 6 missing filter-specific audit steps"
+    )
+    assert "manifest completeness" in content.lower() or "manifest" in content.lower(), (
+        "audit-tests/SKILL.md Group 6 missing manifest completeness check"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 19: Bundled SKILL.md has C11 (sync guard)
+# ---------------------------------------------------------------------------
+
+
+def test_bundled_audit_tests_has_category_11() -> None:
+    path = REPO_ROOT / "src" / "autoskillit" / "skills_extended" / "audit-tests" / "SKILL.md"
+    content = path.read_text(encoding="utf-8")
+    assert "Category 11" in content, (
+        "Bundled audit-tests/SKILL.md missing 'Category 11' — out of sync with project-local"
+    )
+    assert "Test Path Filter Integrity" in content, (
+        "Bundled audit-tests/SKILL.md Category 11 missing 'Test Path Filter Integrity'"
+    )

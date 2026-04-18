@@ -2,7 +2,7 @@
 
 ## xdist Compatibility
 
-All tests run under `-n 4 --dist worksteal`. Every test must be safe for parallel execution:
+All tests run under `-n 4` (xdist default: `--dist load`). Every test must be safe for parallel execution:
 - Use `tmp_path` for filesystem isolation — never write to shared locations
 - Session-scoped fixtures run once per worker process, not once globally
 - Module-level globals are per-worker (separate processes) — no cross-worker state sharing

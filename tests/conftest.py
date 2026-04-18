@@ -47,6 +47,17 @@ _selected_count_key = pytest.StashKey[int | None]()
 _deselected_count_key = pytest.StashKey[int | None]()
 
 
+class TimeoutTier:
+    """Centralized timeout tiers encoding xdist -n 4 budget math.
+
+    CHANNEL_B minimum: 1s preamble + _phase1_timeout (30s) + drain + jitter > 31.5s.
+    """
+
+    UNIT = 10  # Pure logic, no I/O
+    INTEGRATION = 30  # Filesystem/subprocess, no Channel B
+    CHANNEL_B = 60  # Full session_log_dir + Channel B path
+
+
 @pytest.fixture(autouse=True)
 def _structlog_to_null():
     """Prevent structlog from writing to stdout in any test.

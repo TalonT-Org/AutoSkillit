@@ -181,7 +181,7 @@ Test files or supporting files exceeding 750 lines. Flag files approaching the t
 
 ### Category 10: xdist Safety Violations (HIGH)
 
-Tests that are unsafe for parallel execution under pytest-xdist (`-n 4 --dist worksteal`). This project runs tests in parallel by default with explicit safety rules defined in `tests/CLAUDE.md`.
+Tests that are unsafe for parallel execution under pytest-xdist (`-n 4 --dist load`). This project runs tests in parallel by default with explicit safety rules defined in `tests/CLAUDE.md`.
 
 **What to look for:**
 - Tests that create temporary files or directories at fixed paths instead of using `tmp_path` (pytest provides unique per-test paths; on Linux these should land under `/dev/shm/pytest-tmp` per `tests/CLAUDE.md` guidance)

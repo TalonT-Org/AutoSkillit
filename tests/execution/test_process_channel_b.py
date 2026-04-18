@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
 from autoskillit.execution.process import run_managed_async
+from tests.conftest import TimeoutTier
 from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -22,6 +23,8 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
     import sys, time, json, os
     session_dir = sys.argv[1]
     os.makedirs(session_dir, exist_ok=True)
+    sys.stdout.write(json.dumps({"type": "system", "session_id": "session"}) + "\\n")
+    sys.stdout.flush()
     # Small delay to ensure file ctime > spawn_time recorded in run_managed_async
     time.sleep(0.1)
     with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
@@ -66,6 +69,8 @@ CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT = textwrap.dedent("""\
     import sys, time, json, os
     session_dir = sys.argv[1]
     os.makedirs(session_dir, exist_ok=True)
+    sys.stdout.write(json.dumps({"type": "system", "session_id": "session"}) + "\\n")
+    sys.stdout.flush()
     # Small delay to ensure file ctime > spawn_time recorded in run_managed_async
     time.sleep(0.1)
     with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
@@ -90,6 +95,8 @@ PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT = textwrap.dedent("""\
     import sys, json, os, time
     session_dir = sys.argv[1]
     os.makedirs(session_dir, exist_ok=True)
+    sys.stdout.write(json.dumps({"type": "system", "session_id": "session"}) + "\\n")
+    sys.stdout.flush()
     # Small delay ensures file ctime > spawn_time recorded in run_managed_async
     time.sleep(0.1)
     with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
@@ -129,13 +136,14 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir), "0.15"],
             cwd=tmp_path,
-            timeout=60,
+            timeout=TimeoutTier.CHANNEL_B,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=5.0,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
+            _session_id_timeout=0.01,
         )
 
         assert result.termination == TerminationReason.COMPLETED
@@ -152,10 +160,11 @@ class TestChannelBDrainWait:
           t=0.66s  drain times out (script never wrote to stdout)
           t=0.66s  process killed with empty stdout
 
-        timeout=60s: guards against the outer wall-clock expiring under xdist -n 4 load.
-        _watch_session_log waits up to 1s for stdout_session_id_ready before Phase 1 starts;
+        timeout=TimeoutTier.CHANNEL_B (60s): guards against the outer wall-clock expiring under xdist -n 4 load.
+        _watch_session_log waits up to _session_id_timeout (default 1.0s, tests pass 0.01s)
+        for stdout_session_id_ready before Phase 1 starts;
         under CI load both the preamble and Phase 1 polls can overrun, so the outer
-        timeout must exceed 1s + _phase1_timeout (30s default) + drain (0.5s) = 31.5s.
+        timeout must exceed _session_id_timeout + _phase1_timeout (30s default) + drain (0.5s) = 31.5s.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -165,12 +174,13 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=60,
+            timeout=TimeoutTier.CHANNEL_B,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
+            _session_id_timeout=0.01,
         )
 
         assert result.termination == TerminationReason.COMPLETED
@@ -215,12 +225,13 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=60,
+            timeout=TimeoutTier.CHANNEL_B,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.1,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
+            _session_id_timeout=0.01,
         )
 
         assert result.termination == TerminationReason.COMPLETED
@@ -263,13 +274,14 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=60,
+            timeout=TimeoutTier.CHANNEL_B,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=2.0,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
+            _session_id_timeout=0.01,
         )
         assert result.termination == TerminationReason.COMPLETED
         assert (
@@ -291,9 +303,9 @@ class TestChannelBFullPipelineAdjudication:
         - completion_drain_timeout=0.5s: the heartbeat has already seen the empty result
           and failed to confirm by the time Channel B fires (~1s after task group start),
           so 0.5s of additional drain time is more than sufficient semantically.
-        - timeout=60s: guards against the outer wall-clock expiring under xdist -n 4 load.
-          Under heavy load the stdout_session_id_ready wait (1.0s) and inner drain (0.5s)
-          can each overrun 10x, giving a worst-case total of ~15s well inside 60s.
+        - timeout=TimeoutTier.CHANNEL_B (60s): guards against the outer wall-clock expiring under xdist -n 4 load.
+          Under heavy load the stdout_session_id_ready wait (_session_id_timeout, default 1.0s, tests pass 0.01s)
+          and inner drain (0.5s) can each overrun 10x, giving a worst-case total of ~15s well inside 60s.
         """
         from autoskillit.execution.headless import _build_skill_result
 
@@ -305,13 +317,14 @@ class TestChannelBFullPipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=60,
+            timeout=TimeoutTier.CHANNEL_B,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
+            _session_id_timeout=0.01,
         )
         skill_result = _build_skill_result(
             result,
@@ -348,12 +361,13 @@ class TestChannelBDrainRacePipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=60,
+            timeout=TimeoutTier.CHANNEL_B,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
+            _session_id_timeout=0.01,
         )
 
         assert result.termination == TerminationReason.COMPLETED
@@ -415,7 +429,7 @@ class TestPostExitDrainWindow:
 
         Timing rationale for completion_drain_timeout=30.0:
         - Before channel_b_ready can be set, _watch_session_log must:
-            1. Wait up to 1.0s for stdout_session_id_ready (move_on_after(1.0))
+            1. Wait up to _session_id_timeout for stdout_session_id_ready (default 1.0s, tests pass 0.01s)
             2. Sleep _phase1_poll=1.0s before Phase 1's first check
             3. Sleep _phase2_poll=0.05s before Phase 2's first check
           Total minimum: ~2.05s under normal conditions.
@@ -433,13 +447,14 @@ class TestPostExitDrainWindow:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=60,
+            timeout=TimeoutTier.CHANNEL_B,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=30.0,
             _phase1_poll=1.0,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
+            _session_id_timeout=0.01,
         )
 
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
@@ -476,6 +491,7 @@ class TestPostExitDrainWindow:
             _phase1_poll=0.05,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
+            _session_id_timeout=0.01,
         )
 
         assert result.channel_confirmation == ChannelConfirmation.UNMONITORED
@@ -492,6 +508,8 @@ CHANNEL_B_SUB_SKILL_COLLISION_SCRIPT = textwrap.dedent("""\
     session_dir = sys.argv[1]
     unique_marker = sys.argv[2]
     os.makedirs(session_dir, exist_ok=True)
+    sys.stdout.write(json.dumps({"type": "system", "session_id": "session"}) + "\\n")
+    sys.stdout.flush()
     time.sleep(0.1)
     with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
         # Sub-skill emits static marker — should NOT trigger completion
@@ -519,6 +537,15 @@ class TestChannelBSubSkillCollision:
 
     @pytest.mark.anyio
     async def test_channel_b_ignores_sub_skill_marker(self, tmp_path):
+        """Channel B must not trigger on a sub-skill's static %%ORDER_UP%% marker.
+
+        timeout=TimeoutTier.CHANNEL_B (60s): guards against the outer wall-clock
+        expiring under xdist -n 4 load.
+        _watch_session_log waits up to _session_id_timeout (default 1.0s, tests pass 0.01s)
+        for stdout_session_id_ready before Phase 1 starts; under CI load the preamble
+        and Phase 1 polls can overrun, so the outer timeout must exceed
+        _session_id_timeout + _phase1_timeout (30s default) + drain + jitter > 31s.
+        """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
         unique_marker = "%%ORDER_UP::test1234%%"
@@ -528,13 +555,14 @@ class TestChannelBSubSkillCollision:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir), unique_marker],
             cwd=tmp_path,
-            timeout=15,
+            timeout=TimeoutTier.CHANNEL_B,
             session_log_dir=session_dir,
             completion_marker=unique_marker,
             completion_drain_timeout=2.0,
             _phase1_poll=0.05,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
+            _session_id_timeout=0.01,
         )
 
         assert result.termination == TerminationReason.COMPLETED

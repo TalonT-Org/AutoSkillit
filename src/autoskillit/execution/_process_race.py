@@ -234,6 +234,7 @@ async def _watch_session_log(
     _phase1_poll: float,
     _phase2_poll: float,
     _phase1_timeout: float,
+    _session_id_timeout: float = 1.0,
     stdout_session_id_ready: anyio.Event | None = None,
     max_suppression_seconds: float | None = None,
 ) -> None:
@@ -247,7 +248,7 @@ async def _watch_session_log(
     extraction before starting Phase 1 to enable identity-based JSONL selection.
     """
     if stdout_session_id_ready is not None:
-        with anyio.move_on_after(1.0):
+        with anyio.move_on_after(_session_id_timeout):
             await stdout_session_id_ready.wait()
 
     _monitor_kwargs: dict[str, object] = {

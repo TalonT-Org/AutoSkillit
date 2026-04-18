@@ -8,8 +8,11 @@ _logging.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
+import tempfile
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -201,6 +204,30 @@ class DefaultTestRunner:
         if base_ref:
             env["AUTOSKILLIT_TEST_BASE_REF"] = base_ref
 
+        # Create sidecar for conftest to write filter stats into
+        fd, sidecar_path = tempfile.mkstemp(suffix=".json", prefix="filter-stats-")
+        os.close(fd)
+        env["AUTOSKILLIT_FILTER_STATS_FILE"] = sidecar_path
+
+        start = time.monotonic()
         result = await self._runner(command, cwd=cwd, timeout=timeout, env=env)
+        elapsed = time.monotonic() - start
+
+        # Read filter stats sidecar (written by conftest pytest_sessionfinish)
+        filter_stats: dict = {}
+        sidecar = Path(sidecar_path)
+        if sidecar.is_file() and sidecar.stat().st_size > 0:
+            try:
+                filter_stats = json.loads(sidecar.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+        sidecar.unlink(missing_ok=True)
+
         passed = check_test_passed(result.returncode, result.stdout, result.stderr)
-        return TestResult(passed=passed, stdout=result.stdout, stderr=result.stderr)
+        return TestResult(
+            passed=passed,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            duration_seconds=elapsed,
+            **filter_stats,
+        )

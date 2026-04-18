@@ -78,13 +78,20 @@ async def test_check(
                     extra={"worktree": worktree_path},
                 )
 
-            return json.dumps(
-                {
-                    "passed": test_result.passed,
-                    "stdout": truncate_text(test_result.stdout),
-                    "stderr": truncate_text(test_result.stderr),
-                }
-            )
+            response = {
+                "passed": test_result.passed,
+                "stdout": truncate_text(test_result.stdout),
+                "stderr": truncate_text(test_result.stderr),
+            }
+            if test_result.duration_seconds is not None:
+                response["duration_seconds"] = round(test_result.duration_seconds, 2)
+            if test_result.filter_mode is not None:
+                response["filter_mode"] = test_result.filter_mode
+            if test_result.tests_selected is not None:
+                response["tests_selected"] = test_result.tests_selected
+            if test_result.tests_deselected is not None:
+                response["tests_deselected"] = test_result.tests_deselected
+            return json.dumps(response)
         finally:
             if step_name:
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _start)

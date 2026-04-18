@@ -40,6 +40,10 @@ class TestResult:
     passed: bool
     stdout: str
     stderr: str
+    duration_seconds: float | None = None
+    tests_selected: int | None = None
+    tests_deselected: int | None = None
+    filter_mode: str | None = None
 
 
 @dataclass

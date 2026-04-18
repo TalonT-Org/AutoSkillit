@@ -1869,3 +1869,32 @@ def test_fmt_run_skill_legacy_payload_without_kill_reason_renders_bare() -> None
     text = _fmt_run_skill(data, pipeline=False)
     assert "exit_code: 0" in text
     assert "infra" not in text
+
+
+# T6
+
+
+def test_fmt_test_check_displays_duration():
+    """Pretty output shows duration when present."""
+    from autoskillit.hooks._fmt_execution import _fmt_test_check
+
+    data = {"passed": True, "stdout": "= 10 passed =", "duration_seconds": 12.34}
+    out = _fmt_test_check(data, False)
+    assert "12.3s" in out or "12.34" in out
+
+
+def test_fmt_test_check_displays_filter_stats():
+    """Pretty output shows filter stats when present."""
+    from autoskillit.hooks._fmt_execution import _fmt_test_check
+
+    data = {
+        "passed": True,
+        "stdout": "",
+        "filter_mode": "conservative",
+        "tests_selected": 50,
+        "tests_deselected": 100,
+    }
+    out = _fmt_test_check(data, False)
+    assert "conservative" in out
+    assert "50" in out
+    assert "100" in out

@@ -12,6 +12,7 @@ import pytest
 
 from autoskillit.core import pkg_root
 from autoskillit.recipe.io import load_recipe
+from autoskillit.recipe.rules_verdict import _classify_route_target
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -208,8 +209,6 @@ def test_flake_suspected_routes_consistently_across_fix_and_resolve_ci(
     """flake_suspected must route to continuation in both fix/assess and resolve_ci steps."""
     recipe_path = _RECIPES_DIR / recipe_name
     recipe = load_recipe(recipe_path)
-    escalation_patterns = ("failure", "escalat", "stop")
-
     flake_routes: list[tuple[str, str, bool]] = []  # (step_name, route, is_escalation)
     for step_name, step in recipe.steps.items():
         if step.tool != "run_skill":
@@ -221,7 +220,7 @@ def test_flake_suspected_routes_consistently_across_fix_and_resolve_ci(
             continue
         for cond in step.on_result.conditions or []:
             if cond.when and "flake_suspected" in cond.when:
-                is_esc = any(p in cond.route for p in escalation_patterns)
+                is_esc = _classify_route_target(cond.route) == "escalation"
                 flake_routes.append((step_name, cond.route, is_esc))
 
     assert flake_routes, f"{recipe_name}: no flake_suspected routes found"

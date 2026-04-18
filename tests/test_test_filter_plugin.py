@@ -245,7 +245,8 @@ class TestConftestFilterPlugin:
     def test_conftest_no_sidecar_when_env_unset(self, pytester: pytest.Pytester) -> None:
         """No sidecar written when AUTOSKILLIT_FILTER_STATS_FILE is not in env."""
         pytester.makeconftest(_CONFTEST_HOOKS_SOURCE)
-        pytester.makepyfile(test_simple="def test_a(): pass")
+        pytester.mkdir("subdir_a")
+        (pytester.path / "subdir_a" / "test_simple.py").write_text("def test_a(): pass\n")
         result = pytester.runpytest("--filter-mode=conservative")
         result.assert_outcomes(passed=1)
 

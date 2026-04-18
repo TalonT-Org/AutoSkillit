@@ -59,20 +59,25 @@ def _log_root() -> pathlib.Path:
     return base / "autoskillit/logs"
 
 
-def _extract_pr_url(tool_name: str, tool_response_raw: str) -> str | None:
-    """Extract a GitHub PR URL from a PostToolUse tool_response string.
+def _unwrap_mcp_response(tool_name: str, raw: str) -> dict | None:
+    """Parse and double-unwrap a PostToolUse tool_response string.
 
-    Replicates pretty_output._resolve_payload double-unwrap logic.
-    Returns the URL string or None if not found.
+    Returns the effective payload dict, or None if raw is not valid JSON or
+    not a dict.
+
+    For MCP tools (tool_name starts with 'mcp__'), if the outer dict has
+    exactly one key 'result' whose value is a JSON string, attempts to parse
+    that string as a nested dict and returns it. Falls back to returning the
+    outer dict when inner parsing fails or yields a non-dict. Non-MCP tools
+    return the outer dict directly.
     """
     try:
-        outer = json.loads(tool_response_raw)
+        outer = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
         return None
     if not isinstance(outer, dict):
         return None
 
-    result_text: str | None = None
     if (
         tool_name.startswith("mcp__")
         and list(outer.keys()) == ["result"]
@@ -81,15 +86,24 @@ def _extract_pr_url(tool_name: str, tool_response_raw: str) -> str | None:
         try:
             inner = json.loads(outer["result"])
             if isinstance(inner, dict):
-                result_text = inner.get("result", "")
+                return inner
         except (json.JSONDecodeError, ValueError):
-            result_text = outer["result"]
-    else:
-        result_text = outer.get("result", "")
+            pass
 
+    return outer
+
+
+def _extract_pr_url(tool_name: str, tool_response_raw: str) -> str | None:
+    """Extract a GitHub PR URL from a PostToolUse tool_response string.
+
+    Returns the URL string or None if not found.
+    """
+    payload = _unwrap_mcp_response(tool_name, tool_response_raw)
+    if payload is None:
+        return None
+    result_text = payload.get("result", "")
     if not result_text or not isinstance(result_text, str):
         return None
-
     m = re.search(r"https://github\.com/[^/\s]+/[^/\s]+/pull/\d+", result_text)
     return m.group() if m else None
 
@@ -139,34 +153,12 @@ def _read_kitchen_id(base: pathlib.Path | None = None) -> str:
 def _extract_order_id(tool_name: str, tool_response_raw: str) -> str:
     """Extract order_id from a PostToolUse run_skill result JSON.
 
-    Replicates the same double-unwrap logic as _extract_pr_url.
     Returns '' if not found.
     """
-    try:
-        outer = json.loads(tool_response_raw)
-    except (json.JSONDecodeError, ValueError):
+    payload = _unwrap_mcp_response(tool_name, tool_response_raw)
+    if payload is None:
         return ""
-    if not isinstance(outer, dict):
-        return ""
-
-    inner_dict: dict | None = None
-    if (
-        tool_name.startswith("mcp__")
-        and list(outer.keys()) == ["result"]
-        and isinstance(outer["result"], str)
-    ):
-        try:
-            parsed = json.loads(outer["result"])
-            if isinstance(parsed, dict):
-                inner_dict = parsed
-        except (json.JSONDecodeError, ValueError):
-            pass
-    else:
-        inner_dict = outer
-
-    if inner_dict is None:
-        return ""
-    return str(inner_dict.get("order_id", ""))
+    return str(payload.get("order_id", ""))
 
 
 def _load_sessions(

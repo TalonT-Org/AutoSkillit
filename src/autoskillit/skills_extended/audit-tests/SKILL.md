@@ -130,7 +130,7 @@ Tests placed in the wrong directory or category.
 - Unit-level tests in integration directories (no multi-component interaction)
 - Tests in contract/specification directories that duplicate standard unit tests
 - Integration tests that could be unit tests (everything is mocked anyway)
-- Test files that import production code from a source layer outside their directory's cascade entry — the import creates an invisible dependency the filter cannot track (cross-layer import, see C11)
+- Test files that import production code from a source layer outside their directory's cascade entry — even if correctly placed by sub-package, the import creates an invisible dependency the filter cannot track (cross-layer import, see C11)
 - Test files at the `tests/` root that are part of the filter infrastructure (`test_test_filter.py`, `test_test_filter_plugin.py`, `test_test_filter_step7.py`) — these are correctly placed and should NOT be flagged for misclassification
 
 ### Category 9: Oversized Files (MEDIUM)
@@ -177,9 +177,16 @@ Tests and configuration that maintain the path-based test filter's correctness. 
 
 ### Step 1: Launch Parallel Subagents
 
-Spawn subagents to explore different areas of the test suite. Divide by **test directory/module**, not by issue category — each subagent should assess all issue categories within its area.
+Spawn 6 domain-based subagents. Each covers all issue categories (C1–C11) within its area. Group by source domain, not by issue category. Each subagent must read both test files AND the corresponding production code before making judgements.
 
-Each subagent should read test files AND the corresponding production code to judge whether the test is meaningful. For each finding, note the file, line range, issue category, and a brief explanation of why it's a problem and what should change. Additionally, one subagent should perform filter integrity checks: verify filter cascade maps against actual source subpackages; check manifest completeness; verify size marker coverage; check Bucket A minimality.
+- **Group 1 — Core + Config (L0 + L1):** Tests for `core/` and `config/` sub-packages. Also check `conftest.py` for fixture quality.
+- **Group 2 — Pipeline + Workspace (L1):** Tests for `pipeline/` and `workspace/` sub-packages.
+- **Group 3 — Execution (L1):** Tests for `execution/` sub-package.
+- **Group 4 — Recipe + Migration (L2):** Tests for `recipe/` and `migration/` sub-packages.
+- **Group 5 — Server + CLI (L3):** Tests for `server/` and `cli/` sub-packages.
+- **Group 6 — Cross-cutting:** Architecture enforcement tests, instruction surface/contract tests, CI/dev infrastructure tests. Also audit `tests/CLAUDE.md` for accuracy against the actual test files on disk. Additionally, perform filter integrity checks: verify filter cascade maps (`LAYER_CASCADE_CONSERVATIVE`, `LAYER_CASCADE_AGGRESSIVE`) against actual source subpackages under `src/autoskillit/`; check manifest completeness against `git ls-files`; verify size marker rollup coverage against `_SIZE_DIRS` in `conftest.py`; check Bucket A minimality (files that could use manifest instead); verify always-run directories (`ALWAYS_RUN_CONSERVATIVE`, `ALWAYS_RUN_AGGRESSIVE`) have appropriate size markers or are exempted from size filtering.
+
+For each finding, note the file, line range, issue category, and a brief explanation of why it's a problem and what should change.
 
 ### Step 2: Consolidate and Deduplicate
 

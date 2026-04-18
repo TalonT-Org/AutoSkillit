@@ -1,9 +1,11 @@
-"""Recipe identity hashing — content and composite fingerprints."""
+"""Recipe identity hashing — content and composite fingerprints, query and re-run detection."""
 
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
+from typing import Any
 
 from autoskillit.core import get_logger
 from autoskillit.recipe.contracts import compute_skill_hash, resolve_skill_name
@@ -79,3 +81,58 @@ def _load_sub_recipe_for_hash(path: Path) -> Recipe | None:
     except Exception:
         logger.debug("sub_recipe_load_for_hash_failed", path=str(path))
     return None
+
+
+def find_prior_runs(
+    sessions_jsonl: Path,
+    *,
+    composite_hash: str = "",
+    recipe_name: str = "",
+) -> list[dict[str, Any]]:
+    """Return sessions.jsonl entries matching the given recipe identity.
+
+    Filters by composite_hash if provided, then by recipe_name.
+    Returns matches sorted by timestamp descending. Skips malformed lines.
+    """
+    if not sessions_jsonl.is_file():
+        return []
+    matches: list[dict[str, Any]] = []
+    for line in sessions_jsonl.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if composite_hash and entry.get("recipe_composite_hash") != composite_hash:
+            continue
+        if recipe_name and entry.get("recipe_name") != recipe_name:
+            continue
+        if not composite_hash and not recipe_name:
+            continue
+        matches.append(entry)
+    return sorted(matches, key=lambda e: e.get("timestamp", ""), reverse=True)
+
+
+def check_rerun_detection(
+    sessions_jsonl: Path,
+    *,
+    composite_hash: str,
+) -> dict[str, Any] | None:
+    """Check if this exact recipe composite hash has been run before.
+
+    Returns a suggestion dict if a prior run is found, None otherwise.
+    """
+    prior = find_prior_runs(sessions_jsonl, composite_hash=composite_hash)
+    if not prior:
+        return None
+    last = prior[0]
+    return {
+        "rule": "duplicate-run-detected",
+        "severity": "info",
+        "message": (
+            f"This exact recipe version was last run on "
+            f"{last.get('timestamp', 'unknown')} "
+            f"(session {last.get('session_id', 'unknown')})."
+        ),
+    }

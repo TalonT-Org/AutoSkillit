@@ -1,8 +1,9 @@
-"""Tests for recipe identity hashing — composite hash computation."""
+"""Tests for recipe identity hashing — composite hash computation, query, and re-run detection."""
 
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -143,3 +144,138 @@ def test_composite_hash_includes_domain_separator(tmp_path):
     naive = "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
 
     assert composite != naive
+
+
+# ---------------------------------------------------------------------------
+# Part B: find_prior_runs tests
+# ---------------------------------------------------------------------------
+
+
+def test_find_prior_runs_empty(tmp_path):
+    from autoskillit.recipe.identity import find_prior_runs
+
+    result = find_prior_runs(tmp_path / "sessions.jsonl", composite_hash="sha256:abc")
+    assert result == []
+
+
+def test_find_prior_runs_by_composite_hash(tmp_path):
+    from autoskillit.recipe.identity import find_prior_runs
+
+    jsonl = tmp_path / "sessions.jsonl"
+    entry = {
+        "recipe_name": "impl",
+        "recipe_composite_hash": "sha256:abc",
+        "timestamp": "2026-04-01T00:00:00",
+        "session_id": "s1",
+        "success": True,
+    }
+    jsonl.write_text(json.dumps(entry) + "\n")
+    result = find_prior_runs(jsonl, composite_hash="sha256:abc")
+    assert len(result) == 1
+    assert result[0]["session_id"] == "s1"
+
+
+def test_find_prior_runs_filters_mismatch(tmp_path):
+    from autoskillit.recipe.identity import find_prior_runs
+
+    jsonl = tmp_path / "sessions.jsonl"
+    e1 = {
+        "recipe_name": "impl",
+        "recipe_composite_hash": "sha256:abc",
+        "timestamp": "T1",
+        "session_id": "s1",
+    }
+    e2 = {
+        "recipe_name": "impl",
+        "recipe_composite_hash": "sha256:xyz",
+        "timestamp": "T2",
+        "session_id": "s2",
+    }
+    jsonl.write_text(json.dumps(e1) + "\n" + json.dumps(e2) + "\n")
+    result = find_prior_runs(jsonl, composite_hash="sha256:abc")
+    assert len(result) == 1
+
+
+def test_find_prior_runs_by_name(tmp_path):
+    from autoskillit.recipe.identity import find_prior_runs
+
+    jsonl = tmp_path / "sessions.jsonl"
+    e1 = {
+        "recipe_name": "impl",
+        "recipe_composite_hash": "sha256:abc",
+        "timestamp": "T1",
+    }
+    e2 = {
+        "recipe_name": "research",
+        "recipe_composite_hash": "sha256:def",
+        "timestamp": "T2",
+    }
+    jsonl.write_text(json.dumps(e1) + "\n" + json.dumps(e2) + "\n")
+    result = find_prior_runs(jsonl, recipe_name="impl")
+    assert len(result) == 1
+
+
+def test_find_prior_runs_sorted_descending(tmp_path):
+    from autoskillit.recipe.identity import find_prior_runs
+
+    jsonl = tmp_path / "sessions.jsonl"
+    e1 = {
+        "recipe_name": "impl",
+        "recipe_composite_hash": "sha256:abc",
+        "timestamp": "2026-04-01",
+    }
+    e2 = {
+        "recipe_name": "impl",
+        "recipe_composite_hash": "sha256:abc",
+        "timestamp": "2026-04-10",
+    }
+    jsonl.write_text(json.dumps(e1) + "\n" + json.dumps(e2) + "\n")
+    result = find_prior_runs(jsonl, composite_hash="sha256:abc")
+    assert result[0]["timestamp"] == "2026-04-10"
+
+
+def test_find_prior_runs_skips_malformed(tmp_path):
+    from autoskillit.recipe.identity import find_prior_runs
+
+    jsonl = tmp_path / "sessions.jsonl"
+    jsonl.write_text(
+        "not json\n"
+        + json.dumps(
+            {
+                "recipe_name": "impl",
+                "recipe_composite_hash": "sha256:abc",
+                "timestamp": "T1",
+            }
+        )
+        + "\n"
+    )
+    result = find_prior_runs(jsonl, composite_hash="sha256:abc")
+    assert len(result) == 1
+
+
+# ---------------------------------------------------------------------------
+# Part B: Re-run detection tests
+# ---------------------------------------------------------------------------
+
+
+def test_check_rerun_no_prior(tmp_path):
+    from autoskillit.recipe.identity import check_rerun_detection
+
+    result = check_rerun_detection(tmp_path / "sessions.jsonl", composite_hash="sha256:new")
+    assert result is None
+
+
+def test_check_rerun_found(tmp_path):
+    from autoskillit.recipe.identity import check_rerun_detection
+
+    jsonl = tmp_path / "sessions.jsonl"
+    entry = {
+        "recipe_composite_hash": "sha256:abc",
+        "timestamp": "2026-04-10",
+        "session_id": "s1",
+    }
+    jsonl.write_text(json.dumps(entry) + "\n")
+    result = check_rerun_detection(jsonl, composite_hash="sha256:abc")
+    assert result is not None
+    assert result["rule"] == "duplicate-run-detected"
+    assert "2026-04-10" in result["message"]

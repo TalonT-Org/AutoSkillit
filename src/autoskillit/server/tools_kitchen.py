@@ -30,6 +30,7 @@ from autoskillit.server.helpers import (
     _prime_quota_cache,
     _quota_refresh_loop,
     _require_not_headless,
+    check_rerun,
     track_response_size,
 )
 
@@ -367,6 +368,11 @@ async def open_kitchen(
             tool_ctx.recipe_content_hash = result.get("content_hash", "")
             tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
             tool_ctx.recipe_version = result.get("recipe_version") or ""
+
+            composite = result.get("composite_hash", "")
+            rerun_suggestion = check_rerun(tool_ctx.config.linux_tracing.log_dir, composite)
+            if rerun_suggestion:
+                result.setdefault("suggestions", []).append(rerun_suggestion)
 
             try:
                 recipe_info = tool_ctx.recipes.find(name, Path.cwd())

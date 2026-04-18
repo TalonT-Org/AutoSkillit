@@ -1,7 +1,7 @@
 ---
 name: audit-tests
 categories: [audit]
-description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, test path filter integrity, and other test quality issues. Use when user says "audit tests", "audit test suite", "review tests", or "test quality check". Generates an improvement plan in {{AUTOSKILLIT_TEMP}}/ with explanations for each proposed change.
+description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, placement/organization issues, xdist safety violations, test path filter integrity, and other test quality issues. Use when user says "audit tests", "audit test suite", "review tests", or "test quality check". Generates an improvement plan in {{AUTOSKILLIT_TEMP}}/ with explanations for each proposed change.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -131,7 +131,7 @@ Tests placed in the wrong directory or category.
 - Tests in contract/specification directories that duplicate standard unit tests
 - Integration tests that could be unit tests (everything is mocked anyway)
 - Test files that import production code from a source layer outside their directory's cascade entry — even if correctly placed by sub-package, the import creates an invisible dependency the filter cannot track (cross-layer import, see C11)
-- Test files at the `tests/` root that are part of the filter infrastructure (`test_test_filter.py`, `test_test_filter_plugin.py`, `test_test_filter_step7.py`) — these are correctly placed and should NOT be flagged for misclassification
+- Test files at the `tests/` root that are part of the filter infrastructure (`test_test_filter.py`, `test_test_filter_plugin.py`, `test_test_filter_step7.py`) — these are correctly placed and should NOT be flagged for relocation
 
 ### Category 9: Oversized Files (MEDIUM)
 

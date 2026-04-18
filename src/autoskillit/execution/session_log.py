@@ -392,6 +392,7 @@ def flush_session_log(
         "recipe_name": recipe_name,
         "recipe_content_hash": recipe_content_hash,
         "recipe_composite_hash": recipe_composite_hash,
+        "recipe_version": recipe_version or "",
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

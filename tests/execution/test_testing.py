@@ -510,11 +510,6 @@ def test_defaults_yaml_has_filter_mode_and_base_ref():
     assert tc["base_ref"] is None
 
 
-# ---------------------------------------------------------------------------
-# T1: TestResult optional fields
-# ---------------------------------------------------------------------------
-
-
 def test_test_result_has_duration_and_filter_fields():
     """TestResult accepts optional duration_seconds and filter stat fields."""
     from autoskillit.core import TestResult
@@ -545,11 +540,6 @@ def test_test_result_new_fields_default_to_none():
     assert tr.filter_mode is None
 
 
-# ---------------------------------------------------------------------------
-# T2: DefaultTestRunner.run() measures duration
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.anyio
 async def test_default_test_runner_measures_duration(tmp_path: Path) -> None:
     """run() populates duration_seconds on the returned TestResult."""
@@ -562,11 +552,6 @@ async def test_default_test_runner_measures_duration(tmp_path: Path) -> None:
     result = await tester.run(tmp_path)
     assert result.duration_seconds is not None
     assert result.duration_seconds >= 0.0
-
-
-# ---------------------------------------------------------------------------
-# T3: DefaultTestRunner.run() reads filter stats from sidecar file
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio

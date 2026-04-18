@@ -1871,9 +1871,6 @@ def test_fmt_run_skill_legacy_payload_without_kill_reason_renders_bare() -> None
     assert "infra" not in text
 
 
-# T6
-
-
 def test_fmt_test_check_displays_duration():
     """Pretty output shows duration when present."""
     from autoskillit.hooks._fmt_execution import _fmt_test_check

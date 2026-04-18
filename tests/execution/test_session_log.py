@@ -1355,8 +1355,6 @@ def test_summary_no_recipe_provenance_when_empty(tmp_path):
     assert "recipe_provenance" not in summary
 
 
-# T7
-
 
 def test_flush_index_includes_duration_seconds(tmp_path):
     """sessions.jsonl index entry includes duration_seconds."""

@@ -220,8 +220,6 @@ class TestConftestFilterPlugin:
         result = pytester.runpytest("-v", "-W", "always")
         result.stdout.fnmatch_lines(["*Test filter:*selected*deselected*"])
 
-    # T8
-
     def test_conftest_writes_filter_sidecar(
         self,
         pytester: pytest.Pytester,

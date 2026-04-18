@@ -266,22 +266,19 @@ def test_audit_tests_has_category_11_filter_integrity() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "subsection",
-    [
+def test_audit_tests_c11_subsections_present() -> None:
+    content = _read_skill("audit-tests")
+    for subsection in [
         "Cascade alignment",
         "Manifest coverage",
         "Size marker correctness",
         "Bucket A discipline",
         "Test file naming",
         "Filter infrastructure staleness",
-    ],
-)
-def test_audit_tests_c11_subsections_present(subsection: str) -> None:
-    content = _read_skill("audit-tests")
-    assert subsection in content, (
-        f"audit-tests/SKILL.md Category 11 missing subsection '{subsection}'"
-    )
+    ]:
+        assert subsection in content, (
+            f"audit-tests/SKILL.md Category 11 missing subsection '{subsection}'"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -289,22 +286,19 @@ def test_audit_tests_c11_subsections_present(subsection: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "artifact",
-    [
+def test_audit_tests_c11_references_filter_artifacts() -> None:
+    content = _read_skill("audit-tests")
+    for artifact in [
         "LAYER_CASCADE_CONSERVATIVE",
         "LAYER_CASCADE_AGGRESSIVE",
         "test-filter-manifest.yaml",
         "BUCKET_A_PATTERNS",
         "_SIZE_DIRS",
         "ALWAYS_RUN",
-    ],
-)
-def test_audit_tests_c11_references_filter_artifacts(artifact: str) -> None:
-    content = _read_skill("audit-tests")
-    assert artifact in content, (
-        f"audit-tests/SKILL.md Category 11 missing reference to '{artifact}'"
-    )
+    ]:
+        assert artifact in content, (
+            f"audit-tests/SKILL.md Category 11 missing reference to '{artifact}'"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +320,7 @@ def test_audit_tests_c8_has_cross_layer_import_rule() -> None:
 
 def test_audit_tests_c6_has_filter_staleness_checks() -> None:
     content = _read_skill("audit-tests")
-    assert "subpackages" in content.lower() and "cascade" in content.lower(), (
+    assert "that don't match the current set of subpackages" in content, (
         "audit-tests/SKILL.md C6 missing cascade key staleness check"
     )
 
@@ -353,7 +347,7 @@ def test_audit_tests_group6_has_filter_audit_steps() -> None:
     assert "cascade maps" in content.lower() or "filter cascade" in content.lower(), (
         "audit-tests/SKILL.md Group 6 missing filter-specific audit steps"
     )
-    assert "manifest completeness" in content.lower() or "manifest" in content.lower(), (
+    assert "manifest completeness" in content.lower(), (
         "audit-tests/SKILL.md Group 6 missing manifest completeness check"
     )
 

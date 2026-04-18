@@ -158,7 +158,10 @@ class TestTestCheck:
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert "summary" not in result
         assert "output_file" not in result
-        assert set(result.keys()) == {"passed", "stdout", "stderr"}
+        assert "passed" in result
+        assert "stdout" in result
+        assert "stderr" in result
+        assert "duration_seconds" in result
 
     @pytest.mark.anyio
     async def test_cross_validates_error_in_output(self, tool_ctx):
@@ -273,7 +276,7 @@ class TestTestCheck:
         """test_check response contains passed, stdout, and stderr keys."""
         tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
-        assert set(result.keys()) == {"passed", "stdout", "stderr"}
+        assert set(result.keys()) == {"passed", "stdout", "stderr", "duration_seconds"}
 
     @pytest.mark.anyio
     async def test_pytest_failure_still_detected(self, tool_ctx):
@@ -281,6 +284,57 @@ class TestTestCheck:
         tool_ctx.runner.push(_make_result(0, "= 3 failed, 97 passed =\n", ""))
         result = json.loads(await test_check(worktree_path="/tmp/wt"))
         assert result["passed"] is False
+
+    @pytest.mark.anyio
+    async def test_test_check_response_includes_duration(self, tool_ctx):
+        """test_check JSON includes duration_seconds."""
+        tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
+        raw = await test_check("/tmp/wt")
+        data = json.loads(raw)
+        assert "duration_seconds" in data
+        assert isinstance(data["duration_seconds"], float)
+        assert data["duration_seconds"] >= 0.0
+
+    @pytest.mark.anyio
+    async def test_test_check_response_includes_filter_stats(self, tool_ctx, monkeypatch):
+        """test_check JSON includes filter fields when sidecar is written."""
+        from pathlib import Path as _Path
+
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+
+        sidecar_data = {
+            "filter_mode": "aggressive",
+            "tests_selected": 73,
+            "tests_deselected": 275,
+        }
+
+        async def fake_runner(command, *, cwd, timeout, env, **kwargs):
+            sidecar_path = env.get("AUTOSKILLIT_FILTER_STATS_FILE")
+            assert sidecar_path, "AUTOSKILLIT_FILTER_STATS_FILE must be injected into env"
+            _Path(sidecar_path).write_text(json.dumps(sidecar_data))
+            return SubprocessResult(
+                returncode=0,
+                stdout="= 73 passed =\n",
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=12345,
+            )
+
+        monkeypatch.setattr(tool_ctx.tester, "_runner", fake_runner)
+        raw = await test_check("/tmp/wt")
+        data = json.loads(raw)
+        assert data["filter_mode"] == "aggressive"
+        assert data["tests_selected"] == 73
+        assert data["tests_deselected"] == 275
+
+    @pytest.mark.anyio
+    async def test_test_check_response_omits_filter_stats_when_absent(self, tool_ctx):
+        """Filter fields are absent (not null) from response when no filter active."""
+        tool_ctx.runner.push(_make_result(0, "= 10 passed =\n", ""))
+        raw = await test_check("/tmp/wt")
+        data = json.loads(raw)
+        assert "filter_mode" not in data
+        assert "tests_selected" not in data
 
 
 class TestResetGuard:

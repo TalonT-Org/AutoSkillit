@@ -8,8 +8,11 @@ _logging.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
+import tempfile
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -201,6 +204,44 @@ class DefaultTestRunner:
         if base_ref:
             env["AUTOSKILLIT_TEST_BASE_REF"] = base_ref
 
-        result = await self._runner(command, cwd=cwd, timeout=timeout, env=env)
+        # Create sidecar for conftest to write filter stats into
+        fd, sidecar_path = tempfile.mkstemp(suffix=".json", prefix="filter-stats-")
+        os.close(fd)
+        env["AUTOSKILLIT_FILTER_STATS_FILE"] = sidecar_path
+
+        elapsed: float = 0.0
+        stat_filter_mode: str | None = None
+        stat_tests_selected: int | None = None
+        stat_tests_deselected: int | None = None
+        start = time.monotonic()
+        try:
+            result = await self._runner(command, cwd=cwd, timeout=timeout, env=env)
+            elapsed = time.monotonic() - start
+
+            # Read filter stats sidecar (written by conftest pytest_sessionfinish)
+            sidecar = Path(sidecar_path)
+            if sidecar.is_file() and sidecar.stat().st_size > 0:
+                try:
+                    raw = json.loads(sidecar.read_text())
+                    if isinstance(raw, dict):
+                        fm = raw.get("filter_mode")
+                        ts = raw.get("tests_selected")
+                        td = raw.get("tests_deselected")
+                        stat_filter_mode = fm if isinstance(fm, str) else None
+                        stat_tests_selected = ts if isinstance(ts, int) else None
+                        stat_tests_deselected = td if isinstance(td, int) else None
+                except (json.JSONDecodeError, OSError) as exc:
+                    logger.debug("filter stats sidecar read error: %s", exc)
+        finally:
+            Path(sidecar_path).unlink(missing_ok=True)
+
         passed = check_test_passed(result.returncode, result.stdout, result.stderr)
-        return TestResult(passed=passed, stdout=result.stdout, stderr=result.stderr)
+        return TestResult(
+            passed=passed,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            duration_seconds=elapsed,
+            filter_mode=stat_filter_mode,
+            tests_selected=stat_tests_selected,
+            tests_deselected=stat_tests_deselected,
+        )

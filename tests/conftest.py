@@ -1,5 +1,6 @@
 """Shared test fixtures for autoskillit."""
 
+import os
 from pathlib import Path as _Path
 
 import pytest
@@ -42,6 +43,8 @@ _SIZE_DIRS: frozenset[str] = frozenset(
 
 _scope_key = pytest.StashKey[set[_Path] | None]()
 _filter_mode_key = pytest.StashKey[str | None]()
+_selected_count_key = pytest.StashKey[int | None]()
+_deselected_count_key = pytest.StashKey[int | None]()
 
 
 @pytest.fixture(autouse=True)
@@ -281,7 +284,6 @@ def pytest_configure(config: pytest.Config) -> None:
     Opt-in via AUTOSKILLIT_TEST_FILTER env var or --filter-mode CLI flag.
     Fail-open: any error sets scope to None (full test run).
     """
-    import os
     import warnings
 
     config.stash[_scope_key] = None
@@ -408,6 +410,8 @@ def pytest_collection_modifyitems(
                 f"({len(scope)} scope paths)",
                 stacklevel=1,
             )
+            config.stash[_selected_count_key] = len(selected)
+            config.stash[_deselected_count_key] = len(deselected)
 
     except Exception as exc:
         warnings.warn(
@@ -438,3 +442,31 @@ def pytest_collection_modifyitems(
                 f"{len(size_deselected)} large/unannotated deselected",
                 stacklevel=1,
             )
+            prev_deselected = config.stash.get(_deselected_count_key, None) or 0
+            config.stash[_selected_count_key] = len(size_selected)
+            config.stash[_deselected_count_key] = prev_deselected + len(size_deselected)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Write filter stats sidecar for DefaultTestRunner consumption."""
+    if hasattr(session.config, "workerinput"):
+        return  # xdist worker — only the controller writes the sidecar
+    out_path = os.environ.get("AUTOSKILLIT_FILTER_STATS_FILE")
+    if not out_path:
+        return
+    filter_mode = session.config.stash.get(_filter_mode_key, None)
+    selected = session.config.stash.get(_selected_count_key, None)
+    deselected = session.config.stash.get(_deselected_count_key, None)
+    if filter_mode is None:
+        return
+    import json
+
+    _Path(out_path).write_text(
+        json.dumps(
+            {
+                "filter_mode": filter_mode,
+                "tests_selected": selected,
+                "tests_deselected": deselected,
+            }
+        )
+    )

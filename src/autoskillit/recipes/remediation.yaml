@@ -1128,7 +1128,7 @@ steps:
       - when: "${{ result.verdict }} == 'already_green'"
         route: pre_resolve_rebase
       - when: "${{ result.verdict }} == 'flake_suspected'"
-        route: release_issue_failure
+        route: re_push
       - when: "${{ result.verdict }} == 'ci_only_failure'"
         route: release_issue_failure
       - route: release_issue_failure
@@ -1137,7 +1137,8 @@ steps:
       Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci
       structured output to avoid redundant CI failure re-investigation. Routes via
       on_result: verdict dispatch — real_fix pushes, already_green rebases and re-diagnoses
-      (sibling fix may have landed), flake_suspected/ci_only_failure escalate to human.
+      (sibling fix may have landed), flake_suspected retries via re_push (bounded by
+      retries: 2 / on_exhausted: release_issue_failure), ci_only_failure escalates to human.
       Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.
 
   pre_resolve_rebase:

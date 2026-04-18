@@ -1286,3 +1286,70 @@ def test_sessions_jsonl_autoskillit_version_empty_when_no_versions(tmp_path):
     ]
     entry = next(e for e in entries if e["session_id"] == "vs-006")
     assert entry["autoskillit_version"] == ""
+
+
+def test_session_log_includes_recipe_name(tmp_path):
+    _flush(tmp_path, session_id="rp-001", recipe_name="impl")
+    entries = [
+        json.loads(line)
+        for line in (tmp_path / "sessions.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    entry = next(e for e in entries if e["session_id"] == "rp-001")
+    assert entry["recipe_name"] == "impl"
+
+
+def test_session_log_includes_recipe_hashes(tmp_path):
+    _flush(
+        tmp_path,
+        session_id="rp-002",
+        recipe_content_hash="sha256:abc",
+        recipe_composite_hash="sha256:def",
+    )
+    entries = [
+        json.loads(line)
+        for line in (tmp_path / "sessions.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    entry = next(e for e in entries if e["session_id"] == "rp-002")
+    assert entry["recipe_content_hash"] == "sha256:abc"
+    assert entry["recipe_composite_hash"] == "sha256:def"
+
+
+def test_summary_includes_recipe_provenance(tmp_path):
+    _flush(
+        tmp_path,
+        session_id="rp-003",
+        recipe_name="impl",
+        recipe_content_hash="sha256:abc",
+        recipe_composite_hash="sha256:def",
+        recipe_version="1.0.0",
+    )
+    session_dir = tmp_path / "sessions" / "rp-003"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert "recipe_provenance" in summary
+    assert summary["recipe_provenance"]["schema_version"] == 1
+    assert summary["recipe_provenance"]["recipe_name"] == "impl"
+    assert summary["recipe_provenance"]["content_hash"] == "sha256:abc"
+    assert summary["recipe_provenance"]["composite_hash"] == "sha256:def"
+    assert summary["recipe_provenance"]["recipe_version"] == "1.0.0"
+
+
+def test_session_log_empty_recipe_identity(tmp_path):
+    _flush(tmp_path, session_id="rp-004")
+    entries = [
+        json.loads(line)
+        for line in (tmp_path / "sessions.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    entry = next(e for e in entries if e["session_id"] == "rp-004")
+    assert entry["recipe_name"] == ""
+    assert entry["recipe_content_hash"] == ""
+    assert entry["recipe_composite_hash"] == ""
+
+
+def test_summary_no_recipe_provenance_when_empty(tmp_path):
+    _flush(tmp_path, session_id="rp-005")
+    session_dir = tmp_path / "sessions" / "rp-005"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    assert "recipe_provenance" not in summary

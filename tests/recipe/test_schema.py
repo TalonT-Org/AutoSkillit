@@ -299,3 +299,44 @@ def test_recipe_dataclass_has_requires_packs_field():
     assert "requires_packs" in fields
     r = Recipe(name="x", description="y")
     assert r.requires_packs == []
+
+
+def test_recipe_has_content_hash_field():
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="test", description="d")
+    assert r.content_hash == ""
+
+
+def test_recipe_has_composite_hash_field():
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="test", description="d")
+    assert r.composite_hash == ""
+
+
+def test_recipe_has_recipe_version_field():
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="test", description="d")
+    assert r.recipe_version is None
+
+
+def test_recipe_info_has_content_hash_field():
+    from autoskillit.core.types import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    ri = RecipeInfo(
+        name="t", description="d", source=RecipeSource.BUILTIN, path=pathlib.Path("/x")
+    )
+    assert ri.content_hash == ""
+
+
+def test_recipe_info_has_recipe_version_field():
+    from autoskillit.core.types import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    ri = RecipeInfo(
+        name="t", description="d", source=RecipeSource.BUILTIN, path=pathlib.Path("/x")
+    )
+    assert ri.recipe_version is None

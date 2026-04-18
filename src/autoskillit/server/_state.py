@@ -179,6 +179,17 @@ def _get_plugin_dir() -> str | None:
     return _ctx.plugin_dir if _ctx is not None else None
 
 
+def _check_rerun(log_dir: str, composite_hash: str) -> dict[str, object] | None:
+    """Check sessions.jsonl for prior runs with the same composite hash."""
+    if not composite_hash:
+        return None
+    from autoskillit.execution import resolve_log_dir  # noqa: PLC0415
+    from autoskillit.recipe import check_rerun_detection  # noqa: PLC0415
+
+    sessions_path = resolve_log_dir(log_dir) / "sessions.jsonl"
+    return check_rerun_detection(sessions_path, composite_hash=composite_hash)
+
+
 def version_info() -> dict:
     """Return version health information for the running server."""
     from autoskillit.version import version_info as _compute_version

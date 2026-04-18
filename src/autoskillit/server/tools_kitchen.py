@@ -230,6 +230,10 @@ def _close_kitchen_handler() -> None:
         ctx.quota_refresh_task = None
     ctx.gate.disable()
     ctx.active_recipe_packs = None
+    ctx.recipe_name = ""
+    ctx.recipe_content_hash = ""
+    ctx.recipe_composite_hash = ""
+    ctx.recipe_version = ""
     logger.info("close_kitchen", gate_state="closed")
     hook_cfg_path = _hook_config_path(Path.cwd())
     try:
@@ -359,6 +363,17 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="load_and_validate")
 
             tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
+            tool_ctx.recipe_name = name
+            tool_ctx.recipe_content_hash = result.get("content_hash", "")
+            tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
+            tool_ctx.recipe_version = result.get("recipe_version", "")
+
+            composite = result.get("composite_hash", "")
+            from autoskillit.server._state import _check_rerun  # noqa: PLC0415
+
+            rerun_suggestion = _check_rerun(tool_ctx.config.linux_tracing.log_dir, composite)
+            if rerun_suggestion:
+                result.setdefault("suggestions", []).append(rerun_suggestion)
 
             try:
                 recipe_info = tool_ctx.recipes.find(name, Path.cwd())

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from autoskillit.core import RecipeSource, load_yaml
-from autoskillit.recipe.schema import AUTOSKILLIT_VERSION_KEY, RecipeInfo
+from autoskillit.recipe.schema import AUTOSKILLIT_VERSION_KEY, RECIPE_VERSION_KEY, RecipeInfo
 
 
 def _extract_frontmatter(text: str) -> str:
@@ -45,4 +45,5 @@ def parse_recipe_metadata(path: Path) -> RecipeInfo:
         path=path,
         source=RecipeSource.PROJECT,
         version=data.get(AUTOSKILLIT_VERSION_KEY),
+        recipe_version=data.get(RECIPE_VERSION_KEY),
     )

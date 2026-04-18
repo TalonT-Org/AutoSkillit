@@ -160,14 +160,14 @@ From **top-level reviews**, extract:
 
 When a finding matches multiple tiers, use the highest severity.
 
-**Filter:** Include `critical` and `warning` only. Skip `info` findings entirely.
+All three severity levels proceed to intent validation.
 
 ### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes)
 
-Before applying any fix, validate every critical and warning finding against the actual
+Before applying any fix, validate every finding (critical, warning, and info) against the actual
 codebase and git history. This analysis phase runs entirely before code changes are made.
 
-**Domain grouping:** Group all critical+warning findings by the top-level path segment of
+**Domain grouping:** Group all findings by the top-level path segment of
 their `path` field:
 - `src/autoskillit/execution/headless.py` → group `execution`
 - `tests/skills/test_foo.py` → group `tests`
@@ -249,9 +249,12 @@ For each finding where the classification map shows `verdict = ACCEPT`
 
 **Classification gate — REJECT/DISCUSS bypass:**
 For findings where the classification map shows `verdict = REJECT` or `verdict = DISCUSS`:
-- For REJECT: no code changes are applied; record `(file, line, reason="classifier: REJECT — {evidence}")`
-- For DISCUSS: record `(file, line, reason="classifier: DISCUSS — {context}")`
-- Do NOT add these findings' `thread_node_id` to `addressed_thread_ids`
+- For REJECT: no code changes are applied; record `(file, line, reason="classifier: REJECT — {evidence}")`.
+  Append the finding's `thread_node_id` to `addressed_thread_ids` (if not `None`) — a resolved
+  thread with an "Investigated — this is intentional" reply is the correct end state.
+- For DISCUSS: record `(file, line, reason="classifier: DISCUSS — {context}")`.
+  Do NOT add DISCUSS findings' `thread_node_id` to `addressed_thread_ids` — these threads
+  remain open for human decision.
 
 **Skip a finding if:**
 - The referenced file does not exist in the current branch
@@ -301,8 +304,8 @@ the overall skill.
 
 ### Step 6.5: Post Inline Replies
 
-For every comment that was analyzed (i.e., every comment that passed the critical+warning
-filter in Step 3), post an inline reply using the GitHub comment reply API. Each analyzed
+For every comment that was analyzed (i.e., every finding that reached intent validation in
+Step 3.5), post an inline reply using the GitHub comment reply API. Each analyzed
 comment receives exactly one reply based on its classification.
 
 ```bash
@@ -373,7 +376,7 @@ PR: #{pr_number} ({feature_branch} → {base_branch})
 Findings fetched: {total}
   - critical: {n}
   - warning: {n}
-  - info: {n} (skipped — below threshold)
+  - info: {n}
 Intent validation (before code changes):
   - ACCEPT: {accept_count}
   - REJECT: {reject_count}

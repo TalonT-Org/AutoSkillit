@@ -12,43 +12,13 @@ ask_user_question_guard can verify the kitchen is open before allowing AskUserQu
 import json
 import os
 import sys
-from datetime import UTC
 
 
 def _write_kitchen_marker(session_id: str, recipe_name: str | None) -> None:
-    """Write the kitchen-open session marker (stdlib-only, inline implementation)."""
-    import tempfile
-    from datetime import datetime
-    from pathlib import Path as _Path
+    """Write the kitchen-open session marker via the canonical kitchen_state module."""
+    from autoskillit.core.kitchen_state import write_marker  # noqa: PLC0415
 
-    state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
-    if state_override:
-        state_dir = _Path(state_override) / "kitchen_state"
-    else:
-        state_dir = _Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
-    state_dir.mkdir(parents=True, exist_ok=True)
-    marker_path = state_dir / f"{session_id}.json"
-    payload = json.dumps(
-        {
-            "session_id": session_id,
-            "opened_at": datetime.now(UTC).isoformat(),
-            "recipe_name": recipe_name,
-            "marker_version": 1,
-            "content_hash": "",
-            "composite_hash": "",
-        }
-    )
-    fd, tmp = tempfile.mkstemp(dir=state_dir, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(payload)
-        os.replace(tmp, marker_path)
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    write_marker(session_id, recipe_name)
 
 
 def main() -> None:

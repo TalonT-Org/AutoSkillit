@@ -126,7 +126,7 @@ def flush_session_log(
     recipe_name: str = "",
     recipe_content_hash: str = "",
     recipe_composite_hash: str = "",
-    recipe_version: str | None = None,
+    recipe_version: str = "",
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -322,7 +322,7 @@ def flush_session_log(
         summary["recipe_provenance"] = {
             "schema_version": 1,
             "recipe_name": recipe_name,
-            "recipe_version": recipe_version or "",
+            "recipe_version": recipe_version,
             "content_hash": recipe_content_hash,
             "composite_hash": recipe_composite_hash,
         }
@@ -392,7 +392,7 @@ def flush_session_log(
         "recipe_name": recipe_name,
         "recipe_content_hash": recipe_content_hash,
         "recipe_composite_hash": recipe_composite_hash,
-        "recipe_version": recipe_version or "",
+        "recipe_version": recipe_version,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

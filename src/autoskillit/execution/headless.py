@@ -985,7 +985,7 @@ async def run_headless_core(
     recipe_name: str = "",
     recipe_content_hash: str = "",
     recipe_composite_hash: str = "",
-    recipe_version: str | None = None,
+    recipe_version: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -1291,7 +1291,7 @@ class DefaultHeadlessExecutor:
         recipe_name: str = "",
         recipe_content_hash: str = "",
         recipe_composite_hash: str = "",
-        recipe_version: str | None = None,
+        recipe_version: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout

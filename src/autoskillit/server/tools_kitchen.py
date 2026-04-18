@@ -366,7 +366,7 @@ async def open_kitchen(
             tool_ctx.recipe_name = name
             tool_ctx.recipe_content_hash = result.get("content_hash", "")
             tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
-            tool_ctx.recipe_version = result.get("recipe_version") or ""
+            tool_ctx.recipe_version = result.get("recipe_version", "")
 
             composite = result.get("composite_hash", "")
             from autoskillit.server._state import _check_rerun  # noqa: PLC0415

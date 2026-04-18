@@ -192,7 +192,7 @@ class HeadlessExecutor(Protocol):
         recipe_name: str = "",
         recipe_content_hash: str = "",
         recipe_composite_hash: str = "",
-        recipe_version: str | None = None,
+        recipe_version: str = "",
     ) -> SkillResult: ...
 
 

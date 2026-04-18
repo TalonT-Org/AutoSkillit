@@ -308,9 +308,12 @@ def test_audit_tests_c11_references_filter_artifacts() -> None:
 
 def test_audit_tests_c8_has_cross_layer_import_rule() -> None:
     content = _read_skill("audit-tests")
-    assert "cross-layer" in content.lower() or "outside their directory's cascade" in content, (
-        "audit-tests/SKILL.md Category 8 missing cross-layer import rule"
-    )
+    c8_start = content.find("### Category 8:")
+    c8_end = content.find("### Category 9:", c8_start)
+    c8_section = content[c8_start:c8_end]
+    assert (
+        "cross-layer" in c8_section.lower() or "outside their directory's cascade" in c8_section
+    ), "audit-tests/SKILL.md Category 8 missing cross-layer import rule"
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +335,9 @@ def test_audit_tests_c6_has_filter_staleness_checks() -> None:
 
 def test_audit_tests_exclusions_mention_filter_infra_files() -> None:
     content = _read_skill("audit-tests")
-    assert "test_test_filter" in content, (
+    excl_start = content.find("## Exclusions")
+    excl_section = content[excl_start:]
+    assert "test_test_filter" in excl_section, (
         "audit-tests/SKILL.md Exclusions missing filter infrastructure test file exemption"
     )
 
@@ -344,10 +349,13 @@ def test_audit_tests_exclusions_mention_filter_infra_files() -> None:
 
 def test_audit_tests_group6_has_filter_audit_steps() -> None:
     content = _read_skill("audit-tests")
-    assert "cascade maps" in content.lower() or "filter cascade" in content.lower(), (
+    step1_start = content.find("### Step 1:")
+    step1_end = content.find("### Step 2:", step1_start)
+    step1_section = content[step1_start:step1_end]
+    assert "cascade maps" in step1_section.lower(), (
         "audit-tests/SKILL.md Group 6 missing filter-specific audit steps"
     )
-    assert "manifest completeness" in content.lower(), (
+    assert "manifest completeness" in step1_section.lower(), (
         "audit-tests/SKILL.md Group 6 missing manifest completeness check"
     )
 
@@ -359,6 +367,7 @@ def test_audit_tests_group6_has_filter_audit_steps() -> None:
 
 def test_bundled_audit_tests_has_category_11() -> None:
     path = REPO_ROOT / "src" / "autoskillit" / "skills_extended" / "audit-tests" / "SKILL.md"
+    assert path.exists(), f"Bundled audit-tests SKILL.md not found at {path}"
     content = path.read_text(encoding="utf-8")
     assert "Category 11" in content, (
         "Bundled audit-tests/SKILL.md missing 'Category 11' — out of sync with project-local"

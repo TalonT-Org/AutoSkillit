@@ -199,6 +199,7 @@ async def run_managed_async(
     _phase2_poll: float = 2.0,
     _heartbeat_poll: float = 0.5,
     _phase1_timeout: float = 30.0,
+    _session_id_timeout: float = 1.0,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -320,6 +321,7 @@ async def run_managed_async(
                         _phase1_poll,
                         _phase2_poll,
                         _phase1_timeout,
+                        _session_id_timeout,
                         stdout_session_id_ready,
                         max_suppression_seconds,
                     )

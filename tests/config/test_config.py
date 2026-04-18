@@ -345,7 +345,7 @@ class TestQuotaGuardConfig:
         config = AutomationConfig()
         assert config.quota_guard.enabled is True
         assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
-        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
+        assert config.quota_guard.long_window_threshold == pytest.approx(95.0)
         assert config.quota_guard.buffer_seconds == 60
         assert config.quota_guard.cache_max_age == 300
 
@@ -360,7 +360,7 @@ class TestQuotaGuardConfig:
                     "quota_guard": {
                         "enabled": True,
                         "short_window_threshold": 85.0,
-                        "long_window_threshold": 98.0,
+                        "long_window_threshold": 95.0,
                     }
                 }
             )
@@ -368,7 +368,7 @@ class TestQuotaGuardConfig:
         config = load_config(tmp_path)
         assert config.quota_guard.enabled is True
         assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
-        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
+        assert config.quota_guard.long_window_threshold == pytest.approx(95.0)
         # Unspecified fields keep defaults
         assert config.quota_guard.buffer_seconds == 60
 
@@ -377,10 +377,10 @@ class TestQuotaGuardConfig:
 
         assert QuotaGuardConfig().short_window_threshold == 85.0
 
-    def test_long_window_threshold_defaults_to_98(self):
+    def test_long_window_threshold_defaults_to_95(self):
         from autoskillit.config.settings import QuotaGuardConfig
 
-        assert QuotaGuardConfig().long_window_threshold == 98.0
+        assert QuotaGuardConfig().long_window_threshold == 95.0
 
     def test_long_window_patterns_default(self):
         from autoskillit.config.settings import QuotaGuardConfig
@@ -409,7 +409,7 @@ class TestQuotaGuardConfig:
                 {
                     "quota_guard": {
                         "short_window_threshold": 85.0,
-                        "long_window_threshold": 98.0,
+                        "long_window_threshold": 95.0,
                         "long_window_patterns": ["weekly", "sonnet", "opus"],
                     }
                 }
@@ -417,7 +417,7 @@ class TestQuotaGuardConfig:
         )
         config = load_config(tmp_path)
         assert config.quota_guard.short_window_threshold == pytest.approx(85.0)
-        assert config.quota_guard.long_window_threshold == pytest.approx(98.0)
+        assert config.quota_guard.long_window_threshold == pytest.approx(95.0)
         assert config.quota_guard.long_window_patterns == ["weekly", "sonnet", "opus"]
 
     def test_quota_guard_config_has_cache_refresh_interval(self):
@@ -440,13 +440,13 @@ class TestQuotaGuardConfig:
             "otherwise the loop arrives after the cache has already expired"
         )
 
-    def test_quota_guard_per_window_enabled_defaults(self):
-        """Test 14: QuotaGuardConfig() defaults short=True, long=False."""
+    def test_quota_guard_per_window_enabled_defaults_true(self):
+        """Test 14: QuotaGuardConfig() defaults both per-window flags to True."""
         from autoskillit.config.settings import QuotaGuardConfig
 
         config = QuotaGuardConfig()
         assert config.short_window_enabled is True
-        assert config.long_window_enabled is False
+        assert config.long_window_enabled is True
 
     def test_quota_guard_per_window_enabled_yaml_round_trip(self, tmp_path):
         """Test 15: per-window enabled flags survive a YAML round-trip."""
@@ -457,15 +457,15 @@ class TestQuotaGuardConfig:
         )
         config = load_config(tmp_path)
         assert config.quota_guard.short_window_enabled is False
-        assert config.quota_guard.long_window_enabled is False
+        assert config.quota_guard.long_window_enabled is True
 
     def test_defaults_yaml_has_per_window_enabled_keys(self):
-        """Test 16: defaults.yaml has per-window enabled keys (short=True, long=False)."""
+        """Test 16: defaults.yaml has both per-window enabled keys set to True."""
         from autoskillit.core.paths import pkg_root
 
         defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
         assert defaults["quota_guard"]["short_window_enabled"] is True
-        assert defaults["quota_guard"]["long_window_enabled"] is False
+        assert defaults["quota_guard"]["long_window_enabled"] is True
 
     def test_quota_guard_env_var_override_short_window_enabled(self, monkeypatch, tmp_path):
         """Test 17: AUTOSKILLIT_QUOTA_GUARD__SHORT_WINDOW_ENABLED=false is cast to bool False."""

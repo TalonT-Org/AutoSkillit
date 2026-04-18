@@ -288,7 +288,7 @@ async def test_seven_day_raw_api_response_blocks_at_long_threshold(mock_http_ser
             }
         ),
     )
-    cfg = QuotaGuardConfig(long_window_enabled=True)
+    cfg = QuotaGuardConfig()
 
     result = await _fetch_quota(
         credentials,
@@ -301,9 +301,9 @@ async def test_seven_day_raw_api_response_blocks_at_long_threshold(mock_http_ser
     )
 
     assert result.binding.should_block is True, (
-        f"Expected should_block=True for seven_day at 99% with long_threshold=98.0, "
+        f"Expected should_block=True for seven_day at 99% with long_threshold=95.0, "
         f"got effective_threshold={result.binding.effective_threshold}, "
         f"window_name={result.binding.window_name!r}"
     )
     assert result.binding.window_name == "seven_day"
-    assert result.binding.effective_threshold == 98.0
+    assert result.binding.effective_threshold == 95.0

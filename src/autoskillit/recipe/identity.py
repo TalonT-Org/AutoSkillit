@@ -22,12 +22,16 @@ def compute_composite_hash(
     *,
     skills_dir: Path,
     project_dir: Path,
+    _seen: frozenset[Path] | None = None,
 ) -> str:
     """Compute a composite hash covering the recipe, referenced skills, and sub-recipes.
 
     The hash is deterministic: skill and sub-recipe names are sorted before
     hashing. Returns "sha256:<64-hex>".
     """
+    if _seen is None:
+        _seen = frozenset()
+
     hasher = hashlib.sha256()
 
     hasher.update(b"autoskillit-composite-v1\n")
@@ -53,6 +57,10 @@ def compute_composite_hash(
     for name in sorted(sub_names):
         sub_path = find_sub_recipe_by_name(name, project_dir)
         if sub_path and sub_path.is_file():
+            resolved = sub_path.resolve()
+            if resolved in _seen:
+                logger.debug("cycle_detected_in_sub_recipe", path=str(sub_path))
+                continue
             sub_recipe = _load_sub_recipe_for_hash(sub_path)
             if sub_recipe is not None:
                 sub_hash = compute_composite_hash(
@@ -60,6 +68,7 @@ def compute_composite_hash(
                     sub_recipe,
                     skills_dir=skills_dir,
                     project_dir=project_dir,
+                    _seen=_seen | {resolved},
                 )
             else:
                 sub_hash = compute_recipe_hash(sub_path)
@@ -79,7 +88,7 @@ def _load_sub_recipe_for_hash(path: Path) -> Recipe | None:
         if isinstance(data, dict) and "steps" in data:
             return _parse_recipe(data)
     except Exception:
-        logger.debug("sub_recipe_load_for_hash_failed", path=str(path))
+        logger.debug("sub_recipe_load_for_hash_failed", path=str(path), exc_info=True)
     return None
 
 
@@ -97,7 +106,12 @@ def find_prior_runs(
     if not sessions_jsonl.is_file():
         return []
     matches: list[dict[str, Any]] = []
-    for line in sessions_jsonl.read_text(encoding="utf-8").splitlines():
+    try:
+        lines = sessions_jsonl.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        logger.debug("sessions_jsonl_read_failed", path=str(sessions_jsonl), exc_info=True)
+        return []
+    for line in lines:
         if not line.strip():
             continue
         try:

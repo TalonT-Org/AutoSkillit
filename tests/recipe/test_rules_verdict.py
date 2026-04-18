@@ -1,8 +1,11 @@
-"""Tests for the unrouted-verdict-value semantic rule.
+"""Tests for verdict semantic rules: unrouted-verdict-value and verdict-routing-asymmetry.
 
 Verifies that recipe steps using skills with declared allowed_values must
 explicitly handle every allowed value in their on_result block — no value
 may silently fall through a catch-all condition.
+
+Also verifies that steps invoking the same skill must route the same verdict
+value to the same outcome category (continuation vs escalation).
 """
 
 from __future__ import annotations
@@ -147,3 +150,166 @@ def test_unrouted_verdict_passes_for_review_design_in_research_recipe() -> None:
         if f.rule == "unrouted-verdict-value" and f.step_name == "review_design"
     ]
     assert not unrouted, f"unrouted-verdict-value fired for review_design step: {unrouted}"
+
+
+# ---------------------------------------------------------------------------
+# verdict-routing-asymmetry rule tests
+# ---------------------------------------------------------------------------
+
+
+def _asymmetric_resolve_steps() -> dict[str, RecipeStep]:
+    """Two steps invoking the same skill, routing flake_suspected differently."""
+    return {
+        "fix": RecipeStep(
+            tool="run_skill",
+            with_args={"skill_command": "/autoskillit:resolve-failures wp pp bb"},
+            capture={"verdict": "${{ result.verdict }}"},
+            on_result=StepResultRoute(
+                conditions=[
+                    StepResultCondition(
+                        route="test_step",
+                        when="${{ result.verdict }} == 'flake_suspected'",
+                    ),
+                    StepResultCondition(
+                        route="fail_step",
+                        when="${{ result.verdict }} == 'ci_only_failure'",
+                    ),
+                    StepResultCondition(
+                        route="push_step",
+                        when="${{ result.verdict }} == 'real_fix'",
+                    ),
+                    StepResultCondition(
+                        route="rebase_step",
+                        when="${{ result.verdict }} == 'already_green'",
+                    ),
+                ]
+            ),
+            on_failure="fail_step",
+        ),
+        "resolve_ci": RecipeStep(
+            tool="run_skill",
+            with_args={"skill_command": "/autoskillit:resolve-failures wp pp bb"},
+            capture={"verdict": "${{ result.verdict }}"},
+            on_result=StepResultRoute(
+                conditions=[
+                    StepResultCondition(
+                        route="failure_step",
+                        when="${{ result.verdict }} == 'flake_suspected'",
+                    ),
+                    StepResultCondition(
+                        route="failure_step",
+                        when="${{ result.verdict }} == 'ci_only_failure'",
+                    ),
+                    StepResultCondition(
+                        route="push_step",
+                        when="${{ result.verdict }} == 'real_fix'",
+                    ),
+                    StepResultCondition(
+                        route="rebase_step",
+                        when="${{ result.verdict }} == 'already_green'",
+                    ),
+                ]
+            ),
+            on_failure="failure_step",
+        ),
+        "test_step": RecipeStep(tool="test_check"),
+        "push_step": RecipeStep(tool="push_to_remote"),
+        "rebase_step": RecipeStep(tool="run_cmd"),
+        "fail_step": RecipeStep(tool="run_cmd"),
+        "failure_step": RecipeStep(tool="run_cmd"),
+    }
+
+
+def _consistent_resolve_steps() -> dict[str, RecipeStep]:
+    """Two steps invoking the same skill, routing flake_suspected consistently."""
+    steps = _asymmetric_resolve_steps()
+    # Make resolve_ci route flake_suspected to test_step (continuation), matching fix
+    steps["resolve_ci"].on_result.conditions[0] = StepResultCondition(
+        route="test_step",
+        when="${{ result.verdict }} == 'flake_suspected'",
+    )
+    return steps
+
+
+def _different_skills_steps() -> dict[str, RecipeStep]:
+    """Two steps invoking different skills — asymmetry should be ignored."""
+    steps = _asymmetric_resolve_steps()
+    # Change resolve_ci to invoke resolve-review instead
+    steps["resolve_ci"] = RecipeStep(
+        tool="run_skill",
+        with_args={"skill_command": "/autoskillit:resolve-review fb bb"},
+        capture={"verdict": "${{ result.verdict }}"},
+        on_result=StepResultRoute(
+            conditions=[
+                StepResultCondition(
+                    route="failure_step",
+                    when="${{ result.verdict }} == 'flake_suspected'",
+                ),
+                StepResultCondition(
+                    route="failure_step",
+                    when="${{ result.verdict }} == 'ci_only_failure'",
+                ),
+                StepResultCondition(
+                    route="push_step",
+                    when="${{ result.verdict }} == 'real_fix'",
+                ),
+                StepResultCondition(
+                    route="rebase_step",
+                    when="${{ result.verdict }} == 'already_green'",
+                ),
+            ]
+        ),
+        on_failure="failure_step",
+    )
+    return steps
+
+
+def test_verdict_routing_asymmetry_fires_on_inconsistent_routes() -> None:
+    """Rule must error when same skill routes same verdict to different outcome categories."""
+    findings = run_semantic_rules(_make_recipe(_asymmetric_resolve_steps()))
+    rule_names = [f.rule for f in findings]
+    assert "verdict-routing-asymmetry" in rule_names, (
+        "run_semantic_rules must emit 'verdict-routing-asymmetry' finding when "
+        "'flake_suspected' routes to continuation in fix but escalation in resolve_ci."
+    )
+
+
+def test_verdict_routing_asymmetry_passes_when_consistent() -> None:
+    """Rule must not fire when all steps route same verdict to same outcome category."""
+    findings = run_semantic_rules(_make_recipe(_consistent_resolve_steps()))
+    rule_names = [f.rule for f in findings]
+    assert "verdict-routing-asymmetry" not in rule_names, (
+        "verdict-routing-asymmetry must not fire when both steps route "
+        "'flake_suspected' to continuation steps."
+    )
+
+
+def test_verdict_routing_asymmetry_ignores_different_skills() -> None:
+    """Rule must not fire when different skills route same verdict differently."""
+    findings = run_semantic_rules(_make_recipe(_different_skills_steps()))
+    rule_names = [f.rule for f in findings]
+    assert "verdict-routing-asymmetry" not in rule_names, (
+        "verdict-routing-asymmetry must not compare routing across different skills."
+    )
+
+
+def test_verdict_routing_asymmetry_reports_correct_step_names() -> None:
+    """Rule finding message must include both step names involved in the asymmetry."""
+    findings = run_semantic_rules(_make_recipe(_asymmetric_resolve_steps()))
+    verdict_findings = [f for f in findings if f.rule == "verdict-routing-asymmetry"]
+    assert len(verdict_findings) >= 1
+    message = verdict_findings[0].message
+    assert "fix" in message and "resolve_ci" in message, (
+        f"Finding message must reference both step names, got: {message}"
+    )
+
+
+def test_verdict_routing_asymmetry_severity_is_error() -> None:
+    """Rule must emit ERROR severity."""
+    findings = run_semantic_rules(_make_recipe(_asymmetric_resolve_steps()))
+    verdict_findings = [f for f in findings if f.rule == "verdict-routing-asymmetry"]
+    assert len(verdict_findings) >= 1
+    for finding in verdict_findings:
+        assert finding.severity == Severity.ERROR, (
+            f"verdict-routing-asymmetry must be ERROR severity, got {finding.severity}"
+        )

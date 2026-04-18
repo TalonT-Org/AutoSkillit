@@ -30,11 +30,21 @@ from autoskillit.server.helpers import (
     _prime_quota_cache,
     _quota_refresh_loop,
     _require_not_headless,
-    check_rerun,
     track_response_size,
 )
 
 logger = get_logger(__name__)
+
+
+def _check_rerun(log_dir: str, composite_hash: str) -> dict[str, object] | None:
+    """Check sessions.jsonl for prior runs with the same composite hash."""
+    if not composite_hash:
+        return None
+    from autoskillit.execution import resolve_log_dir  # noqa: PLC0415
+    from autoskillit.recipe import check_rerun_detection  # noqa: PLC0415
+
+    sessions_path = resolve_log_dir(log_dir) / "sessions.jsonl"
+    return check_rerun_detection(sessions_path, composite_hash=composite_hash)
 
 
 def _kitchen_failure_envelope(
@@ -370,7 +380,7 @@ async def open_kitchen(
             tool_ctx.recipe_version = result.get("recipe_version") or ""
 
             composite = result.get("composite_hash", "")
-            rerun_suggestion = check_rerun(tool_ctx.config.linux_tracing.log_dir, composite)
+            rerun_suggestion = _check_rerun(tool_ctx.config.linux_tracing.log_dir, composite)
             if rerun_suggestion:
                 result.setdefault("suggestions", []).append(rerun_suggestion)
 

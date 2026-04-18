@@ -474,13 +474,3 @@ def _build_hook_diagnostic_warning() -> str | None:
         lines.append(f"   • {issue}")
     lines.append("   → Run 'autoskillit install' to regenerate hook configuration.\n")
     return "\n".join(lines)
-
-
-def check_rerun(log_dir: str, composite_hash: str) -> dict[str, Any] | None:
-    """Check sessions.jsonl for prior runs with the same composite hash."""
-    if not composite_hash:
-        return None
-    from autoskillit.recipe import check_rerun_detection  # noqa: PLC0415
-
-    sessions_path = resolve_log_dir(log_dir) / "sessions.jsonl"
-    return check_rerun_detection(sessions_path, composite_hash=composite_hash)

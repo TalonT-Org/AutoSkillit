@@ -255,9 +255,7 @@ def test_validate_audit_uses_autoskillit_temp_placeholder() -> None:
 
 def test_audit_tests_has_category_11_filter_integrity() -> None:
     content = _read_skill("audit-tests")
-    assert "Category 11" in content, (
-        "audit-tests/SKILL.md missing 'Category 11' heading"
-    )
+    assert "Category 11" in content, "audit-tests/SKILL.md missing 'Category 11' heading"
     assert "Test Path Filter Integrity" in content, (
         "audit-tests/SKILL.md Category 11 missing 'Test Path Filter Integrity' name"
     )
@@ -268,14 +266,17 @@ def test_audit_tests_has_category_11_filter_integrity() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("subsection", [
-    "Cascade alignment",
-    "Manifest coverage",
-    "Size marker correctness",
-    "Bucket A discipline",
-    "Test file naming",
-    "Filter infrastructure staleness",
-])
+@pytest.mark.parametrize(
+    "subsection",
+    [
+        "Cascade alignment",
+        "Manifest coverage",
+        "Size marker correctness",
+        "Bucket A discipline",
+        "Test file naming",
+        "Filter infrastructure staleness",
+    ],
+)
 def test_audit_tests_c11_subsections_present(subsection: str) -> None:
     content = _read_skill("audit-tests")
     assert subsection in content, (
@@ -288,14 +289,17 @@ def test_audit_tests_c11_subsections_present(subsection: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("artifact", [
-    "LAYER_CASCADE_CONSERVATIVE",
-    "LAYER_CASCADE_AGGRESSIVE",
-    "test-filter-manifest.yaml",
-    "BUCKET_A_PATTERNS",
-    "_SIZE_DIRS",
-    "ALWAYS_RUN",
-])
+@pytest.mark.parametrize(
+    "artifact",
+    [
+        "LAYER_CASCADE_CONSERVATIVE",
+        "LAYER_CASCADE_AGGRESSIVE",
+        "test-filter-manifest.yaml",
+        "BUCKET_A_PATTERNS",
+        "_SIZE_DIRS",
+        "ALWAYS_RUN",
+    ],
+)
 def test_audit_tests_c11_references_filter_artifacts(artifact: str) -> None:
     content = _read_skill("audit-tests")
     assert artifact in content, (

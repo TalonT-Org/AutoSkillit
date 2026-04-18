@@ -1,8 +1,11 @@
-"""Semantic rules for skill verdict routing completeness.
+"""Semantic rules for skill verdict routing completeness and consistency.
 
 Ensures that recipe steps capturing a skill verdict with declared allowed_values
 have an explicit on_result condition for every allowed value. A catch-all
 `when: true` route does not count as explicit handling.
+
+Also ensures that steps invoking the same skill route the same verdict value
+to the same outcome category (continuation vs escalation).
 """
 
 from __future__ import annotations
@@ -132,5 +135,77 @@ def _check_unrouted_verdict_values(ctx: ValidationContext) -> list[RuleFinding]:
                         ),
                     )
                 )
+
+    return findings
+
+
+def _classify_route_target(target: str) -> str:
+    """Classify a route target as 'escalation' or 'continuation'."""
+    if "failure" in target or "escalat" in target or "stop" in target:
+        return "escalation"
+    return "continuation"
+
+
+@semantic_rule(
+    name="verdict-routing-asymmetry",
+    description=(
+        "Steps invoking the same skill must route the same verdict value to the "
+        "same outcome category (continuation vs escalation). Asymmetric routing "
+        "causes flaky tests to abort in one path while retrying in another."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_verdict_routing_asymmetry(ctx: ValidationContext) -> list[RuleFinding]:
+    """Error when the same verdict routes to different outcome categories across steps."""
+    findings: list[RuleFinding] = []
+
+    # Build map: {(skill_name, verdict_value): [(step_name, classification), ...]}
+    routing_map: dict[tuple[str, str], list[tuple[str, str]]] = {}
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_command = (step.with_args or {}).get("skill_command", "")
+        skill_name = _extract_skill_name(skill_command)
+        if not skill_name:
+            continue
+
+        allowed_by_output = _get_allowed_values_for_skill(skill_name)
+        if not allowed_by_output:
+            continue
+
+        if not step.on_result:
+            continue
+
+        conditions = step.on_result.conditions or []
+        for _output_name, allowed_values in allowed_by_output.items():
+            for value in allowed_values:
+                for cond in conditions:
+                    if _is_explicit_condition(cond.when, value):
+                        classification = _classify_route_target(cond.route)
+                        key = (skill_name, value)
+                        routing_map.setdefault(key, []).append((step_name, classification))
+                        break
+
+    for (skill_name, value), entries in routing_map.items():
+        classifications = {cls for _, cls in entries}
+        if len(classifications) <= 1:
+            continue
+        escalation_steps = [name for name, cls in entries if cls == "escalation"]
+        continuation_steps = [name for name, cls in entries if cls == "continuation"]
+        if escalation_steps and continuation_steps:
+            findings.append(
+                RuleFinding(
+                    rule="verdict-routing-asymmetry",
+                    severity=Severity.ERROR,
+                    step_name=escalation_steps[0],
+                    message=(
+                        f"Verdict '{value}' from '{skill_name}' routes to escalation "
+                        f"in step '{escalation_steps[0]}' but continuation in step "
+                        f"'{continuation_steps[0]}'. All steps invoking the same skill "
+                        f"should treat the same verdict consistently."
+                    ),
+                )
+            )
 
     return findings

@@ -12,6 +12,7 @@ import pytest
 
 from autoskillit.core import pkg_root
 from autoskillit.recipe.io import load_recipe
+from autoskillit.recipe.rules_verdict import _classify_route_target
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -158,14 +159,14 @@ def test_resolve_ci_on_result_routes_real_fix_to_re_push(recipe_name: str) -> No
 def test_resolve_ci_on_result_routes_escalation_verdicts_to_failure(
     recipe_name: str,
 ) -> None:
-    """flake_suspected and ci_only_failure must route to release_issue_failure."""
+    """ci_only_failure must route to release_issue_failure."""
     recipe_path = _RECIPES_DIR / recipe_name
     recipe = load_recipe(recipe_path)
     resolve_steps = _find_resolve_steps_reaching_push(recipe)
     for step_name, step in resolve_steps:
         if step.on_result is None:
             continue
-        for verdict in ("flake_suspected", "ci_only_failure"):
+        for verdict in ("ci_only_failure",):
             routes = [
                 cond.route
                 for cond in (step.on_result.conditions or [])
@@ -177,6 +178,57 @@ def test_resolve_ci_on_result_routes_escalation_verdicts_to_failure(
                 f"{recipe_name}/{step_name}: verdict={verdict} must route to "
                 f"a failure/escalation step, got routes: {routes}"
             )
+
+
+@pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
+def test_resolve_ci_routes_flake_suspected_to_re_push(recipe_name: str) -> None:
+    """flake_suspected in resolve_ci must route to re_push, not release_issue_failure."""
+    recipe_path = _RECIPES_DIR / recipe_name
+    recipe = load_recipe(recipe_path)
+    resolve_steps = _find_resolve_steps_reaching_push(recipe)
+    for step_name, step in resolve_steps:
+        if step.on_result is None:
+            continue
+        routes = [
+            cond.route
+            for cond in (step.on_result.conditions or [])
+            if cond.when and "flake_suspected" in cond.when
+        ]
+        if not routes:
+            continue
+        assert any("re_push" in r for r in routes), (
+            f"{recipe_name}/{step_name}: verdict=flake_suspected must route to "
+            f"a re_push step (retry), got routes: {routes}"
+        )
+
+
+@pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
+def test_flake_suspected_routes_consistently_across_fix_and_resolve_ci(
+    recipe_name: str,
+) -> None:
+    """flake_suspected must route to continuation in both fix/assess and resolve_ci steps."""
+    recipe_path = _RECIPES_DIR / recipe_name
+    recipe = load_recipe(recipe_path)
+    flake_routes: list[tuple[str, str, bool]] = []  # (step_name, route, is_escalation)
+    for step_name, step in recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        cmd = (step.with_args or {}).get("skill_command", "")
+        if "resolve-failures" not in cmd:
+            continue
+        if step.on_result is None:
+            continue
+        for cond in step.on_result.conditions or []:
+            if cond.when and "flake_suspected" in cond.when:
+                is_esc = _classify_route_target(cond.route) == "escalation"
+                flake_routes.append((step_name, cond.route, is_esc))
+
+    assert flake_routes, f"{recipe_name}: no flake_suspected routes found"
+    escalation_steps = [f"{name} → {route}" for name, route, is_esc in flake_routes if is_esc]
+    assert not escalation_steps, (
+        f"{recipe_name}: flake_suspected routes to escalation in: {escalation_steps}. "
+        "All steps invoking resolve-failures should route flake_suspected to continuation (retry)."
+    )
 
 
 @pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)

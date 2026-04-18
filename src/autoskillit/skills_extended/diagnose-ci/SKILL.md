@@ -139,9 +139,9 @@ local test result):
 |---|---|
 | `flaky` or `timing_race` | `flake_suspected` |
 | `deterministic` | `ci_only_failure` (if local tests pass) or `real_fix` (if fixable locally) |
-| `fixture` or `import` | `ci_only_failure` (if local tests pass) |
-| `env` | `ci_only_failure` (conservative) |
-| `unknown` | `ci_only_failure` (conservative) |
+| `fixture` or `import` | `flake_suspected` (if local tests pass) |
+| `env` | `flake_suspected` |
+| `unknown` | `flake_suspected` |
 
 Determine `is_fixable`:
 - `true` for `test`, `lint`, `build`, `type_check`

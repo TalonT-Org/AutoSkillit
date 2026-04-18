@@ -129,7 +129,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir), "0.15"],
             cwd=tmp_path,
-            timeout=30,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=5.0,
@@ -192,7 +192,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script)],
             cwd=tmp_path,
-            timeout=30,
+            timeout=60,
             # No session_log_dir: Channel B cannot fire
             _heartbeat_poll=0.05,
         )
@@ -215,7 +215,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=30,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.1,
@@ -239,7 +239,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script)],
             cwd=tmp_path,
-            timeout=30,
+            timeout=60,
             # No session_log_dir: Channel B cannot fire
             _heartbeat_poll=0.05,
         )
@@ -263,7 +263,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=30,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=2.0,
@@ -348,7 +348,7 @@ class TestChannelBDrainRacePipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=30,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,

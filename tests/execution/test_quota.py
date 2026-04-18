@@ -829,7 +829,7 @@ class TestMultiWindowSelection:
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import QuotaWindowEntry, _compute_binding
 
-        cfg = QuotaGuardConfig(long_window_enabled=True)
+        cfg = QuotaGuardConfig()
         now = datetime.now(UTC)
         windows = {
             "seven_day": QuotaWindowEntry(
@@ -851,7 +851,7 @@ class TestMultiWindowSelection:
         )
         assert result.should_block is True
         assert result.window_name == "seven_day"
-        assert result.effective_threshold == 98.0
+        assert result.effective_threshold == 95.0
 
 
 class TestPerWindowThresholds:
@@ -1143,7 +1143,7 @@ class TestPerWindowThresholds:
         )
 
     def test_threshold_for_window_seven_day_returns_long_threshold(self):
-        """seven_day must yield the long threshold (98.0) with default config."""
+        """seven_day must yield the long threshold (95.0) with default config."""
         from autoskillit.config.settings import QuotaGuardConfig
         from autoskillit.execution.quota import _threshold_for_window
 
@@ -1154,8 +1154,8 @@ class TestPerWindowThresholds:
             long_threshold=cfg.long_window_threshold,
             long_patterns=cfg.long_window_patterns,
         )
-        assert result == 98.0, (
-            f"seven_day returned threshold {result}, expected 98.0. "
+        assert result == 95.0, (
+            f"seven_day returned threshold {result}, expected 95.0. "
             "The Anthropic API uses 'seven_day' for the 7-day rate-limit window."
         )
 
@@ -1782,7 +1782,6 @@ class TestPerWindowToggles:
         monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fake_fetch)
         config = make_quota_guard_config(
             short_window_enabled=False,
-            long_window_enabled=True,
             cache_path=str(tmp_path / "cache.json"),
         )
         await _refresh_quota_cache(config)

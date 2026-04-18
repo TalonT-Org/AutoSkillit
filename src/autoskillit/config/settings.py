@@ -147,9 +147,9 @@ class TokenUsageConfig:
 class QuotaGuardConfig:
     enabled: bool = True
     short_window_enabled: bool = True
-    long_window_enabled: bool = False
+    long_window_enabled: bool = True
     short_window_threshold: float = 85.0
-    long_window_threshold: float = 98.0
+    long_window_threshold: float = 95.0
     long_window_patterns: list[str] = field(
         default_factory=lambda: ["seven_day", "sonnet", "opus"]
     )

@@ -232,7 +232,7 @@ def test_vis_lens_count_is_12() -> None:
 def test_quota_thresholds_defaults() -> None:
     short, long_ = _quota_thresholds_default()
     assert short == pytest.approx(85.0)
-    assert long_ == pytest.approx(98.0)
+    assert long_ == pytest.approx(95.0)
 
 
 def test_doctor_check_count_is_22() -> None:
@@ -313,8 +313,8 @@ def test_configuration_states_quota_thresholds() -> None:
     assert "85.0" in text, (
         "docs/configuration.md does not state quota_guard.short_window_threshold = 85.0"
     )
-    assert "98.0" in text, (
-        "docs/configuration.md does not state quota_guard.long_window_threshold = 98.0"
+    assert "95.0" in text, (
+        "docs/configuration.md does not state quota_guard.long_window_threshold = 95.0"
     )
 
 

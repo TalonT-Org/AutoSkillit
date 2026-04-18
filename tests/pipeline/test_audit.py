@@ -16,6 +16,23 @@ from autoskillit.pipeline.audit import (
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
+def _valid_failure_record_dict(**overrides: object) -> dict:
+    """Module-level factory for valid failure record dicts.
+
+    Used by TestValidateFailureRecordDict and TestLoadFromLogDirTypeValidation.
+    """
+    base: dict = {
+        "timestamp": "2026-03-28T00:00:00Z",
+        "skill_command": "/autoskillit:implement-worktree",
+        "exit_code": 1,
+        "subtype": "error",
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "oops",
+    }
+    return {**base, **overrides}
+
+
 def _make_record(**overrides: object) -> FailureRecord:
     defaults = dict(
         timestamp="2026-02-24T16:00:00Z",
@@ -418,62 +435,42 @@ def test_iter_session_log_entries_kitchen_id_backward_compat(tmp_path):
 
 
 class TestValidateFailureRecordDict:
-    def _valid_dict(self, **overrides) -> dict:
-        base = {
-            "timestamp": "2026-03-28T00:00:00Z",
-            "skill_command": "/autoskillit:implement-worktree",
-            "exit_code": 1,
-            "subtype": "error",
-            "needs_retry": False,
-            "retry_reason": "none",
-            "stderr": "oops",
-        }
-        return {**base, **overrides}
-
     def test_valid_dict_returns_true(self):
-        assert _validate_failure_record_dict(self._valid_dict()) is True
+        assert _validate_failure_record_dict(_valid_failure_record_dict()) is True
 
     def test_missing_key_returns_false(self):
-        d = self._valid_dict()
+        d = _valid_failure_record_dict()
         del d["stderr"]
         assert _validate_failure_record_dict(d) is False
 
     def test_wrong_type_exit_code_returns_false(self):
-        assert _validate_failure_record_dict(self._valid_dict(exit_code="bad")) is False
+        assert _validate_failure_record_dict(_valid_failure_record_dict(exit_code="bad")) is False
 
     def test_wrong_type_needs_retry_returns_false(self):
         # "true" is a str, not bool
-        assert _validate_failure_record_dict(self._valid_dict(needs_retry="true")) is False
+        assert (
+            _validate_failure_record_dict(_valid_failure_record_dict(needs_retry="true")) is False
+        )
 
     def test_wrong_type_timestamp_returns_false(self):
-        assert _validate_failure_record_dict(self._valid_dict(timestamp=12345)) is False
+        assert _validate_failure_record_dict(_valid_failure_record_dict(timestamp=12345)) is False
 
     def test_int_for_bool_field_returns_false(self):
         # 0 and 1 are int, not bool — must be rejected for needs_retry: bool
-        assert _validate_failure_record_dict(self._valid_dict(needs_retry=1)) is False
+        assert _validate_failure_record_dict(_valid_failure_record_dict(needs_retry=1)) is False
 
     def test_extra_keys_are_ignored(self):
-        d = self._valid_dict()
+        d = _valid_failure_record_dict()
         d["extra_unexpected_key"] = "ignored"
         assert _validate_failure_record_dict(d) is True
 
 
 class TestLoadFromLogDirTypeValidation:
-    def _valid_record(self, **overrides) -> dict:
-        base = {
-            "timestamp": "2026-03-28T00:00:00Z",
-            "skill_command": "/autoskillit:implement-worktree",
-            "exit_code": 1,
-            "subtype": "error",
-            "needs_retry": False,
-            "retry_reason": "none",
-            "stderr": "oops",
-        }
-        return {**base, **overrides}
-
     def test_wrong_type_exit_code_is_skipped(self, tmp_path):
         """record_dict with exit_code as str is skipped, not silently accepted."""
-        _write_audit_session(tmp_path, "s001", [self._valid_record(exit_code="not-an-int")])
+        _write_audit_session(
+            tmp_path, "s001", [_valid_failure_record_dict(exit_code="not-an-int")]
+        )
         log = DefaultAuditLog()
         n = log.load_from_log_dir(tmp_path)
         assert n == 0
@@ -481,14 +478,14 @@ class TestLoadFromLogDirTypeValidation:
 
     def test_wrong_type_needs_retry_is_skipped(self, tmp_path):
         """record_dict with needs_retry as str is skipped."""
-        _write_audit_session(tmp_path, "s001", [self._valid_record(needs_retry="true")])
+        _write_audit_session(tmp_path, "s001", [_valid_failure_record_dict(needs_retry="true")])
         log = DefaultAuditLog()
         n = log.load_from_log_dir(tmp_path)
         assert n == 0
 
     def test_missing_field_is_skipped(self, tmp_path):
         """record_dict missing a required field is skipped."""
-        bad = self._valid_record()
+        bad = _valid_failure_record_dict()
         del bad["retry_reason"]
         _write_audit_session(tmp_path, "s001", [bad])
         log = DefaultAuditLog()
@@ -498,8 +495,8 @@ class TestLoadFromLogDirTypeValidation:
     def test_valid_record_alongside_invalid_is_preserved(self, tmp_path):
         """A valid record in the same session file is loaded despite invalid siblings."""
         records = [
-            self._valid_record(exit_code="bad"),  # skipped
-            self._valid_record(skill_command="/ok", exit_code=2),  # kept
+            _valid_failure_record_dict(exit_code="bad"),  # skipped
+            _valid_failure_record_dict(skill_command="/ok", exit_code=2),  # kept
         ]
         _write_audit_session(tmp_path, "s001", records)
         log = DefaultAuditLog()

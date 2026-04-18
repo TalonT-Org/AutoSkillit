@@ -38,13 +38,18 @@ def test_composite_hash_changes_with_recipe_content(tmp_path):
     skills_dir = tmp_path / "skills"
     skills_dir.mkdir()
 
-    p1 = _write_recipe(tmp_path, "recipe1")
+    p1 = _write_recipe(tmp_path, "test")
     r1 = load_recipe(p1)
     h1 = compute_composite_hash(p1, r1, skills_dir=skills_dir, project_dir=tmp_path)
 
-    p2 = _write_recipe(tmp_path, "recipe2")
-    r2 = load_recipe(p2)
-    h2 = compute_composite_hash(p2, r2, skills_dir=skills_dir, project_dir=tmp_path)
+    # Overwrite the same file with different step content (same name)
+    p1.write_text(
+        "name: test\ndescription: d\nkitchen_rules:\n  - rule\n"
+        "steps:\n  s1:\n    tool: run_skill\n    message: 'different'\n"
+        "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
+    )
+    r2 = load_recipe(p1)
+    h2 = compute_composite_hash(p1, r2, skills_dir=skills_dir, project_dir=tmp_path)
 
     assert h1 != h2
 

@@ -508,3 +508,88 @@ def test_defaults_yaml_has_filter_mode_and_base_ref():
     assert "base_ref" in tc
     assert tc["filter_mode"] is None
     assert tc["base_ref"] is None
+
+
+def test_test_result_has_duration_and_filter_fields():
+    """TestResult accepts optional duration_seconds and filter stat fields."""
+    from autoskillit.core import TestResult
+
+    tr = TestResult(
+        passed=True,
+        stdout="out",
+        stderr="err",
+        duration_seconds=3.14,
+        tests_selected=73,
+        tests_deselected=275,
+        filter_mode="aggressive",
+    )
+    assert tr.duration_seconds == 3.14
+    assert tr.tests_selected == 73
+    assert tr.tests_deselected == 275
+    assert tr.filter_mode == "aggressive"
+
+
+def test_test_result_new_fields_default_to_none():
+    """Existing callers with positional args still work."""
+    from autoskillit.core import TestResult
+
+    tr = TestResult(passed=True, stdout="", stderr="")
+    assert tr.duration_seconds is None
+    assert tr.tests_selected is None
+    assert tr.tests_deselected is None
+    assert tr.filter_mode is None
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_measures_duration(tmp_path: Path) -> None:
+    """run() populates duration_seconds on the returned TestResult."""
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(0, "= 10 passed =\n", ""))
+    tester = DefaultTestRunner(config=make_test_config(), runner=runner)
+    result = await tester.run(tmp_path)
+    assert result.duration_seconds is not None
+    assert result.duration_seconds >= 0.0
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_populates_filter_stats_from_sidecar(tmp_path: Path) -> None:
+    """run() populates filter fields when sidecar JSON file is written."""
+    import json
+
+    sidecar_data = {"filter_mode": "conservative", "tests_selected": 50, "tests_deselected": 100}
+
+    async def fake_runner(command, *, cwd, timeout, env, **kwargs):
+        sidecar_path = env.get("AUTOSKILLIT_FILTER_STATS_FILE")
+        assert sidecar_path, "AUTOSKILLIT_FILTER_STATS_FILE must be set in env"
+        Path(sidecar_path).write_text(json.dumps(sidecar_data))
+        return SubprocessResult(
+            returncode=0,
+            stdout="= 50 passed =\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+
+    tester = DefaultTestRunner(config=make_test_config(), runner=fake_runner)
+    result = await tester.run(tmp_path)
+    assert result.filter_mode == "conservative"
+    assert result.tests_selected == 50
+    assert result.tests_deselected == 100
+
+
+@pytest.mark.anyio
+async def test_default_test_runner_no_sidecar_means_no_filter_stats(tmp_path: Path) -> None:
+    """run() leaves filter fields as None when no sidecar is written."""
+    from tests.conftest import _make_result
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(0, "= 10 passed =\n", ""))
+    tester = DefaultTestRunner(config=make_test_config(), runner=runner)
+    result = await tester.run(tmp_path)
+    assert result.filter_mode is None
+    assert result.tests_selected is None
+    assert result.tests_deselected is None

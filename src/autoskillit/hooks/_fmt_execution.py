@@ -164,6 +164,17 @@ def _fmt_test_check(data: dict, _pipeline: bool) -> str:
     mark = _CHECK_MARK if passed else _CROSS_MARK
     status = "PASS" if passed else "FAIL"
     lines = [f"## test_check {mark} {status}", "", f"passed: {passed}"]
+
+    duration = data.get("duration_seconds")
+    if duration is not None:
+        lines.append(f"duration: {duration:.1f}s")
+
+    filter_mode = data.get("filter_mode")
+    if filter_mode:
+        selected = data.get("tests_selected", "?")
+        deselected = data.get("tests_deselected", "?")
+        lines.append(f"filter: {filter_mode} ({selected} selected, {deselected} deselected)")
+
     stdout = data.get("stdout", "")
     if stdout:
         filtered = _filter_pytest_output(stdout)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 pytest_plugins = ["pytester"]
@@ -12,12 +14,16 @@ pytest_plugins = ["pytester"]
 # ---------------------------------------------------------------------------
 
 _CONFTEST_HOOKS_SOURCE = """
+import json
 import os
 import warnings
 import pytest
 from pathlib import Path
 
 _scope_key = pytest.StashKey[set | None]()
+_filter_mode_key = pytest.StashKey[str | None]()
+_selected_count_key = pytest.StashKey[int | None]()
+_deselected_count_key = pytest.StashKey[int | None]()
 
 def pytest_addoption(parser):
     parser.addoption("--filter-mode", default=None,
@@ -26,6 +32,7 @@ def pytest_addoption(parser):
 
 def pytest_configure(config):
     config.stash[_scope_key] = None
+    config.stash[_filter_mode_key] = None
     cli_mode = config.getoption("--filter-mode", default=None)
     env_val = os.environ.get("AUTOSKILLIT_TEST_FILTER", "")
     if not cli_mode and not env_val:
@@ -36,6 +43,7 @@ def pytest_configure(config):
         mode = cli_mode or ("conservative" if env_val.lower() in ("1", "true", "yes") else env_val)
         if mode == "none":
             return
+        config.stash[_filter_mode_key] = mode
         # Stub scope: only include files under subdir_a/
         config.stash[_scope_key] = {config.rootpath / "subdir_a"}
     except Exception as exc:
@@ -60,8 +68,27 @@ def pytest_collection_modifyitems(items, config):
                 f"Test filter: {len(selected)} selected, {len(deselected)} deselected",
                 stacklevel=1,
             )
+            config.stash[_selected_count_key] = len(selected)
+            config.stash[_deselected_count_key] = len(deselected)
     except Exception as exc:
         warnings.warn(f"Test filter deselection failed: {exc}", stacklevel=1)
+
+def pytest_sessionfinish(session, exitstatus):
+    if hasattr(session.config, "workerinput"):
+        return
+    out_path = os.environ.get("AUTOSKILLIT_FILTER_STATS_FILE")
+    if not out_path:
+        return
+    filter_mode = session.config.stash.get(_filter_mode_key, None)
+    selected = session.config.stash.get(_selected_count_key, None)
+    deselected = session.config.stash.get(_deselected_count_key, None)
+    if filter_mode is None:
+        return
+    Path(out_path).write_text(json.dumps({
+        "filter_mode": filter_mode,
+        "tests_selected": selected,
+        "tests_deselected": deselected,
+    }))
 
 def _is_under(path, parent):
     try:
@@ -192,6 +219,34 @@ class TestConftestFilterPlugin:
         pytester.makepyfile(test_drop="def test_drop(): pass")
         result = pytester.runpytest("-v", "-W", "always")
         result.stdout.fnmatch_lines(["*Test filter:*selected*deselected*"])
+
+    def test_conftest_writes_filter_sidecar(
+        self,
+        pytester: pytest.Pytester,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """pytest_sessionfinish writes filter stats JSON when sidecar env var is set."""
+        sidecar = tmp_path / "filter-stats.json"
+        monkeypatch.setenv("AUTOSKILLIT_FILTER_STATS_FILE", str(sidecar))
+        pytester.makeconftest(_CONFTEST_HOOKS_SOURCE)
+        pytester.mkdir("subdir_a")
+        (pytester.path / "subdir_a" / "test_in_scope.py").write_text("def test_ok(): pass\n")
+        pytester.makepyfile(test_out_scope="def test_skip(): pass")
+        pytester.runpytest("--filter-mode=conservative")
+        assert sidecar.is_file(), "Sidecar file must be written by pytest_sessionfinish"
+        data = json.loads(sidecar.read_text())
+        assert data["filter_mode"] == "conservative"
+        assert isinstance(data["tests_selected"], int)
+        assert isinstance(data["tests_deselected"], int)
+
+    def test_conftest_no_sidecar_when_env_unset(self, pytester: pytest.Pytester) -> None:
+        """No sidecar written when AUTOSKILLIT_FILTER_STATS_FILE is not in env."""
+        pytester.makeconftest(_CONFTEST_HOOKS_SOURCE)
+        pytester.mkdir("subdir_a")
+        (pytester.path / "subdir_a" / "test_simple.py").write_text("def test_a(): pass\n")
+        result = pytester.runpytest("--filter-mode=conservative")
+        result.assert_outcomes(passed=1)
 
 
 # ---------------------------------------------------------------------------

@@ -1353,3 +1353,12 @@ def test_summary_no_recipe_provenance_when_empty(tmp_path):
     session_dir = tmp_path / "sessions" / "rp-005"
     summary = json.loads((session_dir / "summary.json").read_text())
     assert "recipe_provenance" not in summary
+
+
+
+def test_flush_index_includes_duration_seconds(tmp_path):
+    """sessions.jsonl index entry includes duration_seconds."""
+    _flush(tmp_path, elapsed_seconds=42.5)
+    index = (tmp_path / "sessions.jsonl").read_text().strip()
+    entry = json.loads(index)
+    assert entry["duration_seconds"] == pytest.approx(42.5)

@@ -133,3 +133,62 @@ def test_skill_verdict_covers_all_required_values(skill_text: str) -> None:
     required = {"real_fix", "already_green", "flake_suspected", "ci_only_failure"}
     missing = {v for v in required if v not in skill_text}
     assert not missing, f"resolve-failures SKILL.md is missing these verdict values: {missing}"
+
+
+# ---------------------------------------------------------------------------
+# Verdict decision table row-level mapping tests
+# ---------------------------------------------------------------------------
+
+
+def _find_table_row_verdict(skill_text: str, subtype: str) -> str | None:
+    """Find the verdict assigned to a given failure_subtype in the decision table.
+
+    Scans the markdown table in the Verdict Decision Tree section for a row
+    containing the subtype, and extracts the verdict value from that row.
+    """
+    in_table = False
+    for line in skill_text.splitlines():
+        if "Local result" in line and "failure_subtype" in line and "Verdict" in line:
+            in_table = True
+            continue
+        if in_table and line.strip().startswith("|---"):
+            continue
+        if in_table and "|" in line:
+            cells = [c.strip() for c in line.split("|")]
+            # cells[0] is empty (before first |), cells[-1] is empty (after last |)
+            if len(cells) < 4:
+                continue
+            subtype_cell = cells[2]  # failure_subtype column
+            verdict_cell = cells[3]  # Verdict column
+            if subtype in subtype_cell:
+                # Extract verdict token (backtick-wrapped)
+                match = re.search(r"`(\w+)`", verdict_cell)
+                if match:
+                    return match.group(1)
+        elif in_table and line.strip() == "":
+            break
+    return None
+
+
+def test_unknown_subtype_maps_to_flake_suspected_not_ci_only(skill_text: str) -> None:
+    """The 'unknown' failure_subtype must map to flake_suspected, not ci_only_failure."""
+    verdict = _find_table_row_verdict(skill_text, "unknown")
+    assert verdict is not None, (
+        "resolve-failures SKILL.md verdict decision table must contain a row for 'unknown'"
+    )
+    assert verdict == "flake_suspected", (
+        f"'unknown' subtype must map to 'flake_suspected', got '{verdict}'. "
+        "Ambiguous subtypes should not be routed to abort."
+    )
+
+
+def test_env_subtype_maps_to_flake_suspected_not_ci_only(skill_text: str) -> None:
+    """The 'env' failure_subtype must map to flake_suspected, not ci_only_failure."""
+    verdict = _find_table_row_verdict(skill_text, "env")
+    assert verdict is not None, (
+        "resolve-failures SKILL.md verdict decision table must contain a row for 'env'"
+    )
+    assert verdict == "flake_suspected", (
+        f"'env' subtype must map to 'flake_suspected', got '{verdict}'. "
+        "Ambiguous subtypes should not be routed to abort."
+    )

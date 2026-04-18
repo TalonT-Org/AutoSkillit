@@ -44,6 +44,12 @@ Fix test failures in a worktree implemented by `/autoskillit:implement-worktree-
 - Leave worktree intact on failure for manual inspection
 - Treat CI as the source of truth: "passes locally" is not a resolution
 
+**Flaky tests must always be resolved.** A test that failed previously and now passes
+is flaky by definition. Investigate timing dependencies, race conditions, insufficient
+timeouts, resource contention under parallel execution (pytest-xdist), and
+non-deterministic setup/teardown. Apply a stabilizing fix. Never classify a flaky test
+as unfixable. Never emit `ci_only_failure` for a test that is merely non-deterministic.
+
 ## Context Limit Behavior
 
 When context is exhausted mid-execution, edits may be on disk but not committed.
@@ -184,8 +190,8 @@ Using `{local_result}` from Step 2 and `{failure_subtype}` from Step 2a, determi
 | FAIL → (no fix possible after 3 iterations) | any | proceed to Step 5 |
 | PASS | `flaky` or `timing_race` | `flake_suspected` |
 | PASS | `deterministic` | `ci_only_failure` |
-| PASS | `fixture` or `import` | `ci_only_failure` |
-| PASS | `env` or `unknown` | `ci_only_failure` (conservative) |
+| PASS | `fixture` or `import` | `flake_suspected` |
+| PASS | `env` or `unknown` | `flake_suspected` |
 
 **Note on `already_green`:** This verdict is reserved for the `pre_resolve_rebase`
 re-entry path — when a sibling pipeline's fix has already landed on integration and
@@ -280,7 +286,7 @@ Where:
 Return control to the orchestrator. The recipe's `on_result:` routing dispatches
 on `verdict`:
 - `real_fix` → `re_push` (fix landed, push to remote)
-- `flake_suspected` → `release_issue_failure` (human escalation)
+- `flake_suspected` → `re_push` (retry via CI, bounded by retries: 2 / on_exhausted: release_issue_failure)
 - `ci_only_failure` → `release_issue_failure` (human escalation)
 
 ### Step 5: Report Failure

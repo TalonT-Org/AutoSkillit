@@ -171,7 +171,7 @@ def _asymmetric_resolve_steps() -> dict[str, RecipeStep]:
                         when="${{ result.verdict }} == 'flake_suspected'",
                     ),
                     StepResultCondition(
-                        route="fail_step",
+                        route="failure_step",
                         when="${{ result.verdict }} == 'ci_only_failure'",
                     ),
                     StepResultCondition(
@@ -184,7 +184,7 @@ def _asymmetric_resolve_steps() -> dict[str, RecipeStep]:
                     ),
                 ]
             ),
-            on_failure="fail_step",
+            on_failure="failure_step",
         ),
         "resolve_ci": RecipeStep(
             tool="run_skill",
@@ -215,7 +215,6 @@ def _asymmetric_resolve_steps() -> dict[str, RecipeStep]:
         "test_step": RecipeStep(tool="test_check"),
         "push_step": RecipeStep(tool="push_to_remote"),
         "rebase_step": RecipeStep(tool="run_cmd"),
-        "fail_step": RecipeStep(tool="run_cmd"),
         "failure_step": RecipeStep(tool="run_cmd"),
     }
 

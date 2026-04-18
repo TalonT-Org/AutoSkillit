@@ -600,7 +600,7 @@ steps:
       - when: "${{ result.verdict }} == 'already_green'"
         route: re_push_review
       - when: "${{ result.verdict }} == 'flake_suspected'"
-        route: release_issue_failure
+        route: re_push_review
       - when: "${{ result.verdict }} == 'ci_only_failure'"
         route: release_issue_failure
     on_failure: release_issue_failure
@@ -609,9 +609,9 @@ steps:
       (context.work_dir) has the feature branch (context.merge_target) checked out.
       resolve-review fetches inline and summary review comments via the GitHub API,
       applies fixes for each actionable finding (critical + warning severity), and
-      commits each fix. Routes via on_result: verdict dispatch — real_fix/already_green
-      both route to re_push_review; flake_suspected/ci_only_failure escalate.
-      Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.
+      commits each fix. Routes via on_result: verdict dispatch — real_fix/already_green/
+      flake_suspected all route to re_push_review (retry bounded by retries: 2);
+      ci_only_failure escalates to release_issue_failure.
 
   re_push_review:
     tool: push_to_remote

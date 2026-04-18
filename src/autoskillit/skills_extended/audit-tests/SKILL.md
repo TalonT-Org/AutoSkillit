@@ -1,7 +1,7 @@
 ---
 name: audit-tests
 categories: [audit]
-description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, and other test quality issues. Use when user says "audit tests", "audit test suite", "review tests", or "test quality check". Generates an improvement plan in {{AUTOSKILLIT_TEMP}}/ with explanations for each proposed change.
+description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, test path filter integrity, and other test quality issues. Use when user says "audit tests", "audit test suite", "review tests", or "test quality check". Generates an improvement plan in {{AUTOSKILLIT_TEMP}}/ with explanations for each proposed change.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -105,6 +105,9 @@ Tests that no longer align with the current codebase.
 - Fixtures marked as deprecated that are still defined
 - Tests that are always skipped or conditionally disabled
 - Tests whose setup creates state the production code no longer uses
+- `LAYER_CASCADE_CONSERVATIVE` or `LAYER_CASCADE_AGGRESSIVE` keys in `tests/_test_filter.py` that don't match the current set of subpackages under `src/autoskillit/`
+- `.autoskillit/test-filter-manifest.yaml` patterns that match zero tracked files (orphaned entries)
+- `.autoskillit/test-source-map.json` not regenerated within the quarterly schedule
 
 ### Category 7: Fixture Issues (LOW)
 
@@ -127,10 +130,46 @@ Tests placed in the wrong directory or category.
 - Unit-level tests in integration directories (no multi-component interaction)
 - Tests in contract/specification directories that duplicate standard unit tests
 - Integration tests that could be unit tests (everything is mocked anyway)
+- Test files that import production code from a source layer outside their directory's cascade entry — the import creates an invisible dependency the filter cannot track (cross-layer import, see C11)
+- Test files at the `tests/` root that are part of the filter infrastructure (`test_test_filter.py`, `test_test_filter_plugin.py`, `test_test_filter_step7.py`) — these are correctly placed and should NOT be flagged for misclassification
 
 ### Category 9: Oversized Files (MEDIUM)
 
 Test files or supporting files exceeding 1000 lines. Flag files approaching the threshold (800+) as warnings.
+
+### Category 11: Test Path Filter Integrity (HIGH)
+
+Tests and configuration that maintain the path-based test filter's correctness. The filter system (`tests/_test_filter.py`) provides a 5-minute local feedback loop by selecting only affected test directories. False negatives here mean broken code passes CI; false positives mean slow developer feedback.
+
+**Cascade alignment:**
+- Test files that import production code from a source layer NOT in their directory's cascade entry in `LAYER_CASCADE_CONSERVATIVE` — these tests are silently skipped when the imported module changes (false negative). Check by walking `from autoskillit.<pkg>` imports in each test file and verifying the test's directory appears in `LAYER_CASCADE_CONSERVATIVE[<pkg>]`
+- New source subpackages under `src/autoskillit/` not present as keys in both `LAYER_CASCADE_CONSERVATIVE` and `LAYER_CASCADE_AGGRESSIVE`
+- Cross-layer test imports invisible to the filter's AST walker (e.g., dynamic imports via `importlib.import_module`)
+
+**Manifest coverage:**
+- Non-Python tracked files without a matching entry in `.autoskillit/test-filter-manifest.yaml` — causes unnecessary full runs when only that file changed
+- Manifest entries pointing to nonexistent test directories
+- Manifest patterns that match zero tracked files (orphaned entries)
+
+**Size marker correctness:**
+- Always-run directories (`arch/`, `contracts/`) that have zero size markers — these are fully deselected by aggressive mode's size filter, nullifying the always-run safety net
+- `small`-marked tests that spawn subprocesses or perform real filesystem I/O (should be `medium`)
+- `medium`-marked tests that access the network (should be `large`)
+- `_SIZE_DIRS` in `conftest.py` diverging from `SIZE_DIRECTORIES` in `tests/arch/test_size_markers.py`
+
+**Bucket A discipline:**
+- Files in `BUCKET_A_PATTERNS` that could be narrowed to specific test directories via the manifest instead of triggering a full run
+- High-churn files in Bucket A that frequently negate filter performance gains
+
+**Test file naming for oracle traceability:**
+- Source modules under `src/autoskillit/` with zero corresponding `test_<module>.py` files — the coverage oracle (`test-source-map.json`) and aggressive mode step 7 file-level filtering rely on naming correspondence
+- Cross-reference C8's naming rules — the filter-specific concern is that misnamed test files block file-level filtering in aggressive mode step 7
+
+**Filter infrastructure staleness:**
+- `LAYER_CASCADE_CONSERVATIVE` or `LAYER_CASCADE_AGGRESSIVE` keys in `tests/_test_filter.py` that don't match the current set of subpackages under `src/autoskillit/`
+- Hardcoded count assertions in filter tests that have drifted from reality
+- `test-source-map.json` (coverage oracle) not regenerated within the quarterly schedule
+- `ALWAYS_RUN_CONSERVATIVE` or `ALWAYS_RUN_AGGRESSIVE` sets containing directories that no longer exist under `tests/`
 
 ---
 
@@ -140,7 +179,7 @@ Test files or supporting files exceeding 1000 lines. Flag files approaching the 
 
 Spawn subagents to explore different areas of the test suite. Divide by **test directory/module**, not by issue category — each subagent should assess all issue categories within its area.
 
-Each subagent should read test files AND the corresponding production code to judge whether the test is meaningful. For each finding, note the file, line range, issue category, and a brief explanation of why it's a problem and what should change.
+Each subagent should read test files AND the corresponding production code to judge whether the test is meaningful. For each finding, note the file, line range, issue category, and a brief explanation of why it's a problem and what should change. Additionally, one subagent should perform filter integrity checks: verify filter cascade maps against actual source subpackages; check manifest completeness; verify size marker coverage; check Bucket A minimality.
 
 ### Step 2: Consolidate and Deduplicate
 
@@ -182,3 +221,5 @@ Do NOT flag:
 - Test infrastructure and safety mechanisms
 - Tests that are intentionally minimal as smoke tests
 - Shared fixtures in centralized test configuration
+- Test files at the `tests/` root that are part of the filter infrastructure (`test_test_filter.py`, `test_test_filter_plugin.py`, `test_test_filter_step7.py`, `_test_filter.py`) — these test root-level infrastructure and are correctly placed at the root
+- Hardcoded count assertions in filter/manifest tests (e.g., `>= 22 patterns`) — these are intentional drift detectors, not weak assertions

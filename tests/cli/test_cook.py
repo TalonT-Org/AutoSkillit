@@ -224,10 +224,12 @@ class TestCLIOrder:
     def test_workspace_clean_boundary_5h_is_stale(
         self, tmp_path: Path, capsys: pytest.CaptureFixture
     ) -> None:
-        """T_WC5: dir with mtime exactly 5h ago is stale (>=5h threshold)."""
+        """T_WC5: dir with mtime at the 5h threshold is stale (>=5h threshold)."""
         runs_dir = tmp_path / "autoskillit-runs"
         (runs_dir / "boundary").mkdir(parents=True)
-        boundary_time = time.time() - 5 * 3600
+        # Subtract 2s margin: filesystem mtime rounding can push st_mtime up by 1s,
+        # making the computed age fall just below the 18000s threshold on a tight boundary.
+        boundary_time = time.time() - 5 * 3600 - 2
         os.utime(runs_dir / "boundary", (boundary_time, boundary_time))
         cli.workspace_clean(dir=str(tmp_path), force=True)
         assert not (runs_dir / "boundary").exists()

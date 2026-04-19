@@ -998,8 +998,8 @@ class TestTierAwareGateEnforcement:
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
         result = json.loads(await open_kitchen())
-        assert result.get("subtype") == "headless_error"
-        assert "franchise" in result.get("result", "").lower()
+        assert result.get("error") == "HeadlessDenied"
+        assert "franchise" in result.get("user_visible_message", "").lower()
 
     @pytest.mark.anyio
     async def test_close_kitchen_denied_for_franchise_tier(self, tool_ctx, monkeypatch):

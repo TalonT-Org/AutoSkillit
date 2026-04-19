@@ -23,6 +23,7 @@ __all__ = [
     "PACK_REGISTRY",
     "RecipePackDef",
     "RECIPE_PACK_REGISTRY",
+    "RECIPE_PACK_TAGS",
     "CATEGORY_TAGS",
     "TOOL_SUBSET_TAGS",
     "SKILL_COMMAND_PREFIX",
@@ -214,6 +215,8 @@ RECIPE_PACK_REGISTRY: dict[str, RecipePackDef] = {
     "research-family": RecipePackDef(False, "Research and exploration recipes"),
     "orchestration-family": RecipePackDef(True, "Campaign orchestration and automation"),
 }
+
+RECIPE_PACK_TAGS: frozenset[str] = frozenset(RECIPE_PACK_REGISTRY.keys())
 
 # Maps each MCP tool name to its functional category subset tags.
 # Mirrors the FastMCP @mcp.tool(tags=...) category assignments in the server layer.

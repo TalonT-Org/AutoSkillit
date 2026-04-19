@@ -4187,3 +4187,140 @@ def test_build_skill_result_surfaces_last_stop_reason():
     result = _make_result(returncode=0, stdout=ndjson)
     sr = _build_skill_result(result)
     assert sr.last_stop_reason == "end_turn"
+
+
+class TestDispatchFoodTruck:
+    """Tests for DefaultHeadlessExecutor.dispatch_food_truck."""
+
+    def _make_success_stdout(self, marker: str = "%%FT_DONE%%") -> str:
+        import json
+
+        return json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "result": f"L2 done {marker}",
+                "session_id": "ft-session",
+                "is_error": False,
+            }
+        )
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_calls_runner(self, minimal_ctx, tmp_path: Path):
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.fakes import MockSubprocessRunner
+
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=self._make_success_stdout(),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=55555,
+            )
+        )
+        minimal_ctx.runner = runner
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        await executor.dispatch_food_truck(
+            "You are an L2 orchestrator",
+            str(tmp_path),
+            completion_marker="%%FT_DONE%%",
+        )
+
+        assert runner.call_args_list, "runner was never called"
+        cmd, _cwd, _timeout, kwargs = runner.call_args_list[0]
+        env = kwargs.get("env")
+        assert env is not None
+        assert env["AUTOSKILLIT_SESSION_TYPE"] == "orchestrator"
+        assert env["AUTOSKILLIT_HEADLESS"] == "1"
+        assert "--tools" in cmd
+        assert "AskUserQuestion" in cmd
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_returns_skill_result(self, minimal_ctx, tmp_path: Path):
+        from autoskillit.core.types import SkillResult, SubprocessResult, TerminationReason
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.fakes import MockSubprocessRunner
+
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=self._make_success_stdout(),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=55555,
+            )
+        )
+        minimal_ctx.runner = runner
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        result = await executor.dispatch_food_truck(
+            "You are an L2 orchestrator",
+            str(tmp_path),
+            completion_marker="%%FT_DONE%%",
+        )
+
+        assert isinstance(result, SkillResult)
+        assert result.success is True
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_on_spawn_receives_pid(self, minimal_ctx, tmp_path: Path):
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.fakes import MockSubprocessRunner
+
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=self._make_success_stdout(),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=55555,
+            )
+        )
+        minimal_ctx.runner = runner
+
+        spawned_pids: list[int] = []
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        await executor.dispatch_food_truck(
+            "You are an L2 orchestrator",
+            str(tmp_path),
+            completion_marker="%%FT_DONE%%",
+            on_spawn=spawned_pids.append,
+        )
+
+        assert spawned_pids == [55555]
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_on_spawn_not_required(self, minimal_ctx, tmp_path: Path):
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.fakes import MockSubprocessRunner
+
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=self._make_success_stdout(),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=55555,
+            )
+        )
+        minimal_ctx.runner = runner
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        result = await executor.dispatch_food_truck(
+            "You are an L2 orchestrator",
+            str(tmp_path),
+            completion_marker="%%FT_DONE%%",
+            on_spawn=None,
+        )
+
+        assert result is not None

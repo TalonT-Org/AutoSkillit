@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from collections import deque
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +79,24 @@ class ExecutorCall:
     recipe_version: str | None = None
 
 
+@dataclasses.dataclass
+class DispatchFoodTruckCall:
+    """Record of a single ``HeadlessExecutor.dispatch_food_truck()`` invocation."""
+
+    orchestrator_prompt: str
+    cwd: str
+    completion_marker: str = ""
+    model: str = ""
+    step_name: str = ""
+    kitchen_id: str = ""
+    order_id: str = ""
+    timeout: float | None = None
+    stale_threshold: float | None = None
+    idle_output_timeout: float | None = None
+    env_extras: Mapping[str, str] | None = None
+    on_spawn: Callable[[int], None] | None = None
+
+
 _DEFAULT_SKILL_RESULT = SkillResult(
     success=True,
     result="ok",
@@ -104,6 +122,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         self._default = default_result or _DEFAULT_SKILL_RESULT
         self._queue: deque[SkillResult] = deque()
         self.calls: list[ExecutorCall] = []
+        self.dispatch_calls: list[DispatchFoodTruckCall] = []
 
     def push(self, result: SkillResult) -> None:
         """Enqueue a result to be returned by the next :meth:`run` call."""
@@ -155,6 +174,42 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
             return dataclasses.replace(self._queue.popleft())
         # Return a defensive copy so callers mutating fields (e.g. run_skill
         # setting order_id) don't pollute the shared default across tests.
+        return dataclasses.replace(self._default)
+
+    async def dispatch_food_truck(
+        self,
+        orchestrator_prompt: str,
+        cwd: str,
+        *,
+        completion_marker: str,
+        model: str = "",
+        step_name: str = "",
+        kitchen_id: str = "",
+        order_id: str = "",
+        timeout: float | None = None,
+        stale_threshold: float | None = None,
+        idle_output_timeout: float | None = None,
+        env_extras: Mapping[str, str] | None = None,
+        on_spawn: Callable[[int], None] | None = None,
+    ) -> SkillResult:
+        self.dispatch_calls.append(
+            DispatchFoodTruckCall(
+                orchestrator_prompt=orchestrator_prompt,
+                cwd=cwd,
+                completion_marker=completion_marker,
+                model=model,
+                step_name=step_name,
+                kitchen_id=kitchen_id,
+                order_id=order_id,
+                timeout=timeout,
+                stale_threshold=stale_threshold,
+                idle_output_timeout=idle_output_timeout,
+                env_extras=env_extras,
+                on_spawn=on_spawn,
+            )
+        )
+        if self._queue:
+            return dataclasses.replace(self._queue.popleft())
         return dataclasses.replace(self._default)
 
 

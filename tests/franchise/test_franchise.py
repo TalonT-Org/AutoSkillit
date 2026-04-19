@@ -46,3 +46,20 @@ def test_franchise_lock_acquire_is_coroutine() -> None:
     import asyncio
 
     assert inspect.iscoroutinefunction(asyncio.Lock().acquire)
+
+
+def test_headless_executor_protocol_has_dispatch_food_truck() -> None:
+    """HeadlessExecutor protocol exposes dispatch_food_truck."""
+    from autoskillit.core import HeadlessExecutor
+
+    assert hasattr(HeadlessExecutor, "dispatch_food_truck")
+
+
+def test_default_executor_satisfies_protocol_with_dispatch(minimal_ctx) -> None:
+    """DefaultHeadlessExecutor satisfies HeadlessExecutor protocol."""
+    from autoskillit.core import HeadlessExecutor
+    from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+    executor = DefaultHeadlessExecutor(minimal_ctx)
+    assert isinstance(executor, HeadlessExecutor)
+    assert hasattr(executor, "dispatch_food_truck")

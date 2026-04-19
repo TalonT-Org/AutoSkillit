@@ -189,6 +189,16 @@ class ClaudeSessionResult:
         """The stop_reason from the final assistant turn, or empty string."""
         return self.stop_reasons[-1] if self.stop_reasons else ""
 
+    @property
+    def lifespan_started(self) -> bool:
+        """Heuristic: True when at least one MCP tool call was observed.
+
+        Detects session engagement by checking whether the model invoked any
+        MCP tools, indicating the lifespan context (server init) completed
+        successfully.
+        """
+        return bool(self.tool_uses)
+
 
 def extract_token_usage(stdout: str) -> dict[str, Any] | None:
     """Extract token usage from Claude CLI NDJSON output.

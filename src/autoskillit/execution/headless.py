@@ -15,7 +15,7 @@ import os
 import re
 import time
 import traceback
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
@@ -48,7 +48,11 @@ from autoskillit.execution.clone_guard import (
     is_worktree_skill,
     snapshot_clone_state,
 )
-from autoskillit.execution.commands import build_headless_resume_cmd, build_leaf_headless_cmd
+from autoskillit.execution.commands import (
+    build_food_truck_cmd,
+    build_headless_resume_cmd,
+    build_leaf_headless_cmd,
+)
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.recording import RecordingSubprocessRunner
 from autoskillit.execution.session import (
@@ -66,6 +70,7 @@ if TYPE_CHECKING:
         AutomationConfig,
     )
     from autoskillit.core import AuditLog, SubprocessResult, SubprocessRunner
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
     from autoskillit.pipeline.context import (
         ToolContext,
     )
@@ -966,6 +971,275 @@ def _derive_step_name_from_skill_command(skill_command: str) -> str:
     return token
 
 
+async def _execute_claude_headless(
+    spec: ClaudeHeadlessCmd,
+    cwd: str,
+    ctx: ToolContext,
+    *,
+    skill_command: str = "",
+    step_name: str = "",
+    kitchen_id: str = "",
+    order_id: str = "",
+    timeout: float,
+    stale_threshold: float,
+    idle_output_timeout: float | None = None,
+    expected_output_patterns: Sequence[str] = (),
+    write_behavior: WriteBehaviorSpec | None = None,
+    completion_marker: str = "",
+    recipe_name: str = "",
+    recipe_content_hash: str = "",
+    recipe_composite_hash: str = "",
+    recipe_version: str = "",
+    on_spawn: Callable[[int], None] | None = None,
+    skip_clone_guard: bool = False,
+) -> SkillResult:
+    """Shared subprocess execution for headless Claude sessions.
+
+    Accepts an already-built ClaudeHeadlessCmd and handles runner invocation,
+    exception handling, _build_skill_result, and session log flushing.
+    Used by both run_headless_core (leaf path) and
+    DefaultHeadlessExecutor.dispatch_food_truck (food truck path).
+    """
+    cfg = ctx.config.run_skill
+    _raw_idle = (
+        idle_output_timeout if idle_output_timeout is not None else float(cfg.idle_output_timeout)
+    )
+    effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
+
+    runner = ctx.runner
+    assert runner is not None, "No subprocess runner configured"
+
+    linux_tracing_cfg = ctx.config.linux_tracing
+    _start_ts = datetime.now(UTC).isoformat()
+    _start_mono = time.monotonic()
+    _versions = collect_version_snapshot()
+
+    _clone_snapshot = None
+    if (
+        not skip_clone_guard
+        and is_worktree_skill(skill_command)
+        and not is_git_worktree(Path(cwd))
+    ):
+        _clone_snapshot = await snapshot_clone_state(cwd, runner)
+
+    _result: SubprocessResult | None = None
+    try:
+        _result = await runner(
+            spec.cmd,
+            cwd=Path(cwd),
+            timeout=timeout,
+            env=spec.env,
+            pty_mode=True,
+            session_log_dir=_session_log_dir(cwd),
+            completion_marker=completion_marker,
+            stale_threshold=stale_threshold,
+            completion_drain_timeout=cfg.completion_drain_timeout,
+            linux_tracing_config=linux_tracing_cfg,
+            idle_output_timeout=effective_idle,
+            max_suppression_seconds=cfg.max_suppression_seconds,
+        )
+    except Exception as exc:
+        logger.error("run_headless_core runner crashed", exc_info=True)
+        _exc_text = traceback.format_exc()
+        _log_dir = ctx.config.linux_tracing.log_dir
+        try:
+            # Deferred: autoskillit.execution.__init__ imports headless.py (L39-42);
+            # a top-level import of autoskillit.execution would be circular.
+            from autoskillit.execution import flush_session_log
+
+            flush_session_log(
+                log_dir=_log_dir,
+                cwd=str(cwd),
+                kitchen_id=kitchen_id,
+                order_id=order_id,
+                session_id="",
+                pid=0,
+                skill_command=skill_command,
+                success=False,
+                subtype="crashed",
+                exit_code=-1,
+                start_ts=_start_ts,
+                proc_snapshots=None,
+                termination_reason="CRASHED",
+                exception_text=_exc_text,
+                versions=_versions,
+                recipe_name=recipe_name,
+                recipe_content_hash=recipe_content_hash,
+                recipe_composite_hash=recipe_composite_hash,
+                recipe_version=recipe_version,
+            )
+        except Exception:
+            logger.debug("flush_session_log during crash failed", exc_info=True)
+        return SkillResult.crashed(
+            exception=exc,
+            skill_command=skill_command,
+            order_id=order_id,
+        )
+    except BaseException:
+        logger.warning("run_headless_core cancelled", exc_info=True)
+        _exc_text = traceback.format_exc()
+        _log_dir = ctx.config.linux_tracing.log_dir
+        try:
+            from autoskillit.execution import flush_session_log
+
+            with anyio.CancelScope(shield=True):
+                flush_session_log(
+                    log_dir=_log_dir,
+                    cwd=str(cwd),
+                    kitchen_id=kitchen_id,
+                    order_id=order_id,
+                    session_id="",
+                    pid=0,
+                    skill_command=skill_command,
+                    success=False,
+                    subtype="cancelled",
+                    exit_code=-1,
+                    start_ts=_start_ts,
+                    proc_snapshots=None,
+                    termination_reason="CANCELLED",
+                    exception_text=_exc_text,
+                    versions=_versions,
+                    recipe_name=recipe_name,
+                    recipe_content_hash=recipe_content_hash,
+                    recipe_composite_hash=recipe_composite_hash,
+                    recipe_version=recipe_version,
+                )
+        except Exception:
+            logger.debug("flush_session_log during cancel failed", exc_info=True)
+        raise
+    if _result is None:
+        return SkillResult.crashed(
+            exception=RuntimeError("runner() did not return a result"),
+            order_id=order_id,
+        )
+    _elapsed = time.monotonic() - _start_mono
+    _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
+    result = dataclasses.replace(  # type: ignore[arg-type]
+        _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
+    )
+
+    if on_spawn is not None and result.pid > 0:
+        on_spawn(result.pid)
+
+    audit_count_before = len(ctx.audit.get_report())
+    skill_result = _build_skill_result(
+        result,
+        completion_marker=completion_marker,
+        skill_command=skill_command,
+        audit=ctx.audit,
+        expected_output_patterns=expected_output_patterns,
+        cwd=cwd,
+        write_behavior=write_behavior,
+    )
+
+    # CONTRACT NUDGE: lightweight resume recovery before full retry.
+    # Fires only when _build_skill_result returns CONTRACT_RECOVERY with a
+    # valid session_id (budget-exhausted cases have retry_reason=BUDGET_EXHAUSTED).
+    if (
+        skill_result.retry_reason == RetryReason.CONTRACT_RECOVERY
+        and skill_result.needs_retry
+        and skill_result.session_id
+    ):
+        nudge_success = await _attempt_contract_nudge(
+            skill_result,
+            result,
+            expected_output_patterns,
+            completion_marker,
+            cwd,
+            runner,
+        )
+        if nudge_success is not None:
+            skill_result = nudge_success
+
+    _clone_reverted = False
+    if _clone_snapshot is not None:
+        skill_result, _clone_reverted = await check_and_revert_clone_contamination(
+            _clone_snapshot,
+            skill_result,
+            cwd,
+            runner,
+            ctx.audit,
+            skill_command=skill_command,
+        )
+
+    # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
+    # brackets in run_managed_async. Never re-derive from ISO strings (backward-clock risk).
+    timing_seconds: float = result.elapsed_seconds
+
+    # Extract the audit record (if any) added by this session
+    new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
+    audit_record = new_audit_records[0] if new_audit_records else None
+
+    if result.proc_snapshots is not None or not skill_result.success or bool(step_name):
+        from autoskillit.execution.session_log import flush_session_log
+
+        try:
+            flush_session_log(
+                log_dir=ctx.config.linux_tracing.log_dir,
+                cwd=cwd,
+                kitchen_id=kitchen_id,
+                order_id=order_id,
+                session_id=skill_result.session_id,
+                pid=result.pid,
+                skill_command=skill_command,
+                success=skill_result.success,
+                subtype=skill_result.subtype,
+                cli_subtype=skill_result.cli_subtype,
+                exit_code=skill_result.exit_code,
+                start_ts=result.start_ts,
+                end_ts=result.end_ts,
+                elapsed_seconds=result.elapsed_seconds,
+                termination_reason=result.termination.value,
+                kill_reason=skill_result.kill_reason.value,
+                snapshot_interval_seconds=ctx.config.linux_tracing.proc_interval,
+                proc_snapshots=result.proc_snapshots,
+                step_name=step_name,
+                token_usage=skill_result.token_usage,
+                timing_seconds=timing_seconds,
+                audit_record=audit_record,
+                write_path_warnings=skill_result.write_path_warnings,
+                write_call_count=skill_result.write_call_count,
+                clone_contamination_reverted=_clone_reverted,
+                tracked_comm=result.tracked_comm,
+                orphaned_tool_result=result.orphaned_tool_result,
+                raw_stdout=result.stdout
+                if (
+                    not skill_result.success or skill_result.kill_reason != KillReason.NATURAL_EXIT
+                )
+                else "",
+                last_stop_reason=skill_result.last_stop_reason,
+                versions=_versions,
+                recipe_name=recipe_name,
+                recipe_content_hash=recipe_content_hash,
+                recipe_composite_hash=recipe_composite_hash,
+                recipe_version=recipe_version,
+            )
+        except Exception:
+            logger.debug("session_log_flush_failed", exc_info=True)
+
+    logger.debug(
+        "run_headless_core_exit",
+        success=skill_result.success,
+        needs_retry=skill_result.needs_retry,
+        subtype=skill_result.subtype,
+        session_id=skill_result.session_id,
+    )
+
+    if step_name:
+        try:
+            ctx.token_log.record(
+                step_name,
+                skill_result.token_usage,
+                start_ts=result.start_ts,
+                end_ts=result.end_ts,
+                elapsed_seconds=result.elapsed_seconds,
+                order_id=order_id,
+            )
+        except Exception:
+            logger.debug("token_log_record_failed", exc_info=True)
+    return skill_result
+
+
 async def run_headless_core(
     skill_command: str,
     cwd: str,
@@ -1021,12 +1295,6 @@ async def run_headless_core(
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
-        _raw_idle = (
-            idle_output_timeout
-            if idle_output_timeout is not None
-            else float(cfg.idle_output_timeout)
-        )
-        effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
 
         logger.debug(
             "run_headless_core_entry",
@@ -1038,232 +1306,25 @@ async def run_headless_core(
             add_dirs=list(add_dirs) if add_dirs else None,
         )
 
-        runner = ctx.runner
-        assert runner is not None, "No subprocess runner configured"
-
-        linux_tracing_cfg = ctx.config.linux_tracing
-        _start_ts = datetime.now(UTC).isoformat()
-        _start_mono = time.monotonic()
-        _versions = collect_version_snapshot()
-
-        _clone_snapshot = None
-        if is_worktree_skill(original_skill_command) and not is_git_worktree(Path(cwd)):
-            _clone_snapshot = await snapshot_clone_state(cwd, runner)
-
-        _result: SubprocessResult | None = None
-        try:
-            _result = await runner(
-                spec.cmd,
-                cwd=Path(cwd),
-                timeout=effective_timeout,
-                env=spec.env,
-                pty_mode=True,
-                session_log_dir=_session_log_dir(cwd),
-                completion_marker=effective_marker,
-                stale_threshold=effective_stale,
-                completion_drain_timeout=cfg.completion_drain_timeout,
-                linux_tracing_config=linux_tracing_cfg,
-                idle_output_timeout=effective_idle,
-                max_suppression_seconds=cfg.max_suppression_seconds,
-            )
-        except Exception as exc:
-            logger.error("run_headless_core runner crashed", exc_info=True)
-            _exc_text = traceback.format_exc()
-            _log_dir = ctx.config.linux_tracing.log_dir
-            try:
-                # Deferred: autoskillit.execution.__init__ imports headless.py (L39-42);
-                # a top-level import of autoskillit.execution would be circular.
-                from autoskillit.execution import flush_session_log
-
-                flush_session_log(
-                    log_dir=_log_dir,
-                    cwd=str(cwd),
-                    kitchen_id=kitchen_id,
-                    order_id=order_id,
-                    session_id="",
-                    pid=0,
-                    skill_command=original_skill_command,
-                    success=False,
-                    subtype="crashed",
-                    exit_code=-1,
-                    start_ts=_start_ts,
-                    proc_snapshots=None,
-                    termination_reason="CRASHED",
-                    exception_text=_exc_text,
-                    versions=_versions,
-                    recipe_name=recipe_name,
-                    recipe_content_hash=recipe_content_hash,
-                    recipe_composite_hash=recipe_composite_hash,
-                    recipe_version=recipe_version,
-                )
-            except Exception:
-                logger.debug("flush_session_log during crash failed", exc_info=True)
-            return SkillResult.crashed(
-                exception=exc,
-                skill_command=original_skill_command,
-                order_id=order_id,
-            )
-        except BaseException:
-            logger.warning("run_headless_core cancelled", exc_info=True)
-            _exc_text = traceback.format_exc()
-            _log_dir = ctx.config.linux_tracing.log_dir
-            try:
-                from autoskillit.execution import flush_session_log
-
-                with anyio.CancelScope(shield=True):
-                    flush_session_log(
-                        log_dir=_log_dir,
-                        cwd=str(cwd),
-                        kitchen_id=kitchen_id,
-                        order_id=order_id,
-                        session_id="",
-                        pid=0,
-                        skill_command=original_skill_command,
-                        success=False,
-                        subtype="cancelled",
-                        exit_code=-1,
-                        start_ts=_start_ts,
-                        proc_snapshots=None,
-                        termination_reason="CANCELLED",
-                        exception_text=_exc_text,
-                        versions=_versions,
-                        recipe_name=recipe_name,
-                        recipe_content_hash=recipe_content_hash,
-                        recipe_composite_hash=recipe_composite_hash,
-                        recipe_version=recipe_version,
-                    )
-            except Exception:
-                logger.debug("flush_session_log during cancel failed", exc_info=True)
-            raise
-        if _result is None:
-            return SkillResult.crashed(
-                exception=RuntimeError("runner() did not return a result"),
-                order_id=order_id,
-            )
-        _elapsed = time.monotonic() - _start_mono
-        _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
-        result = dataclasses.replace(  # type: ignore[arg-type]
-            _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
-        )
-
-        audit_count_before = len(ctx.audit.get_report())
-        skill_result = _build_skill_result(
-            result,
-            completion_marker=effective_marker,
+        return await _execute_claude_headless(
+            spec,
+            cwd,
+            ctx,
             skill_command=original_skill_command,
-            audit=ctx.audit,
+            step_name=step_name,
+            kitchen_id=kitchen_id,
+            order_id=order_id,
+            timeout=float(effective_timeout),
+            stale_threshold=float(effective_stale),
+            idle_output_timeout=idle_output_timeout,
             expected_output_patterns=expected_output_patterns,
-            cwd=cwd,
             write_behavior=write_behavior,
+            completion_marker=effective_marker,
+            recipe_name=recipe_name,
+            recipe_content_hash=recipe_content_hash,
+            recipe_composite_hash=recipe_composite_hash,
+            recipe_version=recipe_version,
         )
-
-        # CONTRACT NUDGE: lightweight resume recovery before full retry.
-        # Fires only when _build_skill_result returns CONTRACT_RECOVERY with a
-        # valid session_id (budget-exhausted cases have retry_reason=BUDGET_EXHAUSTED).
-        if (
-            skill_result.retry_reason == RetryReason.CONTRACT_RECOVERY
-            and skill_result.needs_retry
-            and skill_result.session_id
-        ):
-            nudge_success = await _attempt_contract_nudge(
-                skill_result,
-                result,
-                expected_output_patterns,
-                effective_marker,
-                cwd,
-                runner,
-            )
-            if nudge_success is not None:
-                skill_result = nudge_success
-
-        _clone_reverted = False
-        if _clone_snapshot is not None:
-            skill_result, _clone_reverted = await check_and_revert_clone_contamination(
-                _clone_snapshot,
-                skill_result,
-                cwd,
-                runner,
-                ctx.audit,
-                skill_command=original_skill_command,
-            )
-
-        # Use monotonic elapsed_seconds — authoritative wall-clock timing set by time.monotonic()
-        # brackets in run_managed_async. Never re-derive from ISO strings (backward-clock risk).
-        timing_seconds: float = result.elapsed_seconds
-
-        # Extract the audit record (if any) added by this session
-        new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
-        audit_record = new_audit_records[0] if new_audit_records else None
-
-        if result.proc_snapshots is not None or not skill_result.success or bool(step_name):
-            from autoskillit.execution.session_log import flush_session_log
-
-            try:
-                flush_session_log(
-                    log_dir=ctx.config.linux_tracing.log_dir,
-                    cwd=cwd,
-                    kitchen_id=kitchen_id,
-                    order_id=order_id,
-                    session_id=skill_result.session_id,
-                    pid=result.pid,
-                    skill_command=original_skill_command,
-                    success=skill_result.success,
-                    subtype=skill_result.subtype,
-                    cli_subtype=skill_result.cli_subtype,
-                    exit_code=skill_result.exit_code,
-                    start_ts=result.start_ts,
-                    end_ts=result.end_ts,
-                    elapsed_seconds=result.elapsed_seconds,
-                    termination_reason=result.termination.value,
-                    kill_reason=skill_result.kill_reason.value,
-                    snapshot_interval_seconds=ctx.config.linux_tracing.proc_interval,
-                    proc_snapshots=result.proc_snapshots,
-                    step_name=step_name,
-                    token_usage=skill_result.token_usage,
-                    timing_seconds=timing_seconds,
-                    audit_record=audit_record,
-                    write_path_warnings=skill_result.write_path_warnings,
-                    write_call_count=skill_result.write_call_count,
-                    clone_contamination_reverted=_clone_reverted,
-                    tracked_comm=result.tracked_comm,
-                    orphaned_tool_result=result.orphaned_tool_result,
-                    raw_stdout=result.stdout
-                    if (
-                        not skill_result.success
-                        or skill_result.kill_reason != KillReason.NATURAL_EXIT
-                    )
-                    else "",
-                    last_stop_reason=skill_result.last_stop_reason,
-                    versions=_versions,
-                    recipe_name=recipe_name,
-                    recipe_content_hash=recipe_content_hash,
-                    recipe_composite_hash=recipe_composite_hash,
-                    recipe_version=recipe_version,
-                )
-            except Exception:
-                logger.debug("session_log_flush_failed", exc_info=True)
-
-        logger.debug(
-            "run_headless_core_exit",
-            success=skill_result.success,
-            needs_retry=skill_result.needs_retry,
-            subtype=skill_result.subtype,
-            session_id=skill_result.session_id,
-        )
-
-        if step_name:
-            try:
-                ctx.token_log.record(
-                    step_name,
-                    skill_result.token_usage,
-                    start_ts=result.start_ts,
-                    end_ts=result.end_ts,
-                    elapsed_seconds=result.elapsed_seconds,
-                    order_id=order_id,
-                )
-            except Exception:
-                logger.debug("token_log_record_failed", exc_info=True)
-        return skill_result
 
 
 class DefaultHeadlessExecutor:
@@ -1315,4 +1376,63 @@ class DefaultHeadlessExecutor:
             recipe_content_hash=recipe_content_hash,
             recipe_composite_hash=recipe_composite_hash,
             recipe_version=recipe_version,
+        )
+
+    async def dispatch_food_truck(
+        self,
+        orchestrator_prompt: str,
+        cwd: str,
+        *,
+        completion_marker: str,
+        model: str = "",
+        step_name: str = "",
+        kitchen_id: str = "",
+        order_id: str = "",
+        timeout: float | None = None,
+        stale_threshold: float | None = None,
+        idle_output_timeout: float | None = None,
+        env_extras: Mapping[str, str] | None = None,
+        on_spawn: Callable[[int], None] | None = None,
+    ) -> SkillResult:
+        cfg = self._ctx.config
+        resolved_model = _resolve_model(model, cfg)
+        franchise_cfg = cfg.franchise
+
+        plugin_dir = self._ctx.plugin_dir
+        if plugin_dir is None:
+            raise ValueError(
+                "dispatch_food_truck requires a configured plugin_dir; ctx.plugin_dir is None"
+            )
+
+        spec = build_food_truck_cmd(
+            orchestrator_prompt=orchestrator_prompt,
+            plugin_dir=plugin_dir,
+            cwd=cwd,
+            completion_marker=completion_marker,
+            model=resolved_model,
+            env_extras=env_extras,
+            output_format_value=cfg.run_skill.output_format.value,
+        )
+
+        effective_timeout = (
+            timeout if timeout is not None else franchise_cfg.l2_default_timeout_sec
+        )
+        effective_stale = (
+            stale_threshold if stale_threshold is not None else cfg.run_skill.stale_threshold
+        )
+
+        return await _execute_claude_headless(
+            spec,
+            cwd,
+            self._ctx,
+            skill_command="",
+            step_name=step_name,
+            kitchen_id=kitchen_id,
+            order_id=order_id,
+            timeout=float(effective_timeout),
+            stale_threshold=float(effective_stale),
+            idle_output_timeout=idle_output_timeout,
+            completion_marker=completion_marker,
+            on_spawn=on_spawn,
+            skip_clone_guard=True,
         )

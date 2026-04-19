@@ -1377,3 +1377,29 @@ def test_parse_session_result_missing_stop_reason_skipped():
     parsed = parse_session_result(ndjson)
     assert parsed.stop_reasons == []
     assert parsed.last_stop_reason == ""
+
+
+class TestLifespanStarted:
+    def test_lifespan_started_true_when_tool_uses_present(self):
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="ok",
+            session_id="s1",
+            tool_uses=[{"name": "open_kitchen", "id": "t1"}],
+        )
+        assert session.lifespan_started is True
+
+    def test_lifespan_started_false_when_no_tool_uses(self):
+        from autoskillit.execution.session import ClaudeSessionResult
+
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="ok",
+            session_id="s1",
+            tool_uses=[],
+        )
+        assert session.lifespan_started is False

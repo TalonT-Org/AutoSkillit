@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import urllib.parse
@@ -25,6 +26,7 @@ from autoskillit.hook_registry import (
 
 _log = get_logger(__name__)
 _NON_PROBLEM: frozenset[Severity] = frozenset({Severity.OK, Severity.INFO})
+_STALE_THRESHOLD_DAYS = 7
 
 
 @dataclass
@@ -643,11 +645,9 @@ def _check_installed_plugins_entry(
 
 
 def _check_ambient_session_type_leaf() -> DoctorResult:
-    """Detect ambient SESSION_TYPE=leaf or unset — common env leakage."""
-    import os
-
+    """Detect ambient SESSION_TYPE=leaf — common env leakage from franchise subprocesses."""
     raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
-    if not raw or raw.lower() == "leaf":
+    if raw.lower() == "leaf":
         return DoctorResult(
             Severity.WARNING,
             "ambient_session_type_leaf",
@@ -658,14 +658,12 @@ def _check_ambient_session_type_leaf() -> DoctorResult:
     return DoctorResult(
         Severity.OK,
         "ambient_session_type_leaf",
-        f"SESSION_TYPE={raw} (not leaf)",
+        f"SESSION_TYPE={raw!r} (not leaf)",
     )
 
 
 def _check_ambient_session_type_orchestrator() -> DoctorResult:
     """Detect ambient SESSION_TYPE=orchestrator outside a launched session."""
-    import os
-
     raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
     if raw.lower() == "orchestrator":
         return DoctorResult(
@@ -683,8 +681,6 @@ def _check_ambient_session_type_orchestrator() -> DoctorResult:
 
 def _check_ambient_session_type_franchise() -> DoctorResult:
     """Detect ambient SESSION_TYPE=franchise outside a franchise CLI session."""
-    import os
-
     raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
     if raw.lower() == "franchise":
         return DoctorResult(
@@ -702,8 +698,6 @@ def _check_ambient_session_type_franchise() -> DoctorResult:
 
 def _check_ambient_campaign_id() -> DoctorResult:
     """Detect ambient CAMPAIGN_ID — should only be set by dispatch_food_truck."""
-    import os
-
     campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
     if campaign_id:
         return DoctorResult(
@@ -734,29 +728,19 @@ def _check_sous_chef_bundled() -> DoctorResult:
     )
 
 
-def _get_franchise_guard_registry_entry() -> bool:
-    """Check if franchise_dispatch_guard.py is in HOOK_REGISTRY."""
-    return "franchise_dispatch_guard.py" in canonical_script_basenames()
-
-
-def _franchise_guard_script_exists() -> bool:
-    """Check if the franchise_dispatch_guard.py hook script exists on disk."""
-    from autoskillit.hook_registry import HOOKS_DIR
-
-    return (HOOKS_DIR / "franchise_dispatch_guard.py").is_file()
-
-
 def _check_franchise_dispatch_guard_registered() -> DoctorResult:
     """Check that franchise dispatch guard is registered in HOOK_REGISTRY."""
+    from autoskillit.hook_registry import HOOKS_DIR
+
     check_name = "franchise_dispatch_guard_registered"
-    if not _get_franchise_guard_registry_entry():
+    if "franchise_dispatch_guard.py" not in canonical_script_basenames():
         return DoctorResult(
             Severity.ERROR,
             check_name,
             "Franchise dispatch guard not registered in hooks.json. "
             "Run: autoskillit config sync-hooks",
         )
-    if not _franchise_guard_script_exists():
+    if not (HOOKS_DIR / "franchise_dispatch_guard.py").is_file():
         return DoctorResult(
             Severity.ERROR,
             check_name,
@@ -768,9 +752,6 @@ def _check_franchise_dispatch_guard_registered() -> DoctorResult:
         check_name,
         "Franchise dispatch guard registered and accessible",
     )
-
-
-_STALE_THRESHOLD_DAYS = 7
 
 
 def _check_stale_franchise_state(project_dir: Path | None = None) -> DoctorResult:

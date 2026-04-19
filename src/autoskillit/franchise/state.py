@@ -41,7 +41,7 @@ class DispatchRecord:
     """
 
     name: str
-    status: str = DispatchStatus.PENDING
+    status: DispatchStatus = DispatchStatus.PENDING
     dispatch_id: str = ""
     l2_session_id: str = ""
     l2_session_log_dir: str = ""
@@ -89,6 +89,13 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     DispatchStatus.RUNNING: frozenset(
         {DispatchStatus.SUCCESS, DispatchStatus.FAILURE, DispatchStatus.INTERRUPTED}
     ),
+    # Terminal states: no further transitions permitted
+    DispatchStatus.SUCCESS: frozenset(),
+    DispatchStatus.FAILURE: frozenset(),
+    DispatchStatus.INTERRUPTED: frozenset(),
+    DispatchStatus.SKIPPED: frozenset(),
+    DispatchStatus.REFUSED: frozenset(),
+    DispatchStatus.RELEASED: frozenset(),
 }
 
 
@@ -135,7 +142,7 @@ def read_state(state_path: Path) -> CampaignState | None:
         dispatches = [
             DispatchRecord(
                 name=d["name"],
-                status=d.get("status", DispatchStatus.PENDING),
+                status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
                 dispatch_id=d.get("dispatch_id", ""),
                 l2_session_id=d.get("l2_session_id", ""),
                 l2_session_log_dir=d.get("l2_session_log_dir", ""),
@@ -155,7 +162,8 @@ def read_state(state_path: Path) -> CampaignState | None:
             started_at=data["started_at"],
             dispatches=dispatches,
         )
-    except (KeyError, ValueError, TypeError):
+    except (KeyError, ValueError, TypeError) as exc:
+        _log.warning("read_state: schema mismatch or corrupt payload in %s: %s", state_path, exc)
         return None
 
 
@@ -190,6 +198,8 @@ def mark_dispatch_running(
             d.l2_pid = l2_pid
             d.started_at = time.time()
             break
+    else:
+        raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
     _write_state(state_path, state)
 
 
@@ -210,6 +220,8 @@ def mark_dispatch_interrupted(
             d.reason = reason
             d.ended_at = time.time()
             break
+    else:
+        raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
     _write_state(state_path, state)
 
 

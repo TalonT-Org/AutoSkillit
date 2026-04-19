@@ -580,35 +580,60 @@ class TestSessionTypeVisibility:
     async def test_franchise_enables_franchise_tag(self, monkeypatch):
         from fastmcp.client import Client
 
-        from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
+        from autoskillit.core import FRANCHISE_TOOLS, GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
-        # Register a temporary franchise-tagged tool to assert the positive side:
-        # franchise-tagged tools MUST become visible when SESSION_TYPE=franchise.
-        @mcp.local_provider.tool(tags={"franchise"})
-        def _franchise_visibility_marker() -> str:
-            """Temporary marker tool for franchise tag visibility contract."""
-            return "ok"
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        _apply_session_type_visibility()
 
-        try:
-            monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
-            _apply_session_type_visibility()
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
 
-            async with Client(mcp) as client:
-                tools = await client.list_tools()
-            tool_names = {t.name for t in tools}
+        # Positive: franchise-tagged tools are visible
+        for name in FRANCHISE_TOOLS:
+            assert name in tool_names, f"{name} should be visible for franchise session"
+        # Negative: non-franchise kitchen/headless tools remain hidden
+        for name in GATED_TOOLS - FRANCHISE_TOOLS:
+            assert name not in tool_names, f"{name} should be hidden for franchise session"
+        for name in HEADLESS_TOOLS:
+            assert name not in tool_names, f"{name} should be hidden for franchise session"
 
-            # Positive assertion: franchise-tagged tool is visible
-            assert "_franchise_visibility_marker" in tool_names, (
-                "franchise-tagged tool should be visible for franchise session"
-            )
-            # Negative assertions: kitchen/headless tools remain hidden
-            for name in GATED_TOOLS:
-                assert name not in tool_names, f"{name} should be hidden for franchise session"
-            for name in HEADLESS_TOOLS:
-                assert name not in tool_names, f"{name} should be hidden for franchise session"
-        finally:
-            mcp.local_provider.remove_tool("_franchise_visibility_marker")
+    @pytest.mark.anyio
+    async def test_franchise_tools_retain_kitchen_tag(self):
+        """Franchise-tagged tools must still carry the kitchen tag."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import FRANCHISE_TOOLS
+        from autoskillit.server import mcp
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        all_tools = {t.name: t for t in tools}
+        for name in FRANCHISE_TOOLS:
+            tool = all_tools.get(name)
+            assert tool is not None, f"{name} not registered"
+            assert "kitchen" in tool.tags, f"{name} must retain kitchen tag"
+            assert "franchise" in tool.tags, f"{name} must have franchise tag"
+            assert "autoskillit" in tool.tags, f"{name} must retain autoskillit tag"
+
+    @pytest.mark.anyio
+    async def test_franchise_tools_constant_matches_tagged_tools(self):
+        """FRANCHISE_TOOLS constant matches exactly the tools with franchise tag."""
+        from fastmcp.client import Client
+
+        from autoskillit.core import FRANCHISE_TOOLS
+        from autoskillit.server import mcp
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        all_tools = {t.name: t for t in tools}
+        tagged = {name for name, t in all_tools.items() if "franchise" in t.tags}
+        assert tagged == FRANCHISE_TOOLS, (
+            f"FRANCHISE_TOOLS constant out of sync. "
+            f"Extra in constant: {FRANCHISE_TOOLS - tagged}. "
+            f"Extra on server: {tagged - FRANCHISE_TOOLS}."
+        )
 
     @pytest.mark.anyio
     async def test_orchestrator_headless_enables_kitchen_tag(self, monkeypatch):

@@ -17,6 +17,7 @@ __all__ = [
     "SKILL_TOOLS",
     "GATED_TOOLS",
     "HEADLESS_TOOLS",
+    "FRANCHISE_TOOLS",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
     "PackDef",
@@ -173,6 +174,16 @@ GATED_TOOLS: frozenset[str] = frozenset(
 )
 
 HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check"})
+
+FRANCHISE_TOOLS: frozenset[str] = frozenset(
+    {
+        "batch_cleanup_clones",
+        "get_pipeline_report",
+        "get_token_summary",
+        "get_timing_summary",
+        "get_quota_events",
+    }
+)
 
 FREE_RANGE_TOOLS: frozenset[str] = frozenset(
     {"open_kitchen", "close_kitchen", "disable_quota_guard"}

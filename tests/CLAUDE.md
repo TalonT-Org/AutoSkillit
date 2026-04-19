@@ -291,7 +291,7 @@ tests/
 │   ├── test_docstring_labels.py
 │   ├── test_generated_files.py
 │   ├── test_guard_coverage.py
-│   ├── test_headless_orchestration_guard.py
+│   ├── test_leaf_orchestration_guard.py
 │   ├── test_hook_executability.py
 │   ├── test_hook_registration_coverage.py
 │   ├── test_open_kitchen_guard.py       # (moved from root test_phase2_hooks.py in groupG)

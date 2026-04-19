@@ -26,7 +26,7 @@ from autoskillit.server.helpers import (
     _import_and_call,
     _notify,
     _require_enabled,
-    _require_not_headless,
+    _require_orchestrator_or_higher,
     _run_subprocess,
     _validate_skill_command,
     track_response_size,
@@ -59,7 +59,7 @@ async def run_cmd(
 
     Never raises.
     """
-    if (headless := _require_not_headless("run_cmd")) is not None:
+    if (headless := _require_orchestrator_or_higher("run_cmd")) is not None:
         return headless
     if (gate := _require_enabled()) is not None:
         return gate
@@ -140,7 +140,7 @@ async def run_python(
 
     Never raises.
     """
-    if (headless := _require_not_headless("run_python")) is not None:
+    if (headless := _require_orchestrator_or_higher("run_python")) is not None:
         return headless
     if (gate := _require_enabled()) is not None:
         return gate
@@ -225,7 +225,7 @@ async def run_skill(
 
     Never raises.
     """
-    if (headless := _require_not_headless("run_skill")) is not None:
+    if (headless := _require_orchestrator_or_higher("run_skill")) is not None:
         return headless
     if (gate := _require_enabled()) is not None:
         return gate

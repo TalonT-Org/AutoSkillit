@@ -80,7 +80,7 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
     mock_mcp_ctx.enable_components = AsyncMock()
 
     with (
-        patch("autoskillit.server.tools_kitchen._require_not_headless", return_value=None),
+        patch("autoskillit.server.tools_kitchen._require_orchestrator_exact", return_value=None),
         patch(
             "autoskillit.server.tools_kitchen._open_kitchen_handler",
             new_callable=AsyncMock,

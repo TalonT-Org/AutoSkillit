@@ -76,8 +76,8 @@ Three independent layers prevent headless sessions from calling orchestration to
 | Layer | Mechanism | What It Blocks |
 |-------|-----------|----------------|
 | 1. FastMCP | Kitchen tools remain hidden (`mcp.enable(headless)` does not reveal kitchen-only tools) | `run_skill`, `run_cmd`, `run_python`, `merge_worktree`, and all other kitchen-only tools |
-| 2. Hook | `headless_orchestration_guard.py` PreToolUse hook | `run_skill`, `run_cmd`, `run_python` |
-| 3. Code | `_require_not_headless()` guard in `tools_execution.py` | `run_skill`, `run_cmd`, `run_python` |
+| 2. Hook | `leaf_orchestration_guard.py` PreToolUse hook | `run_skill`, `run_cmd`, `run_python` |
+| 3. Code | `_require_orchestrator_or_higher()` guard in `tools_execution.py` | `run_skill`, `run_cmd`, `run_python` |
 
 All three layers must independently agree before any orchestration tool can execute.
 A bypassed hook is caught by the code guard; a bypassed code guard is caught by the

@@ -46,10 +46,11 @@ unintended deletion of clones that may still have unpushed work.
 Blocks `open_kitchen` from running inside a headless session. Only human
 operators may open the kitchen.
 
-### `headless_orchestration_guard.py`
+### `leaf_orchestration_guard.py`
 **Guarded tools:** `run_skill`, `run_cmd`, `run_python`
-Blocks orchestration tools from headless sessions. Enforces the two-tier
-invariant: only the Tier 1 orchestrator may spawn headless sessions.
+Blocks orchestration tools from leaf-tier sessions. Enforces the tier
+invariant: orchestrator and franchise sessions may call orchestration tools;
+leaf workers use native Claude Code tools only.
 
 ### `unsafe_install_guard.py`
 **Guarded tool:** `run_cmd`

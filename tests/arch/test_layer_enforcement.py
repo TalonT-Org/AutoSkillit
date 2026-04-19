@@ -232,12 +232,14 @@ def test_gated_tools_call_require_enabled_first() -> None:
                 for i, stmt in enumerate(node.body):
                     if require_idx is None and _has_call_to(stmt, "_require_enabled"):
                         require_idx = i
-                    # _require_not_headless guard calls may precede _require_enabled —
+                    # Tier-aware guard calls may precede _require_enabled —
                     # they are valid early-exit guards, not tool logic.
                     if (
                         action_idx is None
                         and _has_await_or_return(stmt)
-                        and not _has_call_to(stmt, "_require_not_headless")
+                        and not _has_call_to(stmt, "_require_orchestrator_or_higher")
+                        and not _has_call_to(stmt, "_require_orchestrator_exact")
+                        and not _has_call_to(stmt, "_require_franchise")
                     ):
                         action_idx = i
 

@@ -558,3 +558,141 @@ class TestClaudeCodeCompatMiddleware:
         assert result[0].name == "my_tool"
         assert result[0].description == "Does things"
         assert result[0].parameters == {"type": "object", "properties": {}}
+
+
+class TestSessionTypeVisibility:
+    """3-branch session-type tag visibility dispatch."""
+
+    @pytest.mark.anyio
+    async def test_franchise_enables_franchise_tag(self, monkeypatch):
+        from fastmcp.client import Client
+
+        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core.types import HEADLESS_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        # franchise tag enabled — kitchen/headless tools must remain hidden (no franchise tools yet)
+        for name in GATED_TOOLS:
+            assert name not in tool_names, f"{name} should be hidden for franchise session"
+        for name in HEADLESS_TOOLS:
+            assert name not in tool_names, f"{name} should be hidden for franchise session"
+
+    @pytest.mark.anyio
+    async def test_orchestrator_headless_enables_kitchen_tag(self, monkeypatch):
+        from fastmcp.client import Client
+
+        from autoskillit.core import GATED_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        for name in GATED_TOOLS:
+            assert name in tool_names, f"{name} should be visible for orchestrator+headless"
+
+    @pytest.mark.anyio
+    async def test_orchestrator_interactive_no_pre_reveal(self, monkeypatch):
+        from fastmcp.client import Client
+
+        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core.types import HEADLESS_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        for name in GATED_TOOLS:
+            assert name not in tool_names, f"{name} should be hidden for orchestrator+interactive"
+        for name in HEADLESS_TOOLS:
+            assert name not in tool_names, f"{name} should be hidden for orchestrator+interactive"
+
+    @pytest.mark.anyio
+    async def test_leaf_headless_enables_headless_tag(self, monkeypatch):
+        from fastmcp.client import Client
+
+        from autoskillit.core import GATED_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        assert "test_check" in tool_names, "test_check should be visible for leaf+headless"
+        for name in GATED_TOOLS:
+            assert name not in tool_names, f"{name} (kitchen) should be hidden for leaf+headless"
+
+    @pytest.mark.anyio
+    async def test_leaf_interactive_no_pre_reveal(self, monkeypatch):
+        from fastmcp.client import Client
+
+        from autoskillit.core import GATED_TOOLS
+        from autoskillit.core.types import HEADLESS_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        for name in GATED_TOOLS:
+            assert name not in tool_names, f"{name} should be hidden for leaf+interactive"
+        for name in HEADLESS_TOOLS:
+            assert name not in tool_names, f"{name} should be hidden for leaf+interactive"
+
+    @pytest.mark.anyio
+    async def test_transitional_bridge_enables_headless(self, monkeypatch):
+        import warnings
+
+        from fastmcp.client import Client
+
+        from autoskillit.core import GATED_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            _apply_session_type_visibility()
+
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        assert "test_check" in tool_names, "test_check should be visible for bridge HEADLESS=1"
+        for name in GATED_TOOLS:
+            assert name not in tool_names, f"{name} (kitchen) should be hidden for bridge"
+
+    @pytest.mark.anyio
+    async def test_franchise_tag_reset_by_conftest(self, monkeypatch):
+        from fastmcp.client import Client
+
+        from autoskillit.server import mcp
+
+        # The conftest _reset_mcp_tags fixture has already disabled the franchise tag.
+        # Verify: no franchise-enabled state leaked from a previous test.
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+        tool_names = {t.name for t in tools}
+        # No kitchen tools should be visible — franchise tag was reset
+        from autoskillit.core import GATED_TOOLS
+
+        for name in GATED_TOOLS:
+            assert name not in tool_names, f"{name} should be hidden after conftest reset"

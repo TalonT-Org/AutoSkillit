@@ -26,9 +26,21 @@ __all__ = [
     "SKILL_COMMAND_PREFIX",
     "AUTOSKILLIT_SKILL_PREFIX",
     "RETIRED_READINESS_TOKENS",
+    "SESSION_TYPE_ENV_VAR",
+    "SESSION_TYPE_FRANCHISE",
+    "SESSION_TYPE_ORCHESTRATOR",
+    "SESSION_TYPE_LEAF",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
+
+# Session type environment variable and valid values.
+# String aliases for consumers that cannot import SessionType StrEnum
+# (hook scripts, shell wrappers, env builders).
+SESSION_TYPE_ENV_VAR: str = "AUTOSKILLIT_SESSION_TYPE"
+SESSION_TYPE_FRANCHISE: str = "franchise"
+SESSION_TYPE_ORCHESTRATOR: str = "orchestrator"
+SESSION_TYPE_LEAF: str = "leaf"
 
 # Env vars that control MCP server-level behavior and must not leak into
 # user-code subprocesses (pytest runs, shell commands, etc.).
@@ -39,6 +51,12 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_SKIP_STALE_CHECK",
         "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK",
         "AUTOSKILLIT_FORCE_UPDATE_CHECK",
+        # Franchise tier vars — must not leak into user-code subprocesses
+        "AUTOSKILLIT_SESSION_TYPE",
+        "AUTOSKILLIT_CAMPAIGN_ID",
+        "AUTOSKILLIT_CAMPAIGN_STATE_PATH",
+        "AUTOSKILLIT_PROJECT_DIR",
+        "AUTOSKILLIT_L2_TOOL_TAGS",
     }
 )
 

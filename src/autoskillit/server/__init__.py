@@ -4,9 +4,14 @@ Kitchen tools (40 gated + 1 headless-tagged) are hidden at startup via FastMCP v
 mcp.disable(tags={'kitchen'}) applied once after all tool modules are imported.
 Each new session sees only the 3 free-range tools (open_kitchen, close_kitchen,
 and disable_quota_guard).
-Headless sessions (AUTOSKILLIT_HEADLESS=1) pre-reveal only headless-tagged tools
-(test_check) via mcp.enable(tags={'headless'}) — not all kitchen tools.
-Calling the open_kitchen tool reveals all 41 kitchen-tagged tools for that session
+
+Startup tag visibility is determined by AUTOSKILLIT_SESSION_TYPE (3-branch dispatch):
+  FRANCHISE — franchise-tagged tools pre-revealed
+  ORCHESTRATOR + HEADLESS=1 — all kitchen-tagged tools pre-revealed
+  LEAF + HEADLESS=1 — headless-tagged tools (test_check) pre-revealed
+  ORCHESTRATOR/LEAF (interactive) — no pre-reveal; open_kitchen unlocks
+
+Calling the open_kitchen tool reveals all kitchen-tagged tools for that session
 via ctx.enable_components(tags={'kitchen'}).
 
 Transport: stdio (default for FastMCP).
@@ -48,6 +53,8 @@ __all__ = [
     "make_context",
     # Wire-format compatibility middleware
     "ClaudeCodeCompatMiddleware",
+    # Session-type visibility dispatcher (callable by tests)
+    "_apply_session_type_visibility",
 ]
 
 # Import all tool sub-modules to trigger @mcp.tool() registration.
@@ -55,7 +62,13 @@ __all__ = [
 # because tool modules import `mcp` from this package at import time.
 import os  # noqa: E402
 
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
+from autoskillit.core import (  # noqa: E402
+    PIPELINE_FORBIDDEN_TOOLS,  # noqa: F401
+    SessionType,
+)
+from autoskillit.core import (
+    session_type as _resolve_session_type,
+)
 from autoskillit.server import (  # noqa: E402, F401
     helpers,
     tools_ci,
@@ -83,7 +96,20 @@ from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware  # noqa: 
 
 mcp.add_middleware(ClaudeCodeCompatMiddleware())
 
-# Headless sessions (AUTOSKILLIT_HEADLESS=1) pre-reveal only headless-tagged tools
-# (test_check) so the session starts with test_check visible without calling open_kitchen.
-if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-    mcp.enable(tags={"headless"})
+
+def _apply_session_type_visibility() -> None:
+    """Apply FastMCP tag visibility based on session type + HEADLESS."""
+    _session = _resolve_session_type()
+    _headless = os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
+
+    if _session is SessionType.FRANCHISE:
+        mcp.enable(tags={"franchise"})
+    elif _session is SessionType.ORCHESTRATOR and _headless:
+        mcp.enable(tags={"kitchen"})
+    elif _session is SessionType.LEAF and _headless:
+        mcp.enable(tags={"headless"})
+    # ORCHESTRATOR+interactive and LEAF+interactive: no pre-reveal.
+    # Cook unlocks via open_kitchen (orchestrator) or stays minimal (leaf).
+
+
+_apply_session_type_visibility()

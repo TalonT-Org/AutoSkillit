@@ -196,6 +196,12 @@ def _clear_headless_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _clear_session_type_env(monkeypatch):
+    """Prevent SESSION_TYPE leaking between tests."""
+    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _clear_skip_stale_check_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
 

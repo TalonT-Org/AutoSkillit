@@ -658,7 +658,7 @@ def run_update_checks(home: Path | None = None) -> None:
     ):
         return
 
-    from autoskillit.cli._plugin_cache import any_kitchen_open  # noqa: PLC0415
+    from autoskillit.core import any_kitchen_open  # noqa: PLC0415
 
     if any_kitchen_open():
         return

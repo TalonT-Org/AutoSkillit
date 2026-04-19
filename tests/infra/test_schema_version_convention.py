@@ -124,10 +124,10 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # background.py — payload dict
     ("src/autoskillit/pipeline/background.py", 132),
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
-    ("src/autoskillit/server/_lifespan.py", 55),
+    ("src/autoskillit/server/_lifespan.py", 56),
     # tools_kitchen.py — hook config dict
-    ("src/autoskillit/server/tools_kitchen.py", 165),
-    ("src/autoskillit/server/tools_kitchen.py", 516),
+    ("src/autoskillit/server/tools_kitchen.py", 166),
+    ("src/autoskillit/server/tools_kitchen.py", 530),
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools_status.py", 397),
     # tools_github.py — bug report dict
@@ -141,9 +141,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/_installed_plugins.py", 65),
     # _marketplace.py — marketplace.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 85),
+    ("src/autoskillit/cli/_marketplace.py", 88),
     # _marketplace.py — hooks.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 161),
+    ("src/autoskillit/cli/_marketplace.py", 168),
     # _update_checks.py — dismissal state file
     ("src/autoskillit/cli/_update_checks.py", 102),
     # _update_checks.py — fetch cache

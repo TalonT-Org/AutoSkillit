@@ -208,7 +208,7 @@ async def _open_kitchen_handler() -> str | None:
         return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
 
     try:
-        from autoskillit.cli._plugin_cache import register_active_kitchen  # noqa: PLC0415
+        from autoskillit.core import register_active_kitchen  # noqa: PLC0415
 
         register_active_kitchen(ctx.kitchen_id, os.getpid(), str(Path.cwd()))
     except Exception:
@@ -238,7 +238,7 @@ def _close_kitchen_handler() -> None:
         ctx.quota_refresh_task = None
     ctx.gate.disable()
     try:
-        from autoskillit.cli._plugin_cache import unregister_active_kitchen  # noqa: PLC0415
+        from autoskillit.core import unregister_active_kitchen  # noqa: PLC0415
 
         unregister_active_kitchen(ctx.kitchen_id)
     except Exception:

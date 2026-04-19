@@ -12,8 +12,8 @@ from typing import IO
 
 import psutil
 
-from autoskillit.core import atomic_write, write_versioned_json
-from autoskillit.core.logging import get_logger
+from .io import atomic_write, write_versioned_json
+from .logging import get_logger
 
 logger = get_logger(__name__)
 

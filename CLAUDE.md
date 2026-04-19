@@ -116,6 +116,7 @@ generic_automation_mcp/
 │   ├── claude_conventions.py #  Skill discovery directory layout constants
 │   ├── github_url.py        #   parse_github_repo
 │   ├── kitchen_state.py     #   Kitchen-open session marker (stdlib-only; readable from hooks)
+│   ├── _plugin_cache.py     #   Plugin cache lifecycle: retiring cache, install locking, kitchen registry
 │   └── readiness.py         #   Filesystem readiness sentinel primitives for MCP server startup (L0)
 │
 ├── config/                  # L1

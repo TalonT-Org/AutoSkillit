@@ -82,7 +82,7 @@ async def _run_drift_check_async() -> None:
 
 async def _run_retiring_sweep_async() -> None:
     """Offload blocking retiring cache sweep to a thread."""
-    from autoskillit.cli._plugin_cache import sweep_retiring_cache  # noqa: PLC0415
+    from autoskillit.core import sweep_retiring_cache  # noqa: PLC0415
 
     loop = _asyncio.get_running_loop()
     await loop.run_in_executor(None, sweep_retiring_cache)
@@ -142,7 +142,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         except Exception:
             logger.exception("lifespan sentinel cleanup error")
         try:
-            from autoskillit.cli._plugin_cache import clear_kitchens_for_pid  # noqa: PLC0415
+            from autoskillit.core import clear_kitchens_for_pid  # noqa: PLC0415
 
             clear_kitchens_for_pid(os.getpid())
         except Exception:

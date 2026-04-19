@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import threading
-import fcntl
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -23,7 +23,7 @@ def test_retire_old_versions_registers_different_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import _retire_old_versions
+    from autoskillit.core._plugin_cache import _retire_old_versions
 
     cache_dir = tmp_path / "cache"
     old_dir = cache_dir / "0.8.0"
@@ -44,7 +44,7 @@ def test_retire_old_versions_multiple_old_dirs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import _retire_old_versions
+    from autoskillit.core._plugin_cache import _retire_old_versions
 
     cache_dir = tmp_path / "cache"
     (cache_dir / "0.7.0").mkdir(parents=True)
@@ -69,7 +69,7 @@ def test_retire_old_versions_deletes_same_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import _retire_old_versions
+    from autoskillit.core._plugin_cache import _retire_old_versions
 
     cache_dir = tmp_path / "cache"
     same_dir = cache_dir / "0.9.0"
@@ -88,7 +88,7 @@ def test_retire_old_versions_noop_empty_cache_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import _retire_old_versions
+    from autoskillit.core._plugin_cache import _retire_old_versions
 
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir(parents=True)
@@ -106,11 +106,9 @@ def test_retire_old_versions_noop_empty_cache_dir(
 # ---------------------------------------------------------------------------
 
 
-def test_sweep_deletes_expired_entries(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sweep_deletes_expired_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import sweep_retiring_cache
+    from autoskillit.core._plugin_cache import sweep_retiring_cache
 
     old_dir = tmp_path / "cache" / "0.8.0"
     old_dir.mkdir(parents=True)
@@ -118,7 +116,12 @@ def test_sweep_deletes_expired_entries(
     retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
     retiring_json.parent.mkdir(parents=True, exist_ok=True)
     retiring_json.write_text(
-        json.dumps({"retiring": [{"version": "0.8.0", "path": str(old_dir), "retired_at": retired_at}], "schema_version": 1})
+        json.dumps(
+            {
+                "retiring": [{"version": "0.8.0", "path": str(old_dir), "retired_at": retired_at}],
+                "schema_version": 1,
+            }
+        )
     )
 
     count = sweep_retiring_cache(grace_hours=24)
@@ -129,11 +132,9 @@ def test_sweep_deletes_expired_entries(
     assert data["retiring"] == []
 
 
-def test_sweep_deletes_multiple_expired(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sweep_deletes_multiple_expired(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import sweep_retiring_cache
+    from autoskillit.core._plugin_cache import sweep_retiring_cache
 
     dir1 = tmp_path / "cache" / "0.7.0"
     dir2 = tmp_path / "cache" / "0.8.0"
@@ -143,13 +144,15 @@ def test_sweep_deletes_multiple_expired(
     retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
     retiring_json.parent.mkdir(parents=True, exist_ok=True)
     retiring_json.write_text(
-        json.dumps({
-            "retiring": [
-                {"version": "0.7.0", "path": str(dir1), "retired_at": old_ts},
-                {"version": "0.8.0", "path": str(dir2), "retired_at": old_ts},
-            ],
-            "schema_version": 1,
-        })
+        json.dumps(
+            {
+                "retiring": [
+                    {"version": "0.7.0", "path": str(dir1), "retired_at": old_ts},
+                    {"version": "0.8.0", "path": str(dir2), "retired_at": old_ts},
+                ],
+                "schema_version": 1,
+            }
+        )
     )
 
     count = sweep_retiring_cache(grace_hours=24)
@@ -164,11 +167,9 @@ def test_sweep_deletes_multiple_expired(
 # ---------------------------------------------------------------------------
 
 
-def test_sweep_preserves_fresh_entries(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sweep_preserves_fresh_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import sweep_retiring_cache
+    from autoskillit.core._plugin_cache import sweep_retiring_cache
 
     fresh_dir = tmp_path / "cache" / "0.8.0"
     fresh_dir.mkdir(parents=True)
@@ -176,7 +177,14 @@ def test_sweep_preserves_fresh_entries(
     retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
     retiring_json.parent.mkdir(parents=True, exist_ok=True)
     retiring_json.write_text(
-        json.dumps({"retiring": [{"version": "0.8.0", "path": str(fresh_dir), "retired_at": retired_at}], "schema_version": 1})
+        json.dumps(
+            {
+                "retiring": [
+                    {"version": "0.8.0", "path": str(fresh_dir), "retired_at": retired_at}
+                ],
+                "schema_version": 1,
+            }
+        )
     )
 
     count = sweep_retiring_cache(grace_hours=24)
@@ -187,11 +195,9 @@ def test_sweep_preserves_fresh_entries(
     assert len(data["retiring"]) == 1
 
 
-def test_sweep_mixed_fresh_and_expired(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sweep_mixed_fresh_and_expired(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import sweep_retiring_cache
+    from autoskillit.core._plugin_cache import sweep_retiring_cache
 
     expired_dir = tmp_path / "cache" / "0.7.0"
     fresh_dir = tmp_path / "cache" / "0.8.0"
@@ -202,13 +208,15 @@ def test_sweep_mixed_fresh_and_expired(
     retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
     retiring_json.parent.mkdir(parents=True, exist_ok=True)
     retiring_json.write_text(
-        json.dumps({
-            "retiring": [
-                {"version": "0.7.0", "path": str(expired_dir), "retired_at": expired_ts},
-                {"version": "0.8.0", "path": str(fresh_dir), "retired_at": fresh_ts},
-            ],
-            "schema_version": 1,
-        })
+        json.dumps(
+            {
+                "retiring": [
+                    {"version": "0.7.0", "path": str(expired_dir), "retired_at": expired_ts},
+                    {"version": "0.8.0", "path": str(fresh_dir), "retired_at": fresh_ts},
+                ],
+                "schema_version": 1,
+            }
+        )
     )
 
     count = sweep_retiring_cache(grace_hours=24)
@@ -230,7 +238,7 @@ def test_sweep_handles_already_deleted_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import sweep_retiring_cache
+    from autoskillit.core._plugin_cache import sweep_retiring_cache
 
     missing_dir = tmp_path / "cache" / "0.8.0"
     # Deliberately do NOT create the directory
@@ -238,7 +246,12 @@ def test_sweep_handles_already_deleted_dir(
     retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
     retiring_json.parent.mkdir(parents=True, exist_ok=True)
     retiring_json.write_text(
-        json.dumps({"retiring": [{"version": "0.8.0", "path": str(missing_dir), "retired_at": old_ts}], "schema_version": 1})
+        json.dumps(
+            {
+                "retiring": [{"version": "0.8.0", "path": str(missing_dir), "retired_at": old_ts}],
+                "schema_version": 1,
+            }
+        )
     )
 
     count = sweep_retiring_cache(grace_hours=24)  # must not raise
@@ -248,21 +261,17 @@ def test_sweep_handles_already_deleted_dir(
     assert data["retiring"] == []
 
 
-def test_sweep_noop_when_file_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sweep_noop_when_file_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import sweep_retiring_cache
+    from autoskillit.core._plugin_cache import sweep_retiring_cache
 
     count = sweep_retiring_cache()
     assert count == 0
 
 
-def test_sweep_handles_malformed_json(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sweep_handles_malformed_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import sweep_retiring_cache
+    from autoskillit.core._plugin_cache import sweep_retiring_cache
 
     retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
     retiring_json.parent.mkdir(parents=True, exist_ok=True)
@@ -273,11 +282,9 @@ def test_sweep_handles_malformed_json(
     assert count == 0
 
 
-def test_sweep_handles_missing_retired_at(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sweep_handles_missing_retired_at(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import sweep_retiring_cache
+    from autoskillit.core._plugin_cache import sweep_retiring_cache
 
     old_dir = tmp_path / "cache" / "0.8.0"
     old_dir.mkdir(parents=True)
@@ -298,11 +305,9 @@ def test_sweep_handles_missing_retired_at(
 # ---------------------------------------------------------------------------
 
 
-def test_install_lock_creates_lock_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_install_lock_creates_lock_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import _InstallLock
+    from autoskillit.core._plugin_cache import _InstallLock
 
     lock_path = tmp_path / ".autoskillit" / "install.lock"
     with _InstallLock():
@@ -315,7 +320,7 @@ def test_install_lock_blocks_concurrent_access(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import _install_lock_path
+    from autoskillit.core._plugin_cache import _install_lock_path
 
     lock_file_path = _install_lock_path()
     lock_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -357,7 +362,7 @@ def test_append_preserves_existing_entries(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import append_retiring_entry
+    from autoskillit.core._plugin_cache import append_retiring_entry
 
     append_retiring_entry("0.7.0", "/some/path/0.7.0")
     append_retiring_entry("0.8.0", "/some/path/0.8.0")
@@ -369,11 +374,9 @@ def test_append_preserves_existing_entries(
     assert "0.8.0" in versions
 
 
-def test_registry_path_is_absolute(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_registry_path_is_absolute(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import append_retiring_entry
+    from autoskillit.core._plugin_cache import append_retiring_entry
 
     abs_path = str(tmp_path / "cache" / "0.8.0")
     append_retiring_entry("0.8.0", abs_path)
@@ -389,11 +392,9 @@ def test_registry_path_is_absolute(
 # ---------------------------------------------------------------------------
 
 
-def test_register_creates_entry(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_register_creates_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import register_active_kitchen
+    from autoskillit.core._plugin_cache import register_active_kitchen
 
     kitchen_id = "test-kitchen-001"
     pid = os.getpid()
@@ -411,11 +412,9 @@ def test_register_creates_entry(
     assert kitchens[0]["create_time"] is not None
 
 
-def test_unregister_removes_entry(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_unregister_removes_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import register_active_kitchen, unregister_active_kitchen
+    from autoskillit.core._plugin_cache import register_active_kitchen, unregister_active_kitchen
 
     kitchen_id = "test-kitchen-002"
     register_active_kitchen(kitchen_id, os.getpid(), str(tmp_path))
@@ -430,7 +429,7 @@ def test_any_kitchen_open_false_when_pid_dead(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import any_kitchen_open, register_active_kitchen
+    from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
 
     dead_pid = 99999999
     register_active_kitchen("test-kitchen-003", dead_pid, str(tmp_path))
@@ -439,11 +438,9 @@ def test_any_kitchen_open_false_when_pid_dead(
     assert result is False
 
 
-def test_any_kitchen_open_sweeps_stale(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_any_kitchen_open_sweeps_stale(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import any_kitchen_open, register_active_kitchen
+    from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
 
     dead_pid = 99999999
     register_active_kitchen("test-kitchen-004", dead_pid, str(tmp_path))
@@ -455,11 +452,9 @@ def test_any_kitchen_open_sweeps_stale(
     assert data["kitchens"] == []
 
 
-def test_clear_kitchens_for_pid(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_clear_kitchens_for_pid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import clear_kitchens_for_pid, register_active_kitchen
+    from autoskillit.core._plugin_cache import clear_kitchens_for_pid, register_active_kitchen
 
     pid = os.getpid()
     register_active_kitchen("test-kitchen-005a", pid, str(tmp_path))
@@ -476,7 +471,7 @@ def test_any_kitchen_open_true_for_live_pid(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.cli._plugin_cache import any_kitchen_open, register_active_kitchen
+    from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
 
     register_active_kitchen("test-kitchen-006", os.getpid(), str(tmp_path))
 

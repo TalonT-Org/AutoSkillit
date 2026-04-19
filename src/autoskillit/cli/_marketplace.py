@@ -35,7 +35,7 @@ def _clear_plugin_cache() -> None:
     cache_dir = Path.home() / ".claude" / "plugins" / "cache" / _MARKETPLACE_NAME / "autoskillit"
     if cache_dir.is_dir():
         from autoskillit import __version__ as _new_version
-        from autoskillit.cli._plugin_cache import _retire_old_versions
+        from autoskillit.core import _retire_old_versions
 
         _retire_old_versions(cache_dir, _new_version)
 
@@ -158,7 +158,7 @@ def install(*, scope: str = "user") -> bool:
 
     _ensure_workspace_ready()
 
-    from autoskillit.cli._plugin_cache import _InstallLock
+    from autoskillit.core import _InstallLock
 
     with _InstallLock():
         _clear_plugin_cache()

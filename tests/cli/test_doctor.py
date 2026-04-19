@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import textwrap
 from pathlib import Path
 from unittest.mock import patch
 
@@ -107,6 +108,18 @@ class TestCLIDoctor:
         settings_path = tmp_path / ".claude" / "settings.json"
         _evict_stale_autoskillit_hooks(settings_path)
         sync_hooks_to_settings(settings_path)
+        # Franchise checks: set SESSION_TYPE to a non-triggering value so ambient
+        # checks 18-20 all return OK, and stub check 23 directly so it returns OK
+        # without touching canonical_script_basenames (shared with hook-registration check 4).
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "worker")
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        from autoskillit.cli._doctor import DoctorResult
+        from autoskillit.core import Severity
+
+        monkeypatch.setattr(
+            "autoskillit.cli._doctor._check_franchise_dispatch_guard_registered",
+            lambda: DoctorResult(Severity.OK, "franchise_dispatch_guard_registered", "stubbed"),
+        )
         local_bin = str(tmp_path / ".local" / "bin" / "autoskillit")
         with (
             patch(
@@ -223,6 +236,15 @@ class TestCLIDoctor:
             "dual_mcp_registration",  # ★ new
             "plugin_cache_exists",
             "installed_plugins_entry",
+            "ambient_session_type_leaf",
+            "ambient_session_type_orchestrator",
+            "ambient_session_type_franchise",
+            "ambient_campaign_id",
+            "sous_chef_bundled",
+            "franchise_dispatch_guard_registered",
+            "stale_franchise_state",
+            "campaign_onboarding_hint",
+            "campaign_manifest_clone_dests",
         }
         assert expected <= check_names
 
@@ -1833,3 +1855,315 @@ def test_check_installed_plugins_entry_flat_structure_is_warning(tmp_path: Path)
     p.write_text(json.dumps({"autoskillit@autoskillit-local": {}}))
     result = _check_installed_plugins_entry(plugins_json_path=p)
     assert result.severity == Severity.WARNING
+
+
+class TestGroupMFranchiseDoctorChecks:
+    """Group M: Franchise doctor checks (ambient env detection + infra health + campaign ops)."""
+
+    # M1: SESSION_TYPE unset → OK (unset is normal; check only fires on explicit 'leaf')
+    def test_check_ambient_session_type_leaf_ok_when_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_ambient_session_type_leaf
+        from autoskillit.core import Severity
+
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+        result = _check_ambient_session_type_leaf()
+        assert result.severity == Severity.OK
+        assert result.check == "ambient_session_type_leaf"
+
+    # M2: SESSION_TYPE=leaf → WARN
+    def test_check_ambient_session_type_leaf_warns_when_leaf(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_ambient_session_type_leaf
+        from autoskillit.core import Severity
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+        result = _check_ambient_session_type_leaf()
+        assert result.severity == Severity.WARNING
+
+    # M3: SESSION_TYPE=orchestrator → OK (not this check's concern)
+    def test_check_ambient_session_type_leaf_ok_when_orchestrator(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_ambient_session_type_leaf
+        from autoskillit.core import Severity
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        result = _check_ambient_session_type_leaf()
+        assert result.severity == Severity.OK
+
+    # M4: SESSION_TYPE=orchestrator → WARN from orchestrator check
+    def test_check_ambient_session_type_orchestrator_warns(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_ambient_session_type_orchestrator
+        from autoskillit.core import Severity
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        result = _check_ambient_session_type_orchestrator()
+        assert result.severity == Severity.WARNING
+        assert "should only be set by autoskillit CLIs" in result.message
+
+    # M5: SESSION_TYPE=franchise → WARN from franchise check
+    def test_check_ambient_session_type_franchise_warns(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_ambient_session_type_franchise
+        from autoskillit.core import Severity
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        result = _check_ambient_session_type_franchise()
+        assert result.severity == Severity.WARNING
+        assert "highest-privilege" in result.message
+
+    # M6: SESSION_TYPE unset → OK for orchestrator and franchise checks
+    def test_check_ambient_session_type_orchestrator_ok_when_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_ambient_session_type_orchestrator
+        from autoskillit.core import Severity
+
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+        result = _check_ambient_session_type_orchestrator()
+        assert result.severity == Severity.OK
+
+    def test_check_ambient_session_type_franchise_ok_when_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_ambient_session_type_franchise
+        from autoskillit.core import Severity
+
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+        result = _check_ambient_session_type_franchise()
+        assert result.severity == Severity.OK
+
+    # M7: CAMPAIGN_ID set → WARN
+    def test_check_ambient_campaign_id_warns_when_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_ambient_campaign_id
+        from autoskillit.core import Severity
+
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-123")
+        result = _check_ambient_campaign_id()
+        assert result.severity == Severity.WARNING
+        assert "camp-123" in result.message
+        assert "dispatch_food_truck" in result.message
+
+    # M8: CAMPAIGN_ID unset → OK
+    def test_check_ambient_campaign_id_ok_when_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_ambient_campaign_id
+        from autoskillit.core import Severity
+
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        result = _check_ambient_campaign_id()
+        assert result.severity == Severity.OK
+
+    # M9: sous-chef skill dir exists → OK
+    def test_check_sous_chef_bundled_ok(self) -> None:
+        from autoskillit.cli._doctor import _check_sous_chef_bundled
+        from autoskillit.core import Severity
+
+        result = _check_sous_chef_bundled()
+        assert result.severity == Severity.OK
+
+    # M10: sous-chef skill dir missing → ERROR
+    def test_check_sous_chef_bundled_error_when_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_sous_chef_bundled
+        from autoskillit.core import Severity
+
+        monkeypatch.setattr("autoskillit.cli._doctor.pkg_root", lambda: tmp_path)
+        result = _check_sous_chef_bundled()
+        assert result.severity == Severity.ERROR
+        assert "sous-chef" in result.message
+
+    # M11: franchise_dispatch_guard registered and exists → OK
+    def test_check_franchise_dispatch_guard_registered_ok(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_franchise_dispatch_guard_registered
+        from autoskillit.core import Severity
+
+        hooks_dir = tmp_path / "hooks"
+        hooks_dir.mkdir()
+        (hooks_dir / "franchise_dispatch_guard.py").write_text("")
+        monkeypatch.setattr(
+            "autoskillit.cli._doctor.canonical_script_basenames",
+            lambda: frozenset({"franchise_dispatch_guard.py"}),
+        )
+        monkeypatch.setattr("autoskillit.hook_registry.HOOKS_DIR", hooks_dir)
+        result = _check_franchise_dispatch_guard_registered()
+        assert result.severity == Severity.OK
+
+    # M12: franchise_dispatch_guard not registered → ERROR
+    def test_check_franchise_dispatch_guard_registered_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli._doctor import _check_franchise_dispatch_guard_registered
+        from autoskillit.core import Severity
+
+        monkeypatch.setattr(
+            "autoskillit.cli._doctor.canonical_script_basenames",
+            lambda: frozenset(),
+        )
+        result = _check_franchise_dispatch_guard_registered()
+        assert result.severity == Severity.ERROR
+        assert "sync-hooks" in result.message
+
+    # M13: No state files → OK
+    def test_check_stale_franchise_state_ok_when_no_state(self, tmp_path: Path) -> None:
+        from autoskillit.cli._doctor import _check_stale_franchise_state
+        from autoskillit.core import Severity
+
+        result = _check_stale_franchise_state(project_dir=tmp_path)
+        assert result.severity == Severity.OK
+
+    # M14: State file with running dispatch and mtime > 7d → WARN
+    def test_check_stale_franchise_state_warns_on_stale(self, tmp_path: Path) -> None:
+        import os
+        import time
+
+        from autoskillit.cli._doctor import _check_stale_franchise_state
+        from autoskillit.core import Severity
+
+        state_dir = tmp_path / ".autoskillit" / "temp" / "franchise" / "camp-1"
+        state_dir.mkdir(parents=True)
+        state_file = state_dir / "state.json"
+        state_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "campaign_id": "camp-1",
+                    "campaign_name": "test",
+                    "manifest_path": "",
+                    "started_at": 0,
+                    "dispatches": [{"name": "d1", "status": "running"}],
+                }
+            )
+        )
+        old_time = time.time() - (8 * 86400)
+        os.utime(state_file, (old_time, old_time))
+        result = _check_stale_franchise_state(project_dir=tmp_path)
+        assert result.severity == Severity.WARNING
+        assert "camp-1" in result.message or "state.json" in result.message
+
+    # M15: State file with running dispatch and mtime < 7d → OK
+    def test_check_stale_franchise_state_ok_when_fresh(self, tmp_path: Path) -> None:
+        from autoskillit.cli._doctor import _check_stale_franchise_state
+        from autoskillit.core import Severity
+
+        state_dir = tmp_path / ".autoskillit" / "temp" / "franchise" / "camp-1"
+        state_dir.mkdir(parents=True)
+        state_file = state_dir / "state.json"
+        state_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "campaign_id": "camp-1",
+                    "campaign_name": "test",
+                    "manifest_path": "",
+                    "started_at": 0,
+                    "dispatches": [{"name": "d1", "status": "running"}],
+                }
+            )
+        )
+        result = _check_stale_franchise_state(project_dir=tmp_path)
+        assert result.severity == Severity.OK
+
+    # M16: No campaigns/ dir → INFO onboarding hint
+    def test_check_campaign_onboarding_hint_info_when_empty(self, tmp_path: Path) -> None:
+        from autoskillit.cli._doctor import _check_campaign_onboarding_hint
+        from autoskillit.core import Severity
+
+        result = _check_campaign_onboarding_hint(project_dir=tmp_path)
+        assert result.severity == Severity.INFO
+        assert "make-campaign" in result.message
+
+    # M17: campaigns/ has YAML files → OK
+    def test_check_campaign_onboarding_hint_ok_when_populated(self, tmp_path: Path) -> None:
+        from autoskillit.cli._doctor import _check_campaign_onboarding_hint
+        from autoskillit.core import Severity
+
+        campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
+        campaigns_dir.mkdir(parents=True)
+        (campaigns_dir / "my-campaign.yaml").write_text("name: my-campaign\nkind: campaign\n")
+        result = _check_campaign_onboarding_hint(project_dir=tmp_path)
+        assert result.severity == Severity.OK
+
+    # M18: Duplicate clone destinations across dispatches → WARN
+    def test_check_campaign_manifest_clone_dests_warns_on_duplicates(self, tmp_path: Path) -> None:
+        from autoskillit.cli._doctor import _check_campaign_manifest_clone_dests
+        from autoskillit.core import Severity
+
+        campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
+        campaigns_dir.mkdir(parents=True)
+        recipe_yaml = textwrap.dedent("""\
+            name: my-campaign
+            kind: campaign
+            dispatches:
+              - name: task-1
+                ingredients:
+                  clone_path: /tmp/shared-clone
+              - name: task-2
+                ingredients:
+                  clone_path: /tmp/shared-clone
+        """)
+        (campaigns_dir / "dup-campaign.yaml").write_text(recipe_yaml)
+        result = _check_campaign_manifest_clone_dests(project_dir=tmp_path)
+        assert result.severity == Severity.WARNING
+        assert "/tmp/shared-clone" in result.message
+
+    # M19: Unique clone destinations → OK
+    def test_check_campaign_manifest_clone_dests_ok_unique(self, tmp_path: Path) -> None:
+        from autoskillit.cli._doctor import _check_campaign_manifest_clone_dests
+        from autoskillit.core import Severity
+
+        campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
+        campaigns_dir.mkdir(parents=True)
+        recipe_yaml = textwrap.dedent("""\
+            name: my-campaign
+            kind: campaign
+            dispatches:
+              - name: task-1
+                ingredients:
+                  clone_path: /tmp/clone-1
+              - name: task-2
+                ingredients:
+                  clone_path: /tmp/clone-2
+        """)
+        (campaigns_dir / "ok-campaign.yaml").write_text(recipe_yaml)
+        result = _check_campaign_manifest_clone_dests(project_dir=tmp_path)
+        assert result.severity == Severity.OK
+
+    # M20: All 9 new checks appear in doctor JSON output
+    def test_doctor_json_output_includes_franchise_checks(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        cli.doctor(output_json=True)
+        data = json.loads(capsys.readouterr().out)
+        check_names = {r["check"] for r in data["results"]}
+        franchise_checks = {
+            "ambient_session_type_leaf",
+            "ambient_session_type_orchestrator",
+            "ambient_session_type_franchise",
+            "ambient_campaign_id",
+            "sous_chef_bundled",
+            "franchise_dispatch_guard_registered",
+            "stale_franchise_state",
+            "campaign_onboarding_hint",
+            "campaign_manifest_clone_dests",
+        }
+        assert franchise_checks <= check_names

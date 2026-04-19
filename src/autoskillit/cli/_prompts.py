@@ -22,6 +22,8 @@ _OPEN_KITCHEN_CHOICE: str = "__open_kitchen__"
 # Sous-chef sections retained for L2 food truck prompts (allowlist).
 # All other sections are excluded — they describe L1 multi-dispatch patterns
 # that are structurally impossible in a single-dispatch L2 context.
+# TODO(franchise): move _L2_RETAINED_SECTIONS, _build_l2_sous_chef_block, and
+# _build_food_truck_prompt to src/autoskillit/franchise/ once that layer is built out.
 _L2_RETAINED_SECTIONS: frozenset[str] = frozenset(
     {
         "CONTEXT LIMIT ROUTING",
@@ -42,7 +44,10 @@ def _build_l2_sous_chef_block() -> str:
     path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
     if not path.exists():
         return ""
-    content = path.read_text()
+    try:
+        content = path.read_text()
+    except OSError:
+        return ""
 
     # Split into sections on ## boundaries (keeping the delimiter via lookahead)
     sections = re.split(r"(?=^## )", content, flags=re.MULTILINE)

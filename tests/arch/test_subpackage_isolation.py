@@ -769,6 +769,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "for TerminationReason require explicit IDLE_STALL arms in _compute_success, "
         "_compute_retry, and _normalize_subtype",
     ),
+    "_doctor.py": (
+        1200,
+        "REQ-CNST-010-E4: doctor check registry — 26 sequential checks require inline logic; "
+        "splitting into sub-modules would obscure the check sequence and break the test "
+        "filter cascade",
+    ),
 }
 
 

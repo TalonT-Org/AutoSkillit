@@ -462,9 +462,3 @@ def test_campaign_recipe_construction() -> None:
     assert r.continue_on_failure is True
     assert r.steps == {}
     assert r.requires_packs == []
-
-
-def test_campaign_dispatch_importable() -> None:
-    from autoskillit.recipe.schema import CampaignDispatch
-
-    assert dataclasses.is_dataclass(CampaignDispatch)

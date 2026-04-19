@@ -67,11 +67,20 @@ def test_private_env_vars_includes_franchise_tier_vars() -> None:
     expected = {
         "AUTOSKILLIT_SESSION_TYPE",
         "AUTOSKILLIT_CAMPAIGN_ID",
+        "AUTOSKILLIT_KITCHEN_SESSION_ID",
         "AUTOSKILLIT_CAMPAIGN_STATE_PATH",
         "AUTOSKILLIT_PROJECT_DIR",
         "AUTOSKILLIT_L2_TOOL_TAGS",
     }
     assert expected <= AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
+def test_campaign_id_env_var_and_kitchen_session_id_env_var_exported_from_core() -> None:
+    """CAMPAIGN_ID_ENV_VAR and KITCHEN_SESSION_ID_ENV_VAR are re-exported from autoskillit.core."""
+    from autoskillit.core import CAMPAIGN_ID_ENV_VAR, KITCHEN_SESSION_ID_ENV_VAR
+
+    assert CAMPAIGN_ID_ENV_VAR == "AUTOSKILLIT_CAMPAIGN_ID"
+    assert KITCHEN_SESSION_ID_ENV_VAR == "AUTOSKILLIT_KITCHEN_SESSION_ID"
 
 
 # ---------------------------------------------------------------------------

@@ -70,6 +70,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
         {
             "registry_path",
             "all_owners",
+            "owner_filter",
             "step_name",
         }
     ),

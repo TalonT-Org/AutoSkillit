@@ -4302,7 +4302,7 @@ class TestDispatchFoodTruck:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_on_spawn_not_required(self, minimal_ctx, tmp_path: Path):
-        from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.core.types import SkillResult, SubprocessResult, TerminationReason
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.fakes import MockSubprocessRunner
 
@@ -4327,7 +4327,8 @@ class TestDispatchFoodTruck:
             on_spawn=None,
         )
 
-        assert result is not None
+        assert isinstance(result, SkillResult)
+        assert result.success is True
 
 
 def test_default_executor_satisfies_protocol_with_dispatch(minimal_ctx) -> None:
@@ -4337,4 +4338,3 @@ def test_default_executor_satisfies_protocol_with_dispatch(minimal_ctx) -> None:
 
     executor = DefaultHeadlessExecutor(minimal_ctx)
     assert isinstance(executor, HeadlessExecutor)
-    assert hasattr(executor, "dispatch_food_truck")

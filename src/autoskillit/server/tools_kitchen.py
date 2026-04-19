@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 from uuid import uuid4
@@ -206,6 +207,13 @@ async def _open_kitchen_handler() -> str | None:
         logger.warning("open_kitchen_failure", stage="start_quota_refresh", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
 
+    try:
+        from autoskillit.core import register_active_kitchen  # noqa: PLC0415
+
+        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(Path.cwd()))
+    except Exception:
+        logger.warning("open_kitchen_registry_failed", exc_info=True)
+
     return None
 
 
@@ -229,6 +237,12 @@ def _close_kitchen_handler() -> None:
         ctx.quota_refresh_task.cancel()
         ctx.quota_refresh_task = None
     ctx.gate.disable()
+    try:
+        from autoskillit.core import unregister_active_kitchen  # noqa: PLC0415
+
+        unregister_active_kitchen(ctx.kitchen_id)
+    except Exception:
+        logger.warning("close_kitchen_registry_failed", exc_info=True)
     ctx.active_recipe_packs = None
     ctx.recipe_name = ""
     ctx.recipe_content_hash = ""

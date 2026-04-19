@@ -17,6 +17,7 @@ cleaned up in ``finally:`` before ``_finalize_recorder()`` runs.
 from __future__ import annotations
 
 import asyncio as _asyncio
+import os
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -79,6 +80,14 @@ async def _run_drift_check_async() -> None:
     await loop.run_in_executor(None, run_startup_drift_check)
 
 
+async def _run_retiring_sweep_async() -> None:
+    """Offload blocking retiring cache sweep to a thread."""
+    from autoskillit.core import sweep_retiring_cache  # noqa: PLC0415
+
+    loop = _asyncio.get_running_loop()
+    await loop.run_in_executor(None, sweep_retiring_cache)
+
+
 async def _run_deferred_init(ready_event: _asyncio.Event) -> None:
     """Run deferred_initialize, signalling *ready_event* when done."""
     ctx = _get_ctx_or_none()
@@ -119,6 +128,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         _state._startup_ready = event
         write_readiness_sentinel()
         bg_tasks.append(create_background_task(_run_drift_check_async(), label="drift_check"))
+        bg_tasks.append(create_background_task(_run_retiring_sweep_async(), label="cache_sweep"))
         bg_tasks.append(create_background_task(_run_deferred_init(event), label="deferred_init"))
         yield
     finally:
@@ -131,6 +141,12 @@ async def _autoskillit_lifespan(server: Any) -> Any:
             cleanup_readiness_sentinel()
         except Exception:
             logger.exception("lifespan sentinel cleanup error")
+        try:
+            from autoskillit.core import clear_kitchens_for_pid  # noqa: PLC0415
+
+            clear_kitchens_for_pid(os.getpid())
+        except Exception:
+            logger.exception("lifespan kitchen registry cleanup error")
         try:
             _finalize_recorder()
         except Exception:

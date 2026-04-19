@@ -560,7 +560,11 @@ class TestGroupFInstall:
 def test_clear_plugin_cache_removes_nested_entry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """_clear_plugin_cache must remove the entry from data['plugins'], not top-level data."""
+    """_clear_plugin_cache must remove the entry from data['plugins'], not top-level data.
+
+    With the retiring-cache feature, old version directories survive under a grace
+    period instead of being immediately deleted.
+    """
     from autoskillit.cli._marketplace import _clear_plugin_cache
 
     plugins_dir = tmp_path / ".claude" / "plugins"
@@ -574,11 +578,28 @@ def test_clear_plugin_cache_removes_nested_entry(
             }
         )
     )
+    # Simulate an old version directory in the plugin cache
+    cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    old_version_dir = cache_dir / "0.9.0"
+    old_version_dir.mkdir(parents=True)
+    # Ensure the running __version__ differs from "0.9.0" so retirement applies
+    import autoskillit as _pkg
+
+    monkeypatch.setattr(_pkg, "__version__", "0.9.99-test")
+
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     _clear_plugin_cache()
+
     data = json.loads(installed_json.read_text())
     assert "autoskillit@autoskillit-local" not in data.get("plugins", {})
     assert data["version"] == 2  # other keys preserved
+    # Old version dir survives under grace period
+    assert old_version_dir.exists(), "Old version dir must survive under grace period"
+    # Retiring registry must record the old version
+    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
+    assert retiring_json.exists(), "retiring_cache.json must be created"
+    retiring_data = json.loads(retiring_json.read_text())
+    assert any(e["version"] == "0.9.0" for e in retiring_data["retiring"])
 
 
 def test_clear_plugin_cache_noop_when_entry_absent(

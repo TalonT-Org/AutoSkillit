@@ -677,7 +677,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         kitchen-open session marker reader for hook subprocesses.
         _version_snapshot.py adds the process-scoped version snapshot for session
         telemetry (collect_version_snapshot, lru_cache'd).
-        Exempt at 19 files.
+        _plugin_cache.py adds the plugin cache lifecycle: retiring cache sweep,
+        install locking, and kitchen registry (accessible from server/ without
+        cli/ import).
+        Exempt at 20 files.
       cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
         for backward-compatible cli/ imports; canonical implementation lives in
         core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -700,7 +703,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 20,
         "recipe": 35,
         "execution": 26,
-        "core": 19,
+        "core": 20,
         "cli": 20,
         "hooks": 20,
     }

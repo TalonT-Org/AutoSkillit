@@ -145,7 +145,12 @@ def register_clone(
             KITCHEN_SESSION_ID_ENV_VAR, ""
         )
     if not owner:
-        raise ValueError("owner is required (no campaign_id or kitchen session_id in env)")
+        campaign_val = os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
+        session_val = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR, "")
+        raise ValueError(
+            f"owner is required ({CAMPAIGN_ID_ENV_VAR}={campaign_val!r},"
+            f" {KITCHEN_SESSION_ID_ENV_VAR}={session_val!r})"
+        )
     path = _resolve_registry_path(registry_path, temp_dir)
     with CloneRegistry(path) as reg:
         reg.append(clone_path, status, owner)

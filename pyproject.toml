@@ -282,6 +282,10 @@ name = "L2 franchise does not import L3 or most L1 peers"
 type = "forbidden"
 source_modules = ["autoskillit.franchise"]
 forbidden_modules = [
+    # EXCEPTION: autoskillit.workspace is intentionally absent from this list.
+    # franchise may import workspace solely for path-lookup utilities (e.g., worktree paths).
+    # This is a deliberate, narrow allowance — do not expand workspace use in franchise
+    # beyond path utilities without updating this contract and the rationale comment above.
     "autoskillit.config",
     "autoskillit.pipeline",
     "autoskillit.execution",

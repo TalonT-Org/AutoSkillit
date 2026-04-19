@@ -576,6 +576,15 @@ class TestClaudeCodeCompatMiddleware:
 class TestSessionTypeVisibility:
     """3-branch session-type tag visibility dispatch."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_mcp_visibility(self):
+        """Reset gated tag visibility on the shared mcp singleton before each test."""
+        from autoskillit.server import mcp
+
+        mcp.disable(tags={"franchise", "kitchen", "headless"})
+        yield
+        mcp.disable(tags={"franchise", "kitchen", "headless"})
+
     @pytest.mark.anyio
     async def test_franchise_enables_franchise_tag(self, monkeypatch):
         from fastmcp.client import Client

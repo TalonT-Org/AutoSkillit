@@ -289,6 +289,12 @@ class WorkspaceConfig:
 class FranchiseConfig:
     l2_default_timeout_sec: int = 3600
 
+    def __post_init__(self) -> None:
+        if self.l2_default_timeout_sec <= 0:
+            raise ValueError(
+                f"l2_default_timeout_sec must be positive, got {self.l2_default_timeout_sec}"
+            )
+
 
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""

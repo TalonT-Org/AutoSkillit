@@ -250,3 +250,6 @@ workspace:
   worktree_root: null   # null = auto-resolve to ../worktrees/ relative to project root
   runs_root: null       # null = auto-resolve to ../autoskillit-runs/ relative to project root
   temp_dir: .autoskillit/temp  # canonical default; override per-project or via AUTOSKILLIT_WORKSPACE__TEMP_DIR
+
+franchise:
+  l2_default_timeout_sec: 3600

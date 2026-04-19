@@ -12,9 +12,11 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     RESERVED_LOG_RECORD_KEYS,
+    SessionType,
     TerminationReason,
     extract_path_arg,
     get_logger,
+    session_type,
 )
 from autoskillit.execution import (
     SCENARIO_STEP_NAME_ENV,  # noqa: F401 — re-exported for tools_execution.py
@@ -24,7 +26,7 @@ from autoskillit.execution import (
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
-from autoskillit.pipeline import gate_error_result
+from autoskillit.pipeline import gate_error_result, headless_error_result
 from autoskillit.workspace import clone_registry  # noqa: F401 — re-exported for tools_clone.py
 
 if TYPE_CHECKING:
@@ -175,19 +177,75 @@ def track_response_size(
     return decorator
 
 
-def _require_not_headless(tool_name: str = "") -> str | None:
-    """Return headless_error JSON if called from a headless session; None if safe."""
-    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-        from autoskillit.pipeline import headless_error_result
+def _require_orchestrator_or_higher(tool_name: str = "") -> str | None:
+    """Return headless_error JSON if session is leaf-tier; None if permitted.
 
+    Interactive sessions (HEADLESS not set) always pass.
+    Headless sessions must be orchestrator or franchise tier.
+    Fail-closed: unset/invalid SESSION_TYPE → LEAF → deny.
+    """
+    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
+        return None
+
+    st = session_type()
+    if st in (SessionType.ORCHESTRATOR, SessionType.FRANCHISE):
+        return None
+
+    msg = (
+        f"{tool_name} cannot be called from leaf sessions. "
+        "Only orchestrator or franchise sessions may call this tool."
+        if tool_name
+        else None
+    )
+    return headless_error_result(msg)
+
+
+def _require_orchestrator_exact(tool_name: str = "") -> str | None:
+    """Return headless_error JSON if session is not orchestrator-tier; None if permitted.
+
+    Interactive sessions (HEADLESS not set) always pass.
+    Headless sessions must be exactly orchestrator tier.
+    Franchise and leaf tiers are denied.
+    """
+    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
+        return None
+
+    st = session_type()
+    if st is SessionType.ORCHESTRATOR:
+        return None
+
+    if st is SessionType.FRANCHISE:
         msg = (
-            f"{tool_name} cannot be called from headless sessions. "
-            "Only the Tier 1 orchestrator may call this tool."
+            f"{tool_name} cannot be called from franchise sessions. "
+            "Franchise sessions do not have a kitchen."
             if tool_name
             else None
         )
-        return headless_error_result(msg)
-    return None
+    else:
+        msg = (
+            f"{tool_name} cannot be called from leaf sessions. "
+            "Only the orchestrator may call this tool."
+            if tool_name
+            else None
+        )
+    return headless_error_result(msg)
+
+
+def _require_franchise(tool_name: str = "") -> str | None:
+    """Return headless_error JSON if session is not franchise-tier; None if permitted.
+
+    No interactive bypass — franchise is a specific tier, not a headless guard.
+    """
+    st = session_type()
+    if st is SessionType.FRANCHISE:
+        return None
+
+    msg = (
+        f"{tool_name} requires a franchise session. Current session type is not franchise."
+        if tool_name
+        else None
+    )
+    return headless_error_result(msg)
 
 
 def _require_enabled() -> str | None:

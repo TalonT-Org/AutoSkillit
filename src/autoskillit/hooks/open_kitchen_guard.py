@@ -58,20 +58,43 @@ def main() -> None:
         sys.exit(0)  # fail-open on malformed input or broken pipe
 
     if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        "open_kitchen cannot be called from headless sessions. "
-                        "Open the kitchen in your human session using /autoskillit:open-kitchen."
-                    ),
+        session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower()
+
+        if session_type == "franchise":
+            payload = json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            "open_kitchen cannot be called from franchise sessions. "
+                            "Franchise sessions do not have a kitchen."
+                        ),
+                    }
                 }
-            }
-        )
-        sys.stdout.write(payload + "\n")
-        sys.exit(0)
+            )
+            sys.stdout.write(payload + "\n")
+            sys.exit(0)
+
+        if session_type != "orchestrator":
+            # leaf, unset, or invalid — deny (fail-closed)
+            payload = json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            "open_kitchen cannot be called from leaf sessions. "
+                            "Open the kitchen in your orchestrator session using "
+                            "/autoskillit:open-kitchen."
+                        ),
+                    }
+                }
+            )
+            sys.stdout.write(payload + "\n")
+            sys.exit(0)
+
+        # HEADLESS + orchestrator — fall through to permit path
 
     # Permit path: write a kitchen-open session marker so ask_user_question_guard
     # can verify the kitchen is open before allowing AskUserQuestion.

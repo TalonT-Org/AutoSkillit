@@ -98,6 +98,7 @@ def test_retired_script_basenames_exists_and_complete() -> None:
         "pretty_output.py",
         "token_summary_appender.py",
         "session_start_reminder.py",
+        "headless_orchestration_guard.py",
     }
     missing = required - set(RETIRED_SCRIPT_BASENAMES)
     assert not missing, f"RETIRED_SCRIPT_BASENAMES is missing: {missing}"

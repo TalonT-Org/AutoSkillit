@@ -71,7 +71,7 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*",
-        scripts=["headless_orchestration_guard.py"],
+        scripts=["leaf_orchestration_guard.py"],
         session_scope="headless_only",
     ),
     HookDef(
@@ -100,6 +100,7 @@ RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
         "pretty_output.py",
         "token_summary_appender.py",
         "session_start_reminder.py",
+        "headless_orchestration_guard.py",
         # Append any future retired basenames here, atomically with the rename commit.
     }
 )

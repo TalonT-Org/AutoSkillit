@@ -186,6 +186,7 @@ class PackDef(NamedTuple):
 
 
 PACK_REGISTRY: dict[str, PackDef] = {
+    "kitchen-core": PackDef(True, "Core kitchen orchestration tools"),
     "github": PackDef(True, "GitHub issue and PR tools"),
     "ci": PackDef(True, "CI polling and merge queue tools"),
     "clone": PackDef(True, "Clone-based run isolation tools"),
@@ -229,10 +230,30 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "register_clone_status": frozenset({"clone"}),
     "batch_cleanup_clones": frozenset({"clone"}),
     # telemetry
-    "get_token_summary": frozenset({"telemetry"}),
-    "get_timing_summary": frozenset({"telemetry"}),
-    "write_telemetry_files": frozenset({"telemetry"}),
-    "get_quota_events": frozenset({"telemetry"}),
+    "get_token_summary": frozenset({"kitchen-core", "telemetry"}),
+    "get_timing_summary": frozenset({"kitchen-core", "telemetry"}),
+    "write_telemetry_files": frozenset({"kitchen-core", "telemetry"}),
+    "get_quota_events": frozenset({"kitchen-core", "telemetry"}),
+    # kitchen-core — execution
+    "run_cmd": frozenset({"kitchen-core"}),
+    "run_python": frozenset({"kitchen-core"}),
+    "run_skill": frozenset({"kitchen-core"}),
+    # kitchen-core — workspace
+    "test_check": frozenset({"kitchen-core"}),
+    "reset_test_dir": frozenset({"kitchen-core"}),
+    "reset_workspace": frozenset({"kitchen-core"}),
+    "classify_fix": frozenset({"kitchen-core"}),
+    # kitchen-core — recipe
+    "list_recipes": frozenset({"kitchen-core"}),
+    "load_recipe": frozenset({"kitchen-core"}),
+    "validate_recipe": frozenset({"kitchen-core"}),
+    "migrate_recipe": frozenset({"kitchen-core"}),
+    # kitchen-core — status
+    "kitchen_status": frozenset({"kitchen-core"}),
+    "read_db": frozenset({"kitchen-core"}),
+    "get_pipeline_report": frozenset({"kitchen-core"}),
+    # kitchen-core — git
+    "merge_worktree": frozenset({"kitchen-core"}),
 }
 
 # Canonical prefix required for all skill_command values passed to run_skill.

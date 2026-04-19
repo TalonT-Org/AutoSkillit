@@ -99,6 +99,10 @@ def test_recipe_pack_registry_implementation_family() -> None:
 
     assert "implementation-family" in RECIPE_PACK_REGISTRY
     assert RECIPE_PACK_REGISTRY["implementation-family"].default_enabled is True
+    assert (
+        RECIPE_PACK_REGISTRY["implementation-family"].description
+        == "Implementation and refactoring recipes"
+    )
 
 
 def test_recipe_pack_registry_research_family() -> None:
@@ -106,6 +110,9 @@ def test_recipe_pack_registry_research_family() -> None:
 
     assert "research-family" in RECIPE_PACK_REGISTRY
     assert RECIPE_PACK_REGISTRY["research-family"].default_enabled is False
+    assert (
+        RECIPE_PACK_REGISTRY["research-family"].description == "Research and exploration recipes"
+    )
 
 
 def test_recipe_pack_registry_orchestration_family() -> None:
@@ -113,6 +120,10 @@ def test_recipe_pack_registry_orchestration_family() -> None:
 
     assert "orchestration-family" in RECIPE_PACK_REGISTRY
     assert RECIPE_PACK_REGISTRY["orchestration-family"].default_enabled is True
+    assert (
+        RECIPE_PACK_REGISTRY["orchestration-family"].description
+        == "Campaign orchestration and automation"
+    )
 
 
 def test_recipe_pack_def_importable_from_core() -> None:

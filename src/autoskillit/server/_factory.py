@@ -9,6 +9,7 @@ construction scattered across callers.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 from collections.abc import Callable
@@ -17,6 +18,7 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
+    FranchiseLock,
     SubprocessRunner,
     WriteBehaviorSpec,
     get_logger,
@@ -132,6 +134,7 @@ def make_context(
     *,
     runner: SubprocessRunner | None = _UNSET,
     plugin_dir: str | None = _UNSET,
+    franchise_lock: FranchiseLock | None = None,
 ) -> ToolContext:
     """Create a fully-wired ToolContext with all 22 service fields populated.
 
@@ -151,6 +154,9 @@ def make_context(
                     Pass None explicitly to indicate the plugin is installed
                     (marketplace install; no --plugin-dir needed). When omitted
                     (sentinel), auto-detects via _check_plugin_installed().
+        franchise_lock: FranchiseLock implementation to inject. Defaults to
+                        asyncio.Lock() when None. Pass a custom implementation
+                        in tests to substitute the lock without monkey-patching.
 
     Returns:
         ToolContext with gate starting closed (enabled=False) in all contexts.
@@ -250,6 +256,7 @@ def make_context(
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
         quota_refresh_task=None,
+        franchise_lock=franchise_lock if franchise_lock is not None else asyncio.Lock(),
     )
 
     def _resolve_output_patterns(skill_command: str) -> list[str]:

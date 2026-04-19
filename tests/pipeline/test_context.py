@@ -283,6 +283,14 @@ def test_tool_context_has_token_factory_field():
     )
 
 
+def test_tool_context_has_franchise_lock_field():
+    """ToolContext has a franchise_lock field defaulting to None."""
+    from autoskillit.pipeline.context import ToolContext
+
+    field_info = ToolContext.__dataclass_fields__["franchise_lock"]
+    assert field_info.default is None
+
+
 def test_tool_context_recipe_identity_defaults(tmp_path):
     ctx = _make_ctx(tmp_path)
     assert ctx.recipe_name == ""

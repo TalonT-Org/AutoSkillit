@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from ._type_results import (
     CIRunScope,
@@ -43,6 +43,7 @@ __all__ = [
     "SkillLister",
     "SkillResolver",
     "BackgroundSupervisor",
+    "FranchiseLock",
     "QuotaRefreshTask",
     "TokenFactory",
     "SupportsLogger",
@@ -526,6 +527,21 @@ class QuotaRefreshTask(Protocol):
     """
 
     def cancel(self, msg: Any = None) -> bool: ...
+
+
+@runtime_checkable
+class FranchiseLock(Protocol):
+    """Protocol for a mutual-exclusion lock handle.
+
+    Satisfied by asyncio.Lock — used to type the franchise_lock field in
+    ToolContext without leaking asyncio.Lock into the core layer.
+    """
+
+    def locked(self) -> bool: ...
+
+    async def acquire(self) -> Literal[True]: ...
+
+    def release(self) -> None: ...
 
 
 @runtime_checkable

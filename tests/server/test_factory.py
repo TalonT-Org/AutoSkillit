@@ -460,3 +460,20 @@ def test_make_context_sets_token_factory(tmp_path):
     cfg = AutomationConfig()
     ctx = make_context(cfg, runner=None, plugin_dir=str(tmp_path))
     assert callable(ctx.token_factory)
+
+
+# --- Group P-2: project_dir env inheritance ---
+
+
+def test_make_context_reads_project_dir_env(tmp_path, monkeypatch):
+    """make_context reads AUTOSKILLIT_PROJECT_DIR and stores it on ctx.project_dir."""
+    monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", str(tmp_path))
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.project_dir == tmp_path
+
+
+def test_make_context_project_dir_cwd_fallback(monkeypatch):
+    """make_context falls back to Path.cwd() when AUTOSKILLIT_PROJECT_DIR is not set."""
+    monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.project_dir == Path.cwd()

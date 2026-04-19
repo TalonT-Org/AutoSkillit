@@ -226,7 +226,8 @@ def make_context(
     )
     gate = DefaultGateState(enabled=False)
 
-    project_dir = Path.cwd()
+    env_project_dir = os.environ.get("AUTOSKILLIT_PROJECT_DIR", "")
+    project_dir = Path(env_project_dir) if env_project_dir else Path.cwd()
     temp_dir = resolve_temp_dir(project_dir, config.workspace.temp_dir)
     temp_dir_relpath = temp_dir_display_str(config.workspace.temp_dir)
 
@@ -245,6 +246,7 @@ def make_context(
         plugin_dir=resolved_dir,
         runner=runner,
         temp_dir=temp_dir,
+        project_dir=project_dir,
         tester=DefaultTestRunner(config=config, runner=runner) if runner is not None else None,
         recipes=DefaultRecipeRepository(),
         db_reader=DefaultDatabaseReader(),

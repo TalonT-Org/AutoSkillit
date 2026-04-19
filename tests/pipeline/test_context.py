@@ -297,3 +297,16 @@ def test_tool_context_recipe_identity_defaults(tmp_path):
     assert ctx.recipe_content_hash == ""
     assert ctx.recipe_composite_hash == ""
     assert ctx.recipe_version == ""
+
+
+# --- Group P-2: project_dir env inheritance ---
+
+
+def test_toolcontext_has_project_dir_field():
+    """ToolContext dataclass has a project_dir field of type Path."""
+    import dataclasses
+
+    from autoskillit.pipeline.context import ToolContext
+
+    field_names = {f.name for f in dataclasses.fields(ToolContext)}
+    assert "project_dir" in field_names

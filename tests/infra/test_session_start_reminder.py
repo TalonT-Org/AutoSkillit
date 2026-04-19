@@ -252,3 +252,41 @@ def test_resumed_session_marker_dir_missing_no_crash(tmp_path: Path) -> None:
     data = json.loads(out.strip())
     assert "additionalContext" in data
     assert "recipe" not in data["additionalContext"]
+
+
+# --- Group P-3: Hook namespacing ---
+
+
+def test_session_start_hook_resolves_campaign_namespace(tmp_path: Path, monkeypatch) -> None:
+    """session_start_hook inline path logic includes AUTOSKILLIT_CAMPAIGN_ID."""
+    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-88")
+
+    # Create a marker in the campaign-namespaced directory
+    state_dir = tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "camp-88"
+    state_dir.mkdir(parents=True)
+    marker = {
+        "session_id": "sess-88",
+        "opened_at": datetime.now(UTC).isoformat(),
+        "recipe_name": None,
+        "marker_version": 1,
+    }
+    (state_dir / "sess-88.json").write_text(json.dumps(marker))
+
+    # Run the hook with the campaign-namespaced marker and a resumed transcript
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text('{"type":"say","text":"hello"}\n')
+    payload = json.dumps({"session_id": "sess-88", "transcript_path": str(transcript)})
+    env = {
+        **os.environ,
+        "AUTOSKILLIT_CAMPAIGN_ID": "camp-88",
+    }
+    # Remove AUTOSKILLIT_STATE_DIR so the hook uses the campaign-namespaced path
+    env.pop("AUTOSKILLIT_STATE_DIR", None)
+    # Use monkeypatch chdir so the hook resolves CWD correctly
+    monkeypatch.chdir(tmp_path)
+    rc, out = _run(payload, env=env)
+    assert rc == 0
+    # The hook should find the marker and produce a resume reminder
+    data = json.loads(out.strip())
+    assert "additionalContext" in data

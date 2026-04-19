@@ -21,7 +21,10 @@ def _get_marker_path(session_id: str) -> Path:
     override = os.environ.get("AUTOSKILLIT_STATE_DIR")
     if override:
         return Path(override) / "kitchen_state" / f"{session_id}.json"
-    return Path.cwd() / ".autoskillit" / "temp" / "kitchen_state" / f"{session_id}.json"
+    campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
+    base = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+    state_dir = base / campaign_id if campaign_id else base
+    return state_dir / f"{session_id}.json"
 
 
 def _read_marker(session_id: str) -> dict | None:

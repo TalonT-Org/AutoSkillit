@@ -148,3 +148,18 @@ def test_open_kitchen_guard_no_marker_on_deny(tmp_path: Path, monkeypatch) -> No
     payload = json.loads(result.stdout)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert not (tmp_path / "kitchen_state" / "session-abc.json").exists()
+
+
+# --- Group P-3: Hook namespacing ---
+
+
+def test_open_kitchen_guard_uses_campaign_namespace(tmp_path: Path, monkeypatch) -> None:
+    """open_kitchen_guard writes marker to campaign-namespaced directory."""
+    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-77")
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.hooks.open_kitchen_guard import _write_kitchen_marker
+
+    _write_kitchen_marker("sess-test", "my-recipe")
+    expected = tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "camp-77" / "sess-test.json"
+    assert expected.exists()

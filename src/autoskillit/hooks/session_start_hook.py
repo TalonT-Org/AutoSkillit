@@ -31,7 +31,9 @@ def main() -> None:
         if _state_override:
             _state_dir = Path(_state_override) / "kitchen_state"
         else:
-            _state_dir = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+            _campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
+            _base = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+            _state_dir = _base / _campaign_id if _campaign_id else _base
         if _state_dir.is_dir():
             _ttl_hours = 24
             for _p in _state_dir.glob("*.json"):

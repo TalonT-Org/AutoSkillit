@@ -10,6 +10,7 @@ from types import MappingProxyType
 
 from autoskillit.core import (
     SESSION_TYPE_LEAF,
+    SESSION_TYPE_ORCHESTRATOR,
     ClaudeFlags,
     ValidatedAddDir,
     build_claude_env,
@@ -309,5 +310,81 @@ def build_leaf_headless_cmd(
             cmd.append(flag)
     for validated_dir in add_dirs:
         cmd.extend([ClaudeFlags.ADD_DIR, validated_dir.path])
+
+    return ClaudeHeadlessCmd(cmd=cmd, env=spec.env)
+
+
+def build_food_truck_cmd(
+    *,
+    orchestrator_prompt: str,
+    plugin_dir: str | Path,
+    cwd: str,
+    completion_marker: str,
+    model: str | None = None,
+    env_extras: Mapping[str, str] | None = None,
+    output_format_value: str = "stream-json",
+) -> ClaudeHeadlessCmd:
+    """Build the complete headless command spec for an L2 food truck session.
+
+    A food truck session is an L2 orchestrator: it runs a full recipe
+    autonomously, always carries ``AUTOSKILLIT_SESSION_TYPE=orchestrator``,
+    and restricts Claude native tools to ``--tools AskUserQuestion``.
+
+    Unlike ``build_leaf_headless_cmd``, this builder:
+    - Does NOT call ``_ensure_skill_prefix`` (prompt is a complete orchestrator prompt)
+    - Sets ``SESSION_TYPE=orchestrator`` (not ``leaf``)
+    - Accepts caller-provided ``env_extras`` for campaign-specific variables
+      (CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, L2_TOOL_TAGS, etc.)
+
+    Parameters
+    ----------
+    orchestrator_prompt
+        Complete system prompt built by the franchise caller.
+    plugin_dir
+        Path passed as ``--plugin-dir`` flag.
+    cwd
+        Absolute path to the working directory. Injected as anchor directive.
+    completion_marker
+        Marker string appended to the prompt as a completion directive.
+    model
+        Optional model override.
+    env_extras
+        Caller-provided env variables layered on top of the baseline.
+        Used for CAMPAIGN_ID, CAMPAIGN_STATE_PATH, PROJECT_DIR, L2_TOOL_TAGS,
+        IDLE_OUTPUT_TIMEOUT. These override baseline but cannot override
+        SESSION_TYPE or HEADLESS (applied last).
+    output_format_value
+        String value passed as ``--output-format`` flag. Defaults to ``stream-json``.
+    """
+    # Prompt transformations: completion directive + cwd anchor + narration suppression.
+    # No _ensure_skill_prefix — orchestrator_prompt is a complete system prompt.
+    prompt = _inject_narration_suppression(
+        _inject_cwd_anchor(
+            _inject_completion_directive(orchestrator_prompt, completion_marker),
+            cwd,
+        )
+    )
+
+    # Baseline env: headless + orchestrator session type + MCP settings.
+    extras: dict[str, str] = {
+        "AUTOSKILLIT_HEADLESS": "1",
+        "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_ORCHESTRATOR,
+        "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
+        "MCP_CONNECTION_NONBLOCKING": "0",
+    }
+    # Layer caller env_extras (campaign vars) UNDER the mandatory keys.
+    # This ensures SESSION_TYPE and HEADLESS cannot be accidentally overridden.
+    if env_extras:
+        for k, v in env_extras.items():
+            if k not in ("AUTOSKILLIT_SESSION_TYPE", "AUTOSKILLIT_HEADLESS"):
+                extras[k] = v
+
+    filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
+    spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)
+
+    cmd: list[str] = [*spec.cmd]
+    cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_dir)]
+    cmd += [ClaudeFlags.OUTPUT_FORMAT, output_format_value]
+    cmd += [ClaudeFlags.TOOLS, "AskUserQuestion"]
 
     return ClaudeHeadlessCmd(cmd=cmd, env=spec.env)

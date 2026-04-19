@@ -499,6 +499,12 @@ _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         # marketplace registration + install: `claude plugin marketplace add` /
         # `claude plugin install`. Administrative ops invoked once during setup.
         ("_marketplace.py", "install"),
+        # run_headless_core and dispatch_food_truck pass `spec` (ClaudeHeadlessCmd)
+        # to _execute_claude_headless, which internally uses `spec.env` at the
+        # runner call site. The checker incorrectly treats _execute_claude_headless(spec, ...)
+        # as a direct subprocess call because `spec` resolves to a builder return value.
+        ("headless.py", "run_headless_core"),
+        ("headless.py", "dispatch_food_truck"),
     }
 )
 

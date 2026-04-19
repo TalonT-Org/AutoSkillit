@@ -9,6 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from autoskillit.core import (
+    CAMPAIGN_ID_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
     SESSION_TYPE_LEAF,
     ClaudeFlags,
@@ -296,9 +297,9 @@ def build_leaf_headless_cmd(
         extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
     if scenario_step_name:
         extras["SCENARIO_STEP_NAME"] = scenario_step_name
-    campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID")
+    campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
     if campaign_id:
-        extras["AUTOSKILLIT_CAMPAIGN_ID"] = campaign_id
+        extras[CAMPAIGN_ID_ENV_VAR] = campaign_id
     kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
     if kitchen_session_id:
         extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id

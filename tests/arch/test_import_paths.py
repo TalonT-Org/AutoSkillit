@@ -26,6 +26,7 @@ PACKAGES = frozenset(
         "workspace",
         "recipe",
         "migration",
+        "franchise",
         "config",
         "server",
         "cli",

@@ -6,6 +6,30 @@ explicit `from autoskillit.core.logging import get_logger`.
 """
 
 from ._claude_env import build_claude_env
+from ._plugin_cache import (
+    _InstallLock as _InstallLock,
+)
+from ._plugin_cache import (
+    _retire_old_versions as _retire_old_versions,
+)
+from ._plugin_cache import (
+    any_kitchen_open as any_kitchen_open,
+)
+from ._plugin_cache import (
+    append_retiring_entry as append_retiring_entry,
+)
+from ._plugin_cache import (
+    clear_kitchens_for_pid as clear_kitchens_for_pid,
+)
+from ._plugin_cache import (
+    register_active_kitchen as register_active_kitchen,
+)
+from ._plugin_cache import (
+    sweep_retiring_cache as sweep_retiring_cache,
+)
+from ._plugin_cache import (
+    unregister_active_kitchen as unregister_active_kitchen,
+)
 from ._terminal_table import TerminalColumn as TerminalColumn
 from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
@@ -273,4 +297,11 @@ __all__ = [
     "truncate_text",
     # _version_snapshot
     "collect_version_snapshot",
+    # _plugin_cache
+    "any_kitchen_open",
+    "append_retiring_entry",
+    "clear_kitchens_for_pid",
+    "register_active_kitchen",
+    "sweep_retiring_cache",
+    "unregister_active_kitchen",
 ]

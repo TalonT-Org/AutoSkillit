@@ -658,6 +658,11 @@ def run_update_checks(home: Path | None = None) -> None:
     ):
         return
 
+    from autoskillit.core import any_kitchen_open  # noqa: PLC0415
+
+    if any_kitchen_open():
+        return
+
     _skip_env: dict[str, str] = {
         **os.environ,
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",

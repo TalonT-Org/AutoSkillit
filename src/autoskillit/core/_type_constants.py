@@ -21,6 +21,8 @@ __all__ = [
     "UNGATED_TOOLS",
     "PackDef",
     "PACK_REGISTRY",
+    "RecipePackDef",
+    "RECIPE_PACK_REGISTRY",
     "CATEGORY_TAGS",
     "TOOL_SUBSET_TAGS",
     "SKILL_COMMAND_PREFIX",
@@ -185,6 +187,13 @@ class PackDef(NamedTuple):
     description: str
 
 
+class RecipePackDef(NamedTuple):
+    """Definition of a named recipe pack with default visibility state."""
+
+    default_enabled: bool
+    description: str
+
+
 PACK_REGISTRY: dict[str, PackDef] = {
     "kitchen-core": PackDef(True, "Core kitchen orchestration tools"),
     "github": PackDef(True, "GitHub issue and PR tools"),
@@ -199,6 +208,12 @@ PACK_REGISTRY: dict[str, PackDef] = {
 }
 
 CATEGORY_TAGS: frozenset[str] = frozenset(PACK_REGISTRY.keys())
+
+RECIPE_PACK_REGISTRY: dict[str, RecipePackDef] = {
+    "implementation-family": RecipePackDef(True, "Implementation and refactoring recipes"),
+    "research-family": RecipePackDef(False, "Research and exploration recipes"),
+    "orchestration-family": RecipePackDef(True, "Campaign orchestration and automation"),
+}
 
 # Maps each MCP tool name to its functional category subset tags.
 # Mirrors the FastMCP @mcp.tool(tags=...) category assignments in the server layer.

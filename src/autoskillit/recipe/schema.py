@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
@@ -12,6 +13,11 @@ from autoskillit.core import RecipeSource
 
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
 RECIPE_VERSION_KEY: Final = "recipe_version"
+
+
+class RecipeKind(StrEnum):
+    STANDARD = "standard"
+    CAMPAIGN = "campaign"
 
 
 @dataclass
@@ -115,6 +121,17 @@ class RecipeBlock:
 
 
 @dataclass
+class CampaignDispatch:
+    """A single dispatch entry in a campaign recipe."""
+
+    name: str
+    recipe: str
+    task: str
+    ingredients: dict[str, str] = field(default_factory=dict)
+    depends_on: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Recipe:
     name: str
     description: str
@@ -128,6 +145,12 @@ class Recipe:
     composite_hash: str = ""
     experimental: bool = False
     requires_packs: list[str] = field(default_factory=list)
+    kind: RecipeKind = RecipeKind.STANDARD
+    categories: list[str] = field(default_factory=list)
+    dispatches: list[CampaignDispatch] = field(default_factory=list)
+    requires_recipe_packs: list[str] = field(default_factory=list)
+    allowed_recipes: list[str] = field(default_factory=list)
+    continue_on_failure: bool = False
     # Populated by extract_blocks() during load; empty tuple for recipes with no block: anchors.
     blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
 

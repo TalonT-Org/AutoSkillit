@@ -28,7 +28,7 @@ import os
 from collections.abc import Mapping
 from types import MappingProxyType
 
-from autoskillit.core._type_constants import AUTOSKILLIT_PRIVATE_ENV_VARS
+from ._type_constants import AUTOSKILLIT_PRIVATE_ENV_VARS
 
 # Exact-match IDE discovery variable names stripped from the child env.
 IDE_ENV_DENYLIST: frozenset[str] = frozenset(

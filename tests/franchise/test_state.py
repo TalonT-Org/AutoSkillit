@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import errno
-import json
 import os
 import threading
 from pathlib import Path
@@ -12,12 +11,9 @@ from unittest.mock import patch
 import pytest
 
 from autoskillit.franchise import (
-    CampaignState,
     DispatchRecord,
     DispatchStatus,
-    ResumeDecision,
     append_dispatch_record,
-    mark_dispatch_interrupted,
     mark_dispatch_running,
     read_state,
     resume_campaign_from_state,

@@ -13,7 +13,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import atomic_write, get_logger, write_versioned_json
+from autoskillit.core import get_logger, write_versioned_json
 
 _log = get_logger(__name__)
 
@@ -77,7 +77,14 @@ class ResumeDecision:
 
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     DispatchStatus.PENDING: frozenset(
-        {DispatchStatus.RUNNING, DispatchStatus.SKIPPED, DispatchStatus.REFUSED, DispatchStatus.RELEASED}
+        {
+            DispatchStatus.RUNNING,
+            DispatchStatus.SUCCESS,
+            DispatchStatus.FAILURE,
+            DispatchStatus.SKIPPED,
+            DispatchStatus.REFUSED,
+            DispatchStatus.RELEASED,
+        }
     ),
     DispatchStatus.RUNNING: frozenset(
         {DispatchStatus.SUCCESS, DispatchStatus.FAILURE, DispatchStatus.INTERRUPTED}
@@ -160,9 +167,8 @@ def _write_state(state_path: Path, state: CampaignState) -> None:
         "manifest_path": state.manifest_path,
         "started_at": state.started_at,
         "dispatches": [d.to_dict() for d in state.dispatches],
-        "schema_version": state.schema_version,
     }
-    atomic_write(state_path, json.dumps(payload))
+    write_versioned_json(state_path, payload, schema_version=state.schema_version)
 
 
 def mark_dispatch_running(

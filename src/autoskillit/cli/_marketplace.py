@@ -38,6 +38,10 @@ def _clear_plugin_cache() -> None:
         from autoskillit.core import _retire_old_versions
 
         _retire_old_versions(cache_dir, _new_version)
+    else:
+        from autoskillit.core import sweep_retiring_cache
+
+        sweep_retiring_cache()
 
     from autoskillit.cli._installed_plugins import InstalledPluginsFile
 

@@ -171,7 +171,17 @@ class TestCLIDoctor:
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         severities = {r["severity"] for r in data["results"]}
-        assert severities <= {"ok", "warning", "error"}
+        assert severities <= {"ok", "warning", "error", "info"}
+
+    def test_doctor_info_severity_not_treated_as_problem(self) -> None:
+        """INFO findings must not appear in the problems section."""
+        from autoskillit.cli._doctor import _NON_PROBLEM
+        from autoskillit.core import Severity
+
+        assert Severity.INFO in _NON_PROBLEM, "INFO must be in _NON_PROBLEM"
+        assert Severity.OK in _NON_PROBLEM, "OK must be in _NON_PROBLEM"
+        assert Severity.ERROR not in _NON_PROBLEM, "ERROR must not be in _NON_PROBLEM"
+        assert Severity.WARNING not in _NON_PROBLEM, "WARNING must not be in _NON_PROBLEM"
 
     def test_doctor_passes_when_versions_match(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture

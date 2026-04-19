@@ -24,6 +24,7 @@ from autoskillit.hook_registry import (
 )
 
 _log = get_logger(__name__)
+_NON_PROBLEM: frozenset[Severity] = frozenset({Severity.OK, Severity.INFO})
 
 
 @dataclass
@@ -870,10 +871,10 @@ def run_doctor(*, output_json: bool = False) -> None:
             )
         )
     else:
-        has_problems = any(r.severity != Severity.OK for r in results)
+        has_problems = any(r.severity not in _NON_PROBLEM for r in results)
         if has_problems:
             for r in results:
-                if r.severity != Severity.OK:
+                if r.severity not in _NON_PROBLEM:
                     print(f"{r.severity.upper()}: {r.message}")
         else:
             for r in results:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from typing import Literal
 
@@ -12,7 +13,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import get_logger
+from autoskillit.core import CAMPAIGN_ID_ENV_VAR, get_logger
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
     _notify,
@@ -325,7 +326,7 @@ async def register_clone_status(
         from autoskillit.server import _get_ctx
 
         tool_ctx = _get_ctx()
-        owner = tool_ctx.kitchen_id
+        owner = os.environ.get(CAMPAIGN_ID_ENV_VAR, "") or tool_ctx.kitchen_id
         if owner == "":
             return json.dumps(
                 {
@@ -361,6 +362,7 @@ async def register_clone_status(
 async def batch_cleanup_clones(
     registry_path: str = "",
     all_owners: str = "false",
+    owner_filter: str = "",
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
@@ -381,6 +383,8 @@ async def batch_cleanup_clones(
         all_owners: "false" (default) scopes deletion to the current kitchen's entries;
                     "true" is the operator escape hatch that ignores owner and deletes
                     all success-status entries including legacy orphans.
+        owner_filter: Explicit owner string for campaign-scoped cleanup. When non-empty,
+                      overrides kitchen_id scoping. Ignored when all_owners="true".
         step_name: Optional YAML step key for wall-clock timing accumulation.
     """
     try:
@@ -404,19 +408,21 @@ async def batch_cleanup_clones(
             )
 
         is_escape_hatch = all_owners.strip().lower() == "true"
-        owner_filter: str | None
+        owner_filter_resolved: str | None
         if is_escape_hatch:
-            owner_filter = None
+            owner_filter_resolved = None
+        elif owner_filter:
+            owner_filter_resolved = owner_filter
         else:
-            owner_filter = tool_ctx.kitchen_id
-            if owner_filter == "":
+            owner_filter_resolved = tool_ctx.kitchen_id
+            if owner_filter_resolved == "":
                 return json.dumps(
                     {
                         "deleted": [],
                         "delete_failures": [],
                         "preserved": [],
                         "error": "no active kitchen (kitchen_id empty) — "
-                        "pass all_owners='true' to force-cleanup legacy entries",
+                        "pass all_owners='true' or owner_filter to force-cleanup",
                     }
                 )
 
@@ -427,7 +433,7 @@ async def batch_cleanup_clones(
                 registry_path,
                 tool_ctx.clone_mgr.remove_clone,
                 tool_ctx.temp_dir,
-                owner_filter,
+                owner_filter_resolved,
             )
             return json.dumps(result)
         finally:

@@ -132,8 +132,12 @@ class TestRegisterClonePersistsOwner:
 class TestRegisterCloneRejectsEmptyOwner:
     """T2: register_clone raises ValueError when owner is empty string."""
 
-    def test_register_clone_rejects_empty_owner(self, tmp_path: Path) -> None:
-        """T2 — register_clone raises ValueError and does not write registry when owner=''."""
+    def test_register_clone_rejects_empty_owner(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T2 — raises ValueError when owner='' and no env fallback is set."""
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
         reg = str(tmp_path / "registry.json")
         with pytest.raises(ValueError, match="owner is required"):
             register_clone("/tmp/a", "success", owner="", registry_path=reg)
@@ -361,3 +365,133 @@ class TestBatchDeleteRegistryWriteback:
         remaining = [e["path"] for e in data["clones"]]
         assert "/tmp/mine" not in remaining  # kit-1 entry pruned
         assert "/tmp/theirs" in remaining  # kit-2 entry untouched
+
+
+# ---------------------------------------------------------------------------
+# New tests: T20–T25 (Group P-4: L1 register_clone env-defaulting)
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterCloneEnvDefaulting:
+    """T20–T25: register_clone env-var defaulting for owner."""
+
+    def test_register_clone_defaults_owner_from_campaign_id_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T20 — AUTOSKILLIT_CAMPAIGN_ID env var is used as owner when no explicit owner given."""
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-1")
+        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+        reg = str(tmp_path / "registry.json")
+
+        register_clone("/c", "success", registry_path=reg)
+
+        data = json.loads(Path(reg).read_text())
+        assert data["clones"][0]["owner"] == "camp-1"
+
+    def test_register_clone_defaults_owner_from_kitchen_session_id_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T21 — AUTOSKILLIT_KITCHEN_SESSION_ID is used as owner when CAMPAIGN_ID is absent."""
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        monkeypatch.setenv("AUTOSKILLIT_KITCHEN_SESSION_ID", "kit-session-77")
+        reg = str(tmp_path / "registry.json")
+
+        register_clone("/c", "success", registry_path=reg)
+
+        data = json.loads(Path(reg).read_text())
+        assert data["clones"][0]["owner"] == "kit-session-77"
+
+    def test_register_clone_campaign_id_takes_precedence_over_kitchen_session_id(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T22 — When both env vars are set, CAMPAIGN_ID wins."""
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-priority")
+        monkeypatch.setenv("AUTOSKILLIT_KITCHEN_SESSION_ID", "kit-session-99")
+        reg = str(tmp_path / "registry.json")
+
+        register_clone("/c", "success", registry_path=reg)
+
+        data = json.loads(Path(reg).read_text())
+        assert data["clones"][0]["owner"] == "camp-priority"
+
+    def test_register_clone_raises_when_no_owner_source(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T23 — ValueError raised when neither env var is set and no explicit owner given."""
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+        reg = str(tmp_path / "registry.json")
+
+        with pytest.raises(ValueError, match="owner is required"):
+            register_clone("/c", "success", registry_path=reg)
+        assert not Path(reg).exists()
+
+    def test_register_clone_explicit_owner_overrides_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T24 — Explicit owner argument takes precedence over env vars."""
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-env")
+        monkeypatch.setenv("AUTOSKILLIT_KITCHEN_SESSION_ID", "kit-env")
+        reg = str(tmp_path / "registry.json")
+
+        register_clone("/c", "success", owner="explicit", registry_path=reg)
+
+        data = json.loads(Path(reg).read_text())
+        assert data["clones"][0]["owner"] == "explicit"
+
+    def test_register_clone_env_default_works_with_batch_delete(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T25 — env-default owner is correctly scoped by batch_delete."""
+        campaign_id = "camp-batch-test"
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", campaign_id)
+        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+        reg = str(tmp_path / "registry.json")
+
+        register_clone("/c1", "success", registry_path=reg)
+        register_clone("/c2", "success", "other-owner", registry_path=reg)
+
+        mock_remove = MagicMock(return_value={"removed": "true"})
+        result = batch_delete(reg, mock_remove, owner=campaign_id)
+
+        assert "/c1" in result["deleted"]
+        assert "/c2" not in result["deleted"]
+        mock_remove.assert_called_once_with("/c1", "false")
+
+
+# ---------------------------------------------------------------------------
+# New tests: T31 (Group P-7: end-to-end two-campaign isolation)
+# ---------------------------------------------------------------------------
+
+
+class TestTwoCampaignsIsolation:
+    """T31: two campaigns register clones via env-default; cleanup is isolated."""
+
+    def test_two_campaigns_register_and_cleanup_isolated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T31 — Campaign-1 cleanup removes only campaign-1's clones; campaign-2's remain."""
+        reg = str(tmp_path / "registry.json")
+        camp1, camp2 = "camp-alpha", "camp-beta"
+
+        # Campaign 1 registers its clone via env-defaulting
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", camp1)
+        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+        register_clone("/clone-alpha", "success", registry_path=reg)
+
+        # Campaign 2 registers its clone via env-defaulting
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", camp2)
+        register_clone("/clone-beta", "success", registry_path=reg)
+
+        # Campaign 1 runs cleanup; only its clones are removed
+        mock_remove = MagicMock(return_value={"removed": "true"})
+        result = batch_delete(reg, mock_remove, owner=camp1)
+
+        assert "/clone-alpha" in result["deleted"]
+        assert "/clone-beta" not in result["deleted"]
+
+        # Campaign 2's clone remains on disk
+        data = json.loads(Path(reg).read_text())
+        remaining = [e["path"] for e in data["clones"]]
+        assert "/clone-beta" in remaining
+        assert "/clone-alpha" not in remaining

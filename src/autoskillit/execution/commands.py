@@ -9,6 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from autoskillit.core import (
+    KITCHEN_SESSION_ID_ENV_VAR,
     SESSION_TYPE_LEAF,
     ClaudeFlags,
     ValidatedAddDir,
@@ -131,6 +132,7 @@ _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
 _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
     {
         "AUTOSKILLIT_CAMPAIGN_ID",
+        "AUTOSKILLIT_KITCHEN_SESSION_ID",
         "AUTOSKILLIT_SESSION_TYPE",
         "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
         "MAX_MCP_OUTPUT_TOKENS",
@@ -297,6 +299,9 @@ def build_leaf_headless_cmd(
     campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID")
     if campaign_id:
         extras["AUTOSKILLIT_CAMPAIGN_ID"] = campaign_id
+    kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
+    if kitchen_session_id:
+        extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
 
     filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
     spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)

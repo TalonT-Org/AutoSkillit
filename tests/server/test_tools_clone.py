@@ -538,3 +538,116 @@ class TestBatchCleanupClonesOwner:
         remaining = {e["path"]: e.get("owner") for e in data["clones"]}
         assert "/clone-2" in remaining
         assert remaining["/clone-2"] == "kit-2"
+
+
+# ---------------------------------------------------------------------------
+# New tests: T26–T27 (Group P-5: register_clone_status campaign_id preference)
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterCloneStatusCampaignPreference:
+    """T26–T27: register_clone_status prefers AUTOSKILLIT_CAMPAIGN_ID over kitchen_id."""
+
+    @pytest.mark.anyio
+    async def test_register_clone_status_prefers_campaign_id_over_kitchen_id(
+        self, tool_ctx, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """T26 — CAMPAIGN_ID env var takes precedence over tool_ctx.kitchen_id."""
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-x")
+        tool_ctx.kitchen_id = "kit-y"
+        reg = str(tmp_path / "registry.json")
+
+        result = json.loads(
+            await register_clone_status(clone_path="/c", status="success", registry_path=reg)
+        )
+        assert result["registered"] == "true"
+
+        data = json.loads(Path(reg).read_text())
+        assert data["clones"][0]["owner"] == "camp-x"
+
+    @pytest.mark.anyio
+    async def test_register_clone_status_falls_back_to_kitchen_id_without_campaign_id(
+        self, tool_ctx, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """T27 — Falls back to tool_ctx.kitchen_id when CAMPAIGN_ID is not set."""
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        tool_ctx.kitchen_id = "kit-fallback"
+        reg = str(tmp_path / "registry.json")
+
+        result = json.loads(
+            await register_clone_status(clone_path="/c", status="success", registry_path=reg)
+        )
+        assert result["registered"] == "true"
+
+        data = json.loads(Path(reg).read_text())
+        assert data["clones"][0]["owner"] == "kit-fallback"
+
+
+# ---------------------------------------------------------------------------
+# New tests: T28–T30 (Group P-6: batch_cleanup_clones owner_filter param)
+# ---------------------------------------------------------------------------
+
+
+class TestBatchCleanupClonesOwnerFilter:
+    """T28–T30: batch_cleanup_clones explicit owner_filter parameter."""
+
+    @pytest.mark.anyio
+    async def test_batch_cleanup_clones_owner_filter_scopes_to_specified_owner(
+        self, tool_ctx, tmp_path
+    ):
+        """T28 — owner_filter='camp-A' removes only camp-A's clones regardless of kitchen_id."""
+        reg = str(tmp_path / "registry.json")
+        clone_registry.register_clone("/clone-a", "success", "camp-A", reg)
+        clone_registry.register_clone("/clone-b", "success", "camp-B", reg)
+
+        tool_ctx.kitchen_id = "kit-x"
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+
+        result = json.loads(await batch_cleanup_clones(registry_path=reg, owner_filter="camp-A"))
+
+        assert "/clone-a" in result["deleted"]
+        assert "/clone-b" not in result["deleted"]
+        mock_mgr.remove_clone.assert_called_once_with("/clone-a", "false")
+
+    @pytest.mark.anyio
+    async def test_batch_cleanup_clones_owner_filter_empty_falls_back_to_kitchen_id(
+        self, tool_ctx, tmp_path
+    ):
+        """T29 — owner_filter='' falls back to kitchen_id (backward compatible)."""
+        reg = str(tmp_path / "registry.json")
+        clone_registry.register_clone("/clone-a", "success", "kit-x", reg)
+        clone_registry.register_clone("/clone-b", "success", "kit-y", reg)
+
+        tool_ctx.kitchen_id = "kit-x"
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+
+        result = json.loads(await batch_cleanup_clones(registry_path=reg, owner_filter=""))
+
+        assert "/clone-a" in result["deleted"]
+        assert "/clone-b" not in result["deleted"]
+
+    @pytest.mark.anyio
+    async def test_batch_cleanup_clones_owner_filter_with_all_owners_true_ignores_filter(
+        self, tool_ctx, tmp_path
+    ):
+        """T30 — owner_filter='camp-A' + all_owners='true' → all_owners takes precedence."""
+        reg = str(tmp_path / "registry.json")
+        clone_registry.register_clone("/clone-a", "success", "camp-A", reg)
+        clone_registry.register_clone("/clone-b", "success", "camp-B", reg)
+
+        tool_ctx.kitchen_id = "kit-x"
+        mock_mgr = MagicMock()
+        mock_mgr.remove_clone.return_value = {"removed": "true"}
+        tool_ctx.clone_mgr = mock_mgr
+
+        result = json.loads(
+            await batch_cleanup_clones(registry_path=reg, owner_filter="camp-A", all_owners="true")
+        )
+
+        deleted = result["deleted"]
+        assert "/clone-a" in deleted
+        assert "/clone-b" in deleted

@@ -395,6 +395,20 @@ class TestBuildLeafHeadlessCmd:
         spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
         assert "AUTOSKILLIT_CAMPAIGN_ID" not in spec.env
 
+    def test_env_forwards_kitchen_session_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """T32 — AUTOSKILLIT_KITCHEN_SESSION_ID forwarded into spec.env when set."""
+        monkeypatch.setenv("AUTOSKILLIT_KITCHEN_SESSION_ID", "kit-77")
+        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        assert spec.env["AUTOSKILLIT_KITCHEN_SESSION_ID"] == "kit-77"
+
+    def test_env_omits_kitchen_session_id_when_absent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T33 — AUTOSKILLIT_KITCHEN_SESSION_ID absent from spec.env when not set."""
+        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+        spec = build_leaf_headless_cmd("/investigate foo", **self.BASE)
+        assert "AUTOSKILLIT_KITCHEN_SESSION_ID" not in spec.env
+
     def test_private_vars_scrubbed_except_explicit_forwards(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

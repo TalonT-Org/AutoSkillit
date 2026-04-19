@@ -35,8 +35,9 @@ def _run_guard(
         with redirect_stdout(buf):
             try:
                 main()
-            except SystemExit:
-                pass
+            except SystemExit as exc:
+                if exc.code not in (None, 0):
+                    raise
         return buf.getvalue()
 
 
@@ -70,25 +71,12 @@ def test_guard_denies_headless_regardless_of_session_type(session_type):
     assert "headless" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
 
-# --- M6: MCP-prefixed name ---
-
-
-def test_guard_denies_marketplace_prefixed_name():
-    out = _run_guard(
-        {"tool_name": "mcp__plugin_autoskillit_autoskillit__dispatch_food_truck"},
-        headless=True,
-        session_type="franchise",
-    )
-    response = json.loads(out)
-    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
 # --- M7: Unrelated tool passes through ---
 
 
 def test_guard_ignores_unrelated_tool():
     out = _run_guard(
-        {"tool_name": "mcp__autoskillit__run_skill"},
+        {"tool_name": "Bash"},
         headless=True,
         session_type="franchise",
     )

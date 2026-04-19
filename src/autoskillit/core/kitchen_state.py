@@ -31,13 +31,19 @@ def get_state_dir() -> Path:
     """Return the kitchen-state directory.
 
     Reads AUTOSKILLIT_STATE_DIR env (for test isolation); falls back to the
-    canonical temp location derived from Path.cwd().
+    canonical temp location derived from Path.cwd(), namespaced by
+    AUTOSKILLIT_CAMPAIGN_ID when present.
     """
     override = os.environ.get("AUTOSKILLIT_STATE_DIR")
     if override:
         return Path(override) / "kitchen_state"
-    # Canonical default: .autoskillit/temp/kitchen_state relative to CWD
-    return Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+    campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
+    if campaign_id and ("/" in campaign_id or os.sep in campaign_id):
+        raise ValueError(
+            f"AUTOSKILLIT_CAMPAIGN_ID must not contain path separators: {campaign_id!r}"
+        )
+    base = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+    return base / campaign_id if campaign_id else base
 
 
 def marker_path(session_id: str) -> Path:

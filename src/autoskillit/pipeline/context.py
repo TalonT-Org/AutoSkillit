@@ -86,6 +86,10 @@ class ToolContext:
                           config → GITHUB_TOKEN env → gh CLI fallback chain.
                           Set by make_context(); None in test ToolContext instances
                           unless explicitly provided.
+    project_dir:          Resolved project root directory. Defaults to Path.cwd(); make_context()
+                          resolves from AUTOSKILLIT_PROJECT_DIR env var and supplies it explicitly.
+                          Used by food truck dispatches to resolve recipes against L3's root
+                          (not the subprocess cwd).
     """
 
     config: AutomationConfig
@@ -102,6 +106,7 @@ class ToolContext:
     # resolves temp_dir from config via resolve_temp_dir(). Direct construction
     # (e.g. in tests) must override this field before any file I/O that uses it.
     temp_dir: Path = field(default_factory=lambda: Path.cwd() / ".autoskillit" / "temp")
+    project_dir: Path = field(default_factory=Path.cwd)
     response_log: McpResponseLog = field(default_factory=DefaultMcpResponseLog)
     executor: HeadlessExecutor | None = field(default=None)
     tester: TestRunner | None = field(default=None)

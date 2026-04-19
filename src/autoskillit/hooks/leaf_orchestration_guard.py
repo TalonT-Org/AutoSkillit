@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — blocks orchestration tools from headless sessions.
+"""PreToolUse hook — blocks orchestration tools from leaf-tier sessions.
 
-Headless sessions (AUTOSKILLIT_HEADLESS=1) must never call run_skill,
-run_cmd, or run_python. This is defense-in-depth over the in-handler
-gate check in each tool.
+Leaf sessions (AUTOSKILLIT_SESSION_TYPE=leaf or unset in headless mode) must
+never call run_skill, run_cmd, or run_python. This is defense-in-depth over
+the in-handler gate check in each tool.
 
-The two-tier invariant: Orchestrator (Tier 1) spawns workers via run_skill.
-Workers (Tier 2) execute skills using native Claude Code tools. No nesting.
+Tier invariant: orchestrator and franchise tiers may call orchestration tools.
+Leaf workers use native Claude Code tools only.
 """
 
 import json
@@ -22,8 +22,15 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)  # fail-open on malformed input
 
+    # Interactive sessions always pass
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
-        sys.exit(0)  # not headless — pass through
+        sys.exit(0)
+
+    # Headless: resolve session type, fail-closed to leaf
+    session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower()
+    if session_type in ("orchestrator", "franchise"):
+        sys.exit(0)  # permitted tiers — not a leaf
+    # leaf, unset, or invalid → deny below
 
     tool_name: str = data.get("tool_name", "")
     # MCP tool names are prefixed: mcp__<server>__<tool>
@@ -37,9 +44,9 @@ def main() -> None:
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
-                        f"{tool} cannot be called from headless sessions. "
-                        "Only the Tier 1 orchestrator may call orchestration tools. "
-                        "Headless workers (Tier 2) use native Claude Code tools."
+                        f"{tool} cannot be called from leaf sessions. "
+                        "Only orchestrator or franchise sessions may call orchestration tools. "
+                        "Leaf workers use native Claude Code tools only."
                     ),
                 }
             }

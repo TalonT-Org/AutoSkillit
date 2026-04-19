@@ -277,7 +277,7 @@ generic_automation_mcp/
 │   ├── open_kitchen_guard.py
 │   ├── unsafe_install_guard.py
 │   ├── generated_file_write_guard.py
-│   ├── headless_orchestration_guard.py
+│   ├── leaf_orchestration_guard.py
 │   ├── pretty_output_hook.py #  Dispatch entrypoint for MCP JSON → Markdown-KV reformatter
 │   ├── _fmt_primitives.py   #   Payload dataclasses, token formatter, pipeline-mode + short-name
 │   ├── _fmt_execution.py    #   run_skill, run_cmd, test_check, merge_worktree formatters

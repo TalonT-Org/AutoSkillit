@@ -29,7 +29,7 @@ from autoskillit.server.helpers import (
     _hook_config_path,
     _prime_quota_cache,
     _quota_refresh_loop,
-    _require_not_headless,
+    _require_orchestrator_exact,
     track_response_size,
 )
 
@@ -287,7 +287,7 @@ async def open_kitchen(
     """
     try:
         # Headless guard — wrap denial in envelope shape
-        if (h := _require_not_headless("open_kitchen")) is not None:
+        if (h := _require_orchestrator_exact("open_kitchen")) is not None:
             parsed_h = json.loads(h)
             return json.dumps(
                 {
@@ -466,7 +466,7 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
     Never raises.
     """
     try:
-        if (h := _require_not_headless("close_kitchen")) is not None:
+        if (h := _require_orchestrator_exact("close_kitchen")) is not None:
             return h
         _close_kitchen_handler()
         await ctx.reset_visibility()
@@ -491,7 +491,7 @@ async def disable_quota_guard() -> str:
     Never raises.
     """
     try:
-        if (h := _require_not_headless("disable_quota_guard")) is not None:
+        if (h := _require_orchestrator_exact("disable_quota_guard")) is not None:
             return h
         hook_cfg_path = _hook_config_path(Path.cwd())
         if not hook_cfg_path.exists():

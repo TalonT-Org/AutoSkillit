@@ -947,20 +947,68 @@ async def test_run_skill_result_no_order_id_field_when_empty(tool_ctx, monkeypat
 
 class TestHeadlessGateEnforcement:
     """T_HGE: run_skill, run_cmd, run_python each return headless_error
-    when the session is running with AUTOSKILLIT_HEADLESS=1.
+    when the session is running with AUTOSKILLIT_HEADLESS=1 and SESSION_TYPE=leaf.
 
     The gate is open (tool_ctx default), so _require_enabled() passes.
-    _require_not_headless() fires first and returns subtype='headless_error'.
+    _require_orchestrator_or_higher() fires first and returns subtype='headless_error'.
     """
 
     @pytest.fixture(autouse=True)
     def _set_headless_env(self, monkeypatch):
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
 
     @pytest.mark.anyio
     async def test_run_skill_blocked_in_headless_session(self, tool_ctx):
-        """run_skill returns headless_error when AUTOSKILLIT_HEADLESS=1."""
+        """run_skill returns headless_error when AUTOSKILLIT_HEADLESS=1 and SESSION_TYPE=leaf."""
         result = json.loads(await run_skill("/autoskillit:investigate some-error", "/tmp"))
+        assert result["subtype"] == "headless_error"
+
+
+class TestTierAwareGateEnforcement:
+    """T_TAGE: tier-aware guard permits orchestrator, denies leaf and franchise as appropriate."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_permitted_for_orchestrator_tier(self, tool_ctx, monkeypatch):
+        """run_skill does NOT return headless_error for orchestrator-tier headless sessions."""
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        tool_ctx.runner.push(
+            _make_result(
+                returncode=0,
+                stdout=json.dumps({"type": "result", "subtype": "success", "is_error": False}),
+            )
+        )
+        result = json.loads(await run_skill("/autoskillit:investigate some-error", "/tmp"))
+        assert result.get("subtype") != "headless_error"
+
+    @pytest.mark.anyio
+    async def test_run_skill_denied_for_leaf_tier(self, tool_ctx, monkeypatch):
+        """run_skill returns headless_error for leaf-tier headless sessions."""
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
+        result = json.loads(await run_skill("/autoskillit:investigate some-error", "/tmp"))
+        assert result["subtype"] == "headless_error"
+
+    @pytest.mark.anyio
+    async def test_open_kitchen_denied_for_franchise_tier(self, tool_ctx, monkeypatch):
+        """open_kitchen returns HeadlessDenied for franchise-tier sessions."""
+        from autoskillit.server.tools_kitchen import open_kitchen
+
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        result = json.loads(await open_kitchen())
+        assert result.get("error") == "HeadlessDenied"
+        assert "franchise" in result.get("user_visible_message", "").lower()
+
+    @pytest.mark.anyio
+    async def test_close_kitchen_denied_for_franchise_tier(self, tool_ctx, monkeypatch):
+        """close_kitchen returns headless_error for franchise-tier sessions."""
+        from autoskillit.server.tools_kitchen import close_kitchen
+
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        result = json.loads(await close_kitchen())
         assert result["subtype"] == "headless_error"
 
 

@@ -17,8 +17,8 @@ AutoSkillit splits agent execution into two layers:
   tool). Cannot call `run_skill`, `run_cmd`, or `run_python`.
 
 The boundary is enforced three ways: FastMCP visibility, the
-`headless_orchestration_guard.py` PreToolUse hook, and the
-`_require_not_headless()` runtime guard inside `tools_execution.py`. All
+`leaf_orchestration_guard.py` PreToolUse hook, and the
+`_require_orchestrator_or_higher()` runtime guard inside `tools_execution.py`. All
 three must independently agree before any orchestration tool can fire.
 
 ## Recipe as a program

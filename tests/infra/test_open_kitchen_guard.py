@@ -25,10 +25,48 @@ def _run_guard(env_extra: dict, tool_input: dict) -> dict:
     return json.loads(result.stdout) if result.stdout.strip() else {}
 
 
-def test_open_kitchen_guard_denies_headless() -> None:
-    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1"}, {})
+def test_open_kitchen_guard_denies_leaf_tier() -> None:
+    response = _run_guard({"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "leaf"}, {})
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "headless" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "leaf" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+
+
+def test_open_kitchen_guard_denies_franchise_tier() -> None:
+    response = _run_guard(
+        {"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SESSION_TYPE": "franchise"}, {}
+    )
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "franchise" in response["hookSpecificOutput"]["permissionDecisionReason"].lower()
+
+
+def test_open_kitchen_guard_permits_headless_orchestrator(tmp_path: Path) -> None:
+    hook_path = pkg_root() / "hooks" / "open_kitchen_guard.py"
+    hook_input = {
+        "tool_name": "mcp__autoskillit__open_kitchen",
+        "tool_input": {"name": "my_recipe"},
+        "session_id": "session-orch",
+        "hook_event_name": "PreToolUse",
+    }
+    env = {
+        **os.environ,
+        "AUTOSKILLIT_HEADLESS": "1",
+        "AUTOSKILLIT_SESSION_TYPE": "orchestrator",
+        "AUTOSKILLIT_STATE_DIR": str(tmp_path),
+    }
+    result = subprocess.run(
+        [sys.executable, str(hook_path)],
+        input=json.dumps(hook_input),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0
+    if result.stdout.strip():
+        payload = json.loads(result.stdout)
+        hook_out = payload.get("hookSpecificOutput", {})
+        assert hook_out.get("permissionDecision") != "deny"
+    marker_path = tmp_path / "kitchen_state" / "session-orch.json"
+    assert marker_path.exists(), f"Marker not written at {marker_path}"
 
 
 def test_open_kitchen_guard_allows_human_session() -> None:
@@ -86,7 +124,12 @@ def test_open_kitchen_guard_no_marker_on_deny(tmp_path: Path, monkeypatch) -> No
     """When headless, the guard denies; no marker should be written."""
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     hook_path = pkg_root() / "hooks" / "open_kitchen_guard.py"
-    env = {**os.environ, "AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_STATE_DIR": str(tmp_path)}
+    env = {
+        **os.environ,
+        "AUTOSKILLIT_HEADLESS": "1",
+        "AUTOSKILLIT_SESSION_TYPE": "leaf",
+        "AUTOSKILLIT_STATE_DIR": str(tmp_path),
+    }
     result = subprocess.run(
         [sys.executable, str(hook_path)],
         input=json.dumps(

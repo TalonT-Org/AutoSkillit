@@ -285,6 +285,11 @@ class WorkspaceConfig:
     temp_dir: str | None = None  # null = canonical default (see resolve_temp_dir)
 
 
+@dataclass
+class FranchiseConfig:
+    l2_default_timeout_sec: int = 3600
+
+
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
@@ -321,6 +326,7 @@ class AutomationConfig:
     subsets: SubsetsConfig = field(default_factory=SubsetsConfig)
     packs: PacksConfig = field(default_factory=PacksConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
+    franchise: FranchiseConfig = field(default_factory=FranchiseConfig)
 
     @classmethod
     def from_dynaconf(cls, d: Dynaconf) -> AutomationConfig:
@@ -360,6 +366,7 @@ class AutomationConfig:
         _sub = sec("subsets")
         pk = sec("packs")
         ws_raw = sec("workspace")
+        fr = sec("franchise")
 
         _tc = _field_defaults(TestCheckConfig)
         _cf = _field_defaults(ClassifyFixConfig)
@@ -382,6 +389,7 @@ class AutomationConfig:
         _ci = _field_defaults(CIConfig)
         _sk = _field_defaults(SkillsConfig)
         _wsc = _field_defaults(WorkspaceConfig)
+        _fr = _field_defaults(FranchiseConfig)
 
         return cls(
             test_check=TestCheckConfig(
@@ -525,6 +533,11 @@ class AutomationConfig:
                 worktree_root=val(ws_raw, "worktree_root", _wsc["worktree_root"]) or None,
                 runs_root=val(ws_raw, "runs_root", _wsc["runs_root"]) or None,
                 temp_dir=val(ws_raw, "temp_dir", _wsc["temp_dir"]) or None,
+            ),
+            franchise=FranchiseConfig(
+                l2_default_timeout_sec=int(
+                    val(fr, "l2_default_timeout_sec", _fr["l2_default_timeout_sec"])
+                ),
             ),
         )
 

@@ -602,14 +602,10 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_franchise_tools_retain_kitchen_tag(self):
         """Franchise-tagged tools must still carry the kitchen tag."""
-        from fastmcp.client import Client
-
         from autoskillit.core import FRANCHISE_TOOLS
         from autoskillit.server import mcp
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
-        all_tools = {t.name: t for t in tools}
+        all_tools = {t.name: t for t in await mcp.list_tools()}
         for name in FRANCHISE_TOOLS:
             tool = all_tools.get(name)
             assert tool is not None, f"{name} not registered"
@@ -620,14 +616,10 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_franchise_tools_constant_matches_tagged_tools(self):
         """FRANCHISE_TOOLS constant matches exactly the tools with franchise tag."""
-        from fastmcp.client import Client
-
         from autoskillit.core import FRANCHISE_TOOLS
         from autoskillit.server import mcp
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
-        all_tools = {t.name: t for t in tools}
+        all_tools = {t.name: t for t in await mcp.list_tools()}
         tagged = {name for name, t in all_tools.items() if "franchise" in t.tags}
         assert tagged == FRANCHISE_TOOLS, (
             f"FRANCHISE_TOOLS constant out of sync. "

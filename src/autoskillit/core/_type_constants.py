@@ -257,12 +257,12 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "clone_repo": frozenset({"clone"}),
     "remove_clone": frozenset({"clone"}),
     "register_clone_status": frozenset({"clone"}),
-    "batch_cleanup_clones": frozenset({"clone"}),
+    "batch_cleanup_clones": frozenset({"clone", "franchise"}),
     # kitchen-core — telemetry
-    "get_token_summary": frozenset({"kitchen-core", "telemetry"}),
-    "get_timing_summary": frozenset({"kitchen-core", "telemetry"}),
+    "get_token_summary": frozenset({"kitchen-core", "telemetry", "franchise"}),
+    "get_timing_summary": frozenset({"kitchen-core", "telemetry", "franchise"}),
     "write_telemetry_files": frozenset({"kitchen-core", "telemetry"}),
-    "get_quota_events": frozenset({"kitchen-core", "telemetry"}),
+    "get_quota_events": frozenset({"kitchen-core", "telemetry", "franchise"}),
     # kitchen-core — execution
     "run_cmd": frozenset({"kitchen-core"}),
     "run_python": frozenset({"kitchen-core"}),
@@ -280,7 +280,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     # kitchen-core — status
     "kitchen_status": frozenset({"kitchen-core"}),
     "read_db": frozenset({"kitchen-core"}),
-    "get_pipeline_report": frozenset({"kitchen-core"}),
+    "get_pipeline_report": frozenset({"kitchen-core", "franchise"}),
     # kitchen-core — git
     "merge_worktree": frozenset({"kitchen-core"}),
 }

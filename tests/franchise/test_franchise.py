@@ -15,12 +15,19 @@ def test_franchise_package_importable() -> None:
 
 
 def test_asyncio_lock_satisfies_franchise_lock() -> None:
-    """asyncio.Lock() is a structural match for FranchiseLock at runtime."""
+    """asyncio.Lock() is a structural match for FranchiseLock at runtime.
+
+    isinstance() with @runtime_checkable only verifies that required attribute names
+    are present — not signatures. The additional assertion confirms that acquire is
+    a coroutine on the concrete implementation, not just a name match.
+    """
     import asyncio
 
     from autoskillit.core import FranchiseLock
 
-    assert isinstance(asyncio.Lock(), FranchiseLock)
+    lock = asyncio.Lock()
+    assert isinstance(lock, FranchiseLock)
+    assert inspect.iscoroutinefunction(lock.acquire)
 
 
 def test_franchise_lock_protocol_has_required_methods() -> None:
@@ -32,7 +39,7 @@ def test_franchise_lock_protocol_has_required_methods() -> None:
 
 
 def test_franchise_lock_acquire_is_coroutine() -> None:
-    """acquire() must be async — asyncio.Lock.acquire is a coroutine."""
-    from autoskillit.core import FranchiseLock
+    """acquire() must be async — verifies asyncio.Lock().acquire is a coroutine."""
+    import asyncio
 
-    assert inspect.iscoroutinefunction(FranchiseLock.acquire)
+    assert inspect.iscoroutinefunction(asyncio.Lock().acquire)

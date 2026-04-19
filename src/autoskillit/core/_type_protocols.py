@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from ._type_results import (
     CIRunScope,
@@ -43,8 +43,8 @@ __all__ = [
     "SkillLister",
     "SkillResolver",
     "BackgroundSupervisor",
-    "QuotaRefreshTask",
     "FranchiseLock",
+    "QuotaRefreshTask",
     "TokenFactory",
     "SupportsLogger",
 ]
@@ -539,7 +539,7 @@ class FranchiseLock(Protocol):
 
     def locked(self) -> bool: ...
 
-    async def acquire(self) -> bool: ...
+    async def acquire(self) -> Literal[True]: ...
 
     def release(self) -> None: ...
 

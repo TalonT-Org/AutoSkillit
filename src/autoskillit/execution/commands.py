@@ -119,7 +119,7 @@ _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
     }
 )
 
-# Variables that build_full_headless_cmd controls exclusively. They must not
+# Variables that build_leaf_headless_cmd controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
 # parameters (exit_after_stop_delay_ms, scenario_step_name).
 # Note: these overlap with IDE_ENV_DENYLIST in core/_claude_env.py, which
@@ -223,7 +223,7 @@ def _inject_narration_suppression(skill_command: str) -> str:
     return skill_command + directive
 
 
-def build_full_headless_cmd(
+def build_leaf_headless_cmd(
     skill_command: str,
     *,
     cwd: str,
@@ -237,7 +237,11 @@ def build_full_headless_cmd(
     scenario_step_name: str = "",
     temp_dir_relpath: str | None = None,
 ) -> ClaudeHeadlessCmd:
-    """Build the complete headless command spec ready for subprocess invocation.
+    """Build the complete headless command spec for a leaf session.
+
+    A leaf session is a direct child of an orchestrator: it runs a skill,
+    always carries ``AUTOSKILLIT_SESSION_TYPE=leaf``, and forwards
+    ``AUTOSKILLIT_CAMPAIGN_ID`` from the parent env when present.
 
     Applies prompt transformations (skill prefix, completion directive, cwd anchor,
     narration suppression), then constructs the full CLI command including plugin-dir,
@@ -277,6 +281,7 @@ def build_full_headless_cmd(
     )
     extras: dict[str, str] = {
         "AUTOSKILLIT_HEADLESS": "1",
+        "AUTOSKILLIT_SESSION_TYPE": "leaf",
         "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
         "MCP_CONNECTION_NONBLOCKING": "0",
     }
@@ -284,6 +289,9 @@ def build_full_headless_cmd(
         extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
     if scenario_step_name:
         extras["SCENARIO_STEP_NAME"] = scenario_step_name
+    campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID")
+    if campaign_id:
+        extras["AUTOSKILLIT_CAMPAIGN_ID"] = campaign_id
 
     filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
     spec = build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)

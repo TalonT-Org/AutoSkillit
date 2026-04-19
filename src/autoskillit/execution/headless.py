@@ -48,7 +48,7 @@ from autoskillit.execution.clone_guard import (
     is_worktree_skill,
     snapshot_clone_state,
 )
-from autoskillit.execution.commands import build_full_headless_cmd, build_headless_resume_cmd
+from autoskillit.execution.commands import build_headless_resume_cmd, build_leaf_headless_cmd
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.recording import RecordingSubprocessRunner
 from autoskillit.execution.session import (
@@ -1005,7 +1005,7 @@ async def run_headless_core(
     ):
         effective_plugin_dir = ctx.plugin_dir
         resolved_model = _resolve_model(model, ctx.config)
-        spec = build_full_headless_cmd(
+        spec = build_leaf_headless_cmd(
             skill_command,
             cwd=cwd,
             completion_marker=effective_marker,

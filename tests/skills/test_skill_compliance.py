@@ -66,7 +66,7 @@ _ANTI_PROSE_GUARD_PATTERNS = [
 ]
 
 # Skills whose narration suppression is handled globally by _inject_narration_suppression()
-# in build_full_headless_cmd() (headless path) and sous-chef/SKILL.md (cook path).
+# in build_leaf_headless_cmd() (headless path) and sous-chef/SKILL.md (cook path).
 # Per-loop inline anti-prose guards are intentionally absent — they are redundant.
 _GLOBALLY_GUARDED_SKILLS: frozenset[str] = frozenset(
     {
@@ -237,7 +237,7 @@ def test_no_text_then_tool_in_any_step(skill_dir: Path) -> None:
 
     Skills in _GLOBALLY_GUARDED_SKILLS are exempt from the loop-boundary
     check — their narration suppression is injected at the prompt level
-    by build_full_headless_cmd() and sous-chef/SKILL.md.
+    by build_leaf_headless_cmd() and sous-chef/SKILL.md.
 
     This is a project-wide structural invariant, not specific to
     open-pr or arch-lens.

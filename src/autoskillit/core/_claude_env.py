@@ -5,13 +5,17 @@ through :func:`build_claude_env` so that host-process IDE state (VS Code,
 Cursor, Zed, JetBrains, Neovim bridges) cannot leak across the trust
 boundary and silently widen the child's tool surface.
 
-Two layers of immunity are applied:
+Three layers of immunity are applied:
 
 1. **Denylist scrub** — IDE discovery variables such as
    ``CLAUDE_CODE_SSE_PORT`` and the ``CLAUDE_CODE_IDE_*`` family are
    stripped from ``base``. Removing the port env closes the direct-signal
    attach path.
-2. **Implicit auto-connect disable** — ``CLAUDE_CODE_AUTO_CONNECT_IDE=0``
+2. **Private var scrub** — AutoSkillit internal orchestration variables
+   listed in ``AUTOSKILLIT_PRIVATE_ENV_VARS`` (e.g. ``AUTOSKILLIT_SESSION_TYPE``,
+   ``AUTOSKILLIT_CAMPAIGN_ID``) are stripped so parent session state cannot
+   leak into child sessions. Callers opt back in via ``extras``.
+3. **Implicit auto-connect disable** — ``CLAUDE_CODE_AUTO_CONNECT_IDE=0``
    is always injected. This suppresses the ``~/.claude/ide/*.lock`` scan
    fallback that the Claude CLI follows at startup even when no IDE env
    vars are set; without it, third-party IDE bridges (e.g.
@@ -23,6 +27,8 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from types import MappingProxyType
+
+from autoskillit.core._type_constants import AUTOSKILLIT_PRIVATE_ENV_VARS
 
 # Exact-match IDE discovery variable names stripped from the child env.
 IDE_ENV_DENYLIST: frozenset[str] = frozenset(
@@ -89,7 +95,9 @@ def build_claude_env(
     out: dict[str, str] = {
         k: v
         for k, v in src.items()
-        if k not in IDE_ENV_DENYLIST and not any(k.startswith(p) for p in IDE_ENV_PREFIX_DENYLIST)
+        if k not in IDE_ENV_DENYLIST
+        and k not in AUTOSKILLIT_PRIVATE_ENV_VARS
+        and not any(k.startswith(p) for p in IDE_ENV_PREFIX_DENYLIST)
     }
     out.update(IDE_ENV_ALWAYS_EXTRAS)
     if extras:

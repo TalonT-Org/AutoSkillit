@@ -108,6 +108,14 @@ class TestCLIDoctor:
         settings_path = tmp_path / ".claude" / "settings.json"
         _evict_stale_autoskillit_hooks(settings_path)
         sync_hooks_to_settings(settings_path)
+        # Franchise checks: set SESSION_TYPE to a non-triggering value so ambient
+        # checks 18-20 all return OK, and monkeypatch the guard helpers for check 23.
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "worker")
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        monkeypatch.setattr(
+            "autoskillit.cli._doctor._get_franchise_guard_registry_entry", lambda: True
+        )
+        monkeypatch.setattr("autoskillit.cli._doctor._franchise_guard_script_exists", lambda: True)
         local_bin = str(tmp_path / ".local" / "bin" / "autoskillit")
         with (
             patch(

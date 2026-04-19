@@ -24,7 +24,7 @@ class TestKitchenVisibility:
         """No kitchen tool (gated or headless-tagged) appears in tools/list for a fresh session."""
         from fastmcp.client import Client
 
-        from autoskillit.core.types import HEADLESS_TOOLS
+        from autoskillit.core import HEADLESS_TOOLS
         from autoskillit.pipeline.gate import GATED_TOOLS
         from autoskillit.server import mcp
 
@@ -567,21 +567,35 @@ class TestSessionTypeVisibility:
     async def test_franchise_enables_franchise_tag(self, monkeypatch):
         from fastmcp.client import Client
 
-        from autoskillit.core import GATED_TOOLS
-        from autoskillit.core.types import HEADLESS_TOOLS
+        from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
-        _apply_session_type_visibility()
+        # Register a temporary franchise-tagged tool to assert the positive side:
+        # franchise-tagged tools MUST become visible when SESSION_TYPE=franchise.
+        @mcp.local_provider.tool(tags={"franchise"})
+        def _franchise_visibility_marker() -> str:
+            """Temporary marker tool for franchise tag visibility contract."""
+            return "ok"
 
-        async with Client(mcp) as client:
-            tools = await client.list_tools()
-        tool_names = {t.name for t in tools}
-        # franchise tag enabled — kitchen/headless tools must remain hidden
-        for name in GATED_TOOLS:
-            assert name not in tool_names, f"{name} should be hidden for franchise session"
-        for name in HEADLESS_TOOLS:
-            assert name not in tool_names, f"{name} should be hidden for franchise session"
+        try:
+            monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+            _apply_session_type_visibility()
+
+            async with Client(mcp) as client:
+                tools = await client.list_tools()
+            tool_names = {t.name for t in tools}
+
+            # Positive assertion: franchise-tagged tool is visible
+            assert "_franchise_visibility_marker" in tool_names, (
+                "franchise-tagged tool should be visible for franchise session"
+            )
+            # Negative assertions: kitchen/headless tools remain hidden
+            for name in GATED_TOOLS:
+                assert name not in tool_names, f"{name} should be hidden for franchise session"
+            for name in HEADLESS_TOOLS:
+                assert name not in tool_names, f"{name} should be hidden for franchise session"
+        finally:
+            mcp.local_provider.remove_tool("_franchise_visibility_marker")
 
     @pytest.mark.anyio
     async def test_orchestrator_headless_enables_kitchen_tag(self, monkeypatch):
@@ -604,8 +618,7 @@ class TestSessionTypeVisibility:
     async def test_orchestrator_interactive_no_pre_reveal(self, monkeypatch):
         from fastmcp.client import Client
 
-        from autoskillit.core import GATED_TOOLS
-        from autoskillit.core.types import HEADLESS_TOOLS
+        from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -642,8 +655,7 @@ class TestSessionTypeVisibility:
     async def test_leaf_interactive_no_pre_reveal(self, monkeypatch):
         from fastmcp.client import Client
 
-        from autoskillit.core import GATED_TOOLS
-        from autoskillit.core.types import HEADLESS_TOOLS
+        from autoskillit.core import GATED_TOOLS, HEADLESS_TOOLS
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")

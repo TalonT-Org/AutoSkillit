@@ -279,6 +279,7 @@ generic_automation_mcp/
 │   ├── unsafe_install_guard.py
 │   ├── generated_file_write_guard.py
 │   ├── leaf_orchestration_guard.py
+│   ├── franchise_dispatch_guard.py #  Blocks dispatch_food_truck from headless callers (L3→L3 recursion guard)
 │   ├── pretty_output_hook.py #  Dispatch entrypoint for MCP JSON → Markdown-KV reformatter
 │   ├── _fmt_primitives.py   #   Payload dataclasses, token formatter, pipeline-mode + short-name
 │   ├── _fmt_execution.py    #   run_skill, run_cmd, test_check, merge_worktree formatters

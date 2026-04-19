@@ -79,7 +79,10 @@ async def kitchen_status() -> str:
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@mcp.tool(
+    tags={"autoskillit", "kitchen", "kitchen-core", "franchise"},
+    annotations={"readOnlyHint": True},
+)
 @track_response_size("get_pipeline_report")
 async def get_pipeline_report(clear: bool = False) -> str:
     """Return accumulated run_skill failures since last clear.
@@ -149,7 +152,7 @@ def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> l
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen", "kitchen-core", "telemetry"},
+    tags={"autoskillit", "kitchen", "kitchen-core", "telemetry", "franchise"},
     annotations={"readOnlyHint": True},
 )
 @track_response_size("get_token_summary")
@@ -214,7 +217,7 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen", "kitchen-core", "telemetry"},
+    tags={"autoskillit", "kitchen", "kitchen-core", "telemetry", "franchise"},
     annotations={"readOnlyHint": True},
 )
 @track_response_size("get_timing_summary")
@@ -282,7 +285,7 @@ def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen", "kitchen-core", "telemetry"},
+    tags={"autoskillit", "kitchen", "kitchen-core", "telemetry", "franchise"},
     annotations={"readOnlyHint": True},
 )
 @track_response_size("get_quota_events")

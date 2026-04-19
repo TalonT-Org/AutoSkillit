@@ -97,7 +97,7 @@ def test_step6_5_scope_includes_all_analyzed_comments() -> None:
         else SKILL_TEXT[step65_idx : step65_idx + 800]
     )
     assert "intent validation" in step65_section.lower() or "step 3.5" in step65_section, (
-        "Step 6.5 scope should reference intent validation / Step 3.5 instead of the old severity filter"
+        "Step 6.5 scope should reference intent validation / Step 3.5 instead of the old severity filter"  # noqa: E501
     )
 
 

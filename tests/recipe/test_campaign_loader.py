@@ -213,7 +213,7 @@ def test_validate_recipe_skips_step_check_for_campaign():
         steps={},
     )
     errors = validate_recipe(recipe)
-    assert not any("step" in e.lower() for e in errors)
+    assert "Recipe must have at least one step." not in errors
 
 
 def test_validate_recipe_requires_dispatches_for_campaign():

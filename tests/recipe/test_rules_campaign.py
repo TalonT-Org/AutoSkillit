@@ -96,6 +96,7 @@ def test_dispatch_names_unique_detects_duplicates():
     )
     found = _findings(recipe, "dispatch-names-unique")
     assert found
+    assert found[0].severity == Severity.ERROR
     assert "phase-one" in found[0].message
 
 
@@ -211,6 +212,12 @@ def test_campaign_requires_recipe_packs_exist_warns_on_unknown():
     assert found
     assert found[0].severity == Severity.WARNING
     assert "nonexistent-family" in found[0].message
+
+
+def test_campaign_requires_recipe_packs_exist_no_warning_for_known_pack():
+    recipe = _campaign(requires_recipe_packs=["implementation-family"])
+    found = _findings(recipe, "campaign-requires-recipe-packs-exist")
+    assert not found
 
 
 # ---------------------------------------------------------------------------
@@ -402,14 +409,18 @@ def test_campaign_valid_passes_all_rules():
         available_recipes=frozenset({"implementation"}),
     )
     all_findings = run_semantic_rules(ctx)
+    _is_campaign_rule = lambda f: (  # noqa: E731
+        f.rule.startswith("campaign-")
+        or f.rule.startswith("dispatch-")
+        or f.rule.startswith("depends-on-")
+    )
     error_findings = [
-        f
-        for f in all_findings
-        if f.severity == Severity.ERROR
-        and (
-            f.rule.startswith("campaign-")
-            or f.rule.startswith("dispatch-")
-            or f.rule.startswith("depends-on-")
-        )
+        f for f in all_findings if f.severity == Severity.ERROR and _is_campaign_rule(f)
+    ]
+    warning_findings = [
+        f for f in all_findings if f.severity == Severity.WARNING and _is_campaign_rule(f)
     ]
     assert not error_findings, f"Valid campaign must not have ERROR findings: {error_findings}"
+    assert not warning_findings, (
+        f"Valid campaign must not have WARNING findings: {warning_findings}"
+    )

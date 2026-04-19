@@ -161,7 +161,7 @@ def find_campaign_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
     return next((r for r in result.items if r.name == name), None)
 
 
-def load_recipes_in_packs(
+def load_campaign_recipes_in_packs(
     packs: frozenset[str],
     project_dir: Path,
     allowed_recipe_names: frozenset[str] = frozenset(),

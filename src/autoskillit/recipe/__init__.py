@@ -70,8 +70,8 @@ from autoskillit.recipe.io import (  # noqa: E402
     iter_steps_with_context,
     list_campaign_recipes,
     list_recipes,
+    load_campaign_recipes_in_packs,
     load_recipe,
-    load_recipes_in_packs,
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
@@ -157,5 +157,5 @@ __all__ = [
     "RecipeKind",
     "find_campaign_by_name",
     "list_campaign_recipes",
-    "load_recipes_in_packs",
+    "load_campaign_recipes_in_packs",
 ]

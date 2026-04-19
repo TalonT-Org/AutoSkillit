@@ -1,5 +1,5 @@
 """Tests for campaign recipe loader — _parse_recipe, list_campaign_recipes,
-find_campaign_by_name, load_recipes_in_packs, and validate_recipe campaign branch."""
+find_campaign_by_name, load_campaign_recipes_in_packs, and validate_recipe campaign branch."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from autoskillit.recipe.io import (
     _parse_recipe,
     find_campaign_by_name,
     list_campaign_recipes,
+    load_campaign_recipes_in_packs,
     load_recipe,
-    load_recipes_in_packs,
 )
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 from autoskillit.recipe.validator import validate_recipe
@@ -163,11 +163,11 @@ def test_find_campaign_by_name_returns_none_when_missing(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# load_recipes_in_packs
+# load_campaign_recipes_in_packs
 # ---------------------------------------------------------------------------
 
 
-def test_load_recipes_in_packs_filters_by_categories(tmp_path: Path):
+def test_load_campaign_recipes_in_packs_filters_by_categories(tmp_path: Path):
     campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
     campaigns_dir.mkdir(parents=True)
     _write_yaml(
@@ -178,19 +178,19 @@ def test_load_recipes_in_packs_filters_by_categories(tmp_path: Path):
         campaigns_dir / "research-campaign.yaml",
         _campaign_data(name="research-campaign", categories=["research-family"]),
     )
-    results = load_recipes_in_packs(frozenset({"implementation-family"}), tmp_path)
+    results = load_campaign_recipes_in_packs(frozenset({"implementation-family"}), tmp_path)
     assert len(results) == 1
     assert results[0].name == "impl-campaign"
 
 
-def test_load_recipes_in_packs_includes_allowed_recipes(tmp_path: Path):
+def test_load_campaign_recipes_in_packs_includes_allowed_recipes(tmp_path: Path):
     campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
     campaigns_dir.mkdir(parents=True)
     _write_yaml(
         campaigns_dir / "special-campaign.yaml",
         _campaign_data(name="special-campaign", categories=["research-family"]),
     )
-    results = load_recipes_in_packs(
+    results = load_campaign_recipes_in_packs(
         frozenset({"implementation-family"}),
         tmp_path,
         allowed_recipe_names=frozenset({"special-campaign"}),

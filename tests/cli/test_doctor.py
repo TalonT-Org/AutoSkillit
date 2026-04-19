@@ -678,12 +678,31 @@ def test_doctor_does_not_modify_plugin_state(tmp_path, monkeypatch, capsys):
         )
     )
 
+    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
+    retiring_json.parent.mkdir(parents=True, exist_ok=True)
+    retiring_content = json.dumps(
+        {
+            "retiring": [
+                {
+                    "version": "0.3.0",
+                    "path": str(cache_dir / "0.3.0"),
+                    "retired_at": "2026-01-01T00:00:00+00:00",
+                }
+            ],
+            "schema_version": 1,
+        }
+    )
+    retiring_json.write_text(retiring_content)
+
     cli.doctor()
 
     assert cache_dir.exists(), "Doctor must not delete the plugin cache directory"
     data = json.loads(plugins_json.read_text())
     assert "autoskillit@autoskillit-local" in data.get("plugins", {}), (
         "Doctor must not remove installed_plugins.json entries"
+    )
+    assert retiring_json.read_text() == retiring_content, (
+        "Doctor must not modify retiring_cache.json"
     )
 
 

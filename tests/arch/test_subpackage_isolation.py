@@ -539,9 +539,11 @@ def test_server_file_count_under_limit() -> None:
     FastMCP server lifespan teardown (#745).
     Limit updated from 18 to 19 after _wire_compat.py was added for
     Claude Code wire-format sanitization middleware.
+    Limit updated from 19 to 20 after _session_type.py was added for
+    session-type tag visibility dispatch (3-branch startup logic).
     """
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 19, f"server/ has {len(py_files)} files, max is 19"
+    assert len(py_files) <= 20, f"server/ has {len(py_files)} files, max is 20"
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
@@ -695,7 +697,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         (15 hook scripts + 4 private helpers + 1 __init__).
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 19,
+        "server": 20,
         "recipe": 35,
         "execution": 26,
         "core": 19,

@@ -51,3 +51,16 @@ def test_pack_registry_importable_from_core() -> None:
 
     assert isinstance(PACK_REGISTRY, dict)
     assert all(isinstance(v, PackDef) for v in PACK_REGISTRY.values())
+
+
+def test_private_env_vars_includes_franchise_tier_vars() -> None:
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    expected = {
+        "AUTOSKILLIT_SESSION_TYPE",
+        "AUTOSKILLIT_CAMPAIGN_ID",
+        "AUTOSKILLIT_CAMPAIGN_STATE_PATH",
+        "AUTOSKILLIT_PROJECT_DIR",
+        "AUTOSKILLIT_L2_TOOL_TAGS",
+    }
+    assert expected <= AUTOSKILLIT_PRIVATE_ENV_VARS

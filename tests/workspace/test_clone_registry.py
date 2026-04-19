@@ -367,11 +367,6 @@ class TestBatchDeleteRegistryWriteback:
         assert "/tmp/theirs" in remaining  # kit-2 entry untouched
 
 
-# ---------------------------------------------------------------------------
-# New tests: T20–T25 (Group P-4: L1 register_clone env-defaulting)
-# ---------------------------------------------------------------------------
-
-
 class TestRegisterCloneEnvDefaulting:
     """T20–T25: register_clone env-var defaulting for owner."""
 
@@ -457,11 +452,6 @@ class TestRegisterCloneEnvDefaulting:
         assert "/c1" in result["deleted"]
         assert "/c2" not in result["deleted"]
         mock_remove.assert_called_once_with("/c1", "false")
-
-
-# ---------------------------------------------------------------------------
-# New tests: T31 (Group P-7: end-to-end two-campaign isolation)
-# ---------------------------------------------------------------------------
 
 
 class TestTwoCampaignsIsolation:

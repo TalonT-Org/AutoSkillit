@@ -540,11 +540,6 @@ class TestBatchCleanupClonesOwner:
         assert remaining["/clone-2"] == "kit-2"
 
 
-# ---------------------------------------------------------------------------
-# New tests: T26–T27 (Group P-5: register_clone_status campaign_id preference)
-# ---------------------------------------------------------------------------
-
-
 class TestRegisterCloneStatusCampaignPreference:
     """T26–T27: register_clone_status prefers AUTOSKILLIT_CAMPAIGN_ID over kitchen_id."""
 
@@ -581,11 +576,6 @@ class TestRegisterCloneStatusCampaignPreference:
 
         data = json.loads(Path(reg).read_text())
         assert data["clones"][0]["owner"] == "kit-fallback"
-
-
-# ---------------------------------------------------------------------------
-# New tests: T28–T30 (Group P-6: batch_cleanup_clones owner_filter param)
-# ---------------------------------------------------------------------------
 
 
 class TestBatchCleanupClonesOwnerFilter:

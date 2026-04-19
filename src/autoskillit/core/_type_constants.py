@@ -229,7 +229,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "remove_clone": frozenset({"clone"}),
     "register_clone_status": frozenset({"clone"}),
     "batch_cleanup_clones": frozenset({"clone"}),
-    # telemetry
+    # kitchen-core — telemetry
     "get_token_summary": frozenset({"kitchen-core", "telemetry"}),
     "get_timing_summary": frozenset({"kitchen-core", "telemetry"}),
     "write_telemetry_files": frozenset({"kitchen-core", "telemetry"}),

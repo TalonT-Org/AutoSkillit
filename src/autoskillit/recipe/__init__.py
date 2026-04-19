@@ -9,6 +9,7 @@ _logger = get_logger(__name__)
 # Rule registration — import triggers @semantic_rule registration.
 from autoskillit.recipe import rules_blocks as _rules_blocks  # noqa: E402 F401
 from autoskillit.recipe import rules_bypass as _rules_bypass  # noqa: E402 F401
+from autoskillit.recipe import rules_campaign as _rules_campaign  # noqa: E402 F401
 from autoskillit.recipe import rules_ci as _rules_ci  # noqa: E402 F401
 from autoskillit.recipe import rules_clone as _rules_clone  # noqa: E402 F401
 from autoskillit.recipe import rules_cmd as _rules_cmd  # noqa: E402 F401
@@ -63,21 +64,26 @@ from autoskillit.recipe.identity import (  # noqa: E402
 )
 from autoskillit.recipe.io import (  # noqa: E402
     builtin_sub_recipes_dir,
+    find_campaign_by_name,
     find_recipe_by_name,
     find_sub_recipe_by_name,
     iter_steps_with_context,
+    list_campaign_recipes,
     list_recipes,
+    load_campaign_recipes_in_packs,
     load_recipe,
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
 from autoskillit.recipe.schema import (  # noqa: E402
     AUTOSKILLIT_VERSION_KEY,
+    CampaignDispatch,
     DataFlowReport,
     Recipe,
     RecipeBlock,
     RecipeInfo,
     RecipeIngredient,
+    RecipeKind,
     RecipeStep,
     StepResultCondition,
     StepResultRoute,
@@ -147,4 +153,9 @@ __all__ = [
     "load_all_experiment_types",
     "check_rerun_detection",
     "find_prior_runs",
+    "CampaignDispatch",
+    "RecipeKind",
+    "find_campaign_by_name",
+    "list_campaign_recipes",
+    "load_campaign_recipes_in_packs",
 ]

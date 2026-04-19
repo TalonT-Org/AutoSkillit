@@ -32,7 +32,7 @@ from autoskillit.recipe.registry import (
     run_semantic_rules,
     semantic_rule,
 )
-from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe
+from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe, RecipeKind
 
 logger = get_logger(__name__)
 
@@ -67,6 +67,12 @@ def validate_recipe(recipe: Recipe) -> list[str]:
 
     if not recipe.name:
         errors.append("Recipe must have a 'name'.")
+
+    if recipe.kind == RecipeKind.CAMPAIGN:
+        if not recipe.dispatches:
+            errors.append("Campaign recipe must have at least one dispatch.")
+        return errors
+
     if not recipe.steps:
         errors.append("Recipe must have at least one step.")
 

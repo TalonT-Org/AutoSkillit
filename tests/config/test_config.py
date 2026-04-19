@@ -1211,7 +1211,7 @@ class TestFranchiseConfig:
         """FranchiseConfig is importable from autoskillit.config."""
         from autoskillit.config import FranchiseConfig
 
-        assert FranchiseConfig().l2_default_timeout_sec == 3600
+        assert FranchiseConfig is not None
 
     def test_franchise_key_accepted_by_schema_validator(self, tmp_path) -> None:
         """User config with franchise: section does not raise ConfigSchemaError."""

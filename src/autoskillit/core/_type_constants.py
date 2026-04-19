@@ -30,6 +30,7 @@ __all__ = [
     "SESSION_TYPE_FRANCHISE",
     "SESSION_TYPE_ORCHESTRATOR",
     "SESSION_TYPE_LEAF",
+    "HEADLESS_ENV_VAR",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
@@ -41,6 +42,7 @@ SESSION_TYPE_ENV_VAR: str = "AUTOSKILLIT_SESSION_TYPE"
 SESSION_TYPE_FRANCHISE: str = "franchise"
 SESSION_TYPE_ORCHESTRATOR: str = "orchestrator"
 SESSION_TYPE_LEAF: str = "leaf"
+HEADLESS_ENV_VAR: str = "AUTOSKILLIT_HEADLESS"
 
 # Env vars that control MCP server-level behavior and must not leak into
 # user-code subprocesses (pytest runs, shell commands, etc.).

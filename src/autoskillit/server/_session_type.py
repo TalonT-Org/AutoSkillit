@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from autoskillit.core import SessionType
+from autoskillit.core import HEADLESS_ENV_VAR, SessionType
 from autoskillit.core import session_type as _resolve_session_type
 
 
@@ -17,7 +17,7 @@ def _apply_session_type_visibility() -> None:
     from autoskillit.server import mcp
 
     _session = _resolve_session_type()
-    _headless = os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
+    _headless = os.environ.get(HEADLESS_ENV_VAR) == "1"
 
     if _session is SessionType.FRANCHISE:
         mcp.enable(tags={"franchise"})

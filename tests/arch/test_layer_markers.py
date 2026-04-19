@@ -17,6 +17,7 @@ LAYER_DIRECTORIES: dict[str, str] = {
     "workspace": "workspace",
     "recipe": "recipe",
     "migration": "migration",
+    "franchise": "franchise",
     "server": "server",
     "cli": "cli",
 }

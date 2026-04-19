@@ -93,7 +93,7 @@ markers = [
     "smoke: end-to-end smoke tests requiring Claude API access (deselect with: -m 'not smoke')",
     "integration: integration tests that spawn real subprocesses (deselect with: -m 'not integration')",
     "canary: development-time filter verification tests (deselect with: -m 'not canary')",
-    "layer(name): source-layer marker for test file classification (core, config, pipeline, execution, workspace, recipe, migration, server, cli)",
+    "layer(name): source-layer marker for test file classification (core, config, pipeline, execution, workspace, recipe, migration, franchise, server, cli)",
     "small: pure unit test — no persistent I/O, no network, no subprocess (RAM-backed tmpfs via tmp_path IS allowed)",
     "medium: filesystem and subprocess allowed — no network, no external services",
     "large: full integration — everything allowed (default for unannotated tests)",
@@ -273,6 +273,26 @@ modules = [
 # This exception mirrors the one already documented in IL-003.
 ignore_imports = [
     "autoskillit.pipeline.context -> autoskillit.config",
+]
+
+# IL-009 | Lens: module-dependency | DS-001
+# Rationale: franchise is L2 — imports L0 (core) only; workspace allowed for path utilities
+[[tool.importlinter.contracts]]
+name = "L2 franchise does not import L3 or most L1 peers"
+type = "forbidden"
+source_modules = ["autoskillit.franchise"]
+forbidden_modules = [
+    # EXCEPTION: autoskillit.workspace is intentionally absent from this list.
+    # franchise may import workspace solely for path-lookup utilities (e.g., worktree paths).
+    # This is a deliberate, narrow allowance — do not expand workspace use in franchise
+    # beyond path utilities without updating this contract and the rationale comment above.
+    "autoskillit.config",
+    "autoskillit.pipeline",
+    "autoskillit.execution",
+    "autoskillit.migration",
+    "autoskillit.recipe",
+    "autoskillit.server",
+    "autoskillit.cli",
 ]
 
 [tool.uv.sources]

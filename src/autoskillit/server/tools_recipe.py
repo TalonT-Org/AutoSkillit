@@ -24,7 +24,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("list_recipes")
 async def list_recipes() -> str:
     """List available recipes from .autoskillit/recipes/.
@@ -60,7 +60,7 @@ async def list_recipes() -> str:
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen"},
+    tags={"autoskillit", "kitchen", "kitchen-core"},
     annotations={"readOnlyHint": True},
     meta={"anthropic/maxResultSizeChars": 100_000},
 )
@@ -212,7 +212,7 @@ async def load_recipe(name: str, overrides: dict[str, str] | None = None) -> str
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("validate_recipe")
 async def validate_recipe(script_path: str) -> str:
     """Validate a recipe YAML file against the recipe schema.
@@ -256,7 +256,7 @@ async def validate_recipe(script_path: str) -> str:
         return json.dumps({"valid": False, "errors": [f"{type(exc).__name__}: {exc}"]})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("migrate_recipe")
 async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     """Apply pending migration notes to a recipe file.

@@ -40,7 +40,7 @@ def _is_absolute_path(path: str) -> bool:
     return Path(path).is_absolute()
 
 
-@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("run_cmd")
 async def run_cmd(
     cmd: str,
@@ -115,7 +115,7 @@ async def run_cmd(
         )
 
 
-@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("run_python")
 async def run_python(
     callable: str,
@@ -170,7 +170,7 @@ async def run_python(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("run_skill")
 async def run_skill(
     skill_command: str,

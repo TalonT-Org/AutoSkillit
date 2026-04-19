@@ -22,7 +22,7 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("merge_worktree")
 async def merge_worktree(
     worktree_path: str,
@@ -92,7 +92,7 @@ async def merge_worktree(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("classify_fix")
 async def classify_fix(
     worktree_path: str,

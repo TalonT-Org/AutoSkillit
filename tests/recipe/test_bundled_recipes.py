@@ -83,6 +83,15 @@ def _assert_ci_steps(recipe) -> None:
     assert re_push.on_failure == "release_issue_failure"
 
 
+def test_every_bundled_recipe_declares_requires_packs() -> None:
+    """All top-level bundled recipes must declare a non-empty requires_packs."""
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+    for path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(path)
+        assert recipe.requires_packs, f"{path.name} does not declare requires_packs"
+
+
 # ---------------------------------------------------------------------------
 # TestImplementationPipelineStructure
 # ---------------------------------------------------------------------------

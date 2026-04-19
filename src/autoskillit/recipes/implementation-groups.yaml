@@ -3,6 +3,7 @@ description: Decompose a source document into sequenced implementation groups, t
 summary: clone > capture_base_sha > set_merge_target > (create_branch?) > make-groups > make-plan > (review-approach?) > dry-walkthrough > implement > test > merge (per group, per plan part) > (audit-impl?) > (open_pr?) > push > (review_pr?) > (ci_watch?) > cleanup
 autoskillit_version: "0.3.0"
 recipe_version: "1.0.0"
+requires_packs: [github, ci, clone, telemetry]
 
 ingredients:
   source_doc:

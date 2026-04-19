@@ -1040,7 +1040,7 @@ async def _execute_claude_headless(
             max_suppression_seconds=cfg.max_suppression_seconds,
         )
     except Exception as exc:
-        logger.error("run_headless_core runner crashed", exc_info=True)
+        logger.error("headless_runner_crashed", exc_info=True)
         _exc_text = traceback.format_exc()
         _log_dir = ctx.config.linux_tracing.log_dir
         try:
@@ -1077,7 +1077,7 @@ async def _execute_claude_headless(
             order_id=order_id,
         )
     except BaseException:
-        logger.warning("run_headless_core cancelled", exc_info=True)
+        logger.warning("headless_runner_cancelled", exc_info=True)
         _exc_text = traceback.format_exc()
         _log_dir = ctx.config.linux_tracing.log_dir
         try:
@@ -1214,7 +1214,7 @@ async def _execute_claude_headless(
             logger.debug("session_log_flush_failed", exc_info=True)
 
     logger.debug(
-        "run_headless_core_exit",
+        "headless_session_exit",
         success=skill_result.success,
         needs_retry=skill_result.needs_retry,
         subtype=skill_result.subtype,

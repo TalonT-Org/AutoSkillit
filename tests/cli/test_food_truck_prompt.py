@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-pytestmark = [pytest.mark.layer("franchise"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 # --- Fixtures ---
 

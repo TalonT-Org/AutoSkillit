@@ -12,11 +12,18 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Any, Literal
 
-from autoskillit.core import atomic_write, get_logger, resolve_temp_dir
+from autoskillit.core import (
+    CAMPAIGN_ID_ENV_VAR,
+    KITCHEN_SESSION_ID_ENV_VAR,
+    atomic_write,
+    get_logger,
+    resolve_temp_dir,
+)
 
 _log = get_logger(__name__)
 
@@ -127,14 +134,23 @@ class CloneRegistry:
 def register_clone(
     clone_path: str,
     status: CloneStatus,
-    owner: str,
+    owner: str = "",
     registry_path: str = "",
     temp_dir: Path | None = None,
 ) -> dict[str, str]:
     """Append a clone entry to the registry. Safe for parallel callers — holds an
     exclusive advisory lock across the entire read-modify-write sequence."""
-    if owner == "":
-        raise ValueError("owner is required")
+    if not owner:
+        owner = os.environ.get(CAMPAIGN_ID_ENV_VAR, "") or os.environ.get(
+            KITCHEN_SESSION_ID_ENV_VAR, ""
+        )
+    if not owner:
+        campaign_val = os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
+        session_val = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR, "")
+        raise ValueError(
+            f"owner is required ({CAMPAIGN_ID_ENV_VAR}={campaign_val!r},"
+            f" {KITCHEN_SESSION_ID_ENV_VAR}={session_val!r})"
+        )
     path = _resolve_registry_path(registry_path, temp_dir)
     with CloneRegistry(path) as reg:
         reg.append(clone_path, status, owner)

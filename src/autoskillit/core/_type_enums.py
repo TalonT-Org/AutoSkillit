@@ -170,6 +170,7 @@ class Severity(StrEnum):
     OK = "ok"
     ERROR = "error"
     WARNING = "warning"
+    INFO = "info"
 
 
 class TerminationReason(StrEnum):

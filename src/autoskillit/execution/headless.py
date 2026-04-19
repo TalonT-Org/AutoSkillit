@@ -1108,6 +1108,11 @@ async def _execute_claude_headless(
         except Exception:
             logger.debug("flush_session_log during cancel failed", exc_info=True)
         raise
+    if _result is None:
+        return SkillResult.crashed(
+            exception=RuntimeError("runner() did not return a result"),
+            order_id=order_id,
+        )
     _elapsed = time.monotonic() - _start_mono
     _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
     result = dataclasses.replace(  # type: ignore[arg-type]

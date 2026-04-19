@@ -14,6 +14,7 @@ SIZE_DIRECTORIES: dict[str, str] = {
     "config": "config",
     "core": "core",
     "execution": "execution",
+    "franchise": "franchise",
     "migration": "migration",
     "pipeline": "pipeline",
     "recipe": "recipe",

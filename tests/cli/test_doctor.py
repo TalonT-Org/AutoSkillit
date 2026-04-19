@@ -109,13 +109,17 @@ class TestCLIDoctor:
         _evict_stale_autoskillit_hooks(settings_path)
         sync_hooks_to_settings(settings_path)
         # Franchise checks: set SESSION_TYPE to a non-triggering value so ambient
-        # checks 18-20 all return OK, and monkeypatch the guard helpers for check 23.
+        # checks 18-20 all return OK, and stub check 23 directly so it returns OK
+        # without touching canonical_script_basenames (shared with hook-registration check 4).
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "worker")
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        from autoskillit.cli._doctor import DoctorResult
+        from autoskillit.core import Severity
+
         monkeypatch.setattr(
-            "autoskillit.cli._doctor._get_franchise_guard_registry_entry", lambda: True
+            "autoskillit.cli._doctor._check_franchise_dispatch_guard_registered",
+            lambda: DoctorResult(Severity.OK, "franchise_dispatch_guard_registered", "stubbed"),
         )
-        monkeypatch.setattr("autoskillit.cli._doctor._franchise_guard_script_exists", lambda: True)
         local_bin = str(tmp_path / ".local" / "bin" / "autoskillit")
         with (
             patch(
@@ -1856,8 +1860,8 @@ def test_check_installed_plugins_entry_flat_structure_is_warning(tmp_path: Path)
 class TestGroupMFranchiseDoctorChecks:
     """Group M: Franchise doctor checks (ambient env detection + infra health + campaign ops)."""
 
-    # M1: SESSION_TYPE unset → WARN
-    def test_check_ambient_session_type_leaf_warns_when_unset(
+    # M1: SESSION_TYPE unset → OK (unset is normal; check only fires on explicit 'leaf')
+    def test_check_ambient_session_type_leaf_ok_when_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from autoskillit.cli._doctor import _check_ambient_session_type_leaf
@@ -1865,7 +1869,7 @@ class TestGroupMFranchiseDoctorChecks:
 
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
         result = _check_ambient_session_type_leaf()
-        assert result.severity == Severity.WARNING
+        assert result.severity == Severity.OK
         assert result.check == "ambient_session_type_leaf"
 
     # M2: SESSION_TYPE=leaf → WARN
@@ -1981,15 +1985,19 @@ class TestGroupMFranchiseDoctorChecks:
 
     # M11: franchise_dispatch_guard registered and exists → OK
     def test_check_franchise_dispatch_guard_registered_ok(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from autoskillit.cli._doctor import _check_franchise_dispatch_guard_registered
         from autoskillit.core import Severity
 
+        hooks_dir = tmp_path / "hooks"
+        hooks_dir.mkdir()
+        (hooks_dir / "franchise_dispatch_guard.py").write_text("")
         monkeypatch.setattr(
-            "autoskillit.cli._doctor._get_franchise_guard_registry_entry", lambda: True
+            "autoskillit.cli._doctor.canonical_script_basenames",
+            lambda: frozenset({"franchise_dispatch_guard.py"}),
         )
-        monkeypatch.setattr("autoskillit.cli._doctor._franchise_guard_script_exists", lambda: True)
+        monkeypatch.setattr("autoskillit.hook_registry.HOOKS_DIR", hooks_dir)
         result = _check_franchise_dispatch_guard_registered()
         assert result.severity == Severity.OK
 
@@ -2001,7 +2009,8 @@ class TestGroupMFranchiseDoctorChecks:
         from autoskillit.core import Severity
 
         monkeypatch.setattr(
-            "autoskillit.cli._doctor._get_franchise_guard_registry_entry", lambda: False
+            "autoskillit.cli._doctor.canonical_script_basenames",
+            lambda: frozenset(),
         )
         result = _check_franchise_dispatch_guard_registered()
         assert result.severity == Severity.ERROR

@@ -1157,3 +1157,89 @@ class TestWorkspaceConfig:
 
         cfg = load_config(tmp_path / "settings.toml")
         assert cfg.workspace.runs_root is None
+
+
+class TestFranchiseConfig:
+    def test_franchise_config_default_l2_timeout(self) -> None:
+        """FranchiseConfig.l2_default_timeout_sec defaults to 3600."""
+        from autoskillit.config.settings import FranchiseConfig
+
+        cfg = FranchiseConfig()
+        assert cfg.l2_default_timeout_sec == 3600
+
+    def test_automation_config_has_franchise_field(self) -> None:
+        """AutomationConfig exposes franchise as a FranchiseConfig."""
+        from autoskillit.config.settings import AutomationConfig, FranchiseConfig
+
+        cfg = AutomationConfig()
+        assert isinstance(cfg.franchise, FranchiseConfig)
+        assert cfg.franchise.l2_default_timeout_sec == 3600
+
+    def test_defaults_yaml_has_franchise_section(self) -> None:
+        """defaults.yaml defines franchise.l2_default_timeout_sec."""
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        assert "franchise" in defaults
+        assert defaults["franchise"]["l2_default_timeout_sec"] == 3600
+
+    def test_franchise_l2_timeout_matches_defaults_yaml(self) -> None:
+        """FranchiseConfig Python default matches defaults.yaml value."""
+        from autoskillit.config.settings import FranchiseConfig
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        yaml_val = defaults["franchise"]["l2_default_timeout_sec"]
+        assert FranchiseConfig().l2_default_timeout_sec == yaml_val
+
+    def test_load_config_franchise_override(self, tmp_path) -> None:
+        """User config with franchise section overrides the default."""
+        import yaml
+
+        from autoskillit.config import load_config
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"franchise": {"l2_default_timeout_sec": 7200}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)
+        assert cfg.franchise.l2_default_timeout_sec == 7200
+
+    def test_franchise_config_importable_from_config_package(self) -> None:
+        """FranchiseConfig is importable from autoskillit.config."""
+        from autoskillit.config import FranchiseConfig
+
+        assert FranchiseConfig is not None
+
+    def test_franchise_key_accepted_by_schema_validator(self, tmp_path) -> None:
+        """User config with franchise: section does not raise ConfigSchemaError."""
+        import yaml
+
+        from autoskillit.config import load_config
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        config_data = {"franchise": {"l2_default_timeout_sec": 1800}}
+        (config_dir / "config.yaml").write_text(yaml.dump(config_data))
+        cfg = load_config(tmp_path)  # must not raise ConfigSchemaError
+        assert cfg.franchise.l2_default_timeout_sec == 1800
+
+    def test_franchise_config_rejects_zero_timeout(self) -> None:
+        """FranchiseConfig raises ValueError when l2_default_timeout_sec is zero."""
+        import pytest
+
+        from autoskillit.config.settings import FranchiseConfig
+
+        with pytest.raises(ValueError, match="l2_default_timeout_sec must be positive"):
+            FranchiseConfig(l2_default_timeout_sec=0)
+
+    def test_franchise_config_rejects_negative_timeout(self) -> None:
+        """FranchiseConfig raises ValueError when l2_default_timeout_sec is negative."""
+        import pytest
+
+        from autoskillit.config.settings import FranchiseConfig
+
+        with pytest.raises(ValueError, match="l2_default_timeout_sec must be positive"):
+            FranchiseConfig(l2_default_timeout_sec=-1)

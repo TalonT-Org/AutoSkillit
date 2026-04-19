@@ -17,7 +17,12 @@ def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
+        sys.stderr.write("franchise_dispatch_guard: malformed stdin — failing open\n")
         sys.exit(0)  # fail-open on malformed input
+
+    if not isinstance(data, dict):
+        sys.stderr.write("franchise_dispatch_guard: unexpected JSON root type — failing open\n")
+        sys.exit(0)
 
     # Interactive sessions always pass
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":

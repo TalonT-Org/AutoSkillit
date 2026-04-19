@@ -577,7 +577,7 @@ class TestSessionTypeVisibility:
         async with Client(mcp) as client:
             tools = await client.list_tools()
         tool_names = {t.name for t in tools}
-        # franchise tag enabled — kitchen/headless tools must remain hidden (no franchise tools yet)
+        # franchise tag enabled — kitchen/headless tools must remain hidden
         for name in GATED_TOOLS:
             assert name not in tool_names, f"{name} should be hidden for franchise session"
         for name in HEADLESS_TOOLS:

@@ -1,8 +1,8 @@
 """MCP server for orchestrating automated skill-driven workflows.
 
-Kitchen tools (40 gated + 1 headless-tagged) are hidden at startup via FastMCP v3
-mcp.disable(tags={'kitchen'}) applied once after all tool modules are imported.
-Each new session sees only the 3 free-range tools (open_kitchen, close_kitchen,
+Kitchen tools (41 kitchen-tagged: 40 gated + 1 headless-tagged) are hidden at startup
+via FastMCP v3 mcp.disable(tags={'kitchen'}) applied once after all tool modules are
+imported. Each new session sees only the 3 free-range tools (open_kitchen, close_kitchen,
 and disable_quota_guard).
 
 Startup tag visibility is determined by AUTOSKILLIT_SESSION_TYPE (3-branch dispatch):
@@ -60,15 +60,7 @@ __all__ = [
 # Import all tool sub-modules to trigger @mcp.tool() registration.
 # These imports must come AFTER mcp, _get_ctx, _get_config are defined
 # because tool modules import `mcp` from this package at import time.
-import os  # noqa: E402
-
-from autoskillit.core import (  # noqa: E402
-    PIPELINE_FORBIDDEN_TOOLS,  # noqa: F401
-    SessionType,
-)
-from autoskillit.core import (
-    session_type as _resolve_session_type,
-)
+from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
 from autoskillit.server import (  # noqa: E402, F401
     helpers,
     tools_ci,
@@ -84,6 +76,9 @@ from autoskillit.server import (  # noqa: E402, F401
     tools_workspace,
 )
 from autoskillit.server._factory import make_context  # noqa: E402, F401
+from autoskillit.server._session_type import (  # noqa: E402, F401
+    _apply_session_type_visibility,
+)
 from autoskillit.server.tools_kitchen import _build_tool_category_listing  # noqa: E402, F401
 
 # Apply global visibility transform: all sessions start with kitchen tools hidden.
@@ -95,21 +90,5 @@ mcp.disable(tags={"kitchen"})
 from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware  # noqa: E402
 
 mcp.add_middleware(ClaudeCodeCompatMiddleware())
-
-
-def _apply_session_type_visibility() -> None:
-    """Apply FastMCP tag visibility based on session type + HEADLESS."""
-    _session = _resolve_session_type()
-    _headless = os.environ.get("AUTOSKILLIT_HEADLESS") == "1"
-
-    if _session is SessionType.FRANCHISE:
-        mcp.enable(tags={"franchise"})
-    elif _session is SessionType.ORCHESTRATOR and _headless:
-        mcp.enable(tags={"kitchen"})
-    elif _session is SessionType.LEAF and _headless:
-        mcp.enable(tags={"headless"})
-    # ORCHESTRATOR+interactive and LEAF+interactive: no pre-reveal.
-    # Cook unlocks via open_kitchen (orchestrator) or stays minimal (leaf).
-
 
 _apply_session_type_visibility()

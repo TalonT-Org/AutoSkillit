@@ -12,7 +12,7 @@ from typing import IO
 
 import psutil
 
-from .io import atomic_write, write_versioned_json
+from .io import write_versioned_json
 from .logging import get_logger
 
 logger = get_logger(__name__)
@@ -49,7 +49,7 @@ def _open_lock(lock_path: Path) -> IO[str]:
     fh = open(lock_path, "w")
     try:
         fcntl.flock(fh, fcntl.LOCK_EX)
-    except BaseException:
+    except Exception:
         fh.close()
         raise
     return fh
@@ -66,7 +66,9 @@ def append_retiring_entry(version: str, path: str) -> None:
                 entries = json.loads(cache.read_text()).get("retiring", [])
             except (json.JSONDecodeError, AttributeError):
                 entries = []
-        entries.append({"version": version, "path": path, "retired_at": datetime.now(UTC).isoformat()})
+        entries.append(
+            {"version": version, "path": path, "retired_at": datetime.now(UTC).isoformat()}
+        )
         write_versioned_json(cache, {"retiring": entries}, schema_version=_SCHEMA_VERSION)
     finally:
         fh.close()
@@ -91,18 +93,21 @@ def sweep_retiring_cache(grace_hours: int = 2) -> int:
         for entry in entries:
             retired_at_str = entry.get("retired_at")
             if not retired_at_str:
+                survivors.append(entry)
                 continue
             try:
                 retired_at = datetime.fromisoformat(retired_at_str)
                 age = datetime.now(UTC) - retired_at
             except (ValueError, TypeError):
+                survivors.append(entry)
                 continue
             if age >= cutoff:
                 path = entry.get("path", "")
                 if path and Path(path).is_dir():
                     try:
                         shutil.rmtree(path)
-                    except OSError:
+                    except OSError as exc:
+                        logger.warning("sweep_retiring_cache: failed to remove %s: %s", path, exc)
                         survivors.append(entry)
                         continue
                 count += 1
@@ -120,7 +125,12 @@ def _retire_old_versions(cache_dir: Path, new_version: str) -> None:
         if not subdir.is_dir():
             continue
         if subdir.name == new_version:
-            shutil.rmtree(subdir)
+            try:
+                shutil.rmtree(subdir)
+            except OSError as exc:
+                logger.warning(
+                    "_retire_old_versions: failed to remove same-version dir %s: %s", subdir, exc
+                )
         else:
             append_retiring_entry(version=subdir.name, path=str(subdir))
     sweep_retiring_cache()
@@ -132,7 +142,7 @@ class _InstallLock:
     def __init__(self) -> None:
         self._lock_file: IO[str] | None = None
 
-    def __enter__(self) -> "_InstallLock":
+    def __enter__(self) -> _InstallLock:
         self._lock_file = _open_lock(_install_lock_path())
         return self
 
@@ -179,13 +189,15 @@ def register_active_kitchen(kitchen_id: str, pid: int, project_path: str) -> Non
             create_time: float | None = psutil.Process(pid).create_time()
         except psutil.NoSuchProcess:
             create_time = None
-        entries.append({
-            "kitchen_id": kitchen_id,
-            "pid": pid,
-            "create_time": create_time,
-            "project_path": project_path,
-            "opened_at": datetime.now(UTC).isoformat(),
-        })
+        entries.append(
+            {
+                "kitchen_id": kitchen_id,
+                "pid": pid,
+                "create_time": create_time,
+                "project_path": project_path,
+                "opened_at": datetime.now(UTC).isoformat(),
+            }
+        )
         write_versioned_json(akp, {"kitchens": entries}, schema_version=_SCHEMA_VERSION)
     finally:
         fh.close()
@@ -242,10 +254,16 @@ def any_kitchen_open() -> bool:
             if not isinstance(pid, int):
                 continue
             create_time = entry.get("create_time")
-            stored: float | None = float(create_time) if isinstance(create_time, (int, float)) else None
+            stored: float | None = (
+                float(create_time) if isinstance(create_time, (int, float)) else None
+            )
             if _pid_alive(pid, stored_create_time=stored):
                 survivors.append(entry)
-        write_versioned_json(akp, {"kitchens": survivors}, schema_version=_SCHEMA_VERSION)
+        if len(survivors) < len(entries):
+            try:
+                write_versioned_json(akp, {"kitchens": survivors}, schema_version=_SCHEMA_VERSION)
+            except OSError as exc:
+                logger.warning("any_kitchen_open: failed to persist pruned kitchens: %s", exc)
         return len(survivors) > 0
     finally:
         fh.close()

@@ -4,6 +4,7 @@ budget guidance, quota awareness, sentinel format."""
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -54,6 +55,7 @@ class TestL2SousChefBlock:
             "QUOTA WAIT PROTOCOL",
         ):
             assert title in block, f"Missing retained section: {title}"
+        assert len(re.findall(r"^## ", block, re.MULTILINE)) == 4
 
     def test_excludes_five_sections(self) -> None:
         block = _get_sous_chef_block()
@@ -108,7 +110,7 @@ class TestFoodTruckPromptPlaceholders:
         assert _CAMPAIGN_ID in prompt
         assert str(_L2_TIMEOUT) in prompt
         assert _MCP_PREFIX in prompt
-        assert json.dumps(_INGREDIENTS) in prompt or '"branch"' in prompt
+        assert json.dumps(_INGREDIENTS) in prompt
         assert '"branch": "main"' in prompt
 
 
@@ -129,7 +131,7 @@ class TestHeadlessModeDirectives:
 
     def test_h3_auto_accept_confirm(self) -> None:
         prompt = _get_prompt()
-        assert "auto" in prompt.lower() and "confirm" in prompt.lower()
+        assert "AUTO-ACCEPT CONFIRM STEPS" in prompt
         assert "AskUserQuestion with the step's message" not in prompt
 
     def test_h4_ask_user_question_auto_accepts(self) -> None:

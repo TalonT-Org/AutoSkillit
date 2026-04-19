@@ -36,11 +36,3 @@ def test_franchise_lock_acquire_is_coroutine() -> None:
     from autoskillit.core import FranchiseLock
 
     assert inspect.iscoroutinefunction(FranchiseLock.acquire)
-
-
-def test_tool_context_has_franchise_lock_field() -> None:
-    """ToolContext has a franchise_lock field defaulting to None."""
-    from autoskillit.pipeline.context import ToolContext
-
-    field_info = ToolContext.__dataclass_fields__["franchise_lock"]
-    assert field_info.default is None

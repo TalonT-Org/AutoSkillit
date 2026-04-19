@@ -4,6 +4,7 @@ budget guidance, quota awareness, sentinel format."""
 from __future__ import annotations
 
 import json
+import pathlib
 import re
 
 import pytest
@@ -80,7 +81,9 @@ class TestL2SousChefBlock:
         ):
             assert phrase not in block, f"Dangling crossref: {phrase}"
 
-    def test_graceful_degradation(self, monkeypatch: pytest.MonkeyPatch, tmp_path: object) -> None:
+    def test_graceful_degradation(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+    ) -> None:
         from autoskillit.cli import _prompts
 
         monkeypatch.setattr(_prompts, "pkg_root", lambda: tmp_path)
@@ -145,7 +148,7 @@ class TestHeadlessModeDirectives:
 
     def test_h6_sentinel_only_output(self) -> None:
         prompt = _get_prompt()
-        assert "sentinel" in prompt.lower()
+        assert "SENTINEL-ONLY OUTPUT" in prompt
         assert "Display it verbatim" not in prompt
 
 
@@ -167,9 +170,9 @@ class TestFoodTruckPromptSections:
     def test_contains_budget_guidance(self) -> None:
         prompt = _get_prompt()
         assert "BUDGET" in prompt
-        assert "120" in prompt
-        assert "900" in prompt
-        assert "1800" in prompt
+        assert "120 seconds" in prompt
+        assert "900 seconds" in prompt
+        assert "1800 seconds" in prompt
 
     def test_contains_quota_awareness(self) -> None:
         prompt = _get_prompt()
@@ -178,7 +181,7 @@ class TestFoodTruckPromptSections:
 
     def test_contains_campaign_task_block(self) -> None:
         prompt = _get_prompt()
-        assert "CAMPAIGN TASK" in prompt or "Campaign ID" in prompt
+        assert "CAMPAIGN TASK" in prompt
         assert _RECIPE in prompt
         assert _TASK in prompt
 

@@ -771,9 +771,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
     ),
     "_doctor.py": (
         1200,
-        "REQ-CNST-010-E4: doctor check registry — 26 checks (9 new franchise checks added "
-        "in one commit) require inline logic; splitting into sub-modules would obscure "
-        "the check sequence and break the test filter cascade",
+        "REQ-CNST-010-E4: doctor check registry — 26 sequential checks require inline logic; "
+        "splitting into sub-modules would obscure the check sequence and break the test "
+        "filter cascade",
     ),
 }
 

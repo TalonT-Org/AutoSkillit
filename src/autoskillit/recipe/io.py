@@ -80,7 +80,7 @@ def list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
     _collect_recipes(RecipeSource.BUILTIN, builtin_dir, seen, items, errors)
 
     return LoadResult(
-        items=sorted(items, key=lambda r: (r.source == RecipeSource.BUILTIN, r.name)),
+        items=sorted(items, key=lambda r: (r.source != RecipeSource.BUILTIN, r.name)),
         errors=errors,
     )
 
@@ -147,7 +147,7 @@ def list_campaign_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
     _collect_recipes(RecipeSource.BUILTIN, builtin_campaigns_dir, seen, items, errors)
 
     return LoadResult(
-        items=sorted(items, key=lambda r: (r.source == RecipeSource.BUILTIN, r.name)),
+        items=sorted(items, key=lambda r: (r.source != RecipeSource.BUILTIN, r.name)),
         errors=errors,
     )
 

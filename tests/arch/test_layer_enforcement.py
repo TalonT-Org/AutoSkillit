@@ -38,6 +38,7 @@ SUBPACKAGE_LAYERS: dict[str, int] = {
     # Layer 2: domain services — may import from L0 and L1
     "recipe": 2,
     "migration": 2,
+    "franchise": 2,
     # Layer 3: application layer — may import from L0–L2
     "server": 3,
     "cli": 3,
@@ -1071,6 +1072,7 @@ _TEST_LAYER_ALLOWED: dict[str, frozenset[str]] = {
     "tests/workspace": frozenset({"autoskillit.core", "autoskillit.workspace"}),
     "tests/recipe": frozenset({"autoskillit.core", "autoskillit.recipe"}),
     "tests/migration": frozenset({"autoskillit.core", "autoskillit.migration"}),
+    "tests/franchise": frozenset({"autoskillit.core", "autoskillit.franchise"}),
     "tests/server": frozenset({"autoskillit"}),  # wildcard: any autoskillit.* import allowed
     "tests/cli": frozenset({"autoskillit"}),  # wildcard: any autoskillit.* import allowed
 }

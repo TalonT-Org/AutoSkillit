@@ -216,6 +216,9 @@ generic_automation_mcp/
 │   ├── loader.py            #   Migration note discovery + version chaining
 │   └── store.py             #   FailureStore (JSON, atomic writes)
 │
+├── franchise/               # L2
+│   └── __init__.py          #   Package skeleton — business logic in downstream tickets
+│
 ├── server/                  # L3 FastMCP server
 │   ├── __init__.py          #   FastMCP app, kitchen gating, headless tool reveal
 │   ├── git.py               #   Merge workflow for merge_worktree

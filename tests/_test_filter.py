@@ -81,6 +81,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "workspace",
             "recipe",
             "migration",
+            "franchise",
             "server",
             "cli",
             "hooks",
@@ -121,6 +122,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "workspace",
             "recipe",
+            "franchise",
             "server",
             "cli",
             "skills",
@@ -141,6 +143,13 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "migration",
             "server",
+        }
+    ),
+    "franchise": frozenset(
+        {
+            "franchise",
+            "server",
+            "cli",
         }
     ),
     # L3
@@ -183,6 +192,7 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "workspace": frozenset({"workspace"}),
     "recipe": frozenset({"recipe"}),
     "migration": frozenset({"migration"}),
+    "franchise": frozenset({"franchise"}),
     "server": frozenset({"server"}),
     "cli": frozenset({"cli"}),
     "hooks": frozenset({"hooks"}),

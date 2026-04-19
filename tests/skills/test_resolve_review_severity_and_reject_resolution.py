@@ -64,9 +64,9 @@ def test_reject_threads_added_to_addressed_thread_ids() -> None:
         "The REJECT path in the classification gate must append to addressed_thread_ids"
     )
     # The old blanket "Do NOT add these findings'" must not appear (it covered both REJECT+DISCUSS)
-    assert "Do NOT add these findings' `thread_node_id` to `addressed_thread_ids`" not in SKILL_TEXT, (
-        "The blanket 'Do NOT add' instruction covering both REJECT and DISCUSS must be removed"
-    )
+    assert (
+        "Do NOT add these findings' `thread_node_id` to `addressed_thread_ids`" not in SKILL_TEXT
+    ), "The blanket 'Do NOT add' instruction covering both REJECT and DISCUSS must be removed"
 
 
 def test_discuss_threads_still_excluded_from_addressed_thread_ids() -> None:
@@ -78,11 +78,8 @@ def test_discuss_threads_still_excluded_from_addressed_thread_ids() -> None:
     gate_section = SKILL_TEXT[gate_idx:skip_idx]
     # DISCUSS must still be excluded
     assert "Do NOT add DISCUSS findings" in gate_section or (
-        "discuss" in gate_section.lower()
-        and "do not add" in gate_section.lower()
-    ), (
-        "DISCUSS findings must still be excluded from addressed_thread_ids"
-    )
+        "discuss" in gate_section.lower() and "do not add" in gate_section.lower()
+    ), "DISCUSS findings must still be excluded from addressed_thread_ids"
 
 
 def test_step6_5_scope_includes_all_analyzed_comments() -> None:
@@ -94,9 +91,13 @@ def test_step6_5_scope_includes_all_analyzed_comments() -> None:
     step65_idx = SKILL_TEXT.find("### Step 6.5")
     assert step65_idx != -1, "SKILL.md must have a Step 6.5 section"
     step66_idx = SKILL_TEXT.find("### Step 6.6", step65_idx)
-    step65_section = SKILL_TEXT[step65_idx:step66_idx] if step66_idx != -1 else SKILL_TEXT[step65_idx:step65_idx + 800]
+    step65_section = (
+        SKILL_TEXT[step65_idx:step66_idx]
+        if step66_idx != -1
+        else SKILL_TEXT[step65_idx : step65_idx + 800]
+    )
     assert "intent validation" in step65_section.lower() or "step 3.5" in step65_section, (
-        "Step 6.5 scope should reference intent validation / Step 3.5 instead of the old severity filter"
+        "Step 6.5 scope should reference intent validation / Step 3.5 instead of the old severity filter"  # noqa: E501
     )
 
 
@@ -109,9 +110,7 @@ def test_report_does_not_mark_info_as_skipped() -> None:
     step7_idx = SKILL_TEXT.find("### Step 7")
     assert step7_idx != -1, "SKILL.md must have a Step 7 (Report)"
     report_section = SKILL_TEXT[step7_idx:]
-    assert "info: {n}" in report_section, (
-        "Step 7 report must still include the info count line"
-    )
+    assert "info: {n}" in report_section, "Step 7 report must still include the info count line"
 
 
 def test_reject_no_code_changes_still_enforced() -> None:

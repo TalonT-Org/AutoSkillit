@@ -16,7 +16,7 @@ from autoskillit.recipe.io import (
     load_recipe,
     load_recipes_in_packs,
 )
-from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind, RecipeStep
+from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 from autoskillit.recipe.validator import validate_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -209,9 +209,7 @@ def test_validate_recipe_skips_step_check_for_campaign():
         name="my-campaign",
         description="test",
         kind=RecipeKind.CAMPAIGN,
-        dispatches=[
-            CampaignDispatch(name="phase-one", recipe="impl", task="Do it")
-        ],
+        dispatches=[CampaignDispatch(name="phase-one", recipe="impl", task="Do it")],
         steps={},
     )
     errors = validate_recipe(recipe)

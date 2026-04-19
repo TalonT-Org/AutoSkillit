@@ -185,6 +185,7 @@ generic_automation_mcp/
 │   ├── _analysis.py         #   Step graph building + dataflow analysis
 │   ├── rules_blocks.py      #   Block-level budget rules (block-run-cmd-budget, etc.)
 │   ├── rules_bypass.py
+│   ├── rules_campaign.py
 │   ├── rules_ci.py
 │   ├── rules_clone.py
 │   ├── rules_cmd.py

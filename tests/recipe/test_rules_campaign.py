@@ -7,12 +7,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind, RecipeStep
-
-import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -365,9 +364,13 @@ def test_campaign_rules_skip_for_standard_recipe():
     campaign_findings = [
         f
         for f in all_findings
-        if f.rule.startswith("campaign-") or f.rule.startswith("dispatch-") or f.rule.startswith("depends-on-")
+        if f.rule.startswith("campaign-")
+        or f.rule.startswith("dispatch-")
+        or f.rule.startswith("depends-on-")
     ]
-    assert not campaign_findings, f"Campaign rules must not fire on standard recipe: {campaign_findings}"
+    assert not campaign_findings, (
+        f"Campaign rules must not fire on standard recipe: {campaign_findings}"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -358,8 +358,7 @@ def _check_depends_on_acyclic(ctx: ValidationContext) -> list[RuleFinding]:
                         severity=Severity.ERROR,
                         step_name="(top-level)",
                         message=(
-                            f"Circular dependency detected in dispatches: "
-                            f"{' → '.join(cycle)}"
+                            f"Circular dependency detected in dispatches: {' → '.join(cycle)}"
                         ),
                     )
                 )
@@ -406,6 +405,7 @@ def _check_autoskillit_version_compatible(ctx: ValidationContext) -> list[RuleFi
         return []
     try:
         from importlib.metadata import version  # noqa: PLC0415
+
         from packaging.version import Version  # noqa: PLC0415
 
         installed = Version(version("autoskillit"))

@@ -9,6 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from autoskillit.core import (
+    SESSION_TYPE_LEAF,
     ClaudeFlags,
     ValidatedAddDir,
     build_claude_env,
@@ -121,15 +122,19 @@ _SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
 
 # Variables that build_leaf_headless_cmd controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
-# parameters (exit_after_stop_delay_ms, scenario_step_name).
-# Note: these overlap with IDE_ENV_DENYLIST in core/_claude_env.py, which
-# strips the same keys as part of the broader IDE env scrubbing layer.
-# Both lists must be kept in sync when adding new exclusive variables.
+# parameters (exit_after_stop_delay_ms, scenario_step_name, etc.).
+# Note: CLAUDE_CODE_EXIT_AFTER_STOP_DELAY, SCENARIO_STEP_NAME, and
+# MAX_MCP_OUTPUT_TOKENS also overlap with IDE_ENV_DENYLIST in
+# core/_claude_env.py. AUTOSKILLIT_SESSION_TYPE and AUTOSKILLIT_CAMPAIGN_ID
+# overlap with AUTOSKILLIT_PRIVATE_ENV_VARS (scrubbed by build_claude_env).
+# All lists must be kept in sync when adding new exclusive variables.
 _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
     {
+        "AUTOSKILLIT_CAMPAIGN_ID",
+        "AUTOSKILLIT_SESSION_TYPE",
         "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
-        "SCENARIO_STEP_NAME",
         "MAX_MCP_OUTPUT_TOKENS",
+        "SCENARIO_STEP_NAME",
     }
 )
 
@@ -281,7 +286,7 @@ def build_leaf_headless_cmd(
     )
     extras: dict[str, str] = {
         "AUTOSKILLIT_HEADLESS": "1",
-        "AUTOSKILLIT_SESSION_TYPE": "leaf",
+        "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_LEAF,
         "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
         "MCP_CONNECTION_NONBLOCKING": "0",
     }

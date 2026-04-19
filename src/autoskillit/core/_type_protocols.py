@@ -6,7 +6,7 @@ for dependency injection and structural typing.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -194,6 +194,23 @@ class HeadlessExecutor(Protocol):
         recipe_content_hash: str = "",
         recipe_composite_hash: str = "",
         recipe_version: str = "",
+    ) -> SkillResult: ...
+
+    async def dispatch_food_truck(
+        self,
+        orchestrator_prompt: str,
+        cwd: str,
+        *,
+        completion_marker: str,
+        model: str = "",
+        step_name: str = "",
+        kitchen_id: str = "",
+        order_id: str = "",
+        timeout: float | None = None,
+        stale_threshold: float | None = None,
+        idle_output_timeout: float | None = None,
+        env_extras: Mapping[str, str] | None = None,
+        on_spawn: Callable[[int], None] | None = None,
     ) -> SkillResult: ...
 
 

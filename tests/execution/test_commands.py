@@ -11,6 +11,7 @@ from autoskillit.execution.commands import (
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
     ClaudeHeadlessCmd,
     ClaudeInteractiveCmd,
+    build_food_truck_cmd,
     build_headless_cmd,
     build_headless_resume_cmd,
     build_interactive_cmd,
@@ -407,6 +408,123 @@ class TestBuildLeafHeadlessCmd:
         assert "AUTOSKILLIT_L2_TOOL_TAGS" not in spec.env
 
 
+class TestBuildFoodTruckCmd:
+    BASE = dict(
+        orchestrator_prompt="You are an L2 food truck orchestrator...",
+        plugin_dir="/plugins",
+        cwd="/repo",
+        completion_marker="%%L2_DONE::abc12345%%",
+        model=None,
+        env_extras=None,
+        output_format_value="stream-json",
+    )
+
+    def test_returns_claude_headless_cmd(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert isinstance(spec, ClaudeHeadlessCmd)
+
+    def test_cmd_starts_with_claude(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert spec.cmd[0] == "claude"
+
+    def test_env_has_session_type_orchestrator(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "orchestrator"
+
+    def test_env_has_autoskillit_headless(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_HEADLESS"] == "1"
+
+    def test_env_has_max_mcp_output_tokens(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
+
+    def test_env_has_mcp_connection_nonblocking(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert spec.env["MCP_CONNECTION_NONBLOCKING"] == "0"
+
+    def test_does_not_call_ensure_skill_prefix(self):
+        """Prompt passed through verbatim — no 'Use ' prefix injected."""
+        spec = build_food_truck_cmd(**self.BASE)
+        prompt_idx = spec.cmd.index(ClaudeFlags.PRINT) + 1
+        prompt = spec.cmd[prompt_idx]
+        assert not prompt.startswith("Use ")
+        assert "You are an L2 food truck orchestrator" in prompt
+
+    def test_tools_flag_restricts_to_ask_user_question(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert ClaudeFlags.TOOLS in spec.cmd
+        idx = spec.cmd.index(ClaudeFlags.TOOLS)
+        assert spec.cmd[idx + 1] == "AskUserQuestion"
+
+    def test_plugin_dir_present(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert ClaudeFlags.PLUGIN_DIR in spec.cmd
+        idx = spec.cmd.index(ClaudeFlags.PLUGIN_DIR)
+        assert spec.cmd[idx + 1] == "/plugins"
+
+    def test_output_format_present(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert ClaudeFlags.OUTPUT_FORMAT in spec.cmd
+        idx = spec.cmd.index(ClaudeFlags.OUTPUT_FORMAT)
+        assert spec.cmd[idx + 1] == "stream-json"
+
+    def test_completion_marker_in_prompt(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        prompt_idx = spec.cmd.index(ClaudeFlags.PRINT) + 1
+        assert "%%L2_DONE::abc12345%%" in spec.cmd[prompt_idx]
+
+    def test_cwd_anchor_in_prompt(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        prompt_idx = spec.cmd.index(ClaudeFlags.PRINT) + 1
+        assert "/repo" in spec.cmd[prompt_idx]
+
+    def test_narration_suppression_in_prompt(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        prompt_idx = spec.cmd.index(ClaudeFlags.PRINT) + 1
+        assert "EFFICIENCY DIRECTIVE" in spec.cmd[prompt_idx]
+
+    def test_env_extras_layered(self):
+        params = {**self.BASE, "env_extras": {"AUTOSKILLIT_CAMPAIGN_ID": "camp-1"}}
+        spec = build_food_truck_cmd(**params)
+        assert spec.env["AUTOSKILLIT_CAMPAIGN_ID"] == "camp-1"
+
+    def test_env_extras_do_not_override_session_type(self):
+        params = {**self.BASE, "env_extras": {"AUTOSKILLIT_SESSION_TYPE": "leaf"}}
+        spec = build_food_truck_cmd(**params)
+        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "orchestrator"
+
+    def test_env_overrides_ambient_session_type(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        spec = build_food_truck_cmd(**self.BASE)
+        assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "orchestrator"
+
+    def test_private_vars_scrubbed_from_host_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", "/tmp/state")
+        monkeypatch.setenv("AUTOSKILLIT_L2_TOOL_TAGS", "kitchen")
+        monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", "/tmp/proj")
+        spec = build_food_truck_cmd(**self.BASE)
+        assert "AUTOSKILLIT_CAMPAIGN_STATE_PATH" not in spec.env
+        assert "AUTOSKILLIT_L2_TOOL_TAGS" not in spec.env
+        assert "AUTOSKILLIT_PROJECT_DIR" not in spec.env
+
+    def test_model_injected_when_provided(self):
+        params = {**self.BASE, "model": "claude-opus-4-6"}
+        spec = build_food_truck_cmd(**params)
+        assert ClaudeFlags.MODEL in spec.cmd
+        idx = spec.cmd.index(ClaudeFlags.MODEL)
+        assert spec.cmd[idx + 1] == "claude-opus-4-6"
+
+    def test_model_omitted_when_none(self):
+        spec = build_food_truck_cmd(**self.BASE)
+        assert ClaudeFlags.MODEL not in spec.cmd
+
+    def test_env_strips_sse_port(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
+        spec = build_food_truck_cmd(**self.BASE)
+        assert "CLAUDE_CODE_SSE_PORT" not in spec.env
+
+
 def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
     """MAX_MCP_OUTPUT_TOKENS must be in _HEADLESS_EXCLUSIVE_VARS."""
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
@@ -430,8 +548,14 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
             output_format_value="stream-json",
         ),
         lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
+        lambda: build_food_truck_cmd(
+            orchestrator_prompt="You are an L2 orchestrator",
+            plugin_dir="/plugins",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+        ),
     ],
-    ids=["interactive", "leaf_headless", "headless_resume"],
+    ids=["interactive", "leaf_headless", "headless_resume", "food_truck"],
 )
 def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None:
     """Every session command builder must produce env with MAX_MCP_OUTPUT_TOKENS."""
@@ -465,8 +589,14 @@ def test_interactive_cmd_env_has_mcp_connection_nonblocking() -> None:
             output_format_value="stream-json",
         ),
         lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
+        lambda: build_food_truck_cmd(
+            orchestrator_prompt="You are an L2 orchestrator",
+            plugin_dir="/plugins",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+        ),
     ],
-    ids=["interactive", "leaf_headless", "headless_resume"],
+    ids=["interactive", "leaf_headless", "headless_resume", "food_truck"],
 )
 def test_all_session_builders_inject_mcp_connection_nonblocking(builder_call) -> None:
     """Every session command builder must produce env with MCP_CONNECTION_NONBLOCKING=0."""

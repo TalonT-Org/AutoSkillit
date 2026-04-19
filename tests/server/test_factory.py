@@ -174,6 +174,30 @@ def test_make_context_protocol_substitution():
                 token_usage=None,
             )
 
+        async def dispatch_food_truck(
+            self,
+            orchestrator_prompt: str,
+            cwd: str,
+            *,
+            completion_marker: str = "",
+            model: str = "",
+            step_name: str = "",
+            on_spawn=None,
+            **kwargs,
+        ) -> SkillResult:
+            return SkillResult(
+                success=True,
+                result="",
+                session_id="",
+                subtype="",
+                is_error=False,
+                exit_code=0,
+                needs_retry=False,
+                retry_reason="none",
+                stderr="",
+                token_usage=None,
+            )
+
     ctx = make_context(AutomationConfig(), runner=_runner())
     ctx.executor = FakeExecutor()
     assert isinstance(ctx.executor, HeadlessExecutor)

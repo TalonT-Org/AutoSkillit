@@ -15,7 +15,7 @@ from autoskillit.cli._init_helpers import (
     _check_dual_mcp_files,
     _detect_secret_scanner,
 )
-from autoskillit.core import Severity, get_logger
+from autoskillit.core import SESSION_TYPE_ENV_VAR, Severity, get_logger, pkg_root
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 from autoskillit.hook_registry import (
     _count_hook_registry_drift,
@@ -642,6 +642,253 @@ def _check_installed_plugins_entry(
     )
 
 
+def _check_ambient_session_type_leaf() -> DoctorResult:
+    """Detect ambient SESSION_TYPE=leaf or unset — common env leakage."""
+    import os
+
+    raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
+    if not raw or raw.lower() == "leaf":
+        return DoctorResult(
+            Severity.WARNING,
+            "ambient_session_type_leaf",
+            "Ambient SESSION_TYPE=leaf detected. "
+            "Did you intend to set SESSION_TYPE=leaf? Franchise sessions should set "
+            "SESSION_TYPE=leaf only in launched subprocesses.",
+        )
+    return DoctorResult(
+        Severity.OK,
+        "ambient_session_type_leaf",
+        f"SESSION_TYPE={raw} (not leaf)",
+    )
+
+
+def _check_ambient_session_type_orchestrator() -> DoctorResult:
+    """Detect ambient SESSION_TYPE=orchestrator outside a launched session."""
+    import os
+
+    raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
+    if raw.lower() == "orchestrator":
+        return DoctorResult(
+            Severity.WARNING,
+            "ambient_session_type_orchestrator",
+            "Ambient SESSION_TYPE=orchestrator outside of a launched session "
+            "— should only be set by autoskillit CLIs.",
+        )
+    return DoctorResult(
+        Severity.OK,
+        "ambient_session_type_orchestrator",
+        "No ambient orchestrator session type",
+    )
+
+
+def _check_ambient_session_type_franchise() -> DoctorResult:
+    """Detect ambient SESSION_TYPE=franchise outside a franchise CLI session."""
+    import os
+
+    raw = os.environ.get(SESSION_TYPE_ENV_VAR, "")
+    if raw.lower() == "franchise":
+        return DoctorResult(
+            Severity.WARNING,
+            "ambient_session_type_franchise",
+            "Ambient SESSION_TYPE=franchise outside of a franchise CLI session "
+            "— highest-privilege env, suspicious.",
+        )
+    return DoctorResult(
+        Severity.OK,
+        "ambient_session_type_franchise",
+        "No ambient franchise session type",
+    )
+
+
+def _check_ambient_campaign_id() -> DoctorResult:
+    """Detect ambient CAMPAIGN_ID — should only be set by dispatch_food_truck."""
+    import os
+
+    campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
+    if campaign_id:
+        return DoctorResult(
+            Severity.WARNING,
+            "ambient_campaign_id",
+            f"Ambient CAMPAIGN_ID={campaign_id} — should only be set by dispatch_food_truck.",
+        )
+    return DoctorResult(
+        Severity.OK,
+        "ambient_campaign_id",
+        "No ambient CAMPAIGN_ID",
+    )
+
+
+def _check_sous_chef_bundled() -> DoctorResult:
+    """Check that the sous-chef skill directory exists."""
+    sous_chef_dir = pkg_root() / "skills" / "sous-chef"
+    if sous_chef_dir.is_dir():
+        return DoctorResult(
+            Severity.OK,
+            "sous_chef_bundled",
+            "Sous-chef skill directory exists",
+        )
+    return DoctorResult(
+        Severity.ERROR,
+        "sous_chef_bundled",
+        f"Sous-chef skill not found at {sous_chef_dir}/. Fatal prerequisite.",
+    )
+
+
+def _get_franchise_guard_registry_entry() -> bool:
+    """Check if franchise_dispatch_guard.py is in HOOK_REGISTRY."""
+    return "franchise_dispatch_guard.py" in canonical_script_basenames()
+
+
+def _franchise_guard_script_exists() -> bool:
+    """Check if the franchise_dispatch_guard.py hook script exists on disk."""
+    from autoskillit.hook_registry import HOOKS_DIR
+
+    return (HOOKS_DIR / "franchise_dispatch_guard.py").is_file()
+
+
+def _check_franchise_dispatch_guard_registered() -> DoctorResult:
+    """Check that franchise dispatch guard is registered in HOOK_REGISTRY."""
+    check_name = "franchise_dispatch_guard_registered"
+    if not _get_franchise_guard_registry_entry():
+        return DoctorResult(
+            Severity.ERROR,
+            check_name,
+            "Franchise dispatch guard not registered in hooks.json. "
+            "Run: autoskillit config sync-hooks",
+        )
+    if not _franchise_guard_script_exists():
+        return DoctorResult(
+            Severity.ERROR,
+            check_name,
+            "Franchise dispatch guard registered but script file missing on disk. "
+            "Run: autoskillit install",
+        )
+    return DoctorResult(
+        Severity.OK,
+        check_name,
+        "Franchise dispatch guard registered and accessible",
+    )
+
+
+_STALE_THRESHOLD_DAYS = 7
+
+
+def _check_stale_franchise_state(project_dir: Path | None = None) -> DoctorResult:
+    """Check for stale campaign state files with running dispatches > 7 days old."""
+    import time
+
+    root = project_dir or Path.cwd()
+    franchise_dir = root / ".autoskillit" / "temp" / "franchise"
+    check_name = "stale_franchise_state"
+    if not franchise_dir.is_dir():
+        return DoctorResult(Severity.OK, check_name, "No franchise state directory")
+    threshold = time.time() - (_STALE_THRESHOLD_DAYS * 86400)
+    stale_paths: list[str] = []
+    for campaign_dir in franchise_dir.iterdir():
+        if not campaign_dir.is_dir():
+            continue
+        state_file = campaign_dir / "state.json"
+        if not state_file.is_file():
+            continue
+        if state_file.stat().st_mtime > threshold:
+            continue
+        try:
+            data = json.loads(state_file.read_text(encoding="utf-8"))
+            dispatches = data.get("dispatches", [])
+            has_running = any(d.get("status") == "running" for d in dispatches)
+            if has_running:
+                stale_paths.append(str(state_file))
+        except (json.JSONDecodeError, OSError, KeyError):
+            continue
+    if stale_paths:
+        paths_str = ", ".join(stale_paths)
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"Stale campaign state > {_STALE_THRESHOLD_DAYS} days: {paths_str}. "
+            f"Run: autoskillit franchise status <id> --reap",
+        )
+    return DoctorResult(Severity.OK, check_name, "No stale franchise state files")
+
+
+def _check_campaign_onboarding_hint(project_dir: Path | None = None) -> DoctorResult:
+    """Hint when no campaign recipes exist yet."""
+    root = project_dir or Path.cwd()
+    campaigns_dir = root / ".autoskillit" / "recipes" / "campaigns"
+    check_name = "campaign_onboarding_hint"
+    if not campaigns_dir.is_dir():
+        return DoctorResult(
+            Severity.INFO,
+            check_name,
+            "No campaign recipes found. Get started: /autoskillit:make-campaign <description>",
+        )
+    yaml_files = [
+        f for f in campaigns_dir.iterdir() if f.suffix in (".yaml", ".yml") and f.is_file()
+    ]
+    if not yaml_files:
+        return DoctorResult(
+            Severity.INFO,
+            check_name,
+            "No campaign recipes found. Get started: /autoskillit:make-campaign <description>",
+        )
+    return DoctorResult(
+        Severity.OK,
+        check_name,
+        f"{len(yaml_files)} campaign recipe(s) found",
+    )
+
+
+def _check_campaign_manifest_clone_dests(project_dir: Path | None = None) -> DoctorResult:
+    """Check that dispatches within campaign recipes use unique clone destinations."""
+    from autoskillit.core import YAMLError, load_yaml
+
+    root = project_dir or Path.cwd()
+    campaigns_dir = root / ".autoskillit" / "recipes" / "campaigns"
+    check_name = "campaign_manifest_clone_dests"
+    if not campaigns_dir.is_dir():
+        return DoctorResult(Severity.OK, check_name, "No campaigns directory")
+    yaml_files = [
+        f for f in campaigns_dir.iterdir() if f.suffix in (".yaml", ".yml") and f.is_file()
+    ]
+    if not yaml_files:
+        return DoctorResult(Severity.OK, check_name, "No campaign recipes to check")
+    seen_paths: dict[str, list[str]] = {}
+    for yaml_file in yaml_files:
+        try:
+            data = load_yaml(yaml_file)
+        except (YAMLError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        dispatches = data.get("dispatches", [])
+        if not isinstance(dispatches, list):
+            continue
+        recipe_name = data.get("name", yaml_file.stem)
+        for dispatch in dispatches:
+            if not isinstance(dispatch, dict):
+                continue
+            ingredients = dispatch.get("ingredients", {})
+            if not isinstance(ingredients, dict):
+                continue
+            clone_path = ingredients.get("clone_path", "")
+            if clone_path:
+                key = str(clone_path)
+                label = f"{recipe_name}:{dispatch.get('name', '?')}"
+                seen_paths.setdefault(key, []).append(label)
+    duplicates = {path: users for path, users in seen_paths.items() if len(users) > 1}
+    if duplicates:
+        dup_details = "; ".join(
+            f"{path} (used by {', '.join(users)})" for path, users in duplicates.items()
+        )
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"Dispatches share a literal clone destination: {dup_details}. "
+            f"Use unique clone paths per dispatch.",
+        )
+    return DoctorResult(Severity.OK, check_name, "All dispatch clone destinations unique")
+
+
 def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
     results: list[DoctorResult] = []
@@ -856,6 +1103,35 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 17: Update-prompt dismissal state
     results.append(_check_update_dismissal_state())
+
+    # -- Franchise doctor checks (ambient env + infrastructure health) --
+
+    # Check 18: Ambient SESSION_TYPE=leaf leak detection
+    results.append(_check_ambient_session_type_leaf())
+
+    # Check 19: Ambient SESSION_TYPE=orchestrator leak detection
+    results.append(_check_ambient_session_type_orchestrator())
+
+    # Check 20: Ambient SESSION_TYPE=franchise leak detection
+    results.append(_check_ambient_session_type_franchise())
+
+    # Check 21: Ambient CAMPAIGN_ID leak detection
+    results.append(_check_ambient_campaign_id())
+
+    # Check 22: Sous-chef skill directory exists
+    results.append(_check_sous_chef_bundled())
+
+    # Check 23: Franchise dispatch guard registered
+    results.append(_check_franchise_dispatch_guard_registered())
+
+    # Check 24: Stale franchise state (running > 7 days)
+    results.append(_check_stale_franchise_state())
+
+    # Check 25: Campaign onboarding hint
+    results.append(_check_campaign_onboarding_hint())
+
+    # Check 26: Campaign manifest clone destination collisions
+    results.append(_check_campaign_manifest_clone_dests())
 
     # Output
     if output_json:

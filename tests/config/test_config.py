@@ -1225,3 +1225,21 @@ class TestFranchiseConfig:
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)  # must not raise ConfigSchemaError
         assert cfg.franchise.l2_default_timeout_sec == 1800
+
+    def test_franchise_config_rejects_zero_timeout(self) -> None:
+        """FranchiseConfig raises ValueError when l2_default_timeout_sec is zero."""
+        import pytest
+
+        from autoskillit.config.settings import FranchiseConfig
+
+        with pytest.raises(ValueError, match="l2_default_timeout_sec must be positive"):
+            FranchiseConfig(l2_default_timeout_sec=0)
+
+    def test_franchise_config_rejects_negative_timeout(self) -> None:
+        """FranchiseConfig raises ValueError when l2_default_timeout_sec is negative."""
+        import pytest
+
+        from autoskillit.config.settings import FranchiseConfig
+
+        with pytest.raises(ValueError, match="l2_default_timeout_sec must be positive"):
+            FranchiseConfig(l2_default_timeout_sec=-1)

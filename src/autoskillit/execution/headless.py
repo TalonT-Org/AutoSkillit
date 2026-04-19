@@ -1007,7 +1007,8 @@ async def _execute_claude_headless(
     effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
 
     runner = ctx.runner
-    assert runner is not None, "No subprocess runner configured"
+    if runner is None:
+        raise RuntimeError("No subprocess runner configured")
 
     linux_tracing_cfg = ctx.config.linux_tracing
     _start_ts = datetime.now(UTC).isoformat()

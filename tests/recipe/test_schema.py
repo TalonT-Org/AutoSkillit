@@ -462,3 +462,5 @@ def test_campaign_recipe_construction() -> None:
     assert r.continue_on_failure is True
     assert r.steps == {}
     assert r.requires_packs == []
+    assert r.allowed_recipes == []
+    assert r.categories == []

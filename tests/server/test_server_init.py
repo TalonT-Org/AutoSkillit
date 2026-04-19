@@ -58,10 +58,7 @@ class TestKitchenVisibility:
         """When kitchen-core is in disabled subsets, those tools stay hidden after open_kitchen."""
         from unittest.mock import AsyncMock
 
-        from autoskillit.server import mcp
         from autoskillit.server.tools_kitchen import _redisable_subsets
-
-        await mcp.enable_components(tags={"kitchen"})
 
         mock_ctx = AsyncMock()
 

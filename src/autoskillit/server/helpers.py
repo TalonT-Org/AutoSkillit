@@ -12,9 +12,11 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     RESERVED_LOG_RECORD_KEYS,
+    SessionType,
     TerminationReason,
     extract_path_arg,
     get_logger,
+    session_type,
 )
 from autoskillit.execution import (
     SCENARIO_STEP_NAME_ENV,  # noqa: F401 — re-exported for tools_execution.py
@@ -24,7 +26,7 @@ from autoskillit.execution import (
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
 )
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
-from autoskillit.pipeline import gate_error_result
+from autoskillit.pipeline import gate_error_result, headless_error_result
 from autoskillit.workspace import clone_registry  # noqa: F401 — re-exported for tools_clone.py
 
 if TYPE_CHECKING:
@@ -185,13 +187,9 @@ def _require_orchestrator_or_higher(tool_name: str = "") -> str | None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         return None
 
-    from autoskillit.core import SessionType, session_type
-
     st = session_type()
     if st in (SessionType.ORCHESTRATOR, SessionType.FRANCHISE):
         return None
-
-    from autoskillit.pipeline import headless_error_result
 
     msg = (
         f"{tool_name} cannot be called from leaf sessions. "
@@ -212,13 +210,9 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         return None
 
-    from autoskillit.core import SessionType, session_type
-
     st = session_type()
     if st is SessionType.ORCHESTRATOR:
         return None
-
-    from autoskillit.pipeline import headless_error_result
 
     if st is SessionType.FRANCHISE:
         msg = (
@@ -242,13 +236,9 @@ def _require_franchise(tool_name: str = "") -> str | None:
 
     No interactive bypass — franchise is a specific tier, not a headless guard.
     """
-    from autoskillit.core import SessionType, session_type
-
     st = session_type()
     if st is SessionType.FRANCHISE:
         return None
-
-    from autoskillit.pipeline import headless_error_result
 
     msg = (
         f"{tool_name} requires a franchise session. Current session type is not franchise."

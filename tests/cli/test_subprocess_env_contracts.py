@@ -37,7 +37,7 @@ _CLAUDE_BUILDER_NAMES = frozenset(
     {
         "build_interactive_cmd",
         "build_headless_cmd",
-        "build_full_headless_cmd",
+        "build_leaf_headless_cmd",
     }
 )
 
@@ -345,7 +345,7 @@ class _ClaudeLaunchWalker:
     kwarg and verifies the ``env=`` kwarg shape is one of:
 
     - ``Attribute(value=Name, attr="env")`` where Name was assigned from a
-      ``build_interactive_cmd``/``build_headless_cmd``/``build_full_headless_cmd``
+      ``build_interactive_cmd``/``build_headless_cmd``/``build_leaf_headless_cmd``
       call earlier in the same function body (spec.env pattern).
     - ``Call(func=Name("build_claude_env") | Attribute(..., "build_claude_env"))``
       (direct builder escape hatch).

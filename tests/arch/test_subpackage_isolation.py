@@ -696,8 +696,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         (_fmt_primitives.py, _fmt_execution.py, _fmt_status.py, _fmt_recipe.py)
         that are imported helpers — not standalone hook scripts — split out to
         keep pretty_output_hook.py under its line budget. ask_user_question_guard.py
-        gates AskUserQuestion on kitchen-open state. Exempt at 20 files
-        (15 hook scripts + 4 private helpers + 1 __init__).
+        gates AskUserQuestion on kitchen-open state. Exempt at 21 files
+        (16 hook scripts + 4 private helpers + 1 __init__).
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 20,
@@ -705,7 +705,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 26,
         "core": 20,
         "cli": 20,
-        "hooks": 20,
+        "hooks": 21,
     }
     violations: list[str] = []
     for sub_dir in sorted(SRC_ROOT.iterdir()):

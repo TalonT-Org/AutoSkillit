@@ -17,6 +17,7 @@ __all__ = [
     "SKILL_TOOLS",
     "GATED_TOOLS",
     "HEADLESS_TOOLS",
+    "FRANCHISE_TOOLS",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
     "PackDef",
@@ -174,6 +175,16 @@ GATED_TOOLS: frozenset[str] = frozenset(
 
 HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check"})
 
+FRANCHISE_TOOLS: frozenset[str] = frozenset(
+    {
+        "batch_cleanup_clones",
+        "get_pipeline_report",
+        "get_token_summary",
+        "get_timing_summary",
+        "get_quota_events",
+    }
+)
+
 FREE_RANGE_TOOLS: frozenset[str] = frozenset(
     {"open_kitchen", "close_kitchen", "disable_quota_guard"}
 )
@@ -246,12 +257,12 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "clone_repo": frozenset({"clone"}),
     "remove_clone": frozenset({"clone"}),
     "register_clone_status": frozenset({"clone"}),
-    "batch_cleanup_clones": frozenset({"clone"}),
+    "batch_cleanup_clones": frozenset({"clone", "franchise"}),
     # kitchen-core — telemetry
-    "get_token_summary": frozenset({"kitchen-core", "telemetry"}),
-    "get_timing_summary": frozenset({"kitchen-core", "telemetry"}),
+    "get_token_summary": frozenset({"kitchen-core", "telemetry", "franchise"}),
+    "get_timing_summary": frozenset({"kitchen-core", "telemetry", "franchise"}),
     "write_telemetry_files": frozenset({"kitchen-core", "telemetry"}),
-    "get_quota_events": frozenset({"kitchen-core", "telemetry"}),
+    "get_quota_events": frozenset({"kitchen-core", "telemetry", "franchise"}),
     # kitchen-core — execution
     "run_cmd": frozenset({"kitchen-core"}),
     "run_python": frozenset({"kitchen-core"}),
@@ -269,7 +280,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     # kitchen-core — status
     "kitchen_status": frozenset({"kitchen-core"}),
     "read_db": frozenset({"kitchen-core"}),
-    "get_pipeline_report": frozenset({"kitchen-core"}),
+    "get_pipeline_report": frozenset({"kitchen-core", "franchise"}),
     # kitchen-core — git
     "merge_worktree": frozenset({"kitchen-core"}),
 }

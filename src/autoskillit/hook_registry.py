@@ -75,6 +75,10 @@ HOOK_REGISTRY: list[HookDef] = [
         session_scope="headless_only",
     ),
     HookDef(
+        matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
+        scripts=["franchise_dispatch_guard.py"],
+    ),
+    HookDef(
         event_type="PostToolUse",
         matcher="mcp__.*autoskillit.*",
         scripts=["pretty_output_hook.py"],

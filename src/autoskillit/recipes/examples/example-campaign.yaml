@@ -1,0 +1,46 @@
+name: example-campaign
+description: >-
+  Example campaign recipe demonstrating all campaign schema fields.
+  Use as a reference when authoring new campaigns.
+kind: campaign
+autoskillit_version: "0.9.0"
+recipe_version: "1.0.0"
+
+categories:
+  - implementation-family
+
+requires_recipe_packs:
+  - implementation-family
+
+allowed_recipes: []
+
+continue_on_failure: false
+
+ingredients:
+  source_dir:
+    description: Source repository path
+    required: false
+    default: ""
+
+dispatches:
+  - name: phase-1-implement
+    recipe: implementation
+    task: "Implement the core feature"
+    ingredients:
+      task: "Implement the core feature"
+      source_dir: "${{ inputs.source_dir }}"
+    depends_on: []
+
+  - name: phase-2-follow-up
+    recipe: implementation
+    task: "Add tests and documentation for the core feature"
+    ingredients:
+      task: "Add tests and documentation for the core feature"
+      source_dir: "${{ inputs.source_dir }}"
+    depends_on:
+      - phase-1-implement
+
+kitchen_rules:
+  - "NEVER modify files outside the project directory"
+
+steps: {}

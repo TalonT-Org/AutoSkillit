@@ -31,7 +31,6 @@ def _state_path(tmp_path: Path) -> Path:
     return tmp_path / "campaign" / "state.json"
 
 
-# --- T1 ---
 class TestInitialState:
     def test_initial_state_file_has_all_dispatches_pending(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
@@ -49,7 +48,6 @@ class TestInitialState:
             assert d.status == DispatchStatus.PENDING
 
 
-# --- T2 ---
 class TestAppendDispatchRecord:
     def test_append_dispatch_record_updates_status(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
@@ -65,7 +63,6 @@ class TestAppendDispatchRecord:
         assert state.dispatches[0].status == DispatchStatus.SUCCESS
 
 
-# --- T3 ---
 class TestAtomicWriteSurvivesPartialTmp:
     def test_atomic_write_survives_partial_tmp_file(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
@@ -96,7 +93,6 @@ class TestAtomicWriteSurvivesPartialTmp:
         assert state.dispatches[0].status == DispatchStatus.RUNNING
 
 
-# --- T4 ---
 class TestResumeSkipsSuccessful:
     def test_resume_skips_successful_dispatches(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
@@ -109,7 +105,6 @@ class TestResumeSkipsSuccessful:
         assert "A" in decision.completed_dispatches_block
 
 
-# --- T5 ---
 class TestResumeMarksRunningInterrupted:
     def test_resume_marks_running_as_interrupted(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
@@ -130,7 +125,6 @@ class TestResumeMarksRunningInterrupted:
         assert decision.next_dispatch_name == "B"
 
 
-# --- T6 ---
 class TestResumeRejectsHaltedOnFailure:
     def test_resume_rejects_if_halted_on_failure_with_no_continue_on_failure(
         self, tmp_path: Path
@@ -146,7 +140,6 @@ class TestResumeRejectsHaltedOnFailure:
         assert "franchise_halted_on_failure" in decision.completed_dispatches_block
 
 
-# --- T7 ---
 class TestAtomicUnderConcurrentRead:
     def test_state_json_atomic_under_concurrent_read(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
@@ -177,7 +170,6 @@ class TestAtomicUnderConcurrentRead:
         assert not errors, f"Concurrent read errors: {errors}"
 
 
-# --- T8 ---
 class TestWriteDiskFull:
     def test_state_write_disk_full(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
@@ -195,7 +187,6 @@ class TestWriteDiskFull:
         assert sp.read_text(encoding="utf-8") == original
 
 
-# --- T9 ---
 class TestReadStateRejectsCorrupted:
     def test_read_state_rejects_corrupted_json(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)

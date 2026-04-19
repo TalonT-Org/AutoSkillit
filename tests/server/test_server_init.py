@@ -600,10 +600,13 @@ class TestSessionTypeVisibility:
             assert name not in tool_names, f"{name} should be hidden for franchise session"
 
     @pytest.mark.anyio
-    async def test_franchise_tools_retain_kitchen_tag(self):
+    async def test_franchise_tools_retain_kitchen_tag(self, monkeypatch):
         """Franchise-tagged tools must still carry the kitchen tag."""
         from autoskillit.core import FRANCHISE_TOOLS
-        from autoskillit.server import mcp
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        _apply_session_type_visibility()
 
         all_tools = {t.name: t for t in await mcp.list_tools()}
         for name in FRANCHISE_TOOLS:
@@ -614,10 +617,13 @@ class TestSessionTypeVisibility:
             assert "autoskillit" in tool.tags, f"{name} must retain autoskillit tag"
 
     @pytest.mark.anyio
-    async def test_franchise_tools_constant_matches_tagged_tools(self):
+    async def test_franchise_tools_constant_matches_tagged_tools(self, monkeypatch):
         """FRANCHISE_TOOLS constant matches exactly the tools with franchise tag."""
         from autoskillit.core import FRANCHISE_TOOLS
-        from autoskillit.server import mcp
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "franchise")
+        _apply_session_type_visibility()
 
         all_tools = {t.name: t for t in await mcp.list_tools()}
         tagged = {name for name, t in all_tools.items() if "franchise" in t.tags}

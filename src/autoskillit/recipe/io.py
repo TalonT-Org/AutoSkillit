@@ -270,20 +270,25 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         )
 
     kind_raw = data.get("kind", "standard")
-    kind = (
-        RecipeKind(kind_raw)
-        if kind_raw in RecipeKind.__members__.values()
-        else RecipeKind.STANDARD
-    )
+    try:
+        kind = RecipeKind(kind_raw)
+    except ValueError:
+        kind = RecipeKind.STANDARD
 
     dispatches_raw = data.get("dispatches") or []
     dispatches = []
     for d in dispatches_raw:
         if isinstance(d, dict):
+            d_name = d.get("name", "")
+            d_recipe = d.get("recipe", "")
+            if not d_name or not d_recipe:
+                raise ValueError(
+                    f"Campaign dispatch is missing required 'name' or 'recipe' field: {d!r}"
+                )
             dispatches.append(
                 CampaignDispatch(
-                    name=d.get("name", ""),
-                    recipe=d.get("recipe", ""),
+                    name=d_name,
+                    recipe=d_recipe,
                     task=d.get("task", ""),
                     ingredients=d.get("ingredients") or {},
                     depends_on=d.get("depends_on") or [],

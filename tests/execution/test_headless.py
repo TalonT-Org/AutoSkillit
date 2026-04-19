@@ -4222,6 +4222,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
+        minimal_ctx.plugin_dir = str(tmp_path)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
@@ -4256,6 +4257,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
+        minimal_ctx.plugin_dir = str(tmp_path)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         result = await executor.dispatch_food_truck(
@@ -4284,6 +4286,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
+        minimal_ctx.plugin_dir = str(tmp_path)
 
         spawned_pids: list[int] = []
 
@@ -4314,6 +4317,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
+        minimal_ctx.plugin_dir = str(tmp_path)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         result = await executor.dispatch_food_truck(
@@ -4324,3 +4328,13 @@ class TestDispatchFoodTruck:
         )
 
         assert result is not None
+
+
+def test_default_executor_satisfies_protocol_with_dispatch(minimal_ctx) -> None:
+    """DefaultHeadlessExecutor satisfies HeadlessExecutor protocol with dispatch_food_truck."""
+    from autoskillit.core import HeadlessExecutor
+    from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+    executor = DefaultHeadlessExecutor(minimal_ctx)
+    assert isinstance(executor, HeadlessExecutor)
+    assert hasattr(executor, "dispatch_food_truck")

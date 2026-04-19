@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import subprocess
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -79,9 +80,9 @@ def test_retire_old_versions_deletes_same_version(
 
     assert not same_dir.exists(), "Same-version dir must be deleted immediately"
     retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    if retiring_json.exists():
-        data = json.loads(retiring_json.read_text())
-        assert data.get("retiring", []) == []
+    assert not retiring_json.exists(), (
+        "No retiring entries should be created for a same-version reinstall"
+    )
 
 
 def test_retire_old_versions_noop_empty_cache_dir(
@@ -96,9 +97,9 @@ def test_retire_old_versions_noop_empty_cache_dir(
     _retire_old_versions(cache_dir, "0.9.0")  # must not raise
 
     retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    if retiring_json.exists():
-        data = json.loads(retiring_json.read_text())
-        assert data.get("retiring", []) == []
+    assert not retiring_json.exists(), (
+        "No retiring entries should be created for an empty cache dir"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +298,10 @@ def test_sweep_handles_missing_retired_at(tmp_path: Path, monkeypatch: pytest.Mo
     sweep_retiring_cache()  # must not raise
 
     data = json.loads(retiring_json.read_text())
-    assert data["retiring"] == []
+    assert len(data["retiring"]) == 1, (
+        "Entry with missing retired_at must be preserved in survivors"
+    )
+    assert data["retiring"][0]["version"] == "0.8.0"
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +340,7 @@ def test_install_lock_blocks_concurrent_access(
 
     t = threading.Thread(target=hold_lock, daemon=True)
     t.start()
-    acquired.wait(timeout=2)
+    assert acquired.wait(timeout=2), "background lock thread did not acquire within 2s"
 
     # Try non-blocking acquire — must fail while first holder has it
     with open(lock_file_path, "w") as fh2:
@@ -349,6 +353,7 @@ def test_install_lock_blocks_concurrent_access(
 
     release.set()
     t.join(timeout=2)
+    assert not t.is_alive(), "lock-holding thread did not exit within 2s after release"
 
     assert blocked, "Second acquire must be blocked while first holder has the lock"
 
@@ -431,7 +436,9 @@ def test_any_kitchen_open_false_when_pid_dead(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
 
-    dead_pid = 99999999
+    proc = subprocess.Popen(["true"])
+    proc.wait()
+    dead_pid = proc.pid
     register_active_kitchen("test-kitchen-003", dead_pid, str(tmp_path))
 
     result = any_kitchen_open()
@@ -442,7 +449,9 @@ def test_any_kitchen_open_sweeps_stale(tmp_path: Path, monkeypatch: pytest.Monke
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
 
-    dead_pid = 99999999
+    proc = subprocess.Popen(["true"])
+    proc.wait()
+    dead_pid = proc.pid
     register_active_kitchen("test-kitchen-004", dead_pid, str(tmp_path))
 
     any_kitchen_open()

@@ -10,9 +10,11 @@ from autoskillit.core import LoadReport, LoadResult, RecipeSource, get_logger, l
 from autoskillit.recipe.schema import (
     AUTOSKILLIT_VERSION_KEY,
     RECIPE_VERSION_KEY,
+    CampaignDispatch,
     Recipe,
     RecipeInfo,
     RecipeIngredient,
+    RecipeKind,
     RecipeStep,
     StepResultCondition,
     StepResultRoute,
@@ -132,6 +134,57 @@ def find_recipe_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
     return next((r for r in result.items if r.name == name), None)
 
 
+def list_campaign_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
+    """Find available campaign recipes from project and built-in sources."""
+    seen: set[str] = set()
+    items: list[RecipeInfo] = []
+    errors: list[LoadReport] = []
+
+    project_campaigns_dir = project_dir / ".autoskillit" / "recipes" / "campaigns"
+    _collect_recipes(RecipeSource.PROJECT, project_campaigns_dir, seen, items, errors)
+
+    builtin_campaigns_dir = pkg_root() / "recipes" / "campaigns"
+    _collect_recipes(RecipeSource.BUILTIN, builtin_campaigns_dir, seen, items, errors)
+
+    return LoadResult(
+        items=sorted(items, key=lambda r: (r.source != RecipeSource.BUILTIN, r.name)),
+        errors=errors,
+    )
+
+
+def find_campaign_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
+    """Find a campaign recipe by name.
+
+    Returns the first match (project takes precedence), or None if not found.
+    """
+    result = list_campaign_recipes(project_dir)
+    return next((r for r in result.items if r.name == name), None)
+
+
+def load_campaign_recipes_in_packs(
+    packs: frozenset[str],
+    project_dir: Path,
+    allowed_recipe_names: frozenset[str] = frozenset(),
+) -> list[Recipe]:
+    """Return all campaign recipes whose categories overlap with the requested packs.
+
+    Recipes explicitly named in ``allowed_recipe_names`` are also included regardless
+    of category membership, allowing callers to honour the requesting campaign's
+    ``allowed_recipes`` list.
+    """
+    result = list_campaign_recipes(project_dir)
+    matching: list[Recipe] = []
+    for info in result.items:
+        try:
+            recipe = load_recipe(info.path)
+        except Exception:
+            logger.warning("Failed to load campaign recipe", path=str(info.path))
+            continue
+        if (set(recipe.categories) & packs) or (info.name in allowed_recipe_names):
+            matching.append(recipe)
+    return matching
+
+
 # --- internal helpers ---
 
 # Fields explicitly handled by _parse_step. Must match RecipeStep.__dataclass_fields__
@@ -216,6 +269,37 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
             f"Use recipe_version: '{_rv}' (with quotes) in your recipe file."
         )
 
+    kind_raw = data.get("kind", "standard")
+    try:
+        kind = RecipeKind(kind_raw)
+    except ValueError:
+        kind = RecipeKind.STANDARD
+
+    dispatches_raw = data.get("dispatches") or []
+    dispatches = []
+    for d in dispatches_raw:
+        if isinstance(d, dict):
+            d_name = d.get("name", "")
+            d_recipe = d.get("recipe", "")
+            if not d_name or not d_recipe:
+                raise ValueError(
+                    f"Campaign dispatch is missing required 'name' or 'recipe' field: {d!r}"
+                )
+            dispatches.append(
+                CampaignDispatch(
+                    name=d_name,
+                    recipe=d_recipe,
+                    task=d.get("task", ""),
+                    ingredients=d.get("ingredients") or {},
+                    depends_on=d.get("depends_on") or [],
+                )
+            )
+
+    categories = data.get("categories") or []
+    requires_recipe_packs = data.get("requires_recipe_packs") or []
+    allowed_recipes = data.get("allowed_recipes") or []
+    continue_on_failure = bool(data.get("continue_on_failure", False))
+
     return Recipe(
         name=name,
         description=description,
@@ -227,6 +311,12 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
         recipe_version=_rv,
         experimental=bool(data.get("experimental", False)),
         requires_packs=requires_packs_raw,
+        kind=kind,
+        dispatches=dispatches,
+        categories=categories,
+        requires_recipe_packs=requires_recipe_packs,
+        allowed_recipes=allowed_recipes,
+        continue_on_failure=continue_on_failure,
     )
 
 

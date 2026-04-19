@@ -38,6 +38,10 @@ def get_state_dir() -> Path:
     if override:
         return Path(override) / "kitchen_state"
     campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
+    if campaign_id and ("/" in campaign_id or os.sep in campaign_id):
+        raise ValueError(
+            f"AUTOSKILLIT_CAMPAIGN_ID must not contain path separators: {campaign_id!r}"
+        )
     base = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
     return base / campaign_id if campaign_id else base
 

@@ -13,6 +13,9 @@ def test_franchise_package_importable() -> None:
     """franchise package can be imported without error."""
     import autoskillit.franchise  # noqa: F401
 
+    # Verify gateway exports are accessible
+    from autoskillit.franchise import CampaignState, DispatchRecord, read_state  # noqa: F401
+
 
 def test_asyncio_lock_satisfies_franchise_lock() -> None:
     """asyncio.Lock() is a structural match for FranchiseLock at runtime.

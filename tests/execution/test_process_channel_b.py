@@ -165,6 +165,9 @@ class TestChannelBDrainWait:
         for stdout_session_id_ready before Phase 1 starts;
         under CI load both the preamble and Phase 1 polls can overrun, so the outer
         timeout must exceed _session_id_timeout + _phase1_timeout (30s default) + drain (0.5s) = 31.5s.
+        _phase1_timeout=120: must exceed outer timeout (60s) so that Phase 1 never fires
+        first with STALE when subprocess startup is slow under WSL2 + xdist load; the
+        outer 60s guard cancels all tasks before Phase 1 can timeout independently.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -181,6 +184,7 @@ class TestChannelBDrainWait:
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _session_id_timeout=0.01,
+            _phase1_timeout=120,
         )
 
         assert result.termination == TerminationReason.COMPLETED
@@ -216,6 +220,8 @@ class TestChannelBDrainWait:
 
         Verifies that SubprocessResult.data_confirmed is False when the bounded
         drain wait times out — i.e. Channel A never confirmed stdout data.
+        _phase1_timeout=120: must exceed outer timeout (60s) to prevent Phase 1 from
+        firing STALE before the outer guard when subprocess startup is slow under load.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -232,6 +238,7 @@ class TestChannelBDrainWait:
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _session_id_timeout=0.01,
+            _phase1_timeout=120,
         )
 
         assert result.termination == TerminationReason.COMPLETED

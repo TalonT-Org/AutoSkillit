@@ -115,11 +115,12 @@ def test_load_and_validate_includes_requires_packs(tmp_path):
 
 
 # T4d
-def test_load_recipe_result_requires_packs_absent_for_standard_recipe():
-    """Standard recipes without requires_packs omit the key (matches kitchen_rules pattern)."""
+def test_load_recipe_result_requires_packs_absent_for_standard_recipe(tmp_path):
+    """Recipes without requires_packs omit the key (matches kitchen_rules pattern)."""
     from autoskillit.recipe._api import load_and_validate
 
-    result = load_and_validate(name="implementation", project_dir=None)
+    _setup_project_recipe(tmp_path, "test-recipe-no-rules", _RECIPE_NO_RULES)
+    result = load_and_validate(name="test-recipe-no-rules", project_dir=tmp_path)
     assert "requires_packs" not in result
 
 

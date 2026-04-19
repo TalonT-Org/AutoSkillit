@@ -53,6 +53,14 @@ def test_pack_registry_importable_from_core() -> None:
     assert all(isinstance(v, PackDef) for v in PACK_REGISTRY.values())
 
 
+def test_kitchen_core_in_pack_registry() -> None:
+    """kitchen-core is a registered pack with default_enabled=True."""
+    from autoskillit.core.types import PACK_REGISTRY
+
+    assert "kitchen-core" in PACK_REGISTRY
+    assert PACK_REGISTRY["kitchen-core"].default_enabled is True
+
+
 def test_private_env_vars_includes_franchise_tier_vars() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
 

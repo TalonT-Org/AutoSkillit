@@ -23,7 +23,9 @@ from autoskillit.server.helpers import (
 logger = get_logger(__name__)
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "headless"}, annotations={"readOnlyHint": True})
+@mcp.tool(
+    tags={"autoskillit", "kitchen", "kitchen-core", "headless"}, annotations={"readOnlyHint": True}
+)
 @track_response_size("test_check")
 async def test_check(
     worktree_path: str,
@@ -100,7 +102,7 @@ async def test_check(
         return json.dumps({"passed": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("reset_test_dir")
 async def reset_test_dir(
     test_dir: str,
@@ -182,7 +184,7 @@ async def reset_test_dir(
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen"}, annotations={"readOnlyHint": True})
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @track_response_size("reset_workspace")
 async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str:
     """Runs a configured reset command then deletes directory contents,

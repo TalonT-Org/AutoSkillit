@@ -181,6 +181,48 @@ class TestToolRegistration:
         for name in kitchen_only:
             assert name not in visible, f"{name} should not be revealed by headless-only enable"
 
+    @pytest.mark.anyio
+    async def test_no_tool_has_bare_kitchen_tag_only(self, kitchen_enabled) -> None:
+        """Every kitchen-tagged tool must also carry kitchen-core or a pack tag."""
+        from autoskillit.core.types import PACK_REGISTRY
+        from autoskillit.server import mcp
+
+        pack_tags = frozenset(PACK_REGISTRY.keys()) | {"headless"}
+        all_tools = {t.name: t for t in await mcp.list_tools()}
+        for tool in all_tools.values():
+            if "kitchen" not in tool.tags:
+                continue
+            has_subtag = bool(tool.tags & pack_tags)
+            assert has_subtag, (
+                f"{tool.name} has 'kitchen' tag but no pack/kitchen-core/headless subtag: "
+                f"{sorted(tool.tags)}"
+            )
+
+    @pytest.mark.anyio
+    async def test_kitchen_core_and_packs_partition_kitchen_gated_tools(
+        self, kitchen_enabled
+    ) -> None:
+        """Every gated/headless tool has kitchen-core and/or a pack tag — full coverage."""
+        from autoskillit.core.types import HEADLESS_TOOLS, PACK_REGISTRY
+        from autoskillit.pipeline.gate import GATED_TOOLS
+        from autoskillit.server import mcp
+
+        all_gated = GATED_TOOLS | HEADLESS_TOOLS
+        pack_tags = frozenset(PACK_REGISTRY.keys())
+
+        all_tools = {t.name: t for t in await mcp.list_tools()}
+        missing: list[str] = []
+        for name in sorted(all_gated):
+            tool = all_tools[name]
+            has_classification = bool(tool.tags & pack_tags)
+            if not has_classification:
+                missing.append(f"{name}: tags={sorted(tool.tags)}")
+
+        assert not missing, (
+            "Tools in GATED_TOOLS|HEADLESS_TOOLS without kitchen-core or pack tag:\n"
+            + "\n".join(f"  {m}" for m in missing)
+        )
+
 
 class TestConfigDrivenBehavior:
     """S1-S10: Verify tools use config instead of hardcoded values."""

@@ -127,7 +127,9 @@ class CampaignDispatch:
     name: str
     recipe: str
     task: str
-    ingredients: dict[str, str] = field(default_factory=dict)
+    ingredients: dict[str, str] = field(
+        default_factory=dict
+    )  # string-only: YAML pass-through key-value pairs, not structured RecipeIngredient objects
     depends_on: list[str] = field(default_factory=list)
 
 

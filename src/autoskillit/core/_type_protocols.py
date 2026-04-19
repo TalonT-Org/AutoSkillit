@@ -44,6 +44,7 @@ __all__ = [
     "SkillResolver",
     "BackgroundSupervisor",
     "QuotaRefreshTask",
+    "FranchiseLock",
     "TokenFactory",
     "SupportsLogger",
 ]
@@ -526,6 +527,21 @@ class QuotaRefreshTask(Protocol):
     """
 
     def cancel(self, msg: Any = None) -> bool: ...
+
+
+@runtime_checkable
+class FranchiseLock(Protocol):
+    """Protocol for a mutual-exclusion lock handle.
+
+    Satisfied by asyncio.Lock — used to type the franchise_lock field in
+    ToolContext without leaking asyncio.Lock into the core layer.
+    """
+
+    def locked(self) -> bool: ...
+
+    async def acquire(self) -> bool: ...
+
+    def release(self) -> None: ...
 
 
 @runtime_checkable

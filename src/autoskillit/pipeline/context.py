@@ -18,6 +18,7 @@ from autoskillit.core import (
     CIWatcher,
     CloneManager,
     DatabaseReader,
+    FranchiseLock,
     GateState,
     GitHubFetcher,
     HeadlessExecutor,
@@ -125,6 +126,7 @@ class ToolContext:
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
     token_factory: TokenFactory | None = field(default=None)
+    franchise_lock: FranchiseLock | None = field(default=None)
 
     def __post_init__(self) -> None:
         if self.background is None:

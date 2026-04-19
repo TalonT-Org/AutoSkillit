@@ -9,6 +9,7 @@ construction scattered across callers.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 from collections.abc import Callable
@@ -250,6 +251,7 @@ def make_context(
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
         quota_refresh_task=None,
+        franchise_lock=asyncio.Lock(),
     )
 
     def _resolve_output_patterns(skill_command: str) -> list[str]:

@@ -7,6 +7,7 @@ Replaces two mutable module-level singletons in server.py:
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -86,6 +87,9 @@ class ToolContext:
                           config → GITHUB_TOKEN env → gh CLI fallback chain.
                           Set by make_context(); None in test ToolContext instances
                           unless explicitly provided.
+    project_dir:          Resolved project root directory. Reads from AUTOSKILLIT_PROJECT_DIR
+                          env var with Path.cwd() fallback. Used by food truck dispatches to
+                          resolve recipes against L3's root (not the subprocess cwd).
     """
 
     config: AutomationConfig
@@ -102,6 +106,11 @@ class ToolContext:
     # resolves temp_dir from config via resolve_temp_dir(). Direct construction
     # (e.g. in tests) must override this field before any file I/O that uses it.
     temp_dir: Path = field(default_factory=lambda: Path.cwd() / ".autoskillit" / "temp")
+    project_dir: Path = field(
+        default_factory=lambda: (
+            Path(d) if (d := os.environ.get("AUTOSKILLIT_PROJECT_DIR", "")) else Path.cwd()
+        )
+    )
     response_log: McpResponseLog = field(default_factory=DefaultMcpResponseLog)
     executor: HeadlessExecutor | None = field(default=None)
     tester: TestRunner | None = field(default=None)

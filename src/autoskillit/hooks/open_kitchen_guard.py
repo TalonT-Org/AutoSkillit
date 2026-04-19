@@ -25,7 +25,9 @@ def _write_kitchen_marker(session_id: str, recipe_name: str | None) -> None:
     if state_override:
         state_dir = _Path(state_override) / "kitchen_state"
     else:
-        state_dir = _Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+        campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
+        base = _Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+        state_dir = base / campaign_id if campaign_id else base
     state_dir.mkdir(parents=True, exist_ok=True)
     marker_path = state_dir / f"{session_id}.json"
     payload = json.dumps(

@@ -265,10 +265,17 @@ class TestCampaignSummaryContract:
 
     def test_no_aggregate_fields(self) -> None:
         prompt = _build()
-        assert "total_tokens" not in prompt
-        assert "aggregate" not in prompt
-        assert "total_input_tokens" not in prompt
-        assert "total_output_tokens" not in prompt
+        # Extract just the campaign summary schema section to avoid false positives
+        # from sous-chef content that legitimately uses the word "aggregate".
+        start = prompt.index(f"---campaign-summary::{_CAMPAIGN_ID}---")
+        end = prompt.index(f"---end-campaign-summary::{_CAMPAIGN_ID}---") + len(
+            f"---end-campaign-summary::{_CAMPAIGN_ID}---"
+        )
+        summary_section = prompt[start:end]
+        assert "total_tokens" not in summary_section
+        assert "aggregate" not in summary_section
+        assert "total_input_tokens" not in summary_section
+        assert "total_output_tokens" not in summary_section
 
 
 # --- K-11: TestProgressMarkers ---
@@ -336,5 +343,5 @@ class TestNoL1L2Bootstrap:
 
     def test_no_open_kitchen_call(self) -> None:
         prompt = _build()
-        assert f'{DIRECT_PREFIX}open_kitchen(' not in prompt
-        assert f'{MARKETPLACE_PREFIX}open_kitchen(' not in prompt
+        assert f"{DIRECT_PREFIX}open_kitchen(" not in prompt
+        assert f"{MARKETPLACE_PREFIX}open_kitchen(" not in prompt

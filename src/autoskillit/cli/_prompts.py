@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from autoskillit.recipe.loader import RecipeInfo
+    from autoskillit.recipe.schema import Recipe
 
 
 # Sentinel returned by _resolve_recipe_input when the user selects option 0.
@@ -60,6 +61,15 @@ def _build_l2_sous_chef_block() -> str:
                 break
 
     return "\n\n".join(retained)
+
+
+def _read_full_sous_chef() -> str:
+    """Read the full sous-chef SKILL.md for L1/L3 injection."""
+    path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
+    try:
+        return path.read_text()
+    except OSError:
+        return ""
 
 
 def _build_food_truck_prompt(
@@ -259,6 +269,150 @@ signals session completion to the process monitor.
 """
 
 
+def _build_l3_orchestrator_prompt(
+    campaign_recipe: Recipe,
+    manifest_yaml: str,
+    completed_dispatches: str,
+    mcp_prefix: str,
+    campaign_id: str,
+    max_quota_wait_sec: int = 3600,
+) -> str:
+    """Build the system prompt for an L3 campaign dispatcher headless session.
+
+    Assembles a 10-section prompt that instructs a headless Claude session to
+    sequentially dispatch food trucks (L2 sessions), handle failures, respect
+    quota, resume from prior state, and emit structured campaign-summary and
+    progress markers.
+    """
+    dispatch_count = len(campaign_recipe.dispatches)
+    sous_chef_content = _read_full_sous_chef()
+
+    resume_section = ""
+    if completed_dispatches:
+        resume_section = f"""\
+
+## COMPLETED DISPATCHES — DO NOT RE-DISPATCH
+
+{completed_dispatches}
+
+Skip these dispatch names in the dispatch loop. Begin from the first
+dispatch name NOT listed above.
+"""
+
+    return f"""\
+You are an L3 campaign dispatcher. Execute campaign '{campaign_recipe.name}' autonomously.
+Campaign ID: {campaign_id}. Dispatches: {dispatch_count}.
+
+## SOUS-CHEF DISCIPLINE
+
+{sous_chef_content}
+
+## CAMPAIGN OVERVIEW
+
+- Name: {campaign_recipe.name}
+- Campaign ID: {campaign_id}
+- Description: {campaign_recipe.description}
+- Dispatch count: {dispatch_count} dispatches
+- Continue on failure: {campaign_recipe.continue_on_failure}
+
+## DISPATCH MANIFEST
+
+The following manifest defines all dispatches for this campaign:
+
+```yaml
+{manifest_yaml}
+```
+
+## CAMPAIGN DISCIPLINE
+
+Execute dispatches SEQUENTIALLY via {mcp_prefix}dispatch_food_truck. Do NOT attempt
+parallel dispatch — franchise_lock enforces serial execution and concurrent calls will fail.
+
+Each dispatch is an independent L2 session with its own kitchen context. There is NO
+cross-dispatch state sharing and NO cross-dispatch token aggregation.
+
+Only these 6 tools are available in this session:
+- {mcp_prefix}dispatch_food_truck
+- {mcp_prefix}batch_cleanup_clones
+- {mcp_prefix}get_pipeline_report
+- {mcp_prefix}get_token_summary
+- {mcp_prefix}get_timing_summary
+- {mcp_prefix}get_quota_events
+
+Explicitly FORBIDDEN: open_kitchen, close_kitchen, run_skill, and all GitHub/CI tools.
+Use ONLY {mcp_prefix}dispatch_food_truck to dispatch — never run_skill.
+
+## FAILURE RECOVERY
+
+When a dispatch call returns, evaluate the envelope and payload:
+
+- Condition 1: envelope success=false → dispatch FAILED
+- Condition 2: payload is null → dispatch FAILED (session crashed)
+- Condition 3: payload .success=false → dispatch FAILED
+
+On FAILURE:
+- If continue_on_failure={campaign_recipe.continue_on_failure} is true: mark dispatch failed,
+  emit the %%FRANCHISE_PROGRESS%% marker with state=failure, proceed to next dispatch.
+- If continue_on_failure={campaign_recipe.continue_on_failure} is false: halt campaign
+  immediately (proceed to INTERRUPT/CLEANUP).
+
+NEVER retry the same dispatch_name on non-quota failures in v1.
+
+## QUOTA RETRY
+
+Trigger: a dispatch returns reason=quota_exhausted with a wait_seconds field.
+
+Action:
+1. Sleep min(wait_seconds, {max_quota_wait_sec}) seconds.
+2. Retry that exact dispatch ONCE.
+3. If the retry still fails: halt campaign (proceed to INTERRUPT/CLEANUP).
+
+This is the ONLY condition where re-dispatching the same dispatch_name is permitted.
+{resume_section}
+## INTERRUPT/CLEANUP SEQUENCE
+
+On campaign completion (all dispatches done) OR halt (failure or quota exhaustion):
+
+1. Call {mcp_prefix}batch_cleanup_clones() to clean up all clone artifacts.
+2. Emit the campaign summary block (see CAMPAIGN SUMMARY CONTRACT below).
+3. End the session — no additional tool calls after the summary.
+
+## CAMPAIGN SUMMARY CONTRACT v1
+
+Emit this EXACT block as your final output. No other text after the block.
+
+---campaign-summary::{campaign_id}---
+{{
+  "campaign_id": "{campaign_id}",
+  "campaign_name": "{campaign_recipe.name}",
+  "per_dispatch": [
+    {{"name": "<dispatch_name>", "status": "<success|failure|skipped>",
+     "reason": "<reason_or_null>", "dispatch_id": "<uuid>"}}
+  ],
+  "error_records": [
+    {{"dispatch_name": "<name>", "error": "<error_description>"}}
+  ]
+}}
+---end-campaign-summary::{campaign_id}---
+
+Fields:
+- per_dispatch: one entry per dispatch, in execution order
+- error_records: one entry per failed dispatch; empty list if no failures
+- NO aggregate token fields (no total_input_tokens, no total_output_tokens, no total_duration)
+
+## PROGRESS MARKERS
+
+Emit at each dispatch state transition:
+
+%%FRANCHISE_PROGRESS::{campaign_id}::dispatch_<i>_of_<n>::<dispatch_id>::<state>%%
+
+- <i>: 1-indexed dispatch position
+- <n>: total dispatch count ({dispatch_count})
+- <dispatch_id>: per-dispatch UUID assigned before calling dispatch_food_truck
+- <state>: one of queued, running, success, failure, skipped
+"""
+
+
 def _resolve_recipe_input(raw: str, available: list[RecipeInfo]) -> RecipeInfo | str | None:
     """Resolve picker raw text to a selection.
 
@@ -335,10 +489,8 @@ def _build_orchestrator_prompt(
     is discovered by the session via ``load_recipe``.
     """
     # Inject sous-chef global orchestration rules (graceful degradation if absent)
-    sous_chef_content = ""
-    _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
-    if _sous_chef_path.exists():
-        sous_chef_content = "\n\n" + _sous_chef_path.read_text()
+    _raw = _read_full_sous_chef()
+    sous_chef_content = "\n\n" + _raw if _raw else ""
 
     _ing_section = ""
     if ingredients_table:
@@ -505,10 +657,8 @@ SKILL_COMMAND FORMATTING — MANDATORY:
 
 def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
     """Build the --append-system-prompt content for an open-kitchen cook session (no recipe)."""
-    sous_chef_content = ""
-    _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
-    if _sous_chef_path.exists():
-        sous_chef_content = "\n\n" + _sous_chef_path.read_text()
+    _raw = _read_full_sous_chef()
+    sous_chef_content = "\n\n" + _raw if _raw else ""
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
     text = (

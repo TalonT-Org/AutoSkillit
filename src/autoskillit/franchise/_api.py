@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from autoskillit.core import get_logger
@@ -33,7 +35,7 @@ def _write_pid(state_path: Path, dispatch_name: str, dispatch_id: str, pid: int)
 
 
 async def execute_dispatch(
-    tool_ctx: "ToolContext",
+    tool_ctx: ToolContext,
     recipe: str,
     task: str,
     ingredients: dict[str, str] | None,
@@ -49,31 +51,37 @@ async def execute_dispatch(
     if ingredients is not None:
         bad_vals = [k for k, v in ingredients.items() if not isinstance(v, str)]
         if bad_vals:
-            return json.dumps({
-                "success": False,
-                "error": "franchise_invalid_ingredients",
-                "user_visible_message": (
-                    f"Ingredient values must be strings. Non-string keys: {bad_vals}"
-                ),
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "franchise_invalid_ingredients",
+                    "user_visible_message": (
+                        f"Ingredient values must be strings. Non-string keys: {bad_vals}"
+                    ),
+                }
+            )
 
     lock = tool_ctx.franchise_lock
     if lock is None:
-        return json.dumps({
-            "success": False,
-            "error": "franchise_not_configured",
-            "user_visible_message": (
-                "Franchise lock not initialized — open_kitchen with franchise mode."
-            ),
-        })
+        return json.dumps(
+            {
+                "success": False,
+                "error": "franchise_not_configured",
+                "user_visible_message": (
+                    "Franchise lock not initialized — open_kitchen with franchise mode."
+                ),
+            }
+        )
     if lock.locked():
-        return json.dumps({
-            "success": False,
-            "error": "franchise_parallel_refused",
-            "user_visible_message": (
-                "A dispatch is already in progress. Only one dispatch at a time."
-            ),
-        })
+        return json.dumps(
+            {
+                "success": False,
+                "error": "franchise_parallel_refused",
+                "user_visible_message": (
+                    "A dispatch is already in progress. Only one dispatch at a time."
+                ),
+            }
+        )
 
     await lock.acquire()
     try:
@@ -90,16 +98,18 @@ async def execute_dispatch(
         raise
     except Exception as exc:
         logger.error("execute_dispatch failed", exc_info=True)
-        return json.dumps({
-            "success": False,
-            "error": f"{type(exc).__name__}: {exc}",
-        })
+        return json.dumps(
+            {
+                "success": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
     finally:
         lock.release()
 
 
 async def _run_dispatch(
-    tool_ctx: "ToolContext",
+    tool_ctx: ToolContext,
     recipe: str,
     task: str,
     ingredients: dict[str, str] | None,
@@ -108,51 +118,61 @@ async def _run_dispatch(
     prompt_builder: Callable[..., str],
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
-    from autoskillit.execution import _refresh_quota_cache, check_and_sleep_if_needed
     from autoskillit.franchise.state import (
         DispatchRecord,
         DispatchStatus,
         append_dispatch_record,
         write_initial_state,
     )
-    from autoskillit.recipe import RecipeKind
+
+    _execution = sys.modules["autoskillit.execution"]
+    check_and_sleep_if_needed = _execution.check_and_sleep_if_needed
+    _refresh_quota_cache = _execution._refresh_quota_cache
 
     if tool_ctx.recipes is None:
-        return json.dumps({
-            "success": False,
-            "error": "franchise_not_configured",
-            "user_visible_message": "Recipe repository not configured.",
-        })
+        return json.dumps(
+            {
+                "success": False,
+                "error": "franchise_not_configured",
+                "user_visible_message": "Recipe repository not configured.",
+            }
+        )
 
     recipe_obj = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
     if recipe_obj is None:
-        return json.dumps({
-            "success": False,
-            "error": "franchise_invalid_recipe_kind",
-            "user_visible_message": f"Recipe '{recipe}' not found.",
-        })
-    if recipe_obj.kind != RecipeKind.STANDARD:
-        return json.dumps({
-            "success": False,
-            "error": "franchise_invalid_recipe_kind",
-            "user_visible_message": (
-                f"Recipe '{recipe}' has kind '{recipe_obj.kind}'. "
-                "Only standard recipes can be dispatched as food trucks."
-            ),
-        })
+        return json.dumps(
+            {
+                "success": False,
+                "error": "franchise_invalid_recipe_kind",
+                "user_visible_message": f"Recipe '{recipe}' not found.",
+            }
+        )
+    if recipe_obj.kind != "standard":
+        return json.dumps(
+            {
+                "success": False,
+                "error": "franchise_invalid_recipe_kind",
+                "user_visible_message": (
+                    f"Recipe '{recipe}' has kind '{recipe_obj.kind}'. "
+                    "Only standard recipes can be dispatched as food trucks."
+                ),
+            }
+        )
 
     effective_ingredients = ingredients or {}
     if effective_ingredients:
         unknown = set(effective_ingredients.keys()) - set(recipe_obj.ingredients.keys())
         if unknown:
-            return json.dumps({
-                "success": False,
-                "error": "franchise_invalid_ingredients",
-                "user_visible_message": (
-                    f"Unknown ingredient keys: {sorted(unknown)}. "
-                    f"Valid keys: {sorted(recipe_obj.ingredients.keys())}"
-                ),
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "franchise_invalid_ingredients",
+                    "user_visible_message": (
+                        f"Unknown ingredient keys: {sorted(unknown)}. "
+                        f"Valid keys: {sorted(recipe_obj.ingredients.keys())}"
+                    ),
+                }
+            )
 
     quota_result = await check_and_sleep_if_needed(tool_ctx.config.quota_guard)
     if quota_result.get("should_sleep"):
@@ -183,11 +203,13 @@ async def _run_dispatch(
     )
 
     if tool_ctx.executor is None:
-        return json.dumps({
-            "success": False,
-            "error": "franchise_not_configured",
-            "user_visible_message": "Executor not configured.",
-        })
+        return json.dumps(
+            {
+                "success": False,
+                "error": "franchise_not_configured",
+                "user_visible_message": "Executor not configured.",
+            }
+        )
 
     started_at = time.time()
     skill_result = await tool_ctx.executor.dispatch_food_truck(
@@ -228,10 +250,12 @@ async def _run_dispatch(
     if tool_ctx.session_skill_manager is not None and skill_result.session_id:
         tool_ctx.session_skill_manager.cleanup_session(skill_result.session_id)
 
-    return json.dumps({
-        "success": skill_result.success,
-        "dispatch_id": dispatch_id,
-        "l2_session_id": skill_result.session_id,
-        "l2_payload": skill_result.result,
-        "token_usage": skill_result.token_usage,
-    })
+    return json.dumps(
+        {
+            "success": skill_result.success,
+            "dispatch_id": dispatch_id,
+            "l2_session_id": skill_result.session_id,
+            "l2_payload": skill_result.result,
+            "token_usage": skill_result.token_usage,
+        }
+    )

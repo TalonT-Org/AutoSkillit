@@ -7,12 +7,12 @@ import pathlib
 
 import pytest
 
+from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
+from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 # --- Fixtures ---
-
-from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
-from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 
 _CAMPAIGN_ID = "campaign-test-1234-5678"
 _MAX_QUOTA_WAIT = 3600

@@ -4,6 +4,7 @@ Gateway exports per REQ-IMP-001 — consumers import from
 ``autoskillit.franchise``, not from sub-modules.
 """
 
+from ._api import execute_dispatch
 from .state import (
     CampaignState,
     DispatchRecord,
@@ -18,6 +19,7 @@ from .state import (
 )
 
 __all__ = [
+    "execute_dispatch",
     "CampaignState",
     "DispatchRecord",
     "DispatchStatus",

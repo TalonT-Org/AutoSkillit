@@ -175,6 +175,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "validate_recipe",
         "register_clone_status",
         "batch_cleanup_clones",
+        "dispatch_food_truck",
     }
 )
 
@@ -187,6 +188,7 @@ FRANCHISE_TOOLS: frozenset[str] = frozenset(
         "get_token_summary",
         "get_timing_summary",
         "get_quota_events",
+        "dispatch_food_truck",
     }
 )
 
@@ -286,6 +288,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "kitchen_status": frozenset({"kitchen-core"}),
     "read_db": frozenset({"kitchen-core"}),
     "get_pipeline_report": frozenset({"kitchen-core", "franchise"}),
+    "dispatch_food_truck": frozenset({"kitchen-core", "franchise"}),
     # kitchen-core — git
     "merge_worktree": frozenset({"kitchen-core"}),
 }

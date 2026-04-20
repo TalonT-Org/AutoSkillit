@@ -13,6 +13,7 @@ from autoskillit.cli._cook import cook
 from autoskillit.cli._doctor import DoctorResult
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli._init_helpers import _prompt_recipe_choice
+from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
 from autoskillit.cli._prompts import (
     _OPEN_KITCHEN_CHOICE,
     _build_food_truck_prompt,
@@ -87,4 +88,5 @@ __all__ = [
     "workspace_app",
     "workspace_clean",
     "workspace_init",
+    "detect_autoskillit_mcp_prefix",
 ]

@@ -380,3 +380,63 @@ async def run_skill(
     except BaseException:
         logger.warning("run_skill cancelled", exc_info=True)
         raise
+
+
+@mcp.tool(
+    tags={"autoskillit", "kitchen", "kitchen-core", "franchise"},
+    annotations={"readOnlyHint": False},
+)
+@track_response_size("dispatch_food_truck")
+async def dispatch_food_truck(
+    recipe: str,
+    task: str,
+    ingredients: dict[str, str] | None = None,
+    dispatch_name: str | None = None,
+    timeout_sec: int | None = None,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Dispatch a single food truck L2 session for one recipe.
+
+    Spawns a headless subprocess that executes the given recipe with the
+    provided task and ingredient overrides. Returns a JSON envelope with
+    dispatch_id, l2_session_id, l2_payload, and token_usage.
+
+    Args:
+        recipe: Recipe name to dispatch (must be kind=standard).
+        task: Task description for the L2 session.
+        ingredients: Optional ingredient overrides (all values must be strings).
+        dispatch_name: Optional display name for the dispatch record.
+        timeout_sec: Optional L2 session timeout override in seconds.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
+        return json.dumps(
+            {
+                "success": False,
+                "error": "franchise_hard_refusal_headless",
+                "user_visible_message": (
+                    "dispatch_food_truck cannot be called from headless sessions."
+                ),
+            }
+        )
+    try:
+        from autoskillit.franchise import execute_dispatch
+        from autoskillit.server import _get_ctx
+        from autoskillit.server.helpers import _get_food_truck_prompt_builder
+
+        tool_ctx = _get_ctx()
+        return await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe=recipe,
+            task=task,
+            ingredients=ingredients,
+            dispatch_name=dispatch_name,
+            timeout_sec=timeout_sec,
+            prompt_builder=_get_food_truck_prompt_builder(),
+        )
+    except Exception as exc:
+        logger.error("dispatch_food_truck unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

@@ -532,3 +532,11 @@ def _build_hook_diagnostic_warning() -> str | None:
         lines.append(f"   • {issue}")
     lines.append("   → Run 'autoskillit install' to regenerate hook configuration.\n")
     return "\n".join(lines)
+
+
+def _get_food_truck_prompt_builder() -> Callable[..., str]:
+    """Return the food truck prompt builder with mcp_prefix pre-bound."""
+    from autoskillit.cli import _build_food_truck_prompt, detect_autoskillit_mcp_prefix
+
+    mcp_prefix = detect_autoskillit_mcp_prefix()
+    return functools.partial(_build_food_truck_prompt, mcp_prefix=mcp_prefix)

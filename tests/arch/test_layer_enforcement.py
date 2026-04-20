@@ -609,7 +609,7 @@ def test_server_tools_import_only_allowed_packages() -> None:
     autoskillit.pipeline, autoskillit.config, and intra-package autoskillit.server.*.
     TYPE_CHECKING exempt.
     """
-    ALLOWED = {"core", "pipeline", "server", "config"}
+    ALLOWED = {"core", "pipeline", "server", "config", "franchise"}
     tools_files = [
         p for p in _SOURCE_FILES if p.parent.name == "server" and p.stem.startswith("tools_")
     ]

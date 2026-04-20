@@ -26,7 +26,7 @@ Guides users through a 6-phase interactive workflow to decompose a campaign goal
 ## Critical Constraints
 
 **NEVER:**
-- Modify source code files
+- Write to or edit `.py` files in `src/`
 - Create files outside `.autoskillit/recipes/campaigns/` (final output) or `{{AUTOSKILLIT_TEMP}}/make-campaign/` (temp/validation drafts)
 - Write the final campaign YAML without first passing `validate_recipe` in Phase 5
 - Use recipe names not confirmed by `find_recipe_by_name` or `list_recipes`

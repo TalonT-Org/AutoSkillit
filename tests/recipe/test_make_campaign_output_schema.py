@@ -12,7 +12,7 @@ import pytest
 import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.registry import run_semantic_rules
-from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind, RecipeStep
+from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -72,9 +72,7 @@ def test_minimal_campaign_yaml_validates() -> None:
     """Minimal campaign YAML matching skill output format passes structural validation."""
     campaign = _minimal_campaign()
     # Provide the recipe name as available so dispatch-recipe-exists doesn't fire
-    errors = _error_findings(
-        campaign, available_recipes=frozenset({"implementation"})
-    )
+    errors = _error_findings(campaign, available_recipes=frozenset({"implementation"}))
     # Only remaining potential error would be dispatch-ingredients-keys-in-target-schema,
     # which is skipped when project_dir is None (no recipe file on disk to inspect).
     assert not errors, (

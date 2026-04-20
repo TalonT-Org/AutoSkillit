@@ -50,9 +50,9 @@ def test_make_campaign_has_six_phases():
     """SKILL.md body contains Phase 1 through Phase 6 headings or numbered sections."""
     content = _read_skill_md()
     for phase_num in range(1, 7):
-        assert re.search(
-            rf"Phase\s+{phase_num}\b", content, re.IGNORECASE
-        ), f"SKILL.md missing Phase {phase_num} section"
+        assert re.search(rf"Phase\s+{phase_num}\b", content, re.IGNORECASE), (
+            f"SKILL.md missing Phase {phase_num} section"
+        )
 
 
 def test_make_campaign_output_path_convention():

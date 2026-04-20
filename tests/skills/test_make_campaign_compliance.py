@@ -7,7 +7,6 @@ No pytestmark layer marker — tests/skills/ is out of scope for layer markers.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import yaml
 
@@ -54,9 +53,7 @@ def test_make_campaign_skill_contract_registered() -> None:
     raw = yaml.safe_load(_CONTRACTS_PATH.read_text())
     skills = raw.get("skills", {}) if isinstance(raw, dict) else {}
 
-    assert "make-campaign" in skills, (
-        "make-campaign must be registered in skill_contracts.yaml"
-    )
+    assert "make-campaign" in skills, "make-campaign must be registered in skill_contracts.yaml"
     contract = skills["make-campaign"]
     outputs = contract.get("outputs", [])
     output_names = {o["name"]: o for o in outputs if isinstance(o, dict)}
@@ -71,9 +68,7 @@ def test_make_campaign_skill_contract_registered() -> None:
     )
 
     patterns = contract.get("expected_output_patterns", [])
-    has_path_pattern = any(
-        re.search(r"campaign_path", p) for p in patterns
-    )
+    has_path_pattern = any(re.search(r"campaign_path", p) for p in patterns)
     assert has_path_pattern, (
         "make-campaign contract must have an expected_output_pattern referencing campaign_path. "
         f"Found patterns: {patterns!r}"

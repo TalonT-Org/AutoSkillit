@@ -539,6 +539,19 @@ class TestBuildFoodTruckCmd:
         assert "CLAUDE_CODE_SSE_PORT" not in spec.env
 
 
+class TestBuildFoodTruckCmdPackTags:
+    def test_env_extras_with_l2_tool_tags_passes_through(self):
+        """env_extras containing AUTOSKILLIT_L2_TOOL_TAGS reaches subprocess env."""
+        spec = build_food_truck_cmd(
+            orchestrator_prompt="...",
+            plugin_dir="/plugins",
+            cwd="/repo",
+            completion_marker="%%DONE%%",
+            env_extras={"AUTOSKILLIT_L2_TOOL_TAGS": "github,ci,clone,telemetry"},
+        )
+        assert spec.env["AUTOSKILLIT_L2_TOOL_TAGS"] == "github,ci,clone,telemetry"
+
+
 def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
     """MAX_MCP_OUTPUT_TOKENS must be in _HEADLESS_EXCLUSIVE_VARS."""
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS

@@ -227,10 +227,14 @@ async def _run_dispatch(
         completion_marker=completion_marker,
         kitchen_id=tool_ctx.kitchen_id,
         order_id=dispatch_id,
+        campaign_id=campaign_id,
+        dispatch_id=dispatch_id,
+        project_dir=str(tool_ctx.project_dir),
         timeout=float(timeout_sec) if timeout_sec else None,
         env_extras={
             "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
             "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
+            "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
         },
         on_spawn=_on_spawn,
     )

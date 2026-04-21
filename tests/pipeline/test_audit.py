@@ -503,3 +503,104 @@ class TestLoadFromLogDirTypeValidation:
         n = log.load_from_log_dir(tmp_path)
         assert n == 1
         assert log.get_report()[0].skill_command == "/ok"
+
+
+# --- Group N: campaign_id_filter tests ---
+
+
+def _write_audit_session_cid(
+    log_root: Path,
+    dir_name: str,
+    records: list,
+    campaign_id: str = "",
+    kitchen_id: str = "",
+    timestamp: str = "2026-04-20T00:00:00+00:00",
+) -> None:
+    """Write audit session with campaign_id in the index entry."""
+    session_dir = log_root / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / "audit_log.json").write_text(json.dumps(records))
+    index_entry = {
+        "dir_name": dir_name,
+        "timestamp": timestamp,
+        "campaign_id": campaign_id,
+        "kitchen_id": kitchen_id,
+    }
+    with (log_root / "sessions.jsonl").open("a") as f:
+        f.write(json.dumps(index_entry) + "\n")
+
+
+def test_iter_entries_campaign_id_filter_matches(tmp_path):
+    """Only entries with matching campaign_id are yielded."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_cid(tmp_path, "c1-a", [_valid_failure_record_dict()], campaign_id="c1")
+    _write_audit_session_cid(tmp_path, "c1-b", [_valid_failure_record_dict()], campaign_id="c1")
+    _write_audit_session_cid(tmp_path, "c2-a", [_valid_failure_record_dict()], campaign_id="c2")
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="audit_log.json", campaign_id_filter="c1"
+        )
+    )
+    assert len(results) == 2
+    dir_names = {p.parent.name for p in results}
+    assert dir_names == {"c1-a", "c1-b"}
+
+
+def test_iter_entries_campaign_id_filter_empty_passes_all(tmp_path):
+    """Empty campaign_id_filter passes all entries."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_cid(tmp_path, "c1-a", [_valid_failure_record_dict()], campaign_id="c1")
+    _write_audit_session_cid(tmp_path, "c2-a", [_valid_failure_record_dict()], campaign_id="c2")
+    _write_audit_session_cid(tmp_path, "no-cid", [_valid_failure_record_dict()], campaign_id="")
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path, since="", filename="audit_log.json", campaign_id_filter=""
+        )
+    )
+    assert len(results) == 3
+
+
+def test_iter_entries_campaign_id_filter_combined_with_kitchen_id(tmp_path):
+    """Both campaign_id_filter and kitchen_id_filter applied as AND logic."""
+    from autoskillit.pipeline.audit import _iter_session_log_entries
+
+    _write_audit_session_cid(
+        tmp_path, "match", [_valid_failure_record_dict()], campaign_id="c1", kitchen_id="k1"
+    )
+    _write_audit_session_cid(
+        tmp_path, "wrong-cid", [_valid_failure_record_dict()], campaign_id="c2", kitchen_id="k1"
+    )
+    _write_audit_session_cid(
+        tmp_path, "wrong-kid", [_valid_failure_record_dict()], campaign_id="c1", kitchen_id="k2"
+    )
+
+    results = list(
+        _iter_session_log_entries(
+            tmp_path,
+            since="",
+            filename="audit_log.json",
+            kitchen_id_filter="k1",
+            campaign_id_filter="c1",
+        )
+    )
+    assert len(results) == 1
+    assert results[0].parent.name == "match"
+
+
+def test_audit_load_campaign_id_filter(tmp_path):
+    """DefaultAuditLog.load_from_log_dir respects campaign_id_filter."""
+    _write_audit_session_cid(
+        tmp_path, "c1-a", [_valid_failure_record_dict(skill_command="/camp1")], campaign_id="c1"
+    )
+    _write_audit_session_cid(
+        tmp_path, "c2-a", [_valid_failure_record_dict(skill_command="/camp2")], campaign_id="c2"
+    )
+
+    log = DefaultAuditLog()
+    n = log.load_from_log_dir(tmp_path, campaign_id_filter="c1")
+    assert n == 1
+    assert log.get_report()[0].skill_command == "/camp1"

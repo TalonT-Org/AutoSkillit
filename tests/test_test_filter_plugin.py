@@ -152,7 +152,10 @@ def pytest_collection_modifyitems(items, config):
 class TestConftestFilterPlugin:
     """pytester-based integration tests for conftest filter hook wiring."""
 
-    def test_filter_inactive_by_default(self, pytester: pytest.Pytester) -> None:
+    def test_filter_inactive_by_default(
+        self, pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_TEST_FILTER", raising=False)
         pytester.makeconftest(_CONFTEST_HOOKS_SOURCE)
         pytester.makepyfile(test_a="def test_one(): pass", test_b="def test_two(): pass")
         result = pytester.runpytest("-v")
@@ -204,7 +207,10 @@ class TestConftestFilterPlugin:
         result = pytester.runpytest("--filter-mode=none", "-v")
         result.assert_outcomes(passed=1)
 
-    def test_filter_base_ref_cli_flag(self, pytester: pytest.Pytester) -> None:
+    def test_filter_base_ref_cli_flag(
+        self, pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_TEST_FILTER", raising=False)
         pytester.makeconftest(_CONFTEST_HOOKS_SOURCE)
         pytester.makepyfile(test_a="def test_one(): pass")
         result = pytester.runpytest("--filter-base-ref=main", "-v")

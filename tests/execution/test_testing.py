@@ -388,6 +388,7 @@ async def test_default_test_runner_omits_filter_env_when_none(monkeypatch, tmp_p
             pid=12345,
         )
 
+    monkeypatch.delenv("AUTOSKILLIT_TEST_FILTER", raising=False)
     config = make_test_config(test_check=make_test_check_config())
     runner = DefaultTestRunner(config=config, runner=capturing_runner)
     await runner.run(cwd=tmp_path)

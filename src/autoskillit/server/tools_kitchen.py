@@ -22,6 +22,7 @@ from autoskillit.core import (
     get_logger,
     pkg_root,
 )
+from autoskillit.franchise import FRANCHISE_MENU_TOOLS
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
 from autoskillit.server.helpers import (
@@ -118,6 +119,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "get_quota_events",
         ),
     ),
+    ("Franchise", FRANCHISE_MENU_TOOLS),
     ("Kitchen", ("open_kitchen", "close_kitchen", "disable_quota_guard")),
 )
 

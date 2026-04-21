@@ -471,6 +471,17 @@ class DefaultSessionSkillManager:
             if info and pack_name in info.categories:
                 self._activate_with_deps(session_id, name, activated, _is_root=False)
 
+    def cleanup_session(self, session_id: str) -> bool:
+        """Remove the session skill directory for a completed session.
+
+        Returns True if the directory was found and removed, False otherwise.
+        """
+        session_dir = self._root / session_id
+        if session_dir.is_dir():
+            shutil.rmtree(session_dir, ignore_errors=True)
+            return True
+        return False
+
     def cleanup_stale(self, max_age_seconds: int = 259200) -> int:
         """Remove session dirs not accessed within max_age_seconds.
 

@@ -21,6 +21,7 @@ from autoskillit.core import (
 from autoskillit.execution import (
     SCENARIO_STEP_NAME_ENV,  # noqa: F401 — re-exported for tools_execution.py
     _refresh_quota_cache,  # noqa: F401 — re-exported for tools_execution.py; patched by tests
+    check_and_sleep_if_needed,  # noqa: F401 — re-exported for tools_execution.py dispatch
     fetch_repo_merge_state,  # noqa: F401 — re-exported for tools_ci.py
     resolve_log_dir,  # noqa: F401 — used by tools_github.py, tools_status.py
     write_telemetry_clear_marker,  # noqa: F401 — used by tools_status.py
@@ -464,7 +465,6 @@ async def _prime_quota_cache() -> None:
     Called at open_kitchen so the cache is primed before any run_skill hook fires.
     Fails open: a quota fetch failure must not abort kitchen open.
     """
-    from autoskillit.execution import check_and_sleep_if_needed
     from autoskillit.server import _get_ctx
 
     try:
@@ -532,3 +532,12 @@ def _build_hook_diagnostic_warning() -> str | None:
         lines.append(f"   • {issue}")
     lines.append("   → Run 'autoskillit install' to regenerate hook configuration.\n")
     return "\n".join(lines)
+
+
+def _get_food_truck_prompt_builder() -> Callable[..., str]:
+    """Return the food truck prompt builder with mcp_prefix pre-bound."""
+    from autoskillit.core import detect_autoskillit_mcp_prefix
+    from autoskillit.franchise import _build_food_truck_prompt
+
+    mcp_prefix = detect_autoskillit_mcp_prefix()
+    return functools.partial(_build_food_truck_prompt, mcp_prefix=mcp_prefix)

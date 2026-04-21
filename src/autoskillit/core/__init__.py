@@ -30,6 +30,9 @@ from ._plugin_cache import (
 from ._plugin_cache import (
     unregister_active_kitchen as unregister_active_kitchen,
 )
+from ._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
+from ._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
+from ._plugin_ids import detect_autoskillit_mcp_prefix as detect_autoskillit_mcp_prefix
 from ._terminal_table import TerminalColumn as TerminalColumn
 from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
@@ -310,4 +313,8 @@ __all__ = [
     "register_active_kitchen",
     "sweep_retiring_cache",
     "unregister_active_kitchen",
+    # _plugin_ids
+    "DIRECT_PREFIX",
+    "MARKETPLACE_PREFIX",
+    "detect_autoskillit_mcp_prefix",
 ]

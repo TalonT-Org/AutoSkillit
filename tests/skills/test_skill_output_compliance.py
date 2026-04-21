@@ -17,6 +17,7 @@ from autoskillit.workspace.skills import DefaultSkillResolver
 FIXED_NAME_SKILLS: frozenset[str] = frozenset(
     {
         "write-recipe",  # .autoskillit/recipes/{name}.yaml — idempotent
+        "make-campaign",  # .autoskillit/recipes/campaigns/{name}.yaml — idempotent
         "migrate-recipes",  # .autoskillit/temp/migrations/{name}.yaml — idempotent
         "mermaid",  # edits existing files, no temp output
         "open-kitchen",  # singleton config file
@@ -241,6 +242,8 @@ def test_output_path_tokens_synchronized() -> None:
             "html_path",
             # stage-data skill output (resource feasibility report path)
             "resource_report",
+            # make-campaign skill output (campaign recipe manifest path)
+            "campaign_path",
         }
     )
 

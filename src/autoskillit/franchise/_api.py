@@ -28,7 +28,7 @@ def _write_pid(
     starttime_ticks: int,
 ) -> None:
     """on_spawn callback: atomically mark dispatch as running with l2_pid and identity fields."""
-    from autoskillit.core._linux_proc import read_boot_id
+    from autoskillit.core import read_boot_id
     from autoskillit.franchise.state import mark_dispatch_running
 
     try:

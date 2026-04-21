@@ -6,6 +6,10 @@ execution/headless.py has TYPE_CHECKING-only references to pipeline/.
 """
 
 from autoskillit.core import SkillResult
+from autoskillit.execution._process_kill import (
+    async_kill_process_tree,
+    kill_process_tree,
+)
 from autoskillit.execution.anomaly_detection import (
     AnomalyKind,
     AnomalySeverity,
@@ -100,6 +104,9 @@ from autoskillit.execution.testing import (
 )
 
 __all__ = [
+    # _process_kill
+    "kill_process_tree",
+    "async_kill_process_tree",
     # commands
     "ClaudeInteractiveCmd",
     "ClaudeHeadlessCmd",

@@ -33,8 +33,8 @@ import anyio.abc
 import psutil
 
 from autoskillit.core import get_logger
-from autoskillit.core._linux_proc import read_boot_id as read_boot_id
-from autoskillit.core._linux_proc import read_starttime_ticks as read_starttime_ticks
+from autoskillit.core import read_boot_id as read_boot_id
+from autoskillit.core import read_starttime_ticks as read_starttime_ticks
 
 if TYPE_CHECKING:
     from autoskillit.config import LinuxTracingConfig

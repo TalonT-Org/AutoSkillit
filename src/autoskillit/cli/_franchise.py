@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import fcntl
 import signal
-import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -15,7 +14,7 @@ import psutil
 from cyclopts import App
 
 from autoskillit.core import get_logger
-from autoskillit.franchise.state import (
+from autoskillit.franchise import (
     DispatchStatus,
     mark_dispatch_interrupted,
     read_state,
@@ -40,7 +39,7 @@ async def _franchise_signal_guard(
     - Reads state.json and marks RUNNING dispatches as INTERRUPTED.
     - Verifies PID identity via starttime_ticks before killing.
     - Optionally runs workspace cleanup.
-    - Prints a resume hint to stderr.
+    - Logs a resume hint.
     """
 
     async def _watch(
@@ -60,8 +59,7 @@ async def _franchise_signal_guard(
                 # Shield the cleanup from the now-cancelled scope so that async
                 # operations (kill, state write) are not interrupted.
                 with anyio.CancelScope(shield=True):
-                    from autoskillit.execution._process_kill import async_kill_process_tree
-                    from autoskillit.execution.linux_tracing import read_starttime_ticks
+                    from autoskillit.execution import async_kill_process_tree, read_starttime_ticks
 
                     state = read_state(state_path)
                     if state is not None:
@@ -127,7 +125,7 @@ async def _franchise_signal_guard(
                     if cleanup_on_interrupt:
                         try:
                             from autoskillit.core import ensure_project_temp
-                            from autoskillit.workspace.cleanup import DefaultWorkspaceManager
+                            from autoskillit.workspace import DefaultWorkspaceManager
 
                             workspace_dir = ensure_project_temp(Path.cwd())
                             mgr = DefaultWorkspaceManager()
@@ -135,10 +133,10 @@ async def _franchise_signal_guard(
                         except Exception:
                             logger.warning("signal_guard: workspace cleanup failed", exc_info=True)
 
-                    print(
-                        f"Campaign {campaign_id} interrupted. "
-                        f"Resume with: autoskillit franchise run --resume {campaign_id}",
-                        file=sys.stderr,
+                    logger.info(
+                        "Campaign %s interrupted. Resume: autoskillit franchise run --resume %s",
+                        campaign_id,
+                        campaign_id,
                     )
                 return
 
@@ -160,8 +158,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
     - Process alive + ticks match → kill + reaped_orphan
     - Process alive + ticks mismatch → reaped_pid_recycled (no kill)
     """
-    from autoskillit.execution._process_kill import kill_process_tree
-    from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
+    from autoskillit.execution import kill_process_tree, read_boot_id, read_starttime_ticks
 
     current_boot_id = read_boot_id()
 
@@ -170,15 +167,17 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
         try:
             state = read_state(state_path)
             if state is None:
-                print(f"Cannot read state file: {state_path}", file=sys.stderr)
+                logger.warning("reap: cannot read state file: %s", state_path)
                 return
 
             running = [d for d in state.dispatches if d.status == DispatchStatus.RUNNING]
             if not running:
-                print(f"No running dispatches in campaign {state.campaign_id}.")
+                logger.info("reap: no running dispatches in campaign %s", state.campaign_id)
                 return
 
-            print(f"Scanning {len(running)} dispatches in campaign {state.campaign_id}...")
+            logger.info(
+                "reap: scanning %d dispatches in campaign %s", len(running), state.campaign_id
+            )
 
             for dispatch in running:
                 name = dispatch.name
@@ -187,13 +186,13 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                 if pid == 0:
                     _action = "reaped_dead_pid"
                     if dry_run:
-                        print(f"  [WOULD MARK]  {name}  pid=0  (no PID recorded -> interrupted)")
+                        logger.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
                     else:
                         try:
                             mark_dispatch_interrupted(state_path, name, reason=_action)
-                            print(f"  [MARKED]      {name}  (no PID recorded -> interrupted)")
+                            logger.info("reap: [MARKED]      %s  (no PID recorded)", name)
                         except ValueError:
-                            print(f"  [SKIPPED]     {name}  (already terminal)")
+                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
                     continue
 
                 # Boot ID check: if machine rebooted, all PIDs are recycled
@@ -203,35 +202,43 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                     and dispatch.l2_boot_id != current_boot_id
                 ):
                     if dry_run:
-                        print(f"  [WOULD MARK]  {name}  pid={pid}  (rebooted, pid_recycled)")
+                        logger.info(
+                            "reap: [WOULD MARK]  %s  pid=%d  (rebooted, pid_recycled)", name, pid
+                        )
                     else:
                         try:
                             mark_dispatch_interrupted(
                                 state_path, name, reason="reaped_pid_recycled"
                             )
-                            print(f"  [MARKED]      {name}  pid={pid}  (rebooted, pid_recycled)")
+                            logger.info(
+                                "reap: [MARKED]      %s  pid=%d  (rebooted, pid_recycled)",
+                                name,
+                                pid,
+                            )
                         except ValueError:
-                            print(f"  [SKIPPED]     {name}  (already terminal)")
+                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
                     continue
 
                 if not psutil.pid_exists(pid):
                     if dry_run:
-                        print(f"  [WOULD MARK]  {name}  pid={pid}  (process dead -> interrupted)")
+                        logger.info("reap: [WOULD MARK]  %s  pid=%d  (process dead)", name, pid)
                     else:
                         try:
                             mark_dispatch_interrupted(state_path, name, reason="reaped_dead_pid")
-                            print(
-                                f"  [MARKED]      {name}  pid={pid}  (process dead -> interrupted)"
+                            logger.info(
+                                "reap: [MARKED]      %s  pid=%d  (process dead)", name, pid
                             )
                         except ValueError:
-                            print(f"  [SKIPPED]     {name}  (already terminal)")
+                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
                     continue
 
                 # Process is alive — check identity
                 current_ticks = read_starttime_ticks(pid)
                 if current_ticks is not None and current_ticks == dispatch.l2_starttime_ticks:
                     if dry_run:
-                        print(f"  [WOULD KILL]  {name}  pid={pid}  (orphan, identity match)")
+                        logger.info(
+                            "reap: [WOULD KILL]  %s  pid=%d  (orphan, identity match)", name, pid
+                        )
                     else:
                         try:
                             kill_process_tree(pid)
@@ -241,20 +248,28 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                             )
                         try:
                             mark_dispatch_interrupted(state_path, name, reason="reaped_orphan")
-                            print(f"  [KILLED]      {name}  pid={pid}  (orphan reaped)")
+                            logger.info(
+                                "reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid
+                            )
                         except ValueError:
-                            print(f"  [SKIPPED]     {name}  (already terminal)")
+                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
                 else:
                     if dry_run:
-                        print(f"  [WOULD MARK]  {name}  pid={pid}  (PID recycled, no kill)")
+                        logger.info(
+                            "reap: [WOULD MARK]  %s  pid=%d  (PID recycled, no kill)", name, pid
+                        )
                     else:
                         try:
                             mark_dispatch_interrupted(
                                 state_path, name, reason="reaped_pid_recycled"
                             )
-                            print(f"  [MARKED]      {name}  pid={pid}  (PID recycled, no kill)")
+                            logger.info(
+                                "reap: [MARKED]      %s  pid=%d  (PID recycled, no kill)",
+                                name,
+                                pid,
+                            )
                         except ValueError:
-                            print(f"  [SKIPPED]     {name}  (already terminal)")
+                            logger.info("reap: [SKIPPED]     %s  (already terminal)", name)
         finally:
             fcntl.flock(_lock_fh, fcntl.LOCK_UN)
 
@@ -282,14 +297,14 @@ def franchise_status(
 
     state = read_state(state_path)
     if state is None:
-        print(f"Campaign {campaign_id!r} not found or state file unreadable.", file=sys.stderr)
+        logger.warning("franchise: campaign %r not found or state file unreadable", campaign_id)
         return
 
-    print(f"Campaign: {state.campaign_id}  ({state.campaign_name})")
+    logger.info("franchise: campaign %s  (%s)", state.campaign_id, state.campaign_name)
     for d in state.dispatches:
         pid_info = f"  pid={d.l2_pid}" if d.l2_pid else ""
         reason_info = f"  reason={d.reason!r}" if d.reason else ""
-        print(f"  {d.name}: {d.status}{pid_info}{reason_info}")
+        logger.info("franchise:   %s: %s%s%s", d.name, d.status, pid_info, reason_info)
 
 
 @franchise_app.command(name="run")

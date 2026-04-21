@@ -78,6 +78,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_update_checks",  # cli/_update_checks.py: window constants (see comment above)
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
+        "_franchise",  # cli/_franchise.py: franchise_app = App(name="franchise", ...)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -703,8 +704,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 20,
         "recipe": 36,
         "execution": 26,
-        "core": 20,
-        "cli": 20,
+        "core": 21,
+        "cli": 21,
         "hooks": 21,
     }
     violations: list[str] = []

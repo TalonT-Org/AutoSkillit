@@ -14,6 +14,10 @@ from uuid import uuid4
 
 from cyclopts import App, Parameter
 
+from autoskillit.core import get_logger
+
+_log = get_logger(__name__)
+
 if TYPE_CHECKING:
     from autoskillit.franchise import ResumeDecision
     from autoskillit.recipe.schema import Recipe
@@ -29,6 +33,7 @@ def _remove_clone_fn(path: str, _flag: str) -> dict[str, str]:
         _shutil.rmtree(path)
         return {"removed": "true"}
     except Exception as exc:
+        _log.warning("Failed to remove clone %s: %s", path, exc, exc_info=True)
         return {"removed": "false", "reason": str(exc)}
 
 
@@ -202,24 +207,25 @@ def franchise_status(
         print(_render_terminal_table(columns, rows))
 
         if cleanup:
-            from autoskillit.core.kitchen_state import sweep_stale_markers
-            from autoskillit.workspace.clone_registry import batch_delete
+            from autoskillit.core import sweep_stale_markers
+            from autoskillit.workspace import (
+                DefaultSessionSkillManager,
+                SkillsDirectoryProvider,
+                batch_delete,
+                resolve_ephemeral_root,
+            )
 
             batch_delete("", _remove_clone_fn, owner=campaign_id)
             try:
-                from autoskillit.workspace import (
-                    DefaultSessionSkillManager,
-                    resolve_ephemeral_root,
-                )
-                from autoskillit.workspace.session_skills import SkillsDirectoryProvider
-
                 skill_mgr = DefaultSessionSkillManager(
                     provider=SkillsDirectoryProvider(),
                     ephemeral_root=resolve_ephemeral_root(),
                 )
                 skill_mgr.cleanup_session(campaign_id)
             except Exception:
-                pass
+                _log.warning(
+                    "Session skill cleanup failed for campaign %s", campaign_id, exc_info=True
+                )
             sweep_stale_markers()
             print(f"Cleanup complete for campaign '{campaign_id}'.")
 

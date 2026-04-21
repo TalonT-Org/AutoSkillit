@@ -383,20 +383,42 @@ Emit this EXACT block as your final output. No other text after the block.
 
 ---campaign-summary::{campaign_id}---
 {{
+  "schema_version": 1,
   "campaign_id": "{campaign_id}",
   "campaign_name": "{campaign_recipe.name}",
+  "dispatch_count": <total dispatches>,
+  "completed_count": <successful dispatches>,
+  "failure_count": <failed dispatches>,
+  "skipped_count": <skipped dispatches>,
   "per_dispatch": [
-    {{"name": "<dispatch_name>", "status": "<success|failure|skipped>",
-     "reason": "<reason_or_null>", "dispatch_id": "<uuid>"}}
+    {{
+      "name": "<dispatch_name>",
+      "status": "<success|failure|skipped>",
+      "elapsed_seconds": <float>,
+      "token_usage": {{
+        "input": <int>,
+        "output": <int>,
+        "cache_read": <int>,
+        "cache_creation": <int>
+      }},
+      "l2_session_id": "<session_id>"
+    }}
   ],
   "error_records": [
-    {{"dispatch_name": "<name>", "error": "<error_description>"}}
+    {{
+      "dispatch_name": "<name>",
+      "code": "<franchise_error_code>",
+      "message": "<human_readable_error>",
+      "l2_session_id": "<session_id>"
+    }}
   ]
 }}
 ---end-campaign-summary::{campaign_id}---
 
 Fields:
-- per_dispatch: one entry per dispatch, in execution order
+- schema_version: always 1
+- dispatch_count / completed_count / failure_count / skipped_count: integer tallies
+- per_dispatch: one entry per dispatch, in execution order; status is one of success, failure, skipped
 - error_records: one entry per failed dispatch; empty list if no failures
 - NO aggregate token fields (no total_input_tokens, no total_output_tokens, no total_duration)
 

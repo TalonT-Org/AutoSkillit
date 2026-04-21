@@ -68,8 +68,10 @@ def pytest_collection_modifyitems(items, config):
                 f"Test filter: {len(selected)} selected, {len(deselected)} deselected",
                 stacklevel=1,
             )
-            config.stash[_selected_count_key] = len(selected)
-            config.stash[_deselected_count_key] = len(deselected)
+
+        # Always record counts when scope is active
+        config.stash[_selected_count_key] = len(items)
+        config.stash[_deselected_count_key] = len(deselected)
     except Exception as exc:
         warnings.warn(f"Test filter deselection failed: {exc}", stacklevel=1)
 
@@ -247,6 +249,26 @@ class TestConftestFilterPlugin:
         (pytester.path / "subdir_a" / "test_simple.py").write_text("def test_a(): pass\n")
         result = pytester.runpytest("--filter-mode=conservative")
         result.assert_outcomes(passed=1)
+
+    def test_conftest_sidecar_zero_deselection_has_integer_counts(
+        self, pytester: pytest.Pytester, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """AC2: When filter is active but all tests are in scope, sidecar must
+        have integer counts (not null)."""
+        sidecar = tmp_path / "filter-stats.json"
+        monkeypatch.setenv("AUTOSKILLIT_FILTER_STATS_FILE", str(sidecar))
+        pytester.makeconftest(_CONFTEST_HOOKS_SOURCE)
+        pytester.mkdir("subdir_a")
+        # All test files inside subdir_a — nothing to deselect
+        (pytester.path / "subdir_a" / "test_all_in.py").write_text(
+            "def test_a(): pass\ndef test_b(): pass\n"
+        )
+        pytester.runpytest("--filter-mode=conservative")
+        assert sidecar.is_file()
+        data = json.loads(sidecar.read_text())
+        assert data["filter_mode"] == "conservative"
+        assert data["tests_selected"] == 2
+        assert data["tests_deselected"] == 0
 
 
 # ---------------------------------------------------------------------------

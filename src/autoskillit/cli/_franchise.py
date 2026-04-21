@@ -27,10 +27,8 @@ franchise_app = App(name="franchise", help="Campaign franchise management.")
 
 def _remove_clone_fn(path: str, _flag: str) -> dict[str, str]:
     """Remove a clone directory for batch_delete."""
-    import shutil as _shutil
-
     try:
-        _shutil.rmtree(path)
+        shutil.rmtree(path)
         return {"removed": "true"}
     except Exception as exc:
         _log.warning("Failed to remove clone %s: %s", path, exc, exc_info=True)
@@ -230,10 +228,10 @@ def franchise_status(
             print(f"Cleanup complete for campaign '{campaign_id}'.")
 
         if reap:
-            print("--reap: Not yet implemented.")
+            raise NotImplementedError("--reap is not yet implemented.")
 
         if watch:
-            print("--watch: Not yet implemented.")
+            raise NotImplementedError("--watch is not yet implemented.")
 
     else:
         if not franchise_dir.exists():

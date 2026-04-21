@@ -1190,3 +1190,109 @@ async def test_disable_quota_guard_returns_error_when_kitchen_not_open(tmp_path,
     result_str = await disable_quota_guard()
     parsed = json.loads(result_str)
     assert parsed["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Delivery-verification: sous-chef discipline on named open_kitchen path (1a)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_sous_chef_discipline_injected_on_named_open_kitchen_path(tmp_path, monkeypatch):
+    """Named path (Path A) must deliver sous-chef discipline to all session types.
+
+    Headless L2 sessions receive no system prompt injection, so the only delivery
+    channel is the open_kitchen response. This test verifies the discipline section
+    is present in the result dict under the 'sous_chef_discipline' key.
+    """
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: implementation\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+    }
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="implementation", ctx=mock_ctx)
+
+    result = json.loads(result_str)
+    assert result["success"] is True
+    discipline = result.get("sous_chef_discipline", "")
+    assert "STEP EXECUTION IS NOT DISCRETIONARY" in discipline, (
+        "Named open_kitchen path must inject sous-chef discipline — "
+        "headless L2 sessions have no system prompt injection"
+    )
+    assert "NEVER skip a step because" in discipline
+    assert "on_context_limit routing" in discipline, (
+        "Discipline section must include context-ownership line so model does not "
+        "use context pressure as a rationalization for step-skipping"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Path B baseline regression tests (1e): guard against accidental breakage
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_sous_chef_rules_injected_at_open_kitchen(tmp_path, monkeypatch):
+    """Path B (no-name) must inject full sous-chef SKILL.md into response text."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools_kitchen import open_kitchen
+
+                    result = await open_kitchen(ctx=mock_ctx)
+
+    parsed = json.loads(result)
+    content = parsed["content"]
+    assert "STEP EXECUTION IS NOT DISCRETIONARY" in content, (
+        "Path B open_kitchen must include sous-chef STEP EXECUTION discipline in response"
+    )
+    assert "NEVER skip a step because" in content
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_degrades_gracefully_without_sous_chef(tmp_path, monkeypatch):
+    """When sous-chef SKILL.md is absent, Path B must return a valid response without raising."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+
+    import autoskillit.server.tools_kitchen as tk_mod
+
+    fake_pkg_root_dir = tmp_path / "fake_pkg"
+    (fake_pkg_root_dir / "skills" / "sous-chef").mkdir(parents=True)
+    # sous-chef SKILL.md is deliberately absent — directory exists, file does not
+
+    def fake_pkg_root() -> object:
+        return fake_pkg_root_dir
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch("autoskillit.server.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server.tools_kitchen._write_hook_config"):
+                    with patch.object(tk_mod, "pkg_root", fake_pkg_root):
+                        from autoskillit.server.tools_kitchen import open_kitchen
+
+                        result = await open_kitchen(ctx=mock_ctx)
+
+    parsed = json.loads(result)
+    assert parsed["success"] is True
+    assert "Kitchen is open" in parsed["content"]

@@ -91,10 +91,15 @@ def test_make_campaign_no_code_modification_instructions():
         assert not re.search(pattern, body, re.IGNORECASE), (
             f"SKILL.md must not instruct modifying source code. Found pattern: {pattern!r}"
         )
-    # Critical Constraints must include NEVER modify source code
-    assert re.search(r"NEVER.*modify.*source\s+code", body, re.IGNORECASE | re.DOTALL), (
-        "SKILL.md Critical Constraints must state NEVER modify source code files"
+    # Critical Constraints section must include NEVER modify source code
+    constraints_m = re.search(
+        r"##\s+Critical Constraints\b(.+?)(?=\n##\s|\Z)", body, re.DOTALL | re.IGNORECASE
     )
+    assert constraints_m, "SKILL.md must have a '## Critical Constraints' section"
+    constraints_section = constraints_m.group(1)
+    assert re.search(
+        r"NEVER\b[^\n]*modify[^\n]*source\s+code", constraints_section, re.IGNORECASE
+    ), "SKILL.md Critical Constraints section must state NEVER modify source code files"
 
 
 def test_make_campaign_invokes_validation():

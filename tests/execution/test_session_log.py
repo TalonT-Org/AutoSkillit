@@ -1560,7 +1560,6 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
         dir_name = f"session-{i:04d}"
         d = sessions_dir / dir_name
         d.mkdir()
-        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         if i < 2:
             (d / "meta.json").write_text(
                 json.dumps({"campaign_id": "done-campaign", "dispatch_id": f"d{i}"})
@@ -1571,6 +1570,8 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
                 json.dumps({"session_id": dir_name, "dir_name": dir_name, "campaign_id": cid})
                 + "\n"
             )
+        # Set mtime AFTER all writes inside the dir to get the intended ordering
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
 
     _make_state_file(project_dir, "done-campaign", "released")
 
@@ -1706,12 +1707,13 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
         dir_name = f"session-{i:04d}"
         d = sessions_dir / dir_name
         d.mkdir()
-        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         (d / "meta.json").write_text(
             json.dumps({"campaign_id": "some-campaign", "dispatch_id": f"d{i}"})
         )
         with index_path.open("a") as f:
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
+        # Set mtime AFTER all writes inside the dir to get the intended ordering
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
 
     # Must not crash even though project_dir exists but has no dispatches dir
     flush_session_log(
@@ -1750,12 +1752,13 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
         dir_name = f"session-{i:04d}"
         d = sessions_dir / dir_name
         d.mkdir()
-        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         if i < 2:
             # Write corrupt JSON so meta.json is unreadable
             (d / "meta.json").write_text("not valid json {{{{")
         with index_path.open("a") as f:
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
+        # Set mtime AFTER all writes inside the dir to get the intended ordering
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
 
     flush_session_log(
         log_dir=str(tmp_path),

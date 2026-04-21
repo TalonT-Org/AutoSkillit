@@ -450,6 +450,7 @@ def _build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
                 continue
         return frozenset(protected)
     except Exception:
+        logger.warning("campaign_ids_protection_error", exc_info=True)
         return frozenset()
 
 

@@ -233,7 +233,9 @@ async def _run_dispatch(
             "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
             "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
         },
-        on_spawn=lambda pid, ticks: _write_pid(state_path, effective_name, dispatch_id, pid, ticks),
+        on_spawn=lambda pid, ticks: _write_pid(
+            state_path, effective_name, dispatch_id, pid, ticks
+        ),
     )
     ended_at = time.time()
 

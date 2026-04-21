@@ -12,7 +12,6 @@ from pathlib import Path
 import anyio
 import anyio.abc
 import psutil
-
 from cyclopts import App
 
 from autoskillit.core import get_logger
@@ -55,14 +54,64 @@ async def _franchise_signal_guard(
                 signame = "SIGINT" if sig == signal.SIGINT else "SIGTERM"
 
                 # Cancel the enclosing scope FIRST to unwind any in-flight dispatch
+                # coroutine before the cleanup writes state (prevents ordering races).
                 scope.cancel()
 
-                state = read_state(state_path)
-                if state is not None:
-                    for dispatch in state.dispatches:
-                        if dispatch.status != DispatchStatus.RUNNING:
-                            continue
-                        if dispatch.l2_pid == 0:
+                # Shield the cleanup from the now-cancelled scope so that async
+                # operations (kill, state write) are not interrupted.
+                with anyio.CancelScope(shield=True):
+                    from autoskillit.execution._process_kill import async_kill_process_tree
+                    from autoskillit.execution.linux_tracing import read_starttime_ticks
+
+                    state = read_state(state_path)
+                    if state is not None:
+                        for dispatch in state.dispatches:
+                            if dispatch.status != DispatchStatus.RUNNING:
+                                continue
+                            if dispatch.l2_pid == 0:
+                                try:
+                                    mark_dispatch_interrupted(
+                                        state_path,
+                                        dispatch.name,
+                                        reason=f"signal_{signame}",
+                                    )
+                                except Exception:
+                                    logger.warning(
+                                        "signal_guard: failed to mark dispatch interrupted",
+                                        exc_info=True,
+                                    )
+                                continue
+
+                            # Verify PID identity before killing
+                            current_ticks = read_starttime_ticks(dispatch.l2_pid)
+                            if current_ticks is not None:
+                                if (
+                                    dispatch.l2_starttime_ticks > 0
+                                    and current_ticks == dispatch.l2_starttime_ticks
+                                ):
+                                    try:
+                                        await async_kill_process_tree(dispatch.l2_pid, timeout=5.0)
+                                    except Exception:
+                                        logger.warning(
+                                            "signal_guard: kill_process_tree failed",
+                                            exc_info=True,
+                                        )
+                                else:
+                                    logger.warning(
+                                        "signal_guard: PID %d recycled (ticks mismatch)",
+                                        dispatch.l2_pid,
+                                    )
+                            else:
+                                # Non-Linux fallback: psutil.pid_exists without identity check
+                                if psutil.pid_exists(dispatch.l2_pid):
+                                    try:
+                                        await async_kill_process_tree(dispatch.l2_pid, timeout=5.0)
+                                    except Exception:
+                                        logger.warning(
+                                            "signal_guard: kill_process_tree failed (non-linux)",
+                                            exc_info=True,
+                                        )
+
                             try:
                                 mark_dispatch_interrupted(
                                     state_path,
@@ -74,71 +123,23 @@ async def _franchise_signal_guard(
                                     "signal_guard: failed to mark dispatch interrupted",
                                     exc_info=True,
                                 )
-                            continue
 
-                        # Verify PID identity before killing
-                        from autoskillit.execution.linux_tracing import read_starttime_ticks
-                        from autoskillit.execution._process_kill import async_kill_process_tree
-
-                        current_ticks = read_starttime_ticks(dispatch.l2_pid)
-                        if current_ticks is not None:
-                            if (
-                                dispatch.l2_starttime_ticks > 0
-                                and current_ticks == dispatch.l2_starttime_ticks
-                            ):
-                                try:
-                                    await async_kill_process_tree(dispatch.l2_pid, timeout=5.0)
-                                except Exception:
-                                    logger.warning(
-                                        "signal_guard: kill_process_tree failed",
-                                        exc_info=True,
-                                    )
-                            else:
-                                logger.warning(
-                                    "signal_guard: PID %d recycled (ticks mismatch), skipping kill",
-                                    dispatch.l2_pid,
-                                )
-                        else:
-                            # Non-Linux fallback: use psutil.pid_exists without identity check
-                            if psutil.pid_exists(dispatch.l2_pid):
-                                try:
-                                    await async_kill_process_tree(dispatch.l2_pid, timeout=5.0)
-                                except Exception:
-                                    logger.warning(
-                                        "signal_guard: kill_process_tree failed (non-linux)",
-                                        exc_info=True,
-                                    )
-
+                    if cleanup_on_interrupt:
                         try:
-                            mark_dispatch_interrupted(
-                                state_path,
-                                dispatch.name,
-                                reason=f"signal_{signame}",
-                            )
+                            from autoskillit.core import ensure_project_temp
+                            from autoskillit.workspace.cleanup import DefaultWorkspaceManager
+
+                            workspace_dir = ensure_project_temp(Path.cwd())
+                            mgr = DefaultWorkspaceManager()
+                            mgr.delete_contents(workspace_dir)
                         except Exception:
-                            logger.warning(
-                                "signal_guard: failed to mark dispatch interrupted",
-                                exc_info=True,
-                            )
+                            logger.warning("signal_guard: workspace cleanup failed", exc_info=True)
 
-                if cleanup_on_interrupt:
-                    try:
-                        from autoskillit.workspace.cleanup import DefaultWorkspaceManager
-                        from autoskillit.core import ensure_project_temp
-
-                        workspace_dir = ensure_project_temp()
-                        mgr = DefaultWorkspaceManager()
-                        mgr.delete_contents(workspace_dir)
-                    except Exception:
-                        logger.warning(
-                            "signal_guard: workspace cleanup failed", exc_info=True
-                        )
-
-                print(
-                    f"Campaign {campaign_id} interrupted. "
-                    f"Resume with: autoskillit franchise run --resume {campaign_id}",
-                    file=sys.stderr,
-                )
+                    print(
+                        f"Campaign {campaign_id} interrupted. "
+                        f"Resume with: autoskillit franchise run --resume {campaign_id}",
+                        file=sys.stderr,
+                    )
                 return
 
     async with anyio.create_task_group() as tg:
@@ -159,8 +160,8 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
     - Process alive + ticks match → kill + reaped_orphan
     - Process alive + ticks mismatch → reaped_pid_recycled (no kill)
     """
-    from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
     from autoskillit.execution._process_kill import kill_process_tree
+    from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
 
     current_boot_id = read_boot_id()
 
@@ -186,9 +187,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                 if pid == 0:
                     _action = "reaped_dead_pid"
                     if dry_run:
-                        print(
-                            f"  [WOULD MARK]  {name}  pid=0  (no PID recorded -> interrupted)"
-                        )
+                        print(f"  [WOULD MARK]  {name}  pid=0  (no PID recorded -> interrupted)")
                     else:
                         try:
                             mark_dispatch_interrupted(state_path, name, reason=_action)
@@ -204,15 +203,13 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                     and dispatch.l2_boot_id != current_boot_id
                 ):
                     if dry_run:
-                        print(
-                            f"  [WOULD MARK]  {name}  pid={pid}  (machine rebooted -> pid_recycled)"
-                        )
+                        print(f"  [WOULD MARK]  {name}  pid={pid}  (rebooted, pid_recycled)")
                     else:
                         try:
                             mark_dispatch_interrupted(
                                 state_path, name, reason="reaped_pid_recycled"
                             )
-                            print(f"  [MARKED]      {name}  pid={pid}  (machine rebooted -> pid_recycled)")
+                            print(f"  [MARKED]      {name}  pid={pid}  (rebooted, pid_recycled)")
                         except ValueError:
                             print(f"  [SKIPPED]     {name}  (already terminal)")
                     continue
@@ -223,7 +220,9 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                     else:
                         try:
                             mark_dispatch_interrupted(state_path, name, reason="reaped_dead_pid")
-                            print(f"  [MARKED]      {name}  pid={pid}  (process dead -> interrupted)")
+                            print(
+                                f"  [MARKED]      {name}  pid={pid}  (process dead -> interrupted)"
+                            )
                         except ValueError:
                             print(f"  [SKIPPED]     {name}  (already terminal)")
                     continue
@@ -232,14 +231,14 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                 current_ticks = read_starttime_ticks(pid)
                 if current_ticks is not None and current_ticks == dispatch.l2_starttime_ticks:
                     if dry_run:
-                        print(
-                            f"  [WOULD KILL]  {name}  pid={pid}  (orphan, identity match)"
-                        )
+                        print(f"  [WOULD KILL]  {name}  pid={pid}  (orphan, identity match)")
                     else:
                         try:
                             kill_process_tree(pid)
                         except Exception:
-                            logger.warning("reap: kill_process_tree failed for pid=%d", pid, exc_info=True)
+                            logger.warning(
+                                "reap: kill_process_tree failed for pid=%d", pid, exc_info=True
+                            )
                         try:
                             mark_dispatch_interrupted(state_path, name, reason="reaped_orphan")
                             print(f"  [KILLED]      {name}  pid={pid}  (orphan reaped)")
@@ -247,9 +246,7 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
                             print(f"  [SKIPPED]     {name}  (already terminal)")
                 else:
                     if dry_run:
-                        print(
-                            f"  [WOULD MARK]  {name}  pid={pid}  (PID recycled, no kill)"
-                        )
+                        print(f"  [WOULD MARK]  {name}  pid={pid}  (PID recycled, no kill)")
                     else:
                         try:
                             mark_dispatch_interrupted(
@@ -266,7 +263,7 @@ def _state_path_for_campaign(campaign_id: str) -> Path:
     """Resolve the state.json path for a campaign ID from the temp dir."""
     from autoskillit.core import ensure_project_temp
 
-    return ensure_project_temp() / "dispatches" / f"{campaign_id}.json"
+    return ensure_project_temp(Path.cwd()) / "dispatches" / f"{campaign_id}.json"
 
 
 @franchise_app.command(name="status")

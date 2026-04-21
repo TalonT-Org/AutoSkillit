@@ -11,6 +11,7 @@ from pathlib import Path  # noqa: F401 — tests patch autoskillit.cli.Path.home
 
 from autoskillit.cli._cook import cook
 from autoskillit.cli._doctor import DoctorResult
+from autoskillit.cli._franchise import franchise_list, franchise_run, franchise_status
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli._init_helpers import _prompt_recipe_choice
 from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
@@ -30,6 +31,7 @@ from autoskillit.cli.app import (
     config_app,
     config_show,
     doctor,
+    franchise_app,
     init,
     install,
     main,
@@ -69,7 +71,12 @@ __all__ = [
     "config_app",
     "config_show",
     "cook",
+    "detect_autoskillit_mcp_prefix",
     "doctor",
+    "franchise_app",
+    "franchise_list",
+    "franchise_run",
+    "franchise_status",
     "init",
     "install",
     "main",
@@ -88,5 +95,4 @@ __all__ = [
     "workspace_app",
     "workspace_clean",
     "workspace_init",
-    "detect_autoskillit_mcp_prefix",
 ]

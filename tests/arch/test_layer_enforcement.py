@@ -1075,7 +1075,9 @@ _TEST_LAYER_ALLOWED: dict[str, frozenset[str]] = {
     "tests/workspace": frozenset({"autoskillit.core", "autoskillit.workspace"}),
     "tests/recipe": frozenset({"autoskillit.core", "autoskillit.recipe"}),
     "tests/migration": frozenset({"autoskillit.core", "autoskillit.migration"}),
-    "tests/franchise": frozenset({"autoskillit.core", "autoskillit.franchise"}),
+    "tests/franchise": frozenset(
+        {"autoskillit.core", "autoskillit.franchise", "autoskillit.recipe", "autoskillit.server"}
+    ),
     "tests/server": frozenset({"autoskillit"}),  # wildcard: any autoskillit.* import allowed
     "tests/cli": frozenset({"autoskillit"}),  # wildcard: any autoskillit.* import allowed
 }

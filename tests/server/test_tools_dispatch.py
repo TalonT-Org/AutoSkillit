@@ -125,7 +125,7 @@ class TestDispatchFoodTruckGates:
 class TestDispatchFoodTruckValidation:
     @pytest.mark.anyio
     async def test_dispatch_food_truck_rejects_non_standard_recipe(self, tool_ctx, monkeypatch):
-        """Campaign recipe → franchise_invalid_recipe_kind error."""
+        """Campaign recipe → franchise_recipe_not_found error."""
         from autoskillit.franchise._api import execute_dispatch
 
         tool_ctx.franchise_lock = asyncio.Lock()
@@ -147,11 +147,11 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_invalid_recipe_kind"
+        assert result["error"] == "franchise_recipe_not_found"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_rejects_unknown_ingredients(self, tool_ctx, monkeypatch):
-        """Keys not in recipe.ingredients → franchise_invalid_ingredients error."""
+        """Keys not in recipe.ingredients → franchise_unknown_ingredient error."""
         from autoskillit.franchise._api import execute_dispatch
 
         tool_ctx.franchise_lock = asyncio.Lock()
@@ -174,7 +174,7 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_invalid_ingredients"
+        assert result["error"] == "franchise_unknown_ingredient"
         assert "unknown_key" in result["user_visible_message"]
 
     @pytest.mark.anyio
@@ -199,7 +199,7 @@ class TestDispatchFoodTruckValidation:
             )
         )
         assert result["success"] is False
-        assert result["error"] == "franchise_invalid_ingredients"
+        assert result["error"] == "franchise_unknown_ingredient"
         # Lock must not have been acquired
         assert not lock.locked()
 

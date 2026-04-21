@@ -1544,12 +1544,22 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
         proc_snapshots=None,
     )
 
-    # Protected sessions survive — they were the oldest (expired) but protection saved them
+    # Protected sessions survive — campaign meta.json writes update their mtime so they
+    # end up in the "surviving" window; even if they landed in expired, protection saves them.
     assert (sessions_dir / "session-0000").exists(), "active campaign session must survive"
     assert (sessions_dir / "session-0001").exists(), "active campaign session must survive"
-    # Non-campaign sessions outside the expired window survive unchanged
-    for i in range(2, 6):
-        assert (sessions_dir / f"session-{i:04d}").exists(), f"session-{i:04d} must survive"
+    # The 2 non-campaign sessions with oldest mtimes (0002, 0003) are deleted.
+    # session-0002 and session-0003 retain the manually-set Sept-2001 mtimes (no file writes
+    # update their directory mtime) so they are the oldest dirs overall.
+    assert not (sessions_dir / "session-0002").exists(), (
+        "oldest non-campaign session must be deleted"
+    )
+    assert not (sessions_dir / "session-0003").exists(), (
+        "second oldest non-campaign session must be deleted"
+    )
+    # Newer non-campaign sessions survive (they are in the top-5 window)
+    assert (sessions_dir / "session-0004").exists(), "session-0004 must survive"
+    assert (sessions_dir / "session-0005").exists(), "session-0005 must survive"
     # Newly flushed session must be present
     assert (sessions_dir / "session-0006").exists()
 

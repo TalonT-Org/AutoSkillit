@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -101,7 +100,8 @@ async def execute_dispatch(
         return json.dumps(
             {
                 "success": False,
-                "error": f"{type(exc).__name__}: {exc}",
+                "error": "franchise_internal_error",
+                "detail": f"{type(exc).__name__}: {exc}",
             }
         )
     finally:
@@ -118,16 +118,13 @@ async def _run_dispatch(
     prompt_builder: Callable[..., str],
 ) -> str:
     """Inner dispatch body — called after lock acquisition."""
+    from autoskillit.execution import _refresh_quota_cache, check_and_sleep_if_needed
     from autoskillit.franchise.state import (
         DispatchRecord,
         DispatchStatus,
         append_dispatch_record,
         write_initial_state,
     )
-
-    _execution = sys.modules["autoskillit.execution"]
-    check_and_sleep_if_needed = _execution.check_and_sleep_if_needed
-    _refresh_quota_cache = _execution._refresh_quota_cache
 
     if tool_ctx.recipes is None:
         return json.dumps(

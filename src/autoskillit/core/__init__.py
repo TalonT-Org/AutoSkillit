@@ -55,6 +55,7 @@ from .io import (
     temp_dir_display_str,
     write_versioned_json,
 )
+from .kitchen_state import sweep_stale_markers as sweep_stale_markers
 from .logging import (
     configure_logging,
     get_logger,
@@ -197,6 +198,8 @@ __all__ = [
     # logging
     "configure_logging",
     "get_logger",
+    # kitchen_state
+    "sweep_stale_markers",
     # readiness
     "cleanup_readiness_sentinel",
     "readiness_sentinel_path",

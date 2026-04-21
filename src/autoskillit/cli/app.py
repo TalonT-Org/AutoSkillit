@@ -6,8 +6,6 @@ import dataclasses
 import json
 import os
 import random
-import shutil
-import subprocess
 import sys
 from datetime import UTC
 from pathlib import Path
@@ -23,6 +21,7 @@ if TYPE_CHECKING:
 from cyclopts import App, Parameter
 
 from autoskillit.cli._cook import cook as cook_interactive
+from autoskillit.cli._franchise import franchise_app
 from autoskillit.cli._init_helpers import (
     _MARKER_CONTENT,
     _check_secret_scanning,
@@ -33,9 +32,7 @@ from autoskillit.cli._init_helpers import (
     _register_all,
 )
 from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
-from autoskillit.cli._terminal import terminal_guard
-from autoskillit.core import ClaudeFlags, RecipeSource, atomic_write, pkg_root
-from autoskillit.execution import build_interactive_cmd
+from autoskillit.core import RecipeSource, atomic_write, pkg_root
 
 app = App(
     name="autoskillit",
@@ -51,6 +48,7 @@ app.command(config_app)
 app.command(skills_app)
 app.command(recipes_app)
 app.command(workspace_app)
+app.command(franchise_app)
 
 
 class CliError(Exception):
@@ -450,27 +448,14 @@ def _launch_cook_session(
     resume_session_id: str | None = None,
 ) -> None:
     """Launch an interactive Claude Code cook session with the given system prompt."""
-    if shutil.which("claude") is None:
-        print("ERROR: 'claude' not found. Install: https://docs.anthropic.com/en/docs/claude-code")
-        sys.exit(1)
-    spec = build_interactive_cmd(
-        initial_prompt=initial_message,
-        resume_session_id=resume_session_id,
-        env_extras=extra_env,
-    )
-    plugin_flags = [] if _is_plugin_installed() else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
-    cmd = [
-        *spec.cmd,
-        *plugin_flags,
-        ClaudeFlags.TOOLS,
-        "AskUserQuestion",
-        ClaudeFlags.APPEND_SYSTEM_PROMPT,
+    from autoskillit.cli._session_launch import _run_interactive_session
+
+    _run_interactive_session(
         system_prompt,
-    ]
-    with terminal_guard():
-        result = subprocess.run(cmd, env=spec.env)
-    if result.returncode != 0:
-        sys.exit(result.returncode)
+        initial_message=initial_message,
+        extra_env=extra_env,
+        resume_session_id=resume_session_id,
+    )
 
 
 def _get_subsets_needed(recipe: Recipe, disabled_subsets: frozenset[str]) -> frozenset[str]:

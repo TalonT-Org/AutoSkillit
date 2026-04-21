@@ -36,6 +36,7 @@ __all__ = [
     "SESSION_TYPE_LEAF",
     "HEADLESS_ENV_VAR",
     "CAMPAIGN_ID_ENV_VAR",
+    "DISPATCH_ID_ENV_VAR",
     "KITCHEN_SESSION_ID_ENV_VAR",
 ]
 
@@ -50,6 +51,7 @@ SESSION_TYPE_ORCHESTRATOR: str = "orchestrator"
 SESSION_TYPE_LEAF: str = "leaf"
 HEADLESS_ENV_VAR: str = "AUTOSKILLIT_HEADLESS"
 CAMPAIGN_ID_ENV_VAR: str = "AUTOSKILLIT_CAMPAIGN_ID"
+DISPATCH_ID_ENV_VAR: str = "AUTOSKILLIT_DISPATCH_ID"
 KITCHEN_SESSION_ID_ENV_VAR: str = "AUTOSKILLIT_KITCHEN_SESSION_ID"
 
 # Env vars that control MCP server-level behavior and must not leak into
@@ -64,6 +66,7 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         # Franchise tier vars — must not leak into user-code subprocesses
         "AUTOSKILLIT_SESSION_TYPE",
         "AUTOSKILLIT_CAMPAIGN_ID",
+        "AUTOSKILLIT_DISPATCH_ID",
         "AUTOSKILLIT_KITCHEN_SESSION_ID",
         "AUTOSKILLIT_CAMPAIGN_STATE_PATH",
         "AUTOSKILLIT_PROJECT_DIR",

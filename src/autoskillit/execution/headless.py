@@ -1403,6 +1403,11 @@ class DefaultHeadlessExecutor:
 
         merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
         if requires_packs:
+            if "AUTOSKILLIT_L2_TOOL_TAGS" in merged_extras:
+                raise ValueError(
+                    "dispatch_food_truck: requires_packs and env_extras both specify "
+                    "AUTOSKILLIT_L2_TOOL_TAGS — use requires_packs exclusively"
+                )
             merged_extras["AUTOSKILLIT_L2_TOOL_TAGS"] = ",".join(sorted(requires_packs))
 
         spec = build_food_truck_cmd(

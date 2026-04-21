@@ -109,7 +109,9 @@ class TestPrCreateGuardAllowed:
         assert out.strip() == ""
 
     def test_allows_echo_command(self, tmp_path):
-        out = _run_guard("echo gh pr create is not a real call", kitchen_open=True, tmpdir=tmp_path)
+        out = _run_guard(
+            "echo gh pr create is not a real call", kitchen_open=True, tmpdir=tmp_path
+        )
         # 'gh pr create' appears in a string argument — guard must still deny
         # because the regex matches substrings. This is the intended behavior:
         # conservative blocking to prevent accidental bypass.

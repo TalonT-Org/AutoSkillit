@@ -262,10 +262,7 @@ class TestPipelineProvenance:
     """is_pipeline_sourced and partition_prs provenance_blocked_prs bucket."""
 
     def test_is_pipeline_sourced_true_when_signature_present(self):
-        body = (
-            "PR description\n"
-            "<!-- autoskillit:pipeline-signature steps=compose_pr -->"
-        )
+        body = "PR description\n<!-- autoskillit:pipeline-signature steps=compose_pr -->"
         assert is_pipeline_sourced(body) is True
 
     def test_is_pipeline_sourced_false_when_absent(self):
